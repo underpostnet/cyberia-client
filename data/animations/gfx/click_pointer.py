@@ -1,5 +1,5 @@
 from raylibpy import *
-from items_helper import add_padding
+from utils.items_helper import add_padding
 
 GFX_CLICK_POINTER_MATRIX_00 = [
     [0, 0, 0, 0, 0, 0, 0, 0, 0, 0],

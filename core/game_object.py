@@ -1,13 +1,7 @@
-# --- Instance Entities ---
-
 import logging
-
 import math
 
-
-from raylibpy import (
-    Color,
-)
+from raylibpy import Color
 
 # --- Logging Configuration ---
 logging.basicConfig(
@@ -15,10 +9,12 @@ logging.basicConfig(
 )
 
 
-class InstanceObject:
+class GameObject:
     """
     Represents a generic object within an instance world.
-    This object is a local representation of the server's state.
+    This object is a local representation of the server's state,
+    and includes properties for position, color, obstacle status,
+    speed, and pathfinding.
     """
 
     def __init__(
@@ -30,6 +26,17 @@ class InstanceObject:
         is_obstacle: bool = False,
         speed: float = 200.0,
     ):
+        """
+        Initializes a new GameObject.
+
+        Args:
+            obj_id (str): A unique identifier for the object.
+            x (float): The X-coordinate of the object's position in world space.
+            y (float): The Y-coordinate of the object's position in world space.
+            color (Color): The Raylib Color object for rendering the object.
+            is_obstacle (bool): True if the object acts as an obstacle in the world.
+            speed (float): The movement speed of the object in pixels per second.
+        """
         self.obj_id = obj_id
         self.x = x
         self.y = y
@@ -42,8 +49,11 @@ class InstanceObject:
         self.path_index = 0
 
     def to_dict(self) -> dict:
-        """Converts object state to a dictionary for serialization."""
-        # Included for completeness, although the client does not use it to send full objects.
+        """
+        Converts the GameObject's state to a dictionary for serialization.
+        This is primarily for server-side use or debugging, as the client
+        typically receives state updates rather than sending full object states.
+        """
         return {
             "obj_id": self.obj_id,
             "x": self.x,
@@ -61,8 +71,16 @@ class InstanceObject:
         }
 
     @classmethod
-    def from_dict(cls, data: dict) -> "InstanceObject":
-        """Creates an InstanceObject instance from a dictionary received from the server."""
+    def from_dict(cls, data: dict) -> "GameObject":
+        """
+        Creates a GameObject instance from a dictionary received from the server.
+
+        Args:
+            data (dict): A dictionary containing the object's state.
+
+        Returns:
+            GameObject: A new GameObject instance populated with the provided data.
+        """
         color_data = data["color"]
         color = Color(
             color_data["R"], color_data["G"], color_data["B"], color_data["A"]
@@ -84,8 +102,13 @@ class InstanceObject:
         """
         Updates the object's position, moving it along its path.
         Movement is smoothed based on delta_time and object speed.
-        This logic is for smooth animation on the client.
+        This logic is for smooth animation on the client, interpolating
+        between path points received from the server.
+
+        Args:
+            delta_time (float): The time elapsed since the last frame in seconds.
         """
+        # If no path or path is completed, reset path and return
         if not self.path or self.path_index >= len(self.path):
             self.path = []
             self.path_index = 0
@@ -95,24 +118,25 @@ class InstanceObject:
         target_world_x = target_point["X"]
         target_world_y = target_point["Y"]
 
-        # Calculate distance to target
+        # Calculate distance to the current target point
         dx = target_world_x - self.x
         dy = target_world_y - self.y
         distance = math.sqrt(dx * dx + dy * dy)
 
-        move_distance = (
-            self.speed * delta_time
-        )  # Distance the object can move in this frame
+        # Calculate how far the object can move in this frame
+        move_distance = self.speed * delta_time
 
         if distance < move_distance:
-            # If the distance is less than what it can move, it means it has reached or overshot the point.
-            # Move exactly to the point and advance to the next one in the path.
+            # If the object is very close to or has overshot the target point,
+            # snap to the target point and advance to the next point in the path.
             self.x = target_world_x
             self.y = target_world_y
             self.path_index += 1
         else:
             # Move towards the target point
-            direction_x = dx / distance  # X component of the normalized direction
-            direction_y = dy / distance  # Y component of the normalized direction
+            # Normalize the direction vector
+            direction_x = dx / distance
+            direction_y = dy / distance
+            # Update position based on normalized direction and move distance
             self.x += direction_x * move_distance
             self.y += direction_y * move_distance

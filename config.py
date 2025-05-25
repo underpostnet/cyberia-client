@@ -1,21 +1,28 @@
-# --- Instance Constants ---
-SERVER_HOST = "127.0.0.1"
-SERVER_PORT = 5000
-WEBSOCKET_PATH = "/ws"  # The endpoint for WebSocket connections on the Go server
-
-# Raylib window dimensions (camera viewport)
-SCREEN_WIDTH = 800
-SCREEN_HEIGHT = 800
-
-# World dimensions (the grid/canvas)
+# --- Screen and World Dimensions ---
+SCREEN_WIDTH = 1280
+SCREEN_HEIGHT = 720
 WORLD_WIDTH = 1600
 WORLD_HEIGHT = 1600
+OBJECT_SIZE = 50  # Size of a single game object (e.g., player, obstacle) in pixels
 
-# Size of instance objects (players, obstacles)
-OBJECT_SIZE = 50
+# --- Maze and Grid Settings ---
+# This defines the size of a cell in the simplified maze used for obstacle visualization.
+# It should be a divisor of WORLD_WIDTH and WORLD_HEIGHT.
+MAZE_CELL_WORLD_SIZE = 50  # For a 32x32 maze in a 1600x1600 world, 1600/50 = 32
 
-# A* maze simplification: each cell in the 32x32 maze represents a block of this size in the world
-MAZE_CELL_WORLD_SIZE = WORLD_WIDTH // 32  # 1600 / 32 = 50
+# --- Server Connection Settings ---
+SERVER_HOST = "localhost"
+SERVER_PORT = 5000
+WEBSOCKET_PATH = "/ws"
 
-# Camera smoothing factor (0.0 to 1.0, higher means faster smoothing)
-CAMERA_SMOOTHNESS = 0.05
+# --- Camera Settings ---
+CAMERA_SMOOTHNESS = 0.1  # Value between 0.0 and 1.0 for camera interpolation smoothness
+
+# --- Animation Settings (General) ---
+# These can be overridden by specific animation data, but provide sensible defaults
+DEFAULT_FRAME_DURATION = (
+    0.15  # Default time in seconds each animation frame is displayed
+)
+DEFAULT_STOP_DELAY_DURATION = (
+    0.2  # Default delay before idle animation after stopping movement
+)

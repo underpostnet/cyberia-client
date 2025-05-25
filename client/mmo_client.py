@@ -9,32 +9,9 @@ import websocket  # pip install websocket-client
 from raylibpy import (
     Color,
     Vector2,
-    Camera2D,
-    RAYWHITE,
-    DARKGRAY,
-    LIGHTGRAY,
-    BLACK,
-    BLUE,
-    RED,
-    GREEN,
     MOUSE_BUTTON_LEFT,
-    init_window,
-    set_target_fps,
-    begin_drawing,
-    clear_background,
-    begin_mode2d,
-    draw_line,
-    draw_rectangle,
-    draw_circle,
-    draw_text,
-    end_mode2d,
-    get_frame_time,
-    get_mouse_position,
-    get_screen_to_world2d,
-    close_window,
-    window_should_close,
-    is_mouse_button_pressed,
-    end_drawing,
+    BLACK,
+    RAYWHITE,  # Assuming RAYWHITE is a common background color
 )
 
 # --- Logging Configuration ---
@@ -48,21 +25,35 @@ from config import (
     WORLD_WIDTH,
     WORLD_HEIGHT,
     OBJECT_SIZE,
-    WORLD_WIDTH,
 )
 
-from instance_renderer import InstanceRenderer
-from instance_state import InstanceState
-from instance_object import InstanceObject
+# Import the new centralized Raylib manager
+from core.raylib_manager import RaylibManager
+
+# Import the refactored game renderer
+from visuals.game_renderer import GameRenderer
+
+# Import the refactored game state and game object
+from core.game_state import GameState
+from core.game_object import GameObject
 
 
-class InstanceClient:
+class MmoClient:
     """
     The client component of the MMO, connecting to the Go server via pure WebSocket,
-    rendering the instance world, and sending player actions.
+    managing the instance world state, rendering the world, and sending player actions.
+    This class orchestrates communication, state updates, and rendering.
     """
 
     def __init__(self, host: str, port: int, ws_path: str):
+        """
+        Initializes the MmoClient.
+
+        Args:
+            host (str): The host address of the WebSocket server.
+            port (int): The port of the WebSocket server.
+            ws_path (str): The WebSocket path on the server.
+        """
         self.host = host
         self.port = port
         self.ws_path = ws_path
@@ -74,19 +65,34 @@ class InstanceClient:
             None  # Thread for WebSocket communication
         )
 
-        self.instance_state = InstanceState(
+        # Initialize the centralized Raylib manager
+        self.raylib_manager = RaylibManager(
+            screen_width=SCREEN_WIDTH,
+            screen_height=SCREEN_HEIGHT,
+            title="Python MMO Client",
+            target_fps=60,
+        )
+
+        # Initialize the game state, which holds all game objects
+        self.game_state = GameState(
             WORLD_WIDTH, WORLD_HEIGHT, OBJECT_SIZE
         )  # Local copy of instance state
         self.my_player_id: str | None = None
-        self.my_instance_obj: InstanceObject | None = (
-            None  # Reference to my player object in instance_state.objects
+        self.my_game_object: GameObject | None = (
+            None  # Reference to my player object in game_state.objects
         )
         self.current_path_display: list[dict[str, float]] = (
             []
         )  # Path received from server to display
 
-        self.renderer = InstanceRenderer(
-            SCREEN_WIDTH, SCREEN_HEIGHT, WORLD_WIDTH, WORLD_HEIGHT, OBJECT_SIZE
+        # Initialize the game renderer, passing the Raylib manager to it
+        self.game_renderer = GameRenderer(
+            raylib_manager=self.raylib_manager,
+            screen_width=SCREEN_WIDTH,
+            screen_height=SCREEN_HEIGHT,
+            world_width=WORLD_WIDTH,
+            world_height=WORLD_HEIGHT,
+            object_size=OBJECT_SIZE,
         )
 
         self.message_queue: list[dict] = []  # Thread-safe queue for incoming messages
@@ -117,7 +123,7 @@ class InstanceClient:
         """Handler for WebSocket close event."""
         logging.info(f"Disconnected from server: {close_status_code} - {close_msg}")
         self.my_player_id = None
-        self.my_instance_obj = None
+        self.my_game_object = None
         self.ws = None  # Mark connection as closed
         self.connection_ready_event.clear()  # Clear event on close
 
@@ -139,11 +145,11 @@ class InstanceClient:
         """Dispatches incoming server messages based on their 'type' field."""
         msg_type = data.get("type")
         if msg_type == "instance_state_update":
-            self.instance_state.from_dict(data)
-            if self.my_player_id and self.my_player_id in self.instance_state.objects:
-                self.my_instance_obj = self.instance_state.objects[self.my_player_id]
+            self.game_state.from_dict(data)
+            if self.my_player_id and self.my_player_id in self.game_state.objects:
+                self.my_game_object = self.game_state.objects[self.my_player_id]
             else:
-                self.my_instance_obj = None
+                self.my_game_object = None
             logging.debug("Instance state updated.")
         elif msg_type == "player_assigned":
             self.my_player_id = data["player_id"]
@@ -153,9 +159,9 @@ class InstanceClient:
             path = data["path"]
             if player_id == self.my_player_id:
                 self.current_path_display = path
-                if self.my_instance_obj:
-                    self.my_instance_obj.path = path
-                    self.my_instance_obj.path_index = 0
+                if self.my_game_object:
+                    self.my_game_object.path = path
+                    self.my_game_object.path_index = 0
                 logging.info(f"Received new path for my player: {len(path)} steps.")
         elif msg_type == "message":
             logging.info(f"Server message: {data.get('text', 'No message text')}")
@@ -198,31 +204,37 @@ class InstanceClient:
         # Wait for the connection to be ready with a timeout
         if not self.connection_ready_event.wait(timeout=5):  # Wait up to 5 seconds
             logging.error("Failed to establish WebSocket connection within timeout.")
-            self.renderer.close_window()
+            self.raylib_manager.close_window()  # Use raylib_manager to close window
             return
 
         last_frame_time = time.time()
 
-        while not self.renderer.window_should_close():
-            current_frame_time = time.time()
-            delta_time = current_frame_time - last_frame_time
-            last_frame_time = current_frame_time
+        while (
+            not self.raylib_manager.window_should_close()
+        ):  # Use raylib_manager for window close check
+            current_time = time.time()
+            delta_time = current_time - last_frame_time
+            last_frame_time = current_time
 
             # Process any messages received from the WebSocket thread
             self._process_queued_messages()
 
             # Update client-side player movement based on received path
-            if self.my_instance_obj and self.my_instance_obj.path:
-                self.my_instance_obj.update_position(delta_time)
+            if self.my_game_object and self.my_game_object.path:
+                self.my_game_object.update_position(delta_time)
                 # If the client-side player reached the end of its path, clear it
-                if self.my_instance_obj.path_index >= len(self.my_instance_obj.path):
-                    self.my_instance_obj.path = []
-                    self.my_instance_obj.path_index = 0
+                if self.my_game_object.path_index >= len(self.my_game_object.path):
+                    self.my_game_object.path = []
+                    self.my_game_object.path_index = 0
                     self.current_path_display = []  # Clear displayed path
 
             # --- Input Handling ---
-            if is_mouse_button_pressed(MOUSE_BUTTON_LEFT):
-                world_mouse_pos = self.renderer.get_world_mouse_position()
+            if self.raylib_manager.is_mouse_button_pressed(
+                MOUSE_BUTTON_LEFT
+            ):  # Use raylib_manager for input
+                world_mouse_pos = (
+                    self.raylib_manager.get_world_mouse_position()
+                )  # Use raylib_manager for world mouse pos
                 logging.info(
                     f"Mouse clicked at world position: ({world_mouse_pos.x}, {world_mouse_pos.y})"
                 )
@@ -233,52 +245,65 @@ class InstanceClient:
                 )
 
             # --- Rendering ---
-            self.renderer.begin_frame()
+            self.raylib_manager.begin_drawing()  # Use raylib_manager to begin drawing
+            self.raylib_manager.clear_background(
+                RAYWHITE
+            )  # Use raylib_manager to clear background
+            self.raylib_manager.begin_camera_mode()  # Use raylib_manager to begin camera mode
 
-            self.renderer.draw_grid()
+            self.game_renderer.draw_grid()  # Delegate to game_renderer
 
             # Draw all objects received from the server
-            for obj_id, obj in self.instance_state.objects.items():
-                self.renderer.draw_object(obj)
+            for obj_id, obj in self.game_state.objects.items():
+                self.game_renderer.draw_game_object(obj, current_time)
 
             # Draw the path for my player
-            if self.my_instance_obj and self.current_path_display:
-                self.renderer.draw_path(self.current_path_display)
+            if self.my_game_object and self.current_path_display:
+                self.game_renderer.draw_path(
+                    self.current_path_display
+                )  # Delegate to game_renderer
+
+            self.raylib_manager.end_camera_mode()  # Use raylib_manager to end camera mode
 
             # Update camera to follow my player
-            if self.my_instance_obj:
-                self.renderer.update_camera(
+            if self.my_game_object:
+                self.raylib_manager.update_camera_target(  # Use raylib_manager to update camera
                     Vector2(
-                        self.my_instance_obj.x + OBJECT_SIZE / 2,
-                        self.my_instance_obj.y + OBJECT_SIZE / 2,
-                    )
+                        self.my_game_object.x + OBJECT_SIZE / 2,
+                        self.my_game_object.y + OBJECT_SIZE / 2,
+                    ),
+                    smoothness=0.1,  # CAMERA_SMOOTHNESS from config, or a default value
                 )
                 # Display my player ID
-                self.renderer.draw_debug_info(
+                self.raylib_manager.draw_text(  # Use raylib_manager to draw text
                     f"My Player ID: {self.my_player_id}", 10, 10, 20, BLACK
                 )
-                self.renderer.draw_debug_info(
-                    f"My Pos: ({int(self.my_instance_obj.x)}, {int(self.my_instance_obj.y)})",
+                self.raylib_manager.draw_text(  # Use raylib_manager to draw text
+                    f"My Pos: ({int(self.my_game_object.x)}, {int(self.my_game_object.y)})",
                     10,
                     40,
                     20,
                     BLACK,
                 )
             else:
-                self.renderer.draw_debug_info("Connecting...", 10, 10, 20, BLACK)
+                self.raylib_manager.draw_text(
+                    "Connecting...", 10, 10, 20, BLACK
+                )  # Use raylib_manager to draw text
 
             # Display FPS - Ensure get_frame_time() is not zero
-            frame_time = get_frame_time()
+            frame_time = (
+                self.raylib_manager.get_frame_time()
+            )  # Use raylib_manager for frame time
             if frame_time > 0:
-                self.renderer.draw_debug_info(
+                self.raylib_manager.draw_text(  # Use raylib_manager to draw text
                     f"FPS: {int(1.0 / frame_time)}", 10, SCREEN_HEIGHT - 30, 20, BLACK
                 )
             else:
-                self.renderer.draw_debug_info(
+                self.raylib_manager.draw_text(  # Use raylib_manager to draw text
                     "FPS: N/A", 10, SCREEN_HEIGHT - 30, 20, BLACK
                 )  # Display N/A if frame_time is 0
 
-            self.renderer.end_frame()
+            self.raylib_manager.end_drawing()  # Use raylib_manager to end drawing
 
             # Add a small sleep to yield control, allowing Raylib to process events
             time.sleep(0.001)
@@ -287,5 +312,5 @@ class InstanceClient:
         if self.ws:
             self.ws.close()
         logging.info("WebSocket connection closed.")
-        self.renderer.close_window()
+        self.raylib_manager.close_window()  # Use raylib_manager to close window
         logging.info("Client window closed.")

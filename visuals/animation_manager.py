@@ -1,63 +1,35 @@
-# cyberia-client/gameplay/items_engine.py
-
 import time
 from enum import Enum, auto
 import logging
 
 from raylibpy import (
     Color,
-    draw_rectangle,
-    init_window,
-    set_target_fps,
-    begin_drawing,
-    clear_background,
-    end_drawing,
-    window_should_close,
-    close_window,
-    get_frame_time,
-    is_key_pressed,
-    KEY_UP,
-    KEY_DOWN,
-    KEY_LEFT,
-    KEY_RIGHT,
-    KEY_SPACE,
-    KEY_KP_1,
-    KEY_KP_2,
-    KEY_KP_3,
-    KEY_KP_4,
-    KEY_KP_6,
-    KEY_KP_7,
-    KEY_KP_8,
-    KEY_KP_9,
-    KEY_ONE,
-    KEY_TWO,
-    KEY_THREE,
-    KEY_FOUR,
-    draw_text,
-)
+)  # Only import Color, other Raylib functions via RaylibManager
 
 # Import config for global settings (if needed, currently not used directly in this file)
-import config as settings  # Keep import for consistency, though not directly used here
+import config as settings
 
 # Imported matrices and color map for character animations
-from items.skin.people import (
+# These are now expected to be in data/animations/skin/people.py
+from data.animations.skin.people import (
     SKIN_PEOPLE_MATRIX_08_0,
-    SKIN_PEOPLE_MATRIX_08_1,  # UP IDLE
+    SKIN_PEOPLE_MATRIX_08_1,
     SKIN_PEOPLE_MATRIX_06_0,
-    SKIN_PEOPLE_MATRIX_06_1,  # RIGHT IDLE
+    SKIN_PEOPLE_MATRIX_06_1,
     SKIN_PEOPLE_MATRIX_02_0,
-    SKIN_PEOPLE_MATRIX_02_1,  # DOWN IDLE
+    SKIN_PEOPLE_MATRIX_02_1,
     SKIN_PEOPLE_MATRIX_18_0,
-    SKIN_PEOPLE_MATRIX_18_1,  # UP_RIGHT MOVE
+    SKIN_PEOPLE_MATRIX_18_1,
     SKIN_PEOPLE_MATRIX_16_0,
-    SKIN_PEOPLE_MATRIX_16_1,  # DOWN_RIGHT MOVE
+    SKIN_PEOPLE_MATRIX_16_1,
     SKIN_PEOPLE_MATRIX_12_0,
-    SKIN_PEOPLE_MATRIX_12_1,  # DOWN_LEFT MOVE
+    SKIN_PEOPLE_MATRIX_12_1,
     SKIN_PEOPLE_MAP_COLORS,
 )
 
 # Imported matrices and color map for click pointer animation
-from items.gfx.click_pointer import (
+# These are now expected to be in data/animations/gfx/click_pointer.py
+from data.animations.gfx.click_pointer import (
     GFX_CLICK_POINTER_MATRIX_00,
     GFX_CLICK_POINTER_MATRIX_01,
     GFX_CLICK_POINTER_MATRIX_02,
@@ -65,8 +37,13 @@ from items.gfx.click_pointer import (
     GFX_CLICK_POINTER_ANIMATION_SPEED,
 )
 
+# Import the new ItemRenderer for drawing animations
+from visuals.item_renderer import ItemRenderer
+
+# Import the centralized RaylibManager
+from core.raylib_manager import RaylibManager
+
 # --- Logging Configuration ---
-# Set to INFO to avoid verbose debug messages in console
 logging.basicConfig(
     level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s"
 )
@@ -134,7 +111,7 @@ ANIMATION_DATA = {
             "up_left_move": [SKIN_PEOPLE_MATRIX_18_0, SKIN_PEOPLE_MATRIX_18_1],
         },
         "colors": SKIN_PEOPLE_MAP_COLORS,
-        "frame_duration": 0.3,  # Set to 1.5 seconds as requested
+        "frame_duration": 0.3,
         "stop_delay_duration": 0.2,
         "dimensions": (26, 26),
         "is_stateless": False,  # This animation responds to direction and mode
@@ -184,9 +161,9 @@ DIRECTION_TO_KEY_PREFIX = {
 # --- Animation Class ---
 class Animation:
     """
-    Manages and renders pixel art animations from a set of matrices and a color map.
-    Supports multiple frames per animation state (idle/moving) and direction.
-    Handles stateless animations (e.g., UI elements) separately.
+    Manages the state and progression of a pixel art animation from a set of matrices and a color map.
+    It determines which frame should be displayed based on direction, mode (idle/walking), and time.
+    It does NOT handle the actual drawing/rendering; it provides the current frame data.
     """
 
     def __init__(
@@ -197,6 +174,16 @@ class Animation:
         stop_delay_duration: float = 0.2,
         is_stateless: bool = False,
     ):
+        """
+        Initializes an Animation instance.
+
+        Args:
+            frames_map (dict): A dictionary mapping animation state keys (e.g., "up_idle") to lists of frame matrices.
+            color_map (list[Color]): The color map for the pixel values in the matrices.
+            frame_duration (float): The duration (in seconds) each frame is displayed.
+            stop_delay_duration (float): The delay (in seconds) after stopping movement before transitioning to idle animation.
+            is_stateless (bool): If True, the animation ignores direction and mode and plays continuously.
+        """
         self.frames_map = frames_map
         self.color_map = color_map
         self.frame_duration = frame_duration
@@ -216,6 +203,11 @@ class Animation:
         Sets the desired direction and animation mode for the sprite.
         If the animation is stateless, direction and mode are ignored.
         Resets frame index and timer if the state changes.
+
+        Args:
+            direction (Direction): The current direction of the animated object.
+            mode (AnimationMode): The current animation mode (IDLE or WALKING).
+            timestamp (float): The current time (e.g., from time.time()).
         """
         new_direction = direction
         new_mode = mode
@@ -235,7 +227,7 @@ class Animation:
         if state_changed:
             self.current_frame_index = 0
             self.frame_timer = 0.0
-            logging.info(
+            logging.debug(
                 f"Animation state changed to Direction: {self.current_direction.name}, Mode: {self.animation_mode.name}"
             )
 
@@ -246,6 +238,12 @@ class Animation:
         """
         Determines the appropriate animation key (e.g., "up_idle", "right_move")
         based on the animation's internal state and movement status.
+
+        Args:
+            timestamp (float): The current time (e.g., from time.time()).
+
+        Returns:
+            str: The key corresponding to the current animation sequence in frames_map.
         """
         base_direction_key = DIRECTION_TO_KEY_PREFIX.get(
             self.current_direction, "default"
@@ -269,6 +267,11 @@ class Animation:
     def update(self, dt: float, timestamp: float):
         """
         Updates the animation frame based on delta time and current timestamp.
+        This method progresses the animation to the next frame if enough time has passed.
+
+        Args:
+            dt (float): The delta time (time elapsed since last update) in seconds.
+            timestamp (float): The current time (e.g., from time.time()).
         """
         self.frame_timer += dt
 
@@ -296,37 +299,32 @@ class Animation:
             self.current_frame_index = 0
             self.frame_timer = 0.0
 
-    def render(
-        self,
-        screen_x: float,
-        screen_y: float,
-        display_size_pixels: int,  # The target width/height in screen pixels
-        base_color: Color,  # Fallback color for missing pixel colors
-        timestamp: float = 0.0,
-    ):
+    def get_current_frame_data(
+        self, timestamp: float
+    ) -> tuple[list[list[int]], list[Color], bool, int]:
         """
-        Renders the current frame of the animation.
+        Returns the data required to render the current animation frame.
+
+        Args:
+            timestamp (float): The current time (e.g., from time.time()).
+
+        Returns:
+            tuple[list[list[int]], list[Color], bool, int]:
+                - The 2D integer matrix of the current frame.
+                - The color map for the current animation.
+                - A boolean indicating if the sprite should be flipped horizontally.
+                - The current frame index (for debugging/display).
         """
         animation_key = self._get_current_animation_key(timestamp)
         frames_list = self.frames_map.get(animation_key)
 
         if not frames_list:
             logging.error(
-                f"Render: No frames found for key '{animation_key}' or any fallback. Cannot draw."
+                f"Get Frame Data: No frames found for key '{animation_key}' or any fallback. Returning dummy data."
             )
-            return
+            return [[[0]]], self.color_map, False, 0  # Return dummy data
 
         current_frame_matrix = frames_list[self.current_frame_index]
-
-        matrix_dimension = len(current_frame_matrix)
-        if matrix_dimension == 0:
-            logging.warning(
-                f"Render: Empty matrix for key '{animation_key}'. Cannot draw."
-            )
-            return
-
-        # Calculate the size of each individual pixel in the scaled sprite.
-        effective_pixel_size = max(1, int(display_size_pixels / matrix_dimension))
 
         # Determine if the sprite needs to be flipped horizontally.
         # Only flip for non-stateless animations and if facing left/up-left.
@@ -337,80 +335,36 @@ class Animation:
         ):
             flip_horizontal = True
 
-        for row_idx in range(matrix_dimension):
-            for col_idx in range(matrix_dimension):
-                matrix_value = current_frame_matrix[row_idx][col_idx]
-
-                cell_color = None
-                if matrix_value > 0 and matrix_value < len(self.color_map):
-                    cell_color = self.color_map[matrix_value]
-                elif matrix_value != 0:
-                    logging.debug(
-                        f"Color mapping not found for matrix value: {matrix_value}. Using base_color."
-                    )
-                    cell_color = base_color
-
-                if cell_color:
-                    draw_col = col_idx
-                    if flip_horizontal:
-                        draw_col = matrix_dimension - 1 - col_idx
-
-                    cell_draw_x = screen_x + draw_col * effective_pixel_size
-                    cell_draw_y = screen_y + row_idx * effective_pixel_size
-
-                    draw_rectangle(
-                        int(cell_draw_x),
-                        int(cell_draw_y),
-                        effective_pixel_size,
-                        effective_pixel_size,
-                        cell_color,
-                    )
-
-        # --- Visual Animation Indicator (for debugging/demo) ---
-        indicator_size = int(effective_pixel_size * 2)
-        indicator_x = int(screen_x)
-        indicator_y = int(screen_y)
-
-        indicator_colors = [
-            Color(255, 0, 0, 255),
-            Color(0, 255, 0, 255),
-            Color(0, 0, 255, 255),
-            Color(255, 255, 0, 255),
-        ]
-
-        current_indicator_color = indicator_colors[
-            self.current_frame_index % len(indicator_colors)
-        ]
-        draw_rectangle(
-            indicator_x,
-            indicator_y,
-            indicator_size,
-            indicator_size,
-            current_indicator_color,
+        return (
+            current_frame_matrix,
+            self.color_map,
+            flip_horizontal,
+            self.current_frame_index,
         )
 
-        # --- On-Sprite Frame Index Display (for debugging/demo) ---
-        text_size = int(display_size_pixels * 0.15)
-        if text_size < 10:
-            text_size = 10
 
-        frame_text = str(self.current_frame_index)
-        text_x = int(screen_x + effective_pixel_size)
-        text_y = int(screen_y + effective_pixel_size)
-        draw_text(frame_text, text_x, text_y, text_size, Color(255, 255, 255, 255))
-
-
-# --- ItemsEngine Class ---
-class ItemsEngine:
+# --- AnimationManager Class ---
+class AnimationManager:
     """
     Manages and provides Animation instances for game objects.
-    Acts as a factory for visual components, ensuring consistency and reusability.
-    Caches active Animation instances and their associated display properties.
+    Acts as a factory and cache for visual components, ensuring consistency and reusability.
+    It holds a reference to the ItemRenderer to facilitate drawing.
     """
 
-    def __init__(self):
-        # Cache for active Animation instances and their display properties (obj_id -> dict)
-        self._active_animations: dict[str, dict] = {}
+    def __init__(self, raylib_manager: RaylibManager):
+        """
+        Initializes the AnimationManager.
+
+        Args:
+            raylib_manager (RaylibManager): The centralized Raylib manager instance.
+        """
+        self._active_animations: dict[str, dict] = (
+            {}
+        )  # Cache for active Animation instances (obj_id -> dict)
+        self.item_renderer = ItemRenderer(
+            raylib_manager
+        )  # Initialize ItemRenderer with RaylibManager
+        logging.info("AnimationManager initialized.")
 
     def get_or_create_animation(
         self,
@@ -424,6 +378,17 @@ class ItemsEngine:
         """
         Retrieves an existing Animation instance from the cache or creates a new one.
         Returns a dictionary containing the animation instance and its current display properties.
+
+        Args:
+            obj_id (str): The unique identifier for the game object.
+            display_id (str): The ID referencing the animation data in ANIMATION_DATA (e.g., "SKIN_PEOPLE").
+            desired_direction (Direction): The desired direction for the animation.
+            desired_mode (AnimationMode): The desired animation mode (IDLE or WALKING).
+            target_display_size_pixels (int): The target pixel size for rendering this animation.
+            timestamp (float): The current time (e.g., from time.time()).
+
+        Returns:
+            dict: A dictionary containing the 'animation_instance', 'target_display_size_pixels', and 'display_id'.
         """
         animation_info = ANIMATION_DATA.get(display_id)
         if not animation_info:
@@ -467,7 +432,12 @@ class ItemsEngine:
         return self._active_animations[obj_id]
 
     def remove_animation(self, obj_id: str):
-        """Removes an Animation instance from the cache when an object is removed."""
+        """
+        Removes an Animation instance from the cache when an object is removed.
+
+        Args:
+            obj_id (str): The unique identifier of the object whose animation should be removed.
+        """
         if obj_id in self._active_animations:
             del self._active_animations[obj_id]
             logging.info(f"Removed animation for obj_id '{obj_id}'.")
@@ -475,40 +445,105 @@ class ItemsEngine:
     def update_all_active_animations(self, delta_time: float, current_timestamp: float):
         """
         Updates the animation frame for all currently active Animation instances.
+
+        Args:
+            delta_time (float): The time elapsed since the last update in seconds.
+            current_timestamp (float): The current time (e.g., from time.time()).
         """
         for obj_id, anim_properties in self._active_animations.items():
             animation_instance = anim_properties["animation_instance"]
             animation_instance.update(dt=delta_time, timestamp=current_timestamp)
 
     def get_animation_properties(self, obj_id: str) -> dict | None:
-        """Retrieves the animation properties for a given object ID, including the instance itself."""
+        """
+        Retrieves the animation properties for a given object ID, including the instance itself.
+
+        Args:
+            obj_id (str): The unique identifier of the object.
+
+        Returns:
+            dict | None: A dictionary containing animation properties, or None if not found.
+        """
         return self._active_animations.get(obj_id)
 
+    def render_object_animation(
+        self,
+        obj_id: str,
+        screen_x: float,
+        screen_y: float,
+        base_color: Color,
+        timestamp: float,
+    ):
+        """
+        Renders the animation for a specific game object.
+        This method retrieves the animation data from the managed Animation instance
+        and delegates the actual drawing to the ItemRenderer.
 
-# --- Standalone Demo Logic ---
+        Args:
+            obj_id (str): The unique identifier of the object to render.
+            screen_x (float): The X-coordinate on the screen for rendering.
+            screen_y (float): The Y-coordinate on the screen for rendering.
+            base_color (Color): The base color to use for rendering (e.g., for missing pixels).
+            timestamp (float): The current time (e.g., from time.time()).
+        """
+        anim_properties = self.get_animation_properties(obj_id)
+        if not anim_properties:
+            logging.warning(
+                f"No animation found for object ID: {obj_id}. Cannot render."
+            )
+            return
+
+        animation_instance = anim_properties["animation_instance"]
+        target_display_size_pixels = anim_properties["target_display_size_pixels"]
+
+        # Get the current frame data from the animation instance
+        frame_matrix, color_map, flip_horizontal, current_frame_index = (
+            animation_instance.get_current_frame_data(timestamp)
+        )
+
+        # Delegate rendering to the ItemRenderer
+        self.item_renderer.render_animation_frame(
+            frame_matrix=frame_matrix,
+            color_map=color_map,
+            screen_x=screen_x,
+            screen_y=screen_y,
+            display_size_pixels=target_display_size_pixels,
+            base_color=base_color,
+            flip_horizontal=flip_horizontal,
+            debug_frame_index=current_frame_index,  # Pass for debug display
+        )
+
+
+# --- Standalone Animation Viewer Logic ---
 if __name__ == "__main__":
+    # This block now acts as the 'animation_viewer.py' entry point
+    # It demonstrates how to use AnimationManager and ItemRenderer independently.
+
     SCREEN_WIDTH = 800
     SCREEN_HEIGHT = 600
     TARGET_FPS = 60
 
-    INITIAL_OBJECT_BASE_SIZE = 50  # Base size for calculation, not actual pixel size
+    INITIAL_OBJECT_BASE_SIZE = 50
     current_zoom_factor = 7.0
     ZOOM_SPEED = 0.5
     MIN_ZOOM = 0.5
     MAX_ZOOM = 16.0
 
-    init_window(SCREEN_WIDTH, SCREEN_HEIGHT, "Items Engine - Animation Demo")
-    set_target_fps(TARGET_FPS)
+    # Initialize Raylib through the manager
+    raylib_manager = RaylibManager(
+        SCREEN_WIDTH, SCREEN_HEIGHT, "Animation Viewer Demo", TARGET_FPS
+    )
 
-    items_engine = ItemsEngine()
+    # Initialize the AnimationManager, passing the RaylibManager
+    animation_manager = AnimationManager(raylib_manager)
 
     AVAILABLE_DISPLAY_IDS = ["SKIN_PEOPLE", "GFX_CLICK_POINTER"]
     current_display_id_index = 0
-    demo_obj_id = "demo_player"
+    demo_obj_id = "demo_player_animation"  # Unique ID for the demo animation
 
     # Initial state for the demo player
     current_display_id = AVAILABLE_DISPLAY_IDS[current_display_id_index]
-    current_direction = Direction.UP
+    current_direction = Direction.DOWN
     animation_mode = AnimationMode.IDLE
 
     # Calculate initial target display size based on base size and zoom
@@ -516,8 +551,8 @@ if __name__ == "__main__":
         INITIAL_OBJECT_BASE_SIZE * current_zoom_factor
     )
 
-    # Create/get the initial animation state
-    demo_animation_properties = items_engine.get_or_create_animation(
+    # Create/get the initial animation state using the AnimationManager
+    demo_animation_properties = animation_manager.get_or_create_animation(
         demo_obj_id,
         current_display_id,
         current_direction,
@@ -525,6 +560,7 @@ if __name__ == "__main__":
         current_target_display_size_pixels,
         time.time(),  # Pass current timestamp
     )
+    # The actual Animation instance is nested within the properties dictionary
     demo_animation_instance = demo_animation_properties["animation_instance"]
 
     last_frame_time = time.time()
@@ -537,15 +573,19 @@ if __name__ == "__main__":
     print("Use '3' to switch to the next animation ID and '4' for the previous.")
     print("Press ESC to close the window.")
 
-    while not window_should_close():
+    while (
+        not raylib_manager.window_should_close()
+    ):  # Use RaylibManager for window close check
         current_time = time.time()
         delta_time = current_time - last_frame_time
         last_frame_time = current_time
 
         # Get current animation properties (includes the instance)
-        demo_animation_properties = items_engine.get_animation_properties(demo_obj_id)
+        demo_animation_properties = animation_manager.get_animation_properties(
+            demo_obj_id
+        )
         if not demo_animation_properties:
-            continue  # Should not happen after initial creation
+            continue
 
         demo_animation_instance = demo_animation_properties["animation_instance"]
         current_display_id = demo_animation_properties["display_id"]
@@ -554,30 +594,58 @@ if __name__ == "__main__":
         ]
 
         # Update all active animations (only one in this demo)
-        items_engine.update_all_active_animations(delta_time, current_time)
+        animation_manager.update_all_active_animations(delta_time, current_time)
 
-        # --- Input Handling ---
+        # --- Input Handling (using RaylibManager) ---
         new_direction_from_input = None
-        if is_key_pressed(KEY_UP) or is_key_pressed(KEY_KP_8):
+        from raylibpy import (
+            KEY_UP,
+            KEY_DOWN,
+            KEY_LEFT,
+            KEY_RIGHT,
+            KEY_SPACE,
+            KEY_KP_1,
+            KEY_KP_2,
+            KEY_KP_3,
+            KEY_KP_4,
+            KEY_KP_6,
+            KEY_KP_7,
+            KEY_KP_8,
+            KEY_KP_9,
+            KEY_ONE,
+            KEY_TWO,
+            KEY_THREE,
+            KEY_FOUR,
+        )
+
+        if raylib_manager.is_key_pressed(KEY_UP) or raylib_manager.is_key_pressed(
+            KEY_KP_8
+        ):
             new_direction_from_input = Direction.UP
-        elif is_key_pressed(KEY_RIGHT) or is_key_pressed(KEY_KP_6):
+        elif raylib_manager.is_key_pressed(KEY_RIGHT) or raylib_manager.is_key_pressed(
+            KEY_KP_6
+        ):
             new_direction_from_input = Direction.RIGHT
-        elif is_key_pressed(KEY_DOWN) or is_key_pressed(KEY_KP_2):
+        elif raylib_manager.is_key_pressed(KEY_DOWN) or raylib_manager.is_key_pressed(
+            KEY_KP_2
+        ):
             new_direction_from_input = Direction.DOWN
-        elif is_key_pressed(KEY_LEFT) or is_key_pressed(KEY_KP_4):
+        elif raylib_manager.is_key_pressed(KEY_LEFT) or raylib_manager.is_key_pressed(
+            KEY_KP_4
+        ):
             new_direction_from_input = Direction.LEFT
-        elif is_key_pressed(KEY_KP_7):
+        elif raylib_manager.is_key_pressed(KEY_KP_7):
             new_direction_from_input = Direction.UP_LEFT
-        elif is_key_pressed(KEY_KP_9):
+        elif raylib_manager.is_key_pressed(KEY_KP_9):
             new_direction_from_input = Direction.UP_RIGHT
-        elif is_key_pressed(KEY_KP_1):
+        elif raylib_manager.is_key_pressed(KEY_KP_1):
             new_direction_from_input = Direction.DOWN_LEFT
-        elif is_key_pressed(KEY_KP_3):
+        elif raylib_manager.is_key_pressed(KEY_KP_3):
             new_direction_from_input = Direction.DOWN_RIGHT
 
         if new_direction_from_input:
             current_direction = new_direction_from_input
-            items_engine.get_or_create_animation(
+            animation_manager.get_or_create_animation(
                 demo_obj_id,
                 current_display_id,
                 current_direction,
@@ -586,13 +654,13 @@ if __name__ == "__main__":
                 current_time,
             )
 
-        if is_key_pressed(KEY_SPACE):
+        if raylib_manager.is_key_pressed(KEY_SPACE):
             animation_mode = (
                 AnimationMode.IDLE
                 if animation_mode == AnimationMode.WALKING
                 else AnimationMode.WALKING
             )
-            items_engine.get_or_create_animation(
+            animation_manager.get_or_create_animation(
                 demo_obj_id,
                 current_display_id,
                 current_direction,
@@ -601,14 +669,14 @@ if __name__ == "__main__":
                 current_time,
             )
 
-        if is_key_pressed(KEY_TWO):  # Zoom In
+        if raylib_manager.is_key_pressed(KEY_TWO):  # Zoom In
             current_zoom_factor += ZOOM_SPEED
             if current_zoom_factor > MAX_ZOOM:
                 current_zoom_factor = MAX_ZOOM
             current_target_display_size_pixels = int(
                 INITIAL_OBJECT_BASE_SIZE * current_zoom_factor
             )
-            items_engine.get_or_create_animation(
+            animation_manager.get_or_create_animation(
                 demo_obj_id,
                 current_display_id,
                 current_direction,
@@ -616,14 +684,14 @@ if __name__ == "__main__":
                 current_target_display_size_pixels,
                 current_time,
             )
-        elif is_key_pressed(KEY_ONE):  # Zoom Out
+        elif raylib_manager.is_key_pressed(KEY_ONE):  # Zoom Out
             current_zoom_factor -= ZOOM_SPEED
             if current_zoom_factor < MIN_ZOOM:
                 current_zoom_factor = MIN_ZOOM
             current_target_display_size_pixels = int(
                 INITIAL_OBJECT_BASE_SIZE * current_zoom_factor
             )
-            items_engine.get_or_create_animation(
+            animation_manager.get_or_create_animation(
                 demo_obj_id,
                 current_display_id,
                 current_direction,
@@ -632,12 +700,12 @@ if __name__ == "__main__":
                 current_time,
             )
 
-        if is_key_pressed(KEY_THREE):  # Next ID
+        if raylib_manager.is_key_pressed(KEY_THREE):  # Next ID
             current_display_id_index = (current_display_id_index + 1) % len(
                 AVAILABLE_DISPLAY_IDS
             )
             current_display_id = AVAILABLE_DISPLAY_IDS[current_display_id_index]
-            items_engine.get_or_create_animation(
+            animation_manager.get_or_create_animation(
                 demo_obj_id,
                 current_display_id,
                 current_direction,
@@ -645,12 +713,12 @@ if __name__ == "__main__":
                 current_target_display_size_pixels,
                 current_time,
             )
-        elif is_key_pressed(KEY_FOUR):  # Previous ID
+        elif raylib_manager.is_key_pressed(KEY_FOUR):  # Previous ID
             current_display_id_index = (
                 current_display_id_index - 1 + len(AVAILABLE_DISPLAY_IDS)
             ) % len(AVAILABLE_DISPLAY_IDS)
             current_display_id = AVAILABLE_DISPLAY_IDS[current_display_id_index]
-            items_engine.get_or_create_animation(
+            animation_manager.get_or_create_animation(
                 demo_obj_id,
                 current_display_id,
                 current_direction,
@@ -663,32 +731,32 @@ if __name__ == "__main__":
         draw_x = (SCREEN_WIDTH - current_target_display_size_pixels) / 2
         draw_y = (SCREEN_HEIGHT - current_target_display_size_pixels) / 2
 
-        begin_drawing()
-        clear_background(Color(40, 40, 40, 255))
+        raylib_manager.begin_drawing()  # Use RaylibManager
+        raylib_manager.clear_background(Color(40, 40, 40, 255))  # Use RaylibManager
 
-        # Draw the demo sprite
-        demo_animation_instance.render(
+        # Draw the demo sprite using the AnimationManager's render method
+        animation_manager.render_object_animation(
+            obj_id=demo_obj_id,
             screen_x=draw_x,
             screen_y=draw_y,
-            display_size_pixels=current_target_display_size_pixels,
-            base_color=Color(255, 255, 0, 255),
+            base_color=Color(255, 255, 0, 255),  # Example base color
             timestamp=current_time,
         )
 
-        # Display debug information
-        draw_text(
+        # Display debug information (using RaylibManager)
+        raylib_manager.draw_text(
             f"Current ID: {current_display_id}", 10, 10, 20, Color(255, 255, 255, 255)
         )
 
         # Display state from the animation instance itself
-        draw_text(
+        raylib_manager.draw_text(
             f"Direction: {demo_animation_instance.current_direction.name}",
             10,
             35,
             20,
             Color(255, 255, 255, 255),
         )
-        draw_text(
+        raylib_manager.draw_text(
             f"Animation Mode: {demo_animation_instance.animation_mode.name.capitalize()}",
             10,
             60,
@@ -697,7 +765,7 @@ if __name__ == "__main__":
         )
 
         if demo_animation_instance.is_stateless:
-            draw_text(
+            raylib_manager.draw_text(
                 "Directional input & SPACE ignored for this ID",
                 10,
                 80,
@@ -705,14 +773,14 @@ if __name__ == "__main__":
                 Color(200, 200, 200, 255),
             )
         else:
-            draw_text(
+            raylib_manager.draw_text(
                 "Press SPACE to toggle animation mode",
                 10,
                 80,
                 15,
                 Color(200, 200, 200, 255),
             )
-            draw_text(
+            raylib_manager.draw_text(
                 "Use numpad/arrow keys to set direction",
                 10,
                 100,
@@ -720,31 +788,31 @@ if __name__ == "__main__":
                 Color(200, 200, 200, 255),
             )
 
-        draw_text(
+        raylib_manager.draw_text(
             f"Zoom: {current_zoom_factor:.1f}x (Object Size: {current_target_display_size_pixels})",
             10,
             125,
             15,
             Color(200, 200, 200, 255),
         )
-        draw_text(
+        raylib_manager.draw_text(
             "Use '1' for zoom out and '2' for zoom in",
             10,
             145,
             15,
             Color(200, 200, 200, 255),
         )
-        draw_text(
+        raylib_manager.draw_text(
             "Use '3'/'4' to change animation ID", 10, 165, 15, Color(200, 200, 200, 255)
         )
-        draw_text(
+        raylib_manager.draw_text(
             f"Frame Index (UI): {demo_animation_instance.current_frame_index}",
             10,
             190,
             15,
             Color(200, 200, 200, 255),
         )
-        draw_text(
+        raylib_manager.draw_text(
             f"Frame Timer (UI): {demo_animation_instance.frame_timer:.2f}",
             10,
             210,
@@ -752,14 +820,14 @@ if __name__ == "__main__":
             Color(200, 200, 200, 255),
         )
 
-        draw_text(
-            f"FPS: {int(1.0 / get_frame_time()) if get_frame_time() > 0 else 'N/A'}",
+        raylib_manager.draw_text(
+            f"FPS: {int(1.0 / raylib_manager.get_frame_time()) if raylib_manager.get_frame_time() > 0 else 'N/A'}",
             10,
             SCREEN_HEIGHT - 30,
             20,
             Color(255, 255, 255, 255),
         )
 
-        end_drawing()
+        raylib_manager.end_drawing()  # Use RaylibManager
 
-    close_window()
+    raylib_manager.close_window()  # Use RaylibManager
