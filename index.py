@@ -6,7 +6,8 @@ import math
 import threading
 import json
 
-import websocket
+# Import the pure WebSocket client library
+import websocket  # pip install websocket-client
 
 from raylibpy import (
     Color,
@@ -44,7 +45,7 @@ logging.basicConfig(
     level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s"
 )
 
-# --- Game Constants ---
+# --- Instance Constants ---
 SERVER_HOST = "127.0.0.1"
 SERVER_PORT = 5000
 WEBSOCKET_PATH = "/ws"  # The endpoint for WebSocket connections on the Go server
@@ -57,7 +58,7 @@ SCREEN_HEIGHT = 800
 WORLD_WIDTH = 1600
 WORLD_HEIGHT = 1600
 
-# Size of game objects (players, obstacles)
+# Size of instance objects (players, obstacles)
 OBJECT_SIZE = 50
 
 # A* maze simplification: each cell in the 32x32 maze represents a block of this size in the world
@@ -66,12 +67,12 @@ MAZE_CELL_WORLD_SIZE = WORLD_WIDTH // 32  # 1600 / 32 = 50
 # Camera smoothing factor (0.0 to 1.0, higher means faster smoothing)
 CAMERA_SMOOTHNESS = 0.05
 
-# --- Game Entities ---
+# --- Instance Entities ---
 
 
-class GameObject:
+class InstanceObject:
     """
-    Represents a generic object in the game world.
+    Represents a generic object within an instance world.
     This object is a local representation of the server's state.
     """
 
@@ -115,8 +116,8 @@ class GameObject:
         }
 
     @classmethod
-    def from_dict(cls, data: dict) -> "GameObject":
-        """Creates a GameObject instance from a dictionary received from the server."""
+    def from_dict(cls, data: dict) -> "InstanceObject":
+        """Creates an InstanceObject instance from a dictionary received from the server."""
         color_data = data["color"]
         color = Color(
             color_data["R"], color_data["G"], color_data["B"], color_data["A"]
@@ -172,9 +173,9 @@ class GameObject:
             self.y += direction_y * move_distance
 
 
-class GameState:
+class InstanceState:
     """
-    Manages the overall state of the game world on the client.
+    Manages the overall state of the instance world on the client.
     The server is the authoritative source of truth; the client only reflects its state.
     """
 
@@ -182,12 +183,14 @@ class GameState:
         self.world_width = world_width
         self.world_height = world_height
         self.object_size = object_size
-        self.objects: dict[str, GameObject] = {}  # Dictionary: obj_id -> GameObject
+        self.objects: dict[str, InstanceObject] = (
+            {}
+        )  # Dictionary: obj_id -> InstanceObject
 
         # Conceptual grid for object placement (for visualization and basic collisions)
         self.grid_cells_x = world_width // object_size
         self.grid_cells_y = world_height // object_size
-        self.grid: list[list[GameObject | None]] = [
+        self.grid: list[list[InstanceObject | None]] = [
             [None for _ in range(self.grid_cells_x)] for _ in range(self.grid_cells_y)
         ]
 
@@ -197,9 +200,9 @@ class GameState:
         self.simplified_maze: list[list[int]] = [
             [0 for _ in range(self.maze_cells_x)] for _ in range(self.maze_cells_y)
         ]
-        # The maze is built in from_dict when the game state is received from the server.
+        # The maze is built in from_dict when the instance state is received from the server.
 
-        self.lock = threading.Lock()  # To protect game state from concurrent access
+        self.lock = threading.Lock()  # To protect instance state from concurrent access
 
     def _world_to_grid_coords(self, world_x: float, world_y: float) -> tuple[int, int]:
         """Converts world coordinates to grid cell indices."""
@@ -248,13 +251,13 @@ class GameState:
 
     def from_dict(self, data: dict):
         """
-        Deserializes and updates the client's game state from a dictionary
-        received from the server. This is the only way the client's game state
+        Deserializes and updates the client's instance state from a dictionary
+        received from the server. This is the only way the client's instance state
         should be modified.
         """
         with self.lock:
             self.objects = {
-                obj_id: GameObject.from_dict(obj_data)
+                obj_id: InstanceObject.from_dict(obj_data)
                 for obj_id, obj_data in data["objects"].items()
             }
             # Rebuild grid and maze after loading objects
@@ -266,10 +269,10 @@ class GameState:
                 grid_x, grid_y = self._world_to_grid_coords(obj.x, obj.y)
                 if 0 <= grid_x < self.grid_cells_x and 0 <= grid_y < self.grid_cells_y:
                     self.grid[grid_y][grid_x] = obj
-            self._build_simplified_maze()
+            self._build_simplified_maze()  # Rebuild visualization maze
 
 
-class GameRenderer:
+class InstanceRenderer:
     """
     Handles all Raylib rendering logic, including camera control.
     """
@@ -288,7 +291,7 @@ class GameRenderer:
         self.world_height = world_height
         self.object_size = object_size
 
-        init_window(screen_width, screen_height, "Python MMO Client")
+        init_window(screen_width, screen_height, "Python MMO Instance Client")
         set_target_fps(60)
 
         self.camera = Camera2D()
@@ -319,8 +322,8 @@ class GameRenderer:
         for y in range(0, self.world_height + 1, self.object_size):
             draw_line(0, y, self.world_width, y, LIGHTGRAY)
 
-    def draw_object(self, obj: GameObject):
-        """Draws a game object."""
+    def draw_object(self, obj: InstanceObject):
+        """Draws an instance object."""
         draw_rectangle(
             int(obj.x), int(obj.y), self.object_size, self.object_size, obj.color
         )
@@ -392,10 +395,10 @@ class GameRenderer:
         close_window()
 
 
-class GameClient:
+class InstanceClient:
     """
     The client component of the MMO, connecting to the Go server via pure WebSocket,
-    rendering the game world, and sending player actions.
+    rendering the instance world, and sending player actions.
     """
 
     def __init__(self, host: str, port: int, ws_path: str):
@@ -410,18 +413,18 @@ class GameClient:
             None  # Thread for WebSocket communication
         )
 
-        self.game_state = GameState(
+        self.instance_state = InstanceState(
             WORLD_WIDTH, WORLD_HEIGHT, OBJECT_SIZE
-        )  # Local copy of game state
+        )  # Local copy of instance state
         self.my_player_id: str | None = None
-        self.my_player_obj: GameObject | None = (
-            None  # Reference to my player object in game_state.objects
+        self.my_instance_obj: InstanceObject | None = (
+            None  # Reference to my player object in instance_state.objects
         )
         self.current_path_display: list[dict[str, float]] = (
             []
         )  # Path received from server to display
 
-        self.renderer = GameRenderer(
+        self.renderer = InstanceRenderer(
             SCREEN_WIDTH, SCREEN_HEIGHT, WORLD_WIDTH, WORLD_HEIGHT, OBJECT_SIZE
         )
 
@@ -440,7 +443,7 @@ class GameClient:
         except json.JSONDecodeError:
             logging.error(f"Failed to decode JSON message: {message}")
         except Exception as e:
-            logging.exception(f"Error in _on_message: {e}")
+            logging.exception(f"Error in on_message: {e}")
 
     def _on_error(self, ws: websocket.WebSocketApp, error: Exception):
         """Handler for WebSocket errors."""
@@ -453,7 +456,7 @@ class GameClient:
         """Handler for WebSocket close event."""
         logging.info(f"Disconnected from server: {close_status_code} - {close_msg}")
         self.my_player_id = None
-        self.my_player_obj = None
+        self.my_instance_obj = None
         self.ws = None  # Mark connection as closed
         self.connection_ready_event.clear()  # Clear event on close
 
@@ -463,7 +466,7 @@ class GameClient:
         self.connection_ready_event.set()  # Set event to signal connection is ready
 
     def _process_queued_messages(self):
-        """Processes messages from the queue in the main game loop."""
+        """Processes messages from the queue in the main instance loop."""
         with self.message_queue_lock:
             messages_to_process = list(self.message_queue)
             self.message_queue.clear()
@@ -474,13 +477,13 @@ class GameClient:
     def _handle_server_message(self, data: dict):
         """Dispatches incoming server messages based on their 'type' field."""
         msg_type = data.get("type")
-        if msg_type == "game_state_update":
-            self.game_state.from_dict(data)
-            if self.my_player_id and self.my_player_id in self.game_state.objects:
-                self.my_player_obj = self.game_state.objects[self.my_player_id]
+        if msg_type == "instance_state_update":
+            self.instance_state.from_dict(data)
+            if self.my_player_id and self.my_player_id in self.instance_state.objects:
+                self.my_instance_obj = self.instance_state.objects[self.my_player_id]
             else:
-                self.my_player_obj = None
-            logging.debug("Game state updated.")
+                self.my_instance_obj = None
+            logging.debug("Instance state updated.")
         elif msg_type == "player_assigned":
             self.my_player_id = data["player_id"]
             logging.info(f"Assigned player ID: {self.my_player_id} from server.")
@@ -489,9 +492,9 @@ class GameClient:
             path = data["path"]
             if player_id == self.my_player_id:
                 self.current_path_display = path
-                if self.my_player_obj:
-                    self.my_player_obj.path = path
-                    self.my_player_obj.path_index = 0
+                if self.my_instance_obj:
+                    self.my_instance_obj.path = path
+                    self.my_instance_obj.path_index = 0
                 logging.info(f"Received new path for my player: {len(path)} steps.")
         elif msg_type == "message":
             logging.info(f"Server message: {data.get('text', 'No message text')}")
@@ -548,12 +551,12 @@ class GameClient:
             self._process_queued_messages()
 
             # Update client-side player movement based on received path
-            if self.my_player_obj and self.my_player_obj.path:
-                self.my_player_obj.update_position(delta_time)
+            if self.my_instance_obj and self.my_instance_obj.path:
+                self.my_instance_obj.update_position(delta_time)
                 # If the client-side player reached the end of its path, clear it
-                if self.my_player_obj.path_index >= len(self.my_player_obj.path):
-                    self.my_player_obj.path = []
-                    self.my_player_obj.path_index = 0
+                if self.my_instance_obj.path_index >= len(self.my_instance_obj.path):
+                    self.my_instance_obj.path = []
+                    self.my_instance_obj.path_index = 0
                     self.current_path_display = []  # Clear displayed path
 
             # --- Input Handling ---
@@ -574,19 +577,19 @@ class GameClient:
             self.renderer.draw_grid()
 
             # Draw all objects received from the server
-            for obj_id, obj in self.game_state.objects.items():
+            for obj_id, obj in self.instance_state.objects.items():
                 self.renderer.draw_object(obj)
 
             # Draw the path for my player
-            if self.my_player_obj and self.current_path_display:
+            if self.my_instance_obj and self.current_path_display:
                 self.renderer.draw_path(self.current_path_display)
 
             # Update camera to follow my player
-            if self.my_player_obj:
+            if self.my_instance_obj:
                 self.renderer.update_camera(
                     Vector2(
-                        self.my_player_obj.x + OBJECT_SIZE / 2,
-                        self.my_player_obj.y + OBJECT_SIZE / 2,
+                        self.my_instance_obj.x + OBJECT_SIZE / 2,
+                        self.my_instance_obj.y + OBJECT_SIZE / 2,
                     )
                 )
                 # Display my player ID
@@ -594,7 +597,7 @@ class GameClient:
                     f"My Player ID: {self.my_player_id}", 10, 10, 20, BLACK
                 )
                 self.renderer.draw_debug_info(
-                    f"My Pos: ({int(self.my_player_obj.x)}, {int(self.my_player_obj.y)})",
+                    f"My Pos: ({int(self.my_instance_obj.x)}, {int(self.my_instance_obj.y)})",
                     10,
                     40,
                     20,
@@ -630,7 +633,7 @@ class GameClient:
 # --- Main Execution ---
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(
-        description="Python MMO Client with Plain WebSockets and Raylib."
+        description="Python MMO Instance Client with Plain WebSockets and Raylib."
     )
     parser.add_argument(
         "--host",
@@ -647,5 +650,5 @@ if __name__ == "__main__":
 
     args = parser.parse_args()
 
-    client = GameClient(args.host, args.port, WEBSOCKET_PATH)
+    client = InstanceClient(args.host, args.port, WEBSOCKET_PATH)
     client.run()
