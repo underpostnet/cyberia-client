@@ -6,11 +6,7 @@ import math
 import threading
 import json
 
-# Import the plain WebSocket client library
-import websocket  # pip install websocket-client
-
-# Import the external astar library
-from astar import astar
+import websocket
 
 from raylibpy import (
     Color,
@@ -76,6 +72,7 @@ CAMERA_SMOOTHNESS = 0.05
 class GameObject:
     """
     Represents a generic object in the game world.
+    This object is a local representation of the server's state.
     """
 
     def __init__(
@@ -100,6 +97,7 @@ class GameObject:
 
     def to_dict(self) -> dict:
         """Converts object state to a dictionary for serialization."""
+        # Included for completeness, although the client does not use it to send full objects.
         return {
             "obj_id": self.obj_id,
             "x": self.x,
@@ -118,7 +116,7 @@ class GameObject:
 
     @classmethod
     def from_dict(cls, data: dict) -> "GameObject":
-        """Creates a GameObject instance from a dictionary."""
+        """Creates a GameObject instance from a dictionary received from the server."""
         color_data = data["color"]
         color = Color(
             color_data["R"], color_data["G"], color_data["B"], color_data["A"]
@@ -131,7 +129,7 @@ class GameObject:
             data["is_obstacle"],
             data.get("speed", 200.0),  # Default speed if not provided
         )
-        # Ensure path is always a list, even if Go sends null for empty slice
+        # Ensure path is always a list, even if Go sends null for an empty slice
         obj.path = data.get("path") if data.get("path") is not None else []
         obj.path_index = data.get("path_index", 0)
         return obj
@@ -140,6 +138,7 @@ class GameObject:
         """
         Updates the object's position, moving it along its path.
         Movement is smoothed based on delta_time and object speed.
+        This logic is for smooth animation on the client.
         """
         if not self.path or self.path_index >= len(self.path):
             self.path = []
@@ -175,8 +174,8 @@ class GameObject:
 
 class GameState:
     """
-    Manages the overall state of the game world, including objects and the grid.
-    Handles conceptual grid for object placement and A* pathfinding (client-side simplified maze).
+    Manages the overall state of the game world on the client.
+    The server is the authoritative source of truth; the client only reflects its state.
     """
 
     def __init__(self, world_width: int, world_height: int, object_size: int):
@@ -185,21 +184,20 @@ class GameState:
         self.object_size = object_size
         self.objects: dict[str, GameObject] = {}  # Dictionary: obj_id -> GameObject
 
-        # Initialize the 1600x1600 grid (stores references to objects or None)
-        # This grid is conceptual for object placement, not for A* directly.
+        # Conceptual grid for object placement (for visualization and basic collisions)
         self.grid_cells_x = world_width // object_size
         self.grid_cells_y = world_height // object_size
         self.grid: list[list[GameObject | None]] = [
             [None for _ in range(self.grid_cells_x)] for _ in range(self.grid_cells_y)
         ]
 
-        # Initialize the 32x32 simplified maze for A*
+        # Simplified 32x32 maze for obstacle visualization (not for pathfinding)
         self.maze_cells_x = world_width // MAZE_CELL_WORLD_SIZE
         self.maze_cells_y = world_height // MAZE_CELL_WORLD_SIZE
         self.simplified_maze: list[list[int]] = [
             [0 for _ in range(self.maze_cells_x)] for _ in range(self.maze_cells_y)
         ]
-        self._build_simplified_maze()  # Initial build
+        # The maze is built in from_dict when the game state is received from the server.
 
         self.lock = threading.Lock()  # To protect game state from concurrent access
 
@@ -209,30 +207,17 @@ class GameState:
         grid_y = world_y // self.object_size
         return int(grid_x), int(grid_y)
 
-    def _grid_to_world_coords(self, grid_x: int, grid_y: int) -> tuple[float, float]:
-        """Converts grid cell indices to world coordinates (top-left of cell)."""
-        world_x = float(grid_x * self.object_size)
-        world_y = float(grid_y * self.object_size)
-        return world_x, world_y
-
     def world_to_maze_coords(self, world_x: float, world_y: float) -> tuple[int, int]:
         """Converts world coordinates to 32x32 maze coordinates."""
         maze_x = world_x // MAZE_CELL_WORLD_SIZE
         maze_y = world_y // MAZE_CELL_WORLD_SIZE
         return int(maze_x), int(maze_y)
 
-    def maze_to_world_coords(self, maze_x: int, maze_y: int) -> tuple[float, float]:
-        """Converts maze coordinates to world coordinates (center of the 50x50 block)."""
-        world_x = float(maze_x * MAZE_CELL_WORLD_SIZE + self.object_size // 2)
-        world_y = float(maze_y * MAZE_CELL_WORLD_SIZE + self.object_size // 2)
-        return world_x, world_y
-
     def _build_simplified_maze(self):
         """
-        Populates the 32x32 simplified maze based on obstacle objects.
-        A cell is an obstacle (1) if any part of it is occupied by an obstacle GameObject.
-        This is primarily for client-side visualization of obstacles, not for pathfinding
-        which is handled by the server.
+        Populates the 32x32 simplified maze based on current obstacle objects.
+        This is exclusively for client-side visualization of obstacles,
+        not for calculating paths (the server handles that).
         """
         try:
             # Reset maze
@@ -261,71 +246,12 @@ class GameState:
         except Exception as e:
             logging.exception(f"Error rebuilding simplified maze: {e}")
 
-    def add_object(self, obj: GameObject):
-        """Adds an object to the game state."""
-        with self.lock:
-            if obj.obj_id in self.objects:
-                logging.warning(f"Object with ID {obj.obj_id} already exists.")
-                return
-            self.objects[obj.obj_id] = obj
-            grid_x, grid_y = self._world_to_grid_coords(obj.x, obj.y)
-            if 0 <= grid_x < self.grid_cells_x and 0 <= grid_y < self.grid_cells_y:
-                self.grid[grid_y][grid_x] = obj
-            self._build_simplified_maze()  # Rebuild maze when objects are added/removed/moved
-            logging.debug(f"Added object: {obj.obj_id} at ({obj.x}, {obj.y})")
-
-    def remove_object(self, obj_id: str):
-        """Removes an object from the game state."""
-        with self.lock:
-            if obj_id in self.objects:
-                obj = self.objects.pop(obj_id)
-                grid_x, grid_y = self._world_to_grid_coords(obj.x, obj.y)
-                if (
-                    0 <= grid_x < self.grid_cells_x
-                    and 0 <= grid_y < self.grid_cells_y
-                    and self.grid[grid_y][grid_x] == obj
-                ):  # Ensure it's the same object
-                    self.grid[grid_y][grid_x] = None
-                self._build_simplified_maze()  # Rebuild maze when objects are added/removed/moved
-                logging.debug(f"Removed object: {obj_id}")
-            else:
-                logging.warning(f"Attempted to remove non-existent object: {obj_id}")
-
-    def update_object_position(self, obj_id: str, new_x: float, new_y: float):
-        """Updates an object's position in the game state."""
-        with self.lock:
-            obj = self.objects.get(obj_id)
-            if not obj:
-                logging.warning(
-                    f"Attempted to update position of non-existent object: {obj_id}"
-                )
-                return
-
-            # Clear old grid cell reference
-            old_grid_x, old_grid_y = self._world_to_grid_coords(obj.x, obj.y)
-            if (
-                0 <= old_grid_x < self.grid_cells_x
-                and 0 <= old_grid_y < self.grid_cells_y
-                and self.grid[old_grid_y][old_grid_x] == obj
-            ):
-                self.grid[old_grid_y][old_grid_x] = None
-
-            # Update object position
-            obj.x = new_x
-            obj.y = new_y
-
-            # Set new grid cell reference
-            new_grid_x, new_grid_y = self._world_to_grid_coords(new_x, new_y)
-            if (
-                0 <= new_grid_x < self.grid_cells_x
-                and 0 <= new_grid_y < self.grid_cells_y
-            ):
-                self.grid[new_grid_y][new_grid_x] = obj
-            self._build_simplified_maze()  # Rebuild maze if position changed
-            logging.debug(f"Updated object {obj_id} to ({new_x}, {new_y})")
-
     def from_dict(self, data: dict):
-        """Deserializes game state from a dictionary."""
+        """
+        Deserializes and updates the client's game state from a dictionary
+        received from the server. This is the only way the client's game state
+        should be modified.
+        """
         with self.lock:
             self.objects = {
                 obj_id: GameObject.from_dict(obj_data)
@@ -468,7 +394,7 @@ class GameRenderer:
 
 class GameClient:
     """
-    The client component of the MMO, connecting to the Go server via plain WebSockets,
+    The client component of the MMO, connecting to the Go server via pure WebSocket,
     rendering the game world, and sending player actions.
     """
 
@@ -486,7 +412,7 @@ class GameClient:
 
         self.game_state = GameState(
             WORLD_WIDTH, WORLD_HEIGHT, OBJECT_SIZE
-        )  # Client-side copy of game state
+        )  # Local copy of game state
         self.my_player_id: str | None = None
         self.my_player_obj: GameObject | None = (
             None  # Reference to my player object in game_state.objects
@@ -514,7 +440,7 @@ class GameClient:
         except json.JSONDecodeError:
             logging.error(f"Failed to decode JSON message: {message}")
         except Exception as e:
-            logging.exception(f"Error in on_message: {e}")
+            logging.exception(f"Error in _on_message: {e}")
 
     def _on_error(self, ws: websocket.WebSocketApp, error: Exception):
         """Handler for WebSocket errors."""
@@ -533,7 +459,7 @@ class GameClient:
 
     def _on_open(self, ws: websocket.WebSocketApp):
         """Handler for successful WebSocket connection."""
-        logging.info("Connected to server via Plain WebSocket!")
+        logging.info("Connected to server via Pure WebSocket!")
         self.connection_ready_event.set()  # Set event to signal connection is ready
 
     def _process_queued_messages(self):
@@ -706,7 +632,6 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(
         description="Python MMO Client with Plain WebSockets and Raylib."
     )
-    # The --mode argument is no longer needed as this script is exclusively a client.
     parser.add_argument(
         "--host",
         type=str,
