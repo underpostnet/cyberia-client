@@ -11,6 +11,8 @@ logging.basicConfig(
 from core.raylib_manager import RaylibManager
 from core.game_object import GameObject
 from visuals.animation_manager import AnimationManager, Direction, AnimationMode
+from data.animations.gfx.click_pointer import GFX_CLICK_POINTER_MATRIX_00
+from data.animations.skin.people import SKIN_PEOPLE_MATRIX_08_0
 
 
 class GameRenderer:
@@ -84,12 +86,20 @@ class GameRenderer:
                 # Use a combined ID for the animation manager cache
                 layered_obj_id = f"{game_object.obj_id}_{display_id}"
 
+                dim_num_pixels = 0
+                if display_id == "GFX_CLICK_POINTER":
+                    dim_num_pixels = len(GFX_CLICK_POINTER_MATRIX_00)
+                elif display_id == "SKIN_PEOPLE":
+                    dim_num_pixels = len(SKIN_PEOPLE_MATRIX_08_0)
+
                 self.animation_manager.get_or_create_animation(
                     obj_id=layered_obj_id,  # Use layered ID for cache
                     display_id=display_id,
                     desired_direction=game_object.last_known_direction,
                     desired_mode=animation_mode,
-                    target_display_size_pixels=self.object_size,  # Use object_size for rendering size
+                    target_display_size_pixels=int(
+                        self.object_size / (dim_num_pixels - 1)
+                    ),
                     timestamp=current_timestamp,
                 )
                 # Render the animation using the AnimationManager
@@ -102,13 +112,6 @@ class GameRenderer:
 
         else:
             # If no display_ids, draw a simple rectangle
-            self.raylib_manager.draw_rectangle(
-                int(game_object.x),
-                int(game_object.y),
-                self.object_size,
-                self.object_size,
-                RED,
-            )
             self.raylib_manager.draw_rectangle(
                 int(game_object.x),
                 int(game_object.y),
