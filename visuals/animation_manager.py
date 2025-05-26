@@ -1,7 +1,7 @@
 import time
 from enum import Enum, auto
 import logging
-import collections  # Import collections for deque and Counter
+import collections
 import math
 from raylibpy import (
     Color,

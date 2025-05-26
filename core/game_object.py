@@ -1,6 +1,5 @@
 import logging
 import math
-import collections  # Still needed for other potential uses, though _direction_history is moved
 
 from raylibpy import Color
 
