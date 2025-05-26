@@ -81,7 +81,6 @@ class AnimationMode(Enum):
 # - 'frames': A nested dictionary mapping a string key (e.g., "up_idle") to a list of matrices.
 # - 'colors': The color map for these matrices.
 # - 'frame_duration': The time in seconds each frame is displayed.
-# - 'stop_delay_duration': Optional delay before transitioning from WALKING to IDLE.
 # - 'dimensions': The base width and height of the sprite matrix (e.g., 26x26).
 # - 'is_stateless': True if the animation does not use directional or idle/walking states.
 ANIMATION_DATA = {
@@ -146,7 +145,6 @@ ANIMATION_DATA = {
         },
         "colors": SKIN_PEOPLE_MAP_COLORS,
         "frame_duration": 0.3,
-        "stop_delay_duration": 0.2,
         "dimensions": (26, 26),  # Original content dimensions, before padding
         "is_stateless": False,  # This animation responds to direction and mode
     },
@@ -172,7 +170,6 @@ ANIMATION_DATA = {
         },
         "colors": GFX_CLICK_POINTER_MAP_COLORS,
         "frame_duration": GFX_CLICK_POINTER_ANIMATION_SPEED,
-        "stop_delay_duration": 0.0,
         "dimensions": (5, 5),
         "is_stateless": True,  # This animation is stateless and always animates
     },
@@ -205,7 +202,6 @@ class Animation:
         frames_map: dict,
         color_map: list[Color],
         frame_duration: float = 0.15,
-        stop_delay_duration: float = 0.2,
         is_stateless: bool = False,
     ):
         """
@@ -215,13 +211,11 @@ class Animation:
             frames_map (dict): A dictionary mapping animation state keys (e.g., "up_idle") to lists of frame matrices.
             color_map (list[Color]): The color map for the pixel values in the matrices.
             frame_duration (float): The duration (in seconds) each frame is displayed.
-            stop_delay_duration (float): The delay (in seconds) after stopping movement before transitioning to idle animation.
             is_stateless (bool): If True, the animation ignores direction and mode and plays continuously.
         """
         self.frames_map = frames_map
         self.color_map = color_map
         self.frame_duration = frame_duration
-        self.stop_delay_duration = stop_delay_duration
         self.is_stateless = is_stateless
 
         self.current_frame_index = 0
@@ -284,7 +278,7 @@ class Animation:
         )
 
         is_currently_moving = (self.animation_mode == AnimationMode.WALKING) or (
-            timestamp - self.last_moving_timestamp < self.stop_delay_duration
+            timestamp - self.last_moving_timestamp < 0.5
         )
 
         animation_suffix = "_move" if is_currently_moving else "_idle"
@@ -462,7 +456,6 @@ class AnimationManager:
                 frames_map=animation_info["frames"],
                 color_map=animation_info["colors"],
                 frame_duration=animation_info["frame_duration"],
-                stop_delay_duration=animation_info["stop_delay_duration"],
                 is_stateless=animation_info["is_stateless"],
             )
             self._active_animations[obj_id] = {
