@@ -11,8 +11,6 @@ logging.basicConfig(
 from core.raylib_manager import RaylibManager
 from core.game_object import GameObject
 from visuals.animation_manager import AnimationManager, Direction, AnimationMode
-from data.animations.gfx.click_pointer import GFX_CLICK_POINTER_MATRIX_00
-from data.animations.skin.people import SKIN_PEOPLE_MATRIX_08_0
 
 
 class GameRenderer:
@@ -71,7 +69,7 @@ class GameRenderer:
             current_timestamp (float): The current time (e.g., from time.time()) for animation updates.
         """
 
-        if game_object.object_type == "player":
+        if len(game_object.display_ids) == 0 and game_object.object_type == "player":
             game_object.display_ids = ["SKIN_PEOPLE"]
 
         # Determine animation mode (IDLE or WALKING)
@@ -79,59 +77,29 @@ class GameRenderer:
         if game_object.path and game_object.path_index < len(game_object.path):
             animation_mode = AnimationMode.WALKING
 
-        if game_object.object_type == "player":
-            print(
-                "path_index:",
-                game_object.path_index,
-                "animation_mode:",
-                animation_mode,
-                "direction:",
-                game_object.last_known_direction,
-            )
-
         # Iterate through display_ids for Z-layered rendering
         if len(game_object.display_ids) > 0:
             for display_id in game_object.display_ids:
-                # Get or create the animation instance for this game object and layer
                 # Use a combined ID for the animation manager cache
                 layered_obj_id = f"{game_object.obj_id}_{display_id}"
 
-                dim_num_pixels = 0
-                if display_id == "GFX_CLICK_POINTER":
-                    dim_num_pixels = len(GFX_CLICK_POINTER_MATRIX_00)
-                elif display_id == "SKIN_PEOPLE":
-                    dim_num_pixels = len(SKIN_PEOPLE_MATRIX_08_0)
+                animation_info = self.animation_manager.get_animation_data(display_id)
 
-                current_animation = self.animation_manager.get_animation_properties(
-                    layered_obj_id
+                anim_base_dimensions = animation_info["dimensions"]
+
+                dim_num_pixels = anim_base_dimensions[0] - 1
+
+                target_display_size_pixels = int(self.object_size / dim_num_pixels)
+
+                self.animation_manager.get_or_create_animation(
+                    obj_id=layered_obj_id,  # Use layered ID for cache
+                    display_id=display_id,
+                    desired_direction=game_object.last_known_direction,
+                    desired_mode=animation_mode,
+                    target_display_size_pixels=target_display_size_pixels,
+                    timestamp=current_timestamp,
                 )
 
-                animation_instance = current_animation["animation_instance"]
-
-                if (
-                    not current_animation
-                    or animation_instance.direction != game_object.last_known_direction
-                    or animation_instance.mode != animation_mode
-                ):
-
-                    if game_object.object_type == "player":
-                        print(
-                            "exec last_known_direction:",
-                            game_object.last_known_direction,
-                            "exec animation_mode:",
-                            animation_mode,
-                        )
-
-                    self.animation_manager.get_or_create_animation(
-                        obj_id=layered_obj_id,  # Use layered ID for cache
-                        display_id=display_id,
-                        desired_direction=game_object.last_known_direction,
-                        desired_mode=animation_mode,
-                        target_display_size_pixels=int(
-                            self.object_size / (dim_num_pixels - 1)
-                        ),
-                        timestamp=current_timestamp,
-                    )
                 # Render the animation using the AnimationManager
                 self.animation_manager.render_object_animation(
                     obj_id=layered_obj_id,  # Use layered ID for rendering
