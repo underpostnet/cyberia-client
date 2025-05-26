@@ -32,7 +32,9 @@ from core.raylib_manager import RaylibManager
 
 # Import the refactored game renderer
 from visuals.game_renderer import GameRenderer
-from visuals.animation_manager import AnimationManager
+from visuals.animation_manager import (
+    AnimationManager,
+)  # This import is still needed for type hinting/reference
 
 # Import the refactored game state and game object
 from core.game_state import GameState
@@ -210,8 +212,6 @@ class MmoClient:
 
         last_frame_time = time.time()
 
-        # Initialize the AnimationManager, passing the RaylibManager
-
         while (
             not self.raylib_manager.window_should_close()
         ):  # Use raylib_manager for window close check
@@ -223,13 +223,18 @@ class MmoClient:
             self._process_queued_messages()
 
             # Update client-side player movement based on received path
-            if self.my_game_object and self.my_game_object.path:
-                self.my_game_object.update_position(delta_time)
+            # The GameObject.update_position now only handles position interpolation,
+            # relying on server updates for direction.
+            for obj_id, obj in self.game_state.objects.items():
+                obj.update_position(delta_time)
                 # If the client-side player reached the end of its path, clear it
-                if self.my_game_object.path_index >= len(self.my_game_object.path):
-                    self.my_game_object.path = []
-                    self.my_game_object.path_index = 0
-                    self.current_path_display = []  # Clear displayed path
+                # This logic is now applied to all objects, not just my_game_object
+                if obj.path and obj.path_index >= len(obj.path):
+                    obj.path = []
+                    obj.path_index = 0
+                    # If it's my player, also clear the current_path_display
+                    if obj_id == self.my_player_id:
+                        self.current_path_display = []
 
             # --- Input Handling ---
             if self.raylib_manager.is_mouse_button_pressed(
@@ -260,7 +265,7 @@ class MmoClient:
             for obj_id, obj in self.game_state.objects.items():
                 self.game_renderer.draw_game_object(obj, current_time)
 
-            # Draw the path for my player
+            # Draw the path for my player (if any)
             if self.my_game_object and self.current_path_display:
                 self.game_renderer.draw_path(
                     self.current_path_display
