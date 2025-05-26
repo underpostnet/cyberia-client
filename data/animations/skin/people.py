@@ -1,4 +1,4 @@
-from raylibpy import *
+from raylibpy import Color, BLACK, RED, ORANGE, PINK, BLUE
 
 SKIN_PEOPLE_MATRIX_08_0 = [
     [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
@@ -337,6 +337,7 @@ SKIN_PEOPLE_MATRIX_12_1 = [
     [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
 ]
 SKIN_PEOPLE_MAP_COLORS = [0] * 9
+SKIN_PEOPLE_MAP_COLORS[0] = Color(0, 0, 0, 0)
 SKIN_PEOPLE_MAP_COLORS[1] = BLACK
 SKIN_PEOPLE_MAP_COLORS[2] = BLACK
 SKIN_PEOPLE_MAP_COLORS[3] = BLACK

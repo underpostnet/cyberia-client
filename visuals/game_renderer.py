@@ -1,11 +1,6 @@
 import logging
 
-from raylibpy import (
-    BLACK,
-    LIGHTGRAY,
-    GREEN,
-    RED,
-)
+from raylibpy import BLACK, LIGHTGRAY, GREEN, RED, YELLOW
 
 # --- Logging Configuration ---
 logging.basicConfig(
@@ -74,13 +69,16 @@ class GameRenderer:
             current_timestamp (float): The current time (e.g., from time.time()) for animation updates.
         """
 
+        if game_object.object_type == "player":
+            game_object.display_ids = ["SKIN_PEOPLE"]
+
         # Determine animation mode (IDLE or WALKING)
         animation_mode = AnimationMode.IDLE
         if game_object.path and game_object.path_index < len(game_object.path):
             animation_mode = AnimationMode.WALKING
 
         # Iterate through display_ids for Z-layered rendering
-        if len(game_object.display_ids.display_ids) > 0:
+        if len(game_object.display_ids) > 0:
             for display_id in game_object.display_ids:
                 # Get or create the animation instance for this game object and layer
                 # Use a combined ID for the animation manager cache
@@ -99,7 +97,6 @@ class GameRenderer:
                     obj_id=layered_obj_id,  # Use layered ID for rendering
                     screen_x=game_object.x,
                     screen_y=game_object.y,
-                    base_color=game_object.color,  # Use object's color as base/fallback
                     timestamp=current_timestamp,
                 )
 
@@ -110,7 +107,7 @@ class GameRenderer:
                 int(game_object.y),
                 self.object_size,
                 self.object_size,
-                game_object.color,
+                RED,
             )
             self.raylib_manager.draw_rectangle(
                 int(game_object.x),
@@ -124,7 +121,7 @@ class GameRenderer:
                 int(game_object.y) + 2,
                 self.object_size - 4,
                 self.object_size - 4,
-                game_object.color,
+                YELLOW,
             )
 
     def draw_path(self, path: list[dict[str, float]]):

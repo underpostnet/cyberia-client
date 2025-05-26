@@ -34,6 +34,9 @@ from raylibpy import (
     KEY_FOUR,
 )
 
+from data.animations.gfx.click_pointer import GFX_CLICK_POINTER_MATRIX_00
+from data.animations.skin.people import SKIN_PEOPLE_MATRIX_08_0
+
 # --- Logging Configuration ---
 logging.basicConfig(
     level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s"
@@ -46,10 +49,6 @@ if __name__ == "__main__":
     TARGET_FPS = 60
 
     INITIAL_OBJECT_BASE_SIZE = 50
-    current_zoom_factor = 7.0
-    ZOOM_SPEED = 0.5
-    MIN_ZOOM = 0.5
-    MAX_ZOOM = 16.0
 
     # Initialize Raylib through the manager
     raylib_manager = RaylibManager(
@@ -65,13 +64,11 @@ if __name__ == "__main__":
 
     # Initial state for the demo player
     current_display_id = AVAILABLE_DISPLAY_IDS[current_display_id_index]
-    current_direction = Direction.UP
+    current_direction = Direction.DOWN
     animation_mode = AnimationMode.IDLE
 
-    # Calculate initial target display size based on base size and zoom
-    current_target_display_size_pixels = int(
-        INITIAL_OBJECT_BASE_SIZE * current_zoom_factor
-    )
+    # Calculate initial target display size based on base size
+    current_target_display_size_pixels = 10
 
     # Create/get the initial animation state using the AnimationManager
     demo_animation_properties = animation_manager.get_or_create_animation(
@@ -111,9 +108,6 @@ if __name__ == "__main__":
 
         demo_animation_instance = demo_animation_properties["animation_instance"]
         current_display_id = demo_animation_properties["display_id"]
-        current_target_display_size_pixels = demo_animation_properties[
-            "target_display_size_pixels"
-        ]
 
         # Update all active animations (only one in this demo)
         animation_manager.update_all_active_animations(delta_time, current_time)
@@ -172,13 +166,9 @@ if __name__ == "__main__":
                 current_time,
             )
 
-        if raylib_manager.is_key_pressed(KEY_TWO):  # Zoom In
-            current_zoom_factor += ZOOM_SPEED
-            if current_zoom_factor > MAX_ZOOM:
-                current_zoom_factor = MAX_ZOOM
-            current_target_display_size_pixels = int(
-                INITIAL_OBJECT_BASE_SIZE * current_zoom_factor
-            )
+        if raylib_manager.is_key_pressed(KEY_TWO):
+
+            current_target_display_size_pixels -= 1
             animation_manager.get_or_create_animation(
                 demo_obj_id,
                 current_display_id,
@@ -187,13 +177,9 @@ if __name__ == "__main__":
                 current_target_display_size_pixels,
                 current_time,
             )
-        elif raylib_manager.is_key_pressed(KEY_ONE):  # Zoom Out
-            current_zoom_factor -= ZOOM_SPEED
-            if current_zoom_factor < MIN_ZOOM:
-                current_zoom_factor = MIN_ZOOM
-            current_target_display_size_pixels = int(
-                INITIAL_OBJECT_BASE_SIZE * current_zoom_factor
-            )
+        elif raylib_manager.is_key_pressed(KEY_ONE):
+
+            current_target_display_size_pixels += 1
             animation_manager.get_or_create_animation(
                 demo_obj_id,
                 current_display_id,
@@ -230,9 +216,19 @@ if __name__ == "__main__":
                 current_time,
             )
 
+        dim_num_pixels = 0
+        if current_display_id == "GFX_CLICK_POINTER":
+            dim_num_pixels = len(GFX_CLICK_POINTER_MATRIX_00)
+        elif current_display_id == "SKIN_PEOPLE":
+            dim_num_pixels = len(SKIN_PEOPLE_MATRIX_08_0)
+
         # Recalculate draw position based on current object display size
-        draw_x = (SCREEN_WIDTH - current_target_display_size_pixels) / 2
-        draw_y = (SCREEN_HEIGHT - current_target_display_size_pixels) / 2
+        draw_x = (SCREEN_WIDTH / 2) - (
+            (current_target_display_size_pixels * dim_num_pixels) / 2
+        )
+        draw_y = (SCREEN_HEIGHT / 2) - (
+            (current_target_display_size_pixels * dim_num_pixels) / 2
+        )
 
         raylib_manager.begin_drawing()
         raylib_manager.clear_background(Color(40, 40, 40, 255))
@@ -242,7 +238,6 @@ if __name__ == "__main__":
             obj_id=demo_obj_id,
             screen_x=draw_x,
             screen_y=draw_y,
-            base_color=Color(255, 255, 0, 255),  # Example base color
             timestamp=current_time,
         )
 
@@ -292,7 +287,7 @@ if __name__ == "__main__":
             )
 
         raylib_manager.draw_text(
-            f"Zoom: {current_zoom_factor:.1f}x (Object Size: {current_target_display_size_pixels})",
+            f"Pixel Size: {current_target_display_size_pixels}",
             10,
             125,
             15,

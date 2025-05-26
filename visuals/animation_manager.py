@@ -249,7 +249,7 @@ class Animation:
         if self.is_stateless:
             # Stateless animations always use NONE direction and WALKING mode to ensure continuous play
             new_direction = Direction.NONE
-            new_mode = AnimationMode.WALKING
+            new_mode = AnimationMode.IDLE
 
         state_changed = (self.current_direction != new_direction) or (
             self.animation_mode != new_mode
@@ -262,7 +262,7 @@ class Animation:
             self.current_frame_index = 0
             self.frame_timer = 0.0
             logging.debug(
-                f"Animation state changed to Direction: {self.current_direction.name}, Mode: {self.animation_mode.name}"
+                f"Animation state changed to Direction: {self.current_direction}, Mode: {self.animation_mode.name}"
             )
 
         if self.animation_mode == AnimationMode.WALKING:
@@ -361,7 +361,6 @@ class Animation:
         current_frame_matrix = frames_list[self.current_frame_index]
 
         # Determine if the sprite needs to be flipped horizontally.
-        # Only flip for non-stateless animations and if facing left/up-left.
         flip_horizontal = False
         if not self.is_stateless and (
             self.current_direction == Direction.LEFT
@@ -506,7 +505,6 @@ class AnimationManager:
         obj_id: str,
         screen_x: float,
         screen_y: float,
-        base_color: Color,
         timestamp: float,
     ):
         """
@@ -543,7 +541,5 @@ class AnimationManager:
             screen_x=screen_x,
             screen_y=screen_y,
             display_size_pixels=target_display_size_pixels,
-            base_color=base_color,
             flip_horizontal=flip_horizontal,
-            debug_frame_index=current_frame_index,  # Pass for debug display
         )
