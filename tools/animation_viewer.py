@@ -167,7 +167,7 @@ if __name__ == "__main__":
 
         if raylib_manager.is_key_pressed(KEY_TWO):
 
-            current_target_display_size_pixels -= 1
+            current_target_display_size_pixels += 1
             animation_manager.get_or_create_animation(
                 demo_obj_id,
                 current_display_id,
@@ -178,7 +178,7 @@ if __name__ == "__main__":
             )
         elif raylib_manager.is_key_pressed(KEY_ONE):
 
-            current_target_display_size_pixels += 1
+            current_target_display_size_pixels -= 1
             animation_manager.get_or_create_animation(
                 demo_obj_id,
                 current_display_id,
