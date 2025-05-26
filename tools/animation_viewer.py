@@ -109,7 +109,6 @@ if __name__ == "__main__":
         demo_animation_instance = demo_animation_properties["animation_instance"]
         current_display_id = demo_animation_properties["display_id"]
 
-        # Update all active animations (only one in this demo)
         animation_manager.update_all_active_animations(delta_time, current_time)
 
         # --- Input Handling (using RaylibManager) ---

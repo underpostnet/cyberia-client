@@ -1,6 +1,6 @@
 import logging
 
-from raylibpy import BLACK, LIGHTGRAY, GREEN, RED, YELLOW
+from raylibpy import BLACK, LIGHTGRAY, GREEN, RED, YELLOW, GRAY
 
 # --- Logging Configuration ---
 logging.basicConfig(
@@ -11,6 +11,8 @@ logging.basicConfig(
 from core.raylib_manager import RaylibManager
 from core.game_object import GameObject
 from visuals.animation_manager import AnimationManager, Direction, AnimationMode
+from data.animations.gfx.click_pointer import GFX_CLICK_POINTER_MATRIX_00
+from data.animations.skin.people import SKIN_PEOPLE_MATRIX_08_0
 
 
 class GameRenderer:
@@ -77,6 +79,16 @@ class GameRenderer:
         if game_object.path and game_object.path_index < len(game_object.path):
             animation_mode = AnimationMode.WALKING
 
+        if game_object.object_type == "player":
+            print(
+                "path_index:",
+                game_object.path_index,
+                "animation_mode:",
+                animation_mode,
+                "direction:",
+                game_object.last_known_direction,
+            )
+
         # Iterate through display_ids for Z-layered rendering
         if len(game_object.display_ids) > 0:
             for display_id in game_object.display_ids:
@@ -84,14 +96,29 @@ class GameRenderer:
                 # Use a combined ID for the animation manager cache
                 layered_obj_id = f"{game_object.obj_id}_{display_id}"
 
-                self.animation_manager.get_or_create_animation(
-                    obj_id=layered_obj_id,  # Use layered ID for cache
-                    display_id=display_id,
-                    desired_direction=game_object.last_known_direction,
-                    desired_mode=animation_mode,
-                    target_display_size_pixels=self.object_size,  # Use object_size for rendering size
-                    timestamp=current_timestamp,
+                dim_num_pixels = 0
+                if display_id == "GFX_CLICK_POINTER":
+                    dim_num_pixels = len(GFX_CLICK_POINTER_MATRIX_00)
+                elif display_id == "SKIN_PEOPLE":
+                    dim_num_pixels = len(SKIN_PEOPLE_MATRIX_08_0)
+
+                current_animation = self.animation_manager.get_animation_properties(
+                    layered_obj_id
                 )
+                if (
+                    not current_animation
+                    or current_animation.desired_direction != animation_mode
+                ):
+                    self.animation_manager.get_or_create_animation(
+                        obj_id=layered_obj_id,  # Use layered ID for cache
+                        display_id=display_id,
+                        desired_direction=game_object.last_known_direction,
+                        desired_mode=animation_mode,
+                        target_display_size_pixels=int(
+                            self.object_size / (dim_num_pixels - 1)
+                        ),
+                        timestamp=current_timestamp,
+                    )
                 # Render the animation using the AnimationManager
                 self.animation_manager.render_object_animation(
                     obj_id=layered_obj_id,  # Use layered ID for rendering
@@ -107,13 +134,6 @@ class GameRenderer:
                 int(game_object.y),
                 self.object_size,
                 self.object_size,
-                RED,
-            )
-            self.raylib_manager.draw_rectangle(
-                int(game_object.x),
-                int(game_object.y),
-                self.object_size,
-                self.object_size,
                 BLACK,
             )
             self.raylib_manager.draw_rectangle(
@@ -121,7 +141,7 @@ class GameRenderer:
                 int(game_object.y) + 2,
                 self.object_size - 4,
                 self.object_size - 4,
-                YELLOW,
+                GRAY,
             )
 
     def draw_path(self, path: list[dict[str, float]]):

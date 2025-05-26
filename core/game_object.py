@@ -8,20 +8,9 @@ logging.basicConfig(
     level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s"
 )
 
-
-# Import Direction enum from animation_manager for type hinting and defaults
-# This creates a slight circular dependency, but for enums, it's generally acceptable
-# if not directly instantiating AnimationManager/Animation here.
-class Direction:
-    UP = "UP"
-    DOWN = "DOWN"
-    LEFT = "LEFT"
-    RIGHT = "RIGHT"
-    UP_LEFT = "UP_LEFT"
-    UP_RIGHT = "UP_RIGHT"
-    DOWN_LEFT = "DOWN_LEFT"
-    DOWN_RIGHT = "DOWN_RIGHT"
-    NONE = "NONE"
+# Import the Direction enum from animation_manager
+# This replaces the local simple Direction class
+from visuals.animation_manager import Direction
 
 
 class GameObject:
@@ -170,6 +159,41 @@ class GameObject:
             # Normalize the direction vector
             direction_x = dx / distance
             direction_y = dy / distance
-            # Update position based on normalized direction and move distance
             self.x += direction_x * move_distance
             self.y += direction_y * move_distance
+
+            # Update last_known_direction only when actively moving
+            # and only if there's significant movement to avoid jitter from floating point inaccuracies
+            if abs(dx) > 0.1 or abs(dy) > 0.1:
+                # Determine the 8-directional enum based on delta X and delta Y.
+                norm_dx = 0
+                if dx > 0:
+                    norm_dx = 1
+                elif dx < 0:
+                    norm_dx = -1
+
+                norm_dy = 0
+                if dy > 0:
+                    norm_dy = 1
+                elif dy < 0:
+                    norm_dy = -1
+
+                if norm_dy == -1:  # Up
+                    if norm_dx == 0:
+                        self.last_known_direction = Direction.UP
+                    elif norm_dx == 1:
+                        self.last_known_direction = Direction.UP_RIGHT
+                    else:
+                        self.last_known_direction = Direction.UP_LEFT
+                elif norm_dy == 1:  # Down
+                    if norm_dx == 0:
+                        self.last_known_direction = Direction.DOWN
+                    elif norm_dx == 1:
+                        self.last_known_direction = Direction.DOWN_RIGHT
+                    else:
+                        self.last_known_direction = Direction.DOWN_LEFT
+                else:  # Horizontal (norm_dy == 0)
+                    if norm_dx == 1:
+                        self.last_known_direction = Direction.RIGHT
+                    else:
+                        self.last_known_direction = Direction.LEFT

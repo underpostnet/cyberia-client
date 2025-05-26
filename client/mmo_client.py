@@ -32,6 +32,7 @@ from core.raylib_manager import RaylibManager
 
 # Import the refactored game renderer
 from visuals.game_renderer import GameRenderer
+from visuals.animation_manager import AnimationManager
 
 # Import the refactored game state and game object
 from core.game_state import GameState
@@ -209,6 +210,9 @@ class MmoClient:
 
         last_frame_time = time.time()
 
+        # Initialize the AnimationManager, passing the RaylibManager
+        animation_manager = AnimationManager(self.raylib_manager)
+
         while (
             not self.raylib_manager.window_should_close()
         ):  # Use raylib_manager for window close check
@@ -302,6 +306,8 @@ class MmoClient:
                 self.raylib_manager.draw_text(  # Use raylib_manager to draw text
                     "FPS: N/A", 10, SCREEN_HEIGHT - 30, 20, BLACK
                 )  # Display N/A if frame_time is 0
+
+            animation_manager.update_all_active_animations(delta_time, current_time)
 
             self.raylib_manager.end_drawing()  # Use raylib_manager to end drawing
 
