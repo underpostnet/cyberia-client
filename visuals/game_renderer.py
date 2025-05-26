@@ -105,10 +105,23 @@ class GameRenderer:
                 current_animation = self.animation_manager.get_animation_properties(
                     layered_obj_id
                 )
+
+                animation_instance = current_animation["animation_instance"]
+
                 if (
                     not current_animation
-                    or current_animation.desired_direction != animation_mode
+                    or animation_instance.direction != game_object.last_known_direction
+                    or animation_instance.mode != animation_mode
                 ):
+
+                    if game_object.object_type == "player":
+                        print(
+                            "exec last_known_direction:",
+                            game_object.last_known_direction,
+                            "exec animation_mode:",
+                            animation_mode,
+                        )
+
                     self.animation_manager.get_or_create_animation(
                         obj_id=layered_obj_id,  # Use layered ID for cache
                         display_id=display_id,
@@ -141,7 +154,7 @@ class GameRenderer:
                 int(game_object.y) + 2,
                 self.object_size - 4,
                 self.object_size - 4,
-                GRAY,
+                game_object.color,
             )
 
     def draw_path(self, path: list[dict[str, float]]):
