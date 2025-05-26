@@ -1,16 +1,17 @@
 import time
 from enum import Enum, auto
 import logging
-
+import collections  # Import collections for deque and Counter
+import math
 from raylibpy import (
     Color,
 )  # Only import Color, other Raylib functions via RaylibManager
 
-# Import config for global settings (if needed, currently not used directly in this file)
+# Import config for global settings
 import config as settings
+from config import DIRECTION_HISTORY_LENGTH  # Import the new constant
 
 # Imported matrices and color map for character animations
-# These are now expected to be in data/animations/skin/people.py
 from data.animations.skin.people import (
     SKIN_PEOPLE_MATRIX_08_0,
     SKIN_PEOPLE_MATRIX_08_1,
@@ -28,7 +29,6 @@ from data.animations.skin.people import (
 )
 
 # Imported matrices and color map for click pointer animation
-# These are now expected to be in data/animations/gfx/click_pointer.py
 from data.animations.gfx.click_pointer import (
     GFX_CLICK_POINTER_MATRIX_00,
     GFX_CLICK_POINTER_MATRIX_01,
@@ -223,6 +223,7 @@ class Animation:
         self.last_moving_timestamp = 0.0
 
         # Internal state for the animation instance
+        # These will be set by the AnimationManager now
         self.current_direction = Direction.DOWN  # Default direction
         self.animation_mode = AnimationMode.IDLE  # Default mode
 
@@ -359,7 +360,7 @@ class Animation:
         if not self.is_stateless and (
             self.current_direction == Direction.LEFT
             or self.current_direction == Direction.UP_LEFT
-            or self.current_direction == Direction.DOWN_LEFT  # Added for consistency
+            or self.current_direction == Direction.DOWN_LEFT
         ):
             flip_horizontal = True
 
@@ -377,6 +378,7 @@ class AnimationManager:
     Manages and provides Animation instances for game objects.
     Acts as a factory and cache for visual components, ensuring consistency and reusability.
     It holds a reference to the ItemRenderer to facilitate drawing.
+    It now also manages the directional smoothing for animated objects.
     """
 
     def __init__(self, raylib_manager: RaylibManager):
@@ -392,6 +394,11 @@ class AnimationManager:
         self.item_renderer = ItemRenderer(
             raylib_manager
         )  # Initialize ItemRenderer with RaylibManager
+
+        # New: Dictionary to store direction histories for each (obj_id, display_id)
+        self._object_direction_histories: dict[
+            tuple[str, str], collections.deque[Direction]
+        ] = {}
         logging.info("AnimationManager initialized.")
 
     def get_animation_data(self, display_id: str) -> dict | None:
@@ -410,10 +417,8 @@ class AnimationManager:
         self,
         obj_id: str,
         display_id: str,
-        desired_direction: Direction,
-        desired_mode: AnimationMode,
         target_display_size_pixels: int,
-        timestamp: float,
+        initial_direction: Direction,  # New parameter for initial direction
     ) -> dict:
         """
         Retrieves an existing Animation instance from the cache or creates a new one.
@@ -422,10 +427,8 @@ class AnimationManager:
         Args:
             obj_id (str): The unique identifier for the game object.
             display_id (str): The ID referencing the animation data in ANIMATION_DATA (e.g., "SKIN_PEOPLE").
-            desired_direction (Direction): The desired direction for the animation.
-            desired_mode (AnimationMode): The desired animation mode (IDLE or WALKING).
             target_display_size_pixels (int): The target pixel size for rendering this animation.
-            timestamp (float): The current time (e.g., from time.time()).
+            initial_direction (Direction): The initial direction to set for the animation history.
 
         Returns:
             dict: A dictionary containing the 'animation_instance', 'target_display_size_pixels', and 'display_id'.
@@ -437,8 +440,11 @@ class AnimationManager:
         animation_instance = None
         is_recreate_needed = False
 
-        if obj_id in self._active_animations:
-            current_cached_props = self._active_animations[obj_id]
+        # Unique key for the animation instance and its direction history
+        anim_key = f"{obj_id}_{display_id}"
+
+        if anim_key in self._active_animations:
+            current_cached_props = self._active_animations[anim_key]
             # Check if the core animation properties (display_id or scale) have changed
             if (
                 current_cached_props["display_id"] != display_id
@@ -458,7 +464,7 @@ class AnimationManager:
                 frame_duration=animation_info["frame_duration"],
                 is_stateless=animation_info["is_stateless"],
             )
-            self._active_animations[obj_id] = {
+            self._active_animations[anim_key] = {
                 "animation_instance": animation_instance,
                 "target_display_size_pixels": target_display_size_pixels,
                 "display_id": display_id,
@@ -467,23 +473,150 @@ class AnimationManager:
                 f"Created new animation for obj_id '{obj_id}' with display_id '{display_id}'"
             )
 
-        # Always set the state on the retrieved or newly created instance
-        # This updates its direction, mode, and last_moving_timestamp without recreating the object
-        if animation_instance:  # Ensure instance is not None before calling set_state
-            animation_instance.set_state(desired_direction, desired_mode, timestamp)
+            # Initialize direction history for this object/display_id pair
+            self._object_direction_histories[(obj_id, display_id)] = collections.deque(
+                maxlen=DIRECTION_HISTORY_LENGTH
+            )
+            # Add the initial direction from the server (or default)
+            self._object_direction_histories[(obj_id, display_id)].append(
+                initial_direction
+            )
 
-        return self._active_animations[obj_id]
+        return self._active_animations[anim_key]
 
-    def remove_animation(self, obj_id: str):
+    def remove_animation(self, obj_id: str, display_id: str | None = None):
         """
-        Removes an Animation instance from the cache when an object is removed.
+        Removes Animation instances and their associated direction histories from the cache.
+        If display_id is None, removes all animations for the given obj_id.
 
         Args:
             obj_id (str): The unique identifier of the object whose animation should be removed.
+            display_id (str | None): The specific display_id to remove, or None to remove all for obj_id.
         """
-        if obj_id in self._active_animations:
-            del self._active_animations[obj_id]
-            logging.info(f"Removed animation for obj_id '{obj_id}'.")
+        keys_to_remove = []
+        if display_id:
+            anim_key = f"{obj_id}_{display_id}"
+            if anim_key in self._active_animations:
+                keys_to_remove.append((anim_key, (obj_id, display_id)))
+        else:
+            for key, props in list(self._active_animations.items()):
+                if key.startswith(f"{obj_id}_"):
+                    parts = key.split(
+                        "_", 1
+                    )  # Split only on first underscore to get display_id
+                    if len(parts) > 1:
+                        keys_to_remove.append((key, (obj_id, parts[1])))
+                    else:  # Handle cases where display_id might not be explicitly in key (e.g., "obj_id_")
+                        keys_to_remove.append(
+                            (key, (obj_id, ""))
+                        )  # Use empty string for display_id if not found
+
+        for anim_key, history_key in keys_to_remove:
+            if anim_key in self._active_animations:
+                del self._active_animations[anim_key]
+                logging.info(f"Removed animation instance for key '{anim_key}'.")
+            if history_key in self._object_direction_histories:
+                del self._object_direction_histories[history_key]
+                logging.info(f"Removed direction history for key '{history_key}'.")
+
+    def update_animation_direction_for_object(
+        self,
+        obj_id: str,
+        display_id: str,
+        current_dx: float,
+        current_dy: float,
+        animation_mode: AnimationMode,
+        timestamp: float,
+    ):
+        """
+        Updates the direction history for a specific object's animation
+        and sets the current direction on its Animation instance.
+
+        Args:
+            obj_id (str): The unique identifier of the object.
+            display_id (str): The ID referencing the animation data.
+            current_dx (float): The delta X movement of the object in the current frame.
+            current_dy (float): The delta Y movement of the object in the current frame.
+            animation_mode (AnimationMode): The current animation mode (IDLE or WALKING).
+            timestamp (float): The current time (e.g., from time.time()).
+        """
+        history_key = (obj_id, display_id)
+        direction_history = self._object_direction_histories.get(history_key)
+
+        if not direction_history:
+            logging.warning(
+                f"Direction history not found for {history_key}. Initializing with DOWN."
+            )
+            direction_history = collections.deque(maxlen=DIRECTION_HISTORY_LENGTH)
+            direction_history.append(Direction.DOWN)  # Default if history is missing
+            self._object_direction_histories[history_key] = direction_history
+
+        # Determine the instantaneous direction from current_dx, current_dy
+        movement_threshold = 1.0  # Small threshold to ignore tiny jitters
+        current_movement_magnitude = math.sqrt(current_dx**2 + current_dy**2)
+
+        if current_movement_magnitude > movement_threshold:
+            norm_dx = 0
+            if current_dx > 0:
+                norm_dx = 1
+            elif current_dx < 0:
+                norm_dx = -1
+
+            norm_dy = 0
+            if current_dy > 0:
+                norm_dy = 1
+            elif current_dy < 0:
+                norm_dy = -1
+
+            if norm_dx != 0 or norm_dy != 0:
+                instantaneous_direction = Direction.DOWN  # Default
+                if norm_dy == -1:  # Up
+                    if norm_dx == 0:
+                        instantaneous_direction = Direction.UP
+                    elif norm_dx == 1:
+                        instantaneous_direction = Direction.UP_RIGHT
+                    else:
+                        instantaneous_direction = Direction.UP_LEFT
+                elif norm_dy == 1:  # Down
+                    if norm_dx == 0:
+                        instantaneous_direction = Direction.DOWN
+                    elif norm_dx == 1:
+                        instantaneous_direction = Direction.DOWN_RIGHT
+                    else:
+                        instantaneous_direction = Direction.DOWN_LEFT
+                else:  # Horizontal (norm_dy == 0)
+                    if norm_dx == 1:
+                        instantaneous_direction = Direction.RIGHT
+                    else:
+                        instantaneous_direction = Direction.LEFT
+
+                direction_history.append(instantaneous_direction)
+        else:
+            # If not moving significantly, gradually remove older directions to converge to a static state
+            if len(direction_history) > 1:
+                direction_history.popleft()
+
+        # Determine the "majority" direction from the history for smoother animation
+        smoothed_direction = (
+            Direction.DOWN
+        )  # Default if history is empty or not enough data
+        if direction_history:
+            from collections import Counter
+
+            most_common_direction_tuple = Counter(direction_history).most_common(1)
+            if most_common_direction_tuple:
+                smoothed_direction = most_common_direction_tuple[0][0]
+
+        # Get the Animation instance and set its state
+        anim_key = f"{obj_id}_{display_id}"
+        anim_properties = self._active_animations.get(anim_key)
+        if anim_properties:
+            animation_instance = anim_properties["animation_instance"]
+            animation_instance.set_state(smoothed_direction, animation_mode, timestamp)
+        else:
+            logging.warning(
+                f"Animation instance not found for key '{anim_key}'. Cannot set direction."
+            )
 
     def update_all_active_animations(self, delta_time: float, current_timestamp: float):
         """
@@ -493,25 +626,28 @@ class AnimationManager:
             delta_time (float): The time elapsed since the last update in seconds.
             current_timestamp (float): The current time (e.g., from time.time()).
         """
-        for obj_id, anim_properties in self._active_animations.items():
+        for obj_id_display_id_key, anim_properties in self._active_animations.items():
             animation_instance = anim_properties["animation_instance"]
             animation_instance.update(dt=delta_time, timestamp=current_timestamp)
 
-    def get_animation_properties(self, obj_id: str) -> dict | None:
+    def get_animation_properties(self, obj_id: str, display_id: str) -> dict | None:
         """
-        Retrieves the animation properties for a given object ID, including the instance itself.
+        Retrieves the animation properties for a given object ID and display ID, including the instance itself.
 
         Args:
             obj_id (str): The unique identifier of the object.
+            display_id (str): The ID referencing the animation data.
 
         Returns:
             dict | None: A dictionary containing animation properties, or None if not found.
         """
-        return self._active_animations.get(obj_id)
+        anim_key = f"{obj_id}_{display_id}"
+        return self._active_animations.get(anim_key)
 
     def render_object_animation(
         self,
         obj_id: str,
+        display_id: str,  # Now explicitly pass display_id
         screen_x: float,
         screen_y: float,
         timestamp: float,
@@ -523,14 +659,17 @@ class AnimationManager:
 
         Args:
             obj_id (str): The unique identifier of the object to render.
+            display_id (str): The ID referencing the animation data.
             screen_x (float): The X-coordinate on the screen for rendering.
             screen_y (float): The Y-coordinate on the screen for rendering.
             timestamp (float): The current time (e.g., from time.time()).
         """
-        anim_properties = self.get_animation_properties(obj_id)
+        anim_properties = self.get_animation_properties(
+            obj_id, display_id
+        )  # Use display_id here
         if not anim_properties:
             logging.warning(
-                f"No animation found for object ID: {obj_id}. Cannot render."
+                f"No animation found for object ID: {obj_id} and display ID: {display_id}. Cannot render."
             )
             return
 

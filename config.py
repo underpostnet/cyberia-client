@@ -10,3 +10,11 @@ MAZE_CELL_WORLD_SIZE = 50
 SERVER_HOST = "localhost"
 SERVER_PORT = 5000
 WEBSOCKET_PATH = "/ws"
+
+# --- Client-side Animation Smoothing Settings ---
+# Number of recent instantaneous directions to consider for smoothing
+# an object's visual animation direction. A higher value results in
+# smoother, less jittery direction changes but can introduce a slight
+# visual lag. This helps mitigate rapid, small positional updates
+# from the server or client-side interpolation.
+DIRECTION_HISTORY_LENGTH = 15  # Adjusted for less sensitivity

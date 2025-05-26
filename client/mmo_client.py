@@ -35,6 +35,9 @@ from visuals.game_renderer import GameRenderer
 from visuals.animation_manager import (
     AnimationManager,
 )  # This import is still needed for type hinting/reference
+from visuals.animation_manager import (
+    Direction,
+)  # Import Direction for initial object creation
 
 # Import the refactored game state and game object
 from core.game_state import GameState
@@ -148,7 +151,18 @@ class MmoClient:
         """Dispatches incoming server messages based on their 'type' field."""
         msg_type = data.get("type")
         if msg_type == "instance_state_update":
-            self.game_state.from_dict(data)
+            # Before updating game_state, remove animations for objects that no longer exist
+            # This handles object despawn/disconnection cleanly.
+            current_object_ids = set(self.game_state.objects.keys())
+            new_object_ids = set(data["objects"].keys())
+
+            objects_to_remove = current_object_ids - new_object_ids
+            for obj_id in objects_to_remove:
+                # Remove all animations associated with this object ID
+                self.game_renderer.animation_manager.remove_animation(obj_id)
+
+            self.game_state.from_dict(data)  # This will create/update GameObjects
+
             if self.my_player_id and self.my_player_id in self.game_state.objects:
                 self.my_game_object = self.game_state.objects[self.my_player_id]
             else:
@@ -222,13 +236,14 @@ class MmoClient:
             # Process any messages received from the WebSocket thread
             self._process_queued_messages()
 
-            # Update client-side player movement based on received path
-            # The GameObject.update_position now only handles position interpolation,
-            # relying on server updates for direction.
+            # Update client-side object positions and get movement deltas
+            # The direction smoothing logic is now handled by AnimationManager
+            object_movement_deltas = {}  # Store (dx, dy) for each object
             for obj_id, obj in self.game_state.objects.items():
-                obj.update_position(delta_time)
-                # If the client-side player reached the end of its path, clear it
-                # This logic is now applied to all objects, not just my_game_object
+                dx, dy = obj.update_position(delta_time)
+                object_movement_deltas[obj_id] = (dx, dy)
+
+                # If the object reached the end of its path, clear it
                 if obj.path and obj.path_index >= len(obj.path):
                     obj.path = []
                     obj.path_index = 0
@@ -263,7 +278,9 @@ class MmoClient:
 
             # Draw all objects received from the server
             for obj_id, obj in self.game_state.objects.items():
-                self.game_renderer.draw_game_object(obj, current_time)
+                # Pass the movement deltas to the game renderer
+                dx, dy = object_movement_deltas.get(obj_id, (0.0, 0.0))
+                self.game_renderer.draw_game_object(obj, current_time, dx, dy)
 
             # Draw the path for my player (if any)
             if self.my_game_object and self.current_path_display:

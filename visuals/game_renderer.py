@@ -60,13 +60,22 @@ class GameRenderer:
         for y in range(0, self.world_height + 1, self.object_size):
             self.raylib_manager.draw_line(0, y, self.world_width, y, LIGHTGRAY)
 
-    def draw_game_object(self, game_object: GameObject, current_timestamp: float):
+    def draw_game_object(
+        self,
+        game_object: GameObject,
+        current_timestamp: float,
+        current_dx: float,
+        current_dy: float,
+    ):
         """
         Draws a game object, handling different object types and animation layers.
+        Now also responsible for passing movement deltas to AnimationManager for direction smoothing.
 
         Args:
             game_object (GameObject): The game object to draw.
             current_timestamp (float): The current time (e.g., from time.time()) for animation updates.
+            current_dx (float): The delta X movement of the object in the current frame.
+            current_dy (float): The delta Y movement of the object in the current frame.
         """
 
         if len(game_object.display_ids) == 0 and game_object.object_type == "player":
@@ -91,18 +100,33 @@ class GameRenderer:
 
                 target_display_size_pixels = int(self.object_size / dim_num_pixels)
 
+                # Get or create the animation instance.
+                # The initial direction will be set by the server's authoritative data
+                # when the GameObject is first created from_dict, or a default.
+                # The AnimationManager will then manage its smoothing.
                 self.animation_manager.get_or_create_animation(
-                    obj_id=layered_obj_id,  # Use layered ID for cache
+                    obj_id=game_object.obj_id,  # Use original obj_id for history
                     display_id=display_id,
-                    desired_direction=game_object.last_known_direction,
-                    desired_mode=animation_mode,
                     target_display_size_pixels=target_display_size_pixels,
+                    initial_direction=Direction.DOWN,  # Default initial direction, will be overridden by history
+                    # if server provides one or movement occurs.
+                )
+
+                # NEW: Update the animation direction history and set the smoothed direction
+                # on the Animation instance within the AnimationManager.
+                self.animation_manager.update_animation_direction_for_object(
+                    obj_id=game_object.obj_id,
+                    display_id=display_id,
+                    current_dx=current_dx,
+                    current_dy=current_dy,
+                    animation_mode=animation_mode,
                     timestamp=current_timestamp,
                 )
 
                 # Render the animation using the AnimationManager
                 self.animation_manager.render_object_animation(
-                    obj_id=layered_obj_id,  # Use layered ID for rendering
+                    obj_id=game_object.obj_id,  # Use original obj_id for rendering
+                    display_id=display_id,  # Pass display_id for rendering
                     screen_x=game_object.x,
                     screen_y=game_object.y,
                     timestamp=current_timestamp,
