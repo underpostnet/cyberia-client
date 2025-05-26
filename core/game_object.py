@@ -113,7 +113,7 @@ class GameObject:
             data.get("speed", 200.0),
             data.get("object_type", "unknown"),
             data.get("display_ids", []),
-            Direction.DOWN,
+            data.get("last_known_direction", Direction.DOWN),
         )
         # Ensure path is always a list, even if Go sends null for an empty slice
         obj.path = data.get("path") if data.get("path") is not None else []
@@ -148,12 +148,19 @@ class GameObject:
         # Calculate how far the object can move in this frame
         move_distance = self.speed * delta_time
 
+        # Define a small threshold for considering movement significant
+        # If movement is less than this, don't update direction based on tiny deltas.
+        movement_threshold = 1.0
+
         if distance < move_distance:
             # If the object is very close to or has overshot the target point,
             # snap to the target point and advance to the next point in the path.
             self.x = target_world_x
             self.y = target_world_y
             self.path_index += 1
+            # When snapping to a point, the direction should not change.
+            # It should retain the direction it was moving towards this point.
+            # No update to self.last_known_direction here.
         else:
             # Move towards the target point
             # Normalize the direction vector
@@ -164,7 +171,8 @@ class GameObject:
 
             # Update last_known_direction only when actively moving
             # and only if there's significant movement to avoid jitter from floating point inaccuracies
-            if abs(dx) > 0.1 or abs(dy) > 0.1:
+            # Only update direction if actually moving a significant distance
+            if move_distance > movement_threshold:
                 # Determine the 8-directional enum based on delta X and delta Y.
                 norm_dx = 0
                 if dx > 0:
@@ -178,22 +186,27 @@ class GameObject:
                 elif dy < 0:
                     norm_dy = -1
 
-                if norm_dy == -1:  # Up
-                    if norm_dx == 0:
-                        self.last_known_direction = Direction.UP
-                    elif norm_dx == 1:
-                        self.last_known_direction = Direction.UP_RIGHT
-                    else:
-                        self.last_known_direction = Direction.UP_LEFT
-                elif norm_dy == 1:  # Down
-                    if norm_dx == 0:
-                        self.last_known_direction = Direction.DOWN
-                    elif norm_dx == 1:
-                        self.last_known_direction = Direction.DOWN_RIGHT
-                    else:
-                        self.last_known_direction = Direction.DOWN_LEFT
-                else:  # Horizontal (norm_dy == 0)
-                    if norm_dx == 1:
-                        self.last_known_direction = Direction.RIGHT
-                    else:
-                        self.last_known_direction = Direction.LEFT
+                # Only update if there's actual directional movement
+                if norm_dx != 0 or norm_dy != 0:
+                    if norm_dy == -1:  # Up
+                        if norm_dx == 0:
+                            self.last_known_direction = Direction.UP
+                        elif norm_dx == 1:
+                            self.last_known_direction = Direction.UP_RIGHT
+                        else:
+                            self.last_known_direction = Direction.UP_LEFT
+                    elif norm_dy == 1:  # Down
+                        if norm_dx == 0:
+                            self.last_known_direction = Direction.DOWN
+                        elif norm_dx == 1:
+                            self.last_known_direction = Direction.DOWN_RIGHT
+                        else:
+                            self.last_known_direction = Direction.DOWN_LEFT
+                    else:  # Horizontal (norm_dy == 0)
+                        if norm_dx == 1:
+                            self.last_known_direction = Direction.RIGHT
+                        else:
+                            self.last_known_direction = Direction.LEFT
+
+        if self.object_type == "player" and self.last_known_direction == Direction.DOWN:
+            print("PROBABLY FORCE 08 MAP ERROR BUG CHECK THIS")
