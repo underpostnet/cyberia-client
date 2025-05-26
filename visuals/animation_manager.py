@@ -400,6 +400,18 @@ class AnimationManager:
         )  # Initialize ItemRenderer with RaylibManager
         logging.info("AnimationManager initialized.")
 
+    def get_animation_data(self, display_id: str) -> dict | None:
+        """
+        Helper method to retrieve raw animation data from the global ANIMATION_DATA.
+
+        Args:
+            display_id (str): The ID referencing the animation data.
+
+        Returns:
+            dict | None: The animation data dictionary, or None if not found.
+        """
+        return ANIMATION_DATA.get(display_id)
+
     def get_or_create_animation(
         self,
         obj_id: str,
@@ -424,22 +436,26 @@ class AnimationManager:
         Returns:
             dict: A dictionary containing the 'animation_instance', 'target_display_size_pixels', and 'display_id'.
         """
-        animation_info = ANIMATION_DATA.get(display_id)
+        animation_info = self.get_animation_data(display_id)
         if not animation_info:
             raise ValueError(f"No animation data found for display_id '{display_id}'.")
 
+        animation_instance = None
         is_recreate_needed = False
+
         if obj_id in self._active_animations:
-            current_cached_state = self._active_animations[obj_id]
-            # Recreate if display_id or target_display_size_pixels has changed
+            current_cached_props = self._active_animations[obj_id]
+            # Check if the core animation properties (display_id or scale) have changed
             if (
-                current_cached_state["display_id"] != display_id
-                or current_cached_state["target_display_size_pixels"]
+                current_cached_props["display_id"] != display_id
+                or current_cached_props["target_display_size_pixels"]
                 != target_display_size_pixels
             ):
                 is_recreate_needed = True
+            else:
+                animation_instance = current_cached_props["animation_instance"]
         else:
-            is_recreate_needed = True  # Always create if object ID is new
+            is_recreate_needed = True
 
         if is_recreate_needed:
             animation_instance = Animation(
@@ -457,11 +473,11 @@ class AnimationManager:
             logging.info(
                 f"Created new animation for obj_id '{obj_id}' with display_id '{display_id}'"
             )
-        else:
-            animation_instance = self._active_animations[obj_id]["animation_instance"]
 
-        # Always set the state, even if not recreated, to update direction/mode/timestamp
-        animation_instance.set_state(desired_direction, desired_mode, timestamp)
+        # Always set the state on the retrieved or newly created instance
+        # This updates its direction, mode, and last_moving_timestamp without recreating the object
+        if animation_instance:  # Ensure instance is not None before calling set_state
+            animation_instance.set_state(desired_direction, desired_mode, timestamp)
 
         return self._active_animations[obj_id]
 
@@ -516,7 +532,6 @@ class AnimationManager:
             obj_id (str): The unique identifier of the object to render.
             screen_x (float): The X-coordinate on the screen for rendering.
             screen_y (float): The Y-coordinate on the screen for rendering.
-            base_color (Color): The base color to use for rendering (e.g., for missing pixels).
             timestamp (float): The current time (e.g., from time.time()).
         """
         anim_properties = self.get_animation_properties(obj_id)
