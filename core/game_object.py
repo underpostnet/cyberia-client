@@ -9,6 +9,21 @@ logging.basicConfig(
 )
 
 
+# Import Direction enum from animation_manager for type hinting and defaults
+# This creates a slight circular dependency, but for enums, it's generally acceptable
+# if not directly instantiating AnimationManager/Animation here.
+class Direction:
+    UP = "UP"
+    DOWN = "DOWN"
+    LEFT = "LEFT"
+    RIGHT = "RIGHT"
+    UP_LEFT = "UP_LEFT"
+    UP_RIGHT = "UP_RIGHT"
+    DOWN_LEFT = "DOWN_LEFT"
+    DOWN_RIGHT = "DOWN_RIGHT"
+    NONE = "NONE"
+
+
 class GameObject:
     """
     Represents a generic object within an instance world.
@@ -25,6 +40,9 @@ class GameObject:
         color: Color,
         is_obstacle: bool = False,
         speed: float = 200.0,
+        object_type: str = "unknown",
+        display_ids: list[str] | None = None,
+        last_known_direction: Direction = Direction.DOWN,
     ):
         """
         Initializes a new GameObject.
@@ -36,6 +54,10 @@ class GameObject:
             color (Color): The Raylib Color object for rendering the object.
             is_obstacle (bool): True if the object acts as an obstacle in the world.
             speed (float): The movement speed of the object in pixels per second.
+            object_type (str): The category of the object (e.g., 'player', 'wall').
+            display_ids (list[str] | None): A list of animation IDs to render for this object,
+                                            ordered by Z-layer (higher index = on top).
+            last_known_direction (Direction): The last direction the object was moving.
         """
         self.obj_id = obj_id
         self.x = x
@@ -43,6 +65,10 @@ class GameObject:
         self.color = color
         self.is_obstacle = is_obstacle
         self.speed = speed  # Pixels per second
+        self.object_type = object_type
+        self.display_ids = display_ids if display_ids is not None else []
+        self.last_known_direction = last_known_direction
+
         self.path: list[dict[str, float]] = (
             []
         )  # List of {'X': float, 'Y': float} world coordinates to follow
@@ -68,6 +94,9 @@ class GameObject:
             "speed": self.speed,
             "path": self.path,
             "path_index": self.path_index,
+            "object_type": self.object_type,
+            "display_ids": self.display_ids,
+            "last_known_direction": self.last_known_direction,
         }
 
     @classmethod
@@ -81,17 +110,21 @@ class GameObject:
         Returns:
             GameObject: A new GameObject instance populated with the provided data.
         """
-        color_data = data["color"]
-        color = Color(
-            color_data["R"], color_data["G"], color_data["B"], color_data["A"]
-        )
         obj = cls(
             data["obj_id"],
             data["x"],
             data["y"],
-            color,
+            Color(
+                data["color"]["R"],
+                data["color"]["G"],
+                data["color"]["B"],
+                data["color"]["A"],
+            ),
             data["is_obstacle"],
-            data.get("speed", 200.0),  # Default speed if not provided
+            data.get("speed", 200.0),
+            data.get("object_type", "unknown"),
+            data.get("display_ids", []),
+            Direction.DOWN,
         )
         # Ensure path is always a list, even if Go sends null for an empty slice
         obj.path = data.get("path") if data.get("path") is not None else []
