@@ -211,7 +211,6 @@ class MmoClient:
         last_frame_time = time.time()
 
         # Initialize the AnimationManager, passing the RaylibManager
-        animation_manager = AnimationManager(self.raylib_manager)
 
         while (
             not self.raylib_manager.window_should_close()
@@ -307,7 +306,10 @@ class MmoClient:
                     "FPS: N/A", 10, SCREEN_HEIGHT - 30, 20, BLACK
                 )  # Display N/A if frame_time is 0
 
-            animation_manager.update_all_active_animations(delta_time, current_time)
+            # Update all active animations managed by GameRenderer's AnimationManager
+            self.game_renderer.animation_manager.update_all_active_animations(
+                delta_time, current_time
+            )
 
             self.raylib_manager.end_drawing()  # Use raylib_manager to end drawing
 
