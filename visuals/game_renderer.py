@@ -89,9 +89,6 @@ class GameRenderer:
         # Iterate through display_ids for Z-layered rendering
         if len(game_object.display_ids) > 0:
             for display_id in game_object.display_ids:
-                # Use a combined ID for the animation manager cache
-                layered_obj_id = f"{game_object.obj_id}_{display_id}"
-
                 animation_info = self.animation_manager.get_animation_data(display_id)
 
                 anim_base_dimensions = animation_info["dimensions"]
@@ -100,20 +97,13 @@ class GameRenderer:
 
                 target_display_size_pixels = int(self.object_size / dim_num_pixels)
 
-                # Get or create the animation instance.
-                # The initial direction will be set by the server's authoritative data
-                # when the GameObject is first created from_dict, or a default.
-                # The AnimationManager will then manage its smoothing.
                 self.animation_manager.get_or_create_animation(
-                    obj_id=game_object.obj_id,  # Use original obj_id for history
+                    obj_id=game_object.obj_id,
                     display_id=display_id,
                     target_display_size_pixels=target_display_size_pixels,
-                    initial_direction=Direction.DOWN,  # Default initial direction, will be overridden by history
-                    # if server provides one or movement occurs.
+                    initial_direction=Direction.DOWN,
                 )
 
-                # NEW: Update the animation direction history and set the smoothed direction
-                # on the Animation instance within the AnimationManager.
                 self.animation_manager.update_animation_direction_for_object(
                     obj_id=game_object.obj_id,
                     display_id=display_id,
@@ -123,10 +113,9 @@ class GameRenderer:
                     timestamp=current_timestamp,
                 )
 
-                # Render the animation using the AnimationManager
                 self.animation_manager.render_object_animation(
-                    obj_id=game_object.obj_id,  # Use original obj_id for rendering
-                    display_id=display_id,  # Pass display_id for rendering
+                    obj_id=game_object.obj_id,
+                    display_id=display_id,
                     screen_x=game_object.x,
                     screen_y=game_object.y,
                     timestamp=current_timestamp,
