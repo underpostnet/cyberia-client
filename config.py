@@ -21,8 +21,8 @@ CAMERA_SMOOTHNESS = 0.1  # Value between 0.0 and 1.0 for camera interpolation sm
 # --- Animation Settings (General) ---
 # These can be overridden by specific animation data, but provide sensible defaults
 DEFAULT_FRAME_DURATION = (
-    0.15  # Default time in seconds each animation frame is displayed
+    0.25  # Default time in seconds each animation frame is displayed
 )
 DEFAULT_STOP_DELAY_DURATION = (
-    0.2  # Default delay before idle animation after stopping movement
+    0.25  # Default delay before idle animation after stopping movement
 )
