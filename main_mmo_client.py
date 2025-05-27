@@ -21,7 +21,7 @@ from client.mmo_client import MmoClient
 if __name__ == "__main__":
     # Set up argument parser for command-line arguments
     parser = argparse.ArgumentParser(
-        description="Python MMO Instance Client with Plain WebSockets and Raylib."
+        description="Python MMO Instance Client with WebSockets and Raylib."
     )
     # Add argument for server host, with a default value from config
     parser.add_argument(

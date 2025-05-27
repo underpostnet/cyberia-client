@@ -38,7 +38,7 @@ It's recommended to use a **Python virtual environment** to manage dependencies.
 
     ```bash
     pip install raylib-py==5.0.0 # For rendering
-    pip install websocket-client # For plain WebSocket communication
+    pip install websocket-client # For WebSocket communication
     ```
 
 ---
