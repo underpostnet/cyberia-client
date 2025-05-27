@@ -33,10 +33,7 @@ from raylibpy import (
 
 # Import config for global settings
 import config as settings
-from config import (
-    DIRECTION_HISTORY_LENGTH,
-    OBJECT_SIZE,
-)  # Import the new constant and OBJECT_SIZE
+from config import DIRECTION_HISTORY_LENGTH, OBJECT_SIZE
 
 # Imported matrices and color map for character animations
 from data.animations.skin.people import (
@@ -64,8 +61,24 @@ from data.animations.gfx.click_pointer import (
     GFX_CLICK_POINTER_ANIMATION_SPEED,
 )
 
+# Imported matrices and color map for point path animation
+from data.animations.gfx.point_path import (
+    GFX_POINT_PATH_MATRIX_00,
+    GFX_POINT_PATH_MAP_COLORS,
+    GFX_POINT_PATH_ANIMATION_SPEED,
+)
+
+# New: Imported matrices and color map for wall animation
+from data.animations.building.wall import (
+    BUILDING_WALL_MATRIX_00,
+    BUILDING_WALL_MAP_COLORS,
+    BUILDING_WALL_ANIMATION_SPEED,
+)
+
+
 # Import GameObject for type hinting
 from core.game_object import GameObject
+
 
 # --- Logging Configuration ---
 logging.basicConfig(
@@ -100,82 +113,38 @@ class AnimationMode(Enum):
 
 # --- Global Animation Data Structure ---
 # This dictionary holds all animation matrices and their associated properties,
-# organized by a unique display_id (e.g., "SKIN_PEOPLE", "GFX_CLICK_POINTER").
-# Each display_id maps to another dictionary containing:
-# - 'frames': A nested dictionary mapping a string key (e.g., "up_idle") to a list of matrices.
-# - 'colors': The color map for these matrices.
-# - 'frame_duration': The time in seconds each frame is displayed.
-# - 'dimensions': The base width and height of the sprite matrix (e.g., 26x26).
-# - 'is_stateless': True if the animation does not use directional or idle/walking states.
+# organized by a unique display_id (e.g., "SKIN_PEOPLE", "CLICK_POINTER").
 ANIMATION_DATA = {
     "SKIN_PEOPLE": {
         "frames": {
-            # IDLE animations (using 0X prefixed matrices, where X is direction)
-            # UP animations (02 / 12 from original data, now mapped to UP)
             "up_idle": [SKIN_PEOPLE_MATRIX_02_0, SKIN_PEOPLE_MATRIX_02_1],
-            "up_right_idle": [
-                SKIN_PEOPLE_MATRIX_06_0,
-                SKIN_PEOPLE_MATRIX_06_1,
-            ],  # Uses RIGHT frames for UP_RIGHT idle
+            "up_right_idle": [SKIN_PEOPLE_MATRIX_06_0, SKIN_PEOPLE_MATRIX_06_1],
             "right_idle": [SKIN_PEOPLE_MATRIX_06_0, SKIN_PEOPLE_MATRIX_06_1],
-            "down_right_idle": [
-                SKIN_PEOPLE_MATRIX_06_0,
-                SKIN_PEOPLE_MATRIX_06_1,
-            ],  # Uses RIGHT frames for DOWN_RIGHT idle
-            # DOWN animations (08 / 18 from original data, now mapped to DOWN)
+            "down_right_idle": [SKIN_PEOPLE_MATRIX_06_0, SKIN_PEOPLE_MATRIX_06_1],
             "down_idle": [SKIN_PEOPLE_MATRIX_08_0, SKIN_PEOPLE_MATRIX_08_1],
-            "down_left_idle": [
-                SKIN_PEOPLE_MATRIX_06_0,
-                SKIN_PEOPLE_MATRIX_06_1,
-            ],  # Uses RIGHT frames for DOWN_LEFT idle (will be flipped)
+            "down_left_idle": [SKIN_PEOPLE_MATRIX_06_0, SKIN_PEOPLE_MATRIX_06_1],
             "left_idle": [
                 SKIN_PEOPLE_MATRIX_06_0,
                 SKIN_PEOPLE_MATRIX_06_1,
-            ],  # Uses RIGHT frames for LEFT idle (will be flipped)
-            "up_left_idle": [
-                SKIN_PEOPLE_MATRIX_06_0,
-                SKIN_PEOPLE_MATRIX_06_1,
-            ],  # Uses RIGHT frames for UP_LEFT idle (will be flipped)
-            "default_idle": [
-                SKIN_PEOPLE_MATRIX_08_0,  # Default to DOWN idle
-                SKIN_PEOPLE_MATRIX_08_1,
-            ],
-            # MOVE animations (using 1X prefixed matrices, where X is direction)
-            # UP animations (02 / 12 from original data, now mapped to UP)
+            ],  # Corrected typo here
+            "up_left_idle": [SKIN_PEOPLE_MATRIX_06_0, SKIN_PEOPLE_MATRIX_06_1],
+            "default_idle": [SKIN_PEOPLE_MATRIX_08_0, SKIN_PEOPLE_MATRIX_08_1],
             "up_move": [SKIN_PEOPLE_MATRIX_12_0, SKIN_PEOPLE_MATRIX_12_1],
-            "up_right_move": [
-                SKIN_PEOPLE_MATRIX_16_0,
-                SKIN_PEOPLE_MATRIX_16_1,
-            ],  # Uses RIGHT_MOVE frames for UP_RIGHT move
+            "up_right_move": [SKIN_PEOPLE_MATRIX_16_0, SKIN_PEOPLE_MATRIX_16_1],
             "right_move": [SKIN_PEOPLE_MATRIX_16_0, SKIN_PEOPLE_MATRIX_16_1],
-            "down_right_move": [
-                SKIN_PEOPLE_MATRIX_16_0,
-                SKIN_PEOPLE_MATRIX_16_1,
-            ],  # Uses RIGHT_MOVE frames for DOWN_RIGHT move
-            # DOWN animations (08 / 18 from original data, now mapped to DOWN)
+            "down_right_move": [SKIN_PEOPLE_MATRIX_16_0, SKIN_PEOPLE_MATRIX_16_1],
             "down_move": [SKIN_PEOPLE_MATRIX_18_0, SKIN_PEOPLE_MATRIX_18_1],
-            "down_left_move": [
-                SKIN_PEOPLE_MATRIX_16_0,
-                SKIN_PEOPLE_MATRIX_16_1,
-            ],  # Uses RIGHT_MOVE frames for DOWN_LEFT move (will be flipped)
-            "left_move": [
-                SKIN_PEOPLE_MATRIX_16_0,
-                SKIN_PEOPLE_MATRIX_16_1,
-            ],  # Uses RIGHT_MOVE frames for LEFT move (will be flipped)
-            "up_left_move": [
-                SKIN_PEOPLE_MATRIX_16_0,
-                SKIN_PEOPLE_MATRIX_16_1,
-            ],  # Uses RIGHT_MOVE frames for UP_LEFT move (will be flipped)
+            "down_left_move": [SKIN_PEOPLE_MATRIX_16_0, SKIN_PEOPLE_MATRIX_16_1],
+            "left_move": [SKIN_PEOPLE_MATRIX_16_0, SKIN_PEOPLE_MATRIX_16_1],
+            "up_left_move": [SKIN_PEOPLE_MATRIX_16_0, SKIN_PEOPLE_MATRIX_16_1],
         },
         "colors": SKIN_PEOPLE_MAP_COLORS,
         "frame_duration": 0.3,
         "dimensions": (26, 26),  # Original content dimensions, before padding
-        "is_stateless": False,  # This animation responds to direction and mode
+        "is_stateless": False,
     },
-    "GFX_CLICK_POINTER": {
+    "CLICK_POINTER": {
         "frames": {
-            # For GFX_CLICK_POINTER, 'none_idle' and 'none_move' both point to the full animation sequence.
-            # This ensures it always cycles, regardless of the 'is_moving' flag.
             "none_idle": [
                 GFX_CLICK_POINTER_MATRIX_00,
                 GFX_CLICK_POINTER_MATRIX_01,
@@ -190,12 +159,34 @@ ANIMATION_DATA = {
                 GFX_CLICK_POINTER_MATRIX_00,
                 GFX_CLICK_POINTER_MATRIX_01,
                 GFX_CLICK_POINTER_MATRIX_02,
-            ],  # Fallback
+            ],
         },
         "colors": GFX_CLICK_POINTER_MAP_COLORS,
         "frame_duration": GFX_CLICK_POINTER_ANIMATION_SPEED,
         "dimensions": (5, 5),
-        "is_stateless": True,  # This animation is stateless and always animates
+        "is_stateless": True,
+    },
+    "POINT_PATH": {
+        "frames": {
+            "none_idle": [GFX_POINT_PATH_MATRIX_00],
+            "none_move": [GFX_POINT_PATH_MATRIX_00],
+            "default_idle": [GFX_POINT_PATH_MATRIX_00],
+        },
+        "colors": GFX_POINT_PATH_MAP_COLORS,
+        "frame_duration": GFX_POINT_PATH_ANIMATION_SPEED,
+        "dimensions": (3, 3),
+        "is_stateless": True,
+    },
+    "BUILDING_WALL": {
+        "frames": {
+            "none_idle": [BUILDING_WALL_MATRIX_00],
+            "none_move": [BUILDING_WALL_MATRIX_00],
+            "default_idle": [BUILDING_WALL_MATRIX_00],
+        },
+        "colors": [Color(0, 0, 0, 0), Color(0, 0, 0, 255)],  # Transparent, Black
+        "frame_duration": BUILDING_WALL_ANIMATION_SPEED,
+        "dimensions": (5, 5),
+        "is_stateless": True,
     },
 }
 
@@ -210,6 +201,43 @@ DIRECTION_TO_KEY_PREFIX = {
     Direction.LEFT: "left",
     Direction.UP_LEFT: "up_left",
     Direction.NONE: "none",
+}
+
+# --- Object Type Rendering Properties ---
+# This dictionary defines default display_ids, base sprite scaling,
+# and rendering offsets for different object types.
+OBJECT_RENDER_PROPERTIES = {
+    "PLAYER": {
+        "default_display_ids": ["SKIN_PEOPLE"],
+        "base_sprite_scale": 2,  # Example: 2x scale for player sprites
+        "center_offset_x": -12,  # Adjust to visually center the sprite within OBJECT_SIZE
+        "center_offset_y": -12,
+    },
+    "POINT_PATH": {
+        "default_display_ids": ["POINT_PATH"],
+        "base_sprite_scale": 1,
+        "center_offset_x": -1,  # Adjust to visually center the sprite within OBJECT_SIZE
+        "center_offset_y": -1,
+    },
+    "CLICK_POINTER": {
+        "default_display_ids": ["CLICK_POINTER"],
+        "base_sprite_scale": 1,
+        "center_offset_x": -2,  # Adjust to visually center the sprite within OBJECT_SIZE
+        "center_offset_y": -2,
+    },
+    "WALL": {
+        "default_display_ids": ["BUILDING_WALL"],
+        "base_sprite_scale": 1,
+        "center_offset_x": 0,
+        "center_offset_y": 0,
+    },
+    # Add other object types as needed with their specific rendering properties
+    "UNKNOWN": {  # Default properties for unknown object types
+        "default_display_ids": [],  # No animation by default
+        "base_sprite_scale": 1,
+        "center_offset_x": 0,
+        "center_offset_y": 0,
+    },
 }
 
 
@@ -246,8 +274,6 @@ class Animation:
         self.frame_timer = 0.0
         self.last_moving_timestamp = 0.0
 
-        # Internal state for the animation instance
-        # These will be set by the RenderingSystem now
         self.current_direction = Direction.DOWN  # Default direction
         self.animation_mode = AnimationMode.IDLE  # Default mode
 
@@ -266,7 +292,6 @@ class Animation:
         new_mode = mode
 
         if self.is_stateless:
-            # Stateless animations always use NONE direction and WALKING mode to ensure continuous play
             new_direction = Direction.NONE
             new_mode = AnimationMode.IDLE
 
@@ -302,18 +327,17 @@ class Animation:
             self.current_direction, "default"
         )
 
-        is_currently_moving = (self.animation_mode == AnimationMode.WALKING) or (
-            timestamp - self.last_moving_timestamp < 0.5
-        )
+        if self.is_stateless:
+            return "none_idle" if "none_idle" in self.frames_map else "default_idle"
 
+        is_currently_moving = self.animation_mode == AnimationMode.WALKING
         animation_suffix = "_move" if is_currently_moving else "_idle"
         animation_key = f"{base_direction_key}{animation_suffix}"
 
-        # Fallback logic if specific key not found
         if animation_key not in self.frames_map:
-            animation_key = f"{base_direction_key}_idle"  # Try idle variant
+            animation_key = f"{base_direction_key}_idle"
             if animation_key not in self.frames_map:
-                animation_key = "default_idle"  # Ultimate fallback
+                animation_key = "default_idle"
 
         return animation_key
 
@@ -335,7 +359,7 @@ class Animation:
             logging.error(
                 f"No frames found for key '{animation_key}' or any fallback. Using dummy frame."
             )
-            frames_list = [[[0]]]  # A single 1x1 dummy frame to prevent errors
+            frames_list = [[[0]]]
 
         num_frames = len(frames_list)
         if num_frames == 0:
@@ -347,7 +371,6 @@ class Animation:
         if self.frame_timer >= self.frame_duration:
             self.current_frame_index = (self.current_frame_index + 1) % num_frames
             self.frame_timer = 0.0
-        # If there's only one frame, ensure index is 0 and timer is reset
         if num_frames == 1:
             self.current_frame_index = 0
             self.frame_timer = 0.0
@@ -375,11 +398,10 @@ class Animation:
             logging.error(
                 f"Get Frame Data: No frames found for key '{animation_key}' or any fallback. Returning dummy data."
             )
-            return [[[0]]], self.color_map, False, 0  # Return dummy data
+            return [[[0]]], self.color_map, False, 0
 
         current_frame_matrix = frames_list[self.current_frame_index]
 
-        # Determine if the sprite needs to be flipped horizontally.
         flip_horizontal = False
         if not self.is_stateless and (
             self.current_direction == Direction.LEFT
@@ -401,9 +423,7 @@ class RenderingSystem:
     Centralized manager for all Raylib-py interactions, game world rendering,
     and animation management. This class encapsulates window management,
     drawing primitives, input handling, camera control, grid drawing,
-    game object rendering, path drawing, and animation state management,
-    promoting a clean separation of concerns and making it easier to
-    manage all visual components.
+    game object rendering, and animation state management.
     """
 
     def __init__(
@@ -436,31 +456,23 @@ class RenderingSystem:
         self.object_size = object_size
         self.title = title
         self.target_fps = target_fps
-
-        # Initialize Raylib window (from RaylibManager)
         init_window(self.screen_width, self.screen_height, self.title)
         set_target_fps(self.target_fps)
         logging.info(
             f"Raylib window initialized: {self.screen_width}x{self.screen_height} @ {self.target_fps} FPS"
         )
 
-        # Initialize default 2D camera (from RaylibManager)
         self.camera = Camera2D()
         self.camera.offset = Vector2(self.screen_width / 2, self.screen_height / 2)
         self.camera.rotation = 0.0
         self.camera.zoom = 1.0
-        self.camera.target = Vector2(0, 0)  # Initial target for the camera
+        self.camera.target = Vector2(0, 0)
 
-        # Animation management (from AnimationManager)
-        self._active_animations: dict[str, dict] = (
-            {}
-        )  # Cache for active Animation instances (obj_id_display_id -> dict)
+        self._active_animations: dict[str, dict] = {}
         self._object_direction_histories: dict[
             tuple[str, str], collections.deque[Direction]
         ] = {}
         logging.info("RenderingSystem initialized.")
-
-    # --- Raylib Window Management & Drawing Primitives (from RaylibManager) ---
 
     def begin_drawing(self):
         """Starts the drawing phase for a new frame."""
@@ -538,7 +550,6 @@ class RenderingSystem:
             smoothness (float): A value between 0.0 and 1.0 controlling camera smoothness.
                                 1.0 means instant movement, 0.0 means no movement.
         """
-        # Lerp the camera target towards the desired position
         self.camera.target.x += (target_world_pos.x - self.camera.target.x) * smoothness
         self.camera.target.y += (target_world_pos.y - self.camera.target.y) * smoothness
 
@@ -549,8 +560,6 @@ class RenderingSystem:
     def get_camera_zoom(self) -> float:
         """Returns the current camera zoom level."""
         return self.camera.zoom
-
-    # --- Game World Rendering (from GameRenderer) ---
 
     def draw_grid(self):
         """Draws the grid lines across the game world."""
@@ -568,7 +577,6 @@ class RenderingSystem:
     ):
         """
         Draws a game object, handling different object types and animation layers.
-        Now also responsible for passing movement deltas to AnimationManager for direction smoothing.
 
         Args:
             game_object (GameObject): The game object to draw.
@@ -576,52 +584,16 @@ class RenderingSystem:
             current_dx (float): The delta X movement of the object in the current frame.
             current_dy (float): The delta Y movement of the object in the current frame.
         """
+        render_props = OBJECT_RENDER_PROPERTIES.get(
+            game_object.object_type, OBJECT_RENDER_PROPERTIES["UNKNOWN"]
+        )
 
-        if len(game_object.display_ids) == 0 and game_object.object_type == "player":
-            game_object.display_ids = ["SKIN_PEOPLE"]
+        display_ids_to_use = game_object.display_ids
+        if not display_ids_to_use:
+            display_ids_to_use = render_props["default_display_ids"]
 
-        # Determine animation mode (IDLE or WALKING)
-        animation_mode = AnimationMode.IDLE
-        if game_object.path and game_object.path_index < len(game_object.path):
-            animation_mode = AnimationMode.WALKING
-
-        # Iterate through display_ids for Z-layered rendering
-        if len(game_object.display_ids) > 0:
-            for display_id in game_object.display_ids:
-                animation_info = self.get_animation_data(display_id)
-
-                anim_base_dimensions = animation_info["dimensions"]
-
-                dim_num_pixels = anim_base_dimensions[0] - 1
-
-                target_display_size_pixels = int(self.object_size / dim_num_pixels)
-
-                self.get_or_create_animation(
-                    obj_id=game_object.obj_id,
-                    display_id=display_id,
-                    target_display_size_pixels=target_display_size_pixels,
-                    initial_direction=Direction.DOWN,
-                )
-
-                self.update_animation_direction_for_object(
-                    obj_id=game_object.obj_id,
-                    display_id=display_id,
-                    current_dx=current_dx,
-                    current_dy=current_dy,
-                    animation_mode=animation_mode,
-                    timestamp=current_timestamp,
-                )
-
-                self.render_object_animation(
-                    obj_id=game_object.obj_id,
-                    display_id=display_id,
-                    screen_x=game_object.x,
-                    screen_y=game_object.y,
-                    timestamp=current_timestamp,
-                )
-
-        else:
-            # If no display_ids, draw a simple rectangle
+        if not display_ids_to_use:
+            # If no display_ids are found, draw a simple colored rectangle
             self.draw_rectangle(
                 int(game_object.x),
                 int(game_object.y),
@@ -636,27 +608,74 @@ class RenderingSystem:
                 self.object_size - 4,
                 game_object.color,
             )
-
-    def draw_path(self, path: list[dict[str, float]]):
-        """Draws the path for a game object."""
-        if len(path) < 2:
             return
-        for i in range(len(path) - 1):
-            start_point = path[i]
-            end_point = path[i + 1]
-            self.draw_line(
-                int(start_point["X"]),
-                int(start_point["Y"]),
-                int(end_point["X"]),
-                int(end_point["Y"]),
-                GREEN,
-            )
-            self.draw_circle(
-                int(start_point["X"]), int(start_point["Y"]), 5, GREEN
-            )  # Mark path points
-        self.draw_circle(int(path[-1]["X"]), int(path[-1]["Y"]), 5, RED)  # End point
 
-    # --- Animation Rendering (from ItemRenderer and AnimationManager) ---
+        # Determine animation mode (IDLE or WALKING)
+        animation_mode = AnimationMode.IDLE
+        if game_object.path and game_object.path_index < len(game_object.path):
+            animation_mode = AnimationMode.WALKING
+
+        for display_id in display_ids_to_use:
+            animation_info = self.get_animation_data(display_id)
+            if not animation_info:
+                logging.warning(
+                    f"No animation info found for display_id: {display_id}. Skipping rendering for {game_object.obj_id}."
+                )
+                continue
+
+            anim_base_dimensions = animation_info["dimensions"]
+            base_sprite_scale = render_props["base_sprite_scale"]
+            center_offset_x = render_props["center_offset_x"]
+            center_offset_y = render_props["center_offset_y"]
+
+            # Calculate target display size based on OBJECT_SIZE and sprite dimensions
+            # The goal is to make the sprite fit within or scale relative to the OBJECT_SIZE grid cell
+            target_display_size_pixels = int(
+                base_sprite_scale * (self.object_size / anim_base_dimensions[0])
+            )
+            if target_display_size_pixels == 0:
+                target_display_size_pixels = 1
+
+            # Get or create the animation instance
+            self.get_or_create_animation(
+                obj_id=game_object.obj_id,
+                display_id=display_id,
+                target_display_size_pixels=target_display_size_pixels,
+                initial_direction=Direction.DOWN,
+            )
+
+            # Update animation direction and mode only for non-stateless animations
+            if not animation_info["is_stateless"]:
+                self.update_animation_direction_for_object(
+                    obj_id=game_object.obj_id,
+                    display_id=display_id,
+                    current_dx=current_dx,
+                    current_dy=current_dy,
+                    animation_mode=animation_mode,
+                    timestamp=current_timestamp,
+                )
+            else:
+                # For stateless animations, ensure their internal state is consistent
+                anim_properties = self.get_animation_properties(
+                    game_object.obj_id, display_id
+                )
+                if anim_properties:
+                    animation_instance = anim_properties["animation_instance"]
+                    animation_instance.set_state(
+                        Direction.NONE, AnimationMode.IDLE, current_timestamp
+                    )
+
+            # Calculate drawing position, applying offsets
+            draw_x = game_object.x + center_offset_x
+            draw_y = game_object.y + center_offset_y
+
+            self.render_object_animation(
+                obj_id=game_object.obj_id,
+                display_id=display_id,
+                screen_x=draw_x,
+                screen_y=draw_y,
+                timestamp=current_timestamp,
+            )
 
     def _render_animation_frame(
         self,
@@ -684,15 +703,23 @@ class RenderingSystem:
             logging.warning("Render: Empty matrix provided. Cannot draw.")
             return
 
+        rounded_screen_x = round(screen_x)
+        rounded_screen_y = round(screen_y)
+
         for row_idx in range(matrix_dimension):
             for col_idx in range(matrix_dimension):
                 matrix_value = frame_matrix[row_idx][col_idx]
 
+                if matrix_value == 0 and len(color_map) > 0 and color_map[0].a == 0:
+                    continue
+
                 draw_col = col_idx
                 if flip_horizontal:
                     draw_col = matrix_dimension - 1 - col_idx
-                cell_draw_x = screen_x + draw_col * display_size_pixels
-                cell_draw_y = screen_y + row_idx * display_size_pixels
+
+                cell_draw_x = rounded_screen_x + draw_col * display_size_pixels
+                cell_draw_y = rounded_screen_y + row_idx * display_size_pixels
+
                 self.draw_rectangle(
                     int(cell_draw_x),
                     int(cell_draw_y),
@@ -726,7 +753,7 @@ class RenderingSystem:
 
         Args:
             obj_id (str): The unique identifier for the game object.
-            display_id (str): The ID referencing the animation data in ANIMATION_DATA (e.g., "SKIN_PEOPLE").
+            display_id (str): The ID referencing the animation data in ANIMATION_DATA.
             target_display_size_pixels (int): The target pixel size for rendering this animation.
             initial_direction (Direction): The initial direction to set for the animation history.
 
@@ -737,13 +764,11 @@ class RenderingSystem:
         current_cached_props = self._active_animations.get(anim_key)
 
         if current_cached_props:
-            # Check if display_id is the same but target_display_size_pixels changed
             if (
                 current_cached_props["display_id"] == display_id
                 and current_cached_props["target_display_size_pixels"]
                 != target_display_size_pixels
             ):
-                # Only update the display size, do not recreate animation instance
                 current_cached_props["target_display_size_pixels"] = (
                     target_display_size_pixels
                 )
@@ -756,10 +781,8 @@ class RenderingSystem:
                 and current_cached_props["target_display_size_pixels"]
                 == target_display_size_pixels
             ):
-                # No change, return existing
                 return current_cached_props
 
-        # If no existing animation, or display_id changed, or display_id is the same but other properties changed
         animation_info = self.get_animation_data(display_id)
         if not animation_info:
             raise ValueError(f"No animation data found for display_id '{display_id}'.")
@@ -779,20 +802,22 @@ class RenderingSystem:
             f"Created new animation for obj_id '{obj_id}' with display_id '{display_id}'"
         )
 
-        # Initialize direction history for this object/display_id pair if it doesn't exist
-        if (obj_id, display_id) not in self._object_direction_histories:
-            self._object_direction_histories[(obj_id, display_id)] = collections.deque(
-                maxlen=DIRECTION_HISTORY_LENGTH
-            )
-            self._object_direction_histories[(obj_id, display_id)].append(
-                initial_direction
-            )
-        else:
-            # If history exists, ensure it's not empty and update initial direction if needed
-            if not self._object_direction_histories[(obj_id, display_id)]:
+        if not animation_info["is_stateless"]:
+            if (obj_id, display_id) not in self._object_direction_histories:
+                self._object_direction_histories[(obj_id, display_id)] = (
+                    collections.deque(maxlen=DIRECTION_HISTORY_LENGTH)
+                )
                 self._object_direction_histories[(obj_id, display_id)].append(
                     initial_direction
                 )
+            else:
+                if not self._object_direction_histories[(obj_id, display_id)]:
+                    self._object_direction_histories[(obj_id, display_id)].append(
+                        initial_direction
+                    )
+        else:
+            if (obj_id, display_id) in self._object_direction_histories:
+                del self._object_direction_histories[(obj_id, display_id)]
 
         return self._active_animations[anim_key]
 
@@ -811,17 +836,13 @@ class RenderingSystem:
             if anim_key in self._active_animations:
                 keys_to_remove.append((anim_key, (obj_id, display_id)))
         else:
-            for key, props in list(self._active_animations.items()):
+            for key in list(self._active_animations.keys()):
                 if key.startswith(f"{obj_id}_"):
-                    parts = key.split(
-                        "_", 1
-                    )  # Split only on first underscore to get display_id
+                    parts = key.split("_", 1)
                     if len(parts) > 1:
                         keys_to_remove.append((key, (obj_id, parts[1])))
-                    else:  # Handle cases where display_id might not be explicitly in key (e.g., "obj_id_")
-                        keys_to_remove.append(
-                            (key, (obj_id, ""))
-                        )  # Use empty string for display_id if not found
+                    else:
+                        keys_to_remove.append((key, (obj_id, "")))
 
         for anim_key, history_key in keys_to_remove:
             if anim_key in self._active_animations:
@@ -856,15 +877,12 @@ class RenderingSystem:
         direction_history = self._object_direction_histories.get(history_key)
 
         if not direction_history:
-            logging.warning(
-                f"Direction history not found for {history_key}. Initializing with DOWN."
+            logging.debug(
+                f"Direction history not found for {history_key}. Skipping direction update."
             )
-            direction_history = collections.deque(maxlen=DIRECTION_HISTORY_LENGTH)
-            direction_history.append(Direction.DOWN)  # Default if history is missing
-            self._object_direction_histories[history_key] = direction_history
+            return
 
-        # Determine the instantaneous direction from current_dx, current_dy
-        movement_threshold = 1.0  # Small threshold to ignore tiny jitters
+        movement_threshold = 1.0
         current_movement_magnitude = math.sqrt(current_dx**2 + current_dy**2)
 
         if current_movement_magnitude > movement_threshold:
@@ -880,46 +898,36 @@ class RenderingSystem:
             elif current_dy < 0:
                 norm_dy = -1
 
-            if norm_dx != 0 or norm_dy != 0:
-                instantaneous_direction = Direction.DOWN  # Default
-                if norm_dy == -1:  # Up
-                    if norm_dx == 0:
-                        instantaneous_direction = Direction.UP
-                    elif norm_dx == 1:
-                        instantaneous_direction = Direction.UP_RIGHT
-                    else:
-                        instantaneous_direction = Direction.UP_LEFT
-                elif norm_dy == 1:  # Down
-                    if norm_dx == 0:
-                        instantaneous_direction = Direction.DOWN
-                    elif norm_dx == 1:
-                        instantaneous_direction = Direction.DOWN_RIGHT
-                    else:
-                        instantaneous_direction = Direction.DOWN_LEFT
-                else:  # Horizontal (norm_dy == 0)
-                    if norm_dx == 1:
-                        instantaneous_direction = Direction.RIGHT
-                    else:
-                        instantaneous_direction = Direction.LEFT
+            direction_map = {
+                (0, -1): Direction.UP,
+                (1, -1): Direction.UP_RIGHT,
+                (1, 0): Direction.RIGHT,
+                (1, 1): Direction.DOWN_RIGHT,
+                (0, 1): Direction.DOWN,
+                (-1, 1): Direction.DOWN_LEFT,
+                (-1, 0): Direction.LEFT,
+                (-1, -1): Direction.UP_LEFT,
+            }
+            instantaneous_direction = direction_map.get(
+                (norm_dx, norm_dy), Direction.DOWN
+            )
 
-                direction_history.append(instantaneous_direction)
+            direction_history.append(instantaneous_direction)
         else:
-            # If not moving significantly, gradually remove older directions to converge to a static state
             if len(direction_history) > 1:
                 direction_history.popleft()
 
-        # Determine the "majority" direction from the history for smoother animation
-        smoothed_direction = (
-            Direction.DOWN
-        )  # Default if history is empty or not enough data
+        smoothed_direction = Direction.DOWN
         if direction_history:
             from collections import Counter
 
             most_common_direction_tuple = Counter(direction_history).most_common(1)
             if most_common_direction_tuple:
                 smoothed_direction = most_common_direction_tuple[0][0]
+        else:
+            if animation_mode == AnimationMode.IDLE:
+                smoothed_direction = Direction.DOWN
 
-        # Get the Animation instance and set its state
         anim_key = f"{obj_id}_{display_id}"
         anim_properties = self._active_animations.get(anim_key)
         if anim_properties:
@@ -986,12 +994,10 @@ class RenderingSystem:
         animation_instance = anim_properties["animation_instance"]
         target_display_size_pixels = anim_properties["target_display_size_pixels"]
 
-        # Get the current frame data from the animation instance
         frame_matrix, color_map, flip_horizontal, current_frame_index = (
             animation_instance.get_current_frame_data(timestamp)
         )
 
-        # Delegate rendering to the internal _render_animation_frame method
         self._render_animation_frame(
             frame_matrix=frame_matrix,
             color_map=color_map,

@@ -17,4 +17,4 @@ WEBSOCKET_PATH = "/ws"
 # smoother, less jittery direction changes but can introduce a slight
 # visual lag. This helps mitigate rapid, small positional updates
 # from the server or client-side interpolation.
-DIRECTION_HISTORY_LENGTH = 15  # Adjusted for less sensitivity
+DIRECTION_HISTORY_LENGTH = 15
