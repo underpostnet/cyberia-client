@@ -605,7 +605,7 @@ class RenderingSystem:
                 break
 
         if first_frame and len(first_frame) > 0:
-            return len(first_frame)
+            return len(first_frame) - 1
         else:
             logging.warning(
                 f"Could not determine matrix dimension for {animation_asset_id}. Returning 1."
