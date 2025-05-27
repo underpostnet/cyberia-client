@@ -27,17 +27,8 @@ from config import (
     OBJECT_SIZE,
 )
 
-# Import the new centralized Raylib manager
-from core.raylib_manager import RaylibManager
-
-# Import the refactored game renderer
-from visuals.game_renderer import GameRenderer
-from visuals.animation_manager import (
-    AnimationManager,
-)  # This import is still needed for type hinting/reference
-from visuals.animation_manager import (
-    Direction,
-)  # Import Direction for initial object creation
+# Import the new centralized RenderingSystem
+from visuals.rendering_system import RenderingSystem, Direction, AnimationMode
 
 # Import the refactored game state and game object
 from core.game_state import GameState
@@ -71,10 +62,13 @@ class MmoClient:
             None  # Thread for WebSocket communication
         )
 
-        # Initialize the centralized Raylib manager
-        self.raylib_manager = RaylibManager(
+        # Initialize the centralized RenderingSystem
+        self.rendering_system = RenderingSystem(
             screen_width=SCREEN_WIDTH,
             screen_height=SCREEN_HEIGHT,
+            world_width=WORLD_WIDTH,
+            world_height=WORLD_HEIGHT,
+            object_size=OBJECT_SIZE,
             title="Python MMO Client",
             target_fps=60,
         )
@@ -90,16 +84,6 @@ class MmoClient:
         self.current_path_display: list[dict[str, float]] = (
             []
         )  # Path received from server to display
-
-        # Initialize the game renderer, passing the Raylib manager to it
-        self.game_renderer = GameRenderer(
-            raylib_manager=self.raylib_manager,
-            screen_width=SCREEN_WIDTH,
-            screen_height=SCREEN_HEIGHT,
-            world_width=WORLD_WIDTH,
-            world_height=WORLD_HEIGHT,
-            object_size=OBJECT_SIZE,
-        )
 
         self.message_queue: list[dict] = []  # Thread-safe queue for incoming messages
         self.message_queue_lock = threading.Lock()
@@ -159,7 +143,7 @@ class MmoClient:
             objects_to_remove = current_object_ids - new_object_ids
             for obj_id in objects_to_remove:
                 # Remove all animations associated with this object ID
-                self.game_renderer.animation_manager.remove_animation(obj_id)
+                self.rendering_system.remove_animation(obj_id)
 
             self.game_state.from_dict(data)  # This will create/update GameObjects
 
@@ -221,14 +205,12 @@ class MmoClient:
         # Wait for the connection to be ready with a timeout
         if not self.connection_ready_event.wait(timeout=5):  # Wait up to 5 seconds
             logging.error("Failed to establish WebSocket connection within timeout.")
-            self.raylib_manager.close_window()  # Use raylib_manager to close window
+            self.rendering_system.close_window()
             return
 
         last_frame_time = time.time()
 
-        while (
-            not self.raylib_manager.window_should_close()
-        ):  # Use raylib_manager for window close check
+        while not self.rendering_system.window_should_close():
             current_time = time.time()
             delta_time = current_time - last_frame_time
             last_frame_time = current_time
@@ -237,7 +219,6 @@ class MmoClient:
             self._process_queued_messages()
 
             # Update client-side object positions and get movement deltas
-            # The direction smoothing logic is now handled by AnimationManager
             object_movement_deltas = {}  # Store (dx, dy) for each object
             for obj_id, obj in self.game_state.objects.items():
                 dx, dy = obj.update_position(delta_time)
@@ -252,58 +233,49 @@ class MmoClient:
                         self.current_path_display = []
 
             # --- Input Handling ---
-            if self.raylib_manager.is_mouse_button_pressed(
-                MOUSE_BUTTON_LEFT
-            ):  # Use raylib_manager for input
-                world_mouse_pos = (
-                    self.raylib_manager.get_world_mouse_position()
-                )  # Use raylib_manager for world mouse pos
+            if self.rendering_system.is_mouse_button_pressed(MOUSE_BUTTON_LEFT):
+                world_mouse_pos = self.rendering_system.get_world_mouse_position()
                 logging.info(
                     f"Mouse clicked at world position: ({world_mouse_pos.x}, {world_mouse_pos.y})"
                 )
-                # The send_message function now handles the player_id check
                 self.send_message(
                     "client_move_request",
                     {"target_x": world_mouse_pos.x, "target_y": world_mouse_pos.y},
                 )
 
             # --- Rendering ---
-            self.raylib_manager.begin_drawing()  # Use raylib_manager to begin drawing
-            self.raylib_manager.clear_background(
-                RAYWHITE
-            )  # Use raylib_manager to clear background
-            self.raylib_manager.begin_camera_mode()  # Use raylib_manager to begin camera mode
+            self.rendering_system.begin_drawing()
+            self.rendering_system.clear_background(RAYWHITE)
+            self.rendering_system.begin_camera_mode()
 
-            self.game_renderer.draw_grid()  # Delegate to game_renderer
+            self.rendering_system.draw_grid()
 
             # Draw all objects received from the server
             for obj_id, obj in self.game_state.objects.items():
-                # Pass the movement deltas to the game renderer
+                # Pass the movement deltas to the rendering system
                 dx, dy = object_movement_deltas.get(obj_id, (0.0, 0.0))
-                self.game_renderer.draw_game_object(obj, current_time, dx, dy)
+                self.rendering_system.draw_game_object(obj, current_time, dx, dy)
 
             # Draw the path for my player (if any)
             if self.my_game_object and self.current_path_display:
-                self.game_renderer.draw_path(
-                    self.current_path_display
-                )  # Delegate to game_renderer
+                self.rendering_system.draw_path(self.current_path_display)
 
-            self.raylib_manager.end_camera_mode()  # Use raylib_manager to end camera mode
+            self.rendering_system.end_camera_mode()
 
             # Update camera to follow my player
             if self.my_game_object:
-                self.raylib_manager.update_camera_target(  # Use raylib_manager to update camera
+                self.rendering_system.update_camera_target(
                     Vector2(
                         self.my_game_object.x + OBJECT_SIZE / 2,
                         self.my_game_object.y + OBJECT_SIZE / 2,
                     ),
-                    smoothness=0.1,  # CAMERA_SMOOTHNESS from config, or a default value
+                    smoothness=0.1,
                 )
                 # Display my player ID
-                self.raylib_manager.draw_text(  # Use raylib_manager to draw text
+                self.rendering_system.draw_text(
                     f"My Player ID: {self.my_player_id}", 10, 10, 20, BLACK
                 )
-                self.raylib_manager.draw_text(  # Use raylib_manager to draw text
+                self.rendering_system.draw_text(
                     f"My Pos: ({int(self.my_game_object.x)}, {int(self.my_game_object.y)})",
                     10,
                     40,
@@ -311,29 +283,23 @@ class MmoClient:
                     BLACK,
                 )
             else:
-                self.raylib_manager.draw_text(
-                    "Connecting...", 10, 10, 20, BLACK
-                )  # Use raylib_manager to draw text
+                self.rendering_system.draw_text("Connecting...", 10, 10, 20, BLACK)
 
             # Display FPS - Ensure get_frame_time() is not zero
-            frame_time = (
-                self.raylib_manager.get_frame_time()
-            )  # Use raylib_manager for frame time
+            frame_time = self.rendering_system.get_frame_time()
             if frame_time > 0:
-                self.raylib_manager.draw_text(  # Use raylib_manager to draw text
+                self.rendering_system.draw_text(
                     f"FPS: {int(1.0 / frame_time)}", 10, SCREEN_HEIGHT - 30, 20, BLACK
                 )
             else:
-                self.raylib_manager.draw_text(  # Use raylib_manager to draw text
+                self.rendering_system.draw_text(
                     "FPS: N/A", 10, SCREEN_HEIGHT - 30, 20, BLACK
-                )  # Display N/A if frame_time is 0
+                )
 
-            # Update all active animations managed by GameRenderer's AnimationManager
-            self.game_renderer.animation_manager.update_all_active_animations(
-                delta_time, current_time
-            )
+            # Update all active animations managed by RenderingSystem
+            self.rendering_system.update_all_active_animations(delta_time, current_time)
 
-            self.raylib_manager.end_drawing()  # Use raylib_manager to end drawing
+            self.rendering_system.end_drawing()
 
             # Add a small sleep to yield control, allowing Raylib to process events
             time.sleep(0.001)
@@ -342,5 +308,5 @@ class MmoClient:
         if self.ws:
             self.ws.close()
         logging.info("WebSocket connection closed.")
-        self.raylib_manager.close_window()  # Use raylib_manager to close window
+        self.rendering_system.close_window()
         logging.info("Client window closed.")

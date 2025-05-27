@@ -11,8 +11,7 @@ if project_root not in sys.path:
     sys.path.insert(0, project_root)
 
 # Now import modules from the project
-from core.raylib_manager import RaylibManager
-from visuals.animation_manager import AnimationManager, Direction, AnimationMode
+from visuals.rendering_system import RenderingSystem, Direction, AnimationMode
 from raylibpy import (
     Color,
     KEY_UP,
@@ -42,7 +41,7 @@ logging.basicConfig(
     level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s"
 )
 
-# --- Standalone Animation Viewer Logic ---
+# --- Standalone Rendering Viewer Logic ---
 if __name__ == "__main__":
     SCREEN_WIDTH = 800
     SCREEN_HEIGHT = 600
@@ -50,13 +49,16 @@ if __name__ == "__main__":
 
     INITIAL_OBJECT_BASE_SIZE = 50
 
-    # Initialize Raylib through the manager
-    raylib_manager = RaylibManager(
-        SCREEN_WIDTH, SCREEN_HEIGHT, "Animation Viewer Demo", TARGET_FPS
+    # Initialize RenderingSystem
+    rendering_system = RenderingSystem(
+        screen_width=SCREEN_WIDTH,
+        screen_height=SCREEN_HEIGHT,
+        world_width=SCREEN_WIDTH,  # For viewer, world matches screen
+        world_height=SCREEN_HEIGHT,  # For viewer, world matches screen
+        object_size=INITIAL_OBJECT_BASE_SIZE,
+        title="Rendering Viewer Demo",
+        target_fps=TARGET_FPS,
     )
-
-    # Initialize the AnimationManager, passing the RaylibManager
-    animation_manager = AnimationManager(raylib_manager)
 
     AVAILABLE_DISPLAY_IDS = ["SKIN_PEOPLE", "GFX_CLICK_POINTER"]
     current_display_id_index = 0
@@ -70,8 +72,8 @@ if __name__ == "__main__":
     # Calculate initial target display size based on base size
     current_target_display_size_pixels = 10
 
-    # Create/get the initial animation state using the AnimationManager
-    demo_animation_properties = animation_manager.get_or_create_animation(
+    # Create/get the initial animation state using the RenderingSystem
+    demo_animation_properties = rendering_system.get_or_create_animation(
         demo_obj_id,
         current_display_id,
         current_target_display_size_pixels,
@@ -96,75 +98,81 @@ if __name__ == "__main__":
 
     move_speed_sim = 5.0  # Pixels per frame for simulation
 
-    while (
-        not raylib_manager.window_should_close()
-    ):  # Use RaylibManager for window close check
+    while not rendering_system.window_should_close():
         current_time = time.time()
         delta_time = current_time - last_frame_time
         last_frame_time = current_time
 
-        # Determine current simulated movement based on mode and last commanded direction
-        current_simulated_dx = 0.0
-        current_simulated_dy = 0.0
-
-        if animation_mode == AnimationMode.WALKING:
-            current_simulated_dx = last_commanded_dx
-            current_simulated_dy = last_commanded_dy
-        # If in IDLE mode, simulated movement remains 0.0
-
-        # --- Input Handling (using RaylibManager) ---
-        # Only update last_commanded_dx/dy when a key is pressed
+        # --- Input Handling (using RenderingSystem) ---
         key_pressed_for_movement = False
 
-        if raylib_manager.is_key_pressed(KEY_UP) or raylib_manager.is_key_pressed(
+        # Reset commanded deltas if no key is pressed this frame,
+        # unless we are in WALKING mode (which means we continue moving)
+        if not (
+            rendering_system.is_key_pressed(KEY_UP)
+            or rendering_system.is_key_pressed(KEY_KP_8)
+            or rendering_system.is_key_pressed(KEY_RIGHT)
+            or rendering_system.is_key_pressed(KEY_KP_6)
+            or rendering_system.is_key_pressed(KEY_DOWN)
+            or rendering_system.is_key_pressed(KEY_KP_2)
+            or rendering_system.is_key_pressed(KEY_LEFT)
+            or rendering_system.is_key_pressed(KEY_KP_4)
+            or rendering_system.is_key_pressed(KEY_KP_7)
+            or rendering_system.is_key_pressed(KEY_KP_9)
+            or rendering_system.is_key_pressed(KEY_KP_1)
+            or rendering_system.is_key_pressed(KEY_KP_3)
+        ):
+            # If no directional key is pressed, and we are in IDLE mode, clear the commanded deltas.
+            # If in WALKING mode, we want to maintain the last commanded direction.
+            if animation_mode == AnimationMode.IDLE:
+                last_commanded_dx = 0.0
+                last_commanded_dy = 0.0
+
+        if rendering_system.is_key_pressed(KEY_UP) or rendering_system.is_key_pressed(
             KEY_KP_8
         ):
             last_commanded_dy = -move_speed_sim
-            last_commanded_dx = 0.0  # Reset other axis for cardinal
+            last_commanded_dx = 0.0
             key_pressed_for_movement = True
-        if raylib_manager.is_key_pressed(KEY_RIGHT) or raylib_manager.is_key_pressed(
-            KEY_KP_6
-        ):
+        if rendering_system.is_key_pressed(
+            KEY_RIGHT
+        ) or rendering_system.is_key_pressed(KEY_KP_6):
             last_commanded_dx = move_speed_sim
-            last_commanded_dy = 0.0  # Reset other axis for cardinal
+            last_commanded_dy = 0.0
             key_pressed_for_movement = True
-        if raylib_manager.is_key_pressed(KEY_DOWN) or raylib_manager.is_key_pressed(
+        if rendering_system.is_key_pressed(KEY_DOWN) or rendering_system.is_key_pressed(
             KEY_KP_2
         ):
             last_commanded_dy = move_speed_sim
-            last_commanded_dx = 0.0  # Reset other axis for cardinal
+            last_commanded_dx = 0.0
             key_pressed_for_movement = True
-        if raylib_manager.is_key_pressed(KEY_LEFT) or raylib_manager.is_key_pressed(
+        if rendering_system.is_key_pressed(KEY_LEFT) or rendering_system.is_key_pressed(
             KEY_KP_4
         ):
             last_commanded_dx = -move_speed_sim
-            last_commanded_dy = 0.0  # Reset other axis for cardinal
+            last_commanded_dy = 0.0
             key_pressed_for_movement = True
 
         # Diagonal movements - these will override cardinal if pressed simultaneously
-        if raylib_manager.is_key_pressed(KEY_KP_7):  # UP_LEFT
+        if rendering_system.is_key_pressed(KEY_KP_7):  # UP_LEFT
             last_commanded_dx = -move_speed_sim * 0.707
             last_commanded_dy = -move_speed_sim * 0.707
             key_pressed_for_movement = True
-        if raylib_manager.is_key_pressed(KEY_KP_9):  # UP_RIGHT
+        if rendering_system.is_key_pressed(KEY_KP_9):  # UP_RIGHT
             last_commanded_dx = move_speed_sim * 0.707
             last_commanded_dy = -move_speed_sim * 0.707
             key_pressed_for_movement = True
-        if raylib_manager.is_key_pressed(KEY_KP_1):  # DOWN_LEFT
+        if rendering_system.is_key_pressed(KEY_KP_1):  # DOWN_LEFT
             last_commanded_dx = -move_speed_sim * 0.707
             last_commanded_dy = move_speed_sim * 0.707
             key_pressed_for_movement = True
-        if raylib_manager.is_key_pressed(KEY_KP_3):  # DOWN_RIGHT
+        if rendering_system.is_key_pressed(KEY_KP_3):  # DOWN_RIGHT
             last_commanded_dx = move_speed_sim * 0.707
             last_commanded_dy = move_speed_sim * 0.707
             key_pressed_for_movement = True
-
-        # If no directional key was pressed, and we are in WALKING mode,
-        # the current_simulated_dx/dy will retain last_commanded_dx/dy.
-        # If in IDLE mode, current_simulated_dx/dy is already 0.0.
 
         # Toggle animation mode on SPACE press
-        if raylib_manager.is_key_pressed(KEY_SPACE):
+        if rendering_system.is_key_pressed(KEY_SPACE):
             animation_mode = (
                 AnimationMode.IDLE
                 if animation_mode == AnimationMode.WALKING
@@ -174,72 +182,88 @@ if __name__ == "__main__":
             if animation_mode == AnimationMode.IDLE:
                 last_commanded_dx = 0.0
                 last_commanded_dy = 0.0
-            # Update animation manager with the new mode and current (possibly zero) movement
-            animation_manager.update_animation_direction_for_object(
+            # Update rendering system with the new mode and current (possibly zero) movement
+            rendering_system.update_animation_direction_for_object(
                 obj_id=demo_obj_id,
                 display_id=current_display_id,
-                current_dx=current_simulated_dx,
-                current_dy=current_simulated_dy,
+                current_dx=last_commanded_dx,  # Use last commanded for direction update
+                current_dy=last_commanded_dy,  # Use last commanded for direction update
                 animation_mode=animation_mode,
                 timestamp=current_time,
             )
 
         # Update the animation direction history and set the smoothed direction
-        # on the Animation instance within the AnimationManager.
-        animation_manager.update_animation_direction_for_object(
+        # on the Animation instance within the RenderingSystem.
+        # Always pass the last commanded movement to update direction history
+        rendering_system.update_animation_direction_for_object(
             obj_id=demo_obj_id,
             display_id=current_display_id,
-            current_dx=current_simulated_dx,  # Use the actual movement for this frame
-            current_dy=current_simulated_dy,
+            current_dx=last_commanded_dx,
+            current_dy=last_commanded_dy,
             animation_mode=animation_mode,
             timestamp=current_time,
         )
 
-        if raylib_manager.is_key_pressed(KEY_TWO):
+        if rendering_system.is_key_pressed(KEY_TWO):
             current_target_display_size_pixels += 1
-            animation_manager.get_or_create_animation(
+            rendering_system.get_or_create_animation(
                 demo_obj_id,
                 current_display_id,
                 current_target_display_size_pixels,
                 initial_direction=demo_animation_instance.current_direction,
             )
-        elif raylib_manager.is_key_pressed(KEY_ONE):
+        elif rendering_system.is_key_pressed(KEY_ONE):
             current_target_display_size_pixels -= 1
             if current_target_display_size_pixels < 1:
                 current_target_display_size_pixels = 1
-            animation_manager.get_or_create_animation(
+            rendering_system.get_or_create_animation(
                 demo_obj_id,
                 current_display_id,
                 current_target_display_size_pixels,
                 initial_direction=demo_animation_instance.current_direction,
             )
 
-        if raylib_manager.is_key_pressed(KEY_THREE):  # Next ID
+        if rendering_system.is_key_pressed(KEY_THREE):  # Next ID
             current_display_id_index = (current_display_id_index + 1) % len(
                 AVAILABLE_DISPLAY_IDS
             )
             current_display_id = AVAILABLE_DISPLAY_IDS[current_display_id_index]
-            animation_manager.remove_animation(obj_id=demo_obj_id, display_id=None)
-            animation_manager.get_or_create_animation(
+            rendering_system.remove_animation(obj_id=demo_obj_id, display_id=None)
+            animation_mode = AnimationMode.IDLE  # Reset mode on ID change
+            last_commanded_dx = 0.0  # Reset movement on ID change
+            last_commanded_dy = 0.0  # Reset movement on ID change
+
+            demo_animation_properties = rendering_system.get_or_create_animation(
                 demo_obj_id,
                 current_display_id,
                 current_target_display_size_pixels,
                 initial_direction=demo_animation_instance.current_direction,
             )
-        elif raylib_manager.is_key_pressed(KEY_FOUR):  # Previous ID
+            demo_animation_instance = demo_animation_properties[
+                "animation_instance"
+            ]  # Update instance reference
+
+        elif rendering_system.is_key_pressed(KEY_FOUR):  # Previous ID
             current_display_id_index = (
                 current_display_id_index - 1 + len(AVAILABLE_DISPLAY_IDS)
             ) % len(AVAILABLE_DISPLAY_IDS)
             current_display_id = AVAILABLE_DISPLAY_IDS[current_display_id_index]
-            animation_manager.remove_animation(obj_id=demo_obj_id, display_id=None)
-            animation_manager.get_or_create_animation(
+            rendering_system.remove_animation(obj_id=demo_obj_id, display_id=None)
+            animation_mode = AnimationMode.IDLE  # Reset mode on ID change
+            last_commanded_dx = 0.0  # Reset movement on ID change
+            last_commanded_dy = 0.0  # Reset movement on ID change
+
+            demo_animation_properties = rendering_system.get_or_create_animation(
                 demo_obj_id,
                 current_display_id,
                 current_target_display_size_pixels,
                 initial_direction=demo_animation_instance.current_direction,
             )
+            demo_animation_instance = demo_animation_properties[
+                "animation_instance"
+            ]  # Update instance reference
 
-        demo_animation_properties = animation_manager.get_animation_properties(
+        demo_animation_properties = rendering_system.get_animation_properties(
             demo_obj_id, current_display_id
         )
         if not demo_animation_properties:
@@ -247,7 +271,7 @@ if __name__ == "__main__":
 
         demo_animation_instance = demo_animation_properties["animation_instance"]
 
-        animation_manager.update_all_active_animations(delta_time, current_time)
+        rendering_system.update_all_active_animations(delta_time, current_time)
 
         dim_num_pixels = 0
         if current_display_id == "GFX_CLICK_POINTER":
@@ -262,10 +286,10 @@ if __name__ == "__main__":
             (current_target_display_size_pixels * dim_num_pixels) / 2
         )
 
-        raylib_manager.begin_drawing()
-        raylib_manager.clear_background(Color(40, 40, 40, 255))
+        rendering_system.begin_drawing()
+        rendering_system.clear_background(Color(40, 40, 40, 255))
 
-        animation_manager.render_object_animation(
+        rendering_system.render_object_animation(
             obj_id=demo_obj_id,
             display_id=current_display_id,
             screen_x=draw_x,
@@ -273,18 +297,18 @@ if __name__ == "__main__":
             timestamp=current_time,
         )
 
-        raylib_manager.draw_text(
+        rendering_system.draw_text(
             f"Current ID: {current_display_id}", 10, 10, 20, Color(255, 255, 255, 255)
         )
 
-        raylib_manager.draw_text(
+        rendering_system.draw_text(
             f"Direction: {demo_animation_instance.current_direction.name}",
             10,
             35,
             20,
             Color(255, 255, 255, 255),
         )
-        raylib_manager.draw_text(
+        rendering_system.draw_text(
             f"Animation Mode: {demo_animation_instance.animation_mode.name.capitalize()}",
             10,
             60,
@@ -293,7 +317,7 @@ if __name__ == "__main__":
         )
 
         if demo_animation_instance.is_stateless:
-            raylib_manager.draw_text(
+            rendering_system.draw_text(
                 "Directional input & SPACE ignored for this ID",
                 10,
                 80,
@@ -301,14 +325,14 @@ if __name__ == "__main__":
                 Color(200, 200, 200, 255),
             )
         else:
-            raylib_manager.draw_text(
+            rendering_system.draw_text(
                 "Press SPACE to toggle animation mode",
                 10,
                 80,
                 15,
                 Color(200, 200, 200, 255),
             )
-            raylib_manager.draw_text(
+            rendering_system.draw_text(
                 "Use numpad/arrow keys to set direction",
                 10,
                 100,
@@ -316,31 +340,31 @@ if __name__ == "__main__":
                 Color(200, 200, 200, 255),
             )
 
-        raylib_manager.draw_text(
+        rendering_system.draw_text(
             f"Pixel Size: {current_target_display_size_pixels}",
             10,
             125,
             15,
             Color(200, 200, 200, 255),
         )
-        raylib_manager.draw_text(
+        rendering_system.draw_text(
             "Use '1' for zoom out and '2' for zoom in",
             10,
             145,
             15,
             Color(200, 200, 200, 255),
         )
-        raylib_manager.draw_text(
+        rendering_system.draw_text(
             "Use '3'/'4' to change animation ID", 10, 165, 15, Color(200, 200, 200, 255)
         )
-        raylib_manager.draw_text(
+        rendering_system.draw_text(
             f"Frame Index (UI): {demo_animation_instance.current_frame_index}",
             10,
             190,
             15,
             Color(200, 200, 200, 255),
         )
-        raylib_manager.draw_text(
+        rendering_system.draw_text(
             f"Frame Timer (UI): {demo_animation_instance.frame_timer:.2f}",
             10,
             210,
@@ -348,14 +372,14 @@ if __name__ == "__main__":
             Color(200, 200, 200, 255),
         )
 
-        raylib_manager.draw_text(
-            f"FPS: {int(1.0 / raylib_manager.get_frame_time()) if raylib_manager.get_frame_time() > 0 else 'N/A'}",
+        rendering_system.draw_text(
+            f"FPS: {int(1.0 / rendering_system.get_frame_time()) if rendering_system.get_frame_time() > 0 else 'N/A'}",
             10,
             SCREEN_HEIGHT - 30,
             20,
             Color(255, 255, 255, 255),
         )
 
-        raylib_manager.end_drawing()
+        rendering_system.end_drawing()
 
-    raylib_manager.close_window()
+    rendering_system.close_window()
