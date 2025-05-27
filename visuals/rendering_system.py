@@ -127,8 +127,8 @@ class AnimationMode(Enum):
 # This dictionary holds all animation matrices and their associated properties,
 # organized by a unique animation_asset_id (e.g., "SKIN_PEOPLE", "CLICK_POINTER").
 # Each animation asset has 'frames' (a map of animation states to lists of matrices),
-# 'colors' (the color map), 'frame_duration', 'dimensions' (original matrix size),
-# and 'is_stateless' (if it ignores direction/mode).
+# 'colors' (the color map), and 'frame_duration'.
+# The dimensions are now dynamically read from the first frame of the animation.
 ANIMATION_DATA = {
     ANIMATION_ASSET_PEOPLE: {
         "frames": {
@@ -155,7 +155,6 @@ ANIMATION_DATA = {
         },
         "colors": SKIN_PEOPLE_MAP_COLORS,
         "frame_duration": 0.3,
-        "dimensions": (26, 26),  # Original content dimensions, before padding
         "is_stateless": False,
     },
     ANIMATION_ASSET_CLICK_POINTER: {
@@ -173,7 +172,6 @@ ANIMATION_DATA = {
         },
         "colors": GFX_CLICK_POINTER_MAP_COLORS,
         "frame_duration": GFX_CLICK_POINTER_ANIMATION_SPEED,
-        "dimensions": (5, 5),
         "is_stateless": True,
     },
     ANIMATION_ASSET_POINT_PATH: {
@@ -183,7 +181,6 @@ ANIMATION_DATA = {
         },
         "colors": GFX_POINT_PATH_MAP_COLORS,
         "frame_duration": GFX_POINT_PATH_ANIMATION_SPEED,
-        "dimensions": (3, 3),
         "is_stateless": True,
     },
     ANIMATION_ASSET_WALL: {
@@ -193,7 +190,6 @@ ANIMATION_DATA = {
         },
         "colors": BUILDING_WALL_MAP_COLORS,  # Using the imported map colors
         "frame_duration": BUILDING_WALL_ANIMATION_SPEED,
-        "dimensions": (5, 5),
         "is_stateless": True,
     },
 }
@@ -574,6 +570,48 @@ class RenderingSystem:
         for y in range(0, self.world_height + 1, self.object_size):
             self.draw_line(0, y, self.world_width, y, LIGHTGRAY)
 
+    def get_animation_data(self, animation_asset_id: str) -> dict | None:
+        """
+        Helper method to retrieve raw animation data from the global ANIMATION_DATA.
+
+        Args:
+            animation_asset_id (str): The ID referencing the animation data.
+
+        Returns:
+            dict | None: The animation data dictionary, or None if not found.
+        """
+        return ANIMATION_DATA.get(animation_asset_id)
+
+    def get_animation_matrix_dimension(self, animation_asset_id: str) -> int:
+        """
+        Dynamically gets the dimension (e.g., 26 for 26x26) of the animation matrix.
+        Assumes square matrices.
+        """
+        animation_info = self.get_animation_data(animation_asset_id)
+        if not animation_info:
+            logging.warning(
+                f"No animation data found for {animation_asset_id}. Cannot determine dimensions."
+            )
+            return 1  # Default to 1 to prevent division by zero
+
+        # Try to get the first frame from 'default_idle' or 'none_idle' or any available frame list
+        first_frame = None
+        for key in ["default_idle", "none_idle"] + list(
+            animation_info["frames"].keys()
+        ):
+            frames_list = animation_info["frames"].get(key)
+            if frames_list and len(frames_list) > 0:
+                first_frame = frames_list[0]
+                break
+
+        if first_frame and len(first_frame) > 0:
+            return len(first_frame)
+        else:
+            logging.warning(
+                f"Could not determine matrix dimension for {animation_asset_id}. Returning 1."
+            )
+            return 1
+
     def draw_game_object(
         self,
         game_object: GameObject,
@@ -632,9 +670,7 @@ class RenderingSystem:
 
             # Calculate target display size based on OBJECT_SIZE and sprite matrix dimensions
             # This ensures the entire sprite fits within the OBJECT_SIZE grid cell.
-            matrix_dimension = animation_info["dimensions"][
-                0
-            ]  # Assuming square matrices
+            matrix_dimension = self.get_animation_matrix_dimension(animation_asset_id)
             target_display_size_pixels = self.object_size / matrix_dimension
             if target_display_size_pixels == 0:
                 target_display_size_pixels = 1  # Avoid division by zero
@@ -732,18 +768,6 @@ class RenderingSystem:
                     int(pixel_size_in_display),  # Ensure integer size for drawing
                     color_map[matrix_value],
                 )
-
-    def get_animation_data(self, animation_asset_id: str) -> dict | None:
-        """
-        Helper method to retrieve raw animation data from the global ANIMATION_DATA.
-
-        Args:
-            animation_asset_id (str): The ID referencing the animation data.
-
-        Returns:
-            dict | None: The animation data dictionary, or None if not found.
-        """
-        return ANIMATION_DATA.get(animation_asset_id)
 
     def get_or_create_animation(
         self,

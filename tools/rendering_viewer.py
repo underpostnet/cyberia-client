@@ -82,8 +82,10 @@ if __name__ == "__main__":
     animation_mode = AnimationMode.IDLE
 
     # Calculate initial target display size based on OBJECT_SIZE and the current animation's matrix dimensions
-    animation_info = ANIMATION_DATA.get(current_animation_asset_id)
-    matrix_dimension = animation_info["dimensions"][0] if animation_info else 1
+    # Dynamically get matrix dimension using the new method
+    matrix_dimension = rendering_system.get_animation_matrix_dimension(
+        current_animation_asset_id
+    )
     # pixel_size_in_display is now calculated dynamically based on OBJECT_SIZE
     current_pixel_size_in_display = OBJECT_SIZE / matrix_dimension
     if current_pixel_size_in_display == 0:
@@ -257,8 +259,9 @@ if __name__ == "__main__":
             last_commanded_dy = 0.0
 
             # Recalculate pixel size for the new animation asset
-            animation_info = ANIMATION_DATA.get(current_animation_asset_id)
-            matrix_dimension = animation_info["dimensions"][0] if animation_info else 1
+            matrix_dimension = rendering_system.get_animation_matrix_dimension(
+                current_animation_asset_id
+            )
             current_pixel_size_in_display = OBJECT_SIZE / matrix_dimension
             if current_pixel_size_in_display == 0:
                 current_pixel_size_in_display = 1
@@ -286,8 +289,9 @@ if __name__ == "__main__":
             last_commanded_dy = 0.0
 
             # Recalculate pixel size for the new animation asset
-            animation_info = ANIMATION_DATA.get(current_animation_asset_id)
-            matrix_dimension = animation_info["dimensions"][0] if animation_info else 1
+            matrix_dimension = rendering_system.get_animation_matrix_dimension(
+                current_animation_asset_id
+            )
             current_pixel_size_in_display = OBJECT_SIZE / matrix_dimension
             if current_pixel_size_in_display == 0:
                 current_pixel_size_in_display = 1
@@ -311,12 +315,10 @@ if __name__ == "__main__":
 
         rendering_system.update_all_active_animations(delta_time, current_time)
 
-        # Get the actual dimensions from ANIMATION_DATA to calculate draw position
-        animation_info = ANIMATION_DATA.get(current_animation_asset_id)
-        if animation_info:
-            matrix_dimension = animation_info["dimensions"][0]
-        else:
-            matrix_dimension = 1  # Fallback
+        # Get the actual dimensions using the new method
+        matrix_dimension = rendering_system.get_animation_matrix_dimension(
+            current_animation_asset_id
+        )
 
         # Calculate total rendered size of the sprite
         total_rendered_width = current_pixel_size_in_display * matrix_dimension
