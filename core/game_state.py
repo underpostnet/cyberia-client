@@ -2,7 +2,7 @@ import logging
 import threading
 import time
 
-from config import MAZE_CELL_WORLD_SIZE
+from config import MAZE_CELL_WORLD_SIZE, OBJECT_TYPE_TO_DISPLAY_IDS
 from core.game_object import GameObject
 
 
@@ -112,7 +112,7 @@ class GameState:
     def cleanup_expired_objects(self, current_time: float) -> list[tuple[str, str]]:
         """
         Removes expired client-side objects (those not server-priority and with a decay_time).
-        Returns a list of (obj_id, animation_asset_id) tuples for animations to be removed
+        Returns a list of (obj_id, display_id) tuples for animations to be removed
         from the rendering system. Assumes the caller has acquired self.lock.
         """
         animations_to_remove = []
@@ -143,9 +143,13 @@ class GameState:
                 ):
                     self.grid[grid_y][grid_x] = None
 
-                if obj_to_remove.animation_asset_ids:
-                    for animation_asset_id in obj_to_remove.animation_asset_ids:
-                        animations_to_remove.append((obj_id, animation_asset_id))
+                if obj_to_remove.display_ids:  # Changed from animation_asset_ids
+                    for (
+                        display_id
+                    ) in obj_to_remove.display_ids:  # Changed from animation_asset_ids
+                        animations_to_remove.append(
+                            (obj_id, display_id)
+                        )  # Changed from animation_asset_id
         return animations_to_remove
 
     def _build_simplified_maze(self):
@@ -194,7 +198,7 @@ class GameState:
             data (dict): A dictionary representing the full instance state from the server.
 
         Returns:
-            list[tuple[str, str]]: A list of (obj_id, animation_asset_id) tuples for animations
+            list[tuple[str, str]]: A list of (obj_id, display_id) tuples for animations
                                     to be removed from the rendering system.
         """
         animations_to_remove_from_rendering_system = []
@@ -209,15 +213,20 @@ class GameState:
             # Collect animations to remove from rendering system due to server-side despawn
             for obj_id in removed_server_obj_ids:
                 obj_to_remove = self.objects.get(obj_id)
-                if obj_to_remove and obj_to_remove.animation_asset_ids:
-                    for animation_asset_id in obj_to_remove.animation_asset_ids:
+                if (
+                    obj_to_remove and obj_to_remove.display_ids
+                ):  # Changed from animation_asset_ids
+                    for (
+                        display_id
+                    ) in obj_to_remove.display_ids:  # Changed from animation_asset_ids
                         animations_to_remove_from_rendering_system.append(
-                            (obj_id, animation_asset_id)
+                            (obj_id, display_id)  # Changed from animation_asset_id
                         )
                 self.objects.pop(obj_id, None)  # Directly remove from objects here
 
             # Update or add server-authoritative objects
             for obj_id, obj_data in data["objects"].items():
+                # GameObject.from_dict now handles default display_ids if not provided by server
                 obj = GameObject.from_dict(obj_data)
                 self.objects[obj_id] = obj
 

@@ -25,14 +25,13 @@ from config import (
     WORLD_WIDTH,
     WORLD_HEIGHT,
     OBJECT_SIZE,
-    OBJECT_TYPE_CLICK_POINTER,
-    OBJECT_TYPE_POINT_PATH,
+    CAMERA_SMOOTHNESS,
 )
 
 from visuals.rendering_system import RenderingSystem, Direction, AnimationMode
 from core.game_state import GameState
 from core.game_object import GameObject
-from mock_server import MockServer  # Assuming mock_server.py exists and is updated
+from mock_server import MockServer
 
 
 class MmoClient:
@@ -136,13 +135,15 @@ class MmoClient:
         if msg_type == "instance_state_update":
             # from_dict now handles removing old server-authoritative objects
             # and returns animations to remove from rendering system
-            animations_to_remove_from_rendering_system = self.game_state.from_dict(data)
+            display_ids_to_remove_from_rendering_system = self.game_state.from_dict(
+                data
+            )
 
             for (
                 obj_id,
-                animation_asset_id,
-            ) in animations_to_remove_from_rendering_system:
-                self.rendering_system.remove_animation(obj_id, animation_asset_id)
+                display_id,
+            ) in display_ids_to_remove_from_rendering_system:
+                self.rendering_system.remove_animation(obj_id, display_id)
 
             with self.game_state.lock:  # Acquire lock to safely access game_state.objects
                 if self.my_player_id and self.my_player_id in self.game_state.objects:
@@ -203,25 +204,25 @@ class MmoClient:
         These are client-side only and have a decay time.
         Assumes the caller has already acquired self.game_state.lock.
         """
-        animations_to_remove_from_rendering_system = []
+        display_ids_to_remove_from_rendering_system = []
 
         # Remove existing POINT_PATH objects for this player
         obj_ids_to_remove = [
             obj_id
             for obj_id, obj in self.game_state.objects.items()
-            if obj.object_type == OBJECT_TYPE_POINT_PATH
+            if obj.object_type == "POINT_PATH"  # Used literal string
             and obj_id.startswith(f"path_point_{self.my_player_id}")
         ]
         for obj_id in obj_ids_to_remove:
             obj_to_remove = self.game_state.remove_game_object(obj_id)
-            if obj_to_remove and obj_to_remove.animation_asset_ids:
-                for animation_asset_id in obj_to_remove.animation_asset_ids:
-                    animations_to_remove_from_rendering_system.append(
-                        (obj_id, animation_asset_id)
+            if obj_to_remove and obj_to_remove.display_ids:
+                for display_id in obj_to_remove.display_ids:
+                    display_ids_to_remove_from_rendering_system.append(
+                        (obj_id, display_id)
                     )
 
         logging.debug(
-            f"Clearing {len(animations_to_remove_from_rendering_system)} old path points."
+            f"Clearing {len(display_ids_to_remove_from_rendering_system)} old path points."
         )
 
         # Generate new path points and add them directly to game_state
@@ -229,8 +230,8 @@ class MmoClient:
         for obj in new_path_objects:
             self.game_state.add_or_update_game_object(obj)
 
-        for obj_id, animation_asset_id in animations_to_remove_from_rendering_system:
-            self.rendering_system.remove_animation(obj_id, animation_asset_id)
+        for obj_id, display_id in display_ids_to_remove_from_rendering_system:
+            self.rendering_system.remove_animation(obj_id, display_id)
 
     def run(self):
         """Main client loop, handles rendering and user input."""
@@ -262,16 +263,16 @@ class MmoClient:
             self._process_queued_messages()
 
             # Clean up expired client-side objects
-            animations_to_remove_from_rendering_system = []
+            display_ids_to_remove_from_rendering_system = []
             with self.game_state.lock:  # Acquire lock for cleanup operation
-                animations_to_remove_from_rendering_system = (
+                display_ids_to_remove_from_rendering_system = (
                     self.game_state.cleanup_expired_objects(current_time)
                 )
             for (
                 obj_id,
-                animation_asset_id,
-            ) in animations_to_remove_from_rendering_system:
-                self.rendering_system.remove_animation(obj_id, animation_asset_id)
+                display_id,
+            ) in display_ids_to_remove_from_rendering_system:
+                self.rendering_system.remove_animation(obj_id, display_id)
 
             # Update client-side object positions and get movement deltas
             object_movement_deltas = {}
@@ -297,20 +298,20 @@ class MmoClient:
                 self.send_message("client_move_request", move_request_payload)
 
                 # Generate a client-side click pointer visual effect
-                animations_to_remove_from_rendering_system_click = []
+                display_ids_to_remove_from_rendering_system_click = []
                 with self.game_state.lock:  # Acquire lock for click pointer generation
                     # First, remove any existing click pointers to ensure only one is active
                     obj_ids_to_remove = [
                         obj_id
                         for obj_id, obj in self.game_state.objects.items()
-                        if obj.object_type == OBJECT_TYPE_CLICK_POINTER
+                        if obj.object_type == "CLICK_POINTER"  # Used literal string
                     ]
                     for obj_id in obj_ids_to_remove:
                         obj_to_remove = self.game_state.remove_game_object(obj_id)
-                        if obj_to_remove and obj_to_remove.animation_asset_ids:
-                            for animation_asset_id in obj_to_remove.animation_asset_ids:
-                                animations_to_remove_from_rendering_system_click.append(
-                                    (obj_id, animation_asset_id)
+                        if obj_to_remove and obj_to_remove.display_ids:
+                            for display_id in obj_to_remove.display_ids:
+                                display_ids_to_remove_from_rendering_system_click.append(
+                                    (obj_id, display_id)
                                 )
 
                     # Generate new click pointer and add it directly to game_state
@@ -322,9 +323,9 @@ class MmoClient:
 
                 for (
                     obj_id,
-                    animation_asset_id,
-                ) in animations_to_remove_from_rendering_system_click:
-                    self.rendering_system.remove_animation(obj_id, animation_asset_id)
+                    display_id,
+                ) in display_ids_to_remove_from_rendering_system_click:
+                    self.rendering_system.remove_animation(obj_id, display_id)
 
             # --- Rendering ---
             self.rendering_system.begin_drawing()
@@ -349,7 +350,7 @@ class MmoClient:
                             self.my_game_object.x + OBJECT_SIZE / 2,
                             self.my_game_object.y + OBJECT_SIZE / 2,
                         ),
-                        smoothness=0.1,
+                        smoothness=CAMERA_SMOOTHNESS,
                     )
                     self.rendering_system.draw_text(
                         f"My Player ID: {self.my_player_id}", 10, 10, 20, BLACK

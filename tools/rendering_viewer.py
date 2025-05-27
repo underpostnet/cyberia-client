@@ -36,14 +36,8 @@ from raylibpy import (
     KEY_FOUR,
 )
 
-# Import animation asset IDs from config
-from config import (
-    ANIMATION_ASSET_PEOPLE,
-    ANIMATION_ASSET_CLICK_POINTER,
-    ANIMATION_ASSET_POINT_PATH,
-    ANIMATION_ASSET_WALL,
-    OBJECT_SIZE,  # Import OBJECT_SIZE for consistent scaling
-)
+# Import object size from config
+from config import OBJECT_SIZE
 
 
 # --- Logging Configuration ---
@@ -68,23 +62,24 @@ if __name__ == "__main__":
         target_fps=TARGET_FPS,
     )
 
-    AVAILABLE_ANIMATION_ASSET_IDS = [
-        ANIMATION_ASSET_PEOPLE,
-        ANIMATION_ASSET_CLICK_POINTER,
-        ANIMATION_ASSET_POINT_PATH,
-        ANIMATION_ASSET_WALL,
+    # Use the new display IDs
+    AVAILABLE_DISPLAY_IDS = [
+        "PEOPLE_DISPLAY_ID",
+        "CLICK_POINTER_DISPLAY_ID",
+        "POINT_PATH_DISPLAY_ID",
+        "WALL_DISPLAY_ID",
     ]
-    current_asset_id_index = 0
+    current_display_id_index = 0
     demo_obj_id = "demo_animation_viewer_object"
 
-    current_animation_asset_id = AVAILABLE_ANIMATION_ASSET_IDS[current_asset_id_index]
+    current_display_id = AVAILABLE_DISPLAY_IDS[current_display_id_index]
     demo_direction = Direction.DOWN
     animation_mode = AnimationMode.IDLE
 
     # Calculate initial target display size based on OBJECT_SIZE and the current animation's matrix dimensions
     # Dynamically get matrix dimension using the new method
     matrix_dimension = rendering_system.get_animation_matrix_dimension(
-        current_animation_asset_id
+        current_display_id
     )
     # pixel_size_in_display is now calculated dynamically based on OBJECT_SIZE
     current_pixel_size_in_display = OBJECT_SIZE / matrix_dimension
@@ -93,7 +88,7 @@ if __name__ == "__main__":
 
     demo_animation_properties = rendering_system.get_or_create_animation(
         demo_obj_id,
-        current_animation_asset_id,
+        current_display_id,
         current_pixel_size_in_display,
         initial_direction=demo_direction,
     )
@@ -106,7 +101,9 @@ if __name__ == "__main__":
     )
     print("Press SPACE to toggle animation mode (IDLE/WALKING).")
     print("Use '1' for zoom out and '2' for zoom in (changes individual pixel size).")
-    print("Use '3' to switch to the next animation ID and '4' for the previous.")
+    print(
+        "Use '3' to switch to the next display ID and '4' for the previous."
+    )  # Updated text
     print("Press ESC to close the window.")
 
     last_commanded_dx = 0.0
@@ -194,7 +191,7 @@ if __name__ == "__main__":
                     last_commanded_dy = 0.0
                 rendering_system.update_animation_direction_for_object(
                     obj_id=demo_obj_id,
-                    animation_asset_id=current_animation_asset_id,
+                    display_id=current_display_id,
                     current_dx=last_commanded_dx,
                     current_dy=last_commanded_dy,
                     animation_mode=animation_mode,
@@ -203,7 +200,7 @@ if __name__ == "__main__":
 
             rendering_system.update_animation_direction_for_object(
                 obj_id=demo_obj_id,
-                animation_asset_id=current_animation_asset_id,
+                display_id=current_display_id,
                 current_dx=last_commanded_dx,
                 current_dy=last_commanded_dy,
                 animation_mode=animation_mode,
@@ -215,7 +212,7 @@ if __name__ == "__main__":
             last_commanded_dy = 0.0
             animation_mode = AnimationMode.IDLE
             anim_properties = rendering_system.get_animation_properties(
-                demo_obj_id, current_animation_asset_id
+                demo_obj_id, current_display_id
             )
             if anim_properties:
                 animation_instance = anim_properties["animation_instance"]
@@ -228,7 +225,7 @@ if __name__ == "__main__":
             current_pixel_size_in_display += 1.0
             rendering_system.get_or_create_animation(
                 demo_obj_id,
-                current_animation_asset_id,
+                current_display_id,
                 current_pixel_size_in_display,
                 initial_direction=demo_animation_instance.current_direction,
             )
@@ -238,29 +235,27 @@ if __name__ == "__main__":
                 current_pixel_size_in_display = 1.0
             rendering_system.get_or_create_animation(
                 demo_obj_id,
-                current_animation_asset_id,
+                current_display_id,
                 current_pixel_size_in_display,
                 initial_direction=demo_animation_instance.current_direction,
             )
 
-        # Handle animation asset ID switching
+        # Handle display ID switching
         if rendering_system.is_key_pressed(KEY_THREE):
-            current_asset_id_index = (current_asset_id_index + 1) % len(
-                AVAILABLE_ANIMATION_ASSET_IDS
+            current_display_id_index = (current_display_id_index + 1) % len(
+                AVAILABLE_DISPLAY_IDS
             )
-            current_animation_asset_id = AVAILABLE_ANIMATION_ASSET_IDS[
-                current_asset_id_index
-            ]
+            current_display_id = AVAILABLE_DISPLAY_IDS[current_display_id_index]
             rendering_system.remove_animation(
-                obj_id=demo_obj_id, animation_asset_id=None
+                obj_id=demo_obj_id, display_id=None
             )  # Remove old animation
             animation_mode = AnimationMode.IDLE
             last_commanded_dx = 0.0
             last_commanded_dy = 0.0
 
-            # Recalculate pixel size for the new animation asset
+            # Recalculate pixel size for the new display ID
             matrix_dimension = rendering_system.get_animation_matrix_dimension(
-                current_animation_asset_id
+                current_display_id
             )
             current_pixel_size_in_display = OBJECT_SIZE / matrix_dimension
             if current_pixel_size_in_display == 0:
@@ -268,29 +263,27 @@ if __name__ == "__main__":
 
             demo_animation_properties = rendering_system.get_or_create_animation(
                 demo_obj_id,
-                current_animation_asset_id,
+                current_display_id,
                 current_pixel_size_in_display,
                 initial_direction=Direction.DOWN,
             )
             demo_animation_instance = demo_animation_properties["animation_instance"]
 
         elif rendering_system.is_key_pressed(KEY_FOUR):
-            current_asset_id_index = (
-                current_asset_id_index - 1 + len(AVAILABLE_ANIMATION_ASSET_IDS)
-            ) % len(AVAILABLE_ANIMATION_ASSET_IDS)
-            current_animation_asset_id = AVAILABLE_ANIMATION_ASSET_IDS[
-                current_asset_id_index
-            ]
+            current_display_id_index = (
+                current_display_id_index - 1 + len(AVAILABLE_DISPLAY_IDS)
+            ) % len(AVAILABLE_DISPLAY_IDS)
+            current_display_id = AVAILABLE_DISPLAY_IDS[current_display_id_index]
             rendering_system.remove_animation(
-                obj_id=demo_obj_id, animation_asset_id=None
+                obj_id=demo_obj_id, display_id=None
             )  # Remove old animation
             animation_mode = AnimationMode.IDLE
             last_commanded_dx = 0.0
             last_commanded_dy = 0.0
 
-            # Recalculate pixel size for the new animation asset
+            # Recalculate pixel size for the new display ID
             matrix_dimension = rendering_system.get_animation_matrix_dimension(
-                current_animation_asset_id
+                current_display_id
             )
             current_pixel_size_in_display = OBJECT_SIZE / matrix_dimension
             if current_pixel_size_in_display == 0:
@@ -298,7 +291,7 @@ if __name__ == "__main__":
 
             demo_animation_properties = rendering_system.get_or_create_animation(
                 demo_obj_id,
-                current_animation_asset_id,
+                current_display_id,
                 current_pixel_size_in_display,
                 initial_direction=Direction.DOWN,
             )
@@ -306,7 +299,7 @@ if __name__ == "__main__":
 
         # Ensure demo_animation_properties is up to date after potential changes
         demo_animation_properties = rendering_system.get_animation_properties(
-            demo_obj_id, current_animation_asset_id
+            demo_obj_id, current_display_id
         )
         if not demo_animation_properties:
             continue
@@ -317,7 +310,7 @@ if __name__ == "__main__":
 
         # Get the actual dimensions using the new method
         matrix_dimension = rendering_system.get_animation_matrix_dimension(
-            current_animation_asset_id
+            current_display_id
         )
 
         # Calculate total rendered size of the sprite
@@ -333,14 +326,14 @@ if __name__ == "__main__":
 
         rendering_system.render_object_animation(
             obj_id=demo_obj_id,
-            animation_asset_id=current_animation_asset_id,
+            display_id=current_display_id,
             screen_x=draw_x,
             screen_y=draw_y,
             timestamp=current_time,
         )
 
         rendering_system.draw_text(
-            f"Current Asset ID: {current_animation_asset_id}",
+            f"Current Display ID: {current_display_id}",
             10,
             10,
             20,
@@ -402,7 +395,7 @@ if __name__ == "__main__":
             Color(200, 200, 200, 255),
         )
         rendering_system.draw_text(
-            "Use '3'/'4' to change animation asset ID",
+            "Use '3'/'4' to change display ID",
             10,
             165 + base_y_offset,
             15,

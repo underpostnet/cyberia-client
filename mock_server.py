@@ -10,14 +10,7 @@ from config import (
     WORLD_WIDTH,
     WORLD_HEIGHT,
     OBJECT_SIZE,
-    OBJECT_TYPE_PLAYER,
-    OBJECT_TYPE_WALL,
-    OBJECT_TYPE_POINT_PATH,
-    OBJECT_TYPE_CLICK_POINTER,
-    ANIMATION_ASSET_PEOPLE,
-    ANIMATION_ASSET_WALL,
-    ANIMATION_ASSET_CLICK_POINTER,
-    ANIMATION_ASSET_POINT_PATH,
+    OBJECT_TYPE_TO_DISPLAY_IDS,  # Import the mapping to get default display IDs
 )
 
 # --- Logging Configuration ---
@@ -51,12 +44,12 @@ class MockServer:
             x=WORLD_WIDTH / 2 - OBJECT_SIZE / 2,
             y=WORLD_HEIGHT / 2 - OBJECT_SIZE / 2,
             color=Color(0, 121, 241, 255),  # Raylib blue
-            object_type=OBJECT_TYPE_PLAYER,
+            object_type="PLAYER",  # Used literal string
             is_obstacle=False,
             speed=200.0,
-            animation_asset_ids=[
-                ANIMATION_ASSET_PEOPLE
-            ],  # Assign default animation asset
+            display_ids=OBJECT_TYPE_TO_DISPLAY_IDS[
+                "PLAYER"
+            ],  # Use the display ID from config
         ).to_dict()  # Convert to dict as if from server
 
         # Generate some mock walls
@@ -70,11 +63,11 @@ class MockServer:
                 x=wall_x,
                 y=wall_y,
                 color=Color(100, 100, 100, 255),  # Gray
-                object_type=OBJECT_TYPE_WALL,
+                object_type="WALL",  # Used literal string
                 is_obstacle=True,
-                animation_asset_ids=[
-                    ANIMATION_ASSET_WALL
-                ],  # Assign default animation asset
+                display_ids=OBJECT_TYPE_TO_DISPLAY_IDS[
+                    "WALL"
+                ],  # Use the display ID from config
             ).to_dict()  # Convert to dict as if from server
 
         logging.info(f"Generated initial state with {len(initial_objects)} objects.")
@@ -99,12 +92,12 @@ class MockServer:
                 x=point["X"],
                 y=point["Y"],
                 color=Color(0, 255, 0, 150),  # Semi-transparent green
-                object_type=OBJECT_TYPE_POINT_PATH,
+                object_type="POINT_PATH",  # Used literal string
                 is_obstacle=False,
                 speed=0.0,  # Path points don't move
-                animation_asset_ids=[
-                    ANIMATION_ASSET_POINT_PATH
-                ],  # Assign default animation asset
+                display_ids=OBJECT_TYPE_TO_DISPLAY_IDS[
+                    "POINT_PATH"
+                ],  # Use the display ID from config
                 _decay_time=current_time + decay_duration,
             )
             path_objects.append(path_object)
@@ -124,12 +117,12 @@ class MockServer:
             x=x,
             y=y,
             color=Color(255, 255, 0, 200),  # Semi-transparent yellow
-            object_type=OBJECT_TYPE_CLICK_POINTER,
+            object_type="CLICK_POINTER",  # Used literal string
             is_obstacle=False,
             speed=0.0,  # Click pointer doesn't move
-            animation_asset_ids=[
-                ANIMATION_ASSET_CLICK_POINTER
-            ],  # Assign default animation asset
+            display_ids=OBJECT_TYPE_TO_DISPLAY_IDS[
+                "CLICK_POINTER"
+            ],  # Use the display ID from config
             _decay_time=current_time + decay_duration,
         )
         return click_pointer

@@ -18,30 +18,34 @@ WEBSOCKET_PATH = "/ws"
 # visual lag. This helps mitigate rapid, small positional updates
 # from the server or client-side interpolation.
 DIRECTION_HISTORY_LENGTH = 15
+# Smoothness factor for camera movement, between 0.0 (no movement) and 1.0 (instant movement).
+CAMERA_SMOOTHNESS = 0.1
+
 
 # --- Game Object Type Definitions ---
 # These constants define the object types and their server-priority status.
 # Server-priority objects (like players and walls) have their state
 # authoritative from the server. Client-priority objects (like click pointers
 # and path points) are managed and decay on the client side.
-OBJECT_TYPE_PLAYER = "PLAYER"
-OBJECT_TYPE_WALL = "WALL"
-OBJECT_TYPE_POINT_PATH = "POINT_PATH"
-OBJECT_TYPE_CLICK_POINTER = "CLICK_POINTER"
 
 # Mapping of object types to their server-priority status
 SERVER_PRIORITY_OBJECT_TYPES = {
-    OBJECT_TYPE_PLAYER: True,
-    OBJECT_TYPE_WALL: True,
-    OBJECT_TYPE_POINT_PATH: False,
-    OBJECT_TYPE_CLICK_POINTER: False,
-    "UNKNOWN": False,  # Default for any undefined object type
+    "PLAYER": True,
+    "WALL": True,
+    "POINT_PATH": False,
+    "CLICK_POINTER": False,
+    "UNKNOWN": False,
 }
 
-# --- Animation Asset IDs ---
-# These are the unique identifiers for different animation sets,
-# which are used by the RenderingSystem to fetch and display animations.
-ANIMATION_ASSET_PEOPLE = "SKIN_PEOPLE"
-ANIMATION_ASSET_WALL = "BUILDING_WALL"
-ANIMATION_ASSET_CLICK_POINTER = "CLICK_POINTER"
-ANIMATION_ASSET_POINT_PATH = "POINT_PATH"
+# --- Object Type to Display IDs Mapping ---
+# This mapping defines which display IDs should be assigned to each object type
+# when an object is created or updated from server data, if display_ids are not provided.
+# A displayID can refer to a set of up to 16 animations (8 directions * 2 modes)
+# or 1 animation if it's stateless.
+OBJECT_TYPE_TO_DISPLAY_IDS = {
+    "PLAYER": ["PEOPLE_DISPLAY_ID"],
+    "WALL": ["WALL_DISPLAY_ID"],
+    "POINT_PATH": ["POINT_PATH_DISPLAY_ID"],
+    "CLICK_POINTER": ["CLICK_POINTER_DISPLAY_ID"],
+    "UNKNOWN": [],
+}
