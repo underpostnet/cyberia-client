@@ -938,6 +938,7 @@ class RenderingSystem:
         current_dy: float,
         animation_mode: AnimationMode,
         timestamp: float,
+        reverse: bool = False,
     ):
         """
         Updates the direction history for a specific object's animation
@@ -977,16 +978,29 @@ class RenderingSystem:
             elif current_dy < 0:
                 norm_dy = -1
 
-            direction_map = {
-                (0, -1): Direction.UP,
-                (1, -1): Direction.UP_RIGHT,
-                (1, 0): Direction.RIGHT,
-                (1, 1): Direction.DOWN_RIGHT,
-                (0, 1): Direction.DOWN,
-                (-1, 1): Direction.DOWN_LEFT,
-                (-1, 0): Direction.LEFT,
-                (-1, -1): Direction.UP_LEFT,
-            }
+            if reverse:
+                direction_map = {
+                    (0, -1): Direction.UP,
+                    (1, -1): Direction.UP_RIGHT,
+                    (1, 0): Direction.RIGHT,
+                    (1, 1): Direction.DOWN_RIGHT,
+                    (0, 1): Direction.DOWN,
+                    (-1, 1): Direction.DOWN_LEFT,
+                    (-1, 0): Direction.LEFT,
+                    (-1, -1): Direction.UP_LEFT,
+                }
+            else:
+                direction_map = {
+                    (0, -1): Direction.DOWN,
+                    (1, -1): Direction.DOWN_LEFT,
+                    (1, 0): Direction.LEFT,
+                    (1, 1): Direction.UP_LEFT,
+                    (0, 1): Direction.UP,
+                    (-1, 1): Direction.UP_RIGHT,
+                    (-1, 0): Direction.RIGHT,
+                    (-1, -1): Direction.DOWN_RIGHT,
+                }
+
             instantaneous_direction = direction_map.get(
                 (norm_dx, norm_dy), Direction.DOWN
             )  # Default to DOWN if no match

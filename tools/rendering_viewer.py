@@ -198,6 +198,7 @@ if __name__ == "__main__":
                     current_dy=last_commanded_dy,
                     animation_mode=animation_mode,
                     timestamp=current_time,
+                    reverse=True,
                 )
 
             rendering_system.update_animation_direction_for_object(
@@ -207,6 +208,7 @@ if __name__ == "__main__":
                 current_dy=last_commanded_dy,
                 animation_mode=animation_mode,
                 timestamp=current_time,
+                reverse=True,
             )
         else:
             # For stateless animations, clear movement and set to IDLE
