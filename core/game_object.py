@@ -3,6 +3,15 @@ import math
 
 from raylibpy import Color
 
+# Import object type constants for consistency
+from config import (
+    SERVER_PRIORITY_OBJECT_TYPES,
+    OBJECT_TYPE_PLAYER,
+    OBJECT_TYPE_WALL,
+    OBJECT_TYPE_POINT_PATH,
+    OBJECT_TYPE_CLICK_POINTER,
+)
+
 # --- Logging Configuration ---
 logging.basicConfig(
     level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s"
@@ -25,8 +34,10 @@ class GameObject:
         color: Color,
         is_obstacle: bool = False,
         speed: float = 200.0,
-        object_type: str = "unknown",
-        display_ids: list[str] | None = None,
+        object_type: str = "UNKNOWN",  # Default to UNKNOWN, will be standardized to uppercase
+        animation_asset_ids: (
+            list[str] | None
+        ) = None,  # Renamed from display_ids for clarity
         # Client-side properties, not part of server's authoritative state
         _decay_time: float | None = None,
     ):
@@ -40,8 +51,8 @@ class GameObject:
             color (Color): The Raylib Color object for rendering the object.
             is_obstacle (bool): True if the object acts as an obstacle for pathfinding.
             speed (float): The movement speed of the object in pixels per second.
-            object_type (str): A string representing the type of object (e.g., "player", "wall").
-            display_ids (list[str] | None): A list of display_ids for rendering this object (e.g., layers of animation).
+            object_type (str): A string representing the type of object (e.g., "PLAYER", "WALL").
+            animation_asset_ids (list[str] | None): A list of animation asset IDs for rendering this object (e.g., layers of animation).
             _decay_time (float | None): For client-side only objects, the timestamp at which
                                         the object should be removed from the client. None for permanent objects.
         """
@@ -54,7 +65,9 @@ class GameObject:
         self.object_type = (
             object_type.upper()
         )  # Standardize to uppercase for consistency
-        self.display_ids = display_ids if display_ids is not None else []
+        self.animation_asset_ids = (
+            animation_asset_ids if animation_asset_ids is not None else []
+        )
 
         self.path: list[dict[str, float]] = (
             []
@@ -74,7 +87,7 @@ class GameObject:
         Determines if this object's state is primarily managed by the server.
         Client-side visuals (like click pointers, path points) are not server-priority.
         """
-        return self.object_type in ["WALL", "PLAYER"]
+        return SERVER_PRIORITY_OBJECT_TYPES.get(self.object_type, False)
 
     @property
     def decay_time(self) -> float | None:
@@ -175,8 +188,8 @@ class GameObject:
 
         is_obstacle = data.get("is_obstacle", False)
         speed = data.get("speed", 200.0)
-        object_type = data.get("object_type", "unknown")
-        display_ids = data.get("display_ids")
+        object_type = data.get("object_type", "UNKNOWN")
+        # animation_asset_ids are NOT sent by the server; the client (MockServer or RenderingSystem) assigns them.
 
         # When creating from server dict, it's always server-authoritative and doesn't decay client-side
         obj = cls(
@@ -187,7 +200,7 @@ class GameObject:
             is_obstacle=is_obstacle,
             speed=speed,
             object_type=object_type,
-            display_ids=display_ids,
+            animation_asset_ids=None,  # Explicitly pass None, letting __init__ default to []
             _decay_time=None,  # Server-authoritative objects don't decay client-side
         )
         if "path" in data:
@@ -213,6 +226,5 @@ class GameObject:
             "is_obstacle": self.is_obstacle,
             "speed": self.speed,
             "object_type": self.object_type,
-            "display_ids": self.display_ids,
             "path": self.path,
         }

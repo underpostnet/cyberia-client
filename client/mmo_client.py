@@ -25,12 +25,14 @@ from config import (
     WORLD_WIDTH,
     WORLD_HEIGHT,
     OBJECT_SIZE,
+    OBJECT_TYPE_CLICK_POINTER,
+    OBJECT_TYPE_POINT_PATH,
 )
 
 from visuals.rendering_system import RenderingSystem, Direction, AnimationMode
 from core.game_state import GameState
 from core.game_object import GameObject
-from mock_server import MockServer
+from mock_server import MockServer  # Assuming mock_server.py exists and is updated
 
 
 class MmoClient:
@@ -78,10 +80,7 @@ class MmoClient:
 
         self.my_player_path_for_gfx: list[dict[str, float]] = []
 
-        self.mock_server = MockServer()
-
-        # Removed initial mock object generation here.
-        # These objects will now be simulated as part of the initial server state update.
+        self.mock_server = MockServer()  # Instance of the simplified MockServer
 
     def _on_message(self, ws: websocket.WebSocketApp, message: str):
         """Handler for incoming WebSocket messages."""
@@ -115,9 +114,9 @@ class MmoClient:
         self.connection_ready_event.set()
 
         # Simulate initial server state if this is the first connection
-        # This ensures walls and initial players are added as if from the server
+        # This ensures all defined object types are added as if from the server
         if self.my_player_id is None and not self.game_state.get_all_objects():
-            logging.info("Simulating initial server state...")
+            logging.info("Simulating initial server state with all object types...")
             initial_state_data = self.mock_server.generate_initial_state_dict()
             with self.message_queue_lock:  # Acquire lock before modifying message queue
                 self.message_queue.append(initial_state_data)
@@ -139,8 +138,11 @@ class MmoClient:
             # and returns animations to remove from rendering system
             animations_to_remove_from_rendering_system = self.game_state.from_dict(data)
 
-            for obj_id, display_id in animations_to_remove_from_rendering_system:
-                self.rendering_system.remove_animation(obj_id, display_id)
+            for (
+                obj_id,
+                animation_asset_id,
+            ) in animations_to_remove_from_rendering_system:
+                self.rendering_system.remove_animation(obj_id, animation_asset_id)
 
             with self.game_state.lock:  # Acquire lock to safely access game_state.objects
                 if self.my_player_id and self.my_player_id in self.game_state.objects:
@@ -207,17 +209,15 @@ class MmoClient:
         obj_ids_to_remove = [
             obj_id
             for obj_id, obj in self.game_state.objects.items()
-            if obj.object_type == "POINT_PATH"
+            if obj.object_type == OBJECT_TYPE_POINT_PATH
             and obj_id.startswith(f"path_point_{self.my_player_id}")
         ]
         for obj_id in obj_ids_to_remove:
-            obj_to_remove = self.game_state.remove_game_object(
-                obj_id
-            )  # remove_game_object no longer acquires lock
-            if obj_to_remove and obj_to_remove.display_ids:
-                for display_id in obj_to_remove.display_ids:
+            obj_to_remove = self.game_state.remove_game_object(obj_id)
+            if obj_to_remove and obj_to_remove.animation_asset_ids:
+                for animation_asset_id in obj_to_remove.animation_asset_ids:
                     animations_to_remove_from_rendering_system.append(
-                        (obj_id, display_id)
+                        (obj_id, animation_asset_id)
                     )
 
         logging.debug(
@@ -227,12 +227,10 @@ class MmoClient:
         # Generate new path points and add them directly to game_state
         new_path_objects = self.mock_server.generate_point_path(path, current_time)
         for obj in new_path_objects:
-            self.game_state.add_or_update_game_object(
-                obj
-            )  # add_or_update_game_object no longer acquires lock
+            self.game_state.add_or_update_game_object(obj)
 
-        for obj_id, display_id in animations_to_remove_from_rendering_system:
-            self.rendering_system.remove_animation(obj_id, display_id)
+        for obj_id, animation_asset_id in animations_to_remove_from_rendering_system:
+            self.rendering_system.remove_animation(obj_id, animation_asset_id)
 
     def run(self):
         """Main client loop, handles rendering and user input."""
@@ -269,8 +267,11 @@ class MmoClient:
                 animations_to_remove_from_rendering_system = (
                     self.game_state.cleanup_expired_objects(current_time)
                 )
-            for obj_id, display_id in animations_to_remove_from_rendering_system:
-                self.rendering_system.remove_animation(obj_id, display_id)
+            for (
+                obj_id,
+                animation_asset_id,
+            ) in animations_to_remove_from_rendering_system:
+                self.rendering_system.remove_animation(obj_id, animation_asset_id)
 
             # Update client-side object positions and get movement deltas
             object_movement_deltas = {}
@@ -302,32 +303,28 @@ class MmoClient:
                     obj_ids_to_remove = [
                         obj_id
                         for obj_id, obj in self.game_state.objects.items()
-                        if obj.object_type == "CLICK_POINTER"
+                        if obj.object_type == OBJECT_TYPE_CLICK_POINTER
                     ]
                     for obj_id in obj_ids_to_remove:
-                        obj_to_remove = self.game_state.remove_game_object(
-                            obj_id
-                        )  # remove_game_object no longer acquires lock
-                        if obj_to_remove and obj_to_remove.display_ids:
-                            for display_id in obj_to_remove.display_ids:
+                        obj_to_remove = self.game_state.remove_game_object(obj_id)
+                        if obj_to_remove and obj_to_remove.animation_asset_ids:
+                            for animation_asset_id in obj_to_remove.animation_asset_ids:
                                 animations_to_remove_from_rendering_system_click.append(
-                                    (obj_id, display_id)
+                                    (obj_id, animation_asset_id)
                                 )
 
                     # Generate new click pointer and add it directly to game_state
                     new_click_pointer = self.mock_server.generate_click_pointer(
                         world_mouse_pos.x, world_mouse_pos.y, current_time
                     )
-                    self.game_state.add_or_update_game_object(
-                        new_click_pointer
-                    )  # add_or_update_game_object no longer acquires lock
+                    self.game_state.add_or_update_game_object(new_click_pointer)
                     logging.debug("Created new click pointer via mock server.")
 
                 for (
                     obj_id,
-                    display_id,
+                    animation_asset_id,
                 ) in animations_to_remove_from_rendering_system_click:
-                    self.rendering_system.remove_animation(obj_id, display_id)
+                    self.rendering_system.remove_animation(obj_id, animation_asset_id)
 
             # --- Rendering ---
             self.rendering_system.begin_drawing()
