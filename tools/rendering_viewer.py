@@ -1,20 +1,22 @@
-import sys
-import os
 import time
 import logging
 
-# Add the project root to the Python path
-script_dir = os.path.dirname(__file__)
-project_root = os.path.abspath(os.path.join(script_dir, ".."))
-if project_root not in sys.path:
-    sys.path.insert(0, project_root)
+import sys
+import os
+
+# Get the project root directory (assuming this script is in a subdirectory)
+project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
+# Add the project root to sys.path
+sys.path.insert(0, project_root)
+
 
 from visuals.rendering_system import (
     RenderingSystem,
     Direction,
     AnimationMode,
-    ANIMATION_DATA,
 )
+
 from raylibpy import (
     Color,
     KEY_UP,

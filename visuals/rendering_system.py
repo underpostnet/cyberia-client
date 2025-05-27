@@ -31,12 +31,9 @@ from raylibpy import (
     RED,
 )
 
-# Import config for global settings
-import config as settings
 from config import (
     DIRECTION_HISTORY_LENGTH,
-    OBJECT_SIZE,
-    OBJECT_TYPE_TO_DISPLAY_IDS,
+    CAMERA_SMOOTHNESS,  # Import CAMERA_SMOOTHNESS
 )
 
 
@@ -232,41 +229,7 @@ DIRECTION_TO_KEY_PREFIX = {
     Direction.NONE: "none",
 }
 
-# --- Object Type Rendering Properties ---
-# This dictionary defines default display IDs and rendering offsets
-# for different object types. The scaling is now dynamically calculated
-# based on OBJECT_SIZE and the animation's matrix dimensions.
-OBJECT_RENDER_PROPERTIES = {
-    "PLAYER": {  # Used literal string
-        "default_display_ids": OBJECT_TYPE_TO_DISPLAY_IDS["PLAYER"],
-        "center_offset_x": -12,  # Adjust to visually center the sprite within OBJECT_SIZE
-        "center_offset_y": -12,
-    },
-    "POINT_PATH": {  # Used literal string
-        "default_display_ids": OBJECT_TYPE_TO_DISPLAY_IDS["POINT_PATH"],
-        "center_offset_x": -1,  # Adjust to visually center the sprite within OBJECT_SIZE
-        "center_offset_y": -1,
-    },
-    "CLICK_POINTER": {  # Used literal string
-        "default_display_ids": OBJECT_TYPE_TO_DISPLAY_IDS["CLICK_POINTER"],
-        "center_offset_x": -2,  # Adjust to visually center the sprite within OBJECT_SIZE
-        "center_offset_y": -2,
-    },
-    "WALL": {  # Used literal string
-        "default_display_ids": OBJECT_TYPE_TO_DISPLAY_IDS["WALL"],
-        "center_offset_x": 0,
-        "center_offset_y": 0,
-    },
-    # Default properties for unknown object types
-    "UNKNOWN": {  # Used literal string
-        "default_display_ids": OBJECT_TYPE_TO_DISPLAY_IDS["UNKNOWN"],
-        "center_offset_x": 0,
-        "center_offset_y": 0,
-    },
-}
 
-
-# --- Animation Class ---
 class Animation:
     """
     Manages the state and progression of a pixel art animation from a set of matrices and a color map.
@@ -517,6 +480,8 @@ class RenderingSystem:
         self._animation_direction_histories: dict[
             tuple[str, str], collections.deque[Direction]
         ] = {}
+        # Stores the smoothed rendering positions for each object, keyed by obj_id
+        self._rendered_object_positions: dict[str, Vector2] = {}
         logging.info("RenderingSystem initialized.")
 
     def begin_drawing(self):
@@ -664,33 +629,52 @@ class RenderingSystem:
     ):
         """
         Draws a game object, handling different object types and animation layers.
+        Applies smoothing to the object's rendered position.
 
         Args:
             game_object (GameObject): The game object to draw.
             current_timestamp (float): The current time (e.g., from time.time()) for animation updates.
-            current_dx (float): The delta X movement of the object in the current frame.
-            current_dy (float): The delta Y movement of the object in the current frame.
+            current_dx (float): The delta X movement of the object in the current frame (for animation direction).
+            current_dy (float): The delta Y movement of the object in the current frame (for animation direction).
         """
-        render_props = OBJECT_RENDER_PROPERTIES.get(
-            game_object.object_type, OBJECT_RENDER_PROPERTIES["UNKNOWN"]
-        )
-
         # GameObject's __init__ now handles setting display_ids based on OBJECT_TYPE_TO_DISPLAY_IDS
         # if not explicitly provided, so game_object.display_ids should always be a list.
         display_ids_to_use = game_object.display_ids
 
+        # --- Object Position Smoothing ---
+        # Get the current authoritative position from the GameObject
+        target_world_pos = Vector2(game_object.x, game_object.y)
+
+        # Initialize or retrieve the smoothed position for this object
+        if game_object.obj_id not in self._rendered_object_positions:
+            self._rendered_object_positions[game_object.obj_id] = target_world_pos
+
+        smoothed_pos = self._rendered_object_positions[game_object.obj_id]
+
+        # Apply smoothing towards the target position using CAMERA_SMOOTHNESS
+        smoothed_pos.x += (target_world_pos.x - smoothed_pos.x) * CAMERA_SMOOTHNESS
+        smoothed_pos.y += (target_world_pos.y - smoothed_pos.y) * CAMERA_SMOOTHNESS
+
+        # Update the stored smoothed position
+        self._rendered_object_positions[game_object.obj_id] = smoothed_pos
+
+        # Use the smoothed position for drawing
+        draw_x_base = smoothed_pos.x
+        draw_y_base = smoothed_pos.y
+        # --- End Object Position Smoothing ---
+
         if not display_ids_to_use:
             # If still no display IDs (e.g., UNKNOWN type with no default), draw a simple colored rectangle
             self.draw_rectangle(
-                int(game_object.x),
-                int(game_object.y),
+                int(draw_x_base),  # Use smoothed position
+                int(draw_y_base),  # Use smoothed position
                 self.object_size,
                 self.object_size,
                 BLACK,
             )
             self.draw_rectangle(
-                int(game_object.x) + 2,
-                int(game_object.y) + 2,
+                int(draw_x_base) + 2,  # Use smoothed position
+                int(draw_y_base) + 2,  # Use smoothed position
                 self.object_size - 4,
                 self.object_size - 4,
                 game_object.color,
@@ -730,8 +714,8 @@ class RenderingSystem:
                 self.update_animation_direction_for_object(
                     obj_id=game_object.obj_id,
                     display_id=display_id,
-                    current_dx=current_dx,
-                    current_dy=current_dy,
+                    current_dx=current_dx,  # Use actual movement deltas for animation direction
+                    current_dy=current_dy,  # Use actual movement deltas for animation direction
                     animation_mode=animation_mode,
                     timestamp=current_timestamp,
                 )
@@ -746,9 +730,9 @@ class RenderingSystem:
                         Direction.NONE, AnimationMode.IDLE, current_timestamp
                     )
 
-            # Calculate drawing position, applying offsets
-            draw_x = game_object.x + render_props["center_offset_x"]
-            draw_y = game_object.y + render_props["center_offset_y"]
+            # Calculate drawing position directly from smoothed base position
+            draw_x = draw_x_base
+            draw_y = draw_y_base
 
             self.render_object_animation(
                 obj_id=game_object.obj_id,
@@ -907,6 +891,7 @@ class RenderingSystem:
         """
         Removes Animation instances and their associated direction histories from the cache.
         If display_id is None, removes all animations for the given obj_id.
+        Also removes the object's entry from the smoothed rendering positions.
 
         Args:
             obj_id (str): The unique identifier of the object whose animation should be removed.
@@ -939,6 +924,11 @@ class RenderingSystem:
                 logging.info(
                     f"Removed direction history for key '{history_key_tuple}'."
                 )
+
+        # Remove from smoothed rendering positions as well
+        if obj_id in self._rendered_object_positions:
+            del self._rendered_object_positions[obj_id]
+            logging.debug(f"Removed smoothed position for object '{obj_id}'.")
 
     def update_animation_direction_for_object(
         self,
@@ -1004,6 +994,7 @@ class RenderingSystem:
             direction_history.append(instantaneous_direction)
         else:
             # If not moving, gradually remove older directions to smooth out to a stable idle direction
+            # Only pop if there's more than one direction, to keep the last known direction
             if len(direction_history) > 1:
                 direction_history.popleft()
 
