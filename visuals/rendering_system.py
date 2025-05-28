@@ -638,7 +638,6 @@ class RenderingSystem:
             current_dx (float): The delta X movement of the object in the current frame (for animation direction).
             current_dy (float): The delta Y movement of the object in the current frame (for animation direction).
         """
-        # GameObject's __init__ now handles setting display_ids based on OBJECT_TYPE_TO_DISPLAY_IDS
         # if not explicitly provided, so game_object.display_ids should always be a list.
         display_ids_to_use = game_object.display_ids
 

@@ -2,7 +2,7 @@ import logging
 import threading
 import time
 
-from config import MAZE_CELL_WORLD_SIZE, OBJECT_TYPE_TO_DISPLAY_IDS
+from config import MAZE_CELL_WORLD_SIZE
 from core.game_object import GameObject
 
 
