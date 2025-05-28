@@ -42,10 +42,10 @@ SERVER_PRIORITY_OBJECT_TYPES = {
 # when an object is created or updated from server data, if display_ids are not provided.
 # A displayID can refer to a set of up to 16 animations (8 directions * 2 modes)
 # or 1 animation if it's stateless.
-OBJECT_TYPE_TO_DISPLAY_IDS = {
-    "PLAYER": ["PEOPLE_DISPLAY_ID"],
-    "WALL": ["WALL_DISPLAY_ID"],
-    "POINT_PATH": ["POINT_PATH_DISPLAY_ID"],
-    "CLICK_POINTER": ["CLICK_POINTER_DISPLAY_ID"],
+OBJECT_TYPE_DEFAULT_DISPLAY_IDS = {
+    "PLAYER": ["PEOPLE"],
+    "WALL": ["WALL"],
+    "POINT_PATH": ["POINT_PATH"],
+    "CLICK_POINTER": ["CLICK_POINTER"],
     "UNKNOWN": [],
 }

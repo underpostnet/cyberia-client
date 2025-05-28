@@ -10,7 +10,7 @@ from config import (
     WORLD_WIDTH,
     WORLD_HEIGHT,
     OBJECT_SIZE,
-    OBJECT_TYPE_TO_DISPLAY_IDS,  # Import the mapping to get default display IDs
+    OBJECT_TYPE_DEFAULT_DISPLAY_IDS,  # Import the mapping to get default display IDs
 )
 
 # --- Logging Configuration ---
@@ -47,7 +47,7 @@ class MockServer:
             object_type="PLAYER",  # Used literal string
             is_obstacle=False,
             speed=200.0,
-            display_ids=OBJECT_TYPE_TO_DISPLAY_IDS[
+            display_ids=OBJECT_TYPE_DEFAULT_DISPLAY_IDS[
                 "PLAYER"
             ],  # Use the display ID from config
         ).to_dict()  # Convert to dict as if from server
@@ -65,7 +65,7 @@ class MockServer:
                 color=Color(100, 100, 100, 255),  # Gray
                 object_type="WALL",  # Used literal string
                 is_obstacle=True,
-                display_ids=OBJECT_TYPE_TO_DISPLAY_IDS[
+                display_ids=OBJECT_TYPE_DEFAULT_DISPLAY_IDS[
                     "WALL"
                 ],  # Use the display ID from config
             ).to_dict()  # Convert to dict as if from server
@@ -95,7 +95,7 @@ class MockServer:
                 object_type="POINT_PATH",  # Used literal string
                 is_obstacle=False,
                 speed=0.0,  # Path points don't move
-                display_ids=OBJECT_TYPE_TO_DISPLAY_IDS[
+                display_ids=OBJECT_TYPE_DEFAULT_DISPLAY_IDS[
                     "POINT_PATH"
                 ],  # Use the display ID from config
                 _decay_time=current_time + decay_duration,
@@ -120,7 +120,7 @@ class MockServer:
             object_type="CLICK_POINTER",  # Used literal string
             is_obstacle=False,
             speed=0.0,  # Click pointer doesn't move
-            display_ids=OBJECT_TYPE_TO_DISPLAY_IDS[
+            display_ids=OBJECT_TYPE_DEFAULT_DISPLAY_IDS[
                 "CLICK_POINTER"
             ],  # Use the display ID from config
             _decay_time=current_time + decay_duration,

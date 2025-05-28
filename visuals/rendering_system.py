@@ -116,12 +116,12 @@ class AnimationMode(Enum):
 
 # --- Global Animation Data Structure ---
 # This dictionary holds all animation matrices and their associated properties,
-# organized by a unique display_id (e.g., "PEOPLE_DISPLAY_ID", "CLICK_POINTER_DISPLAY_ID").
+# organized by a unique display_id (e.g., "PEOPLE", "CLICK_POINTER").
 # Each display ID has 'frames' (a map of animation states to lists of matrices),
 # 'colors' (the color map), and 'frame_duration'.
 # The dimensions are now dynamically read from the first frame of the animation.
 ANIMATION_DATA = {
-    "PEOPLE_DISPLAY_ID": {
+    "PEOPLE": {
         "frames": {
             # Idle animations based on user's desired mapping
             "up_idle": [SKIN_PEOPLE_MATRIX_02_0, SKIN_PEOPLE_MATRIX_02_1],
@@ -180,7 +180,7 @@ ANIMATION_DATA = {
         "frame_duration": SKIN_PEOPLE_ANIMATION_SPEED,
         "is_stateless": False,
     },
-    "CLICK_POINTER_DISPLAY_ID": {
+    "CLICK_POINTER": {
         "frames": {
             "none_idle": [
                 GFX_CLICK_POINTER_MATRIX_00,
@@ -197,7 +197,7 @@ ANIMATION_DATA = {
         "frame_duration": GFX_CLICK_POINTER_ANIMATION_SPEED,
         "is_stateless": True,
     },
-    "POINT_PATH_DISPLAY_ID": {
+    "POINT_PATH": {
         "frames": {
             "none_idle": [GFX_POINT_PATH_MATRIX_00],
             "default_idle": [GFX_POINT_PATH_MATRIX_00],  # Fallback
@@ -206,7 +206,7 @@ ANIMATION_DATA = {
         "frame_duration": GFX_POINT_PATH_ANIMATION_SPEED,
         "is_stateless": True,
     },
-    "WALL_DISPLAY_ID": {
+    "WALL": {
         "frames": {
             "none_idle": [BUILDING_WALL_MATRIX_00],
             "default_idle": [BUILDING_WALL_MATRIX_00],  # Fallback

@@ -66,10 +66,10 @@ if __name__ == "__main__":
 
     # Use the new display IDs
     AVAILABLE_DISPLAY_IDS = [
-        "PEOPLE_DISPLAY_ID",
-        "CLICK_POINTER_DISPLAY_ID",
-        "POINT_PATH_DISPLAY_ID",
-        "WALL_DISPLAY_ID",
+        "PEOPLE",
+        "CLICK_POINTER",
+        "POINT_PATH",
+        "WALL",
     ]
     current_display_id_index = 0
     demo_obj_id = "demo_animation_viewer_object"

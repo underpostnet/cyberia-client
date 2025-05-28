@@ -6,7 +6,7 @@ from raylibpy import Color
 # Import object type constants and display ID mapping for consistency
 from config import (
     SERVER_PRIORITY_OBJECT_TYPES,
-    OBJECT_TYPE_TO_DISPLAY_IDS,
+    OBJECT_TYPE_DEFAULT_DISPLAY_IDS,
 )
 
 # --- Logging Configuration ---
@@ -66,7 +66,7 @@ class GameObject:
 
         # If display_ids are not provided, use the default mapping from config
         if display_ids is None:
-            self.display_ids = OBJECT_TYPE_TO_DISPLAY_IDS.get(self.object_type, [])
+            self.display_ids = OBJECT_TYPE_DEFAULT_DISPLAY_IDS.get(self.object_type, [])
         else:
             self.display_ids = display_ids
 
@@ -191,7 +191,6 @@ class GameObject:
         speed = data.get("speed", 200.0)
         object_type = data.get("object_type", "UNKNOWN")
         # display_ids are NOT sent by the server; the client assigns them based on object_type.
-        # Pass None to __init__ to trigger the default assignment based on OBJECT_TYPE_TO_DISPLAY_IDS.
         display_ids_from_server = data.get(
             "display_ids"
         )  # Check if server explicitly sent them
