@@ -52,6 +52,7 @@ from data.animations.skin.people import (
     SKIN_PEOPLE_MATRIX_12_0,  # UP MOVE 0
     SKIN_PEOPLE_MATRIX_12_1,  # UP MOVE 1
     SKIN_PEOPLE_MAP_COLORS,
+    SKIN_PEOPLE_ANIMATION_SPEED,
 )
 
 # Imported matrices and color map for click pointer animation
@@ -176,7 +177,7 @@ ANIMATION_DATA = {
             ],  # Flipped horizontally
         },
         "colors": SKIN_PEOPLE_MAP_COLORS,
-        "frame_duration": 0.15,  # Adjusted for smoother animation
+        "frame_duration": SKIN_PEOPLE_ANIMATION_SPEED,
         "is_stateless": False,
     },
     "CLICK_POINTER_DISPLAY_ID": {
