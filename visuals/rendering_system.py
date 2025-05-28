@@ -38,7 +38,7 @@ from config import (
 
 
 # Imported matrices and color map for character animations
-from data.animations.skin.people import (
+from display.skin.people import (
     SKIN_PEOPLE_MATRIX_08_0,  # DOWN IDLE 0
     SKIN_PEOPLE_MATRIX_08_1,  # DOWN IDLE 1
     SKIN_PEOPLE_MATRIX_06_0,  # RIGHT IDLE 0 (used for RIGHT, UP_RIGHT, DOWN_RIGHT, LEFT, UP_LEFT, DOWN_LEFT with flip)
@@ -56,7 +56,7 @@ from data.animations.skin.people import (
 )
 
 # Imported matrices and color map for click pointer animation
-from data.animations.gfx.click_pointer import (
+from display.gfx.click_pointer import (
     GFX_CLICK_POINTER_MATRIX_00,
     GFX_CLICK_POINTER_MATRIX_01,
     GFX_CLICK_POINTER_MATRIX_02,
@@ -65,14 +65,14 @@ from data.animations.gfx.click_pointer import (
 )
 
 # Imported matrices and color map for point path animation
-from data.animations.gfx.point_path import (
+from display.gfx.point_path import (
     GFX_POINT_PATH_MATRIX_00,
     GFX_POINT_PATH_MAP_COLORS,
     GFX_POINT_PATH_ANIMATION_SPEED,
 )
 
 # Imported matrices and color map for wall animation
-from data.animations.building.wall import (
+from display.building.wall import (
     BUILDING_WALL_MATRIX_00,
     BUILDING_WALL_MAP_COLORS,
     BUILDING_WALL_ANIMATION_SPEED,
