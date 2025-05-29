@@ -95,8 +95,19 @@ class NetworkStateClient:
         msg_type = data.get("type")
         if msg_type == "network_state_update":
             if "network_objects" in data:
+                # When receiving network_state_update from proxy/server,
+                # we only want to update persistent objects.
+                # Temporary GFX objects (POINT_PATH, CLICK_POINTER) are managed client-side
+                # and should not be overwritten or removed by server updates.
+                filtered_network_objects_data = {}
+                for obj_id, obj_data in data["network_objects"].items():
+                    # Create a temporary NetworkObject instance to check its persistence
+                    temp_obj = NetworkObject.from_dict(obj_data)
+                    if temp_obj.is_persistent:
+                        filtered_network_objects_data[obj_id] = obj_data
+
                 object_layer_ids_to_remove_from_rendering_system = (
-                    self.network_state.update_from_dict(data["network_objects"])
+                    self.network_state.update_from_dict(filtered_network_objects_data)
                 )
 
                 for (
@@ -145,9 +156,17 @@ class NetworkStateClient:
             obj_id = data.get("obj_id")
             object_layer_id = data.get("object_layer_id")
             if obj_id and object_layer_id:
+                # The client should remove objects from rendering that were
+                # explicitly told to be removed by the server/proxy (for persistent objects),
+                # or its own GFX.
                 self.object_layer_render.remove_object_layer_animation(
                     obj_id, object_layer_id
                 )
+                # Also remove from client's network state if it's a persistent object
+                with self.network_state.lock:
+                    obj_to_remove = self.network_state.get_network_object(obj_id)
+                    if obj_to_remove and obj_to_remove.is_persistent:
+                        self.network_state.remove_network_object(obj_id)
                 logging.debug(
                     f"Removed object {obj_id} with layer {object_layer_id} from rendering as requested by proxy."
                 )

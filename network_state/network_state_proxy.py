@@ -48,6 +48,7 @@ class NetworkStateProxy:
         self.client_connection_ready_event = client_connection_ready_event
         self.client_player_id_setter = client_player_id_setter
 
+        # The proxy's factory is used only for generating initial persistent game state (players, walls)
         self.network_object_factory = NetworkObjectFactory()
         self.offline_network_state = NetworkState(
             WORLD_WIDTH, WORLD_HEIGHT, NETWORK_OBJECT_SIZE
@@ -221,26 +222,18 @@ class NetworkStateProxy:
                             player_obj.path_index = 0
                             self.offline_player_path = []  # Clear proxy's path as well
 
-                # Cleanup expired GFX objects (these would be from client-side generation)
-                object_layer_ids_to_remove = (
-                    self.offline_network_state.cleanup_expired_network_objects(
-                        current_time
-                    )
-                )
-                for obj_id, object_layer_id in object_layer_ids_to_remove:
-                    # Send a message to client to remove these objects from rendering
-                    self._send_to_client(
-                        {
-                            "type": "object_removed_from_rendering",
-                            "obj_id": obj_id,
-                            "object_layer_id": object_layer_id,
-                        }
-                    )
+                # The proxy's offline_network_state should only contain persistent game objects (players, walls).
+                # GFX objects (POINT_PATH, CLICK_POINTER) are handled client-side and should not be in this state.
+                # Therefore, cleanup_expired_network_objects here would only apply to any non-persistent objects
+                # the proxy *might* create, but in this architecture, it shouldn't create GFX objects.
+                # We remove the explicit cleanup and message sending here, as client will handle its own GFX cleanup.
 
-                # Send the current state of offline objects to the client
+                # Send the current state of *persistent* offline objects to the client.
+                # This ensures only actual game state is sent, not client-side GFX.
                 network_objects_data = {
                     obj_id: obj.to_dict()
                     for obj_id, obj in self.offline_network_state.get_all_network_objects().items()
+                    if obj.is_persistent  # Only send persistent objects
                 }
                 self._send_to_client(
                     {
@@ -290,7 +283,9 @@ class NetworkStateProxy:
             player_obj.set_path(path_world_coords)
             self.offline_player_path = path_world_coords  # Store for consistency
 
-            # Send player path update to client (this is the actual movement path)
+            # Send player path update to client (this is the actual movement path).
+            # The client will use this path to render the player's movement
+            # and to generate its own client-side POINT_PATH GFX.
             self._send_to_client(
                 {
                     "type": "player_path_update",
