@@ -31,7 +31,7 @@ from raylibpy import (
 )
 
 from config import CAMERA_SMOOTHNESS, DIRECTION_HISTORY_LENGTH
-from display.animation_data import ANIMATION_DATA, AnimationMode, Direction
+from object_layer.animation_data import ANIMATION_DATA, AnimationMode, Direction
 from logic.game_object import GameObject
 
 logging.basicConfig(
@@ -158,7 +158,7 @@ class Animation:
         )
 
 
-class RenderingSystem:
+class RaylibRender:
     def __init__(
         self,
         screen_width: int,
@@ -196,7 +196,7 @@ class RenderingSystem:
         ] = {}
         self._rendered_object_positions: dict[str, Vector2] = {}
         self.animation_data = animation_data
-        logging.info("RenderingSystem initialized.")
+        logging.info("RaylibRender initialized.")
 
     def begin_drawing(self):
         begin_drawing()

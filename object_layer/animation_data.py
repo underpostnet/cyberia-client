@@ -10,24 +10,24 @@ logging.basicConfig(
 )
 
 # Import actual animation matrices and color maps
-from display.building.wall import (
+from object_layer.building.wall import (
     BUILDING_WALL_ANIMATION_SPEED,
     BUILDING_WALL_MAP_COLORS,
     BUILDING_WALL_MATRIX_00,
 )
-from display.gfx.click_pointer import (
+from object_layer.gfx.click_pointer import (
     GFX_CLICK_POINTER_ANIMATION_SPEED,
     GFX_CLICK_POINTER_MAP_COLORS,
     GFX_CLICK_POINTER_MATRIX_00,
     GFX_CLICK_POINTER_MATRIX_01,
     GFX_CLICK_POINTER_MATRIX_02,
 )
-from display.gfx.point_path import (
+from object_layer.gfx.point_path import (
     GFX_POINT_PATH_ANIMATION_SPEED,
     GFX_POINT_PATH_MAP_COLORS,
     GFX_POINT_PATH_MATRIX_00,
 )
-from display.skin.people import (
+from object_layer.skin.people import (
     SKIN_PEOPLE_ANIMATION_SPEED,
     SKIN_PEOPLE_MAP_COLORS,
     SKIN_PEOPLE_MATRIX_02_0,

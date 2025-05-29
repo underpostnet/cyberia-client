@@ -15,8 +15,8 @@ from config import (
     WORLD_HEIGHT,
     WORLD_WIDTH,
 )
-from display.animation_data import AnimationMode, Direction
-from display.rendering_system import RenderingSystem
+from object_layer.animation_data import AnimationMode, Direction
+from object_layer.raylib_render import RaylibRender
 from logic.game_object import GameObject
 from logic.game_state import GameState
 from logic.mock_server import MockServer
@@ -38,7 +38,7 @@ class MmoClient:
         self.mock_server = MockServer()
         animation_data = self.mock_server.get_animation_data()
 
-        self.rendering_system = RenderingSystem(
+        self.raylib_render = RaylibRender(
             screen_width=SCREEN_WIDTH,
             screen_height=SCREEN_HEIGHT,
             world_width=WORLD_WIDTH,
@@ -111,7 +111,7 @@ class MmoClient:
                 obj_id,
                 object_layer_id,
             ) in object_layer_ids_to_remove_from_rendering_system:
-                self.rendering_system.remove_animation(obj_id, object_layer_id)
+                self.raylib_render.remove_animation(obj_id, object_layer_id)
 
             with self.game_state.lock:
                 if self.my_player_id and self.my_player_id in self.game_state.objects:
@@ -190,7 +190,7 @@ class MmoClient:
             self.game_state.add_or_update_game_object(obj)
 
         for obj_id, object_layer_id in object_layer_ids_to_remove_from_rendering_system:
-            self.rendering_system.remove_animation(obj_id, object_layer_id)
+            self.raylib_render.remove_animation(obj_id, object_layer_id)
 
     def run(self):
         logging.info(f"Connecting to WebSocket server at {self.websocket_url}")
@@ -208,12 +208,12 @@ class MmoClient:
 
         if not self.connection_ready_event.wait(timeout=5):
             logging.error("Failed to establish WebSocket connection within timeout.")
-            self.rendering_system.close_window()
+            self.raylib_render.close_window()
             return
 
         last_frame_time = time.time()
 
-        while not self.rendering_system.window_should_close():
+        while not self.raylib_render.window_should_close():
             current_time = time.time()
             delta_time = current_time - last_frame_time
             last_frame_time = current_time
@@ -229,7 +229,7 @@ class MmoClient:
                 obj_id,
                 object_layer_id,
             ) in object_layer_ids_to_remove_from_rendering_system:
-                self.rendering_system.remove_animation(obj_id, object_layer_id)
+                self.raylib_render.remove_animation(obj_id, object_layer_id)
 
             object_movement_deltas = {}
             with self.game_state.lock:
@@ -241,8 +241,8 @@ class MmoClient:
                         obj.path = []
                         obj.path_index = 0
 
-            if self.rendering_system.is_mouse_button_pressed(MOUSE_BUTTON_LEFT):
-                world_mouse_pos = self.rendering_system.get_world_mouse_position()
+            if self.raylib_render.is_mouse_button_pressed(MOUSE_BUTTON_LEFT):
+                world_mouse_pos = self.raylib_render.get_world_mouse_position()
                 logging.info(
                     f"Mouse clicked at world position: ({world_mouse_pos.x}, {world_mouse_pos.y})"
                 )
@@ -277,34 +277,34 @@ class MmoClient:
                     obj_id,
                     object_layer_id,
                 ) in object_layer_ids_to_remove_from_rendering_system_click:
-                    self.rendering_system.remove_animation(obj_id, object_layer_id)
+                    self.raylib_render.remove_animation(obj_id, object_layer_id)
 
-            self.rendering_system.begin_drawing()
-            self.rendering_system.clear_background(RAYWHITE)
-            self.rendering_system.begin_camera_mode()
+            self.raylib_render.begin_drawing()
+            self.raylib_render.clear_background(RAYWHITE)
+            self.raylib_render.begin_camera_mode()
 
-            self.rendering_system.draw_grid()
+            self.raylib_render.draw_grid()
 
             with self.game_state.lock:
                 for obj_id, obj in self.game_state.objects.items():
                     dx, dy = object_movement_deltas.get(obj_id, (0.0, 0.0))
-                    self.rendering_system.draw_game_object(obj, current_time, dx, dy)
+                    self.raylib_render.draw_game_object(obj, current_time, dx, dy)
 
-            self.rendering_system.end_camera_mode()
+            self.raylib_render.end_camera_mode()
 
             with self.game_state.lock:
                 if self.my_game_object:
-                    self.rendering_system.update_camera_target(
+                    self.raylib_render.update_camera_target(
                         Vector2(
                             self.my_game_object.x + OBJECT_SIZE / 2,
                             self.my_game_object.y + OBJECT_SIZE / 2,
                         ),
                         smoothness=CAMERA_SMOOTHNESS,
                     )
-                    self.rendering_system.draw_text(
+                    self.raylib_render.draw_text(
                         f"My Player ID: {self.my_player_id}", 10, 10, 20, BLACK
                     )
-                    self.rendering_system.draw_text(
+                    self.raylib_render.draw_text(
                         f"My Pos: ({int(self.my_game_object.x)}, {int(self.my_game_object.y)})",
                         10,
                         40,
@@ -312,26 +312,26 @@ class MmoClient:
                         BLACK,
                     )
                 else:
-                    self.rendering_system.draw_text("Connecting...", 10, 10, 20, BLACK)
+                    self.raylib_render.draw_text("Connecting...", 10, 10, 20, BLACK)
 
-            frame_time = self.rendering_system.get_frame_time()
+            frame_time = self.raylib_render.get_frame_time()
             if frame_time > 0:
-                self.rendering_system.draw_text(
+                self.raylib_render.draw_text(
                     f"FPS: {int(1.0 / frame_time)}", 10, SCREEN_HEIGHT - 30, 20, BLACK
                 )
             else:
-                self.rendering_system.draw_text(
+                self.raylib_render.draw_text(
                     "FPS: N/A", 10, SCREEN_HEIGHT - 30, 20, BLACK
                 )
 
-            self.rendering_system.update_all_active_animations(delta_time, current_time)
+            self.raylib_render.update_all_active_animations(delta_time, current_time)
 
-            self.rendering_system.end_drawing()
+            self.raylib_render.end_drawing()
 
             time.sleep(0.001)
 
         if self.ws:
             self.ws.close()
         logging.info("WebSocket connection closed.")
-        self.rendering_system.close_window()
+        self.raylib_render.close_window()
         logging.info("Client window closed.")

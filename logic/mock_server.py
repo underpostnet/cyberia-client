@@ -11,7 +11,7 @@ from config import (
     WORLD_HEIGHT,
     WORLD_WIDTH,
 )
-from display.animation_data import (
+from object_layer.animation_data import (
     ANIMATION_DATA,
     AnimationMode,
     Direction,
