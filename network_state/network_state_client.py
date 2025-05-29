@@ -236,13 +236,30 @@ class NetworkStateClient:
             # Display player info and connection status
             with self.network_state.lock:
                 if self.my_network_object:
-                    self.object_layer_render.update_camera_target(
-                        Vector2(
-                            self.my_network_object.x + NETWORK_OBJECT_SIZE / 2,
-                            self.my_network_object.y + NETWORK_OBJECT_SIZE / 2,
-                        ),
-                        smoothness=CAMERA_SMOOTHNESS,
+                    # Get the smoothed position for the camera target
+                    smoothed_player_pos = (
+                        self.object_layer_render.get_smoothed_object_position(
+                            self.my_player_id
+                        )
                     )
+                    if smoothed_player_pos:
+                        self.object_layer_render.update_camera_target(
+                            Vector2(
+                                smoothed_player_pos.x + NETWORK_OBJECT_SIZE / 2,
+                                smoothed_player_pos.y + NETWORK_OBJECT_SIZE / 2,
+                            ),
+                            smoothness=CAMERA_SMOOTHNESS,
+                        )
+                    else:
+                        # Fallback to raw position if smoothed position not available yet
+                        self.object_layer_render.update_camera_target(
+                            Vector2(
+                                self.my_network_object.x + NETWORK_OBJECT_SIZE / 2,
+                                self.my_network_object.y + NETWORK_OBJECT_SIZE / 2,
+                            ),
+                            smoothness=CAMERA_SMOOTHNESS,
+                        )
+
                     self.object_layer_render.draw_text(
                         f"My Player ID: {self.my_player_id}", 10, 10, 20, BLACK
                     )

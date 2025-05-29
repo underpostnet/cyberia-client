@@ -187,10 +187,9 @@ class ObjectLayerRender:
         self.world_height = world_height
         self.network_object_size = network_object_size
         self.title = title
-        self.target_fps = target_fps
+        set_target_fps(target_fps)
 
         init_window(self.screen_width, self.screen_height, self.title)
-        set_target_fps(self.target_fps)
 
         self.camera = Camera2D()
         self.camera.offset = Vector2(self.screen_width / 2, self.screen_height / 2)
@@ -703,3 +702,10 @@ class ObjectLayerRender:
             pixel_size_in_display=target_pixel_size,
             flip_horizontal=flip_horizontal,
         )
+
+    def get_smoothed_object_position(self, obj_id: str) -> Vector2 | None:
+        """
+        Returns the smoothed rendering position of a network object.
+        This position is updated internally by draw_network_object.
+        """
+        return self._rendered_network_object_positions.get(obj_id)
