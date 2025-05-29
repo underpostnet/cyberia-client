@@ -17,9 +17,9 @@ from config import (
 )
 from object_layer.object_layer_data import ObjectLayerMode, Direction
 from object_layer.object_layer_render import ObjectLayerRender
-from logic.network_object import NetworkObject
-from logic.network_state import NetworkState
-from logic.network_object_factory import NetworkObjectFactory
+from network_state.network_object import NetworkObject
+from network_state.network_state import NetworkState
+from network_state.network_object_factory import NetworkObjectFactory
 
 logging.basicConfig(
     level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s"

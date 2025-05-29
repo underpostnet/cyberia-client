@@ -32,7 +32,7 @@ from raylibpy import (
 
 from config import CAMERA_SMOOTHNESS, DIRECTION_HISTORY_LENGTH
 from object_layer.object_layer_data import OBJECT_LAYER_DATA, ObjectLayerMode, Direction
-from logic.network_object import NetworkObject
+from network_state.network_object import NetworkObject
 
 logging.basicConfig(
     level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s"

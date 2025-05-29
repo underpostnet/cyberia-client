@@ -3,7 +3,7 @@ import threading
 import time
 
 from config import MAZE_CELL_WORLD_SIZE
-from logic.network_object import NetworkObject
+from network_state.network_object import NetworkObject
 
 logging.basicConfig(
     level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s"

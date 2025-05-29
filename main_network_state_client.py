@@ -2,7 +2,7 @@ import argparse
 import logging
 
 from config import SERVER_HOST, SERVER_PORT, WEBSOCKET_PATH
-from logic.network_state_client import NetworkStateClient
+from network_state.network_state_client import NetworkStateClient
 
 logging.basicConfig(
     level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s"
