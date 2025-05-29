@@ -568,6 +568,17 @@ class ObjectLayerRender:
         if obj_id in self._rendered_network_object_positions:
             del self._rendered_network_object_positions[obj_id]
 
+    def reset_smoothed_object_position(self, obj_id: str):
+        """
+        Resets the smoothed rendering position of a network object to its current raw position.
+        This will cause an immediate "flicker" as requested when a new path is set.
+        """
+        if obj_id in self._rendered_network_object_positions:
+            # Remove the smoothed position, it will be re-initialized in draw_network_object
+            # with the current raw position, effectively resetting the smoothing.
+            del self._rendered_network_object_positions[obj_id]
+            logging.debug(f"Reset smoothed position for object ID: {obj_id}")
+
     def update_object_layer_direction_for_object(
         self,
         obj_id: str,

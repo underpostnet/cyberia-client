@@ -21,8 +21,10 @@ from network_state.network_object import NetworkObject
 from network_state.network_state import NetworkState
 from network_state.network_object_factory import (
     NetworkObjectFactory,
-)  # Still needed for initial state generation in proxy
-from network_state.network_state_proxy import NetworkStateProxy  # Import the proxy
+)
+from network_state.network_state_proxy import NetworkStateProxy
+from network_state.astar import astar  # Import astar for client-side path GFX
+
 
 logging.basicConfig(
     level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s"
@@ -40,13 +42,17 @@ class NetworkStateClient:
         self.port = port
         self.ws_path = ws_path
 
+        self.network_object_factory = (
+            NetworkObjectFactory()
+        )  # Initialize factory for client-side GFX
+
         self.object_layer_render = ObjectLayerRender(
             screen_width=SCREEN_WIDTH,
             screen_height=SCREEN_HEIGHT,
             world_width=WORLD_WIDTH,
             world_height=WORLD_HEIGHT,
             network_object_size=NETWORK_OBJECT_SIZE,
-            object_layer_data=NetworkObjectFactory().get_object_layer_data(),  # Get data from factory
+            object_layer_data=self.network_object_factory.get_object_layer_data(),  # Get data from factory
             title="Python NetworkState Client",
             target_fps=60,
         )
@@ -128,6 +134,10 @@ class NetworkStateClient:
                     player_obj = self.network_state.get_network_object(player_id)
                     if player_obj:
                         player_obj.set_path(path)
+                        # Always reset smoothed position on new path updates for flicker effect
+                        self.object_layer_render.reset_smoothed_object_position(
+                            player_id
+                        )
                         logging.info(f"Player {player_id} received path update: {path}")
                     else:
                         logging.warning(
@@ -157,6 +167,37 @@ class NetworkStateClient:
     def send_message_to_proxy(self, msg_type: str, payload: dict | None = None):
         """Sends a message to the NetworkStateProxy."""
         self.proxy.send_client_message(msg_type, payload)
+
+    def _generate_client_path_gfx_async(
+        self, path_coords: list[dict[str, float]], current_time: float
+    ):
+        """
+        Generates POINT_PATH network objects sequentially with a delay to simulate
+        the path being "drawn" on the client-side.
+        """
+        # Clear existing non-persistent path points to avoid accumulation
+        obj_ids_to_remove = []
+        with self.network_state.lock:
+            for obj_id, obj in self.network_state.network_objects.items():
+                if obj.network_object_type == "POINT_PATH" and not obj.is_persistent:
+                    obj_ids_to_remove.append(obj_id)
+            for obj_id in obj_ids_to_remove:
+                self.network_state.remove_network_object(obj_id)
+        for obj_id in obj_ids_to_remove:
+            self.object_layer_render.remove_object_layer_animation(obj_id, "POINT_PATH")
+
+        delay_per_point = 0.02  # Small delay between adding each path point
+
+        for point in path_coords:
+            obj = self.network_object_factory.generate_point_path(
+                [point], current_time
+            )[0]
+            with self.network_state.lock:
+                self.network_state.add_or_update_network_object(obj)
+            time.sleep(delay_per_point)
+        logging.debug(
+            f"Generated {len(path_coords)} client-side path GFX points asynchronously."
+        )
 
     def run(self):
         """Runs the main client loop."""
@@ -216,6 +257,51 @@ class NetworkStateClient:
                     "target_y": world_mouse_pos.y,
                 }
                 self.send_message_to_proxy("client_move_request", move_request_payload)
+
+                # Client-side GFX generation for click pointer
+                click_pointer_obj = self.network_object_factory.generate_click_pointer(
+                    world_mouse_pos.x, world_mouse_pos.y, current_time
+                )
+                with self.network_state.lock:
+                    self.network_state.add_or_update_network_object(click_pointer_obj)
+
+                # Client-side GFX generation for path points
+                if self.my_network_object:
+                    start_grid_x, start_grid_y = (
+                        self.network_state._world_to_grid_coords(
+                            self.my_network_object.x, self.my_network_object.y
+                        )
+                    )
+                    end_grid_x, end_grid_y = self.network_state._world_to_grid_coords(
+                        world_mouse_pos.x, world_mouse_pos.y
+                    )
+                    maze = self.network_state.simplified_maze
+                    path_grid = astar(
+                        maze, (start_grid_y, start_grid_x), (end_grid_y, end_grid_x)
+                    )
+
+                    if path_grid:
+                        path_world_coords = []
+                        for grid_y, grid_x in path_grid:
+                            world_x, world_y = self.network_state._grid_to_world_coords(
+                                grid_x, grid_y
+                            )
+                            path_world_coords.append({"X": world_x, "Y": world_y})
+
+                        # Start a new thread for drawing path GFX
+                        threading.Thread(
+                            target=self._generate_client_path_gfx_async,
+                            args=(path_world_coords, current_time),
+                            daemon=True,
+                        ).start()
+                    else:
+                        logging.warning(
+                            "No path found for client-side POINT_PATH GFX generation."
+                        )
+                else:
+                    logging.warning(
+                        "Player object not available for client-side path GFX generation."
+                    )
 
             # --- Rendering ---
             self.object_layer_render.begin_drawing()

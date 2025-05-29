@@ -26,8 +26,8 @@ logging.basicConfig(
 class NetworkStateProxy:
     """
     Acts as a proxy for the network state, handling communication with a real server
-    or emulating server behavior if offline. It also generates client-side GFX objects
-    (like click pointers and path lines) as if they came from the server.
+    or emulating server behavior if offline. It also manages the offline simulation
+    of player movement.
     """
 
     def __init__(
@@ -126,7 +126,7 @@ class NetworkStateProxy:
     def send_client_message(self, msg_type: str, payload: dict | None = None):
         """
         Receives messages from the client and either forwards them to the real server
-        or handles them in offline mode.
+        or handles them in offline mode. GFX generation is now handled client-side.
         """
         if payload is None:
             payload = {}
@@ -160,8 +160,8 @@ class NetworkStateProxy:
             target_x = payload.get("target_x")
             target_y = payload.get("target_y")
             if target_x is not None and target_y is not None:
+                # This only handles the *actual* player movement path for offline mode
                 self._handle_offline_move_request(target_x, target_y, current_time)
-                self._generate_click_pointer_gfx(target_x, target_y, current_time)
         # Other client messages can be handled here for offline mode if needed
 
     def _send_offline_initial_state(self):
@@ -208,7 +208,7 @@ class NetworkStateProxy:
             delta_time = current_time - last_update_time
             last_update_time = current_time
 
-            if not self.is_online:
+            if not self.is_online:  # Only update offline state if not online
                 # Update player position if a path is set
                 if self.my_player_id:
                     player_obj = self.offline_network_state.get_network_object(
@@ -221,7 +221,7 @@ class NetworkStateProxy:
                             player_obj.path_index = 0
                             self.offline_player_path = []  # Clear proxy's path as well
 
-                # Cleanup expired GFX objects
+                # Cleanup expired GFX objects (these would be from client-side generation)
                 object_layer_ids_to_remove = (
                     self.offline_network_state.cleanup_expired_network_objects(
                         current_time
@@ -254,7 +254,7 @@ class NetworkStateProxy:
     ):
         """
         Calculates a path for the player in offline mode and updates the player's
-        network object with this path. Also generates path GFX.
+        network object with this path. This path is for actual movement, not GFX.
         """
         if not self.my_player_id:
             logging.warning("Cannot handle offline move request: Player ID not set.")
@@ -288,14 +288,7 @@ class NetworkStateProxy:
                 path_world_coords.append({"X": world_x, "Y": world_y})
 
             player_obj.set_path(path_world_coords)
-            self.offline_player_path = path_world_coords  # Store for GFX generation
-
-            # Generate and send POINT_PATH GFX
-            # This is now handled asynchronously to create the "drawing" effect
-            threading.Thread(
-                target=self._generate_path_gfx_async,
-                args=(self.offline_player_path, current_time),
-            ).start()
+            self.offline_player_path = path_world_coords  # Store for consistency
 
             # Send player path update to client (this is the actual movement path)
             self._send_to_client(
@@ -312,84 +305,6 @@ class NetworkStateProxy:
             logging.warning(
                 f"No offline path found for player {self.my_player_id} from ({start_grid_x},{start_grid_y}) to ({end_grid_x},{end_grid_y})."
             )
-
-    def _generate_path_gfx_async(
-        self, path_coords: list[dict[str, float]], current_time: float
-    ):
-        """
-        Generates POINT_PATH network objects sequentially with a delay to simulate
-        the path being "drawn". This runs in a separate thread.
-        """
-        # Clear existing non-persistent path points to avoid accumulation
-        obj_ids_to_remove = [
-            obj_id
-            for obj_id, obj in self.offline_network_state.network_objects.items()
-            if obj.network_object_type == "POINT_PATH" and not obj.is_persistent
-        ]
-        for obj_id in obj_ids_to_remove:
-            self.offline_network_state.remove_network_object(obj_id)
-            # Immediately send removal message to client for old path points
-            self._send_to_client(
-                {
-                    "type": "object_removed_from_rendering",
-                    "obj_id": obj_id,
-                    "object_layer_id": "POINT_PATH",  # Specify the object layer ID to remove
-                }
-            )
-
-        delay_per_point = 0.02  # Small delay between sending each path point
-
-        for point in path_coords:
-            obj = self.network_object_factory.generate_point_path(
-                [point], current_time
-            )[
-                0
-            ]  # Generate single point
-            self.offline_network_state.add_or_update_network_object(obj)
-            # Send each path point as a separate update to the client
-            self._send_to_client(
-                {
-                    "type": "network_state_update",
-                    "network_objects": {obj.obj_id: obj.to_dict()},
-                }
-            )
-            time.sleep(delay_per_point)  # Introduce delay for drawing effect
-        logging.debug(f"Generated {len(path_coords)} path GFX points asynchronously.")
-
-    def _generate_click_pointer_gfx(self, x: float, y: float, current_time: float):
-        """
-        Generates a CLICK_POINTER network object for visual feedback on clicks.
-        This is temporary and decays over time.
-        """
-        # Remove any existing click pointers before adding a new one
-        obj_ids_to_remove = [
-            obj_id
-            for obj_id, obj in self.offline_network_state.network_objects.items()
-            if obj.network_object_type == "CLICK_POINTER" and not obj.is_persistent
-        ]
-        for obj_id in obj_ids_to_remove:
-            self.offline_network_state.remove_network_object(obj_id)
-            # Send removal message to client for old click pointers
-            self._send_to_client(
-                {
-                    "type": "object_removed_from_rendering",
-                    "obj_id": obj_id,
-                    "object_layer_id": "CLICK_POINTER",  # Specify the object layer ID to remove
-                }
-            )
-
-        click_pointer = self.network_object_factory.generate_click_pointer(
-            x, y, current_time
-        )
-        self.offline_network_state.add_or_update_network_object(click_pointer)
-        # Send the click pointer to the client
-        self._send_to_client(
-            {
-                "type": "network_state_update",
-                "network_objects": {click_pointer.obj_id: click_pointer.to_dict()},
-            }
-        )
-        logging.debug("Generated click pointer GFX.")
 
     def close(self):
         """Closes the WebSocket connection if open."""
