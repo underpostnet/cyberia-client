@@ -1,15 +1,12 @@
 import logging
 from enum import Enum, auto
 
-# This file centralizes animation data, enums, and related constants.
-# In a full-fledged application, this data might be loaded from external
-# asset files or a content management system.
-
+# This file centralizes object layer data, enums, and related constants.
 logging.basicConfig(
     level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s"
 )
 
-# Import actual animation matrices and color maps
+# Import actual object layer matrices and color maps
 from object_layer.building.wall import (
     BUILDING_WALL_ANIMATION_SPEED,
     BUILDING_WALL_MAP_COLORS,
@@ -46,11 +43,6 @@ from object_layer.skin.people import (
 
 
 class Direction(Enum):
-    """
-    Defines the 8 cardinal and intercardinal directions, plus a NONE state.
-    Used for character animation and movement.
-    """
-
     UP = auto()
     UP_RIGHT = auto()
     RIGHT = auto()
@@ -62,33 +54,12 @@ class Direction(Enum):
     NONE = auto()
 
 
-class AnimationMode(Enum):
-    """
-    Defines the animation modes for objects, e.g., idle or walking.
-    """
-
+class ObjectLayerMode(Enum):
     IDLE = auto()
     WALKING = auto()
 
 
-# ANIMATION_DATA structure:
-# {
-#   "OBJECT_LAYER_ID": {
-#     "FRAMES": {
-#       "DIRECTION_MODE": [matrix_frame_0, matrix_frame_1, ...],
-#       ...
-#     },
-#     "COLORS": [(R, G, B, A), ...], # List of raw RGBA tuples for color mapping
-#     "FRAME_DURATION": float,       # Time in seconds each frame is displayed
-#     "IS_STATELESS": bool           # True if animation ignores direction/mode
-#   },
-#   ...
-# }
-#
-# Each matrix_frame is a list of lists representing pixel data,
-# where each integer corresponds to an index in the "COLORS" list.
-
-ANIMATION_DATA = {
+OBJECT_LAYER_DATA = {
     "PEOPLE": {
         "FRAMES": {
             "UP_IDLE": [SKIN_PEOPLE_MATRIX_02_0, SKIN_PEOPLE_MATRIX_02_1],

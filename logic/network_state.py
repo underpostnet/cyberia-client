@@ -3,23 +3,23 @@ import threading
 import time
 
 from config import MAZE_CELL_WORLD_SIZE
-from logic.game_object import GameObject
+from logic.network_object import NetworkObject
 
 logging.basicConfig(
     level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s"
 )
 
 
-class GameState:
+class NetworkState:
     def __init__(self, world_width: int, world_height: int, object_size: int):
         self.world_width = world_width
         self.world_height = world_height
         self.object_size = object_size
-        self.objects: dict[str, GameObject] = {}
+        self.network_objects: dict[str, NetworkObject] = {}
 
         self.grid_cells_x = world_width // object_size
         self.grid_cells_y = world_height // object_size
-        self.grid: list[list[GameObject | None]] = [
+        self.grid: list[list[NetworkObject | None]] = [
             [None for _ in range(self.grid_cells_x)] for _ in range(self.grid_cells_y)
         ]
 
@@ -40,19 +40,19 @@ class GameState:
         world_y = grid_y * self.object_size + self.object_size / 2
         return world_x, world_y
 
-    def add_or_update_game_object(self, obj: GameObject):
-        self.objects[obj.obj_id] = obj
+    def add_or_update_network_object(self, obj: NetworkObject):
+        self.network_objects[obj.obj_id] = obj
         grid_x, grid_y = self._world_to_grid_coords(obj.x, obj.y)
         if 0 <= grid_x < self.grid_cells_x and 0 <= grid_y < self.grid_cells_y:
             self.grid[grid_y][grid_x] = obj
 
-    def get_game_object(self, obj_id: str) -> GameObject | None:
-        return self.objects.get(obj_id)
+    def get_network_object(self, obj_id: str) -> NetworkObject | None:
+        return self.network_objects.get(obj_id)
 
-    def remove_game_object(self, obj_id: str) -> GameObject | None:
-        obj_to_remove = self.objects.pop(obj_id, None)
+    def remove_network_object(self, obj_id: str) -> NetworkObject | None:
+        obj_to_remove = self.network_objects.pop(obj_id, None)
         if obj_to_remove:
-            logging.info(f"Removed object: {obj_id}")
+            logging.info(f"Removed network object: {obj_id}")
             grid_x, grid_y = self._world_to_grid_coords(
                 obj_to_remove.x, obj_to_remove.y
             )
@@ -63,17 +63,20 @@ class GameState:
             ):
                 self.grid[grid_y][grid_x] = None
         else:
-            logging.warning(f"Attempted to remove non-existent object: {obj_id}")
+            logging.warning(
+                f"Attempted to remove non-existent network object: {obj_id}"
+            )
         return obj_to_remove
 
-    def get_all_objects(self) -> dict[str, GameObject]:
-        return self.objects.copy()
+    def get_all_network_objects(self) -> dict[str, NetworkObject]:
+        return self.network_objects.copy()
 
-    def cleanup_expired_objects(self, current_time: float) -> list[tuple[str, str]]:
-        animations_to_remove = []
+    def cleanup_expired_network_objects(
+        self, current_time: float
+    ) -> list[tuple[str, str]]:
+        object_layer_ids_to_remove = []
         expired_object_ids = []
-        for obj_id, obj in list(self.objects.items()):
-            # Only clean up non-persistent objects that have a decay time and have expired
+        for obj_id, obj in list(self.network_objects.items()):
             if (
                 not obj.is_persistent
                 and obj.decay_time is not None
@@ -82,9 +85,11 @@ class GameState:
                 expired_object_ids.append(obj_id)
 
         for obj_id in expired_object_ids:
-            if obj_id in self.objects:
-                obj_to_remove = self.objects.pop(obj_id)
-                logging.debug(f"Cleaning up expired client-side object: {obj_id}")
+            if obj_id in self.network_objects:
+                obj_to_remove = self.network_objects.pop(obj_id)
+                logging.debug(
+                    f"Cleaning up expired client-side network object: {obj_id}"
+                )
                 grid_x, grid_y = self._world_to_grid_coords(
                     obj_to_remove.x, obj_to_remove.y
                 )
@@ -97,15 +102,15 @@ class GameState:
 
                 if obj_to_remove.object_layer_ids:
                     for object_layer_id in obj_to_remove.object_layer_ids:
-                        animations_to_remove.append((obj_id, object_layer_id))
-        return animations_to_remove
+                        object_layer_ids_to_remove.append((obj_id, object_layer_id))
+        return object_layer_ids_to_remove
 
     def _build_simplified_maze(self):
         try:
             self.simplified_maze = [
                 [0 for _ in range(self.grid_cells_x)] for _ in range(self.grid_cells_y)
             ]
-            for obj in self.objects.values():
+            for obj in self.network_objects.values():
                 if obj.is_obstacle:
                     maze_start_x = int(obj.x // MAZE_CELL_WORLD_SIZE)
                     maze_start_y = int(obj.y // MAZE_CELL_WORLD_SIZE)
@@ -126,44 +131,41 @@ class GameState:
         except Exception as e:
             logging.exception(f"Error rebuilding simplified maze: {e}")
 
-    def from_dict(self, data: dict) -> list[tuple[str, str]]:
-        animations_to_remove_from_rendering_system = []
+    def update_from_dict(self, network_objects_data: dict) -> list[tuple[str, str]]:
+        object_layer_ids_to_remove_from_rendering_system = []
         with self.lock:
-            # Determine objects to remove (those present in current state but not in new data)
-            current_obj_ids = set(self.objects.keys())
-            new_obj_ids = set(data["objects"].keys())
+            current_obj_ids = set(self.network_objects.keys())
+            # Corrected: data is already the network_objects_data dictionary
+            new_obj_ids = set(network_objects_data.keys())
 
-            # Objects to remove are those that are currently in our state AND are persistent,
-            # but are NOT in the new state from the server.
             removed_obj_ids = {
                 obj_id
                 for obj_id in current_obj_ids
-                if self.objects[obj_id].is_persistent and obj_id not in new_obj_ids
+                if self.network_objects[obj_id].is_persistent
+                and obj_id not in new_obj_ids
             }
 
             for obj_id in removed_obj_ids:
-                obj_to_remove = self.objects.get(obj_id)
+                obj_to_remove = self.network_objects.get(obj_id)
                 if obj_to_remove and obj_to_remove.object_layer_ids:
                     for object_layer_id in obj_to_remove.object_layer_ids:
-                        animations_to_remove_from_rendering_system.append(
+                        object_layer_ids_to_remove_from_rendering_system.append(
                             (obj_id, object_layer_id)
                         )
-                self.objects.pop(obj_id, None)
+                self.network_objects.pop(obj_id, None)
 
-            # Add or update objects from new data
-            for obj_id, obj_data in data["objects"].items():
-                obj = GameObject.from_dict(obj_data)
-                self.objects[obj_id] = obj
+            for obj_id, obj_data in network_objects_data.items():
+                obj = NetworkObject.from_dict(obj_data)
+                self.network_objects[obj_id] = obj
 
-            # Rebuild grid and maze based on current objects
             self.grid = [
                 [None for _ in range(self.grid_cells_x)]
                 for _ in range(self.grid_cells_y)
             ]
-            for obj_id, obj in self.objects.items():
+            for obj_id, obj in self.network_objects.items():
                 grid_x, grid_y = self._world_to_grid_coords(obj.x, obj.y)
                 if 0 <= grid_x < self.grid_cells_x and 0 <= grid_y < self.grid_cells_y:
                     self.grid[grid_y][grid_x] = obj
             self._build_simplified_maze()
 
-        return animations_to_remove_from_rendering_system
+        return object_layer_ids_to_remove_from_rendering_system

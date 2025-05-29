@@ -9,24 +9,24 @@ from raylibpy import BLACK, MOUSE_BUTTON_LEFT, RAYWHITE, Vector2
 
 from config import (
     CAMERA_SMOOTHNESS,
-    OBJECT_SIZE,
+    NETWORK_OBJECT_SIZE,
     SCREEN_HEIGHT,
     SCREEN_WIDTH,
     WORLD_HEIGHT,
     WORLD_WIDTH,
 )
-from object_layer.animation_data import AnimationMode, Direction
-from object_layer.raylib_render import RaylibRender
-from logic.game_object import GameObject
-from logic.game_state import GameState
-from logic.mock_server import MockServer
+from object_layer.object_layer_data import ObjectLayerMode, Direction
+from object_layer.object_layer_render import ObjectLayerRender
+from logic.network_object import NetworkObject
+from logic.network_state import NetworkState
+from logic.network_object_factory import NetworkObjectFactory
 
 logging.basicConfig(
     level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s"
 )
 
 
-class MmoClient:
+class NetworkStateClient:
     def __init__(self, host: str, port: int, ws_path: str):
         self.host = host
         self.port = port
@@ -35,23 +35,25 @@ class MmoClient:
         self.ws: websocket.WebSocketApp | None = None
         self.ws_thread: threading.Thread | None = None
 
-        self.mock_server = MockServer()
-        animation_data = self.mock_server.get_animation_data()
+        self.network_object_factory = NetworkObjectFactory()
+        object_layer_data = self.network_object_factory.get_object_layer_data()
 
-        self.raylib_render = RaylibRender(
+        self.object_layer_render = ObjectLayerRender(
             screen_width=SCREEN_WIDTH,
             screen_height=SCREEN_HEIGHT,
             world_width=WORLD_WIDTH,
             world_height=WORLD_HEIGHT,
-            object_size=OBJECT_SIZE,
-            animation_data=animation_data,
-            title="Python MMO Client",
+            network_object_size=NETWORK_OBJECT_SIZE,
+            object_layer_data=object_layer_data,
+            title="Python NetworkState Client",
             target_fps=60,
         )
 
-        self.game_state = GameState(WORLD_WIDTH, WORLD_HEIGHT, OBJECT_SIZE)
+        self.network_state = NetworkState(
+            WORLD_WIDTH, WORLD_HEIGHT, NETWORK_OBJECT_SIZE
+        )
         self.my_player_id: str | None = None
-        self.my_game_object: GameObject | None = None
+        self.my_network_object: NetworkObject | None = None
 
         self.message_queue: list[dict] = []
         self.message_queue_lock = threading.Lock()
@@ -78,7 +80,7 @@ class MmoClient:
     ):
         logging.info(f"Disconnected from server: {close_status_code} - {close_msg}")
         self.my_player_id = None
-        self.my_game_object = None
+        self.my_network_object = None
         self.ws = None
         self.connection_ready_event.clear()
 
@@ -86,9 +88,7 @@ class MmoClient:
         logging.info("Connected to server via Pure WebSocket!")
         self.connection_ready_event.set()
 
-        # Simulate initial server state with all object types
-        logging.info("Simulating initial server state with all object types...")
-        initial_state_data = self.mock_server.generate_initial_state_dict()
+        initial_state_data = self.network_object_factory.generate_initial_state_dict()
         with self.message_queue_lock:
             self.message_queue.append(initial_state_data)
 
@@ -102,23 +102,37 @@ class MmoClient:
 
     def _handle_server_message(self, data: dict):
         msg_type = data.get("type")
-        if msg_type == "instance_state_update":
-            object_layer_ids_to_remove_from_rendering_system = (
-                self.game_state.from_dict(data)
-            )
+        logging.debug(f"Handling message of type: {msg_type}, data: {data}")
+        if msg_type == "network_state_update":
+            # Changed to expect "network_objects" key from the server
+            if "network_objects" in data:
+                object_layer_ids_to_remove_from_rendering_system = (
+                    self.network_state.update_from_dict(data["network_objects"])
+                )
 
-            for (
-                obj_id,
-                object_layer_id,
-            ) in object_layer_ids_to_remove_from_rendering_system:
-                self.raylib_render.remove_animation(obj_id, object_layer_id)
+                for (
+                    obj_id,
+                    object_layer_id,
+                ) in object_layer_ids_to_remove_from_rendering_system:
+                    self.object_layer_render.remove_object_layer_animation(
+                        obj_id, object_layer_id
+                    )
 
-            with self.game_state.lock:
-                if self.my_player_id and self.my_player_id in self.game_state.objects:
-                    self.my_game_object = self.game_state.objects[self.my_player_id]
-                else:
-                    self.my_game_object = None
-            logging.debug("Instance state updated.")
+                with self.network_state.lock:
+                    if (
+                        self.my_player_id
+                        and self.my_player_id in self.network_state.network_objects
+                    ):
+                        self.my_network_object = self.network_state.network_objects[
+                            self.my_player_id
+                        ]
+                    else:
+                        self.my_network_object = None
+                logging.debug("Network state updated.")
+            else:
+                logging.error(
+                    f"Received 'network_state_update' message without 'network_objects' key: {data}"
+                )
         elif msg_type == "player_assigned":
             self.my_player_id = data["player_id"]
             logging.info(f"Assigned player ID: {self.my_player_id} from server.")
@@ -128,8 +142,8 @@ class MmoClient:
             player_id = data.get("player_id")
             path = data.get("path")
             if player_id and path:
-                with self.game_state.lock:
-                    player_obj = self.game_state.get_game_object(player_id)
+                with self.network_state.lock:
+                    player_obj = self.network_state.get_network_object(player_id)
                     if player_obj:
                         player_obj.set_path(path)
                         if player_id == self.my_player_id:
@@ -169,12 +183,12 @@ class MmoClient:
 
         obj_ids_to_remove = [
             obj_id
-            for obj_id, obj in self.game_state.objects.items()
-            if obj.object_type == "POINT_PATH"
+            for obj_id, obj in self.network_state.network_objects.items()
+            if obj.network_object_type == "POINT_PATH"
             and obj_id.startswith(f"path_point_{self.my_player_id}")
         ]
         for obj_id in obj_ids_to_remove:
-            obj_to_remove = self.game_state.remove_game_object(obj_id)
+            obj_to_remove = self.network_state.remove_network_object(obj_id)
             if obj_to_remove and obj_to_remove.object_layer_ids:
                 for object_layer_id in obj_to_remove.object_layer_ids:
                     object_layer_ids_to_remove_from_rendering_system.append(
@@ -185,12 +199,16 @@ class MmoClient:
             f"Clearing {len(object_layer_ids_to_remove_from_rendering_system)} old path points."
         )
 
-        new_path_objects = self.mock_server.generate_point_path(path, current_time)
-        for obj in new_path_objects:
-            self.game_state.add_or_update_game_object(obj)
+        new_path_network_objects = self.network_object_factory.generate_point_path(
+            path, current_time
+        )
+        for obj in new_path_network_objects:
+            self.network_state.add_or_update_network_object(obj)
 
         for obj_id, object_layer_id in object_layer_ids_to_remove_from_rendering_system:
-            self.raylib_render.remove_animation(obj_id, object_layer_id)
+            self.object_layer_render.remove_object_layer_animation(
+                obj_id, object_layer_id
+            )
 
     def run(self):
         logging.info(f"Connecting to WebSocket server at {self.websocket_url}")
@@ -208,12 +226,12 @@ class MmoClient:
 
         if not self.connection_ready_event.wait(timeout=5):
             logging.error("Failed to establish WebSocket connection within timeout.")
-            self.raylib_render.close_window()
+            self.object_layer_render.close_window()
             return
 
         last_frame_time = time.time()
 
-        while not self.raylib_render.window_should_close():
+        while not self.object_layer_render.window_should_close():
             current_time = time.time()
             delta_time = current_time - last_frame_time
             last_frame_time = current_time
@@ -221,19 +239,21 @@ class MmoClient:
             self._process_queued_messages()
 
             object_layer_ids_to_remove_from_rendering_system = []
-            with self.game_state.lock:
+            with self.network_state.lock:
                 object_layer_ids_to_remove_from_rendering_system = (
-                    self.game_state.cleanup_expired_objects(current_time)
+                    self.network_state.cleanup_expired_network_objects(current_time)
                 )
             for (
                 obj_id,
                 object_layer_id,
             ) in object_layer_ids_to_remove_from_rendering_system:
-                self.raylib_render.remove_animation(obj_id, object_layer_id)
+                self.object_layer_render.remove_object_layer_animation(
+                    obj_id, object_layer_id
+                )
 
             object_movement_deltas = {}
-            with self.game_state.lock:
-                for obj_id, obj in self.game_state.objects.items():
+            with self.network_state.lock:
+                for obj_id, obj in self.network_state.network_objects.items():
                     dx, dy = obj.update_position(delta_time)
                     object_movement_deltas[obj_id] = (dx, dy)
 
@@ -241,8 +261,8 @@ class MmoClient:
                         obj.path = []
                         obj.path_index = 0
 
-            if self.raylib_render.is_mouse_button_pressed(MOUSE_BUTTON_LEFT):
-                world_mouse_pos = self.raylib_render.get_world_mouse_position()
+            if self.object_layer_render.is_mouse_button_pressed(MOUSE_BUTTON_LEFT):
+                world_mouse_pos = self.object_layer_render.get_world_mouse_position()
                 logging.info(
                     f"Mouse clicked at world position: ({world_mouse_pos.x}, {world_mouse_pos.y})"
                 )
@@ -253,85 +273,97 @@ class MmoClient:
                 self.send_message("client_move_request", move_request_payload)
 
                 object_layer_ids_to_remove_from_rendering_system_click = []
-                with self.game_state.lock:
+                with self.network_state.lock:
                     obj_ids_to_remove = [
                         obj_id
-                        for obj_id, obj in self.game_state.objects.items()
-                        if obj.object_type == "CLICK_POINTER"
+                        for obj_id, obj in self.network_state.network_objects.items()
+                        if obj.network_object_type == "CLICK_POINTER"
                     ]
                     for obj_id in obj_ids_to_remove:
-                        obj_to_remove = self.game_state.remove_game_object(obj_id)
+                        obj_to_remove = self.network_state.remove_network_object(obj_id)
                         if obj_to_remove and obj_to_remove.object_layer_ids:
                             for object_layer_id in obj_to_remove.object_layer_ids:
                                 object_layer_ids_to_remove_from_rendering_system_click.append(
                                     (obj_id, object_layer_id)
                                 )
 
-                    new_click_pointer = self.mock_server.generate_click_pointer(
-                        world_mouse_pos.x, world_mouse_pos.y, current_time
+                    new_click_pointer = (
+                        self.network_object_factory.generate_click_pointer(
+                            world_mouse_pos.x, world_mouse_pos.y, current_time
+                        )
                     )
-                    self.game_state.add_or_update_game_object(new_click_pointer)
-                    logging.debug("Created new click pointer via mock server.")
+                    self.network_state.add_or_update_network_object(new_click_pointer)
+                    logging.debug(
+                        "Created new click pointer via network object factory."
+                    )
 
                 for (
                     obj_id,
                     object_layer_id,
                 ) in object_layer_ids_to_remove_from_rendering_system_click:
-                    self.raylib_render.remove_animation(obj_id, object_layer_id)
+                    self.object_layer_render.remove_object_layer_animation(
+                        obj_id, object_layer_id
+                    )
 
-            self.raylib_render.begin_drawing()
-            self.raylib_render.clear_background(RAYWHITE)
-            self.raylib_render.begin_camera_mode()
+            self.object_layer_render.begin_drawing()
+            self.object_layer_render.clear_background(RAYWHITE)
+            self.object_layer_render.begin_camera_mode()
 
-            self.raylib_render.draw_grid()
+            self.object_layer_render.draw_grid()
 
-            with self.game_state.lock:
-                for obj_id, obj in self.game_state.objects.items():
+            with self.network_state.lock:
+                for obj_id, obj in self.network_state.network_objects.items():
                     dx, dy = object_movement_deltas.get(obj_id, (0.0, 0.0))
-                    self.raylib_render.draw_game_object(obj, current_time, dx, dy)
+                    self.object_layer_render.draw_network_object(
+                        obj, current_time, dx, dy
+                    )
 
-            self.raylib_render.end_camera_mode()
+            self.object_layer_render.end_camera_mode()
 
-            with self.game_state.lock:
-                if self.my_game_object:
-                    self.raylib_render.update_camera_target(
+            with self.network_state.lock:
+                if self.my_network_object:
+                    self.object_layer_render.update_camera_target(
                         Vector2(
-                            self.my_game_object.x + OBJECT_SIZE / 2,
-                            self.my_game_object.y + OBJECT_SIZE / 2,
+                            self.my_network_object.x + NETWORK_OBJECT_SIZE / 2,
+                            self.my_network_object.y + NETWORK_OBJECT_SIZE / 2,
                         ),
                         smoothness=CAMERA_SMOOTHNESS,
                     )
-                    self.raylib_render.draw_text(
+                    self.object_layer_render.draw_text(
                         f"My Player ID: {self.my_player_id}", 10, 10, 20, BLACK
                     )
-                    self.raylib_render.draw_text(
-                        f"My Pos: ({int(self.my_game_object.x)}, {int(self.my_game_object.y)})",
+                    self.object_layer_render.draw_text(
+                        f"My Pos: ({int(self.my_network_object.x)}, {int(self.my_network_object.y)})",
                         10,
                         40,
                         20,
                         BLACK,
                     )
                 else:
-                    self.raylib_render.draw_text("Connecting...", 10, 10, 20, BLACK)
+                    self.object_layer_render.draw_text(
+                        "Connecting...", 10, 10, 20, BLACK
+                    )
 
-            frame_time = self.raylib_render.get_frame_time()
+            frame_time = self.object_layer_render.get_frame_time()
             if frame_time > 0:
-                self.raylib_render.draw_text(
+                self.object_layer_render.draw_text(
                     f"FPS: {int(1.0 / frame_time)}", 10, SCREEN_HEIGHT - 30, 20, BLACK
                 )
             else:
-                self.raylib_render.draw_text(
+                self.object_layer_render.draw_text(
                     "FPS: N/A", 10, SCREEN_HEIGHT - 30, 20, BLACK
                 )
 
-            self.raylib_render.update_all_active_animations(delta_time, current_time)
+            self.object_layer_render.update_all_active_object_layer_animations(
+                delta_time, current_time
+            )
 
-            self.raylib_render.end_drawing()
+            self.object_layer_render.end_drawing()
 
             time.sleep(0.001)
 
         if self.ws:
             self.ws.close()
         logging.info("WebSocket connection closed.")
-        self.raylib_render.close_window()
+        self.object_layer_render.close_window()
         logging.info("Client window closed.")

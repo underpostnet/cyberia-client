@@ -2,7 +2,7 @@ import argparse
 import logging
 
 from config import SERVER_HOST, SERVER_PORT, WEBSOCKET_PATH
-from logic.mmo_client import MmoClient
+from logic.network_state_client import NetworkStateClient
 
 logging.basicConfig(
     level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s"
@@ -10,7 +10,7 @@ logging.basicConfig(
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(
-        description="Python MMO Instance Client with WebSockets and Raylib."
+        description="Python NetworkState Client with WebSockets and Raylib."
     )
     parser.add_argument(
         "--host",
@@ -27,6 +27,6 @@ if __name__ == "__main__":
 
     args = parser.parse_args()
 
-    client = MmoClient(args.host, args.port, WEBSOCKET_PATH)
+    client = NetworkStateClient(args.host, args.port, WEBSOCKET_PATH)
 
     client.run()
