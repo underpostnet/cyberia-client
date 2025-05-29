@@ -80,7 +80,7 @@ from display.building.wall import (
 
 
 # Import GameObject for type hinting
-from core.game_object import GameObject
+from logic.game_object import GameObject
 
 
 # --- Logging Configuration ---
@@ -123,60 +123,58 @@ class AnimationMode(Enum):
 ANIMATION_DATA = {
     "PEOPLE": {
         "frames": {
-            # Idle animations based on user's desired mapping
             "up_idle": [SKIN_PEOPLE_MATRIX_02_0, SKIN_PEOPLE_MATRIX_02_1],
             "down_idle": [SKIN_PEOPLE_MATRIX_08_0, SKIN_PEOPLE_MATRIX_08_1],
             "right_idle": [SKIN_PEOPLE_MATRIX_06_0, SKIN_PEOPLE_MATRIX_06_1],
             "left_idle": [
                 SKIN_PEOPLE_MATRIX_06_0,
                 SKIN_PEOPLE_MATRIX_06_1,
-            ],  # Flipped horizontally
+            ],
             "up_right_idle": [
                 SKIN_PEOPLE_MATRIX_06_0,
                 SKIN_PEOPLE_MATRIX_06_1,
-            ],  # Flipped horizontally
+            ],
             "down_right_idle": [
                 SKIN_PEOPLE_MATRIX_06_0,
                 SKIN_PEOPLE_MATRIX_06_1,
-            ],  # Flipped horizontally
+            ],
             "up_left_idle": [
                 SKIN_PEOPLE_MATRIX_06_0,
                 SKIN_PEOPLE_MATRIX_06_1,
-            ],  # Flipped horizontally
+            ],
             "down_left_idle": [
                 SKIN_PEOPLE_MATRIX_06_0,
                 SKIN_PEOPLE_MATRIX_06_1,
-            ],  # Flipped horizontally
+            ],
             "default_idle": [
                 SKIN_PEOPLE_MATRIX_08_0,
                 SKIN_PEOPLE_MATRIX_08_1,
-            ],  # Fallback to DOWN IDLE
-            # Walking animations based on user's desired mapping
+            ],
             "up_move": [SKIN_PEOPLE_MATRIX_12_0, SKIN_PEOPLE_MATRIX_12_1],
             "down_move": [SKIN_PEOPLE_MATRIX_18_0, SKIN_PEOPLE_MATRIX_18_1],
             "right_move": [SKIN_PEOPLE_MATRIX_16_0, SKIN_PEOPLE_MATRIX_16_1],
             "left_move": [
                 SKIN_PEOPLE_MATRIX_16_0,
                 SKIN_PEOPLE_MATRIX_16_1,
-            ],  # Flipped horizontally
+            ],
             "up_right_move": [
                 SKIN_PEOPLE_MATRIX_16_0,
                 SKIN_PEOPLE_MATRIX_16_1,
-            ],  # Flipped horizontally
+            ],
             "down_right_move": [
                 SKIN_PEOPLE_MATRIX_16_0,
                 SKIN_PEOPLE_MATRIX_16_1,
-            ],  # Flipped horizontally
+            ],
             "up_left_move": [
                 SKIN_PEOPLE_MATRIX_16_0,
                 SKIN_PEOPLE_MATRIX_16_1,
-            ],  # Flipped horizontally
+            ],
             "down_left_move": [
                 SKIN_PEOPLE_MATRIX_16_0,
                 SKIN_PEOPLE_MATRIX_16_1,
-            ],  # Flipped horizontally
+            ],
         },
-        "colors": SKIN_PEOPLE_MAP_COLORS,
+        "colors": [Color(r, g, b, a) for r, g, b, a in SKIN_PEOPLE_MAP_COLORS],
         "frame_duration": SKIN_PEOPLE_ANIMATION_SPEED,
         "is_stateless": False,
     },
@@ -187,31 +185,31 @@ ANIMATION_DATA = {
                 GFX_CLICK_POINTER_MATRIX_01,
                 GFX_CLICK_POINTER_MATRIX_02,
             ],
-            "default_idle": [  # Fallback
+            "default_idle": [
                 GFX_CLICK_POINTER_MATRIX_00,
                 GFX_CLICK_POINTER_MATRIX_01,
                 GFX_CLICK_POINTER_MATRIX_02,
             ],
         },
-        "colors": GFX_CLICK_POINTER_MAP_COLORS,
+        "colors": [Color(r, g, b, a) for r, g, b, a in GFX_CLICK_POINTER_MAP_COLORS],
         "frame_duration": GFX_CLICK_POINTER_ANIMATION_SPEED,
         "is_stateless": True,
     },
     "POINT_PATH": {
         "frames": {
             "none_idle": [GFX_POINT_PATH_MATRIX_00],
-            "default_idle": [GFX_POINT_PATH_MATRIX_00],  # Fallback
+            "default_idle": [GFX_POINT_PATH_MATRIX_00],
         },
-        "colors": GFX_POINT_PATH_MAP_COLORS,
+        "colors": [Color(r, g, b, a) for r, g, b, a in GFX_POINT_PATH_MAP_COLORS],
         "frame_duration": GFX_POINT_PATH_ANIMATION_SPEED,
         "is_stateless": True,
     },
     "WALL": {
         "frames": {
             "none_idle": [BUILDING_WALL_MATRIX_00],
-            "default_idle": [BUILDING_WALL_MATRIX_00],  # Fallback
+            "default_idle": [BUILDING_WALL_MATRIX_00],
         },
-        "colors": BUILDING_WALL_MAP_COLORS,  # Using the imported map colors
+        "colors": [Color(r, g, b, a) for r, g, b, a in BUILDING_WALL_MAP_COLORS],
         "frame_duration": BUILDING_WALL_ANIMATION_SPEED,
         "is_stateless": True,
     },

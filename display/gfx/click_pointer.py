@@ -1,6 +1,3 @@
-from raylibpy import Color
-from utils.items_helper import add_padding
-
 GFX_CLICK_POINTER_MATRIX_00 = [
     [0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
     [0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
@@ -13,6 +10,7 @@ GFX_CLICK_POINTER_MATRIX_00 = [
     [0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
     [0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
 ]
+
 GFX_CLICK_POINTER_MATRIX_01 = [
     [0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
     [0, 0, 0, 0, 2, 2, 0, 0, 0, 0],
@@ -39,13 +37,10 @@ GFX_CLICK_POINTER_MATRIX_02 = [
     [0, 0, 0, 0, 2, 2, 0, 0, 0, 0],
 ]
 
-GFX_CLICK_POINTER_MATRIX_00 = add_padding(GFX_CLICK_POINTER_MATRIX_00, 3)
-GFX_CLICK_POINTER_MATRIX_01 = add_padding(GFX_CLICK_POINTER_MATRIX_01, 3)
-GFX_CLICK_POINTER_MATRIX_02 = add_padding(GFX_CLICK_POINTER_MATRIX_02, 3)
-
-GFX_CLICK_POINTER_MAP_COLORS = [0] * 3
-GFX_CLICK_POINTER_MAP_COLORS[0] = Color(0, 0, 0, 0)
-GFX_CLICK_POINTER_MAP_COLORS[1] = Color(255, 226, 0, 200)
-GFX_CLICK_POINTER_MAP_COLORS[2] = Color(0, 0, 0, 200)
+GFX_CLICK_POINTER_MAP_COLORS = [
+    [0, 0, 0, 0],
+    [255, 226, 0, 200],
+    [0, 0, 0, 200],
+]
 
 GFX_CLICK_POINTER_ANIMATION_SPEED = 0.1

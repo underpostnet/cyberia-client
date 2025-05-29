@@ -1,17 +1,8 @@
 import time
 import logging
 
-import sys
-import os
 
-# Get the project root directory (assuming this script is in a subdirectory)
-project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-
-# Add the project root to sys.path
-sys.path.insert(0, project_root)
-
-
-from visuals.rendering_system import (
+from display.rendering_system import (
     RenderingSystem,
     Direction,
     AnimationMode,

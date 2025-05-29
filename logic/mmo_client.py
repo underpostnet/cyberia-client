@@ -28,10 +28,10 @@ from config import (
     CAMERA_SMOOTHNESS,
 )
 
-from visuals.rendering_system import RenderingSystem, Direction, AnimationMode
-from core.game_state import GameState
-from core.game_object import GameObject
-from mock_server import MockServer
+from display.rendering_system import RenderingSystem, Direction, AnimationMode
+from logic.game_state import GameState
+from logic.game_object import GameObject
+from logic.mock_server import MockServer
 
 
 class MmoClient:

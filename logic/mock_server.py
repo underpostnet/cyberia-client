@@ -5,7 +5,7 @@ import logging
 
 from raylibpy import Color
 
-from core.game_object import GameObject
+from logic.game_object import GameObject
 from config import (
     WORLD_WIDTH,
     WORLD_HEIGHT,

@@ -3,7 +3,7 @@ import threading
 import time
 
 from config import MAZE_CELL_WORLD_SIZE
-from core.game_object import GameObject
+from logic.game_object import GameObject
 
 
 # --- Logging Configuration ---

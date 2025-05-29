@@ -14,7 +14,7 @@ from config import (
 )
 
 # Import the refactored MMO client
-from client.mmo_client import MmoClient
+from logic.mmo_client import MmoClient
 
 
 # --- Main Execution ---
