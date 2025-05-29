@@ -35,5 +35,5 @@ It's recommended to use a **Python virtual environment** to manage dependencies.
 Once you've installed the dependencies and activated your virtual environment:
 
 ```bash
-python main_mmo_client.py
+python main_network_state_client.py
 ```
