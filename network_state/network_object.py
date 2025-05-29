@@ -11,6 +11,11 @@ logging.basicConfig(
 
 
 class NetworkObject:
+    """
+    Represents an object in the network state, with properties like position, color,
+    type, movement path, and persistence.
+    """
+
     def __init__(
         self,
         obj_id: str,
@@ -32,37 +37,49 @@ class NetworkObject:
         self.speed = speed
         self.network_object_type = network_object_type.upper()
 
-        if object_layer_ids is None:
-            self.object_layer_ids = NETWORK_OBJECT_TYPE_DEFAULT_OBJECT_LAYER_IDS.get(
+        # Assign default object layer IDs if not provided
+        self.object_layer_ids = (
+            object_layer_ids
+            if object_layer_ids is not None
+            else NETWORK_OBJECT_TYPE_DEFAULT_OBJECT_LAYER_IDS.get(
                 self.network_object_type, []
             )
-        else:
-            self.object_layer_ids = object_layer_ids
+        )
 
-        self.path: list[dict[str, float]] = []
-        self.path_index = 0
+        self.path: list[dict[str, float]] = (
+            []
+        )  # List of {'X': float, 'Y': float} for movement
+        self.path_index = 0  # Current index in the path
 
-        self._prev_x = x
-        self._prev_y = y
+        self._prev_x = x  # Previous X position for movement calculation
+        self._prev_y = y  # Previous Y position for movement calculation
 
-        self._decay_time = decay_time
-        self.is_persistent = is_persistent
+        self._decay_time = decay_time  # Timestamp when this object should decay
+        self.is_persistent = (
+            is_persistent  # If True, object is not automatically removed
+        )
 
     @property
     def decay_time(self) -> float | None:
+        """Returns the decay time of the object."""
         return self._decay_time
 
     def set_path(self, path: list[dict[str, float]]):
+        """Sets a new movement path for the object."""
         self.path = path
         self.path_index = 0
 
     def update_position(self, delta_time: float) -> tuple[float, float]:
+        """
+        Updates the object's position along its path based on delta_time and speed.
+        Returns the change in x and y position.
+        """
         prev_x, prev_y = self.x, self.y
 
         if not self.path or self.path_index >= len(self.path):
             self._prev_x = self.x
             self._prev_y = self.y
-            return 0.0, 0.0
+            return 0.0, 0.0  # No movement if no path or path completed
 
         target_point = self.path[self.path_index]
         target_world_x = target_point["X"]
@@ -77,10 +94,12 @@ class NetworkObject:
         move_distance = self.speed * delta_time
 
         if distance_to_target < move_distance:
+            # Reached or overshot the current target point, move to next
             self.x = target_world_x
             self.y = target_world_y
             self.path_index += 1
         else:
+            # Move towards the target point
             direction_x = dx_to_target / distance_to_target
             direction_y = dy_to_target / distance_to_target
             self.x += direction_x * move_distance
@@ -96,6 +115,7 @@ class NetworkObject:
 
     @classmethod
     def from_dict(cls, data: dict):
+        """Creates a NetworkObject instance from a dictionary."""
         obj_id = data["obj_id"]
         x = data["x"]
         y = data["y"]
@@ -130,6 +150,7 @@ class NetworkObject:
         return obj
 
     def to_dict(self) -> dict:
+        """Converts the NetworkObject instance to a dictionary."""
         return {
             "obj_id": self.obj_id,
             "x": self.x,

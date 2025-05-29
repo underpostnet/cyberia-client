@@ -27,6 +27,6 @@ if __name__ == "__main__":
 
     args = parser.parse_args()
 
+    # The client now directly manages the proxy
     client = NetworkStateClient(args.host, args.port, WEBSOCKET_PATH)
-
     client.run()

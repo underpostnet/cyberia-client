@@ -10,7 +10,6 @@ from config import (
     WORLD_HEIGHT,
     WORLD_WIDTH,
 )
-from object_layer.object_layer_data import ObjectLayerMode, Direction
 from network_state.network_object import NetworkObject
 
 logging.basicConfig(
@@ -19,17 +18,24 @@ logging.basicConfig(
 
 
 class NetworkObjectFactory:
-    def __init__(self):
-        logging.info("NetworkObjectFactory initialized.")
+    """
+    Factory for creating various types of NetworkObjects.
+    """
 
     def get_object_layer_data(self) -> dict:
+        """Imports and returns the object layer data."""
         from object_layer.object_layer_data import OBJECT_LAYER_DATA
 
         return OBJECT_LAYER_DATA
 
     def generate_initial_state_dict(self) -> dict:
+        """
+        Generates an initial set of network objects for the game world,
+        including a player and some walls.
+        """
         initial_network_objects = {}
 
+        # Generate player object
         player_id = str(uuid.uuid4())
         initial_network_objects[player_id] = NetworkObject(
             obj_id=player_id,
@@ -43,8 +49,9 @@ class NetworkObjectFactory:
             is_persistent=True,
         ).to_dict()
 
+        # Generate some wall objects
         wall_count = 5
-        for i in range(wall_count):
+        for _ in range(wall_count):
             wall_id = str(uuid.uuid4())
             wall_x = (
                 random.randint(0, WORLD_WIDTH // NETWORK_OBJECT_SIZE - 1)
@@ -65,9 +72,6 @@ class NetworkObjectFactory:
                 is_persistent=True,
             ).to_dict()
 
-        logging.info(
-            f"Generated initial state with {len(initial_network_objects)} network objects."
-        )
         return {
             "type": "network_state_update",
             "network_objects": initial_network_objects,
@@ -76,15 +80,19 @@ class NetworkObjectFactory:
     def generate_point_path(
         self, path_coords: list[dict[str, float]], current_time: float
     ) -> list[NetworkObject]:
+        """
+        Generates a list of NetworkObjects representing points along a path.
+        These are typically used for visual effects and are not persistent.
+        """
         path_network_objects = []
-        decay_duration = 2.0
-        for i, point in enumerate(path_coords):
+        decay_duration = 2.0  # Path points decay after 2 seconds
+        for point in path_coords:
             obj_id = f"path_point_{uuid.uuid4()}"
             path_network_object = NetworkObject(
                 obj_id=obj_id,
                 x=point["X"],
                 y=point["Y"],
-                color=Color(0, 255, 0, 150),
+                color=Color(0, 255, 0, 150),  # Green with some transparency
                 network_object_type="POINT_PATH",
                 is_obstacle=False,
                 speed=0.0,
@@ -92,7 +100,7 @@ class NetworkObjectFactory:
                     "POINT_PATH"
                 ],
                 decay_time=current_time + decay_duration,
-                is_persistent=False,
+                is_persistent=False,  # These objects are temporary
             )
             path_network_objects.append(path_network_object)
         return path_network_objects
@@ -100,13 +108,17 @@ class NetworkObjectFactory:
     def generate_click_pointer(
         self, x: float, y: float, current_time: float
     ) -> NetworkObject:
+        """
+        Generates a NetworkObject representing a visual click pointer.
+        This is temporary and decays over time.
+        """
         obj_id = f"click_pointer_{uuid.uuid4()}"
-        decay_duration = 1.0
+        decay_duration = 1.0  # Click pointer decays after 1 second
         click_pointer = NetworkObject(
             obj_id=obj_id,
             x=x,
             y=y,
-            color=Color(255, 255, 0, 200),
+            color=Color(255, 255, 0, 200),  # Yellow with some transparency
             network_object_type="CLICK_POINTER",
             is_obstacle=False,
             speed=0.0,
@@ -114,6 +126,6 @@ class NetworkObjectFactory:
                 "CLICK_POINTER"
             ],
             decay_time=current_time + decay_duration,
-            is_persistent=False,
+            is_persistent=False,  # This object is temporary
         )
         return click_pointer
