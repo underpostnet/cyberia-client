@@ -1,20 +1,11 @@
-import time
 import logging
+import time
 
-
-from display.rendering_system import (
-    RenderingSystem,
-    Direction,
-    AnimationMode,
-)
-
+from config import OBJECT_SIZE
+from display.rendering_system import AnimationMode, Direction, RenderingSystem
 from raylibpy import (
-    Color,
-    KEY_UP,
     KEY_DOWN,
-    KEY_LEFT,
-    KEY_RIGHT,
-    KEY_SPACE,
+    KEY_FOUR,
     KEY_KP_1,
     KEY_KP_2,
     KEY_KP_3,
@@ -23,39 +14,35 @@ from raylibpy import (
     KEY_KP_7,
     KEY_KP_8,
     KEY_KP_9,
+    KEY_LEFT,
     KEY_ONE,
-    KEY_TWO,
+    KEY_RIGHT,
+    KEY_SPACE,
     KEY_THREE,
-    KEY_FOUR,
+    KEY_TWO,
+    KEY_UP,
+    Color,
 )
 
-# Import object size from config
-from config import OBJECT_SIZE
-
-
-# --- Logging Configuration ---
 logging.basicConfig(
     level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s"
 )
 
-# --- Standalone Rendering Viewer Logic ---
 if __name__ == "__main__":
     SCREEN_WIDTH = 800
     SCREEN_HEIGHT = 600
     TARGET_FPS = 60
 
-    # Initialize RenderingSystem with the global OBJECT_SIZE
     rendering_system = RenderingSystem(
         screen_width=SCREEN_WIDTH,
         screen_height=SCREEN_HEIGHT,
         world_width=SCREEN_WIDTH,
         world_height=SCREEN_HEIGHT,
-        object_size=OBJECT_SIZE,  # Use the standard OBJECT_SIZE
+        object_size=OBJECT_SIZE,
         title="Rendering Viewer Demo",
         target_fps=TARGET_FPS,
     )
 
-    # Use the new display IDs
     AVAILABLE_DISPLAY_IDS = [
         "PEOPLE",
         "CLICK_POINTER",
@@ -69,12 +56,9 @@ if __name__ == "__main__":
     demo_direction = Direction.DOWN
     animation_mode = AnimationMode.IDLE
 
-    # Calculate initial target display size based on OBJECT_SIZE and the current animation's matrix dimensions
-    # Dynamically get matrix dimension using the new method
     matrix_dimension = rendering_system.get_animation_matrix_dimension(
         current_display_id
     )
-    # pixel_size_in_display is now calculated dynamically based on OBJECT_SIZE
     current_pixel_size_in_display = OBJECT_SIZE / matrix_dimension
     if current_pixel_size_in_display == 0:
         current_pixel_size_in_display = 1
@@ -94,15 +78,13 @@ if __name__ == "__main__":
     )
     print("Press SPACE to toggle animation mode (IDLE/WALKING).")
     print("Use '1' for zoom out and '2' for zoom in (changes individual pixel size).")
-    print(
-        "Use '3' to switch to the next display ID and '4' for the previous."
-    )  # Updated text
+    print("Use '3' to switch to the next display ID and '4' for the previous.")
     print("Press ESC to close the window.")
 
     last_commanded_dx = 0.0
     last_commanded_dy = 0.0
 
-    move_speed_sim = 5.0  # Simulated movement speed for demo purposes
+    move_speed_sim = 5.0
 
     while not rendering_system.window_should_close():
         current_time = time.time()
@@ -112,7 +94,6 @@ if __name__ == "__main__":
         if not demo_animation_instance.is_stateless:
             key_pressed_for_movement = False
 
-            # Handle directional input for non-stateless animations
             if not (
                 rendering_system.is_key_pressed(KEY_UP)
                 or rendering_system.is_key_pressed(KEY_KP_8)
@@ -156,19 +137,19 @@ if __name__ == "__main__":
                 last_commanded_dy = 0.0
                 key_pressed_for_movement = True
 
-            if rendering_system.is_key_pressed(KEY_KP_7):  # UP_LEFT
+            if rendering_system.is_key_pressed(KEY_KP_7):
                 last_commanded_dx = -move_speed_sim * 0.707
                 last_commanded_dy = -move_speed_sim * 0.707
                 key_pressed_for_movement = True
-            if rendering_system.is_key_pressed(KEY_KP_9):  # UP_RIGHT
+            if rendering_system.is_key_pressed(KEY_KP_9):
                 last_commanded_dx = move_speed_sim * 0.707
                 last_commanded_dy = -move_speed_sim * 0.707
                 key_pressed_for_movement = True
-            if rendering_system.is_key_pressed(KEY_KP_1):  # DOWN_LEFT
+            if rendering_system.is_key_pressed(KEY_KP_1):
                 last_commanded_dx = -move_speed_sim * 0.707
                 last_commanded_dy = move_speed_sim * 0.707
                 key_pressed_for_movement = True
-            if rendering_system.is_key_pressed(KEY_KP_3):  # DOWN_RIGHT
+            if rendering_system.is_key_pressed(KEY_KP_3):
                 last_commanded_dx = move_speed_sim * 0.707
                 last_commanded_dy = move_speed_sim * 0.707
                 key_pressed_for_movement = True
@@ -202,7 +183,6 @@ if __name__ == "__main__":
                 reverse=True,
             )
         else:
-            # For stateless animations, clear movement and set to IDLE
             last_commanded_dx = 0.0
             last_commanded_dy = 0.0
             animation_mode = AnimationMode.IDLE
@@ -215,7 +195,6 @@ if __name__ == "__main__":
                     Direction.NONE, AnimationMode.IDLE, current_time
                 )
 
-        # Handle scaling (pixel size) input
         if rendering_system.is_key_pressed(KEY_TWO):
             current_pixel_size_in_display += 1.0
             rendering_system.get_or_create_animation(
@@ -235,20 +214,16 @@ if __name__ == "__main__":
                 initial_direction=demo_animation_instance.current_direction,
             )
 
-        # Handle display ID switching
         if rendering_system.is_key_pressed(KEY_THREE):
             current_display_id_index = (current_display_id_index + 1) % len(
                 AVAILABLE_DISPLAY_IDS
             )
             current_display_id = AVAILABLE_DISPLAY_IDS[current_display_id_index]
-            rendering_system.remove_animation(
-                obj_id=demo_obj_id, display_id=None
-            )  # Remove old animation
+            rendering_system.remove_animation(obj_id=demo_obj_id, display_id=None)
             animation_mode = AnimationMode.IDLE
             last_commanded_dx = 0.0
             last_commanded_dy = 0.0
 
-            # Recalculate pixel size for the new display ID
             matrix_dimension = rendering_system.get_animation_matrix_dimension(
                 current_display_id
             )
@@ -269,14 +244,11 @@ if __name__ == "__main__":
                 current_display_id_index - 1 + len(AVAILABLE_DISPLAY_IDS)
             ) % len(AVAILABLE_DISPLAY_IDS)
             current_display_id = AVAILABLE_DISPLAY_IDS[current_display_id_index]
-            rendering_system.remove_animation(
-                obj_id=demo_obj_id, display_id=None
-            )  # Remove old animation
+            rendering_system.remove_animation(obj_id=demo_obj_id, display_id=None)
             animation_mode = AnimationMode.IDLE
             last_commanded_dx = 0.0
             last_commanded_dy = 0.0
 
-            # Recalculate pixel size for the new display ID
             matrix_dimension = rendering_system.get_animation_matrix_dimension(
                 current_display_id
             )
@@ -292,7 +264,6 @@ if __name__ == "__main__":
             )
             demo_animation_instance = demo_animation_properties["animation_instance"]
 
-        # Ensure demo_animation_properties is up to date after potential changes
         demo_animation_properties = rendering_system.get_animation_properties(
             demo_obj_id, current_display_id
         )
@@ -303,16 +274,13 @@ if __name__ == "__main__":
 
         rendering_system.update_all_active_animations(delta_time, current_time)
 
-        # Get the actual dimensions using the new method
         matrix_dimension = rendering_system.get_animation_matrix_dimension(
             current_display_id
         )
 
-        # Calculate total rendered size of the sprite
         total_rendered_width = current_pixel_size_in_display * matrix_dimension
         total_rendered_height = current_pixel_size_in_display * matrix_dimension
 
-        # Center the animation on the screen
         draw_x = (SCREEN_WIDTH / 2) - (total_rendered_width / 2)
         draw_y = (SCREEN_HEIGHT / 2) - (total_rendered_height / 2)
 

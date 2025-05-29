@@ -1,25 +1,14 @@
 import argparse
 import logging
 
-# --- Logging Configuration ---
+from config import SERVER_HOST, SERVER_PORT, WEBSOCKET_PATH
+from logic.mmo_client import MmoClient
+
 logging.basicConfig(
     level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s"
 )
 
-# Import configuration settings
-from config import (
-    SERVER_HOST,
-    SERVER_PORT,
-    WEBSOCKET_PATH,
-)
-
-# Import the refactored MMO client
-from logic.mmo_client import MmoClient
-
-
-# --- Main Execution ---
 if __name__ == "__main__":
-    # Set up argument parser for command-line arguments
     parser = argparse.ArgumentParser(
         description="Python MMO Instance Client with WebSockets and Raylib."
     )
