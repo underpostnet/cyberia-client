@@ -134,10 +134,6 @@ class NetworkStateClient:
                     player_obj = self.network_state.get_network_object(player_id)
                     if player_obj:
                         player_obj.set_path(path)
-                        # Always reset smoothed position on new path updates for flicker effect
-                        self.object_layer_render.reset_smoothed_object_position(
-                            player_id
-                        )
                         logging.info(f"Player {player_id} received path update: {path}")
                     else:
                         logging.warning(
