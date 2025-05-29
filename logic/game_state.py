@@ -42,7 +42,6 @@ class GameState:
 
     def add_or_update_game_object(self, obj: GameObject):
         self.objects[obj.obj_id] = obj
-
         grid_x, grid_y = self._world_to_grid_coords(obj.x, obj.y)
         if 0 <= grid_x < self.grid_cells_x and 0 <= grid_y < self.grid_cells_y:
             self.grid[grid_y][grid_x] = obj
@@ -52,7 +51,6 @@ class GameState:
 
     def remove_game_object(self, obj_id: str) -> GameObject | None:
         obj_to_remove = self.objects.pop(obj_id, None)
-
         if obj_to_remove:
             logging.info(f"Removed object: {obj_id}")
             grid_x, grid_y = self._world_to_grid_coords(
@@ -66,7 +64,6 @@ class GameState:
                 self.grid[grid_y][grid_x] = None
         else:
             logging.warning(f"Attempted to remove non-existent object: {obj_id}")
-
         return obj_to_remove
 
     def get_all_objects(self) -> dict[str, GameObject]:
@@ -76,8 +73,9 @@ class GameState:
         animations_to_remove = []
         expired_object_ids = []
         for obj_id, obj in list(self.objects.items()):
+            # Only clean up non-persistent objects that have a decay time and have expired
             if (
-                not obj.server_priority
+                not obj.is_persistent
                 and obj.decay_time is not None
                 and current_time >= obj.decay_time
             ):
@@ -97,9 +95,9 @@ class GameState:
                 ):
                     self.grid[grid_y][grid_x] = None
 
-                if obj_to_remove.display_ids:
-                    for display_id in obj_to_remove.display_ids:
-                        animations_to_remove.append((obj_id, display_id))
+                if obj_to_remove.object_layer_ids:
+                    for object_layer_id in obj_to_remove.object_layer_ids:
+                        animations_to_remove.append((obj_id, object_layer_id))
         return animations_to_remove
 
     def _build_simplified_maze(self):
@@ -107,19 +105,16 @@ class GameState:
             self.simplified_maze = [
                 [0 for _ in range(self.grid_cells_x)] for _ in range(self.grid_cells_y)
             ]
-
             for obj in self.objects.values():
                 if obj.is_obstacle:
                     maze_start_x = int(obj.x // MAZE_CELL_WORLD_SIZE)
                     maze_start_y = int(obj.y // MAZE_CELL_WORLD_SIZE)
-
                     maze_end_x = (
                         maze_start_x + (self.object_size // MAZE_CELL_WORLD_SIZE) - 1
                     )
                     maze_end_y = (
                         maze_start_y + (self.object_size // MAZE_CELL_WORLD_SIZE) - 1
                     )
-
                     maze_start_x = max(0, min(maze_start_x, self.grid_cells_x - 1))
                     maze_start_y = max(0, min(maze_start_y, self.grid_cells_y - 1))
                     maze_end_x = max(0, min(maze_end_x, self.grid_cells_x - 1))
@@ -134,25 +129,33 @@ class GameState:
     def from_dict(self, data: dict) -> list[tuple[str, str]]:
         animations_to_remove_from_rendering_system = []
         with self.lock:
-            current_server_obj_ids = {
-                obj_id for obj_id, obj in self.objects.items() if obj.server_priority
-            }
-            new_server_obj_ids = set(data["objects"].keys())
-            removed_server_obj_ids = current_server_obj_ids - new_server_obj_ids
+            # Determine objects to remove (those present in current state but not in new data)
+            current_obj_ids = set(self.objects.keys())
+            new_obj_ids = set(data["objects"].keys())
 
-            for obj_id in removed_server_obj_ids:
+            # Objects to remove are those that are currently in our state AND are persistent,
+            # but are NOT in the new state from the server.
+            removed_obj_ids = {
+                obj_id
+                for obj_id in current_obj_ids
+                if self.objects[obj_id].is_persistent and obj_id not in new_obj_ids
+            }
+
+            for obj_id in removed_obj_ids:
                 obj_to_remove = self.objects.get(obj_id)
-                if obj_to_remove and obj_to_remove.display_ids:
-                    for display_id in obj_to_remove.display_ids:
+                if obj_to_remove and obj_to_remove.object_layer_ids:
+                    for object_layer_id in obj_to_remove.object_layer_ids:
                         animations_to_remove_from_rendering_system.append(
-                            (obj_id, display_id)
+                            (obj_id, object_layer_id)
                         )
                 self.objects.pop(obj_id, None)
 
+            # Add or update objects from new data
             for obj_id, obj_data in data["objects"].items():
                 obj = GameObject.from_dict(obj_data)
                 self.objects[obj_id] = obj
 
+            # Rebuild grid and maze based on current objects
             self.grid = [
                 [None for _ in range(self.grid_cells_x)]
                 for _ in range(self.grid_cells_y)

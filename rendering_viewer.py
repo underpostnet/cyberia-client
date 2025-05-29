@@ -2,7 +2,8 @@ import logging
 import time
 
 from config import OBJECT_SIZE
-from display.rendering_system import AnimationMode, Direction, RenderingSystem
+from display.animation_data import ANIMATION_DATA, AnimationMode, Direction
+from display.rendering_system import RenderingSystem
 from raylibpy import (
     KEY_DOWN,
     KEY_FOUR,
@@ -28,10 +29,23 @@ logging.basicConfig(
     level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s"
 )
 
+
+class MockAnimationDataProvider:
+    """
+    A mock provider for animation data, emulating what a server might provide.
+    """
+
+    def get_animation_data(self) -> dict:
+        return ANIMATION_DATA
+
+
 if __name__ == "__main__":
     SCREEN_WIDTH = 800
     SCREEN_HEIGHT = 600
     TARGET_FPS = 60
+
+    animation_data_provider = MockAnimationDataProvider()
+    animation_data = animation_data_provider.get_animation_data()
 
     rendering_system = RenderingSystem(
         screen_width=SCREEN_WIDTH,
@@ -39,25 +53,26 @@ if __name__ == "__main__":
         world_width=SCREEN_WIDTH,
         world_height=SCREEN_HEIGHT,
         object_size=OBJECT_SIZE,
+        animation_data=animation_data,
         title="Rendering Viewer Demo",
         target_fps=TARGET_FPS,
     )
 
-    AVAILABLE_DISPLAY_IDS = [
+    AVAILABLE_OBJECT_LAYER_IDS = [
         "PEOPLE",
         "CLICK_POINTER",
         "POINT_PATH",
         "WALL",
     ]
-    current_display_id_index = 0
+    current_object_layer_id_index = 0
     demo_obj_id = "demo_animation_viewer_object"
 
-    current_display_id = AVAILABLE_DISPLAY_IDS[current_display_id_index]
+    current_object_layer_id = AVAILABLE_OBJECT_LAYER_IDS[current_object_layer_id_index]
     demo_direction = Direction.DOWN
     animation_mode = AnimationMode.IDLE
 
     matrix_dimension = rendering_system.get_animation_matrix_dimension(
-        current_display_id
+        current_object_layer_id
     )
     current_pixel_size_in_display = OBJECT_SIZE / matrix_dimension
     if current_pixel_size_in_display == 0:
@@ -65,7 +80,7 @@ if __name__ == "__main__":
 
     demo_animation_properties = rendering_system.get_or_create_animation(
         demo_obj_id,
-        current_display_id,
+        current_object_layer_id,
         current_pixel_size_in_display,
         initial_direction=demo_direction,
     )
@@ -78,7 +93,7 @@ if __name__ == "__main__":
     )
     print("Press SPACE to toggle animation mode (IDLE/WALKING).")
     print("Use '1' for zoom out and '2' for zoom in (changes individual pixel size).")
-    print("Use '3' to switch to the next display ID and '4' for the previous.")
+    print("Use '3' to switch to the next object layer ID and '4' for the previous.")
     print("Press ESC to close the window.")
 
     last_commanded_dx = 0.0
@@ -92,8 +107,6 @@ if __name__ == "__main__":
         last_frame_time = current_time
 
         if not demo_animation_instance.is_stateless:
-            key_pressed_for_movement = False
-
             if not (
                 rendering_system.is_key_pressed(KEY_UP)
                 or rendering_system.is_key_pressed(KEY_KP_8)
@@ -117,42 +130,34 @@ if __name__ == "__main__":
             ) or rendering_system.is_key_pressed(KEY_KP_8):
                 last_commanded_dy = -move_speed_sim
                 last_commanded_dx = 0.0
-                key_pressed_for_movement = True
             if rendering_system.is_key_pressed(
                 KEY_RIGHT
             ) or rendering_system.is_key_pressed(KEY_KP_6):
                 last_commanded_dx = move_speed_sim
                 last_commanded_dy = 0.0
-                key_pressed_for_movement = True
             if rendering_system.is_key_pressed(
                 KEY_DOWN
             ) or rendering_system.is_key_pressed(KEY_KP_2):
                 last_commanded_dy = move_speed_sim
                 last_commanded_dx = 0.0
-                key_pressed_for_movement = True
             if rendering_system.is_key_pressed(
                 KEY_LEFT
             ) or rendering_system.is_key_pressed(KEY_KP_4):
                 last_commanded_dx = -move_speed_sim
                 last_commanded_dy = 0.0
-                key_pressed_for_movement = True
 
             if rendering_system.is_key_pressed(KEY_KP_7):
                 last_commanded_dx = -move_speed_sim * 0.707
                 last_commanded_dy = -move_speed_sim * 0.707
-                key_pressed_for_movement = True
             if rendering_system.is_key_pressed(KEY_KP_9):
                 last_commanded_dx = move_speed_sim * 0.707
                 last_commanded_dy = -move_speed_sim * 0.707
-                key_pressed_for_movement = True
             if rendering_system.is_key_pressed(KEY_KP_1):
                 last_commanded_dx = -move_speed_sim * 0.707
                 last_commanded_dy = move_speed_sim * 0.707
-                key_pressed_for_movement = True
             if rendering_system.is_key_pressed(KEY_KP_3):
                 last_commanded_dx = move_speed_sim * 0.707
                 last_commanded_dy = move_speed_sim * 0.707
-                key_pressed_for_movement = True
 
             if rendering_system.is_key_pressed(KEY_SPACE):
                 animation_mode = (
@@ -165,7 +170,7 @@ if __name__ == "__main__":
                     last_commanded_dy = 0.0
                 rendering_system.update_animation_direction_for_object(
                     obj_id=demo_obj_id,
-                    display_id=current_display_id,
+                    object_layer_id=current_object_layer_id,
                     current_dx=last_commanded_dx,
                     current_dy=last_commanded_dy,
                     animation_mode=animation_mode,
@@ -175,7 +180,7 @@ if __name__ == "__main__":
 
             rendering_system.update_animation_direction_for_object(
                 obj_id=demo_obj_id,
-                display_id=current_display_id,
+                object_layer_id=current_object_layer_id,
                 current_dx=last_commanded_dx,
                 current_dy=last_commanded_dy,
                 animation_mode=animation_mode,
@@ -187,7 +192,7 @@ if __name__ == "__main__":
             last_commanded_dy = 0.0
             animation_mode = AnimationMode.IDLE
             anim_properties = rendering_system.get_animation_properties(
-                demo_obj_id, current_display_id
+                demo_obj_id, current_object_layer_id
             )
             if anim_properties:
                 animation_instance = anim_properties["animation_instance"]
@@ -199,7 +204,7 @@ if __name__ == "__main__":
             current_pixel_size_in_display += 1.0
             rendering_system.get_or_create_animation(
                 demo_obj_id,
-                current_display_id,
+                current_object_layer_id,
                 current_pixel_size_in_display,
                 initial_direction=demo_animation_instance.current_direction,
             )
@@ -209,23 +214,25 @@ if __name__ == "__main__":
                 current_pixel_size_in_display = 1.0
             rendering_system.get_or_create_animation(
                 demo_obj_id,
-                current_display_id,
+                current_object_layer_id,
                 current_pixel_size_in_display,
                 initial_direction=demo_animation_instance.current_direction,
             )
 
         if rendering_system.is_key_pressed(KEY_THREE):
-            current_display_id_index = (current_display_id_index + 1) % len(
-                AVAILABLE_DISPLAY_IDS
+            current_object_layer_id_index = (current_object_layer_id_index + 1) % len(
+                AVAILABLE_OBJECT_LAYER_IDS
             )
-            current_display_id = AVAILABLE_DISPLAY_IDS[current_display_id_index]
-            rendering_system.remove_animation(obj_id=demo_obj_id, display_id=None)
+            current_object_layer_id = AVAILABLE_OBJECT_LAYER_IDS[
+                current_object_layer_id_index
+            ]
+            rendering_system.remove_animation(obj_id=demo_obj_id, object_layer_id=None)
             animation_mode = AnimationMode.IDLE
             last_commanded_dx = 0.0
             last_commanded_dy = 0.0
 
             matrix_dimension = rendering_system.get_animation_matrix_dimension(
-                current_display_id
+                current_object_layer_id
             )
             current_pixel_size_in_display = OBJECT_SIZE / matrix_dimension
             if current_pixel_size_in_display == 0:
@@ -233,24 +240,26 @@ if __name__ == "__main__":
 
             demo_animation_properties = rendering_system.get_or_create_animation(
                 demo_obj_id,
-                current_display_id,
+                current_object_layer_id,
                 current_pixel_size_in_display,
                 initial_direction=Direction.DOWN,
             )
             demo_animation_instance = demo_animation_properties["animation_instance"]
 
         elif rendering_system.is_key_pressed(KEY_FOUR):
-            current_display_id_index = (
-                current_display_id_index - 1 + len(AVAILABLE_DISPLAY_IDS)
-            ) % len(AVAILABLE_DISPLAY_IDS)
-            current_display_id = AVAILABLE_DISPLAY_IDS[current_display_id_index]
-            rendering_system.remove_animation(obj_id=demo_obj_id, display_id=None)
+            current_object_layer_id_index = (
+                current_object_layer_id_index - 1 + len(AVAILABLE_OBJECT_LAYER_IDS)
+            ) % len(AVAILABLE_OBJECT_LAYER_IDS)
+            current_object_layer_id = AVAILABLE_OBJECT_LAYER_IDS[
+                current_object_layer_id_index
+            ]
+            rendering_system.remove_animation(obj_id=demo_obj_id, object_layer_id=None)
             animation_mode = AnimationMode.IDLE
             last_commanded_dx = 0.0
             last_commanded_dy = 0.0
 
             matrix_dimension = rendering_system.get_animation_matrix_dimension(
-                current_display_id
+                current_object_layer_id
             )
             current_pixel_size_in_display = OBJECT_SIZE / matrix_dimension
             if current_pixel_size_in_display == 0:
@@ -258,14 +267,14 @@ if __name__ == "__main__":
 
             demo_animation_properties = rendering_system.get_or_create_animation(
                 demo_obj_id,
-                current_display_id,
+                current_object_layer_id,
                 current_pixel_size_in_display,
                 initial_direction=Direction.DOWN,
             )
             demo_animation_instance = demo_animation_properties["animation_instance"]
 
         demo_animation_properties = rendering_system.get_animation_properties(
-            demo_obj_id, current_display_id
+            demo_obj_id, current_object_layer_id
         )
         if not demo_animation_properties:
             continue
@@ -275,7 +284,7 @@ if __name__ == "__main__":
         rendering_system.update_all_active_animations(delta_time, current_time)
 
         matrix_dimension = rendering_system.get_animation_matrix_dimension(
-            current_display_id
+            current_object_layer_id
         )
 
         total_rendered_width = current_pixel_size_in_display * matrix_dimension
@@ -289,14 +298,14 @@ if __name__ == "__main__":
 
         rendering_system.render_object_animation(
             obj_id=demo_obj_id,
-            display_id=current_display_id,
+            object_layer_id=current_object_layer_id,
             screen_x=draw_x,
             screen_y=draw_y,
             timestamp=current_time,
         )
 
         rendering_system.draw_text(
-            f"Current Display ID: {current_display_id}",
+            f"Current Object Layer ID: {current_object_layer_id}",
             10,
             10,
             20,
@@ -358,7 +367,7 @@ if __name__ == "__main__":
             Color(200, 200, 200, 255),
         )
         rendering_system.draw_text(
-            "Use '3'/'4' to change display ID",
+            "Use '3'/'4' to change object layer ID",
             10,
             165 + base_y_offset,
             15,

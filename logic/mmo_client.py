@@ -15,7 +15,8 @@ from config import (
     WORLD_HEIGHT,
     WORLD_WIDTH,
 )
-from display.rendering_system import AnimationMode, Direction, RenderingSystem
+from display.animation_data import AnimationMode, Direction
+from display.rendering_system import RenderingSystem
 from logic.game_object import GameObject
 from logic.game_state import GameState
 from logic.mock_server import MockServer
@@ -34,12 +35,16 @@ class MmoClient:
         self.ws: websocket.WebSocketApp | None = None
         self.ws_thread: threading.Thread | None = None
 
+        self.mock_server = MockServer()
+        animation_data = self.mock_server.get_animation_data()
+
         self.rendering_system = RenderingSystem(
             screen_width=SCREEN_WIDTH,
             screen_height=SCREEN_HEIGHT,
             world_width=WORLD_WIDTH,
             world_height=WORLD_HEIGHT,
             object_size=OBJECT_SIZE,
+            animation_data=animation_data,
             title="Python MMO Client",
             target_fps=60,
         )
@@ -53,8 +58,6 @@ class MmoClient:
         self.connection_ready_event = threading.Event()
 
         self.my_player_path_for_gfx: list[dict[str, float]] = []
-
-        self.mock_server = MockServer()
 
     def _on_message(self, ws: websocket.WebSocketApp, message: str):
         try:
@@ -83,11 +86,11 @@ class MmoClient:
         logging.info("Connected to server via Pure WebSocket!")
         self.connection_ready_event.set()
 
-        if self.my_player_id is None and not self.game_state.get_all_objects():
-            logging.info("Simulating initial server state with all object types...")
-            initial_state_data = self.mock_server.generate_initial_state_dict()
-            with self.message_queue_lock:
-                self.message_queue.append(initial_state_data)
+        # Simulate initial server state with all object types
+        logging.info("Simulating initial server state with all object types...")
+        initial_state_data = self.mock_server.generate_initial_state_dict()
+        with self.message_queue_lock:
+            self.message_queue.append(initial_state_data)
 
     def _process_queued_messages(self):
         with self.message_queue_lock:
@@ -100,12 +103,15 @@ class MmoClient:
     def _handle_server_message(self, data: dict):
         msg_type = data.get("type")
         if msg_type == "instance_state_update":
-            display_ids_to_remove_from_rendering_system = self.game_state.from_dict(
-                data
+            object_layer_ids_to_remove_from_rendering_system = (
+                self.game_state.from_dict(data)
             )
 
-            for obj_id, display_id in display_ids_to_remove_from_rendering_system:
-                self.rendering_system.remove_animation(obj_id, display_id)
+            for (
+                obj_id,
+                object_layer_id,
+            ) in object_layer_ids_to_remove_from_rendering_system:
+                self.rendering_system.remove_animation(obj_id, object_layer_id)
 
             with self.game_state.lock:
                 if self.my_player_id and self.my_player_id in self.game_state.objects:
@@ -159,7 +165,7 @@ class MmoClient:
             )
 
     def _generate_path_gfx(self, path: list[dict[str, float]], current_time: float):
-        display_ids_to_remove_from_rendering_system = []
+        object_layer_ids_to_remove_from_rendering_system = []
 
         obj_ids_to_remove = [
             obj_id
@@ -169,22 +175,22 @@ class MmoClient:
         ]
         for obj_id in obj_ids_to_remove:
             obj_to_remove = self.game_state.remove_game_object(obj_id)
-            if obj_to_remove and obj_to_remove.display_ids:
-                for display_id in obj_to_remove.display_ids:
-                    display_ids_to_remove_from_rendering_system.append(
-                        (obj_id, display_id)
+            if obj_to_remove and obj_to_remove.object_layer_ids:
+                for object_layer_id in obj_to_remove.object_layer_ids:
+                    object_layer_ids_to_remove_from_rendering_system.append(
+                        (obj_id, object_layer_id)
                     )
 
         logging.debug(
-            f"Clearing {len(display_ids_to_remove_from_rendering_system)} old path points."
+            f"Clearing {len(object_layer_ids_to_remove_from_rendering_system)} old path points."
         )
 
         new_path_objects = self.mock_server.generate_point_path(path, current_time)
         for obj in new_path_objects:
             self.game_state.add_or_update_game_object(obj)
 
-        for obj_id, display_id in display_ids_to_remove_from_rendering_system:
-            self.rendering_system.remove_animation(obj_id, display_id)
+        for obj_id, object_layer_id in object_layer_ids_to_remove_from_rendering_system:
+            self.rendering_system.remove_animation(obj_id, object_layer_id)
 
     def run(self):
         logging.info(f"Connecting to WebSocket server at {self.websocket_url}")
@@ -214,17 +220,20 @@ class MmoClient:
 
             self._process_queued_messages()
 
-            display_ids_to_remove_from_rendering_system = []
+            object_layer_ids_to_remove_from_rendering_system = []
             with self.game_state.lock:
-                display_ids_to_remove_from_rendering_system = (
+                object_layer_ids_to_remove_from_rendering_system = (
                     self.game_state.cleanup_expired_objects(current_time)
                 )
-            for obj_id, display_id in display_ids_to_remove_from_rendering_system:
-                self.rendering_system.remove_animation(obj_id, display_id)
+            for (
+                obj_id,
+                object_layer_id,
+            ) in object_layer_ids_to_remove_from_rendering_system:
+                self.rendering_system.remove_animation(obj_id, object_layer_id)
 
             object_movement_deltas = {}
             with self.game_state.lock:
-                for obj_id, obj in list(self.game_state.objects.items()):
+                for obj_id, obj in self.game_state.objects.items():
                     dx, dy = obj.update_position(delta_time)
                     object_movement_deltas[obj_id] = (dx, dy)
 
@@ -243,7 +252,7 @@ class MmoClient:
                 }
                 self.send_message("client_move_request", move_request_payload)
 
-                display_ids_to_remove_from_rendering_system_click = []
+                object_layer_ids_to_remove_from_rendering_system_click = []
                 with self.game_state.lock:
                     obj_ids_to_remove = [
                         obj_id
@@ -252,10 +261,10 @@ class MmoClient:
                     ]
                     for obj_id in obj_ids_to_remove:
                         obj_to_remove = self.game_state.remove_game_object(obj_id)
-                        if obj_to_remove and obj_to_remove.display_ids:
-                            for display_id in obj_to_remove.display_ids:
-                                display_ids_to_remove_from_rendering_system_click.append(
-                                    (obj_id, display_id)
+                        if obj_to_remove and obj_to_remove.object_layer_ids:
+                            for object_layer_id in obj_to_remove.object_layer_ids:
+                                object_layer_ids_to_remove_from_rendering_system_click.append(
+                                    (obj_id, object_layer_id)
                                 )
 
                     new_click_pointer = self.mock_server.generate_click_pointer(
@@ -266,9 +275,9 @@ class MmoClient:
 
                 for (
                     obj_id,
-                    display_id,
-                ) in display_ids_to_remove_from_rendering_system_click:
-                    self.rendering_system.remove_animation(obj_id, display_id)
+                    object_layer_id,
+                ) in object_layer_ids_to_remove_from_rendering_system_click:
+                    self.rendering_system.remove_animation(obj_id, object_layer_id)
 
             self.rendering_system.begin_drawing()
             self.rendering_system.clear_background(RAYWHITE)

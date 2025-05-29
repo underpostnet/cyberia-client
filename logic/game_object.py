@@ -3,7 +3,7 @@ import math
 
 from raylibpy import Color
 
-from config import OBJECT_TYPE_DEFAULT_DISPLAY_IDS, SERVER_PRIORITY_OBJECT_TYPES
+from config import OBJECT_TYPE_DEFAULT_OBJECT_LAYER_IDS
 
 logging.basicConfig(
     level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s"
@@ -20,8 +20,9 @@ class GameObject:
         is_obstacle: bool = False,
         speed: float = 200.0,
         object_type: str = "UNKNOWN",
-        display_ids: list[str] | None = None,
-        _decay_time: float | None = None,
+        object_layer_ids: list[str] | None = None,
+        decay_time: float | None = None,
+        is_persistent: bool = True,  # New flag for object persistence
     ):
         self.obj_id = obj_id
         self.x = x
@@ -31,10 +32,12 @@ class GameObject:
         self.speed = speed
         self.object_type = object_type.upper()
 
-        if display_ids is None:
-            self.display_ids = OBJECT_TYPE_DEFAULT_DISPLAY_IDS.get(self.object_type, [])
+        if object_layer_ids is None:
+            self.object_layer_ids = OBJECT_TYPE_DEFAULT_OBJECT_LAYER_IDS.get(
+                self.object_type, []
+            )
         else:
-            self.display_ids = display_ids
+            self.object_layer_ids = object_layer_ids
 
         self.path: list[dict[str, float]] = []
         self.path_index = 0
@@ -42,11 +45,8 @@ class GameObject:
         self._prev_x = x
         self._prev_y = y
 
-        self._decay_time = _decay_time
-
-    @property
-    def server_priority(self) -> bool:
-        return SERVER_PRIORITY_OBJECT_TYPES.get(self.object_type, False)
+        self._decay_time = decay_time
+        self.is_persistent = is_persistent
 
     @property
     def decay_time(self) -> float | None:
@@ -109,7 +109,11 @@ class GameObject:
         is_obstacle = data.get("is_obstacle", False)
         speed = data.get("speed", 200.0)
         object_type = data.get("object_type", "UNKNOWN")
-        display_ids_from_server = data.get("display_ids")
+        object_layer_ids_from_server = data.get("object_layer_ids")
+        decay_time = data.get("decay_time")
+        is_persistent = data.get(
+            "is_persistent", True
+        )  # Default to True for server objects
 
         obj = cls(
             obj_id=obj_id,
@@ -119,8 +123,9 @@ class GameObject:
             is_obstacle=is_obstacle,
             speed=speed,
             object_type=object_type,
-            display_ids=display_ids_from_server,
-            _decay_time=None,
+            object_layer_ids=object_layer_ids_from_server,
+            decay_time=decay_time,
+            is_persistent=is_persistent,
         )
         if "path" in data:
             obj.set_path(data["path"])
@@ -138,5 +143,8 @@ class GameObject:
             "is_obstacle": self.is_obstacle,
             "speed": self.speed,
             "object_type": self.object_type,
+            "object_layer_ids": self.object_layer_ids,
             "path": self.path,
+            "decay_time": self._decay_time,
+            "is_persistent": self.is_persistent,
         }

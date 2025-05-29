@@ -7,10 +7,15 @@ from raylibpy import Color
 
 from config import (
     OBJECT_SIZE,
-    OBJECT_TYPE_DEFAULT_DISPLAY_IDS,
+    OBJECT_TYPE_DEFAULT_OBJECT_LAYER_IDS,
     WORLD_HEIGHT,
     WORLD_WIDTH,
 )
+from display.animation_data import (
+    ANIMATION_DATA,
+    AnimationMode,
+    Direction,
+)  # Import ANIMATION_DATA
 from logic.game_object import GameObject
 
 logging.basicConfig(
@@ -21,6 +26,15 @@ logging.basicConfig(
 class MockServer:
     def __init__(self):
         logging.info("MockServer initialized.")
+        # Use the imported ANIMATION_DATA
+        self.animation_data = ANIMATION_DATA
+
+    def get_animation_data(self) -> dict:
+        """
+        Emulates a server providing animation asset data.
+        In a real scenario, this would involve database queries or asset loading.
+        """
+        return self.animation_data
 
     def generate_initial_state_dict(self) -> dict:
         initial_objects = {}
@@ -34,7 +48,8 @@ class MockServer:
             object_type="PLAYER",
             is_obstacle=False,
             speed=200.0,
-            display_ids=OBJECT_TYPE_DEFAULT_DISPLAY_IDS["PLAYER"],
+            object_layer_ids=OBJECT_TYPE_DEFAULT_OBJECT_LAYER_IDS["PLAYER"],
+            is_persistent=True,  # Player objects are persistent
         ).to_dict()
 
         wall_count = 5
@@ -49,7 +64,8 @@ class MockServer:
                 color=Color(100, 100, 100, 255),
                 object_type="WALL",
                 is_obstacle=True,
-                display_ids=OBJECT_TYPE_DEFAULT_DISPLAY_IDS["WALL"],
+                object_layer_ids=OBJECT_TYPE_DEFAULT_OBJECT_LAYER_IDS["WALL"],
+                is_persistent=True,  # Wall objects are persistent
             ).to_dict()
 
         logging.info(f"Generated initial state with {len(initial_objects)} objects.")
@@ -73,8 +89,9 @@ class MockServer:
                 object_type="POINT_PATH",
                 is_obstacle=False,
                 speed=0.0,
-                display_ids=OBJECT_TYPE_DEFAULT_DISPLAY_IDS["POINT_PATH"],
-                _decay_time=current_time + decay_duration,
+                object_layer_ids=OBJECT_TYPE_DEFAULT_OBJECT_LAYER_IDS["POINT_PATH"],
+                decay_time=current_time + decay_duration,
+                is_persistent=False,  # Path points are not persistent
             )
             path_objects.append(path_object)
         return path_objects
@@ -92,7 +109,8 @@ class MockServer:
             object_type="CLICK_POINTER",
             is_obstacle=False,
             speed=0.0,
-            display_ids=OBJECT_TYPE_DEFAULT_DISPLAY_IDS["CLICK_POINTER"],
-            _decay_time=current_time + decay_duration,
+            object_layer_ids=OBJECT_TYPE_DEFAULT_OBJECT_LAYER_IDS["CLICK_POINTER"],
+            decay_time=current_time + decay_duration,
+            is_persistent=False,  # Click pointers are not persistent
         )
         return click_pointer

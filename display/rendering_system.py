@@ -31,124 +31,12 @@ from raylibpy import (
 )
 
 from config import CAMERA_SMOOTHNESS, DIRECTION_HISTORY_LENGTH
-from display.building.wall import (
-    BUILDING_WALL_ANIMATION_SPEED,
-    BUILDING_WALL_MAP_COLORS,
-    BUILDING_WALL_MATRIX_00,
-)
-from display.gfx.click_pointer import (
-    GFX_CLICK_POINTER_ANIMATION_SPEED,
-    GFX_CLICK_POINTER_MAP_COLORS,
-    GFX_CLICK_POINTER_MATRIX_00,
-    GFX_CLICK_POINTER_MATRIX_01,
-    GFX_CLICK_POINTER_MATRIX_02,
-)
-from display.gfx.point_path import (
-    GFX_POINT_PATH_ANIMATION_SPEED,
-    GFX_POINT_PATH_MAP_COLORS,
-    GFX_POINT_PATH_MATRIX_00,
-)
-from display.skin.people import (
-    SKIN_PEOPLE_ANIMATION_SPEED,
-    SKIN_PEOPLE_MAP_COLORS,
-    SKIN_PEOPLE_MATRIX_02_0,
-    SKIN_PEOPLE_MATRIX_02_1,
-    SKIN_PEOPLE_MATRIX_06_0,
-    SKIN_PEOPLE_MATRIX_06_1,
-    SKIN_PEOPLE_MATRIX_08_0,
-    SKIN_PEOPLE_MATRIX_08_1,
-    SKIN_PEOPLE_MATRIX_12_0,
-    SKIN_PEOPLE_MATRIX_12_1,
-    SKIN_PEOPLE_MATRIX_16_0,
-    SKIN_PEOPLE_MATRIX_16_1,
-    SKIN_PEOPLE_MATRIX_18_0,
-    SKIN_PEOPLE_MATRIX_18_1,
-)
+from display.animation_data import ANIMATION_DATA, AnimationMode, Direction
 from logic.game_object import GameObject
 
 logging.basicConfig(
     level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s"
 )
-
-
-class Direction(Enum):
-    UP = auto()
-    UP_RIGHT = auto()
-    RIGHT = auto()
-    DOWN_RIGHT = auto()
-    DOWN = auto()
-    DOWN_LEFT = auto()
-    LEFT = auto()
-    UP_LEFT = auto()
-    NONE = auto()
-
-
-class AnimationMode(Enum):
-    IDLE = auto()
-    WALKING = auto()
-
-
-ANIMATION_DATA = {
-    "PEOPLE": {
-        "FRAMES": {
-            "UP_IDLE": [SKIN_PEOPLE_MATRIX_02_0, SKIN_PEOPLE_MATRIX_02_1],
-            "DOWN_IDLE": [SKIN_PEOPLE_MATRIX_08_0, SKIN_PEOPLE_MATRIX_08_1],
-            "RIGHT_IDLE": [SKIN_PEOPLE_MATRIX_06_0, SKIN_PEOPLE_MATRIX_06_1],
-            "LEFT_IDLE": [SKIN_PEOPLE_MATRIX_06_0, SKIN_PEOPLE_MATRIX_06_1],
-            "UP_RIGHT_IDLE": [SKIN_PEOPLE_MATRIX_06_0, SKIN_PEOPLE_MATRIX_06_1],
-            "DOWN_RIGHT_IDLE": [SKIN_PEOPLE_MATRIX_06_0, SKIN_PEOPLE_MATRIX_06_1],
-            "UP_LEFT_IDLE": [SKIN_PEOPLE_MATRIX_06_0, SKIN_PEOPLE_MATRIX_06_1],
-            "DOWN_LEFT_IDLE": [SKIN_PEOPLE_MATRIX_06_0, SKIN_PEOPLE_MATRIX_06_1],
-            "DEFAULT_IDLE": [SKIN_PEOPLE_MATRIX_08_0, SKIN_PEOPLE_MATRIX_08_1],
-            "UP_WALKING": [SKIN_PEOPLE_MATRIX_12_0, SKIN_PEOPLE_MATRIX_12_1],
-            "DOWN_WALKING": [SKIN_PEOPLE_MATRIX_18_0, SKIN_PEOPLE_MATRIX_18_1],
-            "RIGHT_WALKING": [SKIN_PEOPLE_MATRIX_16_0, SKIN_PEOPLE_MATRIX_16_1],
-            "LEFT_WALKING": [SKIN_PEOPLE_MATRIX_16_0, SKIN_PEOPLE_MATRIX_16_1],
-            "UP_RIGHT_WALKING": [SKIN_PEOPLE_MATRIX_16_0, SKIN_PEOPLE_MATRIX_16_1],
-            "DOWN_RIGHT_WALKING": [SKIN_PEOPLE_MATRIX_16_0, SKIN_PEOPLE_MATRIX_16_1],
-            "UP_LEFT_WALKING": [SKIN_PEOPLE_MATRIX_16_0, SKIN_PEOPLE_MATRIX_16_1],
-            "DOWN_LEFT_WALKING": [SKIN_PEOPLE_MATRIX_16_0, SKIN_PEOPLE_MATRIX_16_1],
-        },
-        "COLORS": SKIN_PEOPLE_MAP_COLORS,
-        "FRAME_DURATION": SKIN_PEOPLE_ANIMATION_SPEED,
-        "IS_STATELESS": False,
-    },
-    "CLICK_POINTER": {
-        "FRAMES": {
-            "NONE_IDLE": [
-                GFX_CLICK_POINTER_MATRIX_00,
-                GFX_CLICK_POINTER_MATRIX_01,
-                GFX_CLICK_POINTER_MATRIX_02,
-            ],
-            "DEFAULT_IDLE": [
-                GFX_CLICK_POINTER_MATRIX_00,
-                GFX_CLICK_POINTER_MATRIX_01,
-                GFX_CLICK_POINTER_MATRIX_02,
-            ],
-        },
-        "COLORS": GFX_CLICK_POINTER_MAP_COLORS,
-        "FRAME_DURATION": GFX_CLICK_POINTER_ANIMATION_SPEED,
-        "IS_STATELESS": True,
-    },
-    "POINT_PATH": {
-        "FRAMES": {
-            "NONE_IDLE": [GFX_POINT_PATH_MATRIX_00],
-            "DEFAULT_IDLE": [GFX_POINT_PATH_MATRIX_00],
-        },
-        "COLORS": GFX_POINT_PATH_MAP_COLORS,
-        "FRAME_DURATION": GFX_POINT_PATH_ANIMATION_SPEED,
-        "IS_STATELESS": True,
-    },
-    "WALL": {
-        "FRAMES": {
-            "NONE_IDLE": [BUILDING_WALL_MATRIX_00],
-            "DEFAULT_IDLE": [BUILDING_WALL_MATRIX_00],
-        },
-        "COLORS": BUILDING_WALL_MAP_COLORS,
-        "FRAME_DURATION": BUILDING_WALL_ANIMATION_SPEED,
-        "IS_STATELESS": True,
-    },
-}
 
 
 class Animation:
@@ -278,6 +166,7 @@ class RenderingSystem:
         world_width: int,
         world_height: int,
         object_size: int,
+        animation_data: dict,
         title: str = "Raylib Application",
         target_fps: int = 60,
     ):
@@ -306,6 +195,7 @@ class RenderingSystem:
             tuple[str, str], collections.deque[Direction]
         ] = {}
         self._rendered_object_positions: dict[str, Vector2] = {}
+        self.animation_data = animation_data
         logging.info("RenderingSystem initialized.")
 
     def begin_drawing(self):
@@ -375,14 +265,14 @@ class RenderingSystem:
         for y in range(0, self.world_height + 1, self.object_size):
             self.draw_line(0, y, self.world_width, y, LIGHTGRAY)
 
-    def get_animation_data(self, display_id: str) -> dict | None:
-        return ANIMATION_DATA.get(display_id)
+    def get_object_layer_data(self, object_layer_id: str) -> dict | None:
+        return self.animation_data.get(object_layer_id)
 
-    def get_animation_matrix_dimension(self, display_id: str) -> int:
-        animation_info = self.get_animation_data(display_id)
+    def get_animation_matrix_dimension(self, object_layer_id: str) -> int:
+        animation_info = self.get_object_layer_data(object_layer_id)
         if not animation_info:
             logging.warning(
-                f"No animation data found for {display_id}. Cannot determine dimensions."
+                f"No animation data found for {object_layer_id}. Cannot determine dimensions."
             )
             return 1
 
@@ -399,7 +289,7 @@ class RenderingSystem:
             return len(first_frame)
         else:
             logging.warning(
-                f"Could not determine matrix dimension for {display_id}. Returning 1."
+                f"Could not determine matrix dimension for {object_layer_id}. Returning 1."
             )
             return 1
 
@@ -410,7 +300,7 @@ class RenderingSystem:
         current_dx: float,
         current_dy: float,
     ):
-        display_ids_to_use = game_object.display_ids
+        object_layer_ids_to_use = game_object.object_layer_ids
 
         target_world_pos = Vector2(game_object.x, game_object.y)
 
@@ -427,7 +317,7 @@ class RenderingSystem:
         draw_x_base = smoothed_pos.x
         draw_y_base = smoothed_pos.y
 
-        if not display_ids_to_use:
+        if not object_layer_ids_to_use:
             self.draw_rectangle(
                 int(draw_x_base),
                 int(draw_y_base),
@@ -448,30 +338,30 @@ class RenderingSystem:
         if game_object.path and game_object.path_index < len(game_object.path):
             animation_mode = AnimationMode.WALKING
 
-        for display_id in display_ids_to_use:
-            animation_info = self.get_animation_data(display_id)
+        for object_layer_id in object_layer_ids_to_use:
+            animation_info = self.get_object_layer_data(object_layer_id)
             if not animation_info:
                 logging.warning(
-                    f"No animation info found for display ID: {display_id}. Skipping rendering for {game_object.obj_id}."
+                    f"No animation info found for object layer ID: {object_layer_id}. Skipping rendering for {game_object.obj_id}."
                 )
                 continue
 
-            matrix_dimension = self.get_animation_matrix_dimension(display_id)
-            target_display_size_pixels = self.object_size / matrix_dimension
-            if target_display_size_pixels == 0:
-                target_display_size_pixels = 1
+            matrix_dimension = self.get_animation_matrix_dimension(object_layer_id)
+            target_object_layer_size_pixels = self.object_size / matrix_dimension
+            if target_object_layer_size_pixels == 0:
+                target_object_layer_size_pixels = 1
 
             self.get_or_create_animation(
                 obj_id=game_object.obj_id,
-                display_id=display_id,
-                target_display_size_pixels=target_display_size_pixels,
+                object_layer_id=object_layer_id,
+                target_object_layer_size_pixels=target_object_layer_size_pixels,
                 initial_direction=Direction.DOWN,
             )
 
             if not animation_info["IS_STATELESS"]:
                 self.update_animation_direction_for_object(
                     obj_id=game_object.obj_id,
-                    display_id=display_id,
+                    object_layer_id=object_layer_id,
                     current_dx=current_dx,
                     current_dy=current_dy,
                     animation_mode=animation_mode,
@@ -479,7 +369,7 @@ class RenderingSystem:
                 )
             else:
                 anim_properties = self.get_animation_properties(
-                    game_object.obj_id, display_id
+                    game_object.obj_id, object_layer_id
                 )
                 if anim_properties:
                     animation_instance = anim_properties["animation_instance"]
@@ -492,7 +382,7 @@ class RenderingSystem:
 
             self.render_object_animation(
                 obj_id=game_object.obj_id,
-                display_id=display_id,
+                object_layer_id=object_layer_id,
                 screen_x=draw_x,
                 screen_y=draw_y,
                 timestamp=current_timestamp,
@@ -543,36 +433,38 @@ class RenderingSystem:
     def get_or_create_animation(
         self,
         obj_id: str,
-        display_id: str,
-        target_display_size_pixels: float,
+        object_layer_id: str,
+        target_object_layer_size_pixels: float,
         initial_direction: Direction,
     ) -> dict:
-        anim_key = f"{obj_id}_{display_id}"
+        anim_key = f"{obj_id}_{object_layer_id}"
         current_cached_props = self._animation_instances.get(anim_key)
 
         if current_cached_props:
             if (
-                current_cached_props["display_id"] == display_id
-                and current_cached_props["target_display_size_pixels"]
-                != target_display_size_pixels
+                current_cached_props["object_layer_id"] == object_layer_id
+                and current_cached_props["target_object_layer_size_pixels"]
+                != target_object_layer_size_pixels
             ):
-                current_cached_props["target_display_size_pixels"] = (
-                    target_display_size_pixels
+                current_cached_props["target_object_layer_size_pixels"] = (
+                    target_object_layer_size_pixels
                 )
                 logging.debug(
-                    f"Updated display size for existing animation '{anim_key}'."
+                    f"Updated object layer size for existing animation '{anim_key}'."
                 )
                 return current_cached_props
             elif (
-                current_cached_props["display_id"] == display_id
-                and current_cached_props["target_display_size_pixels"]
-                == target_display_size_pixels
+                current_cached_props["object_layer_id"] == object_layer_id
+                and current_cached_props["target_object_layer_size_pixels"]
+                == target_object_layer_size_pixels
             ):
                 return current_cached_props
 
-        animation_info = self.get_animation_data(display_id)
+        animation_info = self.get_object_layer_data(object_layer_id)
         if not animation_info:
-            raise ValueError(f"No animation data found for display ID '{display_id}'.")
+            raise ValueError(
+                f"No animation data found for object layer ID '{object_layer_id}'."
+            )
 
         animation_instance = Animation(
             frames_map=animation_info["FRAMES"],
@@ -582,15 +474,15 @@ class RenderingSystem:
         )
         self._animation_instances[anim_key] = {
             "animation_instance": animation_instance,
-            "target_display_size_pixels": target_display_size_pixels,
-            "display_id": display_id,
+            "target_object_layer_size_pixels": target_object_layer_size_pixels,
+            "object_layer_id": object_layer_id,
         }
         logging.info(
-            f"Created new animation for obj_id '{obj_id}' with display ID '{display_id}'"
+            f"Created new animation for obj_id '{obj_id}' with object layer ID '{object_layer_id}'"
         )
 
         if not animation_info["IS_STATELESS"]:
-            history_key = (obj_id, display_id)
+            history_key = (obj_id, object_layer_id)
             if history_key not in self._animation_direction_histories:
                 self._animation_direction_histories[history_key] = collections.deque(
                     maxlen=DIRECTION_HISTORY_LENGTH
@@ -604,18 +496,18 @@ class RenderingSystem:
                         initial_direction
                     )
         else:
-            history_key = (obj_id, display_id)
+            history_key = (obj_id, object_layer_id)
             if history_key in self._animation_direction_histories:
                 del self._animation_direction_histories[history_key]
 
         return self._animation_instances[anim_key]
 
-    def remove_animation(self, obj_id: str, display_id: str | None = None):
+    def remove_animation(self, obj_id: str, object_layer_id: str | None = None):
         keys_to_remove = []
-        if display_id:
-            anim_key = f"{obj_id}_{display_id}"
+        if object_layer_id:
+            anim_key = f"{obj_id}_{object_layer_id}"
             if anim_key in self._animation_instances:
-                keys_to_remove.append((anim_key, (obj_id, display_id)))
+                keys_to_remove.append((anim_key, (obj_id, object_layer_id)))
         else:
             for key in list(self._animation_instances.keys()):
                 if key.startswith(f"{obj_id}_"):
@@ -642,14 +534,14 @@ class RenderingSystem:
     def update_animation_direction_for_object(
         self,
         obj_id: str,
-        display_id: str,
+        object_layer_id: str,
         current_dx: float,
         current_dy: float,
         animation_mode: AnimationMode,
         timestamp: float,
         reverse: bool = False,
     ):
-        history_key = (obj_id, display_id)
+        history_key = (obj_id, object_layer_id)
         direction_history = self._animation_direction_histories.get(history_key)
 
         if not direction_history:
@@ -717,7 +609,7 @@ class RenderingSystem:
             if animation_mode == AnimationMode.IDLE:
                 smoothed_direction = Direction.DOWN
 
-        anim_key = f"{obj_id}_{display_id}"
+        anim_key = f"{obj_id}_{object_layer_id}"
         anim_properties = self._animation_instances.get(anim_key)
         if anim_properties:
             animation_instance = anim_properties["animation_instance"]
@@ -732,27 +624,31 @@ class RenderingSystem:
             animation_instance = anim_properties["animation_instance"]
             animation_instance.update(dt=delta_time, timestamp=current_timestamp)
 
-    def get_animation_properties(self, obj_id: str, display_id: str) -> dict | None:
-        anim_key = f"{obj_id}_{display_id}"
+    def get_animation_properties(
+        self, obj_id: str, object_layer_id: str
+    ) -> dict | None:
+        anim_key = f"{obj_id}_{object_layer_id}"
         return self._animation_instances.get(anim_key)
 
     def render_object_animation(
         self,
         obj_id: str,
-        display_id: str,
+        object_layer_id: str,
         screen_x: float,
         screen_y: float,
         timestamp: float,
     ):
-        anim_properties = self.get_animation_properties(obj_id, display_id)
+        anim_properties = self.get_animation_properties(obj_id, object_layer_id)
         if not anim_properties:
             logging.warning(
-                f"No animation found for object ID: {obj_id} and display ID: {display_id}. Cannot render."
+                f"No animation found for object ID: {obj_id} and object layer ID: {object_layer_id}. Cannot render."
             )
             return
 
         animation_instance = anim_properties["animation_instance"]
-        target_display_size_pixels = anim_properties["target_display_size_pixels"]
+        target_object_layer_size_pixels = anim_properties[
+            "target_object_layer_size_pixels"
+        ]
 
         frame_matrix, color_map, flip_horizontal, current_frame_index = (
             animation_instance.get_current_frame_data(timestamp)
@@ -763,6 +659,6 @@ class RenderingSystem:
             color_map=color_map,
             screen_x=screen_x,
             screen_y=screen_y,
-            pixel_size_in_display=target_display_size_pixels,
+            pixel_size_in_display=target_object_layer_size_pixels,
             flip_horizontal=flip_horizontal,
         )
