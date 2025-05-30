@@ -1,4 +1,5 @@
 import logging
+import random
 from enum import Enum, auto
 
 # This file centralizes object layer data, enums, and related constants.
@@ -63,67 +64,94 @@ class ObjectLayerMode(Enum):
     WALKING = auto()
 
 
+def _generate_seed_data() -> dict:
+    """Generates random integer values between 0 and 10 for seed data attributes."""
+    return {
+        "EFFECT": random.randint(0, 10),
+        "RESISTANCE": random.randint(0, 10),
+        "AGILITY": random.randint(0, 10),
+        "RANGE": random.randint(0, 10),
+        "INTELLIGENCE": random.randint(0, 10),
+        "UTILITY": random.randint(0, 10),
+    }
+
+
 OBJECT_LAYER_DATA = {
     "PEOPLE": {
-        "FRAMES": {
-            "UP_IDLE": [SKIN_PEOPLE_MATRIX_02_0, SKIN_PEOPLE_MATRIX_02_1],
-            "DOWN_IDLE": [SKIN_PEOPLE_MATRIX_08_0, SKIN_PEOPLE_MATRIX_08_1],
-            "RIGHT_IDLE": [SKIN_PEOPLE_MATRIX_06_0, SKIN_PEOPLE_MATRIX_06_1],
-            "LEFT_IDLE": [SKIN_PEOPLE_MATRIX_06_0, SKIN_PEOPLE_MATRIX_06_1],
-            "UP_RIGHT_IDLE": [SKIN_PEOPLE_MATRIX_06_0, SKIN_PEOPLE_MATRIX_06_1],
-            "DOWN_RIGHT_IDLE": [SKIN_PEOPLE_MATRIX_06_0, SKIN_PEOPLE_MATRIX_06_1],
-            "UP_LEFT_IDLE": [SKIN_PEOPLE_MATRIX_06_0, SKIN_PEOPLE_MATRIX_06_1],
-            "DOWN_LEFT_IDLE": [SKIN_PEOPLE_MATRIX_06_0, SKIN_PEOPLE_MATRIX_06_1],
-            "DEFAULT_IDLE": [
-                SKIN_PEOPLE_MATRIX_08_0,
-                SKIN_PEOPLE_MATRIX_08_1,
-            ],  # Fallback
-            "UP_WALKING": [SKIN_PEOPLE_MATRIX_12_0, SKIN_PEOPLE_MATRIX_12_1],
-            "DOWN_WALKING": [SKIN_PEOPLE_MATRIX_18_0, SKIN_PEOPLE_MATRIX_18_1],
-            "RIGHT_WALKING": [SKIN_PEOPLE_MATRIX_16_0, SKIN_PEOPLE_MATRIX_16_1],
-            "LEFT_WALKING": [SKIN_PEOPLE_MATRIX_16_0, SKIN_PEOPLE_MATRIX_16_1],
-            "UP_RIGHT_WALKING": [SKIN_PEOPLE_MATRIX_16_0, SKIN_PEOPLE_MATRIX_16_1],
-            "DOWN_RIGHT_WALKING": [SKIN_PEOPLE_MATRIX_16_0, SKIN_PEOPLE_MATRIX_16_1],
-            "UP_LEFT_WALKING": [SKIN_PEOPLE_MATRIX_16_0, SKIN_PEOPLE_MATRIX_16_1],
-            "DOWN_LEFT_WALKING": [SKIN_PEOPLE_MATRIX_16_0, SKIN_PEOPLE_MATRIX_16_1],
+        "RENDER_DATA": {
+            "FRAMES": {
+                "UP_IDLE": [SKIN_PEOPLE_MATRIX_02_0, SKIN_PEOPLE_MATRIX_02_1],
+                "DOWN_IDLE": [SKIN_PEOPLE_MATRIX_08_0, SKIN_PEOPLE_MATRIX_08_1],
+                "RIGHT_IDLE": [SKIN_PEOPLE_MATRIX_06_0, SKIN_PEOPLE_MATRIX_06_1],
+                "LEFT_IDLE": [SKIN_PEOPLE_MATRIX_06_0, SKIN_PEOPLE_MATRIX_06_1],
+                "UP_RIGHT_IDLE": [SKIN_PEOPLE_MATRIX_06_0, SKIN_PEOPLE_MATRIX_06_1],
+                "DOWN_RIGHT_IDLE": [SKIN_PEOPLE_MATRIX_06_0, SKIN_PEOPLE_MATRIX_06_1],
+                "UP_LEFT_IDLE": [SKIN_PEOPLE_MATRIX_06_0, SKIN_PEOPLE_MATRIX_06_1],
+                "DOWN_LEFT_IDLE": [SKIN_PEOPLE_MATRIX_06_0, SKIN_PEOPLE_MATRIX_06_1],
+                "DEFAULT_IDLE": [
+                    SKIN_PEOPLE_MATRIX_08_0,
+                    SKIN_PEOPLE_MATRIX_08_1,
+                ],  # Fallback
+                "UP_WALKING": [SKIN_PEOPLE_MATRIX_12_0, SKIN_PEOPLE_MATRIX_12_1],
+                "DOWN_WALKING": [SKIN_PEOPLE_MATRIX_18_0, SKIN_PEOPLE_MATRIX_18_1],
+                "RIGHT_WALKING": [SKIN_PEOPLE_MATRIX_16_0, SKIN_PEOPLE_MATRIX_16_1],
+                "LEFT_WALKING": [SKIN_PEOPLE_MATRIX_16_0, SKIN_PEOPLE_MATRIX_16_1],
+                "UP_RIGHT_WALKING": [SKIN_PEOPLE_MATRIX_16_0, SKIN_PEOPLE_MATRIX_16_1],
+                "DOWN_RIGHT_WALKING": [
+                    SKIN_PEOPLE_MATRIX_16_0,
+                    SKIN_PEOPLE_MATRIX_16_1,
+                ],
+                "UP_LEFT_WALKING": [SKIN_PEOPLE_MATRIX_16_0, SKIN_PEOPLE_MATRIX_16_1],
+                "DOWN_LEFT_WALKING": [SKIN_PEOPLE_MATRIX_16_0, SKIN_PEOPLE_MATRIX_16_1],
+            },
+            "COLORS": SKIN_PEOPLE_MAP_COLORS,
+            "FRAME_DURATION": SKIN_PEOPLE_ANIMATION_SPEED,
+            "IS_STATELESS": False,  # People animations have state (direction, mode)
         },
-        "COLORS": SKIN_PEOPLE_MAP_COLORS,
-        "FRAME_DURATION": SKIN_PEOPLE_ANIMATION_SPEED,
-        "IS_STATELESS": False,  # People animations have state (direction, mode)
+        "SEED_DATA": _generate_seed_data(),
     },
     "CLICK_POINTER": {
-        "FRAMES": {
-            "NONE_IDLE": [  # Stateless animations use NONE_IDLE or DEFAULT_IDLE
-                GFX_CLICK_POINTER_MATRIX_00,
-                GFX_CLICK_POINTER_MATRIX_01,
-                GFX_CLICK_POINTER_MATRIX_02,
-            ],
-            "DEFAULT_IDLE": [  # Fallback
-                GFX_CLICK_POINTER_MATRIX_00,
-                GFX_CLICK_POINTER_MATRIX_01,
-                GFX_CLICK_POINTER_MATRIX_02,
-            ],
+        "RENDER_DATA": {
+            "FRAMES": {
+                "NONE_IDLE": [  # Stateless animations use NONE_IDLE or DEFAULT_IDLE
+                    GFX_CLICK_POINTER_MATRIX_00,
+                    GFX_CLICK_POINTER_MATRIX_01,
+                    GFX_CLICK_POINTER_MATRIX_02,
+                ],
+                "DEFAULT_IDLE": [  # Fallback
+                    GFX_CLICK_POINTER_MATRIX_00,
+                    GFX_CLICK_POINTER_MATRIX_01,
+                    GFX_CLICK_POINTER_MATRIX_02,
+                ],
+            },
+            "COLORS": GFX_CLICK_POINTER_MAP_COLORS,
+            "FRAME_DURATION": GFX_CLICK_POINTER_ANIMATION_SPEED,
+            "IS_STATELESS": True,  # Click pointer animation is stateless
         },
-        "COLORS": GFX_CLICK_POINTER_MAP_COLORS,
-        "FRAME_DURATION": GFX_CLICK_POINTER_ANIMATION_SPEED,
-        "IS_STATELESS": True,  # Click pointer animation is stateless
+        "SEED_DATA": _generate_seed_data(),
     },
     "POINT_PATH": {
-        "FRAMES": {
-            "NONE_IDLE": [GFX_POINT_PATH_MATRIX_00],
-            "DEFAULT_IDLE": [GFX_POINT_PATH_MATRIX_00],  # Fallback
+        "RENDER_DATA": {
+            "FRAMES": {
+                "NONE_IDLE": [GFX_POINT_PATH_MATRIX_00],
+                "DEFAULT_IDLE": [GFX_POINT_PATH_MATRIX_00],  # Fallback
+            },
+            "COLORS": GFX_POINT_PATH_MAP_COLORS,
+            "FRAME_DURATION": GFX_POINT_PATH_ANIMATION_SPEED,
+            "IS_STATELESS": True,  # Path points are stateless
         },
-        "COLORS": GFX_POINT_PATH_MAP_COLORS,
-        "FRAME_DURATION": GFX_POINT_PATH_ANIMATION_SPEED,
-        "IS_STATELESS": True,  # Path points are stateless
+        "SEED_DATA": _generate_seed_data(),
     },
     "WALL": {
-        "FRAMES": {
-            "NONE_IDLE": [BUILDING_WALL_MATRIX_00],
-            "DEFAULT_IDLE": [BUILDING_WALL_MATRIX_00],  # Fallback
+        "RENDER_DATA": {
+            "FRAMES": {
+                "NONE_IDLE": [BUILDING_WALL_MATRIX_00],
+                "DEFAULT_IDLE": [BUILDING_WALL_MATRIX_00],  # Fallback
+            },
+            "COLORS": BUILDING_WALL_MAP_COLORS,
+            "FRAME_DURATION": BUILDING_WALL_ANIMATION_SPEED,
+            "IS_STATELESS": True,  # Walls are static and stateless
         },
-        "COLORS": BUILDING_WALL_MAP_COLORS,
-        "FRAME_DURATION": BUILDING_WALL_ANIMATION_SPEED,
-        "IS_STATELESS": True,  # Walls are static and stateless
+        "SEED_DATA": _generate_seed_data(),
     },
 }

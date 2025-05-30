@@ -282,7 +282,9 @@ class ObjectLayerRender:
     # --- Object Layer Animation Management ---
     def get_object_layer_data_for_id(self, object_layer_id: str) -> dict | None:
         """Retrieves animation data for a specific object layer ID."""
-        return self.object_layer_data.get(object_layer_id)
+        # Access the RENDER_DATA sub-dictionary
+        object_data = self.object_layer_data.get(object_layer_id)
+        return object_data.get("RENDER_DATA") if object_data else None
 
     def get_object_layer_matrix_dimension(self, object_layer_id: str) -> int:
         """
