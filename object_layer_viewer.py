@@ -34,6 +34,7 @@ from raylibpy import (
     KEY_SEVEN,
     KEY_EIGHT,
     KEY_NINE,
+    MOUSE_BUTTON_LEFT,
 )
 
 logging.basicConfig(
@@ -165,10 +166,12 @@ if __name__ == "__main__":
 
     PALETTE_SQUARE_SIZE = 20
     PALETTE_PADDING = 10
-    PALETTE_COLS_RAINBOW = 16  # Changed to 16 columns for rainbow palette
-    PALETTE_ROWS_RAINBOW = 1  # Changed to 1 row for rainbow palette
-    PALETTE_COLS_LIGHTNESS = 16  # Explicitly set for clarity
-    PALETTE_ROWS_LIGHTNESS = 1  # Explicitly set for clarity
+    PALETTE_COLS_RAINBOW = 16
+    PALETTE_ROWS_RAINBOW = 1
+    PALETTE_COLS_LIGHTNESS = 16
+    PALETTE_ROWS_LIGHTNESS = 1
+
+    selected_color_rgb_text = ""  # Variable to store the selected color's RGB text
 
     while not object_layer_render.window_should_close():
         current_time = time.time()
@@ -387,6 +390,7 @@ if __name__ == "__main__":
             demo_object_layer_animation_instance.pause_at_frame(9, current_time)
         elif object_layer_render.is_key_pressed(KEY_ENTER):
             demo_object_layer_animation_instance.resume()
+            selected_color_rgb_text = ""  # Clear selected color text on resume
 
         # Get current animation instance properties
         demo_object_layer_properties = (
@@ -428,7 +432,7 @@ if __name__ == "__main__":
             timestamp=current_time,
         )
 
-        # Draw grid if animation is paused
+        # Draw grid and palettes only if animation is paused
         if demo_object_layer_animation_instance.is_paused:
             # Get the current frame matrix to determine its dimensions
             frame_matrix, _, _, _ = (
@@ -479,7 +483,7 @@ if __name__ == "__main__":
             # Draw the 16-color rainbow palette
             for i, color in enumerate(COLOR_PALETTE_RAINBOW):
                 col = i % PALETTE_COLS_RAINBOW
-                row = i // PALETTE_COLS_RAINBOW  # Will always be 0 for a single row
+                row = i // PALETTE_COLS_RAINBOW
 
                 square_x = rainbow_palette_start_x + col * PALETTE_SQUARE_SIZE
                 square_y = rainbow_palette_start_y + row * PALETTE_SQUARE_SIZE
@@ -517,7 +521,72 @@ if __name__ == "__main__":
                     Color(255, 255, 255, 50),
                 )
 
-        # Display UI text
+            # Eyedropper logic: Detect clicks on palettes
+            if object_layer_render.is_mouse_button_pressed(MOUSE_BUTTON_LEFT):
+                mouse_pos = object_layer_render.get_mouse_position()
+                mouse_x, mouse_y = mouse_pos.x, mouse_pos.y
+
+                # Check rainbow palette click
+                if (
+                    rainbow_palette_start_x
+                    <= mouse_x
+                    < rainbow_palette_start_x + total_palette_width
+                    and rainbow_palette_start_y
+                    <= mouse_y
+                    < rainbow_palette_start_y
+                    + (PALETTE_ROWS_RAINBOW * PALETTE_SQUARE_SIZE)
+                ):
+
+                    clicked_col = int(
+                        (mouse_x - rainbow_palette_start_x) // PALETTE_SQUARE_SIZE
+                    )
+                    clicked_row = int(
+                        (mouse_y - rainbow_palette_start_y) // PALETTE_SQUARE_SIZE
+                    )
+                    index = clicked_row * PALETTE_COLS_RAINBOW + clicked_col
+
+                    if 0 <= index < len(COLOR_PALETTE_RAINBOW):
+                        selected_color = COLOR_PALETTE_RAINBOW[index]
+                        selected_color_rgb_text = f"Selected: R:{selected_color.r} G:{selected_color.g} B:{selected_color.b}"
+
+                # Check lightness palette click
+                elif (
+                    lightness_bar_start_x
+                    <= mouse_x
+                    < lightness_bar_start_x + total_palette_width
+                    and lightness_bar_start_y
+                    <= mouse_y
+                    < lightness_bar_start_y
+                    + (PALETTE_ROWS_LIGHTNESS * PALETTE_SQUARE_SIZE)
+                ):
+
+                    clicked_col = int(
+                        (mouse_x - lightness_bar_start_x) // PALETTE_SQUARE_SIZE
+                    )
+                    clicked_row = int(
+                        (mouse_y - lightness_bar_start_y) // PALETTE_SQUARE_SIZE
+                    )
+                    index = clicked_row * PALETTE_COLS_LIGHTNESS + clicked_col
+
+                    if 0 <= index < len(COLOR_PALETTE_LIGHTNESS):
+                        selected_color = COLOR_PALETTE_LIGHTNESS[index]
+                        selected_color_rgb_text = f"Selected: R:{selected_color.r} G:{selected_color.g} B:{selected_color.b}"
+                else:
+                    selected_color_rgb_text = (
+                        ""  # Clear selection if clicked outside palettes
+                    )
+
+            # Display selected color RGB text
+            if selected_color_rgb_text:
+                object_layer_render.draw_text(
+                    selected_color_rgb_text,
+                    int(SCREEN_WIDTH - total_palette_width - PALETTE_PADDING),
+                    int(lightness_bar_start_y - PALETTE_SQUARE_SIZE - PALETTE_PADDING),
+                    15,
+                    Color(255, 255, 255, 255),
+                )
+
+        # Display UI text (top-left)
         object_layer_render.draw_text(
             f"Current Object Layer ID: {current_object_layer_id}",
             10,
@@ -535,7 +604,7 @@ if __name__ == "__main__":
                 15,
                 Color(200, 200, 200, 255),
             )
-            base_y_offset = -70  # Adjust UI position for stateless info
+            base_y_offset = -70
         else:
             object_layer_render.draw_text(
                 f"Direction: {demo_object_layer_animation_instance.current_direction.name}",
