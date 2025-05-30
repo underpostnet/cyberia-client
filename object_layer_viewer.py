@@ -6,7 +6,6 @@ from object_layer.object_layer_data import OBJECT_LAYER_DATA, ObjectLayerMode, D
 from object_layer.object_layer_render import ObjectLayerRender
 from raylibpy import (
     KEY_DOWN,
-    KEY_FOUR,
     KEY_KP_1,
     KEY_KP_2,
     KEY_KP_3,
@@ -16,13 +15,25 @@ from raylibpy import (
     KEY_KP_8,
     KEY_KP_9,
     KEY_LEFT,
-    KEY_ONE,
     KEY_RIGHT,
     KEY_SPACE,
-    KEY_THREE,
-    KEY_TWO,
     KEY_UP,
     Color,
+    KEY_Q,
+    KEY_W,
+    KEY_E,
+    KEY_R,
+    KEY_ENTER,
+    KEY_ZERO,
+    KEY_ONE,
+    KEY_TWO,
+    KEY_THREE,
+    KEY_FOUR,
+    KEY_FIVE,
+    KEY_SIX,
+    KEY_SEVEN,
+    KEY_EIGHT,
+    KEY_NINE,
 )
 
 logging.basicConfig(
@@ -97,8 +108,10 @@ if __name__ == "__main__":
         "Use arrow keys or numpad directions (e.g., 8 for UP, 6 for RIGHT) to change object layer animation direction."
     )
     print("Press SPACE to toggle object layer animation mode (IDLE/WALKING).")
-    print("Use '1' for zoom out and '2' for zoom in (changes individual pixel size).")
-    print("Use '3' to switch to the next object layer ID and '4' for the previous.")
+    print("Use 'Q' for zoom out and 'W' for zoom in (changes individual pixel size).")
+    print("Use 'E' to switch to the next object layer ID and 'R' for the previous.")
+    print("Use number keys (0-9) to pause animation at a specific frame.")
+    print("Press ENTER to resume animation.")
     print("Press ESC to close the window.")
 
     last_commanded_dx = 0.0
@@ -213,7 +226,7 @@ if __name__ == "__main__":
                 )
 
         # Handle zoom (pixel size) changes
-        if object_layer_render.is_key_pressed(KEY_TWO):
+        if object_layer_render.is_key_pressed(KEY_W):
             current_pixel_size_in_display += 1.0
             object_layer_render.get_or_create_object_layer_animation(
                 demo_obj_id,
@@ -221,7 +234,7 @@ if __name__ == "__main__":
                 current_pixel_size_in_display,
                 initial_direction=demo_object_layer_animation_instance.current_direction,
             )
-        elif object_layer_render.is_key_pressed(KEY_ONE):
+        elif object_layer_render.is_key_pressed(KEY_Q):
             current_pixel_size_in_display -= 1.0
             if current_pixel_size_in_display < 1.0:
                 current_pixel_size_in_display = 1.0
@@ -233,7 +246,7 @@ if __name__ == "__main__":
             )
 
         # Handle object layer ID changes
-        if object_layer_render.is_key_pressed(KEY_THREE):
+        if object_layer_render.is_key_pressed(KEY_E):
             current_object_layer_id_index = (current_object_layer_id_index + 1) % len(
                 AVAILABLE_OBJECT_LAYER_IDS
             )
@@ -242,7 +255,7 @@ if __name__ == "__main__":
             ]
             object_layer_render.remove_object_layer_animation(
                 obj_id=demo_obj_id, object_layer_id=None
-            )  # Remove all animations for this obj_id
+            )
             object_layer_mode = ObjectLayerMode.IDLE
             last_commanded_dx = 0.0
             last_commanded_dy = 0.0
@@ -266,7 +279,7 @@ if __name__ == "__main__":
                 "object_layer_animation_instance"
             ]
 
-        elif object_layer_render.is_key_pressed(KEY_FOUR):
+        elif object_layer_render.is_key_pressed(KEY_R):
             current_object_layer_id_index = (
                 current_object_layer_id_index - 1 + len(AVAILABLE_OBJECT_LAYER_IDS)
             ) % len(AVAILABLE_OBJECT_LAYER_IDS)
@@ -275,7 +288,7 @@ if __name__ == "__main__":
             ]
             object_layer_render.remove_object_layer_animation(
                 obj_id=demo_obj_id, object_layer_id=None
-            )  # Remove all animations for this obj_id
+            )
             object_layer_mode = ObjectLayerMode.IDLE
             last_commanded_dx = 0.0
             last_commanded_dy = 0.0
@@ -298,6 +311,30 @@ if __name__ == "__main__":
             demo_object_layer_animation_instance = demo_object_layer_properties[
                 "object_layer_animation_instance"
             ]
+
+        # Handle pausing/resuming animation
+        if object_layer_render.is_key_pressed(KEY_ZERO):
+            demo_object_layer_animation_instance.pause_at_frame(0, current_time)
+        elif object_layer_render.is_key_pressed(KEY_ONE):
+            demo_object_layer_animation_instance.pause_at_frame(1, current_time)
+        elif object_layer_render.is_key_pressed(KEY_TWO):
+            demo_object_layer_animation_instance.pause_at_frame(2, current_time)
+        elif object_layer_render.is_key_pressed(KEY_THREE):
+            demo_object_layer_animation_instance.pause_at_frame(3, current_time)
+        elif object_layer_render.is_key_pressed(KEY_FOUR):
+            demo_object_layer_animation_instance.pause_at_frame(4, current_time)
+        elif object_layer_render.is_key_pressed(KEY_FIVE):
+            demo_object_layer_animation_instance.pause_at_frame(5, current_time)
+        elif object_layer_render.is_key_pressed(KEY_SIX):
+            demo_object_layer_animation_instance.pause_at_frame(6, current_time)
+        elif object_layer_render.is_key_pressed(KEY_SEVEN):
+            demo_object_layer_animation_instance.pause_at_frame(7, current_time)
+        elif object_layer_render.is_key_pressed(KEY_EIGHT):
+            demo_object_layer_animation_instance.pause_at_frame(8, current_time)
+        elif object_layer_render.is_key_pressed(KEY_NINE):
+            demo_object_layer_animation_instance.pause_at_frame(9, current_time)
+        elif object_layer_render.is_key_pressed(KEY_ENTER):
+            demo_object_layer_animation_instance.resume()
 
         # Get current animation instance properties
         demo_object_layer_properties = (
@@ -396,14 +433,14 @@ if __name__ == "__main__":
             Color(200, 200, 200, 255),
         )
         object_layer_render.draw_text(
-            "Use '1' for zoom out and '2' for zoom in",
+            "Use 'Q' for zoom out and 'W' for zoom in",
             10,
             145 + base_y_offset,
             15,
             Color(200, 200, 200, 255),
         )
         object_layer_render.draw_text(
-            "Use '3'/'4' to change object layer ID",
+            "Use 'E'/'R' to change object layer ID",
             10,
             165 + base_y_offset,
             15,
@@ -423,6 +460,24 @@ if __name__ == "__main__":
             15,
             Color(200, 200, 200, 255),
         )
+
+        # Display pause/resume status
+        if demo_object_layer_animation_instance.is_paused:
+            object_layer_render.draw_text(
+                f"Animation PAUSED at frame {demo_object_layer_animation_instance.paused_frame_index}",
+                10,
+                230 + base_y_offset,
+                15,
+                Color(255, 0, 0, 255),
+            )
+        else:
+            object_layer_render.draw_text(
+                "Animation RUNNING (Press 0-9 to pause, ENTER to resume)",
+                10,
+                230 + base_y_offset,
+                15,
+                Color(0, 255, 0, 255),
+            )
 
         object_layer_render.draw_text(
             f"FPS: {int(1.0 / object_layer_render.get_frame_time()) if object_layer_render.get_frame_time() > 0 else 'N/A'}",

@@ -5,7 +5,27 @@ import time
 import uuid
 
 import websocket
-from raylibpy import BLACK, MOUSE_BUTTON_LEFT, RAYWHITE, Vector2
+from raylibpy import (
+    BLACK,
+    MOUSE_BUTTON_LEFT,
+    RAYWHITE,
+    Vector2,
+    KEY_ENTER,
+    KEY_ZERO,
+    KEY_ONE,
+    KEY_TWO,
+    KEY_THREE,
+    KEY_FOUR,
+    KEY_FIVE,
+    KEY_SIX,
+    KEY_SEVEN,
+    KEY_EIGHT,
+    KEY_NINE,
+    KEY_Q,
+    KEY_W,
+    KEY_E,
+    KEY_R,
+)
 
 from config import (
     CAMERA_SMOOTHNESS,
@@ -19,11 +39,9 @@ from object_layer.object_layer_data import ObjectLayerMode
 from object_layer.object_layer_render import ObjectLayerRender
 from network_state.network_object import NetworkObject
 from network_state.network_state import NetworkState
-from network_state.network_object_factory import (
-    NetworkObjectFactory,
-)
+from network_state.network_object_factory import NetworkObjectFactory
 from network_state.network_state_proxy import NetworkStateProxy
-from network_state.astar import astar  # Import astar for client-side path GFX
+from network_state.astar import astar
 
 
 logging.basicConfig(
@@ -32,19 +50,14 @@ logging.basicConfig(
 
 
 class NetworkStateClient:
-    """
-    Manages the client-side application, rendering the world and handling user input.
-    It communicates with the NetworkStateProxy for all network-related operations.
-    """
+    """Manages the client-side application, rendering the world and handling user input."""
 
     def __init__(self, host: str, port: int, ws_path: str):
         self.host = host
         self.port = port
         self.ws_path = ws_path
 
-        self.network_object_factory = (
-            NetworkObjectFactory()
-        )  # Initialize factory for client-side GFX
+        self.network_object_factory = NetworkObjectFactory()
 
         self.object_layer_render = ObjectLayerRender(
             screen_width=SCREEN_WIDTH,
@@ -52,7 +65,7 @@ class NetworkStateClient:
             world_width=WORLD_WIDTH,
             world_height=WORLD_HEIGHT,
             network_object_size=NETWORK_OBJECT_SIZE,
-            object_layer_data=self.network_object_factory.get_object_layer_data(),  # Get data from factory
+            object_layer_data=self.network_object_factory.get_object_layer_data(),
             title="Python NetworkState Client",
             target_fps=60,
         )
@@ -67,14 +80,13 @@ class NetworkStateClient:
         self.message_queue_lock = threading.Lock()
         self.connection_ready_event = threading.Event()
 
-        # Initialize the proxy, passing necessary client components
         self.proxy = NetworkStateProxy(
             host=self.host,
             port=self.port,
             ws_path=self.ws_path,
             client_message_queue=self.message_queue,
             client_connection_ready_event=self.connection_ready_event,
-            client_player_id_setter=self._set_my_player_id,  # Pass a method to set player ID
+            client_player_id_setter=self._set_my_player_id,
         )
 
     def _set_my_player_id(self, player_id: str):
@@ -95,16 +107,11 @@ class NetworkStateClient:
         msg_type = data.get("type")
         if msg_type == "network_state_update":
             if "network_objects" in data:
-                # When receiving network_state_update from proxy/server,
-                # we only want to update persistent objects.
-                # Temporary GFX objects (POINT_PATH, CLICK_POINTER) are managed client-side
-                # and should not be overwritten or removed by server updates.
-                filtered_network_objects_data = {}
-                for obj_id, obj_data in data["network_objects"].items():
-                    # Create a temporary NetworkObject instance to check its persistence
-                    temp_obj = NetworkObject.from_dict(obj_data)
-                    if temp_obj.is_persistent:
-                        filtered_network_objects_data[obj_id] = obj_data
+                filtered_network_objects_data = {
+                    obj_id: obj_data
+                    for obj_id, obj_data in data["network_objects"].items()
+                    if NetworkObject.from_dict(obj_data).is_persistent
+                }
 
                 object_layer_ids_to_remove_from_rendering_system = (
                     self.network_state.update_from_dict(filtered_network_objects_data)
@@ -119,21 +126,14 @@ class NetworkStateClient:
                     )
 
                 with self.network_state.lock:
-                    if (
+                    self.my_network_object = self.network_state.network_objects.get(
                         self.my_player_id
-                        and self.my_player_id in self.network_state.network_objects
-                    ):
-                        self.my_network_object = self.network_state.network_objects[
-                            self.my_player_id
-                        ]
-                    else:
-                        self.my_network_object = None
+                    )
             else:
                 logging.error(
-                    f"Received 'network_state_update' message without 'network_objects' key: {data}"
+                    f"Received 'network_state_update' without 'network_objects': {data}"
                 )
         elif msg_type == "player_assigned":
-            # Player ID is now set via _set_my_player_id by the proxy
             logging.info(f"Client received assigned player ID: {self.my_player_id}.")
         elif msg_type == "message":
             logging.info(f"Proxy message: {data.get('text', 'No message text')}")
@@ -156,19 +156,15 @@ class NetworkStateClient:
             obj_id = data.get("obj_id")
             object_layer_id = data.get("object_layer_id")
             if obj_id and object_layer_id:
-                # The client should remove objects from rendering that were
-                # explicitly told to be removed by the server/proxy (for persistent objects),
-                # or its own GFX.
                 self.object_layer_render.remove_object_layer_animation(
                     obj_id, object_layer_id
                 )
-                # Also remove from client's network state if it's a persistent object
                 with self.network_state.lock:
                     obj_to_remove = self.network_state.get_network_object(obj_id)
                     if obj_to_remove and obj_to_remove.is_persistent:
                         self.network_state.remove_network_object(obj_id)
                 logging.debug(
-                    f"Removed object {obj_id} with layer {object_layer_id} from rendering as requested by proxy."
+                    f"Removed object {obj_id} with layer {object_layer_id} from rendering."
                 )
             else:
                 logging.warning(
@@ -186,22 +182,19 @@ class NetworkStateClient:
     def _generate_client_path_gfx_async(
         self, path_coords: list[dict[str, float]], current_time: float
     ):
-        """
-        Generates POINT_PATH network objects sequentially with a delay to simulate
-        the path being "drawn" on the client-side.
-        """
-        # Clear existing non-persistent path points to avoid accumulation
-        obj_ids_to_remove = []
+        """Generates POINT_PATH network objects sequentially for client-side path visualization."""
+        obj_ids_to_remove = [
+            obj_id
+            for obj_id, obj in self.network_state.network_objects.items()
+            if obj.network_object_type == "POINT_PATH" and not obj.is_persistent
+        ]
         with self.network_state.lock:
-            for obj_id, obj in self.network_state.network_objects.items():
-                if obj.network_object_type == "POINT_PATH" and not obj.is_persistent:
-                    obj_ids_to_remove.append(obj_id)
             for obj_id in obj_ids_to_remove:
                 self.network_state.remove_network_object(obj_id)
         for obj_id in obj_ids_to_remove:
             self.object_layer_render.remove_object_layer_animation(obj_id, "POINT_PATH")
 
-        delay_per_point = 0.02  # Small delay between adding each path point
+        delay_per_point = 0.02
 
         for point in path_coords:
             obj = self.network_object_factory.generate_point_path(
@@ -216,11 +209,9 @@ class NetworkStateClient:
 
     def run(self):
         """Runs the main client loop."""
-        self.proxy.connect()  # Start the proxy connection
+        self.proxy.connect()
 
-        if not self.connection_ready_event.wait(
-            timeout=10
-        ):  # Increased timeout for proxy to connect
+        if not self.connection_ready_event.wait(timeout=10):
             logging.error("Failed to establish connection via proxy within timeout.")
             self.object_layer_render.close_window()
             self.proxy.close()
@@ -235,13 +226,9 @@ class NetworkStateClient:
 
             self._process_queued_messages()
 
-            # Cleanup expired network objects (e.g., GFX objects)
-            # This is primarily for objects that decay on the client-side *without* explicit proxy removal messages
-            object_layer_ids_to_remove_from_rendering_system = []
-            with self.network_state.lock:
-                object_layer_ids_to_remove_from_rendering_system = (
-                    self.network_state.cleanup_expired_network_objects(current_time)
-                )
+            object_layer_ids_to_remove_from_rendering_system = (
+                self.network_state.cleanup_expired_network_objects(current_time)
+            )
             for (
                 obj_id,
                 object_layer_id,
@@ -250,7 +237,6 @@ class NetworkStateClient:
                     obj_id, object_layer_id
                 )
 
-            # Update positions of all network objects
             object_movement_deltas = {}
             with self.network_state.lock:
                 for obj_id, obj in self.network_state.network_objects.items():
@@ -261,64 +247,86 @@ class NetworkStateClient:
                         obj.path = []
                         obj.path_index = 0
 
-            # Handle mouse clicks for movement requests
             if self.object_layer_render.is_mouse_button_pressed(MOUSE_BUTTON_LEFT):
                 world_mouse_pos = self.object_layer_render.get_world_mouse_position()
-                logging.info(
-                    f"Mouse clicked at world position: ({world_mouse_pos.x}, {world_mouse_pos.y})"
-                )
-                move_request_payload = {
-                    "target_x": world_mouse_pos.x,
-                    "target_y": world_mouse_pos.y,
-                }
-                self.send_message_to_proxy("client_move_request", move_request_payload)
 
-                # Client-side GFX generation for click pointer
                 click_pointer_obj = self.network_object_factory.generate_click_pointer(
                     world_mouse_pos.x, world_mouse_pos.y, current_time
                 )
                 with self.network_state.lock:
                     self.network_state.add_or_update_network_object(click_pointer_obj)
 
-                # Client-side GFX generation for path points
-                if self.my_network_object:
-                    start_grid_x, start_grid_y = (
-                        self.network_state._world_to_grid_coords(
-                            self.my_network_object.x, self.my_network_object.y
-                        )
+                grid_x, grid_y = self.network_state._world_to_grid_coords(
+                    world_mouse_pos.x, world_mouse_pos.y
+                )
+
+                is_valid_click = True
+                if not (
+                    0 <= grid_x < self.network_state.grid_cells_x
+                    and 0 <= grid_y < self.network_state.grid_cells_y
+                ):
+                    logging.warning(
+                        f"Click outside map boundaries: ({grid_x}, {grid_y})"
                     )
-                    end_grid_x, end_grid_y = self.network_state._world_to_grid_coords(
-                        world_mouse_pos.x, world_mouse_pos.y
+                    is_valid_click = False
+                elif self.network_state.simplified_maze[grid_y][grid_x] == 1:
+                    logging.warning(
+                        f"Click on an obstacle at grid: ({grid_x}, {grid_y})"
                     )
-                    maze = self.network_state.simplified_maze
-                    path_grid = astar(
-                        maze, (start_grid_y, start_grid_x), (end_grid_y, end_grid_x)
+                    is_valid_click = False
+
+                if is_valid_click:
+                    logging.info(
+                        f"Mouse clicked at world position: ({world_mouse_pos.x}, {world_mouse_pos.y})"
+                    )
+                    move_request_payload = {
+                        "target_x": world_mouse_pos.x,
+                        "target_y": world_mouse_pos.y,
+                    }
+                    self.send_message_to_proxy(
+                        "client_move_request", move_request_payload
                     )
 
-                    if path_grid:
-                        path_world_coords = []
-                        for grid_y, grid_x in path_grid:
-                            world_x, world_y = self.network_state._grid_to_world_coords(
-                                grid_x, grid_y
+                    if self.my_network_object:
+                        start_grid_x, start_grid_y = (
+                            self.network_state._world_to_grid_coords(
+                                self.my_network_object.x, self.my_network_object.y
                             )
-                            path_world_coords.append({"X": world_x, "Y": world_y})
+                        )
+                        end_grid_x, end_grid_y = (
+                            self.network_state._world_to_grid_coords(
+                                world_mouse_pos.x, world_mouse_pos.y
+                            )
+                        )
+                        maze = self.network_state.simplified_maze
+                        path_grid = astar(
+                            maze, (start_grid_y, start_grid_x), (end_grid_y, end_grid_x)
+                        )
 
-                        # Start a new thread for drawing path GFX
-                        threading.Thread(
-                            target=self._generate_client_path_gfx_async,
-                            args=(path_world_coords, current_time),
-                            daemon=True,
-                        ).start()
+                        if path_grid:
+                            path_world_coords = []
+                            for grid_y, grid_x in path_grid:
+                                world_x, world_y = (
+                                    self.network_state._grid_to_world_coords(
+                                        grid_x, grid_y
+                                    )
+                                )
+                                path_world_coords.append({"X": world_x, "Y": world_y})
+
+                            threading.Thread(
+                                target=self._generate_client_path_gfx_async,
+                                args=(path_world_coords, current_time),
+                                daemon=True,
+                            ).start()
+                        else:
+                            logging.warning(
+                                "No path found for client-side POINT_PATH GFX generation."
+                            )
                     else:
                         logging.warning(
-                            "No path found for client-side POINT_PATH GFX generation."
+                            "Player object not available for client-side path GFX generation."
                         )
-                else:
-                    logging.warning(
-                        "Player object not available for client-side path GFX generation."
-                    )
 
-            # --- Rendering ---
             self.object_layer_render.begin_drawing()
             self.object_layer_render.clear_background(RAYWHITE)
             self.object_layer_render.begin_camera_mode()
@@ -334,32 +342,30 @@ class NetworkStateClient:
 
             self.object_layer_render.end_camera_mode()
 
-            # Display player info and connection status
             with self.network_state.lock:
                 if self.my_network_object:
-                    # Get the smoothed position for the camera target
                     smoothed_player_pos = (
                         self.object_layer_render.get_smoothed_object_position(
                             self.my_player_id
                         )
                     )
-                    if smoothed_player_pos:
-                        self.object_layer_render.update_camera_target(
-                            Vector2(
-                                smoothed_player_pos.x + NETWORK_OBJECT_SIZE / 2,
-                                smoothed_player_pos.y + NETWORK_OBJECT_SIZE / 2,
-                            ),
-                            smoothness=CAMERA_SMOOTHNESS,
+                    camera_target_pos = Vector2(
+                        (
+                            smoothed_player_pos.x
+                            if smoothed_player_pos
+                            else self.my_network_object.x
                         )
-                    else:
-                        # Fallback to raw position if smoothed position not available yet
-                        self.object_layer_render.update_camera_target(
-                            Vector2(
-                                self.my_network_object.x + NETWORK_OBJECT_SIZE / 2,
-                                self.my_network_object.y + NETWORK_OBJECT_SIZE / 2,
-                            ),
-                            smoothness=CAMERA_SMOOTHNESS,
+                        + NETWORK_OBJECT_SIZE / 2,
+                        (
+                            smoothed_player_pos.y
+                            if smoothed_player_pos
+                            else self.my_network_object.y
                         )
+                        + NETWORK_OBJECT_SIZE / 2,
+                    )
+                    self.object_layer_render.update_camera_target(
+                        camera_target_pos, smoothness=CAMERA_SMOOTHNESS
+                    )
 
                     self.object_layer_render.draw_text(
                         f"My Player ID: {self.my_player_id}", 10, 10, 20, BLACK
@@ -376,16 +382,14 @@ class NetworkStateClient:
                         "Connecting...", 10, 10, 20, BLACK
                     )
 
-            # Display FPS
             frame_time = self.object_layer_render.get_frame_time()
-            if frame_time > 0:
-                self.object_layer_render.draw_text(
-                    f"FPS: {int(1.0 / frame_time)}", 10, SCREEN_HEIGHT - 30, 20, BLACK
-                )
-            else:
-                self.object_layer_render.draw_text(
-                    "FPS: N/A", 10, SCREEN_HEIGHT - 30, 20, BLACK
-                )
+            self.object_layer_render.draw_text(
+                f"FPS: {int(1.0 / frame_time) if frame_time > 0 else 'N/A'}",
+                10,
+                SCREEN_HEIGHT - 30,
+                20,
+                BLACK,
+            )
 
             self.object_layer_render.update_all_active_object_layer_animations(
                 delta_time, current_time
@@ -395,6 +399,6 @@ class NetworkStateClient:
 
             time.sleep(0.001)
 
-        self.proxy.close()  # Close the proxy connection on client exit
+        self.proxy.close()
         self.object_layer_render.close_window()
         logging.info("Client window closed.")

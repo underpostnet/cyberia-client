@@ -18,9 +18,7 @@ logging.basicConfig(
 
 
 class NetworkObjectFactory:
-    """
-    Factory for creating various types of NetworkObjects.
-    """
+    """Factory for creating various types of NetworkObjects."""
 
     def get_object_layer_data(self) -> dict:
         """Imports and returns the object layer data."""
@@ -31,7 +29,7 @@ class NetworkObjectFactory:
     def generate_initial_state_dict(self) -> dict:
         """
         Generates an initial set of network objects for the game world,
-        including a player and some walls.
+        including a player and obstacle mounds.
         """
         initial_network_objects = {}
 
@@ -49,74 +47,53 @@ class NetworkObjectFactory:
             is_persistent=True,
         ).to_dict()
 
-        OFFLINE_WALL_COORDS = [
-            {"X": 200, "Y": 200},
-            {"X": 250, "Y": 200},
-            {"X": 300, "Y": 200},
-            {"X": 200, "Y": 250},
-            {"X": 300, "Y": 250},
-            {"X": 200, "Y": 300},
-            {"X": 250, "Y": 300},
-            {"X": 300, "Y": 300},
-            {"X": 700, "Y": 700},
-            {"X": 750, "Y": 700},
-            {"X": 800, "Y": 700},
-            {"X": 700, "Y": 750},
-            {"X": 800, "Y": 750},
-            {"X": 700, "Y": 800},
-            {"X": 750, "Y": 800},
-            {"X": 800, "Y": 800},
-            {"X": 100, "Y": 500},
-            {"X": 150, "Y": 500},
-            {"X": 200, "Y": 500},
-            {"X": 500, "Y": 100},
-            {"X": 500, "Y": 150},
-            {"X": 500, "Y": 200},
-            {"X": 1000, "Y": 1000},
-            {"X": 1050, "Y": 1000},
-            {"X": 1100, "Y": 1000},
-            {"X": 1000, "Y": 1050},
-            {"X": 1100, "Y": 1050},
-            {"X": 1000, "Y": 1100},
-            {"X": 1050, "Y": 1100},
-            {"X": 1100, "Y": 1100},
+        wall_coords = []
+        seen_coords = set()
+
+        grid_cells_x = WORLD_WIDTH // NETWORK_OBJECT_SIZE
+        grid_cells_y = WORLD_HEIGHT // NETWORK_OBJECT_SIZE
+        grid_center_x = grid_cells_x // 2
+        grid_center_y = grid_cells_y // 2
+
+        # Define obstacle mounds in grid coordinates (start_x, start_y, width, height)
+        obstacle_mounds_grid = [
+            (grid_center_x - 15, grid_center_y - 10, 6, 8),
+            (grid_center_x + 9, grid_center_y - 10, 6, 8),
+            (grid_center_x - 3, grid_center_y - 18, 6, 8),
+            (grid_center_x - 3, grid_center_y + 10, 6, 8),
+            (grid_center_x - 12, grid_center_y - 2, 4, 4),
+            (grid_center_x + 8, grid_center_y - 2, 4, 4),
+            (grid_center_x - 2, grid_center_y - 12, 4, 4),
+            (grid_center_x - 2, grid_center_y + 8, 4, 4),
+            (grid_center_x - 20, grid_center_y - 20, 3, 3),
+            (grid_center_x + 17, grid_center_y - 20, 3, 3),
+            (grid_center_x - 20, grid_center_y + 17, 3, 3),
+            (grid_center_x + 17, grid_center_y + 17, 3, 3),
+            (grid_center_x - 8, grid_center_y - 8, 2, 2),
+            (grid_center_x + 6, grid_center_y + 6, 2, 2),
         ]
 
-        # Generate wall objects from OFFLINE_WALL_COORDS
-        for wall_coord in OFFLINE_WALL_COORDS:
+        for start_x_grid, start_y_grid, width_grid, height_grid in obstacle_mounds_grid:
+            for y_offset in range(height_grid):
+                for x_offset in range(width_grid):
+                    grid_x = start_x_grid + x_offset
+                    grid_y = start_y_grid + y_offset
+
+                    if 0 <= grid_x < grid_cells_x and 0 <= grid_y < grid_cells_y:
+                        world_x = float(grid_x * NETWORK_OBJECT_SIZE)
+                        world_y = float(grid_y * NETWORK_OBJECT_SIZE)
+                        coord_tuple = (world_x, world_y)
+
+                        if coord_tuple not in seen_coords:
+                            wall_coords.append({"X": world_x, "Y": world_y})
+                            seen_coords.add(coord_tuple)
+
+        for wall_coord in wall_coords:
             wall_id = str(uuid.uuid4())
             initial_network_objects[wall_id] = NetworkObject(
                 obj_id=wall_id,
-                x=float(wall_coord["X"]),
-                y=float(wall_coord["Y"]),
-                color=Color(100, 100, 100, 255),
-                network_object_type="WALL",
-                is_obstacle=True,
-                object_layer_ids=NETWORK_OBJECT_TYPE_DEFAULT_OBJECT_LAYER_IDS["WALL"],
-                is_persistent=True,
-            ).to_dict()
-
-        return {
-            "type": "network_state_update",
-            "network_objects": initial_network_objects,
-        }
-
-        # Generate some wall objects
-        wall_count = 5
-        for _ in range(wall_count):
-            wall_id = str(uuid.uuid4())
-            wall_x = (
-                random.randint(0, WORLD_WIDTH // NETWORK_OBJECT_SIZE - 1)
-                * NETWORK_OBJECT_SIZE
-            )
-            wall_y = (
-                random.randint(0, WORLD_HEIGHT // NETWORK_OBJECT_SIZE - 1)
-                * NETWORK_OBJECT_SIZE
-            )
-            initial_network_objects[wall_id] = NetworkObject(
-                obj_id=wall_id,
-                x=wall_x,
-                y=wall_y,
+                x=wall_coord["X"],
+                y=wall_coord["Y"],
                 color=Color(100, 100, 100, 255),
                 network_object_type="WALL",
                 is_obstacle=True,
@@ -132,19 +109,16 @@ class NetworkObjectFactory:
     def generate_point_path(
         self, path_coords: list[dict[str, float]], current_time: float
     ) -> list[NetworkObject]:
-        """
-        Generates a list of NetworkObjects representing points along a path.
-        These are typically used for visual effects and are not persistent.
-        """
+        """Generates a list of NetworkObjects representing points along a path."""
         path_network_objects = []
-        decay_duration = 2.0  # Path points decay after 2 seconds
+        decay_duration = 2.0
         for point in path_coords:
             obj_id = f"path_point_{uuid.uuid4()}"
             path_network_object = NetworkObject(
                 obj_id=obj_id,
                 x=point["X"],
                 y=point["Y"],
-                color=Color(0, 255, 0, 150),  # Green with some transparency
+                color=Color(0, 255, 0, 150),
                 network_object_type="POINT_PATH",
                 is_obstacle=False,
                 speed=0.0,
@@ -152,7 +126,7 @@ class NetworkObjectFactory:
                     "POINT_PATH"
                 ],
                 decay_time=current_time + decay_duration,
-                is_persistent=False,  # These objects are temporary
+                is_persistent=False,
             )
             path_network_objects.append(path_network_object)
         return path_network_objects
@@ -160,17 +134,14 @@ class NetworkObjectFactory:
     def generate_click_pointer(
         self, x: float, y: float, current_time: float
     ) -> NetworkObject:
-        """
-        Generates a NetworkObject representing a visual click pointer.
-        This is temporary and decays over time.
-        """
+        """Generates a NetworkObject representing a visual click pointer."""
         obj_id = f"click_pointer_{uuid.uuid4()}"
-        decay_duration = 1.0  # Click pointer decays after 1 second
+        decay_duration = 1.0
         click_pointer = NetworkObject(
             obj_id=obj_id,
             x=x,
             y=y,
-            color=Color(255, 255, 0, 200),  # Yellow with some transparency
+            color=Color(255, 255, 0, 200),
             network_object_type="CLICK_POINTER",
             is_obstacle=False,
             speed=0.0,
@@ -178,6 +149,6 @@ class NetworkObjectFactory:
                 "CLICK_POINTER"
             ],
             decay_time=current_time + decay_duration,
-            is_persistent=False,  # This object is temporary
+            is_persistent=False,
         )
         return click_pointer
