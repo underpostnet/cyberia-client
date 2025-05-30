@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import collections
 import logging
 import math
@@ -6,15 +8,12 @@ from enum import Enum, auto
 
 from raylibpy import (
     BLACK,
-    LIGHTGRAY,
     Color,
     Vector2,
     begin_drawing,
     begin_mode2d,
     clear_background,
     close_window,
-    draw_circle,
-    draw_line,
     draw_rectangle,
     draw_text,
     end_drawing,
@@ -30,9 +29,14 @@ from raylibpy import (
     Camera2D,
 )
 
-from config import CAMERA_SMOOTHNESS, DIRECTION_HISTORY_LENGTH
+from config import (
+    CAMERA_SMOOTHNESS,
+    DIRECTION_HISTORY_LENGTH,
+    WORLD_WIDTH,
+    WORLD_HEIGHT,
+)
 from object_layer.object_layer_data import ObjectLayerMode, Direction
-from network_state.network_object import NetworkObject
+
 
 logging.basicConfig(
     level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s"
@@ -40,11 +44,6 @@ logging.basicConfig(
 
 
 class ObjectLayerAnimation:
-    """
-    Manages the animation state for a single object layer (e.g., a character's skin).
-    Handles frame progression, direction, and animation mode (idle/walking).
-    """
-
     def __init__(
         self,
         frames_map: dict,
@@ -59,15 +58,12 @@ class ObjectLayerAnimation:
 
         self.current_frame_index = 0
         self.frame_timer = 0.0
-        self.last_moving_timestamp = (
-            0.0  # Timestamp of last movement for non-stateless animations
-        )
+        self.last_moving_timestamp = 0.0
 
         self.current_direction = Direction.DOWN
         self.object_layer_mode = ObjectLayerMode.IDLE
 
     def set_state(self, direction: Direction, mode: ObjectLayerMode, timestamp: float):
-        """Sets the current direction and mode of the animation."""
         new_direction = direction
         new_mode = mode
 
@@ -90,7 +86,6 @@ class ObjectLayerAnimation:
             self.last_moving_timestamp = timestamp
 
     def _get_current_object_layer_key(self, timestamp: float) -> str:
-        """Determines the appropriate animation key based on current state."""
         if self.is_stateless:
             return "NONE_IDLE" if "NONE_IDLE" in self.frames_map else "DEFAULT_IDLE"
 
@@ -100,55 +95,46 @@ class ObjectLayerAnimation:
         object_layer_key = f"{direction_prefix}_{object_layer_suffix}"
 
         if object_layer_key not in self.frames_map:
-            # Fallback to idle animation if walking animation for direction doesn't exist
             fallback_key = f"{direction_prefix}_IDLE"
             if fallback_key in self.frames_map:
                 return fallback_key
             else:
-                return "DEFAULT_IDLE"  # Final fallback
+                return "DEFAULT_IDLE"
 
         return object_layer_key
 
     def update(self, dt: float, timestamp: float):
-        """Updates the animation frame based on delta time."""
         self.frame_timer += dt
 
         object_layer_key = self._get_current_object_layer_key(timestamp)
         frames_list = self.frames_map.get(object_layer_key)
 
         if not frames_list:
-            # If no frames, prevent errors by using a dummy frame and logging
             frames_list = [[[0]]]
 
         num_frames = len(frames_list)
         if num_frames == 0:
-            return  # No frames to animate
+            return
 
         if self.frame_timer >= self.frame_duration:
             self.current_frame_index = (self.current_frame_index + 1) % num_frames
             self.frame_timer = 0.0
-        if num_frames == 1:  # If only one frame, keep index at 0 and timer at 0
+        if num_frames == 1:
             self.current_frame_index = 0
             self.frame_timer = 0.0
 
     def get_current_frame_data(
         self, timestamp: float
     ) -> tuple[list[list[int]], list[Color], bool, int]:
-        """
-        Returns the current frame matrix, color map, horizontal flip status,
-        and current frame index.
-        """
         object_layer_key = self._get_current_object_layer_key(timestamp)
         frames_list = self.frames_map.get(object_layer_key)
 
         if not frames_list:
-            # Return dummy data if no frames are found
             return [[[0]]], self.color_map, False, 0
 
         current_frame_matrix = frames_list[self.current_frame_index]
 
         flip_horizontal = False
-        # Determine if the animation should be flipped horizontally
         if not self.is_stateless and (
             self.current_direction == Direction.LEFT
             or self.current_direction == Direction.UP_LEFT
@@ -165,11 +151,6 @@ class ObjectLayerAnimation:
 
 
 class ObjectLayerRender:
-    """
-    Handles all rendering operations using Raylib, including drawing network objects
-    and managing their animations.
-    """
-
     def __init__(
         self,
         screen_width: int,
@@ -197,17 +178,13 @@ class ObjectLayerRender:
         self.camera.zoom = 1.0
         self.camera.target = Vector2(0, 0)
 
-        # Stores active ObjectLayerAnimation instances
         self._object_layer_animation_instances: dict[str, dict] = {}
-        # Stores direction histories for smoothing character movement animations
         self._object_layer_direction_histories: dict[
             tuple[str, str], collections.deque[Direction]
         ] = {}
-        # Stores smoothed positions for network objects to reduce jitter
         self._rendered_network_object_positions: dict[str, Vector2] = {}
         self.object_layer_data = object_layer_data
 
-    # --- Raylib Wrapper Methods ---
     def begin_drawing(self):
         begin_drawing()
 
@@ -225,14 +202,6 @@ class ObjectLayerRender:
 
     def draw_rectangle(self, x: int, y: int, width: int, height: int, color: Color):
         draw_rectangle(x, y, width, height, color)
-
-    def draw_circle(self, center_x: int, center_y: int, radius: float, color: Color):
-        draw_circle(center_x, center_y, radius, color)
-
-    def draw_line(
-        self, start_x: int, start_y: int, end_x: int, end_y: int, color: Color
-    ):
-        draw_line(start_x, start_y, end_x, end_y, color)
 
     def draw_text(self, text: str, x: int, y: int, font_size: int, color: Color):
         draw_text(text, x, y, font_size, color)
@@ -258,37 +227,20 @@ class ObjectLayerRender:
     def close_window(self):
         close_window()
 
-    # --- Camera and Grid Methods ---
     def update_camera_target(self, target_world_pos: Vector2, smoothness: float = 1.0):
-        """Smoothly moves the camera target towards a world position."""
         self.camera.target.x += (target_world_pos.x - self.camera.target.x) * smoothness
         self.camera.target.y += (target_world_pos.y - self.camera.target.y) * smoothness
 
     def set_camera_zoom(self, zoom_factor: float):
-        """Sets the camera zoom level."""
         self.camera.zoom = zoom_factor
 
     def get_camera_zoom(self) -> float:
-        """Returns the current camera zoom level."""
         return self.camera.zoom
 
-    def draw_grid(self):
-        """Draws a grid over the world based on network object size."""
-        for x in range(0, self.world_width + 1, self.network_object_size):
-            self.draw_line(x, 0, x, self.world_height, LIGHTGRAY)
-        for y in range(0, self.world_height + 1, self.network_object_size):
-            self.draw_line(0, y, self.world_width, y, LIGHTGRAY)
-
-    # --- Object Layer Animation Management ---
     def get_object_layer_data_for_id(self, object_layer_id: str) -> dict | None:
-        """Retrieves animation data for a specific object layer ID."""
         return self.object_layer_data.get(object_layer_id)
 
     def get_object_layer_matrix_dimension(self, object_layer_id: str) -> int:
-        """
-        Determines the dimension (e.g., 16 for 16x16) of the animation matrix
-        for a given object layer ID.
-        """
         object_layer_info = self.get_object_layer_data_for_id(object_layer_id)
         if not object_layer_info:
             logging.warning(
@@ -296,7 +248,6 @@ class ObjectLayerRender:
             )
             return 1
 
-        # Try to find any frame to determine dimension
         first_frame = None
         for key in ["DEFAULT_IDLE", "NONE_IDLE"] + list(
             object_layer_info["FRAMES"].keys()
@@ -316,19 +267,15 @@ class ObjectLayerRender:
 
     def draw_network_object(
         self,
-        network_object: NetworkObject,
+        network_object: "NetworkObject",
         current_timestamp: float,
-        current_dx: float,
-        current_dy: float,
+        effective_dx: float,
+        effective_dy: float,
     ):
-        """
-        Draws a network object, handling its animation based on its type and movement.
-        """
         object_layer_ids_to_use = network_object.object_layer_ids
 
         target_world_pos = Vector2(network_object.x, network_object.y)
 
-        # Initialize smoothed position if not already present
         if network_object.obj_id not in self._rendered_network_object_positions:
             self._rendered_network_object_positions[network_object.obj_id] = (
                 target_world_pos
@@ -336,94 +283,128 @@ class ObjectLayerRender:
 
         smoothed_pos = self._rendered_network_object_positions[network_object.obj_id]
 
-        # Smoothly interpolate towards the target position
-        smoothed_pos.x += (target_world_pos.x - smoothed_pos.x) * CAMERA_SMOOTHNESS
-        smoothed_pos.y += (target_world_pos.y - smoothed_pos.y) * CAMERA_SMOOTHNESS
+        # Calculate the difference between the raw position and the smoothed position
+        # considering world wrapping for the shortest path.
+        diff_x_for_snap = target_world_pos.x - smoothed_pos.x
+        diff_y_for_snap = target_world_pos.y - smoothed_pos.y
+
+        # Adjust diff_x_for_snap for wrapping, finding the shortest path across the world.
+        if abs(diff_x_for_snap) > self.world_width / 2:
+            if diff_x_for_snap > 0:
+                diff_x_for_snap -= self.world_width
+            else:
+                diff_x_for_snap += self.world_width
+
+        # Adjust diff_y_for_snap for wrapping, finding the shortest path across the world.
+        if abs(diff_y_for_snap) > self.world_height / 2:
+            if diff_y_for_snap > 0:
+                diff_y_for_snap -= self.world_height
+            else:
+                diff_y_for_snap += self.world_height
+
+        # If the adjusted difference is still large (e.g., more than one object size),
+        # it indicates a direct wrap-around that needs immediate snapping for the object's visual.
+        # This threshold prevents snapping for normal smooth movement.
+        if (
+            abs(diff_x_for_snap) > self.network_object_size
+            or abs(diff_y_for_snap) > self.network_object_size
+        ):
+            smoothed_pos.x = target_world_pos.x
+            smoothed_pos.y = target_world_pos.y
+        else:
+            # Otherwise, apply regular smoothing
+            smoothed_pos.x += (target_world_pos.x - smoothed_pos.x) * CAMERA_SMOOTHNESS
+            smoothed_pos.y += (target_world_pos.y - smoothed_pos.y) * CAMERA_SMOOTHNESS
 
         self._rendered_network_object_positions[network_object.obj_id] = smoothed_pos
 
-        draw_x_base = smoothed_pos.x
-        draw_y_base = smoothed_pos.y
+        # Calculate all 9 potential drawing positions for wrapping effect
+        draw_positions = []
+        for x_offset in [-self.world_width, 0, self.world_width]:
+            for y_offset in [-self.world_height, 0, self.world_height]:
+                draw_positions.append(
+                    Vector2(smoothed_pos.x + x_offset, smoothed_pos.y + y_offset)
+                )
 
-        # If no object layer IDs are specified, draw a simple colored rectangle
-        if not object_layer_ids_to_use:
-            self.draw_rectangle(
-                int(draw_x_base),
-                int(draw_y_base),
-                self.network_object_size,
-                self.network_object_size,
-                BLACK,
-            )
-            self.draw_rectangle(
-                int(draw_x_base) + 2,
-                int(draw_y_base) + 2,
-                self.network_object_size - 4,
-                self.network_object_size - 4,
-                network_object.color,
-            )
-            return
+        for current_draw_pos in draw_positions:
+            draw_x_base = current_draw_pos.x
+            draw_y_base = current_draw_pos.y
 
-        # Determine animation mode (idle or walking)
-        object_layer_mode = ObjectLayerMode.IDLE
-        if network_object.path and network_object.path_index < len(network_object.path):
-            object_layer_mode = ObjectLayerMode.WALKING
-
-        for object_layer_id in object_layer_ids_to_use:
-            object_layer_info = self.get_object_layer_data_for_id(object_layer_id)
-            if not object_layer_info:
-                logging.warning(
-                    f"No object layer info found for ID: {object_layer_id}. Skipping rendering for {network_object.obj_id}."
+            if not object_layer_ids_to_use:
+                self.draw_rectangle(
+                    int(draw_x_base),
+                    int(draw_y_base),
+                    self.network_object_size,
+                    self.network_object_size,
+                    BLACK,
+                )
+                self.draw_rectangle(
+                    int(draw_x_base) + 2,
+                    int(draw_y_base) + 2,
+                    self.network_object_size - 4,
+                    self.network_object_size - 4,
+                    network_object.color,
                 )
                 continue
 
-            # Calculate pixel size for this object layer
-            matrix_dimension = self.get_object_layer_matrix_dimension(object_layer_id)
-            target_object_layer_size_pixels = (
-                self.network_object_size / matrix_dimension
-            )
-            if target_object_layer_size_pixels == 0:
-                target_object_layer_size_pixels = 1
+            object_layer_mode = ObjectLayerMode.IDLE
+            if network_object.path and network_object.path_index < len(
+                network_object.path
+            ):
+                object_layer_mode = ObjectLayerMode.WALKING
 
-            # Get or create the animation instance
-            self.get_or_create_object_layer_animation(
-                obj_id=network_object.obj_id,
-                object_layer_id=object_layer_id,
-                target_object_layer_size_pixels=target_object_layer_size_pixels,
-                initial_direction=Direction.DOWN,  # Default initial direction
-            )
+            for object_layer_id in object_layer_ids_to_use:
+                object_layer_info = self.get_object_layer_data_for_id(object_layer_id)
+                if not object_layer_info:
+                    logging.warning(
+                        f"No object layer info found for ID: {object_layer_id}. Skipping rendering for {network_object.obj_id}."
+                    )
+                    continue
 
-            # Update direction and mode for non-stateless animations
-            if not object_layer_info["IS_STATELESS"]:
-                self.update_object_layer_direction_for_object(
+                matrix_dimension = self.get_object_layer_matrix_dimension(
+                    object_layer_id
+                )
+                target_object_layer_size_pixels = (
+                    self.network_object_size / matrix_dimension
+                )
+                if target_object_layer_size_pixels == 0:
+                    target_object_layer_size_pixels = 1
+
+                self.get_or_create_object_layer_animation(
                     obj_id=network_object.obj_id,
                     object_layer_id=object_layer_id,
-                    current_dx=current_dx,
-                    current_dy=current_dy,
-                    object_layer_mode=object_layer_mode,
+                    target_object_layer_size_pixels=target_object_layer_size_pixels,
+                    initial_direction=Direction.DOWN,
+                )
+
+                if not object_layer_info["IS_STATELESS"]:
+                    self.update_object_layer_direction_for_object(
+                        obj_id=network_object.obj_id,
+                        object_layer_id=object_layer_id,
+                        current_dx=effective_dx,
+                        current_dy=effective_dy,
+                        object_layer_mode=object_layer_mode,
+                        timestamp=current_timestamp,
+                    )
+                else:
+                    anim_properties = self.get_object_layer_animation_properties(
+                        network_object.obj_id, object_layer_id
+                    )
+                    if anim_properties:
+                        anim_instance = anim_properties[
+                            "object_layer_animation_instance"
+                        ]
+                        anim_instance.set_state(
+                            Direction.NONE, ObjectLayerMode.IDLE, current_timestamp
+                        )
+
+                self.render_object_layer_animation(
+                    obj_id=network_object.obj_id,
+                    object_layer_id=object_layer_id,
+                    screen_x=draw_x_base,
+                    screen_y=draw_y_base,
                     timestamp=current_timestamp,
                 )
-            else:
-                # For stateless animations, ensure mode is IDLE and direction is NONE
-                anim_properties = self.get_object_layer_animation_properties(
-                    network_object.obj_id, object_layer_id
-                )
-                if anim_properties:
-                    anim_instance = anim_properties["object_layer_animation_instance"]
-                    anim_instance.set_state(
-                        Direction.NONE, ObjectLayerMode.IDLE, current_timestamp
-                    )
-
-            # Render the animation frame
-            draw_x = draw_x_base
-            draw_y = draw_y_base
-
-            self.render_object_layer_animation(
-                obj_id=network_object.obj_id,
-                object_layer_id=object_layer_id,
-                screen_x=draw_x,
-                screen_y=draw_y,
-                timestamp=current_timestamp,
-            )
 
     def _render_object_layer_frame(
         self,
@@ -434,15 +415,10 @@ class ObjectLayerRender:
         pixel_size_in_display: float,
         flip_horizontal: bool = False,
     ):
-        """
-        Renders a single frame of an object layer animation.
-        Each pixel in the matrix is drawn as a rectangle.
-        """
         matrix_dimension = len(frame_matrix)
         if matrix_dimension == 0:
             return
 
-        # Round values for drawing to avoid pixel gaps
         rounded_screen_x = round(screen_x)
         rounded_screen_y = round(screen_y)
         rounded_pixel_size = round(pixel_size_in_display)
@@ -453,18 +429,17 @@ class ObjectLayerRender:
             for col_idx in range(matrix_dimension):
                 matrix_value = frame_matrix[row_idx][col_idx]
 
-                # Skip drawing if the color is fully transparent (alpha 0)
                 if matrix_value == 0 and len(color_map) > 0 and color_map[0].a == 0:
                     continue
 
                 draw_col = col_idx
                 if flip_horizontal:
-                    draw_col = matrix_dimension - 1 - col_idx  # Flip column index
+                    draw_col = matrix_dimension - 1 - col_idx
 
                 cell_draw_x = rounded_screen_x + draw_col * rounded_pixel_size
                 cell_draw_y = rounded_screen_y + row_idx * rounded_pixel_size
 
-                self.draw_rectangle(
+                draw_rectangle(
                     int(cell_draw_x),
                     int(cell_draw_y),
                     rounded_pixel_size,
@@ -479,15 +454,10 @@ class ObjectLayerRender:
         target_object_layer_size_pixels: float,
         initial_direction: Direction,
     ) -> dict:
-        """
-        Retrieves an existing ObjectLayerAnimation instance or creates a new one
-        if it doesn't exist for the given object and layer ID.
-        """
         anim_key = f"{obj_id}_{object_layer_id}"
         current_cached_props = self._object_layer_animation_instances.get(anim_key)
 
         if current_cached_props:
-            # Update pixel size if it has changed
             if (
                 current_cached_props["target_object_layer_size_pixels"]
                 != target_object_layer_size_pixels
@@ -497,7 +467,6 @@ class ObjectLayerRender:
                 )
             return current_cached_props
 
-        # Create new animation instance if not found
         object_layer_info = self.get_object_layer_data_for_id(object_layer_id)
         if not object_layer_info:
             raise ValueError(
@@ -516,7 +485,6 @@ class ObjectLayerRender:
             "object_layer_id": object_layer_id,
         }
 
-        # Initialize direction history for non-stateless animations
         if not object_layer_info["IS_STATELESS"]:
             history_key = (obj_id, object_layer_id)
             if history_key not in self._object_layer_direction_histories:
@@ -527,7 +495,6 @@ class ObjectLayerRender:
                     initial_direction
                 )
         else:
-            # Remove history for stateless animations if it exists
             history_key = (obj_id, object_layer_id)
             if history_key in self._object_layer_direction_histories:
                 del self._object_layer_direction_histories[history_key]
@@ -537,26 +504,19 @@ class ObjectLayerRender:
     def remove_object_layer_animation(
         self, obj_id: str, object_layer_id: str | None = None
     ):
-        """
-        Removes an object layer animation instance and its associated direction history.
-        If object_layer_id is None, all animations for the given obj_id are removed.
-        """
         keys_to_remove = []
         if object_layer_id:
             anim_key = f"{obj_id}_{object_layer_id}"
             if anim_key in self._object_layer_animation_instances:
                 keys_to_remove.append((anim_key, (obj_id, object_layer_id)))
         else:
-            # Find all animations for the given obj_id
             for key in list(self._object_layer_animation_instances.keys()):
                 if key.startswith(f"{obj_id}_"):
                     parts = key.split(f"{obj_id}_", 1)
                     if len(parts) > 1:
                         keys_to_remove.append((key, (obj_id, parts[1])))
                     else:
-                        keys_to_remove.append(
-                            (key, (obj_id, ""))
-                        )  # Should not happen with current key format
+                        keys_to_remove.append((key, (obj_id, "")))
 
         for anim_key, history_key_tuple in keys_to_remove:
             if anim_key in self._object_layer_animation_instances:
@@ -564,18 +524,11 @@ class ObjectLayerRender:
             if history_key_tuple in self._object_layer_direction_histories:
                 del self._object_layer_direction_histories[history_key_tuple]
 
-        # Also remove the smoothed position for the network object
         if obj_id in self._rendered_network_object_positions:
             del self._rendered_network_object_positions[obj_id]
 
     def reset_smoothed_object_position(self, obj_id: str):
-        """
-        Resets the smoothed rendering position of a network object to its current raw position.
-        This will cause an immediate "flicker" as requested when a new path is set.
-        """
         if obj_id in self._rendered_network_object_positions:
-            # Remove the smoothed position, it will be re-initialized in draw_network_object
-            # with the current raw position, effectively resetting the smoothing.
             del self._rendered_network_object_positions[obj_id]
             logging.debug(f"Reset smoothed position for object ID: {obj_id}")
 
@@ -589,21 +542,16 @@ class ObjectLayerRender:
         timestamp: float,
         reverse: bool = False,
     ):
-        """
-        Updates the direction and mode of an object's animation based on its movement.
-        Uses a history to smooth out direction changes.
-        """
         history_key = (obj_id, object_layer_id)
         direction_history = self._object_layer_direction_histories.get(history_key)
 
         if not direction_history:
-            return  # No history to update
+            return
 
-        movement_threshold = 1.0  # Minimum movement to consider a direction change
+        movement_threshold = 1.0
         current_movement_magnitude = math.sqrt(current_dx**2 + current_dy**2)
 
         if current_movement_magnitude > movement_threshold:
-            # Normalize movement vector to get direction
             norm_dx = 0
             if current_dx > 0:
                 norm_dx = 1
@@ -616,8 +564,7 @@ class ObjectLayerRender:
             elif current_dy < 0:
                 norm_dy = -1
 
-            # Map normalized movement to Direction enum
-            if reverse:  # For viewer demo, directions are reversed
+            if reverse:
                 direction_map = {
                     (0, -1): Direction.UP,
                     (1, -1): Direction.UP_RIGHT,
@@ -645,11 +592,14 @@ class ObjectLayerRender:
             )
             direction_history.append(instantaneous_direction)
         else:
-            # If not moving, gradually reduce direction history to favor IDLE state
+            # If not moving, and history has more than one entry, remove older entries
+            # to eventually settle on the last active direction or a default.
             if len(direction_history) > 1:
                 direction_history.popleft()
+            # If the object stops completely, and there's only one direction in history,
+            # we might want to default to a specific "idle" direction (e.g., DOWN).
+            # This is already handled by the 'else' block below.
 
-        # Determine smoothed direction from history
         smoothed_direction = Direction.DOWN
         if direction_history:
             from collections import Counter
@@ -658,10 +608,11 @@ class ObjectLayerRender:
             if most_common_direction_tuple:
                 smoothed_direction = most_common_direction_tuple[0][0]
         else:
+            # If direction_history is empty (e.g., initial state or after reset)
+            # and the object is idle, set a default idle direction.
             if object_layer_mode == ObjectLayerMode.IDLE:
-                smoothed_direction = Direction.DOWN  # Default to DOWN when idle
+                smoothed_direction = Direction.DOWN
 
-        # Update the animation instance with the smoothed direction and current mode
         anim_key = f"{obj_id}_{object_layer_id}"
         anim_properties = self._object_layer_animation_instances.get(anim_key)
         if anim_properties:
@@ -671,7 +622,6 @@ class ObjectLayerRender:
     def update_all_active_object_layer_animations(
         self, delta_time: float, current_timestamp: float
     ):
-        """Updates all currently active object layer animations."""
         for anim_properties in self._object_layer_animation_instances.values():
             anim_instance = anim_properties["object_layer_animation_instance"]
             anim_instance.update(dt=delta_time, timestamp=current_timestamp)
@@ -679,7 +629,6 @@ class ObjectLayerRender:
     def get_object_layer_animation_properties(
         self, obj_id: str, object_layer_id: str
     ) -> dict | None:
-        """Retrieves properties of an active object layer animation."""
         anim_key = f"{obj_id}_{object_layer_id}"
         return self._object_layer_animation_instances.get(anim_key)
 
@@ -691,12 +640,11 @@ class ObjectLayerRender:
         screen_y: float,
         timestamp: float,
     ):
-        """Renders a specific object layer animation at given screen coordinates."""
         anim_properties = self.get_object_layer_animation_properties(
             obj_id, object_layer_id
         )
         if not anim_properties:
-            return  # No animation to render
+            return
 
         anim_instance = anim_properties["object_layer_animation_instance"]
         target_pixel_size = anim_properties["target_object_layer_size_pixels"]
@@ -715,8 +663,4 @@ class ObjectLayerRender:
         )
 
     def get_smoothed_object_position(self, obj_id: str) -> Vector2 | None:
-        """
-        Returns the smoothed rendering position of a network object.
-        This position is updated internally by draw_network_object.
-        """
         return self._rendered_network_object_positions.get(obj_id)

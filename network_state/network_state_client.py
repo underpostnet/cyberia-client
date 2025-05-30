@@ -14,6 +14,7 @@ from config import (
     SCREEN_WIDTH,
     WORLD_HEIGHT,
     WORLD_WIDTH,
+    VIEWPORT_PADDING,
 )
 from object_layer.object_layer_data import ObjectLayerMode
 from object_layer.object_layer_render import ObjectLayerRender
@@ -23,7 +24,7 @@ from network_state.network_object_factory import (
     NetworkObjectFactory,
 )
 from network_state.network_state_proxy import NetworkStateProxy
-from network_state.astar import astar  # Import astar for client-side path GFX
+from network_state.astar import astar  # Ensure this import is present and correct
 
 
 logging.basicConfig(
@@ -32,19 +33,12 @@ logging.basicConfig(
 
 
 class NetworkStateClient:
-    """
-    Manages the client-side application, rendering the world and handling user input.
-    It communicates with the NetworkStateProxy for all network-related operations.
-    """
-
     def __init__(self, host: str, port: int, ws_path: str):
         self.host = host
         self.port = port
         self.ws_path = ws_path
 
-        self.network_object_factory = (
-            NetworkObjectFactory()
-        )  # Initialize factory for client-side GFX
+        self.network_object_factory = NetworkObjectFactory()
 
         self.object_layer_render = ObjectLayerRender(
             screen_width=SCREEN_WIDTH,
@@ -52,7 +46,7 @@ class NetworkStateClient:
             world_width=WORLD_WIDTH,
             world_height=WORLD_HEIGHT,
             network_object_size=NETWORK_OBJECT_SIZE,
-            object_layer_data=self.network_object_factory.get_object_layer_data(),  # Get data from factory
+            object_layer_data=self.network_object_factory.get_object_layer_data(),
             title="Python NetworkState Client",
             target_fps=60,
         )
@@ -67,22 +61,22 @@ class NetworkStateClient:
         self.message_queue_lock = threading.Lock()
         self.connection_ready_event = threading.Event()
 
-        # Initialize the proxy, passing necessary client components
         self.proxy = NetworkStateProxy(
             host=self.host,
             port=self.port,
             ws_path=self.ws_path,
             client_message_queue=self.message_queue,
             client_connection_ready_event=self.connection_ready_event,
-            client_player_id_setter=self._set_my_player_id,  # Pass a method to set player ID
+            client_player_id_setter=self._set_my_player_id,
+            world_width=WORLD_WIDTH,
+            world_height=WORLD_HEIGHT,
+            network_object_size=NETWORK_OBJECT_SIZE,
         )
 
     def _set_my_player_id(self, player_id: str):
-        """Sets the client's player ID, called by the proxy."""
         self.my_player_id = player_id
 
     def _process_queued_messages(self):
-        """Processes messages received from the proxy."""
         with self.message_queue_lock:
             messages_to_process = list(self.message_queue)
             self.message_queue.clear()
@@ -91,23 +85,11 @@ class NetworkStateClient:
             self._handle_proxy_message(data)
 
     def _handle_proxy_message(self, data: dict):
-        """Handles messages forwarded by the proxy."""
         msg_type = data.get("type")
         if msg_type == "network_state_update":
             if "network_objects" in data:
-                # When receiving network_state_update from proxy/server,
-                # we only want to update persistent objects.
-                # Temporary GFX objects (POINT_PATH, CLICK_POINTER) are managed client-side
-                # and should not be overwritten or removed by server updates.
-                filtered_network_objects_data = {}
-                for obj_id, obj_data in data["network_objects"].items():
-                    # Create a temporary NetworkObject instance to check its persistence
-                    temp_obj = NetworkObject.from_dict(obj_data)
-                    if temp_obj.is_persistent:
-                        filtered_network_objects_data[obj_id] = obj_data
-
                 object_layer_ids_to_remove_from_rendering_system = (
-                    self.network_state.update_from_dict(filtered_network_objects_data)
+                    self.network_state.update_from_dict(data["network_objects"])
                 )
 
                 for (
@@ -133,7 +115,6 @@ class NetworkStateClient:
                     f"Received 'network_state_update' message without 'network_objects' key: {data}"
                 )
         elif msg_type == "player_assigned":
-            # Player ID is now set via _set_my_player_id by the proxy
             logging.info(f"Client received assigned player ID: {self.my_player_id}.")
         elif msg_type == "message":
             logging.info(f"Proxy message: {data.get('text', 'No message text')}")
@@ -156,13 +137,9 @@ class NetworkStateClient:
             obj_id = data.get("obj_id")
             object_layer_id = data.get("object_layer_id")
             if obj_id and object_layer_id:
-                # The client should remove objects from rendering that were
-                # explicitly told to be removed by the server/proxy (for persistent objects),
-                # or its own GFX.
                 self.object_layer_render.remove_object_layer_animation(
                     obj_id, object_layer_id
                 )
-                # Also remove from client's network state if it's a persistent object
                 with self.network_state.lock:
                     obj_to_remove = self.network_state.get_network_object(obj_id)
                     if obj_to_remove and obj_to_remove.is_persistent:
@@ -180,17 +157,11 @@ class NetworkStateClient:
             )
 
     def send_message_to_proxy(self, msg_type: str, payload: dict | None = None):
-        """Sends a message to the NetworkStateProxy."""
         self.proxy.send_client_message(msg_type, payload)
 
     def _generate_client_path_gfx_async(
         self, path_coords: list[dict[str, float]], current_time: float
     ):
-        """
-        Generates POINT_PATH network objects sequentially with a delay to simulate
-        the path being "drawn" on the client-side.
-        """
-        # Clear existing non-persistent path points to avoid accumulation
         obj_ids_to_remove = []
         with self.network_state.lock:
             for obj_id, obj in self.network_state.network_objects.items():
@@ -201,7 +172,7 @@ class NetworkStateClient:
         for obj_id in obj_ids_to_remove:
             self.object_layer_render.remove_object_layer_animation(obj_id, "POINT_PATH")
 
-        delay_per_point = 0.02  # Small delay between adding each path point
+        delay_per_point = 0.02
 
         for point in path_coords:
             obj = self.network_object_factory.generate_point_path(
@@ -215,12 +186,9 @@ class NetworkStateClient:
         )
 
     def run(self):
-        """Runs the main client loop."""
-        self.proxy.connect()  # Start the proxy connection
+        self.proxy.connect()
 
-        if not self.connection_ready_event.wait(
-            timeout=10
-        ):  # Increased timeout for proxy to connect
+        if not self.connection_ready_event.wait(timeout=10):
             logging.error("Failed to establish connection via proxy within timeout.")
             self.object_layer_render.close_window()
             self.proxy.close()
@@ -235,8 +203,6 @@ class NetworkStateClient:
 
             self._process_queued_messages()
 
-            # Cleanup expired network objects (e.g., GFX objects)
-            # This is primarily for objects that decay on the client-side *without* explicit proxy removal messages
             object_layer_ids_to_remove_from_rendering_system = []
             with self.network_state.lock:
                 object_layer_ids_to_remove_from_rendering_system = (
@@ -250,117 +216,240 @@ class NetworkStateClient:
                     obj_id, object_layer_id
                 )
 
-            # Update positions of all network objects
             object_movement_deltas = {}
             with self.network_state.lock:
                 for obj_id, obj in self.network_state.network_objects.items():
-                    dx, dy = obj.update_position(delta_time)
-                    object_movement_deltas[obj_id] = (dx, dy)
+                    # Update position and get effective movement delta
+                    effective_dx, effective_dy = obj.update_position(delta_time)
+                    object_movement_deltas[obj_id] = (effective_dx, effective_dy)
 
                     if obj.path and obj.path_index >= len(obj.path):
                         obj.path = []
                         obj.path_index = 0
 
-            # Handle mouse clicks for movement requests
             if self.object_layer_render.is_mouse_button_pressed(MOUSE_BUTTON_LEFT):
                 world_mouse_pos = self.object_layer_render.get_world_mouse_position()
                 logging.info(
                     f"Mouse clicked at world position: ({world_mouse_pos.x}, {world_mouse_pos.y})"
                 )
-                move_request_payload = {
-                    "target_x": world_mouse_pos.x,
-                    "target_y": world_mouse_pos.y,
-                }
-                self.send_message_to_proxy("client_move_request", move_request_payload)
 
-                # Client-side GFX generation for click pointer
+                # Calculate grid coordinates for the exact clicked spot
+                clicked_grid_x, clicked_grid_y = (
+                    self.network_state._world_to_grid_coords(
+                        world_mouse_pos.x, world_mouse_pos.y
+                    )
+                )
+
+                # Generate click pointer regardless of obstacle status
                 click_pointer_obj = self.network_object_factory.generate_click_pointer(
                     world_mouse_pos.x, world_mouse_pos.y, current_time
                 )
                 with self.network_state.lock:
                     self.network_state.add_or_update_network_object(click_pointer_obj)
 
-                # Client-side GFX generation for path points
-                if self.my_network_object:
-                    start_grid_x, start_grid_y = (
-                        self.network_state._world_to_grid_coords(
-                            self.my_network_object.x, self.my_network_object.y
-                        )
+                # Check if the clicked location is within maze bounds and is an obstacle
+                if (
+                    0 <= clicked_grid_y < len(self.network_state.simplified_maze)
+                    and 0 <= clicked_grid_x < len(self.network_state.simplified_maze[0])
+                    and self.network_state.simplified_maze[clicked_grid_y][
+                        clicked_grid_x
+                    ]
+                    == 1
+                ):
+                    logging.warning(
+                        f"Clicked on an obstacle at grid ({clicked_grid_x}, {clicked_grid_y}). Pathfinding skipped."
                     )
-                    end_grid_x, end_grid_y = self.network_state._world_to_grid_coords(
-                        world_mouse_pos.x, world_mouse_pos.y
-                    )
-                    maze = self.network_state.simplified_maze
-                    path_grid = astar(
-                        maze, (start_grid_y, start_grid_x), (end_grid_y, end_grid_x)
+                else:
+                    # If not an obstacle, proceed with move request and pathfinding
+                    move_request_payload = {
+                        "target_x": world_mouse_pos.x,
+                        "target_y": world_mouse_pos.y,
+                    }
+                    self.send_message_to_proxy(
+                        "client_move_request", move_request_payload
                     )
 
-                    if path_grid:
-                        path_world_coords = []
-                        for grid_y, grid_x in path_grid:
-                            world_x, world_y = self.network_state._grid_to_world_coords(
-                                grid_x, grid_y
+                    if self.my_network_object:
+                        player_current_world_x = self.my_network_object.x
+                        player_current_world_y = self.my_network_object.y
+
+                        maze = self.network_state.simplified_maze
+                        shortest_path_grid = None
+                        min_path_length = float("inf")
+
+                        # Consider 9 potential target locations for wrapping effect
+                        for dx_wrap in [-1, 0, 1]:
+                            for dy_wrap in [-1, 0, 1]:
+                                candidate_target_x = (
+                                    world_mouse_pos.x + dx_wrap * WORLD_WIDTH
+                                )
+                                candidate_target_y = (
+                                    world_mouse_pos.y + dy_wrap * WORLD_HEIGHT
+                                )
+
+                                start_grid_x, start_grid_y = (
+                                    self.network_state._world_to_grid_coords(
+                                        player_current_world_x, player_current_world_y
+                                    )
+                                )
+                                end_grid_x, end_grid_y = (
+                                    self.network_state._world_to_grid_coords(
+                                        candidate_target_x, candidate_target_y
+                                    )
+                                )
+
+                                # Pass maze dimensions to the heuristic
+                                current_path_grid = astar(
+                                    maze,
+                                    (start_grid_y, start_grid_x),
+                                    (end_grid_y, end_grid_x),
+                                )
+
+                                if (
+                                    current_path_grid
+                                    and len(current_path_grid) < min_path_length
+                                ):
+                                    min_path_length = len(current_path_grid)
+                                    shortest_path_grid = current_path_grid
+
+                        if shortest_path_grid:
+                            path_world_coords = []
+                            prev_world_x, prev_world_y = (
+                                player_current_world_x,
+                                player_current_world_y,
                             )
-                            path_world_coords.append({"X": world_x, "Y": world_y})
+                            for grid_y, grid_x in shortest_path_grid:
+                                world_x, world_y = (
+                                    self.network_state._grid_to_world_coords(
+                                        grid_x, grid_y, prev_world_x, prev_world_y
+                                    )
+                                )
+                                path_world_coords.append({"X": world_x, "Y": world_y})
+                                prev_world_x, prev_world_y = world_x, world_y
 
-                        # Start a new thread for drawing path GFX
-                        threading.Thread(
-                            target=self._generate_client_path_gfx_async,
-                            args=(path_world_coords, current_time),
-                            daemon=True,
-                        ).start()
+                            threading.Thread(
+                                target=self._generate_client_path_gfx_async,
+                                args=(path_world_coords, current_time),
+                                daemon=True,
+                            ).start()
+                        else:
+                            logging.warning(
+                                "No path found for client-side POINT_PATH GFX generation."
+                            )
                     else:
                         logging.warning(
-                            "No path found for client-side POINT_PATH GFX generation."
+                            "Player object not available for client-side path GFX generation."
                         )
-                else:
-                    logging.warning(
-                        "Player object not available for client-side path GFX generation."
-                    )
 
-            # --- Rendering ---
             self.object_layer_render.begin_drawing()
             self.object_layer_render.clear_background(RAYWHITE)
-            self.object_layer_render.begin_camera_mode()
 
-            self.object_layer_render.draw_grid()
+            if self.my_network_object:
+                # Get the raw, wrapped position of the player
+                player_raw_x = self.my_network_object.x
+                player_raw_y = self.my_network_object.y
+
+                # Get the currently rendered (smoothed) position
+                smoothed_player_pos = (
+                    self.object_layer_render.get_smoothed_object_position(
+                        self.my_player_id
+                    )
+                )
+
+                if smoothed_player_pos:
+                    # Calculate the difference, considering potential wrap-around for snapping
+                    diff_x_for_snap = player_raw_x - smoothed_player_pos.x
+                    diff_y_for_snap = player_raw_y - smoothed_player_pos.y
+
+                    # Adjust diff_x_for_snap for wrapping
+                    # If the distance is greater than half the world, it means we've wrapped.
+                    # Adjust the difference to be the "shorter" wrapped distance.
+                    if abs(diff_x_for_snap) > WORLD_WIDTH / 2:
+                        diff_x_for_snap = (player_raw_x % WORLD_WIDTH) - (
+                            smoothed_player_pos.x % WORLD_WIDTH
+                        )
+                        if (
+                            abs(diff_x_for_snap) > WORLD_WIDTH / 2
+                        ):  # Check again after initial modulo
+                            if diff_x_for_snap > 0:
+                                diff_x_for_snap -= WORLD_WIDTH
+                            else:
+                                diff_x_for_snap += WORLD_WIDTH
+
+                    if abs(diff_y_for_snap) > WORLD_HEIGHT / 2:
+                        diff_y_for_snap = (player_raw_y % WORLD_HEIGHT) - (
+                            smoothed_player_pos.y % WORLD_HEIGHT
+                        )
+                        if (
+                            abs(diff_y_for_snap) > WORLD_HEIGHT / 2
+                        ):  # Check again after initial modulo
+                            if diff_y_for_snap > 0:
+                                diff_y_for_snap -= WORLD_HEIGHT
+                            else:
+                                diff_y_for_snap += WORLD_HEIGHT
+
+                    # If the adjusted difference is still large (e.g., more than one object size),
+                    # it indicates a direct wrap-around that needs immediate camera snap.
+                    # This threshold prevents snapping for normal smooth movement.
+                    if (
+                        abs(diff_x_for_snap) > NETWORK_OBJECT_SIZE
+                        or abs(diff_y_for_snap) > NETWORK_OBJECT_SIZE
+                    ):
+                        # Direct jump (no smoothness)
+                        self.object_layer_render.camera.target.x = (
+                            player_raw_x + NETWORK_OBJECT_SIZE / 2
+                        )
+                        self.object_layer_render.camera.target.y = (
+                            player_raw_y + NETWORK_OBJECT_SIZE / 2
+                        )
+                    else:
+                        # Otherwise, apply smooth camera movement
+                        self.object_layer_render.update_camera_target(
+                            Vector2(
+                                player_raw_x + NETWORK_OBJECT_SIZE / 2,
+                                player_raw_y + NETWORK_OBJECT_SIZE / 2,
+                            ),
+                            smoothness=CAMERA_SMOOTHNESS,
+                        )
+
+                    self.send_message_to_proxy(
+                        "client_viewport_update",
+                        {
+                            "center_x": self.object_layer_render.camera.target.x,
+                            "center_y": self.object_layer_render.camera.target.y,
+                        },
+                    )
+                else:
+                    # Fallback if smoothed_player_pos is not yet available, snap directly
+                    self.object_layer_render.camera.target.x = (
+                        self.my_network_object.x + NETWORK_OBJECT_SIZE / 2
+                    )
+                    self.object_layer_render.camera.target.y = (
+                        self.my_network_object.y + NETWORK_OBJECT_SIZE / 2
+                    )
+                    self.send_message_to_proxy(
+                        "client_viewport_update",
+                        {
+                            "center_x": self.object_layer_render.camera.target.x,
+                            "center_y": self.object_layer_render.camera.target.y,
+                        },
+                    )
+
+            self.object_layer_render.begin_camera_mode()
 
             with self.network_state.lock:
                 for obj_id, obj in self.network_state.network_objects.items():
-                    dx, dy = object_movement_deltas.get(obj_id, (0.0, 0.0))
+                    effective_dx, effective_dy = object_movement_deltas.get(
+                        obj_id, (0.0, 0.0)
+                    )
                     self.object_layer_render.draw_network_object(
-                        obj, current_time, dx, dy
+                        obj, current_time, effective_dx, effective_dy
                     )
 
             self.object_layer_render.end_camera_mode()
 
-            # Display player info and connection status
             with self.network_state.lock:
                 if self.my_network_object:
-                    # Get the smoothed position for the camera target
-                    smoothed_player_pos = (
-                        self.object_layer_render.get_smoothed_object_position(
-                            self.my_player_id
-                        )
-                    )
-                    if smoothed_player_pos:
-                        self.object_layer_render.update_camera_target(
-                            Vector2(
-                                smoothed_player_pos.x + NETWORK_OBJECT_SIZE / 2,
-                                smoothed_player_pos.y + NETWORK_OBJECT_SIZE / 2,
-                            ),
-                            smoothness=CAMERA_SMOOTHNESS,
-                        )
-                    else:
-                        # Fallback to raw position if smoothed position not available yet
-                        self.object_layer_render.update_camera_target(
-                            Vector2(
-                                self.my_network_object.x + NETWORK_OBJECT_SIZE / 2,
-                                self.my_network_object.y + NETWORK_OBJECT_SIZE / 2,
-                            ),
-                            smoothness=CAMERA_SMOOTHNESS,
-                        )
-
                     self.object_layer_render.draw_text(
                         f"My Player ID: {self.my_player_id}", 10, 10, 20, BLACK
                     )
@@ -376,7 +465,6 @@ class NetworkStateClient:
                         "Connecting...", 10, 10, 20, BLACK
                     )
 
-            # Display FPS
             frame_time = self.object_layer_render.get_frame_time()
             if frame_time > 0:
                 self.object_layer_render.draw_text(
@@ -395,6 +483,6 @@ class NetworkStateClient:
 
             time.sleep(0.001)
 
-        self.proxy.close()  # Close the proxy connection on client exit
+        self.proxy.close()
         self.object_layer_render.close_window()
         logging.info("Client window closed.")

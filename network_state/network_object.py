@@ -3,7 +3,11 @@ import math
 
 from raylibpy import Color
 
-from config import NETWORK_OBJECT_TYPE_DEFAULT_OBJECT_LAYER_IDS
+from config import (
+    NETWORK_OBJECT_TYPE_DEFAULT_OBJECT_LAYER_IDS,
+    WORLD_WIDTH,
+    WORLD_HEIGHT,
+)
 
 logging.basicConfig(
     level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s"
@@ -11,11 +15,6 @@ logging.basicConfig(
 
 
 class NetworkObject:
-    """
-    Represents an object in the network state, with properties like position, color,
-    type, movement path, and persistence.
-    """
-
     def __init__(
         self,
         obj_id: str,
@@ -37,7 +36,6 @@ class NetworkObject:
         self.speed = speed
         self.network_object_type = network_object_type.upper()
 
-        # Assign default object layer IDs if not provided
         self.object_layer_ids = (
             object_layer_ids
             if object_layer_ids is not None
@@ -46,84 +44,128 @@ class NetworkObject:
             )
         )
 
-        self.path: list[dict[str, float]] = (
-            []
-        )  # List of {'X': float, 'Y': float} for movement
-        self.path_index = 0  # Current index in the path
+        self.path: list[dict[str, float]] = []
+        self.path_index: int = 0
 
-        self._prev_x = x  # Previous X position for movement calculation
-        self._prev_y = y  # Previous Y position for movement calculation
-
-        self._decay_time = decay_time  # Timestamp when this object should decay
-        self.is_persistent = (
-            is_persistent  # If True, object is not automatically removed
-        )
-
-    @property
-    def decay_time(self) -> float | None:
-        """Returns the decay time of the object."""
-        return self._decay_time
+        self.decay_time = decay_time
+        self.is_persistent = is_persistent
 
     def set_path(self, path: list[dict[str, float]]):
-        """Sets a new movement path for the object."""
         self.path = path
         self.path_index = 0
 
     def update_position(self, delta_time: float) -> tuple[float, float]:
         """
-        Updates the object's position along its path based on delta_time and speed.
-        Returns the change in x and y position.
+        Updates the object's position along its path.
+        Returns the effective delta_x and delta_y considering world wrapping.
         """
-        prev_x, prev_y = self.x, self.y
-
         if not self.path or self.path_index >= len(self.path):
-            self._prev_x = self.x
-            self._prev_y = self.y
-            return 0.0, 0.0  # No movement if no path or path completed
+            return 0.0, 0.0
 
         target_point = self.path[self.path_index]
-        target_world_x = target_point["X"]
-        target_world_y = target_point["Y"]
+        target_x = target_point["X"]
+        target_y = target_point["Y"]
 
-        dx_to_target = target_world_x - self.x
-        dy_to_target = target_world_y - self.y
-        distance_to_target = math.sqrt(
-            dx_to_target * dx_to_target + dy_to_target * dy_to_target
-        )
+        # Store old position before update
+        old_x = self.x
+        old_y = self.y
 
-        move_distance = self.speed * delta_time
+        # Calculate vector to target, considering world wrapping for shortest path
+        # This is for movement calculation, not visual rendering
+        diff_x = target_x - self.x
+        diff_y = target_y - self.y
 
-        if distance_to_target < move_distance:
-            # Reached or overshot the current target point, move to next
-            self.x = target_world_x
-            self.y = target_world_y
+        # Adjust diff_x for wrapping
+        if abs(diff_x) > WORLD_WIDTH / 2:
+            if diff_x > 0:
+                diff_x -= WORLD_WIDTH
+            else:
+                diff_x += WORLD_WIDTH
+
+        # Adjust diff_y for wrapping
+        if abs(diff_y) > WORLD_HEIGHT / 2:
+            if diff_y > 0:
+                diff_y -= WORLD_HEIGHT
+            else:
+                diff_y += WORLD_HEIGHT
+
+        distance = math.sqrt(diff_x**2 + diff_y**2)
+
+        if distance < 1.0:  # Close enough to target, move to next point
+            self.x = target_x % WORLD_WIDTH
+            self.y = target_y % WORLD_HEIGHT
+            if self.x < 0:
+                self.x += WORLD_WIDTH
+            if self.y < 0:
+                self.y += WORLD_HEIGHT
             self.path_index += 1
+            return diff_x, diff_y  # Return the delta for the last step to target
         else:
-            # Move towards the target point
-            direction_x = dx_to_target / distance_to_target
-            direction_y = dy_to_target / distance_to_target
-            self.x += direction_x * move_distance
-            self.y += direction_y * move_distance
+            move_distance = min(self.speed * delta_time, distance)
+            move_x = (diff_x / distance) * move_distance
+            move_y = (diff_y / distance) * move_distance
 
-        current_dx = self.x - prev_x
-        current_dy = self.y - prev_y
+            self.x = (self.x + move_x) % WORLD_WIDTH
+            self.y = (self.y + move_y) % WORLD_HEIGHT
 
-        self._prev_x = self.x
-        self._prev_y = self.y
+            # Ensure coordinates are positive after modulo
+            if self.x < 0:
+                self.x += WORLD_WIDTH
+            if self.y < 0:
+                self.y += WORLD_HEIGHT
 
-        return current_dx, current_dy
+            # Calculate effective_dx and effective_dy for rendering direction
+            effective_dx = self.x - old_x
+            effective_dy = self.y - old_y
+
+            # Adjust effective_dx/dy if a wrap occurred during this step
+            if abs(effective_dx) > WORLD_WIDTH / 2:
+                if effective_dx > 0:
+                    effective_dx -= WORLD_WIDTH
+                else:
+                    effective_dx += WORLD_WIDTH
+
+            if abs(effective_dy) > WORLD_HEIGHT / 2:
+                if effective_dy > 0:
+                    effective_dy -= WORLD_HEIGHT
+                else:
+                    effective_dy += WORLD_HEIGHT
+
+            return effective_dx, effective_dy
 
     @classmethod
-    def from_dict(cls, data: dict):
-        """Creates a NetworkObject instance from a dictionary."""
+    def from_dict(cls, data: dict) -> "NetworkObject":
         obj_id = data["obj_id"]
         x = data["x"]
         y = data["y"]
 
-        color_r = data.get("color_r", 255)
-        color_g = data.get("color_g", 255)
-        color_b = data.get("color_b", 255)
-        color_a = data.get("color_a", 255)
+        # --- START MODIFICATION FOR COLOR PARSING ---
+        if (
+            "color_r" in data
+            and "color_g" in data
+            and "color_b" in data
+            and "color_a" in data
+        ):
+            # New flattened format from Go server
+            color_r = data["color_r"]
+            color_g = data["color_g"]
+            color_b = data["color_b"]
+            color_a = data["color_a"]
+        elif "color" in data and isinstance(data["color"], dict):
+            # Old nested format (fallback for older server versions or inconsistent data)
+            nested_color = data["color"]
+            color_r = nested_color.get("R", 0)
+            color_g = nested_color.get("G", 0)
+            color_b = nested_color.get("B", 0)
+            color_a = nested_color.get("A", 255)  # Default alpha to 255 if not present
+        else:
+            # Default to black if color data is completely missing or malformed
+            logging.warning(
+                f"Color data missing or malformed for object {obj_id}. Defaulting to black."
+            )
+            color_r, color_g, color_b, color_a = 0, 0, 0, 255
+        # --- END MODIFICATION FOR COLOR PARSING ---
+
         color = Color(color_r, color_g, color_b, color_a)
 
         is_obstacle = data.get("is_obstacle", False)
@@ -150,7 +192,6 @@ class NetworkObject:
         return obj
 
     def to_dict(self) -> dict:
-        """Converts the NetworkObject instance to a dictionary."""
         return {
             "obj_id": self.obj_id,
             "x": self.x,
@@ -163,7 +204,8 @@ class NetworkObject:
             "speed": self.speed,
             "network_object_type": self.network_object_type,
             "object_layer_ids": self.object_layer_ids,
-            "path": self.path,
-            "decay_time": self._decay_time,
+            "decay_time": self.decay_time,
             "is_persistent": self.is_persistent,
+            "path": self.path,
+            "path_index": self.path_index,
         }

@@ -1,7 +1,13 @@
 import logging
 import time
 
-from config import NETWORK_OBJECT_SIZE
+from config import (
+    NETWORK_OBJECT_SIZE,
+    SCREEN_WIDTH,
+    SCREEN_HEIGHT,
+    WORLD_WIDTH,
+    WORLD_HEIGHT,
+)
 from object_layer.object_layer_data import OBJECT_LAYER_DATA, ObjectLayerMode, Direction
 from object_layer.object_layer_render import ObjectLayerRender
 from raylibpy import (
@@ -31,15 +37,11 @@ logging.basicConfig(
 
 
 class MockObjectLayerDataProvider:
-    """Provides object layer data for the viewer demo."""
-
     def get_object_layer_data(self) -> dict:
         return OBJECT_LAYER_DATA
 
 
 if __name__ == "__main__":
-    SCREEN_WIDTH = 800
-    SCREEN_HEIGHT = 600
     TARGET_FPS = 60
 
     object_layer_data_provider = MockObjectLayerDataProvider()
@@ -48,8 +50,8 @@ if __name__ == "__main__":
     object_layer_render = ObjectLayerRender(
         screen_width=SCREEN_WIDTH,
         screen_height=SCREEN_HEIGHT,
-        world_width=SCREEN_WIDTH,  # For demo, world matches screen size
-        world_height=SCREEN_HEIGHT,
+        world_width=WORLD_WIDTH,
+        world_height=WORLD_HEIGHT,
         network_object_size=NETWORK_OBJECT_SIZE,
         object_layer_data=object_layer_data,
         title="Object Layer Viewer Demo",
@@ -63,13 +65,12 @@ if __name__ == "__main__":
         "WALL",
     ]
     current_object_layer_id_index = 0
-    demo_obj_id = "demo_object_layer_viewer_object"  # Unique ID for the demo object
+    demo_obj_id = "demo_object_layer_viewer_object"
 
     current_object_layer_id = AVAILABLE_OBJECT_LAYER_IDS[current_object_layer_id_index]
     demo_direction = Direction.DOWN
     object_layer_mode = ObjectLayerMode.IDLE
 
-    # Calculate initial pixel size based on network object size and matrix dimension
     matrix_dimension = object_layer_render.get_object_layer_matrix_dimension(
         current_object_layer_id
     )
@@ -77,7 +78,6 @@ if __name__ == "__main__":
     if current_pixel_size_in_display == 0:
         current_pixel_size_in_display = 1
 
-    # Get or create the animation instance for the demo object
     demo_object_layer_properties = (
         object_layer_render.get_or_create_object_layer_animation(
             demo_obj_id,
@@ -103,16 +103,14 @@ if __name__ == "__main__":
 
     last_commanded_dx = 0.0
     last_commanded_dy = 0.0
-    move_speed_sim = 5.0  # Simulated movement speed for demo
+    move_speed_sim = 5.0
 
     while not object_layer_render.window_should_close():
         current_time = time.time()
         delta_time = current_time - last_frame_time
         last_frame_time = current_time
 
-        # Handle input for non-stateless animations (e.g., player character)
         if not demo_object_layer_animation_instance.is_stateless:
-            # Reset movement if no direction keys are pressed and in IDLE mode
             if not (
                 object_layer_render.is_key_pressed(KEY_UP)
                 or object_layer_render.is_key_pressed(KEY_KP_8)
@@ -131,7 +129,6 @@ if __name__ == "__main__":
                     last_commanded_dx = 0.0
                     last_commanded_dy = 0.0
 
-            # Update commanded movement based on key presses
             if object_layer_render.is_key_pressed(
                 KEY_UP
             ) or object_layer_render.is_key_pressed(KEY_KP_8):
@@ -153,21 +150,19 @@ if __name__ == "__main__":
                 last_commanded_dx = -move_speed_sim
                 last_commanded_dy = 0.0
 
-            # Diagonal movements
-            if object_layer_render.is_key_pressed(KEY_KP_7):  # Up-Left
+            if object_layer_render.is_key_pressed(KEY_KP_7):
                 last_commanded_dx = -move_speed_sim * 0.707
                 last_commanded_dy = -move_speed_sim * 0.707
-            if object_layer_render.is_key_pressed(KEY_KP_9):  # Up-Right
+            if object_layer_render.is_key_pressed(KEY_KP_9):
                 last_commanded_dx = move_speed_sim * 0.707
                 last_commanded_dy = -move_speed_sim * 0.707
-            if object_layer_render.is_key_pressed(KEY_KP_1):  # Down-Left
+            if object_layer_render.is_key_pressed(KEY_KP_1):
                 last_commanded_dx = -move_speed_sim * 0.707
                 last_commanded_dy = move_speed_sim * 0.707
-            if object_layer_render.is_key_pressed(KEY_KP_3):  # Down-Right
+            if object_layer_render.is_key_pressed(KEY_KP_3):
                 last_commanded_dx = move_speed_sim * 0.707
                 last_commanded_dy = move_speed_sim * 0.707
 
-            # Toggle walking/idle mode
             if object_layer_render.is_key_pressed(KEY_SPACE):
                 object_layer_mode = (
                     ObjectLayerMode.IDLE
@@ -177,7 +172,6 @@ if __name__ == "__main__":
                 if object_layer_mode == ObjectLayerMode.IDLE:
                     last_commanded_dx = 0.0
                     last_commanded_dy = 0.0
-                # Update animation direction and mode
                 object_layer_render.update_object_layer_direction_for_object(
                     obj_id=demo_obj_id,
                     object_layer_id=current_object_layer_id,
@@ -185,10 +179,9 @@ if __name__ == "__main__":
                     current_dy=last_commanded_dy,
                     object_layer_mode=object_layer_mode,
                     timestamp=current_time,
-                    reverse=True,  # Reverse direction for display in viewer
+                    reverse=True,
                 )
 
-            # Continuous update of animation direction based on commanded movement
             object_layer_render.update_object_layer_direction_for_object(
                 obj_id=demo_obj_id,
                 object_layer_id=current_object_layer_id,
@@ -196,10 +189,9 @@ if __name__ == "__main__":
                 current_dy=last_commanded_dy,
                 object_layer_mode=object_layer_mode,
                 timestamp=current_time,
-                reverse=True,  # Reverse direction for display in viewer
+                reverse=True,
             )
         else:
-            # For stateless animations, reset movement and mode
             last_commanded_dx = 0.0
             last_commanded_dy = 0.0
             object_layer_mode = ObjectLayerMode.IDLE
@@ -212,7 +204,6 @@ if __name__ == "__main__":
                     Direction.NONE, ObjectLayerMode.IDLE, current_time
                 )
 
-        # Handle zoom (pixel size) changes
         if object_layer_render.is_key_pressed(KEY_TWO):
             current_pixel_size_in_display += 1.0
             object_layer_render.get_or_create_object_layer_animation(
@@ -232,7 +223,6 @@ if __name__ == "__main__":
                 initial_direction=demo_object_layer_animation_instance.current_direction,
             )
 
-        # Handle object layer ID changes
         if object_layer_render.is_key_pressed(KEY_THREE):
             current_object_layer_id_index = (current_object_layer_id_index + 1) % len(
                 AVAILABLE_OBJECT_LAYER_IDS
@@ -242,7 +232,7 @@ if __name__ == "__main__":
             ]
             object_layer_render.remove_object_layer_animation(
                 obj_id=demo_obj_id, object_layer_id=None
-            )  # Remove all animations for this obj_id
+            )
             object_layer_mode = ObjectLayerMode.IDLE
             last_commanded_dx = 0.0
             last_commanded_dy = 0.0
@@ -275,7 +265,7 @@ if __name__ == "__main__":
             ]
             object_layer_render.remove_object_layer_animation(
                 obj_id=demo_obj_id, object_layer_id=None
-            )  # Remove all animations for this obj_id
+            )
             object_layer_mode = ObjectLayerMode.IDLE
             last_commanded_dx = 0.0
             last_commanded_dy = 0.0
@@ -299,7 +289,6 @@ if __name__ == "__main__":
                 "object_layer_animation_instance"
             ]
 
-        # Get current animation instance properties
         demo_object_layer_properties = (
             object_layer_render.get_object_layer_animation_properties(
                 demo_obj_id, current_object_layer_id
@@ -312,12 +301,10 @@ if __name__ == "__main__":
             "object_layer_animation_instance"
         ]
 
-        # Update all active animations (only one in this demo)
         object_layer_render.update_all_active_object_layer_animations(
             delta_time, current_time
         )
 
-        # Calculate drawing position for the demo object
         matrix_dimension = object_layer_render.get_object_layer_matrix_dimension(
             current_object_layer_id
         )
@@ -326,11 +313,9 @@ if __name__ == "__main__":
         draw_x = (SCREEN_WIDTH / 2) - (total_rendered_width / 2)
         draw_y = (SCREEN_HEIGHT / 2) - (total_rendered_height / 2)
 
-        # --- Rendering ---
         object_layer_render.begin_drawing()
-        object_layer_render.clear_background(Color(40, 40, 40, 255))  # Dark background
+        object_layer_render.clear_background(Color(40, 40, 40, 255))
 
-        # Render the demo object's animation
         object_layer_render.render_object_layer_animation(
             obj_id=demo_obj_id,
             object_layer_id=current_object_layer_id,
@@ -339,7 +324,6 @@ if __name__ == "__main__":
             timestamp=current_time,
         )
 
-        # Display UI text
         object_layer_render.draw_text(
             f"Current Object Layer ID: {current_object_layer_id}",
             10,
@@ -357,7 +341,7 @@ if __name__ == "__main__":
                 15,
                 Color(200, 200, 200, 255),
             )
-            base_y_offset = -70  # Adjust UI position for stateless info
+            base_y_offset = -70
         else:
             object_layer_render.draw_text(
                 f"Direction: {demo_object_layer_animation_instance.current_direction.name}",

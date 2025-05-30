@@ -1,140 +1,113 @@
-# Credit for this: Nicholas Swift
-# as found at https://medium.com/@nicholas.w.swift/easy-a-star-pathfinding-7e6689c7f7b2
-from warnings import warn
 import heapq
 
 
-class Node:
+# Heuristic function (Manhattan distance)
+def heuristic(a, b, rows, cols):
     """
-    A node class for A* Pathfinding algorithm.
+    Calculates the shortest distance between two points in a wrapped grid.
+    This is a Manhattan distance that considers wrapping around the grid.
     """
+    dr = abs(a[0] - b[0])
+    dc = abs(a[1] - b[1])
 
-    def __init__(self, parent=None, position=None):
-        self.parent = parent
-        self.position = position  # (row, col)
+    # Consider wrapping around for rows
+    dr_wrapped = min(dr, rows - dr)
+    # Consider wrapping around for columns
+    dc_wrapped = min(dc, cols - dc)
 
-        self.g = 0  # Cost from start to current node
-        self.h = 0  # Heuristic cost from current node to end node
-        self.f = 0  # Total cost (g + h)
-
-    def __eq__(self, other):
-        return self.position == other.position
-
-    def __repr__(self):
-        return f"{self.position} - g: {self.g} h: {self.h} f: {self.f}"
-
-    # Define less than and greater than for heap queue operations
-    def __lt__(self, other):
-        return self.f < other.f
-
-    def __gt__(self, other):
-        return self.f > other.f
+    return dr_wrapped + dc_wrapped
 
 
-def return_path(current_node):
-    """Reconstructs the path from the end node back to the start node."""
-    path = []
-    current = current_node
-    while current is not None:
-        path.append(current.position)
-        current = current.parent
-    return path[::-1]  # Return reversed path to get it from start to end
+def astar(grid, start, end):
+    # grid: 2D list, 0 for walkable, 1 for obstacle
+    # start: (row, col) - wrapped grid coordinates
+    # end: (row, col) - wrapped grid coordinates
 
+    rows = len(grid)
+    cols = len(grid[0])
 
-def astar(maze, start, end, allow_diagonal_movement=False):
-    """
-    Returns a list of tuples (row, col) as a path from the given start to the given end in the given maze.
-    :param maze: A 2D list (grid) where 0 is walkable and 1 is an obstacle.
-    :param start: A tuple (row, col) representing the start position.
-    :param end: A tuple (row, col) representing the end position.
-    :param allow_diagonal_movement: Boolean to allow diagonal movement.
-    :return: A list of tuples (row, col) representing the path, or None if no path is found.
-    """
+    # open_set: Priority queue (f_score, (absolute_row, absolute_col))
+    # We need to track absolute coordinates to correctly reconstruct the path across wraps
+    open_set = [(0, (start[0], start[1]))]  # Store (f_score, (abs_row, abs_col))
 
-    start_node = Node(None, start)
-    start_node.g = start_node.h = start_node.f = 0
-    end_node = Node(None, end)
-    end_node.g = end_node.h = end_node.f = 0
+    # g_score: cost from start to current node, mapped by (absolute_row, absolute_col)
+    g_score = {(start[0], start[1]): 0}
 
-    open_list = []  # Priority queue for nodes to be evaluated
-    closed_list = []  # List of nodes already evaluated
+    # f_score: estimated total cost from start to end through current node, mapped by (absolute_row, absolute_col)
+    f_score = {
+        (start[0], start[1]): heuristic(start, end, rows, cols)
+    }  # Use wrapped heuristic
 
-    heapq.heapify(open_list)
-    heapq.heappush(open_list, start_node)
+    # came_from: reconstruct path. Stores (absolute_row, absolute_col) -> (absolute_prev_row, absolute_prev_col)
+    came_from = {}
 
-    max_iterations = len(maze[0]) * len(maze) * 2  # Safety break for infinite loops
-    outer_iterations = 0
+    while open_set:
+        current_f, current_abs_node = heapq.heappop(open_set)
+        current_wrapped_node = (current_abs_node[0] % rows, current_abs_node[1] % cols)
 
-    # Define possible movements (up, down, left, right)
-    adjacent_squares = (
-        (0, -1),  # Up
-        (0, 1),  # Down
-        (-1, 0),  # Left
-        (1, 0),  # Right
-    )
-    if allow_diagonal_movement:
-        # Add diagonal movements
-        adjacent_squares += (
-            (-1, -1),  # Up-Left
-            (-1, 1),  # Down-Left
-            (1, -1),  # Up-Right
-            (1, 1),  # Down-Right
-        )
+        # Check if the wrapped version of the current_abs_node is the end node
+        if current_wrapped_node == end:
+            path = []
+            node_to_reconstruct = current_abs_node
+            while node_to_reconstruct in came_from:
+                path.append(node_to_reconstruct)
+                node_to_reconstruct = came_from[node_to_reconstruct]
+            path.append(start)  # Add the true start node (which is also absolute)
+            path.reverse()
+            return path
 
-    while len(open_list) > 0:
-        outer_iterations += 1
-        if outer_iterations > max_iterations:
-            warn("A* pathfinding exceeded max iterations. Returning partial path.")
-            return return_path(current_node)
-
-        current_node = heapq.heappop(open_list)
-        closed_list.append(current_node)
-
-        if current_node == end_node:
-            return return_path(current_node)
-
-        children = []
-        for new_position in adjacent_squares:
-            node_position = (
-                current_node.position[0] + new_position[0],
-                current_node.position[1] + new_position[1],
+        # Define neighbors (8 directions)
+        for dr, dc in [
+            (-1, 0),
+            (1, 0),
+            (0, -1),
+            (0, 1),
+            (-1, -1),
+            (-1, 1),
+            (1, -1),
+            (1, 1),
+        ]:
+            # Calculate the absolute neighbor coordinates
+            abs_neighbor_row, abs_neighbor_col = (
+                current_abs_node[0] + dr,
+                current_abs_node[1] + dc,
             )
 
-            # Check if within maze boundaries
-            if not (
-                0 <= node_position[0] < len(maze)
-                and 0 <= node_position[1] < len(maze[0])
-            ):
-                continue
+            # Calculate the wrapped neighbor coordinates for grid lookup
+            wrapped_neighbor_row = abs_neighbor_row % rows
+            wrapped_neighbor_col = abs_neighbor_col % cols
 
-            # Check if walkable terrain (0 means walkable)
-            if maze[node_position[0]][node_position[1]] != 0:
-                continue
+            # Check if the wrapped neighbor is within bounds and not an obstacle
+            if (
+                0 <= wrapped_neighbor_row < rows
+                and 0 <= wrapped_neighbor_col < cols
+                and grid[wrapped_neighbor_row][wrapped_neighbor_col] == 0
+            ):  # 0 for walkable
 
-            new_node = Node(current_node, node_position)
-            children.append(new_node)
+                # Calculate tentative g_score for the neighbor
+                # Diagonal moves have a cost of sqrt(2), cardinal moves have a cost of 1
+                tentative_g_score = g_score[current_abs_node] + (
+                    1.414 if dr != 0 and dc != 0 else 1
+                )
 
-        for child in children:
-            # Child is already in the closed list
-            if child in closed_list:
-                continue
+                # If this path to neighbor is better than any previous one
+                if tentative_g_score < g_score.get(
+                    (abs_neighbor_row, abs_neighbor_col), float("inf")
+                ):
+                    came_from[(abs_neighbor_row, abs_neighbor_col)] = current_abs_node
+                    g_score[(abs_neighbor_row, abs_neighbor_col)] = tentative_g_score
+                    f_score[(abs_neighbor_row, abs_neighbor_col)] = (
+                        tentative_g_score
+                        + heuristic(
+                            (abs_neighbor_row, abs_neighbor_col), end, rows, cols
+                        )
+                    )  # Use wrapped heuristic
+                    heapq.heappush(
+                        open_set,
+                        (
+                            f_score[(abs_neighbor_row, abs_neighbor_col)],
+                            (abs_neighbor_row, abs_neighbor_col),
+                        ),
+                    )
 
-            # Calculate f, g, and h values
-            child.g = current_node.g + 1
-            # Heuristic: Euclidean distance squared
-            child.h = ((child.position[0] - end_node.position[0]) ** 2) + (
-                (child.position[1] - end_node.position[1]) ** 2
-            )
-            child.f = child.g + child.h
-
-            # Child is already in the open list and has a worse G score
-            if any(
-                child.position == open_node.position and child.g >= open_node.g
-                for open_node in open_list
-            ):
-                continue
-
-            heapq.heappush(open_list, child)
-
-    warn("Couldn't get a path to destination.")
-    return None
+    return None  # No path found

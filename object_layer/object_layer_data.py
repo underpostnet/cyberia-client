@@ -1,12 +1,10 @@
 import logging
 from enum import Enum, auto
 
-# This file centralizes object layer data, enums, and related constants.
 logging.basicConfig(
     level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s"
 )
 
-# Import actual object layer matrices and color maps
 from object_layer.building.wall import (
     BUILDING_WALL_ANIMATION_SPEED,
     BUILDING_WALL_MAP_COLORS,
@@ -43,8 +41,6 @@ from object_layer.skin.people import (
 
 
 class Direction(Enum):
-    """Defines possible directions for animated objects."""
-
     UP = auto()
     UP_RIGHT = auto()
     RIGHT = auto()
@@ -53,12 +49,10 @@ class Direction(Enum):
     DOWN_LEFT = auto()
     LEFT = auto()
     UP_LEFT = auto()
-    NONE = auto()  # For objects without a specific direction (e.g., static)
+    NONE = auto()
 
 
 class ObjectLayerMode(Enum):
-    """Defines animation modes (e.g., idle, walking)."""
-
     IDLE = auto()
     WALKING = auto()
 
@@ -77,7 +71,7 @@ OBJECT_LAYER_DATA = {
             "DEFAULT_IDLE": [
                 SKIN_PEOPLE_MATRIX_08_0,
                 SKIN_PEOPLE_MATRIX_08_1,
-            ],  # Fallback
+            ],
             "UP_WALKING": [SKIN_PEOPLE_MATRIX_12_0, SKIN_PEOPLE_MATRIX_12_1],
             "DOWN_WALKING": [SKIN_PEOPLE_MATRIX_18_0, SKIN_PEOPLE_MATRIX_18_1],
             "RIGHT_WALKING": [SKIN_PEOPLE_MATRIX_16_0, SKIN_PEOPLE_MATRIX_16_1],
@@ -89,16 +83,16 @@ OBJECT_LAYER_DATA = {
         },
         "COLORS": SKIN_PEOPLE_MAP_COLORS,
         "FRAME_DURATION": SKIN_PEOPLE_ANIMATION_SPEED,
-        "IS_STATELESS": False,  # People animations have state (direction, mode)
+        "IS_STATELESS": False,
     },
     "CLICK_POINTER": {
         "FRAMES": {
-            "NONE_IDLE": [  # Stateless animations use NONE_IDLE or DEFAULT_IDLE
+            "NONE_IDLE": [
                 GFX_CLICK_POINTER_MATRIX_00,
                 GFX_CLICK_POINTER_MATRIX_01,
                 GFX_CLICK_POINTER_MATRIX_02,
             ],
-            "DEFAULT_IDLE": [  # Fallback
+            "DEFAULT_IDLE": [
                 GFX_CLICK_POINTER_MATRIX_00,
                 GFX_CLICK_POINTER_MATRIX_01,
                 GFX_CLICK_POINTER_MATRIX_02,
@@ -106,24 +100,24 @@ OBJECT_LAYER_DATA = {
         },
         "COLORS": GFX_CLICK_POINTER_MAP_COLORS,
         "FRAME_DURATION": GFX_CLICK_POINTER_ANIMATION_SPEED,
-        "IS_STATELESS": True,  # Click pointer animation is stateless
+        "IS_STATELESS": True,
     },
     "POINT_PATH": {
         "FRAMES": {
             "NONE_IDLE": [GFX_POINT_PATH_MATRIX_00],
-            "DEFAULT_IDLE": [GFX_POINT_PATH_MATRIX_00],  # Fallback
+            "DEFAULT_IDLE": [GFX_POINT_PATH_MATRIX_00],
         },
         "COLORS": GFX_POINT_PATH_MAP_COLORS,
         "FRAME_DURATION": GFX_POINT_PATH_ANIMATION_SPEED,
-        "IS_STATELESS": True,  # Path points are stateless
+        "IS_STATELESS": True,
     },
     "WALL": {
         "FRAMES": {
             "NONE_IDLE": [BUILDING_WALL_MATRIX_00],
-            "DEFAULT_IDLE": [BUILDING_WALL_MATRIX_00],  # Fallback
+            "DEFAULT_IDLE": [BUILDING_WALL_MATRIX_00],
         },
         "COLORS": BUILDING_WALL_MAP_COLORS,
         "FRAME_DURATION": BUILDING_WALL_ANIMATION_SPEED,
-        "IS_STATELESS": True,  # Walls are static and stateless
+        "IS_STATELESS": True,
     },
 }

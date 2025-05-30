@@ -1,10 +1,13 @@
 # Screen and World Dimensions
-SCREEN_WIDTH = 1280
-SCREEN_HEIGHT = 720
-WORLD_WIDTH = 1600
-WORLD_HEIGHT = 1600
+SCREEN_WIDTH = 1200
+SCREEN_HEIGHT = 800
+WORLD_WIDTH = 3000
+WORLD_HEIGHT = 3000
 NETWORK_OBJECT_SIZE = 50
 MAZE_CELL_WORLD_SIZE = 50
+
+# Client viewport padding for Area of Interest (AoI)
+VIEWPORT_PADDING = 200
 
 # Server Connection Settings
 SERVER_HOST = "localhost"
