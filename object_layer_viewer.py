@@ -118,6 +118,58 @@ if __name__ == "__main__":
     last_commanded_dy = 0.0
     move_speed_sim = 5.0  # Simulated movement speed for demo
 
+    # Define a fixed 16-color rainbow palette
+    def get_rainbow_color(index, total_colors):
+        """Generates a rainbow color based on index."""
+        hue = index * (360 / total_colors)  # Hue in degrees (0-360)
+
+        # Simple HSL to RGB conversion for a vibrant spectrum
+        c = 1.0  # Chroma (saturation * lightness)
+        s = 1.0  # Saturation
+        l = 0.5  # Lightness (fixed for vibrant colors)
+
+        h_prime = hue / 60.0
+        x = c * (1 - abs(h_prime % 2 - 1))
+
+        r1, g1, b1 = 0, 0, 0
+        if 0 <= h_prime < 1:
+            r1, g1, b1 = c, x, 0
+        elif 1 <= h_prime < 2:
+            r1, g1, b1 = x, c, 0
+        elif 2 <= h_prime < 3:
+            r1, g1, b1 = 0, c, x
+        elif 3 <= h_prime < 4:
+            r1, g1, b1 = 0, x, c
+        elif 4 <= h_prime < 5:
+            r1, g1, b1 = x, 0, c
+        elif 5 <= h_prime < 6:
+            r1, g1, b1 = c, 0, x
+
+        m = l - c / 2
+        r, g, b = (r1 + m), (g1 + m), (b1 + m)
+
+        return Color(int(r * 255), int(g * 255), int(b * 255), 255)
+
+    COLOR_PALETTE_RAINBOW = [get_rainbow_color(i, 16) for i in range(16)]
+
+    # Define a 16-color lightness/darkness bar (white to black)
+    COLOR_PALETTE_LIGHTNESS = [
+        Color(
+            int(255 - i * (255 / 15)),
+            int(255 - i * (255 / 15)),
+            int(255 - i * (255 / 15)),
+            255,
+        )
+        for i in range(16)
+    ]
+
+    PALETTE_SQUARE_SIZE = 20
+    PALETTE_PADDING = 10
+    PALETTE_COLS_RAINBOW = 16  # Changed to 16 columns for rainbow palette
+    PALETTE_ROWS_RAINBOW = 1  # Changed to 1 row for rainbow palette
+    PALETTE_COLS_LIGHTNESS = 16  # Explicitly set for clarity
+    PALETTE_ROWS_LIGHTNESS = 1  # Explicitly set for clarity
+
     while not object_layer_render.window_should_close():
         current_time = time.time()
         delta_time = current_time - last_frame_time
@@ -375,6 +427,95 @@ if __name__ == "__main__":
             screen_y=draw_y,
             timestamp=current_time,
         )
+
+        # Draw grid if animation is paused
+        if demo_object_layer_animation_instance.is_paused:
+            # Get the current frame matrix to determine its dimensions
+            frame_matrix, _, _, _ = (
+                demo_object_layer_animation_instance.get_current_frame_data(
+                    current_time
+                )
+            )
+            if frame_matrix:
+                matrix_rows = len(frame_matrix)
+                matrix_cols = len(frame_matrix[0]) if matrix_rows > 0 else 0
+
+                grid_color = Color(200, 200, 200, 100)  # Light gray with transparency
+
+                # Draw vertical lines
+                for col_idx in range(matrix_cols + 1):
+                    start_x = draw_x + col_idx * current_pixel_size_in_display
+                    object_layer_render.draw_line(
+                        int(start_x),
+                        int(draw_y),
+                        int(start_x),
+                        int(draw_y + total_rendered_height),
+                        grid_color,
+                    )
+                # Draw horizontal lines
+                for row_idx in range(matrix_rows + 1):
+                    start_y = draw_y + row_idx * current_pixel_size_in_display
+                    object_layer_render.draw_line(
+                        int(draw_x),
+                        int(start_y),
+                        int(draw_x + total_rendered_width),
+                        int(start_y),
+                        grid_color,
+                    )
+
+            # Calculate positions for palettes at bottom-right
+            total_palette_width = PALETTE_COLS_RAINBOW * PALETTE_SQUARE_SIZE
+
+            # Rainbow palette position
+            rainbow_palette_start_x = (
+                SCREEN_WIDTH - total_palette_width - PALETTE_PADDING
+            )
+            rainbow_palette_start_y = (
+                SCREEN_HEIGHT
+                - (PALETTE_ROWS_RAINBOW * PALETTE_SQUARE_SIZE)
+                - PALETTE_PADDING
+            )
+
+            # Draw the 16-color rainbow palette
+            for i, color in enumerate(COLOR_PALETTE_RAINBOW):
+                col = i % PALETTE_COLS_RAINBOW
+                row = i // PALETTE_COLS_RAINBOW  # Will always be 0 for a single row
+
+                square_x = rainbow_palette_start_x + col * PALETTE_SQUARE_SIZE
+                square_y = rainbow_palette_start_y + row * PALETTE_SQUARE_SIZE
+
+                object_layer_render.draw_rectangle(
+                    square_x, square_y, PALETTE_SQUARE_SIZE, PALETTE_SQUARE_SIZE, color
+                )
+                object_layer_render.draw_rectangle(
+                    square_x,
+                    square_y,
+                    PALETTE_SQUARE_SIZE,
+                    PALETTE_SQUARE_SIZE,
+                    Color(255, 255, 255, 50),  # Semi-transparent white border
+                )
+
+            # Lightness bar position (below rainbow palette)
+            lightness_bar_start_x = SCREEN_WIDTH - total_palette_width - PALETTE_PADDING
+            lightness_bar_start_y = (
+                rainbow_palette_start_y - PALETTE_SQUARE_SIZE - PALETTE_PADDING
+            )
+
+            # Draw the lightness/darkness bar
+            for i, color in enumerate(COLOR_PALETTE_LIGHTNESS):
+                square_x = lightness_bar_start_x + i * PALETTE_SQUARE_SIZE
+                square_y = lightness_bar_start_y
+
+                object_layer_render.draw_rectangle(
+                    square_x, square_y, PALETTE_SQUARE_SIZE, PALETTE_SQUARE_SIZE, color
+                )
+                object_layer_render.draw_rectangle(
+                    square_x,
+                    square_y,
+                    PALETTE_SQUARE_SIZE,
+                    PALETTE_SQUARE_SIZE,
+                    Color(255, 255, 255, 50),
+                )
 
         # Display UI text
         object_layer_render.draw_text(
