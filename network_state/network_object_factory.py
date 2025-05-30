@@ -49,6 +49,58 @@ class NetworkObjectFactory:
             is_persistent=True,
         ).to_dict()
 
+        OFFLINE_WALL_COORDS = [
+            {"X": 200, "Y": 200},
+            {"X": 250, "Y": 200},
+            {"X": 300, "Y": 200},
+            {"X": 200, "Y": 250},
+            {"X": 300, "Y": 250},
+            {"X": 200, "Y": 300},
+            {"X": 250, "Y": 300},
+            {"X": 300, "Y": 300},
+            {"X": 700, "Y": 700},
+            {"X": 750, "Y": 700},
+            {"X": 800, "Y": 700},
+            {"X": 700, "Y": 750},
+            {"X": 800, "Y": 750},
+            {"X": 700, "Y": 800},
+            {"X": 750, "Y": 800},
+            {"X": 800, "Y": 800},
+            {"X": 100, "Y": 500},
+            {"X": 150, "Y": 500},
+            {"X": 200, "Y": 500},
+            {"X": 500, "Y": 100},
+            {"X": 500, "Y": 150},
+            {"X": 500, "Y": 200},
+            {"X": 1000, "Y": 1000},
+            {"X": 1050, "Y": 1000},
+            {"X": 1100, "Y": 1000},
+            {"X": 1000, "Y": 1050},
+            {"X": 1100, "Y": 1050},
+            {"X": 1000, "Y": 1100},
+            {"X": 1050, "Y": 1100},
+            {"X": 1100, "Y": 1100},
+        ]
+
+        # Generate wall objects from OFFLINE_WALL_COORDS
+        for wall_coord in OFFLINE_WALL_COORDS:
+            wall_id = str(uuid.uuid4())
+            initial_network_objects[wall_id] = NetworkObject(
+                obj_id=wall_id,
+                x=float(wall_coord["X"]),
+                y=float(wall_coord["Y"]),
+                color=Color(100, 100, 100, 255),
+                network_object_type="WALL",
+                is_obstacle=True,
+                object_layer_ids=NETWORK_OBJECT_TYPE_DEFAULT_OBJECT_LAYER_IDS["WALL"],
+                is_persistent=True,
+            ).to_dict()
+
+        return {
+            "type": "network_state_update",
+            "network_objects": initial_network_objects,
+        }
+
         # Generate some wall objects
         wall_count = 5
         for _ in range(wall_count):
