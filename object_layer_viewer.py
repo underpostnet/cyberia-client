@@ -1269,6 +1269,44 @@ if __name__ == "__main__":
             )
             current_y += SUB_LINE_HEIGHT + PADDING
 
+        # --- Object Layer ID list (Top-Right) ---
+        RIGHT_UI_START_X = SCREEN_WIDTH - 200  # Adjust as needed for text width
+        RIGHT_UI_START_Y = UI_START_Y
+
+        object_layer_render.draw_text(
+            "Available Object Layers:",
+            RIGHT_UI_START_X,
+            RIGHT_UI_START_Y,
+            LINE_HEIGHT,
+            Color(255, 255, 255, 255),
+        )
+        right_ui_current_y = RIGHT_UI_START_Y + LINE_HEIGHT + PADDING
+
+        num_available = len(AVAILABLE_OBJECT_LAYER_IDS)
+        if num_available > 0:
+            # Calculate indices for 5 adjacent IDs, centered on current_object_layer_id_index
+            display_indices = []
+            for i in range(-2, 3):  # -2, -1, 0, 1, 2
+                display_index = (
+                    current_object_layer_id_index + i + num_available
+                ) % num_available
+                display_indices.append(display_index)
+
+            for i, idx_to_display in enumerate(display_indices):
+                obj_id_to_display = AVAILABLE_OBJECT_LAYER_IDS[idx_to_display]
+                text_color = Color(200, 200, 200, 255)  # Default light gray
+                if i == 2:  # The middle element (current ID)
+                    text_color = Color(255, 255, 0, 255)  # Yellow
+
+                object_layer_render.draw_text(
+                    obj_id_to_display,
+                    RIGHT_UI_START_X,
+                    right_ui_current_y,
+                    SUB_LINE_HEIGHT,
+                    text_color,
+                )
+                right_ui_current_y += SUB_LINE_HEIGHT + PADDING
+
         # FPS display at bottom left (fixed position)
         object_layer_render.draw_text(
             f"FPS: {int(1.0 / object_layer_render.get_frame_time()) if object_layer_render.get_frame_time() > 0 else 'N/A'}",
