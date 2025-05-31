@@ -151,7 +151,22 @@ if __name__ == "__main__":
 
         return Color(int(r * 255), int(g * 255), int(b * 255), 255)
 
+    def get_darker_color(color: Color, factor: float = 0.7) -> Color:
+        """Returns a darker version of the given color."""
+        return Color(
+            int(color.r * factor),
+            int(color.g * factor),
+            int(color.b * factor),
+            color.a,
+        )
+
     COLOR_PALETTE_RAINBOW = [get_rainbow_color(i, 16) for i in range(16)]
+    COLOR_PALETTE_RAINBOW_DARKER_1 = [
+        get_darker_color(color, 0.7) for color in COLOR_PALETTE_RAINBOW
+    ]
+    COLOR_PALETTE_RAINBOW_DARKER_2 = [
+        get_darker_color(color, 0.4) for color in COLOR_PALETTE_RAINBOW
+    ]
 
     # Define a 16-color lightness/darkness bar (white to black)
     COLOR_PALETTE_LIGHTNESS = [
@@ -474,10 +489,14 @@ if __name__ == "__main__":
             rainbow_palette_start_x = (
                 SCREEN_WIDTH - total_palette_width - PALETTE_PADDING
             )
+            # Adjusted y-position to make space for two new darker palettes
             rainbow_palette_start_y = (
                 SCREEN_HEIGHT
-                - (PALETTE_ROWS_RAINBOW * PALETTE_SQUARE_SIZE)
-                - PALETTE_PADDING
+                - (
+                    PALETTE_ROWS_RAINBOW * PALETTE_SQUARE_SIZE * 3
+                )  # 3 rows for original + 2 darker
+                - (PALETTE_PADDING * 3)  # Additional padding for new rows
+                - PALETTE_SQUARE_SIZE  # For lightness bar
             )
 
             # Draw the 16-color rainbow palette
@@ -499,10 +518,54 @@ if __name__ == "__main__":
                     Color(255, 255, 255, 50),  # Semi-transparent white border
                 )
 
-            # Lightness bar position (below rainbow palette)
+            # Draw the first darker rainbow palette
+            darker_rainbow_palette_1_y = (
+                rainbow_palette_start_y + PALETTE_SQUARE_SIZE + PALETTE_PADDING
+            )
+            for i, color in enumerate(COLOR_PALETTE_RAINBOW_DARKER_1):
+                col = i % PALETTE_COLS_RAINBOW
+                row = i // PALETTE_COLS_RAINBOW
+
+                square_x = rainbow_palette_start_x + col * PALETTE_SQUARE_SIZE
+                square_y = darker_rainbow_palette_1_y + row * PALETTE_SQUARE_SIZE
+
+                object_layer_render.draw_rectangle(
+                    square_x, square_y, PALETTE_SQUARE_SIZE, PALETTE_SQUARE_SIZE, color
+                )
+                object_layer_render.draw_rectangle(
+                    square_x,
+                    square_y,
+                    PALETTE_SQUARE_SIZE,
+                    PALETTE_SQUARE_SIZE,
+                    Color(255, 255, 255, 50),
+                )
+
+            # Draw the second darker rainbow palette
+            darker_rainbow_palette_2_y = (
+                darker_rainbow_palette_1_y + PALETTE_SQUARE_SIZE + PALETTE_PADDING
+            )
+            for i, color in enumerate(COLOR_PALETTE_RAINBOW_DARKER_2):
+                col = i % PALETTE_COLS_RAINBOW
+                row = i // PALETTE_COLS_RAINBOW
+
+                square_x = rainbow_palette_start_x + col * PALETTE_SQUARE_SIZE
+                square_y = darker_rainbow_palette_2_y + row * PALETTE_SQUARE_SIZE
+
+                object_layer_render.draw_rectangle(
+                    square_x, square_y, PALETTE_SQUARE_SIZE, PALETTE_SQUARE_SIZE, color
+                )
+                object_layer_render.draw_rectangle(
+                    square_x,
+                    square_y,
+                    PALETTE_SQUARE_SIZE,
+                    PALETTE_SQUARE_SIZE,
+                    Color(255, 255, 255, 50),
+                )
+
+            # Lightness bar position (below all rainbow palettes)
             lightness_bar_start_x = SCREEN_WIDTH - total_palette_width - PALETTE_PADDING
             lightness_bar_start_y = (
-                rainbow_palette_start_y - PALETTE_SQUARE_SIZE - PALETTE_PADDING
+                darker_rainbow_palette_2_y + PALETTE_SQUARE_SIZE + PALETTE_PADDING
             )
 
             # Draw the lightness/darkness bar
@@ -526,7 +589,9 @@ if __name__ == "__main__":
                 mouse_pos = object_layer_render.get_mouse_position()
                 mouse_x, mouse_y = mouse_pos.x, mouse_pos.y
 
-                # Check rainbow palette click
+                selected_color = None
+
+                # Check original rainbow palette click
                 if (
                     rainbow_palette_start_x
                     <= mouse_x
@@ -536,7 +601,6 @@ if __name__ == "__main__":
                     < rainbow_palette_start_y
                     + (PALETTE_ROWS_RAINBOW * PALETTE_SQUARE_SIZE)
                 ):
-
                     clicked_col = int(
                         (mouse_x - rainbow_palette_start_x) // PALETTE_SQUARE_SIZE
                     )
@@ -544,10 +608,48 @@ if __name__ == "__main__":
                         (mouse_y - rainbow_palette_start_y) // PALETTE_SQUARE_SIZE
                     )
                     index = clicked_row * PALETTE_COLS_RAINBOW + clicked_col
-
                     if 0 <= index < len(COLOR_PALETTE_RAINBOW):
                         selected_color = COLOR_PALETTE_RAINBOW[index]
-                        selected_color_rgb_text = f"Selected: R:{selected_color.r} G:{selected_color.g} B:{selected_color.b}"
+
+                # Check first darker rainbow palette click
+                elif (
+                    rainbow_palette_start_x
+                    <= mouse_x
+                    < rainbow_palette_start_x + total_palette_width
+                    and darker_rainbow_palette_1_y
+                    <= mouse_y
+                    < darker_rainbow_palette_1_y
+                    + (PALETTE_ROWS_RAINBOW * PALETTE_SQUARE_SIZE)
+                ):
+                    clicked_col = int(
+                        (mouse_x - rainbow_palette_start_x) // PALETTE_SQUARE_SIZE
+                    )
+                    clicked_row = int(
+                        (mouse_y - darker_rainbow_palette_1_y) // PALETTE_SQUARE_SIZE
+                    )
+                    index = clicked_row * PALETTE_COLS_RAINBOW + clicked_col
+                    if 0 <= index < len(COLOR_PALETTE_RAINBOW_DARKER_1):
+                        selected_color = COLOR_PALETTE_RAINBOW_DARKER_1[index]
+
+                # Check second darker rainbow palette click
+                elif (
+                    rainbow_palette_start_x
+                    <= mouse_x
+                    < rainbow_palette_start_x + total_palette_width
+                    and darker_rainbow_palette_2_y
+                    <= mouse_y
+                    < darker_rainbow_palette_2_y
+                    + (PALETTE_ROWS_RAINBOW * PALETTE_SQUARE_SIZE)
+                ):
+                    clicked_col = int(
+                        (mouse_x - rainbow_palette_start_x) // PALETTE_SQUARE_SIZE
+                    )
+                    clicked_row = int(
+                        (mouse_y - darker_rainbow_palette_2_y) // PALETTE_SQUARE_SIZE
+                    )
+                    index = clicked_row * PALETTE_COLS_RAINBOW + clicked_col
+                    if 0 <= index < len(COLOR_PALETTE_RAINBOW_DARKER_2):
+                        selected_color = COLOR_PALETTE_RAINBOW_DARKER_2[index]
 
                 # Check lightness palette click
                 elif (
@@ -559,7 +661,6 @@ if __name__ == "__main__":
                     < lightness_bar_start_y
                     + (PALETTE_ROWS_LIGHTNESS * PALETTE_SQUARE_SIZE)
                 ):
-
                     clicked_col = int(
                         (mouse_x - lightness_bar_start_x) // PALETTE_SQUARE_SIZE
                     )
@@ -567,10 +668,11 @@ if __name__ == "__main__":
                         (mouse_y - lightness_bar_start_y) // PALETTE_SQUARE_SIZE
                     )
                     index = clicked_row * PALETTE_COLS_LIGHTNESS + clicked_col
-
                     if 0 <= index < len(COLOR_PALETTE_LIGHTNESS):
                         selected_color = COLOR_PALETTE_LIGHTNESS[index]
-                        selected_color_rgb_text = f"Selected: R:{selected_color.r} G:{selected_color.g} B:{selected_color.b}"
+
+                if selected_color:
+                    selected_color_rgb_text = f"Selected: R:{selected_color.r} G:{selected_color.g} B:{selected_color.b}"
                 else:
                     selected_color_rgb_text = (
                         ""  # Clear selection if clicked outside palettes
@@ -581,7 +683,9 @@ if __name__ == "__main__":
                 object_layer_render.draw_text(
                     selected_color_rgb_text,
                     int(SCREEN_WIDTH - total_palette_width - PALETTE_PADDING),
-                    int(lightness_bar_start_y - PALETTE_SQUARE_SIZE - PALETTE_PADDING),
+                    int(
+                        lightness_bar_start_y + PALETTE_SQUARE_SIZE + PALETTE_PADDING
+                    ),  # Adjusted position
                     15,
                     Color(255, 255, 255, 255),
                 )
@@ -595,6 +699,7 @@ if __name__ == "__main__":
             Color(255, 255, 255, 255),
         )
 
+        # Adjusted base_y_offset to account for new palettes
         base_y_offset = 0
         if demo_object_layer_animation_instance.is_stateless:
             object_layer_render.draw_text(
@@ -635,38 +740,47 @@ if __name__ == "__main__":
                 Color(200, 200, 200, 255),
             )
 
+        # Further adjust y-offset for UI text to avoid overlap with palettes
+        ui_text_start_y = 125 + base_y_offset
+        if demo_object_layer_animation_instance.is_paused:
+            # If palettes are visible, push UI text higher
+            ui_text_start_y = 10 + (
+                SCREEN_HEIGHT
+                - (lightness_bar_start_y + PALETTE_SQUARE_SIZE + PALETTE_PADDING + 20)
+            )  # 20 is approx text height
+
         object_layer_render.draw_text(
             f"Pixel Size: {current_pixel_size_in_display:.2f}",
             10,
-            125 + base_y_offset,
+            ui_text_start_y,
             15,
             Color(200, 200, 200, 255),
         )
         object_layer_render.draw_text(
             "Use 'Q' for zoom out and 'W' for zoom in",
             10,
-            145 + base_y_offset,
+            ui_text_start_y + 20,
             15,
             Color(200, 200, 200, 255),
         )
         object_layer_render.draw_text(
             "Use 'E'/'R' to change object layer ID",
             10,
-            165 + base_y_offset,
+            ui_text_start_y + 40,
             15,
             Color(200, 200, 200, 255),
         )
         object_layer_render.draw_text(
             f"Frame Index: {demo_object_layer_animation_instance.current_frame_index}",
             10,
-            190 + base_y_offset,
+            ui_text_start_y + 65,
             15,
             Color(200, 200, 200, 255),
         )
         object_layer_render.draw_text(
             f"Frame Timer: {demo_object_layer_animation_instance.frame_timer:.2f}",
             10,
-            210 + base_y_offset,
+            ui_text_start_y + 85,
             15,
             Color(200, 200, 200, 255),
         )
@@ -676,7 +790,7 @@ if __name__ == "__main__":
             object_layer_render.draw_text(
                 f"Animation PAUSED at frame {demo_object_layer_animation_instance.paused_frame_index}",
                 10,
-                230 + base_y_offset,
+                ui_text_start_y + 105,
                 15,
                 Color(255, 0, 0, 255),
             )
@@ -684,7 +798,7 @@ if __name__ == "__main__":
             object_layer_render.draw_text(
                 "Animation RUNNING (Press 0-9 to pause, ENTER to resume)",
                 10,
-                230 + base_y_offset,
+                ui_text_start_y + 105,
                 15,
                 Color(0, 255, 0, 255),
             )
