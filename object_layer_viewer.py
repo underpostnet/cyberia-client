@@ -186,7 +186,9 @@ if __name__ == "__main__":
     PALETTE_COLS_LIGHTNESS = 16
     PALETTE_ROWS_LIGHTNESS = 1
 
-    selected_color_rgb_text = ""  # Variable to store the selected color's RGB text
+    # Initialize selected color to white
+    selected_color_rgb_text = "Selected: R:255 G:255 B:255 (White)"
+    selected_color_box_color = Color(255, 255, 255, 255)
 
     while not object_layer_render.window_should_close():
         current_time = time.time()
@@ -405,7 +407,9 @@ if __name__ == "__main__":
             demo_object_layer_animation_instance.pause_at_frame(9, current_time)
         elif object_layer_render.is_key_pressed(KEY_ENTER):
             demo_object_layer_animation_instance.resume()
-            selected_color_rgb_text = ""  # Clear selected color text on resume
+            # Reset selected color text and box on resume
+            selected_color_rgb_text = "Selected: R:255 G:255 B:255 (White)"
+            selected_color_box_color = Color(255, 255, 255, 255)
 
         # Get current animation instance properties
         demo_object_layer_properties = (
@@ -489,14 +493,10 @@ if __name__ == "__main__":
             rainbow_palette_start_x = (
                 SCREEN_WIDTH - total_palette_width - PALETTE_PADDING
             )
-            # Adjusted y-position to make space for two new darker palettes
             rainbow_palette_start_y = (
                 SCREEN_HEIGHT
-                - (
-                    PALETTE_ROWS_RAINBOW * PALETTE_SQUARE_SIZE * 3
-                )  # 3 rows for original + 2 darker
-                - (PALETTE_PADDING * 3)  # Additional padding for new rows
-                - PALETTE_SQUARE_SIZE  # For lightness bar
+                - (PALETTE_ROWS_RAINBOW * PALETTE_SQUARE_SIZE * 4)  # Space for 4 rows
+                - (PALETTE_PADDING * 4)  # Padding between rows
             )
 
             # Draw the 16-color rainbow palette
@@ -673,140 +673,161 @@ if __name__ == "__main__":
 
                 if selected_color:
                     selected_color_rgb_text = f"Selected: R:{selected_color.r} G:{selected_color.g} B:{selected_color.b}"
+                    selected_color_box_color = selected_color
                 else:
-                    selected_color_rgb_text = (
-                        ""  # Clear selection if clicked outside palettes
-                    )
+                    # If clicked outside palettes, keep the current selection or reset to white
+                    pass  # Do not reset, keep the last selected color
 
-            # Display selected color RGB text
-            if selected_color_rgb_text:
-                object_layer_render.draw_text(
-                    selected_color_rgb_text,
-                    int(SCREEN_WIDTH - total_palette_width - PALETTE_PADDING),
-                    int(
-                        lightness_bar_start_y + PALETTE_SQUARE_SIZE + PALETTE_PADDING
-                    ),  # Adjusted position
-                    15,
-                    Color(255, 255, 255, 255),
-                )
+        # --- UI Text Display (Top-Left) ---
+        UI_START_X = 10
+        UI_START_Y = 10
+        LINE_HEIGHT = 20  # For main titles
+        SUB_LINE_HEIGHT = 15  # For smaller info
+        PADDING = 5
 
-        # Display UI text (top-left)
+        current_y = UI_START_Y
+
         object_layer_render.draw_text(
             f"Current Object Layer ID: {current_object_layer_id}",
-            10,
-            10,
-            20,
+            UI_START_X,
+            current_y,
+            LINE_HEIGHT,
             Color(255, 255, 255, 255),
         )
+        current_y += LINE_HEIGHT + PADDING
 
-        # Adjusted base_y_offset to account for new palettes
-        base_y_offset = 0
         if demo_object_layer_animation_instance.is_stateless:
             object_layer_render.draw_text(
                 "Stateless Animation (Direction & Mode Ignored)",
-                10,
-                35,
-                15,
+                UI_START_X,
+                current_y,
+                SUB_LINE_HEIGHT,
                 Color(200, 200, 200, 255),
             )
-            base_y_offset = -70
+            current_y += SUB_LINE_HEIGHT + PADDING
         else:
             object_layer_render.draw_text(
                 f"Direction: {demo_object_layer_animation_instance.current_direction.name}",
-                10,
-                35,
-                20,
+                UI_START_X,
+                current_y,
+                LINE_HEIGHT,
                 Color(255, 255, 255, 255),
             )
+            current_y += LINE_HEIGHT
             object_layer_render.draw_text(
                 f"Mode: {demo_object_layer_animation_instance.object_layer_mode.name.capitalize()}",
-                10,
-                60,
-                15,
+                UI_START_X,
+                current_y,
+                SUB_LINE_HEIGHT,
                 Color(200, 200, 200, 255),
             )
+            current_y += SUB_LINE_HEIGHT
             object_layer_render.draw_text(
                 "Press SPACE to toggle mode",
-                10,
-                80,
-                15,
+                UI_START_X,
+                current_y,
+                SUB_LINE_HEIGHT,
                 Color(200, 200, 200, 255),
             )
+            current_y += SUB_LINE_HEIGHT
             object_layer_render.draw_text(
                 "Use numpad/arrow keys to set direction",
-                10,
-                100,
-                15,
+                UI_START_X,
+                current_y,
+                SUB_LINE_HEIGHT,
                 Color(200, 200, 200, 255),
             )
-
-        # Further adjust y-offset for UI text to avoid overlap with palettes
-        ui_text_start_y = 125 + base_y_offset
-        if demo_object_layer_animation_instance.is_paused:
-            # If palettes are visible, push UI text higher
-            ui_text_start_y = 10 + (
-                SCREEN_HEIGHT
-                - (lightness_bar_start_y + PALETTE_SQUARE_SIZE + PALETTE_PADDING + 20)
-            )  # 20 is approx text height
+            current_y += SUB_LINE_HEIGHT + PADDING
 
         object_layer_render.draw_text(
             f"Pixel Size: {current_pixel_size_in_display:.2f}",
-            10,
-            ui_text_start_y,
-            15,
+            UI_START_X,
+            current_y,
+            SUB_LINE_HEIGHT,
             Color(200, 200, 200, 255),
         )
+        current_y += SUB_LINE_HEIGHT
         object_layer_render.draw_text(
             "Use 'Q' for zoom out and 'W' for zoom in",
-            10,
-            ui_text_start_y + 20,
-            15,
+            UI_START_X,
+            current_y,
+            SUB_LINE_HEIGHT,
             Color(200, 200, 200, 255),
         )
+        current_y += SUB_LINE_HEIGHT
         object_layer_render.draw_text(
             "Use 'E'/'R' to change object layer ID",
-            10,
-            ui_text_start_y + 40,
-            15,
+            UI_START_X,
+            current_y,
+            SUB_LINE_HEIGHT,
             Color(200, 200, 200, 255),
         )
+        current_y += SUB_LINE_HEIGHT + PADDING
+
         object_layer_render.draw_text(
             f"Frame Index: {demo_object_layer_animation_instance.current_frame_index}",
-            10,
-            ui_text_start_y + 65,
-            15,
+            UI_START_X,
+            current_y,
+            SUB_LINE_HEIGHT,
             Color(200, 200, 200, 255),
         )
+        current_y += SUB_LINE_HEIGHT
         object_layer_render.draw_text(
             f"Frame Timer: {demo_object_layer_animation_instance.frame_timer:.2f}",
-            10,
-            ui_text_start_y + 85,
-            15,
+            UI_START_X,
+            current_y,
+            SUB_LINE_HEIGHT,
             Color(200, 200, 200, 255),
         )
+        current_y += SUB_LINE_HEIGHT
 
         # Display pause/resume status
         if demo_object_layer_animation_instance.is_paused:
             object_layer_render.draw_text(
                 f"Animation PAUSED at frame {demo_object_layer_animation_instance.paused_frame_index}",
-                10,
-                ui_text_start_y + 105,
-                15,
+                UI_START_X,
+                current_y,
+                SUB_LINE_HEIGHT,
                 Color(255, 0, 0, 255),
             )
         else:
             object_layer_render.draw_text(
                 "Animation RUNNING (Press 0-9 to pause, ENTER to resume)",
-                10,
-                ui_text_start_y + 105,
-                15,
+                UI_START_X,
+                current_y,
+                SUB_LINE_HEIGHT,
                 Color(0, 255, 0, 255),
             )
+        current_y += SUB_LINE_HEIGHT + PADDING
 
+        # Display selected color RGB text and box
+        object_layer_render.draw_text(
+            selected_color_rgb_text,
+            UI_START_X,
+            current_y,
+            SUB_LINE_HEIGHT,
+            Color(255, 255, 255, 255),
+        )
+        # Calculate position for the color box next to the text
+        text_width = object_layer_render.measure_text(
+            selected_color_rgb_text, SUB_LINE_HEIGHT
+        )
+        color_box_x = UI_START_X + text_width + 10  # 10 pixels padding
+        color_box_size = 20  # Small box size
+        object_layer_render.draw_rectangle(
+            color_box_x,
+            current_y,
+            color_box_size,
+            color_box_size,
+            selected_color_box_color,
+        )
+        current_y += SUB_LINE_HEIGHT + PADDING
+
+        # FPS display at bottom left (fixed position)
         object_layer_render.draw_text(
             f"FPS: {int(1.0 / object_layer_render.get_frame_time()) if object_layer_render.get_frame_time() > 0 else 'N/A'}",
-            10,
-            SCREEN_HEIGHT - 30,
+            UI_START_X,
+            SCREEN_HEIGHT - 30,  # Fixed at bottom
             20,
             Color(255, 255, 255, 255),
         )

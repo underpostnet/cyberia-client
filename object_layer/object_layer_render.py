@@ -28,6 +28,7 @@ from raylibpy import (
     set_target_fps,
     window_should_close,
     Camera2D,
+    measure_text as raylib_measure_text,  # Import measure_text
 )
 
 from config import CAMERA_SMOOTHNESS, DIRECTION_HISTORY_LENGTH
@@ -262,6 +263,11 @@ class ObjectLayerRender:
 
     def draw_text(self, text: str, x: int, y: int, font_size: int, color: Color):
         draw_text(text, x, y, font_size, color)
+
+    def measure_text(self, text: str, font_size: int) -> int:
+        """Measures the width of the given text for a specific font size."""
+        # raylibpy.measure_text returns an integer for the width directly.
+        return raylib_measure_text(text, font_size)
 
     def get_frame_time(self) -> float:
         return get_frame_time()
