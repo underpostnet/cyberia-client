@@ -263,16 +263,30 @@ if __name__ == "__main__":
         for i in range(16)
     ]
 
+    # Define a 16-step alpha palette (opaque to transparent)
+    COLOR_PALETTE_ALPHA = [
+        Color(255, 255, 255, int(255 - i * (255 / 15)))  # White with varying alpha
+        for i in range(16)
+    ]
+
     PALETTE_SQUARE_SIZE = 20
     PALETTE_PADDING = 10
     PALETTE_COLS_RAINBOW = 16
     PALETTE_ROWS_RAINBOW = 1
     PALETTE_COLS_LIGHTNESS = 16
     PALETTE_ROWS_LIGHTNESS = 1
+    PALETTE_COLS_ALPHA = 16
+    PALETTE_ROWS_ALPHA = 1
 
     # Initialize selected color for painting
-    selected_color_rgb_text = "Selected: R:255 G:255 B:255 (White)"
-    selected_color_box_color = Color(255, 255, 255, 255)
+    selected_color_rgb = Color(
+        255, 255, 255, 255
+    )  # Stores only RGB, alpha will be applied separately
+    selected_alpha = 255  # Stores the selected alpha value
+    selected_color_box_color = Color(
+        255, 255, 255, 255
+    )  # Combined color for display and painting
+    selected_color_rgb_text = "Selected: R:255 G:255 B:255 A:255 (White)"
 
     while not object_layer_render.window_should_close():
         current_time = time.time()
@@ -317,8 +331,15 @@ if __name__ == "__main__":
                             "MODIFIED": False,  # Flag to track if clone has been modified
                         }
                         # Reset selected color when a brand new clone is created
-                        selected_color_rgb_text = "Selected: R:255 G:255 B:255 (White)"
-                        selected_color_box_color = Color(255, 255, 255, 255)
+                        selected_color_rgb = Color(255, 255, 255, 255)
+                        selected_alpha = 255
+                        selected_color_box_color = Color(
+                            selected_color_rgb.r,
+                            selected_color_rgb.g,
+                            selected_color_rgb.b,
+                            selected_alpha,
+                        )
+                        selected_color_rgb_text = f"Selected: R:{selected_color_rgb.r} G:{selected_color_rgb.g} B:{selected_color_rgb.b} A:{selected_alpha} (White)"
 
                     # Update animation instance to use clone's data
                     update_animation_instance_data_source()
@@ -380,8 +401,16 @@ if __name__ == "__main__":
                         current_time,
                     )
                 # Reset selected color when clone is explicitly reset
-                selected_color_rgb_text = "Selected: R:255 G:255 B:255 (White)"
-                selected_color_box_color = Color(255, 255, 255, 255)
+                selected_color_rgb = Color(255, 255, 255, 255)
+                selected_alpha = 255
+                selected_color_box_color = Color(
+                    selected_color_rgb.r,
+                    selected_color_rgb.g,
+                    selected_color_rgb.b,
+                    selected_alpha,
+                )
+                selected_color_rgb_text = f"Selected: R:{selected_color_rgb.r} G:{selected_color_rgb.g} B:{selected_color_rgb.b} A:{selected_alpha} (White)"
+
             else:
                 logging.info(f"No clone to reset for {current_object_layer_id}")
 
@@ -409,8 +438,13 @@ if __name__ == "__main__":
 
                 # Prepare the full object layer data structure for the JSON file
                 full_object_layer_json = {
-                    "RENDER_DATA": clone_data_to_save["RENDER_DATA"],
-                    "SEED_DATA": clone_data_to_save["SEED_DATA"],
+                    current_object_layer_id: {
+                        "RENDER_DATA": clone_data_to_save["RENDER_DATA"],
+                        "SEED_DATA": clone_data_to_save["SEED_DATA"],
+                        "MODIFIED": clone_data_to_save[
+                            "MODIFIED"
+                        ],  # Include modified status
+                    }
                 }
 
                 random_prefix = random.randint(10000, 99999)
@@ -716,9 +750,9 @@ if __name__ == "__main__":
             rainbow_palette_start_y = (
                 SCREEN_HEIGHT
                 - (
-                    PALETTE_ROWS_RAINBOW * PALETTE_SQUARE_SIZE * 4
-                )  # Space for 4 rows of palettes
-                - (PALETTE_PADDING * 4)  # Padding between rows
+                    PALETTE_ROWS_RAINBOW * PALETTE_SQUARE_SIZE * 5
+                )  # Space for 5 rows of palettes (4 color + 1 alpha)
+                - (PALETTE_PADDING * 5)  # Padding between rows
             )
 
             # Draw the 16-color rainbow palette (first row)
@@ -784,7 +818,7 @@ if __name__ == "__main__":
                     Color(255, 255, 255, 50),
                 )
 
-            # Lightness bar position (fourth row, below all rainbow palettes)
+            # Lightness bar position (fourth row)
             lightness_bar_start_x = SCREEN_WIDTH - total_palette_width - PALETTE_PADDING
             lightness_bar_start_y = (
                 darker_rainbow_palette_2_y + PALETTE_SQUARE_SIZE + PALETTE_PADDING
@@ -806,15 +840,49 @@ if __name__ == "__main__":
                     Color(255, 255, 255, 50),
                 )
 
-            # Eyedropper logic: Detect clicks on palettes to select a color
+            # Alpha palette position (fifth row)
+            alpha_palette_start_x = SCREEN_WIDTH - total_palette_width - PALETTE_PADDING
+            alpha_palette_start_y = (
+                lightness_bar_start_y + PALETTE_SQUARE_SIZE + PALETTE_PADDING
+            )
+
+            # Draw the alpha palette
+            for i, color in enumerate(COLOR_PALETTE_ALPHA):
+                square_x = alpha_palette_start_x + i * PALETTE_SQUARE_SIZE
+                square_y = alpha_palette_start_y
+
+                # Use the selected RGB color, but with the alpha from the palette
+                alpha_color = Color(
+                    selected_color_rgb.r,
+                    selected_color_rgb.g,
+                    selected_color_rgb.b,
+                    color.a,
+                )
+                object_layer_render.draw_rectangle(
+                    square_x,
+                    square_y,
+                    PALETTE_SQUARE_SIZE,
+                    PALETTE_SQUARE_SIZE,
+                    alpha_color,
+                )
+                object_layer_render.draw_rectangle(
+                    square_x,
+                    square_y,
+                    PALETTE_SQUARE_SIZE,
+                    PALETTE_SQUARE_SIZE,
+                    Color(255, 255, 255, 50),
+                )
+
+            # Eyedropper logic: Detect clicks on palettes to select a color or alpha
             if object_layer_render.is_mouse_button_pressed(MOUSE_BUTTON_LEFT):
                 mouse_pos = object_layer_render.get_mouse_position()
                 mouse_x, mouse_y = mouse_pos.x, mouse_pos.y
 
                 clicked_on_palette = False
-                temp_selected_color = None
+                temp_selected_rgb = None
+                temp_selected_alpha = None
 
-                # Check clicks on each palette row
+                # Check clicks on each color palette row (RGB selection)
                 if (
                     rainbow_palette_start_x
                     <= mouse_x
@@ -832,7 +900,7 @@ if __name__ == "__main__":
                     )
                     index = clicked_row * PALETTE_COLS_RAINBOW + clicked_col
                     if 0 <= index < len(COLOR_PALETTE_RAINBOW):
-                        temp_selected_color = COLOR_PALETTE_RAINBOW[index]
+                        temp_selected_rgb = COLOR_PALETTE_RAINBOW[index]
                         clicked_on_palette = True
 
                 elif (
@@ -852,7 +920,7 @@ if __name__ == "__main__":
                     )
                     index = clicked_row * PALETTE_COLS_RAINBOW + clicked_col
                     if 0 <= index < len(COLOR_PALETTE_RAINBOW_DARKER_1):
-                        temp_selected_color = COLOR_PALETTE_RAINBOW_DARKER_1[index]
+                        temp_selected_rgb = COLOR_PALETTE_RAINBOW_DARKER_1[index]
                         clicked_on_palette = True
 
                 elif (
@@ -872,7 +940,7 @@ if __name__ == "__main__":
                     )
                     index = clicked_row * PALETTE_COLS_RAINBOW + clicked_col
                     if 0 <= index < len(COLOR_PALETTE_RAINBOW_DARKER_2):
-                        temp_selected_color = COLOR_PALETTE_RAINBOW_DARKER_2[index]
+                        temp_selected_rgb = COLOR_PALETTE_RAINBOW_DARKER_2[index]
                         clicked_on_palette = True
 
                 elif (
@@ -892,12 +960,47 @@ if __name__ == "__main__":
                     )
                     index = clicked_row * PALETTE_COLS_LIGHTNESS + clicked_col
                     if 0 <= index < len(COLOR_PALETTE_LIGHTNESS):
-                        temp_selected_color = COLOR_PALETTE_LIGHTNESS[index]
+                        temp_selected_rgb = COLOR_PALETTE_LIGHTNESS[index]
                         clicked_on_palette = True
 
-                if clicked_on_palette and temp_selected_color:
-                    selected_color_rgb_text = f"Selected: R:{temp_selected_color.r} G:{temp_selected_color.g} B:{temp_selected_color.b}"
-                    selected_color_box_color = temp_selected_color
+                # Check clicks on Alpha palette (Alpha selection)
+                elif (
+                    alpha_palette_start_x
+                    <= mouse_x
+                    < alpha_palette_start_x + total_palette_width
+                    and alpha_palette_start_y
+                    <= mouse_y
+                    < alpha_palette_start_y + (PALETTE_ROWS_ALPHA * PALETTE_SQUARE_SIZE)
+                ):
+                    clicked_col = int(
+                        (mouse_x - alpha_palette_start_x) // PALETTE_SQUARE_SIZE
+                    )
+                    clicked_row = int(
+                        (mouse_y - alpha_palette_start_y) // PALETTE_SQUARE_SIZE
+                    )
+                    index = clicked_row * PALETTE_COLS_ALPHA + clicked_col
+                    if 0 <= index < len(COLOR_PALETTE_ALPHA):
+                        temp_selected_alpha = COLOR_PALETTE_ALPHA[
+                            index
+                        ].a  # Get only the alpha value
+                        clicked_on_palette = True
+
+                if clicked_on_palette:
+                    if temp_selected_rgb:
+                        selected_color_rgb = temp_selected_rgb
+                    if (
+                        temp_selected_alpha is not None
+                    ):  # Check for None explicitly as 0 is a valid alpha
+                        selected_alpha = temp_selected_alpha
+
+                    # Update the combined color and text
+                    selected_color_box_color = Color(
+                        selected_color_rgb.r,
+                        selected_color_rgb.g,
+                        selected_color_rgb.b,
+                        selected_alpha,
+                    )
+                    selected_color_rgb_text = f"Selected: R:{selected_color_rgb.r} G:{selected_color_rgb.g} B:{selected_color_rgb.b} A:{selected_alpha}"
 
                 # Paint functionality on the animation grid
                 if (
