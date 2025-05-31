@@ -35,6 +35,7 @@ from raylibpy import (
     KEY_SEVEN,
     KEY_EIGHT,
     KEY_NINE,
+    KEY_T,  # Import KEY_T for test mode
     MOUSE_BUTTON_LEFT,
     KEY_BACKSPACE,  # Import KEY_BACKSPACE
 )
@@ -85,6 +86,7 @@ if __name__ == "__main__":
 
     # --- New State Variables for Edit Mode and Clones ---
     is_edit_mode: bool = False
+    is_test_mode: bool = False  # New state for test mode
     # Stores cloned data: {object_layer_id: {"RENDER_DATA": {...}, "SEED_DATA": {...}, "MODIFIED": bool}}
     cloned_object_layer_states: dict[str, dict] = {}
 
@@ -122,6 +124,61 @@ if __name__ == "__main__":
         "object_layer_animation_instance"
     ]
 
+    # Helper function to update the animation instance's data source based on current mode and test mode
+    # This function is now defined AFTER demo_object_layer_animation_instance is initialized.
+    def update_animation_instance_data_source():
+        # These variables are in the global scope of this script, so 'global' is used.
+        global demo_object_layer_animation_instance
+        global current_object_layer_id
+        global original_object_layer_data
+        global cloned_object_layer_states
+        global is_edit_mode
+        global is_test_mode
+
+        target_render_data = None
+        if is_edit_mode:
+            # In edit mode, always use the clone's data if it exists
+            if current_object_layer_id in cloned_object_layer_states:
+                target_render_data = cloned_object_layer_states[
+                    current_object_layer_id
+                ]["RENDER_DATA"]
+            else:
+                # Should ideally not happen if clone is created on entering edit mode
+                target_render_data = original_object_layer_data[
+                    current_object_layer_id
+                ]["RENDER_DATA"]
+                logging.warning(
+                    f"No clone found for {current_object_layer_id} in edit mode, using original."
+                )
+        else:  # Normal Mode
+            if is_test_mode and current_object_layer_id in cloned_object_layer_states:
+                target_render_data = cloned_object_layer_states[
+                    current_object_layer_id
+                ]["RENDER_DATA"]
+            else:
+                target_render_data = original_object_layer_data[
+                    current_object_layer_id
+                ]["RENDER_DATA"]
+
+        if target_render_data:
+            demo_object_layer_animation_instance.set_frames_and_colors(
+                target_render_data["FRAMES"], target_render_data["COLORS"]
+            )
+        else:
+            logging.error(
+                f"Could not determine render data for {current_object_layer_id}. Using default."
+            )
+            # Fallback to original if no target_render_data could be determined
+            default_render_data = original_object_layer_data[current_object_layer_id][
+                "RENDER_DATA"
+            ]
+            demo_object_layer_animation_instance.set_frames_and_colors(
+                default_render_data["FRAMES"], default_render_data["COLORS"]
+            )
+
+    # Initial update of animation instance data source
+    update_animation_instance_data_source()
+
     last_frame_time = time.time()
 
     print("--- Object Layer Viewer Controls ---")
@@ -139,6 +196,7 @@ if __name__ == "__main__":
         "In EDIT MODE, click on the animation grid to change pixel colors with the selected palette color."
     )
     print("Press BACKSPACE to reset the current clone to its original state.")
+    print("Press 'T' to toggle TEST MODE (runs cloned animation in Normal Mode).")
     print("Press ESC to close the window.")
 
     last_commanded_dx = 0.0
@@ -262,15 +320,7 @@ if __name__ == "__main__":
                         selected_color_box_color = Color(255, 255, 255, 255)
 
                     # Update animation instance to use clone's data (which now has Color objects)
-                    clone_render_data = cloned_object_layer_states[
-                        current_object_layer_id
-                    ]["RENDER_DATA"]
-                    demo_object_layer_animation_instance.set_frames_and_colors(
-                        clone_render_data["FRAMES"],
-                        clone_render_data[
-                            "COLORS"
-                        ],  # This will now be a list of Color objects
-                    )
+                    update_animation_instance_data_source()  # Call helper here
                 demo_object_layer_animation_instance.pause_at_frame(i, current_time)
                 # Ensure the animation instance is paused and using the correct frame
                 demo_object_layer_animation_instance.is_paused = (
@@ -287,14 +337,7 @@ if __name__ == "__main__":
         if object_layer_render.is_key_pressed(KEY_ENTER):
             is_edit_mode = False
             demo_object_layer_animation_instance.resume()
-            # Restore original animation data (do NOT reset clone data)
-            original_render_data = original_object_layer_data[current_object_layer_id][
-                "RENDER_DATA"
-            ]
-            demo_object_layer_animation_instance.set_frames_and_colors(
-                original_render_data["FRAMES"], original_render_data["COLORS"]
-            )
-            # Removed: selected_color_rgb_text and selected_color_box_color reset here
+            update_animation_instance_data_source()  # Call helper here
 
         # Handle Backspace to reset current clone
         if object_layer_render.is_key_pressed(KEY_BACKSPACE):
@@ -329,10 +372,7 @@ if __name__ == "__main__":
                         )
                 reset_clone_render_data["COLORS"] = processed_colors_on_reset
 
-                # Update animation instance to reflect the reset clone data
-                demo_object_layer_animation_instance.set_frames_and_colors(
-                    reset_clone_render_data["FRAMES"], reset_clone_render_data["COLORS"]
-                )
+                update_animation_instance_data_source()  # Call helper here
                 # If in edit mode, re-pause at the current frame to refresh display
                 if is_edit_mode:
                     demo_object_layer_animation_instance.pause_at_frame(
@@ -344,6 +384,13 @@ if __name__ == "__main__":
                 selected_color_box_color = Color(255, 255, 255, 255)
             else:
                 logging.info(f"No clone to reset for {current_object_layer_id}")
+
+        # Handle 'T' key for Test Mode toggle
+        if object_layer_render.is_key_pressed(KEY_T):
+            is_test_mode = not is_test_mode
+            logging.info(f"Test Mode toggled: {'ON' if is_test_mode else 'OFF'}")
+            if not is_edit_mode:  # Only update data source if not in edit mode
+                update_animation_instance_data_source()
 
         # Handle direction and mode changes (applies in both Normal and Edit modes)
         # Note: In Edit Mode, this changes which frame of the CLONE is displayed,
@@ -503,13 +550,7 @@ if __name__ == "__main__":
             demo_object_layer_animation_instance = demo_object_layer_properties[
                 "object_layer_animation_instance"
             ]
-            # Ensure animation instance uses original data for new ID
-            original_render_data = original_object_layer_data[current_object_layer_id][
-                "RENDER_DATA"
-            ]
-            demo_object_layer_animation_instance.set_frames_and_colors(
-                original_render_data["FRAMES"], original_render_data["COLORS"]
-            )
+            update_animation_instance_data_source()  # Call helper here
 
         elif object_layer_render.is_key_pressed(KEY_R):
             current_object_layer_id_index = (
@@ -544,13 +585,7 @@ if __name__ == "__main__":
             demo_object_layer_animation_instance = demo_object_layer_properties[
                 "object_layer_animation_instance"
             ]
-            # Ensure animation instance uses original data for new ID
-            original_render_data = original_object_layer_data[current_object_layer_id][
-                "RENDER_DATA"
-            ]
-            demo_object_layer_animation_instance.set_frames_and_colors(
-                original_render_data["FRAMES"], original_render_data["COLORS"]
-            )
+            update_animation_instance_data_source()  # Call helper here
 
         # Get current animation instance properties (after potential ID change)
         demo_object_layer_properties = (
@@ -1057,11 +1092,27 @@ if __name__ == "__main__":
             current_y += SUB_LINE_HEIGHT + PADDING
         else:
             object_layer_render.draw_text(
-                "Mode: NORMAL MODE (Press 0-9 to enter Edit Mode)",
+                "Mode: NORMAL MODE",
                 UI_START_X,
                 current_y,
                 SUB_LINE_HEIGHT,
                 Color(0, 255, 0, 255),
+            )
+            current_y += SUB_LINE_HEIGHT
+            object_layer_render.draw_text(
+                "Press 0-9 to enter Edit Mode",
+                UI_START_X,
+                current_y,
+                SUB_LINE_HEIGHT,
+                Color(200, 200, 200, 255),
+            )
+            current_y += SUB_LINE_HEIGHT
+            object_layer_render.draw_text(
+                f"Test Mode: {'ON' if is_test_mode else 'OFF'} (Press 'T' to toggle)",
+                UI_START_X,
+                current_y,
+                SUB_LINE_HEIGHT,
+                Color(255, 165, 0, 255),  # Orange color for test mode
             )
             current_y += SUB_LINE_HEIGHT + PADDING
 
