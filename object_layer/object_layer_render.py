@@ -131,6 +131,49 @@ class ObjectLayerAnimation:
             self.current_frame_index = 0
             self.frame_timer = 0.0
 
+    def set_frames_and_colors(self, new_frames_map: dict, new_colors_data: list):
+        """Dynamically updates the animation's frames and color map.
+        Ensures self.color_map always contains Color objects.
+        """
+        self.frames_map = new_frames_map
+
+        processed_color_map = []
+        for item in new_colors_data:
+            if (
+                isinstance(item, (tuple, list)) and len(item) == 4
+            ):  # Handle both tuple and list of 4 ints
+                processed_color_map.append(Color(item[0], item[1], item[2], item[3]))
+            elif isinstance(item, Color):
+                processed_color_map.append(item)
+            else:
+                logging.warning(f"Unexpected color data type: {type(item)}. Skipping.")
+        self.color_map = processed_color_map
+
+        # Reset animation state to frame 0 to reflect new data immediately
+        self.current_frame_index = 0
+        self.frame_timer = 0.0
+
+    def get_current_frame_matrix_for_editing(self, timestamp: float) -> list[list[int]]:
+        """Returns the current frame matrix for direct modification (e.g., painting)."""
+        object_layer_key = self._get_current_object_layer_key(timestamp)
+        frames_list = self.frames_map.get(object_layer_key)
+
+        if not frames_list:
+            return [[0]]  # Return a minimal valid matrix
+
+        current_frame_index_to_use = self.current_frame_index
+        if self.is_paused:
+            current_frame_index_to_use = self.paused_frame_index
+            if current_frame_index_to_use >= len(frames_list):
+                current_frame_index_to_use = 0
+
+        # Return a reference to the actual frame data for direct modification
+        return frames_list[current_frame_index_to_use]
+
+    def get_current_color_map_for_editing(self) -> list[Color]:
+        """Returns the current color map for direct modification (e.g., adding colors)."""
+        return self.color_map
+
     def get_current_frame_data(
         self, timestamp: float
     ) -> tuple[list[list[int]], list[Color], bool, int]:
@@ -465,7 +508,17 @@ class ObjectLayerRender:
             for col_idx in range(matrix_dimension):
                 matrix_value = frame_matrix[row_idx][col_idx]
 
-                if matrix_value == 0 and len(color_map) > 0 and color_map[0].a == 0:
+                # Ensure matrix_value is a valid index for color_map
+                if not (0 <= matrix_value < len(color_map)):
+                    logging.warning(
+                        f"Matrix value {matrix_value} is out of bounds for color_map (size {len(color_map)}). Defaulting to black."
+                    )
+                    # Fallback to a default color (e.g., black) if index is out of bounds
+                    current_color = BLACK
+                else:
+                    current_color = color_map[matrix_value]
+
+                if current_color.a == 0:  # Skip fully transparent pixels
                     continue
 
                 draw_col = col_idx
@@ -480,7 +533,7 @@ class ObjectLayerRender:
                     int(cell_draw_y),
                     rounded_pixel_size,
                     rounded_pixel_size,
-                    color_map[matrix_value],
+                    current_color,
                 )
 
     def get_or_create_object_layer_animation(
