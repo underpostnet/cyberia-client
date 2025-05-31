@@ -1,45 +1,13 @@
 import logging
 import random
 from enum import Enum, auto
+import os
+import json
+
 
 # This file centralizes object layer data, enums, and related constants.
 logging.basicConfig(
     level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s"
-)
-
-# Import actual object layer matrices and color maps
-from object_layer.building.wall import (
-    BUILDING_WALL_ANIMATION_SPEED,
-    BUILDING_WALL_MAP_COLORS,
-    BUILDING_WALL_MATRIX_00,
-)
-from object_layer.gfx.click_pointer import (
-    GFX_CLICK_POINTER_ANIMATION_SPEED,
-    GFX_CLICK_POINTER_MAP_COLORS,
-    GFX_CLICK_POINTER_MATRIX_00,
-    GFX_CLICK_POINTER_MATRIX_01,
-    GFX_CLICK_POINTER_MATRIX_02,
-)
-from object_layer.gfx.point_path import (
-    GFX_POINT_PATH_ANIMATION_SPEED,
-    GFX_POINT_PATH_MAP_COLORS,
-    GFX_POINT_PATH_MATRIX_00,
-)
-from object_layer.skin.people import (
-    SKIN_PEOPLE_ANIMATION_SPEED,
-    SKIN_PEOPLE_MAP_COLORS,
-    SKIN_PEOPLE_MATRIX_02_0,
-    SKIN_PEOPLE_MATRIX_02_1,
-    SKIN_PEOPLE_MATRIX_06_0,
-    SKIN_PEOPLE_MATRIX_06_1,
-    SKIN_PEOPLE_MATRIX_08_0,
-    SKIN_PEOPLE_MATRIX_08_1,
-    SKIN_PEOPLE_MATRIX_12_0,
-    SKIN_PEOPLE_MATRIX_12_1,
-    SKIN_PEOPLE_MATRIX_16_0,
-    SKIN_PEOPLE_MATRIX_16_1,
-    SKIN_PEOPLE_MATRIX_18_0,
-    SKIN_PEOPLE_MATRIX_18_1,
 )
 
 
@@ -76,82 +44,18 @@ def _generate_seed_data() -> dict:
     }
 
 
-OBJECT_LAYER_DATA = {
-    "PEOPLE": {
-        "RENDER_DATA": {
-            "FRAMES": {
-                "UP_IDLE": [SKIN_PEOPLE_MATRIX_02_0, SKIN_PEOPLE_MATRIX_02_1],
-                "DOWN_IDLE": [SKIN_PEOPLE_MATRIX_08_0, SKIN_PEOPLE_MATRIX_08_1],
-                "RIGHT_IDLE": [SKIN_PEOPLE_MATRIX_06_0, SKIN_PEOPLE_MATRIX_06_1],
-                "LEFT_IDLE": [SKIN_PEOPLE_MATRIX_06_0, SKIN_PEOPLE_MATRIX_06_1],
-                "UP_RIGHT_IDLE": [SKIN_PEOPLE_MATRIX_06_0, SKIN_PEOPLE_MATRIX_06_1],
-                "DOWN_RIGHT_IDLE": [SKIN_PEOPLE_MATRIX_06_0, SKIN_PEOPLE_MATRIX_06_1],
-                "UP_LEFT_IDLE": [SKIN_PEOPLE_MATRIX_06_0, SKIN_PEOPLE_MATRIX_06_1],
-                "DOWN_LEFT_IDLE": [SKIN_PEOPLE_MATRIX_06_0, SKIN_PEOPLE_MATRIX_06_1],
-                "DEFAULT_IDLE": [
-                    SKIN_PEOPLE_MATRIX_08_0,
-                    SKIN_PEOPLE_MATRIX_08_1,
-                ],  # Fallback
-                "UP_WALKING": [SKIN_PEOPLE_MATRIX_12_0, SKIN_PEOPLE_MATRIX_12_1],
-                "DOWN_WALKING": [SKIN_PEOPLE_MATRIX_18_0, SKIN_PEOPLE_MATRIX_18_1],
-                "RIGHT_WALKING": [SKIN_PEOPLE_MATRIX_16_0, SKIN_PEOPLE_MATRIX_16_1],
-                "LEFT_WALKING": [SKIN_PEOPLE_MATRIX_16_0, SKIN_PEOPLE_MATRIX_16_1],
-                "UP_RIGHT_WALKING": [SKIN_PEOPLE_MATRIX_16_0, SKIN_PEOPLE_MATRIX_16_1],
-                "DOWN_RIGHT_WALKING": [
-                    SKIN_PEOPLE_MATRIX_16_0,
-                    SKIN_PEOPLE_MATRIX_16_1,
-                ],
-                "UP_LEFT_WALKING": [SKIN_PEOPLE_MATRIX_16_0, SKIN_PEOPLE_MATRIX_16_1],
-                "DOWN_LEFT_WALKING": [SKIN_PEOPLE_MATRIX_16_0, SKIN_PEOPLE_MATRIX_16_1],
-            },
-            "COLORS": SKIN_PEOPLE_MAP_COLORS,
-            "FRAME_DURATION": SKIN_PEOPLE_ANIMATION_SPEED,
-            "IS_STATELESS": False,  # People animations have state (direction, mode)
-        },
-        "SEED_DATA": _generate_seed_data(),
-    },
-    "CLICK_POINTER": {
-        "RENDER_DATA": {
-            "FRAMES": {
-                "NONE_IDLE": [  # Stateless animations use NONE_IDLE or DEFAULT_IDLE
-                    GFX_CLICK_POINTER_MATRIX_00,
-                    GFX_CLICK_POINTER_MATRIX_01,
-                    GFX_CLICK_POINTER_MATRIX_02,
-                ],
-                "DEFAULT_IDLE": [  # Fallback
-                    GFX_CLICK_POINTER_MATRIX_00,
-                    GFX_CLICK_POINTER_MATRIX_01,
-                    GFX_CLICK_POINTER_MATRIX_02,
-                ],
-            },
-            "COLORS": GFX_CLICK_POINTER_MAP_COLORS,
-            "FRAME_DURATION": GFX_CLICK_POINTER_ANIMATION_SPEED,
-            "IS_STATELESS": True,  # Click pointer animation is stateless
-        },
-        "SEED_DATA": _generate_seed_data(),
-    },
-    "POINT_PATH": {
-        "RENDER_DATA": {
-            "FRAMES": {
-                "NONE_IDLE": [GFX_POINT_PATH_MATRIX_00],
-                "DEFAULT_IDLE": [GFX_POINT_PATH_MATRIX_00],  # Fallback
-            },
-            "COLORS": GFX_POINT_PATH_MAP_COLORS,
-            "FRAME_DURATION": GFX_POINT_PATH_ANIMATION_SPEED,
-            "IS_STATELESS": True,  # Path points are stateless
-        },
-        "SEED_DATA": _generate_seed_data(),
-    },
-    "WALL": {
-        "RENDER_DATA": {
-            "FRAMES": {
-                "NONE_IDLE": [BUILDING_WALL_MATRIX_00],
-                "DEFAULT_IDLE": [BUILDING_WALL_MATRIX_00],  # Fallback
-            },
-            "COLORS": BUILDING_WALL_MAP_COLORS,
-            "FRAME_DURATION": BUILDING_WALL_ANIMATION_SPEED,
-            "IS_STATELESS": True,  # Walls are static and stateless
-        },
-        "SEED_DATA": _generate_seed_data(),
-    },
-}
+OBJECT_LAYER_DATA = {}
+
+
+for dirpath, dirnames, filenames in os.walk("./object_layer"):
+    for filename in filenames:
+        if filename.startswith("object_layer_") and ".json" in filename:
+            with open(dirpath + "/" + filename) as json_file:
+                data = json.load(json_file)
+                object_layer_id = (
+                    filename.replace(".json", "")
+                    .replace("object_layer_data_", "")
+                    .upper()
+                )
+                print("Load object layer data", object_layer_id)
+                OBJECT_LAYER_DATA[object_layer_id] = data

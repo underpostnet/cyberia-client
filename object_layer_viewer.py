@@ -1,6 +1,8 @@
 import logging
 import time
-import copy  # Import copy for deep copying
+import copy
+import json
+import random
 
 from config import NETWORK_OBJECT_SIZE
 from object_layer.object_layer_data import OBJECT_LAYER_DATA, ObjectLayerMode, Direction
@@ -35,9 +37,10 @@ from raylibpy import (
     KEY_SEVEN,
     KEY_EIGHT,
     KEY_NINE,
-    KEY_T,  # Import KEY_T for test mode
+    KEY_T,
+    KEY_Y,
     MOUSE_BUTTON_LEFT,
-    KEY_BACKSPACE,  # Import KEY_BACKSPACE
+    KEY_BACKSPACE,
 )
 
 logging.basicConfig(
@@ -71,12 +74,7 @@ if __name__ == "__main__":
         target_fps=TARGET_FPS,
     )
 
-    AVAILABLE_OBJECT_LAYER_IDS = [
-        "PEOPLE",
-        "CLICK_POINTER",
-        "POINT_PATH",
-        "WALL",
-    ]
+    AVAILABLE_OBJECT_LAYER_IDS = list(original_object_layer_data.keys())
     current_object_layer_id_index = 0
     demo_obj_id = "demo_object_layer_viewer_object"  # Unique ID for the demo object
 
@@ -84,20 +82,20 @@ if __name__ == "__main__":
     demo_direction = Direction.DOWN
     object_layer_mode = ObjectLayerMode.IDLE
 
-    # --- New State Variables for Edit Mode and Clones ---
+    # State variables for Edit Mode, Test Mode, and cloned object data
     is_edit_mode: bool = False
-    is_test_mode: bool = False  # New state for test mode
+    is_test_mode: bool = False
     # Stores cloned data: {object_layer_id: {"RENDER_DATA": {...}, "SEED_DATA": {...}, "MODIFIED": bool}}
     cloned_object_layer_states: dict[str, dict] = {}
 
-    # Function to get the current active render data (original or clone)
     def get_active_object_layer_render_data(obj_id: str, obj_layer_id: str) -> dict:
+        """Determines whether to use original or cloned render data."""
         if is_edit_mode and obj_layer_id in cloned_object_layer_states:
             return cloned_object_layer_states[obj_layer_id]["RENDER_DATA"]
         return original_object_layer_data[obj_layer_id]["RENDER_DATA"]
 
-    # Function to check if the current object layer has been modified in clone
     def is_current_object_layer_modified() -> bool:
+        """Checks if the current object layer's clone has been modified."""
         return is_edit_mode and cloned_object_layer_states.get(
             current_object_layer_id, {}
         ).get("MODIFIED", False)
@@ -110,8 +108,8 @@ if __name__ == "__main__":
     if current_pixel_size_in_display == 0:
         current_pixel_size_in_display = 1
 
-    # Get or create the animation instance for the demo object
-    # This instance will be dynamically updated with original/clone data
+    # Get or create the animation instance for the demo object.
+    # This instance will be dynamically updated with original/clone data.
     demo_object_layer_properties = (
         object_layer_render.get_or_create_object_layer_animation(
             demo_obj_id,
@@ -124,10 +122,10 @@ if __name__ == "__main__":
         "object_layer_animation_instance"
     ]
 
-    # Helper function to update the animation instance's data source based on current mode and test mode
-    # This function is now defined AFTER demo_object_layer_animation_instance is initialized.
+    # Helper function to update the animation instance's data source based on current mode and test mode.
+    # This function is defined AFTER demo_object_layer_animation_instance is initialized,
+    # and uses 'global' for variables in the main script's scope.
     def update_animation_instance_data_source():
-        # These variables are in the global scope of this script, so 'global' is used.
         global demo_object_layer_animation_instance
         global current_object_layer_id
         global original_object_layer_data
@@ -143,7 +141,8 @@ if __name__ == "__main__":
                     current_object_layer_id
                 ]["RENDER_DATA"]
             else:
-                # Should ideally not happen if clone is created on entering edit mode
+                # This case should ideally not happen if clone is created on entering edit mode.
+                # Fallback to original if no clone is found in edit mode.
                 target_render_data = original_object_layer_data[
                     current_object_layer_id
                 ]["RENDER_DATA"]
@@ -151,6 +150,7 @@ if __name__ == "__main__":
                     f"No clone found for {current_object_layer_id} in edit mode, using original."
                 )
         else:  # Normal Mode
+            # In normal mode, use clone data if test mode is active, otherwise use original.
             if is_test_mode and current_object_layer_id in cloned_object_layer_states:
                 target_render_data = cloned_object_layer_states[
                     current_object_layer_id
@@ -181,6 +181,7 @@ if __name__ == "__main__":
 
     last_frame_time = time.time()
 
+    # --- Console Controls Instructions ---
     print("--- Object Layer Viewer Controls ---")
     print(
         "Use arrow keys or numpad directions (e.g., 8 for UP, 6 for RIGHT) to change object layer animation direction."
@@ -197,21 +198,20 @@ if __name__ == "__main__":
     )
     print("Press BACKSPACE to reset the current clone to its original state.")
     print("Press 'T' to toggle TEST MODE (runs cloned animation in Normal Mode).")
+    print("Press 'Y' to save the current clone's data as a JSON file.")
     print("Press ESC to close the window.")
 
     last_commanded_dx = 0.0
     last_commanded_dy = 0.0
-    move_speed_sim = 5.0  # Simulated movement speed for demo
+    move_speed_sim = 5.0
 
-    # Define a fixed 16-color rainbow palette
+    # --- Color Palette Definitions ---
     def get_rainbow_color(index, total_colors):
         """Generates a rainbow color based on index."""
-        hue = index * (360 / total_colors)  # Hue in degrees (0-360)
-
-        # Simple HSL to RGB conversion for a vibrant spectrum
-        c = 1.0  # Chroma (saturation * lightness)
-        s = 1.0  # Saturation
-        l = 0.5  # Lightness (fixed for vibrant colors)
+        hue = index * (360 / total_colors)
+        c = 1.0
+        s = 1.0
+        l = 0.5
 
         h_prime = hue / 60.0
         x = c * (1 - abs(h_prime % 2 - 1))
@@ -270,7 +270,7 @@ if __name__ == "__main__":
     PALETTE_COLS_LIGHTNESS = 16
     PALETTE_ROWS_LIGHTNESS = 1
 
-    # Initialize selected color to white
+    # Initialize selected color for painting
     selected_color_rgb_text = "Selected: R:255 G:255 B:255 (White)"
     selected_color_box_color = Color(255, 255, 255, 255)
 
@@ -281,13 +281,13 @@ if __name__ == "__main__":
 
         # --- Input Handling ---
 
-        # Handle mode switching (Edit Mode / Normal Mode)
-        for i in range(10):  # Keys 0-9 for Edit Mode
+        # Handle mode switching (Edit Mode / Normal Mode) using number keys
+        for i in range(10):
             if object_layer_render.is_key_pressed(KEY_ZERO + i):
-                if not is_edit_mode:  # Only clone if entering edit mode
+                if not is_edit_mode:  # If entering edit mode from normal mode
                     is_edit_mode = True
                     if current_object_layer_id not in cloned_object_layer_states:
-                        # Deep copy original data and ensure colors are Color objects
+                        # Deep copy original data and ensure colors are Color objects for the clone
                         original_render_data_for_clone = copy.deepcopy(
                             original_object_layer_data[current_object_layer_id][
                                 "RENDER_DATA"
@@ -314,35 +314,34 @@ if __name__ == "__main__":
                                     "SEED_DATA"
                                 ]
                             ),
-                            "MODIFIED": False,
+                            "MODIFIED": False,  # Flag to track if clone has been modified
                         }
+                        # Reset selected color when a brand new clone is created
                         selected_color_rgb_text = "Selected: R:255 G:255 B:255 (White)"
                         selected_color_box_color = Color(255, 255, 255, 255)
 
-                    # Update animation instance to use clone's data (which now has Color objects)
-                    update_animation_instance_data_source()  # Call helper here
-                demo_object_layer_animation_instance.pause_at_frame(i, current_time)
-                # Ensure the animation instance is paused and using the correct frame
-                demo_object_layer_animation_instance.is_paused = (
-                    True  # Explicitly set pause state
-                )
-                demo_object_layer_animation_instance.paused_frame_index = (
-                    i  # Set the paused frame
-                )
-                demo_object_layer_animation_instance.current_frame_index = (
-                    i  # Update current frame index
-                )
-                demo_object_layer_animation_instance.frame_timer = 0.0  # Reset timer
+                    # Update animation instance to use clone's data
+                    update_animation_instance_data_source()
 
+                # Pause animation at the selected frame
+                demo_object_layer_animation_instance.pause_at_frame(i, current_time)
+                demo_object_layer_animation_instance.is_paused = True
+                demo_object_layer_animation_instance.paused_frame_index = i
+                demo_object_layer_animation_instance.current_frame_index = i
+                demo_object_layer_animation_instance.frame_timer = 0.0
+
+        # Handle ENTER key to return to Normal Mode
         if object_layer_render.is_key_pressed(KEY_ENTER):
             is_edit_mode = False
             demo_object_layer_animation_instance.resume()
-            update_animation_instance_data_source()  # Call helper here
+            # Restore animation data source based on test mode
+            update_animation_instance_data_source()
 
-        # Handle Backspace to reset current clone
+        # Handle BACKSPACE to reset current clone
         if object_layer_render.is_key_pressed(KEY_BACKSPACE):
             if current_object_layer_id in cloned_object_layer_states:
                 logging.info(f"Resetting clone for {current_object_layer_id}")
+                # Reset clone data to original state
                 cloned_object_layer_states[current_object_layer_id] = {
                     "RENDER_DATA": copy.deepcopy(
                         original_object_layer_data[current_object_layer_id][
@@ -372,7 +371,8 @@ if __name__ == "__main__":
                         )
                 reset_clone_render_data["COLORS"] = processed_colors_on_reset
 
-                update_animation_instance_data_source()  # Call helper here
+                # Update animation instance to reflect the reset clone data
+                update_animation_instance_data_source()
                 # If in edit mode, re-pause at the current frame to refresh display
                 if is_edit_mode:
                     demo_object_layer_animation_instance.pause_at_frame(
@@ -392,8 +392,45 @@ if __name__ == "__main__":
             if not is_edit_mode:  # Only update data source if not in edit mode
                 update_animation_instance_data_source()
 
+        # Handle 'Y' key press to save clone data as JSON
+        if object_layer_render.is_key_pressed(KEY_Y):
+            if is_edit_mode and current_object_layer_id in cloned_object_layer_states:
+                clone_data_to_save = copy.deepcopy(
+                    cloned_object_layer_states[current_object_layer_id]
+                )
+
+                # Convert Color objects back to serializable tuples for JSON saving
+                serializable_colors = []
+                for color_obj in clone_data_to_save["RENDER_DATA"]["COLORS"]:
+                    serializable_colors.append(
+                        [color_obj.r, color_obj.g, color_obj.b, color_obj.a]
+                    )
+                clone_data_to_save["RENDER_DATA"]["COLORS"] = serializable_colors
+
+                # Prepare the full object layer data structure for the JSON file
+                full_object_layer_json = {
+                    "RENDER_DATA": clone_data_to_save["RENDER_DATA"],
+                    "SEED_DATA": clone_data_to_save["SEED_DATA"],
+                }
+
+                random_prefix = random.randint(10000, 99999)
+                filename = f"{random_prefix}_{current_object_layer_id}.json"
+
+                try:
+                    with open(filename, "w") as f:
+                        json.dump(full_object_layer_json, f, indent=4)
+                    logging.info(
+                        f"Saved clone data for {current_object_layer_id} to {filename}"
+                    )
+                except Exception as e:
+                    logging.error(f"Error saving clone data to {filename}: {e}")
+            else:
+                logging.warning(
+                    "Cannot save clone data: Not in Edit Mode or no clone exists for current object layer."
+                )
+
         # Handle direction and mode changes (applies in both Normal and Edit modes)
-        # Note: In Edit Mode, this changes which frame of the CLONE is displayed,
+        # In Edit Mode, this changes which frame of the CLONE is displayed,
         # but does not affect the pixel data of the CLONE itself.
         if not demo_object_layer_animation_instance.is_stateless:
             # Reset movement if no direction keys are pressed and in IDLE mode
@@ -482,8 +519,7 @@ if __name__ == "__main__":
                 timestamp=current_time,
                 reverse=True,  # Reverse direction for display in viewer
             )
-        else:  # For stateless animations
-            # For stateless animations, reset movement and mode
+        else:  # For stateless animations, movement and mode are ignored
             last_commanded_dx = 0.0
             last_commanded_dy = 0.0
             object_layer_mode = ObjectLayerMode.IDLE
@@ -516,7 +552,7 @@ if __name__ == "__main__":
                 initial_direction=demo_object_layer_animation_instance.current_direction,
             )
 
-        # Handle object layer ID changes
+        # Handle object layer ID changes (next/previous)
         if object_layer_render.is_key_pressed(KEY_E):
             current_object_layer_id_index = (current_object_layer_id_index + 1) % len(
                 AVAILABLE_OBJECT_LAYER_IDS
@@ -524,6 +560,7 @@ if __name__ == "__main__":
             current_object_layer_id = AVAILABLE_OBJECT_LAYER_IDS[
                 current_object_layer_id_index
             ]
+            # Remove previous animation instance to ensure clean state for new ID
             object_layer_render.remove_object_layer_animation(
                 obj_id=demo_obj_id, object_layer_id=None
             )
@@ -532,6 +569,7 @@ if __name__ == "__main__":
             last_commanded_dy = 0.0
             is_edit_mode = False  # Exit edit mode on ID change
 
+            # Recalculate pixel size for the new object layer
             matrix_dimension = object_layer_render.get_object_layer_matrix_dimension(
                 current_object_layer_id
             )
@@ -539,6 +577,7 @@ if __name__ == "__main__":
             if current_pixel_size_in_display == 0:
                 current_pixel_size_in_display = 1
 
+            # Get or create new animation instance for the updated ID
             demo_object_layer_properties = (
                 object_layer_render.get_or_create_object_layer_animation(
                     demo_obj_id,
@@ -550,7 +589,8 @@ if __name__ == "__main__":
             demo_object_layer_animation_instance = demo_object_layer_properties[
                 "object_layer_animation_instance"
             ]
-            update_animation_instance_data_source()  # Call helper here
+            # Update animation instance data source based on current mode and test mode
+            update_animation_instance_data_source()
 
         elif object_layer_render.is_key_pressed(KEY_R):
             current_object_layer_id_index = (
@@ -559,6 +599,7 @@ if __name__ == "__main__":
             current_object_layer_id = AVAILABLE_OBJECT_LAYER_IDS[
                 current_object_layer_id_index
             ]
+            # Remove previous animation instance to ensure clean state for new ID
             object_layer_render.remove_object_layer_animation(
                 obj_id=demo_obj_id, object_layer_id=None
             )
@@ -567,6 +608,7 @@ if __name__ == "__main__":
             last_commanded_dy = 0.0
             is_edit_mode = False  # Exit edit mode on ID change
 
+            # Recalculate pixel size for the new object layer
             matrix_dimension = object_layer_render.get_object_layer_matrix_dimension(
                 current_object_layer_id
             )
@@ -574,6 +616,7 @@ if __name__ == "__main__":
             if current_pixel_size_in_display == 0:
                 current_pixel_size_in_display = 1
 
+            # Get or create new animation instance for the updated ID
             demo_object_layer_properties = (
                 object_layer_render.get_or_create_object_layer_animation(
                     demo_obj_id,
@@ -585,7 +628,8 @@ if __name__ == "__main__":
             demo_object_layer_animation_instance = demo_object_layer_properties[
                 "object_layer_animation_instance"
             ]
-            update_animation_instance_data_source()  # Call helper here
+            # Update animation instance data source based on current mode and test mode
+            update_animation_instance_data_source()
 
         # Get current animation instance properties (after potential ID change)
         demo_object_layer_properties = (
@@ -605,7 +649,7 @@ if __name__ == "__main__":
             delta_time, current_time
         )
 
-        # Calculate drawing position for the demo object
+        # Calculate drawing position for the demo object to center it
         matrix_dimension = object_layer_render.get_object_layer_matrix_dimension(
             current_object_layer_id
         )
@@ -629,7 +673,7 @@ if __name__ == "__main__":
 
         # Draw grid and palettes only if in edit mode
         if is_edit_mode:
-            # Get the current frame matrix to determine its dimensions
+            # Get the current frame matrix to determine its dimensions for grid drawing
             frame_matrix, _, _, _ = (
                 demo_object_layer_animation_instance.get_current_frame_data(
                     current_time
@@ -641,7 +685,7 @@ if __name__ == "__main__":
 
                 grid_color = Color(200, 200, 200, 100)  # Light gray with transparency
 
-                # Draw vertical lines
+                # Draw vertical grid lines
                 for col_idx in range(matrix_cols + 1):
                     start_x = draw_x + col_idx * current_pixel_size_in_display
                     object_layer_render.draw_line(
@@ -651,7 +695,7 @@ if __name__ == "__main__":
                         int(draw_y + total_rendered_height),
                         grid_color,
                     )
-                # Draw horizontal lines
+                # Draw horizontal grid lines
                 for row_idx in range(matrix_rows + 1):
                     start_y = draw_y + row_idx * current_pixel_size_in_display
                     object_layer_render.draw_line(
@@ -662,7 +706,7 @@ if __name__ == "__main__":
                         grid_color,
                     )
 
-            # Calculate positions for palettes at bottom-right
+            # Calculate positions for palettes at bottom-right of the screen
             total_palette_width = PALETTE_COLS_RAINBOW * PALETTE_SQUARE_SIZE
 
             # Rainbow palette position
@@ -671,11 +715,13 @@ if __name__ == "__main__":
             )
             rainbow_palette_start_y = (
                 SCREEN_HEIGHT
-                - (PALETTE_ROWS_RAINBOW * PALETTE_SQUARE_SIZE * 4)  # Space for 4 rows
+                - (
+                    PALETTE_ROWS_RAINBOW * PALETTE_SQUARE_SIZE * 4
+                )  # Space for 4 rows of palettes
                 - (PALETTE_PADDING * 4)  # Padding between rows
             )
 
-            # Draw the 16-color rainbow palette
+            # Draw the 16-color rainbow palette (first row)
             for i, color in enumerate(COLOR_PALETTE_RAINBOW):
                 col = i % PALETTE_COLS_RAINBOW
                 row = i // PALETTE_COLS_RAINBOW
@@ -694,7 +740,7 @@ if __name__ == "__main__":
                     Color(255, 255, 255, 50),  # Semi-transparent white border
                 )
 
-            # Draw the first darker rainbow palette
+            # Draw the first darker rainbow palette (second row)
             darker_rainbow_palette_1_y = (
                 rainbow_palette_start_y + PALETTE_SQUARE_SIZE + PALETTE_PADDING
             )
@@ -716,7 +762,7 @@ if __name__ == "__main__":
                     Color(255, 255, 255, 50),
                 )
 
-            # Draw the second darker rainbow palette
+            # Draw the second darker rainbow palette (third row)
             darker_rainbow_palette_2_y = (
                 darker_rainbow_palette_1_y + PALETTE_SQUARE_SIZE + PALETTE_PADDING
             )
@@ -738,7 +784,7 @@ if __name__ == "__main__":
                     Color(255, 255, 255, 50),
                 )
 
-            # Lightness bar position (below all rainbow palettes)
+            # Lightness bar position (fourth row, below all rainbow palettes)
             lightness_bar_start_x = SCREEN_WIDTH - total_palette_width - PALETTE_PADDING
             lightness_bar_start_y = (
                 darker_rainbow_palette_2_y + PALETTE_SQUARE_SIZE + PALETTE_PADDING
@@ -760,7 +806,7 @@ if __name__ == "__main__":
                     Color(255, 255, 255, 50),
                 )
 
-            # Eyedropper logic: Detect clicks on palettes
+            # Eyedropper logic: Detect clicks on palettes to select a color
             if object_layer_render.is_mouse_button_pressed(MOUSE_BUTTON_LEFT):
                 mouse_pos = object_layer_render.get_mouse_position()
                 mouse_x, mouse_y = mouse_pos.x, mouse_pos.y
@@ -768,7 +814,7 @@ if __name__ == "__main__":
                 clicked_on_palette = False
                 temp_selected_color = None
 
-                # Check original rainbow palette click
+                # Check clicks on each palette row
                 if (
                     rainbow_palette_start_x
                     <= mouse_x
@@ -789,7 +835,6 @@ if __name__ == "__main__":
                         temp_selected_color = COLOR_PALETTE_RAINBOW[index]
                         clicked_on_palette = True
 
-                # Check first darker rainbow palette click
                 elif (
                     rainbow_palette_start_x
                     <= mouse_x
@@ -810,7 +855,6 @@ if __name__ == "__main__":
                         temp_selected_color = COLOR_PALETTE_RAINBOW_DARKER_1[index]
                         clicked_on_palette = True
 
-                # Check second darker rainbow palette click
                 elif (
                     rainbow_palette_start_x
                     <= mouse_x
@@ -831,7 +875,6 @@ if __name__ == "__main__":
                         temp_selected_color = COLOR_PALETTE_RAINBOW_DARKER_2[index]
                         clicked_on_palette = True
 
-                # Check lightness palette click
                 elif (
                     lightness_bar_start_x
                     <= mouse_x
@@ -856,8 +899,7 @@ if __name__ == "__main__":
                     selected_color_rgb_text = f"Selected: R:{temp_selected_color.r} G:{temp_selected_color.g} B:{temp_selected_color.b}"
                     selected_color_box_color = temp_selected_color
 
-                # --- Paint functionality on the frame grid ---
-                # Check if click is on the rendered object's grid
+                # Paint functionality on the animation grid
                 if (
                     draw_x <= mouse_x < draw_x + total_rendered_width
                     and draw_y <= mouse_y < draw_y + total_rendered_height
@@ -889,22 +931,20 @@ if __name__ == "__main__":
                             color_index = idx
                             break
 
-                    if color_index == -1:  # Color not found, add it to the map
+                    if color_index == -1:  # If color not found, add it to the map
                         current_color_map.append(selected_color_box_color)
                         color_index = len(current_color_map) - 1
-                        # IMPORTANT: Also update the clone's RENDER_DATA["COLORS"] with the new Color object
+                        # Update the clone's RENDER_DATA["COLORS"] with the new Color object
                         cloned_object_layer_states[current_object_layer_id][
                             "RENDER_DATA"
                         ]["COLORS"].append(selected_color_box_color)
 
-                    # Ensure bounds
+                    # Ensure bounds before painting
                     if 0 <= clicked_row_on_grid < len(
                         current_frame_matrix
                     ) and 0 <= clicked_col_on_grid < len(current_frame_matrix[0]):
 
                         # Apply color to the clone's frame data
-                        # Note: current_frame_matrix is already a reference to the clone's data
-                        # if we are in edit mode and a clone exists.
                         current_frame_matrix[clicked_row_on_grid][
                             clicked_col_on_grid
                         ] = color_index
@@ -915,7 +955,7 @@ if __name__ == "__main__":
                             f"Painted cell ({clicked_row_on_grid}, {clicked_col_on_grid}) with color index {color_index}"
                         )
 
-            # Display selected color RGB text and box (only in edit mode)
+            # Display selected color RGB text and color box (only in edit mode)
             object_layer_render.draw_text(
                 selected_color_rgb_text,
                 UI_START_X,  # Use UI_START_X for consistent left alignment
@@ -941,8 +981,8 @@ if __name__ == "__main__":
         # --- UI Text Display (Top-Left) ---
         UI_START_X = 10
         UI_START_Y = 10
-        LINE_HEIGHT = 20  # For main titles
-        SUB_LINE_HEIGHT = 15  # For smaller info
+        LINE_HEIGHT = 20
+        SUB_LINE_HEIGHT = 15
         PADDING = 5
 
         current_y = UI_START_Y
@@ -956,7 +996,7 @@ if __name__ == "__main__":
         )
         current_y += LINE_HEIGHT + PADDING
 
-        # Object State: Original / Clone (Modified) / Clone (Unmodified)
+        # Display object state: Original / Clone (Modified) / Clone (Unmodified)
         object_state_text = "Original"
         if is_edit_mode:
             if (
@@ -979,6 +1019,7 @@ if __name__ == "__main__":
         )
         current_y += SUB_LINE_HEIGHT + PADDING
 
+        # Display animation direction and mode if not stateless
         if demo_object_layer_animation_instance.is_stateless:
             object_layer_render.draw_text(
                 "Stateless Animation (Direction & Mode Ignored)",
@@ -1022,6 +1063,7 @@ if __name__ == "__main__":
             )
             current_y += SUB_LINE_HEIGHT + PADDING
 
+        # Display pixel size and zoom controls
         object_layer_render.draw_text(
             f"Pixel Size: {current_pixel_size_in_display:.2f}",
             UI_START_X,
@@ -1047,6 +1089,7 @@ if __name__ == "__main__":
         )
         current_y += SUB_LINE_HEIGHT + PADDING
 
+        # Display current frame information
         object_layer_render.draw_text(
             f"Frame Index: {demo_object_layer_animation_instance.current_frame_index}",
             UI_START_X,
@@ -1064,14 +1107,14 @@ if __name__ == "__main__":
         )
         current_y += SUB_LINE_HEIGHT
 
-        # Display mode status
+        # Display current mode status and controls
         if is_edit_mode:
             object_layer_render.draw_text(
                 f"Mode: EDIT MODE (Frame {demo_object_layer_animation_instance.paused_frame_index})",
                 UI_START_X,
                 current_y,
                 SUB_LINE_HEIGHT,
-                Color(255, 0, 0, 255),
+                Color(255, 0, 0, 255),  # Red for Edit Mode
             )
             current_y += SUB_LINE_HEIGHT
             object_layer_render.draw_text(
@@ -1089,6 +1132,14 @@ if __name__ == "__main__":
                 SUB_LINE_HEIGHT,
                 Color(255, 255, 255, 255),
             )
+            current_y += SUB_LINE_HEIGHT
+            object_layer_render.draw_text(
+                "Press 'Y' to save clone data as JSON.",  # Added UI for 'Y' key
+                UI_START_X,
+                current_y,
+                SUB_LINE_HEIGHT,
+                Color(255, 255, 255, 255),
+            )
             current_y += SUB_LINE_HEIGHT + PADDING
         else:
             object_layer_render.draw_text(
@@ -1096,7 +1147,7 @@ if __name__ == "__main__":
                 UI_START_X,
                 current_y,
                 SUB_LINE_HEIGHT,
-                Color(0, 255, 0, 255),
+                Color(0, 255, 0, 255),  # Green for Normal Mode
             )
             current_y += SUB_LINE_HEIGHT
             object_layer_render.draw_text(
