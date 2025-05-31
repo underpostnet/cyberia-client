@@ -40,8 +40,6 @@ LATENT_DIM = 128  # Ensure this matches the LATENT_DIM from your training script
 
 
 # --- Define the Decoder's architecture (must match the saved model) ---
-# We need to define the decoder's structure again to load it correctly.
-# This part should be identical to the build_decoder function in your training script.
 def build_decoder(latent_dim, output_shape=(25, 25, 1), num_colors=None):
     """Builds the decoder part of the VAE."""
     if num_colors is None:
@@ -97,7 +95,10 @@ def generate_and_visualize_skin(vae_decoder, latent_dim, color_map, num_samples=
     plt.figure(figsize=(num_samples * 3, 4))
 
     for i, skin_frame_indices in enumerate(generated_frames_indices):
-        skin_frame_2d_indices = skin_frame_indices.squeeze()
+        # Ensure indices are within the valid range of the color map
+        clamped_indices = np.clip(skin_frame_indices, 0, len(color_map) - 1)
+
+        skin_frame_2d_indices = clamped_indices.squeeze()
         skin_frame_rgba = color_map[skin_frame_2d_indices]
 
         plt.subplot(1, num_samples, i + 1)
@@ -130,7 +131,6 @@ if __name__ == "__main__":
             NUM_COLORS_LOADED = len(loaded_color_map_rgba)
 
             # Load the decoder model using keras.models.load_model for .keras format
-            # Pass NUM_COLORS_LOADED to build_decoder
             loaded_decoder = build_decoder(LATENT_DIM, num_colors=NUM_COLORS_LOADED)
             loaded_decoder.load_weights(DECODER_MODEL_PATH)
 
