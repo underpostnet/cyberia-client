@@ -74,7 +74,9 @@ if __name__ == "__main__":
         target_fps=TARGET_FPS,
     )
 
+    # Dynamically populate AVAILABLE_OBJECT_LAYER_IDS from the keys of original_object_layer_data
     AVAILABLE_OBJECT_LAYER_IDS = list(original_object_layer_data.keys())
+
     current_object_layer_id_index = 0
     demo_obj_id = "demo_object_layer_viewer_object"  # Unique ID for the demo object
 
@@ -441,9 +443,6 @@ if __name__ == "__main__":
                     current_object_layer_id: {
                         "RENDER_DATA": clone_data_to_save["RENDER_DATA"],
                         "SEED_DATA": clone_data_to_save["SEED_DATA"],
-                        "MODIFIED": clone_data_to_save[
-                            "MODIFIED"
-                        ],  # Include modified status
                     }
                 }
 

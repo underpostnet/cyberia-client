@@ -17,7 +17,7 @@ CAMERA_SMOOTHNESS = 0.1
 
 # Network object type to object layer IDs mapping
 NETWORK_OBJECT_TYPE_DEFAULT_OBJECT_LAYER_IDS = {
-    "PLAYER": ["PEOPLE"],
+    "PLAYER": ["ANON"],
     "WALL": ["WALL"],
     "POINT_PATH": ["POINT_PATH"],
     "CLICK_POINTER": ["CLICK_POINTER"],
