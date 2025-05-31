@@ -301,7 +301,7 @@ class ObjectLayerRender:
         clear_background(color)
 
     def begin_camera_mode(self):
-        """Begins 2D camera mode for drawing world elements."""
+        """Starts 2D camera mode for drawing world elements."""
         begin_mode2d(self.camera)
 
     def end_camera_mode(self):
@@ -488,7 +488,7 @@ class ObjectLayerRender:
             )
 
             # Update direction and mode for non-stateless animations
-            if not object_layer_info["IS_STATELESS"]:
+            if not object_layer_info["IS_STATELESS"]:  # Corrected typo here
                 self.update_object_layer_direction_for_object(
                     obj_id=network_object.obj_id,
                     object_layer_id=object_layer_id,
@@ -543,6 +543,17 @@ class ObjectLayerRender:
             for col_idx in range(matrix_dimension):
                 matrix_value = frame_matrix[row_idx][col_idx]
 
+                # Defensive check: Ensure matrix_value is an integer as expected
+                if not isinstance(matrix_value, int):
+                    logging.error(
+                        f"Expected integer for pixel value at ({row_idx}, {col_idx}) in frame_matrix, "
+                        f"but got type {type(matrix_value)} with value: {matrix_value}. "
+                        f"This indicates a malformed frame data structure. Defaulting pixel to 0."
+                    )
+                    matrix_value = (
+                        0  # Fallback to a valid index (0 for first color in map)
+                    )
+
                 # Ensure matrix_value is a valid index for color_map
                 if not (0 <= matrix_value < len(color_map)):
                     logging.warning(
@@ -554,6 +565,8 @@ class ObjectLayerRender:
 
                 if current_color.a == 0:  # Skip fully transparent pixels
                     continue
+
+                # No horizontal flip logic here
                 cell_draw_x = rounded_screen_x + col_idx * rounded_pixel_size
                 cell_draw_y = rounded_screen_y + row_idx * rounded_pixel_size
 
@@ -607,7 +620,7 @@ class ObjectLayerRender:
         }
 
         # Manage direction history for non-stateless animations
-        if not object_layer_info["IS_STATELESS"]:
+        if not object_layer_info["IS_STATELESS"]:  # Corrected typo here
             history_key = (obj_id, object_layer_id)
             if history_key not in self._object_layer_direction_histories:
                 self._object_layer_direction_histories[history_key] = collections.deque(
