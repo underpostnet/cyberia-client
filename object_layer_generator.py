@@ -1,5 +1,7 @@
 import os
 
+# Set XLA_FLAGS to point to the CUDA data directory where libdevice is located.
+# This must be set BEFORE importing tensorflow.
 os.environ["XLA_FLAGS"] = "--xla_gpu_cuda_data_dir=/root/.conda/envs/cuda_env"
 
 import tensorflow as tf
@@ -8,6 +10,23 @@ from tensorflow.keras import layers
 import numpy as np
 import json
 import matplotlib.pyplot as plt
+
+# --- Check for GPU devices ---
+gpus = tf.config.list_physical_devices("GPU")
+if gpus:
+    try:
+        # Restrict TensorFlow to only use the first GPU
+        tf.config.set_visible_devices(gpus[0], "GPU")
+        logical_gpus = tf.config.list_logical_devices("GPU")
+        print(
+            f"TensorFlow detected {len(gpus)} Physical GPUs, {len(logical_gpus)} Logical GPUs."
+        )
+        print(f"Using GPU: {gpus[0].name}")
+    except RuntimeError as e:
+        # Visible devices must be set before GPUs have been initialized
+        print(e)
+else:
+    print("TensorFlow did not detect any GPU devices. Running on CPU.")
 
 # --- Configuration for Loading ---
 # Directory where the trained model and color map are saved
@@ -23,8 +42,13 @@ LATENT_DIM = 128  # Ensure this matches the LATENT_DIM from your training script
 # --- Define the Decoder's architecture (must match the saved model) ---
 # We need to define the decoder's structure again to load it correctly.
 # This part should be identical to the build_decoder function in your training script.
-def build_decoder(latent_dim, output_shape=(25, 25, 1)):  # Default output_shape
+def build_decoder(latent_dim, output_shape=(25, 25, 1), num_colors=None):
     """Builds the decoder part of the VAE."""
+    if num_colors is None:
+        raise ValueError(
+            "num_colors must be provided to build the decoder for generation."
+        )
+
     decoder_inputs = keras.Input(shape=(latent_dim,))
     initial_dense_dim = 7 * 7 * 64
     x = layers.Dense(initial_dense_dim, activation="relu")(decoder_inputs)
@@ -32,8 +56,10 @@ def build_decoder(latent_dim, output_shape=(25, 25, 1)):  # Default output_shape
 
     x = layers.Conv2DTranspose(64, 3, activation="relu", strides=2, padding="same")(x)
     x = layers.Conv2DTranspose(32, 3, activation="relu", strides=2, padding="same")(x)
+
+    # Output layer: now outputs NUM_COLORS channels with softmax for probability distribution
     decoder_outputs = layers.Conv2DTranspose(
-        1, 3, activation="sigmoid", padding="same"
+        num_colors, 3, activation="softmax", padding="same"
     )(x)
 
     # Re-apply cropping logic as in the training script
@@ -56,26 +82,15 @@ def build_decoder(latent_dim, output_shape=(25, 25, 1)):  # Default output_shape
 def generate_and_visualize_skin(vae_decoder, latent_dim, color_map, num_samples=1):
     """Generates new pixel art frames and visualizes them using the provided color map."""
     random_latent_vectors = tf.random.normal(shape=(num_samples, latent_dim))
-    generated_frames_normalized = vae_decoder.predict(random_latent_vectors)
+    generated_frames_probs = vae_decoder.predict(random_latent_vectors)
 
-    print(
-        f"\nGenerated Normalized Frames (Raw Sigmoid Output) Min: {np.min(generated_frames_normalized):.4f}, Max: {np.max(generated_frames_normalized):.4f}"
+    # Get the index with the highest probability for each pixel
+    generated_frames_indices = (
+        tf.argmax(generated_frames_probs, axis=-1).numpy().astype(int)
     )
 
-    max_color_index = len(color_map) - 1
-    generated_frames_denormalized_before_clip = (
-        generated_frames_normalized * max_color_index
-    )
-    generated_frames_indices = np.round(generated_frames_denormalized_before_clip)
-    generated_frames_indices = np.clip(
-        generated_frames_indices, 0, max_color_index
-    ).astype(int)
-
     print(
-        f"Generated Indices (Before Round & Clip) Min: {np.min(generated_frames_denormalized_before_clip):.2f}, Max: {np.max(generated_frames_denormalized_before_clip):.2f}"
-    )
-    print(
-        f"Generated Indices (After Round & Clip) Min: {np.min(generated_frames_indices):.2f}, Max: {np.max(generated_frames_indices):.2f}"
+        f"\nGenerated Indices Min: {np.min(generated_frames_indices):.2f}, Max: {np.max(generated_frames_indices):.2f}"
     )
 
     print(f"\nGenerated {num_samples} new pixel art frames:")
@@ -108,24 +123,22 @@ if __name__ == "__main__":
         )
     else:
         try:
-            # Load the color map
+            # Load the color map first to get NUM_COLORS
             with open(COLOR_MAP_FILE, "r") as f:
                 loaded_color_map_list = json.load(f)
             loaded_color_map_rgba = np.array(loaded_color_map_list, dtype=np.float32)
+            NUM_COLORS_LOADED = len(loaded_color_map_rgba)
 
             # Load the decoder model using keras.models.load_model for .keras format
-            # We need to provide custom objects if any custom layers were used in the model
-            # In this case, 'Sampling' is a custom layer used in the encoder, not directly in the decoder.
-            # However, if the decoder itself had custom layers, they would need to be passed here.
-            # Since build_decoder creates the model structure, we can load weights directly.
-            loaded_decoder = build_decoder(LATENT_DIM)
-            # When saving with .keras, load_weights expects the path to the .keras file directly.
+            # Pass NUM_COLORS_LOADED to build_decoder
+            loaded_decoder = build_decoder(LATENT_DIM, num_colors=NUM_COLORS_LOADED)
             loaded_decoder.load_weights(DECODER_MODEL_PATH)
 
             print(f"Model loaded successfully from {DECODER_MODEL_PATH}")
             print(f"Color map loaded successfully from {COLOR_MAP_FILE}")
             print(f"Loaded Color Map (Normalized RGBA):")
             print(loaded_color_map_rgba)
+            print(f"Number of colors in loaded map: {NUM_COLORS_LOADED}")
 
             # Generate and visualize new skins
             generate_and_visualize_skin(

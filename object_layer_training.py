@@ -1,11 +1,7 @@
 import os
 
-# Remove CPU-only enforcement to enable GPU usage.
-# os.environ["CUDA_VISIBLE_DEVICES"] = "-1" # Removed this line
-
 # Set XLA_FLAGS to point to the CUDA data directory where libdevice is located.
-# Based on your provided path: /root/.conda/envs/cuda_env/nvvm/libdevice
-# The --xla_gpu_cuda_data_dir should point to the parent directory of 'nvvm'.
+# This must be set BEFORE importing tensorflow.
 os.environ["XLA_FLAGS"] = "--xla_gpu_cuda_data_dir=/root/.conda/envs/cuda_env"
 
 import tensorflow as tf
@@ -152,10 +148,10 @@ def load_and_preprocess_data_from_file(json_file_path, target_height, target_wid
     # Convert list of frames to a numpy array
     frames_array = np.array(all_frames_in_file)
 
-    # Normalize pixel values (indices) to be between 0 and 1
-    # Use the dynamically determined num_colors_in_file for normalization
-    # IMPORTANT: Ensure that the input pixel values are indeed indices from 0 to num_colors_in_file - 1.
-    # If they are already scaled values, this normalization might be incorrect.
+    # For training with sparse_categorical_crossentropy, we need integer indices directly
+    # The input to the VAE will still be normalized, but the target for loss calculation
+    # will be the original integer indices.
+    # The normalization here is for the input to the encoder.
     normalized_frames = (
         frames_array / (num_colors_in_file - 1)
         if num_colors_in_file > 1
@@ -168,6 +164,7 @@ def load_and_preprocess_data_from_file(json_file_path, target_height, target_wid
         normalized_frames.reshape(input_shape),
         num_colors_in_file,
         color_map_rgba_in_file,
+        frames_array.reshape(input_shape).astype(np.int32),
     )
 
 
@@ -180,6 +177,7 @@ all_skin_files = [
 all_skin_files_paths = [os.path.join(SKIN_DATA_DIR, f) for f in all_skin_files]
 
 all_preprocessed_frames = []
+all_integer_frames = []  # To store integer indices for sparse_categorical_crossentropy
 max_num_colors = 0
 final_color_map_rgba = np.array([])
 
@@ -189,6 +187,9 @@ if not all_skin_files_paths:
     )
     # Fallback to dummy data if no files are found
     x_train = np.random.rand(100, PIXEL_HEIGHT, PIXEL_WIDTH, 1).astype(np.float32)
+    y_train_indices = np.random.randint(
+        0, 4, size=(100, PIXEL_HEIGHT, PIXEL_WIDTH, 1)
+    ).astype(np.int32)
     NUM_COLORS = 4  # Default to 4 for dummy data
     COLOR_MAP_RGBA = np.array(
         [
@@ -204,13 +205,14 @@ else:
     try:
         for skin_file_path in all_skin_files_paths:
             print(f"Loading data from: {skin_file_path}")
-            frames, current_num_colors, current_color_map_rgba = (
+            frames, current_num_colors, current_color_map_rgba, integer_frames = (
                 load_and_preprocess_data_from_file(
                     skin_file_path, PIXEL_HEIGHT, PIXEL_WIDTH
                 )
             )
             if frames.size > 0:
                 all_preprocessed_frames.append(frames)
+                all_integer_frames.append(integer_frames)
                 # Keep the color map from the file with the largest number of colors
                 # This assumes a more comprehensive palette is desired.
                 if current_num_colors > max_num_colors:
@@ -219,10 +221,16 @@ else:
 
         if all_preprocessed_frames:
             x_train = np.concatenate(all_preprocessed_frames, axis=0)
+            y_train_indices = np.concatenate(
+                all_integer_frames, axis=0
+            )  # Concatenate integer frames
             NUM_COLORS = max_num_colors
             COLOR_MAP_RGBA = final_color_map_rgba
             print(f"Total number of frames loaded: {x_train.shape[0]}")
-            print(f"Shape of loaded training data: {x_train.shape}")
+            print(f"Shape of loaded training data (normalized): {x_train.shape}")
+            print(
+                f"Shape of loaded training data (integer indices): {y_train_indices.shape}"
+            )
             print(f"Dynamically determined number of colors: {NUM_COLORS}")
             print(f"Shape of final color map: {COLOR_MAP_RGBA.shape}")
             print(f"\n--- Final Color Map (Normalized RGBA) ---")
@@ -236,6 +244,9 @@ else:
         print("Falling back to dummy data for VAE training.")
         # Fallback to dummy data if loading fails for any reason
         x_train = np.random.rand(100, PIXEL_HEIGHT, PIXEL_WIDTH, 1).astype(np.float32)
+        y_train_indices = np.random.randint(
+            0, 4, size=(100, PIXEL_HEIGHT, PIXEL_WIDTH, 1)
+        ).astype(np.int32)
         NUM_COLORS = 4  # Default to 4 for dummy data
         COLOR_MAP_RGBA = np.array(
             [
@@ -253,14 +264,21 @@ NUM_SYNTHETIC_FRAMES = 500  # Number of synthetic frames to generate
 if x_train.size > 0 and NUM_COLORS > 0:
     print(f"\nGenerating {NUM_SYNTHETIC_FRAMES} synthetic frames...")
     # Generate random integers from 0 to NUM_COLORS-1 for synthetic data
-    synthetic_frames = np.random.randint(
+    synthetic_frames_indices = np.random.randint(
         0, NUM_COLORS, size=(NUM_SYNTHETIC_FRAMES, PIXEL_HEIGHT, PIXEL_WIDTH, 1)
-    ).astype(np.float32)
-    # Normalize synthetic frames using the determined NUM_COLORS
+    ).astype(np.int32)
+    # Normalize synthetic frames for input to encoder
     synthetic_frames_normalized = (
-        synthetic_frames / (NUM_COLORS - 1) if NUM_COLORS > 1 else synthetic_frames
+        synthetic_frames_indices / (NUM_COLORS - 1)
+        if NUM_COLORS > 1
+        else synthetic_frames_indices.astype(np.float32)
     )
+
     x_train = np.concatenate([x_train, synthetic_frames_normalized], axis=0)
+    y_train_indices = np.concatenate(
+        [y_train_indices, synthetic_frames_indices], axis=0
+    )
+
     print(
         f"Total training data after adding synthetic frames: {x_train.shape[0]} frames."
     )
@@ -297,7 +315,7 @@ def build_encoder(latent_dim, input_shape):
     return keras.Model(encoder_inputs, [z_mean, z_log_var, z], name="encoder")
 
 
-def build_decoder(latent_dim, output_shape):
+def build_decoder(latent_dim, output_shape, num_colors):
     """Builds the decoder part of the VAE."""
     decoder_inputs = keras.Input(shape=(latent_dim,))
     # Calculate initial dense layer size based on encoder's last conv feature map
@@ -310,21 +328,13 @@ def build_decoder(latent_dim, output_shape):
     x = layers.Conv2DTranspose(64, 3, activation="relu", strides=2, padding="same")(x)
     # Upsample to 28x28 (14 * 2 = 28)
     x = layers.Conv2DTranspose(32, 3, activation="relu", strides=2, padding="same")(x)
-    # Output layer: single channel (for pixel values 0-3), sigmoid for 0-1 range
-    # The sigmoid activation maps output to [0, 1].
-    # We then denormalize and round to get integer indices.
+
+    # Output layer: now outputs NUM_COLORS channels with softmax for probability distribution
     decoder_outputs = layers.Conv2DTranspose(
-        1, 3, activation="sigmoid", padding="same"
+        num_colors, 3, activation="softmax", padding="same"
     )(x)
 
     # Crop the 28x28 output to the target output_shape (e.g., 25x25)
-    # The cropping values depend on the difference between the current output (28x28)
-    # and the target output_shape (25x25).
-    # (28 - 25) = 3 pixels difference in height and width.
-    # We need to remove 3 pixels from height and 3 pixels from width.
-    # Cropping expects ((top_crop, bottom_crop), (left_crop, right_crop))
-    # To remove 3 pixels, we can remove 1 from top/left and 2 from bottom/right, or vice-versa.
-    # This ensures the output matches the target PIXEL_HEIGHT and PIXEL_WIDTH.
     crop_height = decoder_outputs.shape[1] - output_shape[0]
     crop_width = decoder_outputs.shape[2] - output_shape[1]
 
@@ -361,12 +371,25 @@ class VAE(keras.Model):
         ]
 
     def train_step(self, data):
+        # 'data' here is the normalized input (x_train)
+        # We also need the original integer indices for sparse_categorical_crossentropy
+        x_normalized, y_true_indices = data  # Unpack the tuple (input, target)
+
         with tf.GradientTape() as tape:
-            z_mean, z_log_var, z = self.encoder(data)
-            reconstruction = self.decoder(z)
+            z_mean, z_log_var, z = self.encoder(x_normalized)
+            reconstruction_logits = self.decoder(
+                z
+            )  # Output are logits/probabilities for each class
+
+            # Calculate reconstruction loss using sparse_categorical_crossentropy
+            # y_true_indices should be integer labels (shape: (batch, height, width, 1))
+            # reconstruction_logits should be probabilities (shape: (batch, height, width, num_colors))
             reconstruction_loss = tf.reduce_mean(
-                keras.losses.binary_crossentropy(data, reconstruction)
+                keras.losses.sparse_categorical_crossentropy(
+                    y_true_indices, reconstruction_logits
+                )
             )
+
             kl_loss = -0.5 * (1 + z_log_var - tf.square(z_mean) - tf.exp(z_log_var))
             kl_loss = tf.reduce_mean(tf.reduce_sum(kl_loss, axis=1))
             total_loss = reconstruction_loss + kl_loss
@@ -389,28 +412,28 @@ class VAE(keras.Model):
 
 # Build the VAE components
 encoder = build_encoder(LATENT_DIM, (PIXEL_HEIGHT, PIXEL_WIDTH, 1))
-decoder = build_decoder(LATENT_DIM, (PIXEL_HEIGHT, PIXEL_WIDTH, 1))
+# Pass NUM_COLORS to the decoder
+decoder = build_decoder(LATENT_DIM, (PIXEL_HEIGHT, PIXEL_WIDTH, 1), NUM_COLORS)
 
 # Create and compile the VAE model
-# Consider a slightly lower learning rate if the model is unstable or not converging well
 vae = VAE(encoder, decoder)
 vae.compile(
     optimizer=keras.optimizers.Adam(learning_rate=0.0005)
 )  # Slightly reduced learning rate
 
 # --- 3. Train the VAE ---
-EPOCHS = 50  # Down to 50 epochs as requested
+EPOCHS = 200  # Increased epochs for better learning with multi-class output
 BATCH_SIZE = 32
 
 if x_train.size > 0:
     print("\nStarting VAE training...")
-    vae.fit(x_train, epochs=EPOCHS, batch_size=BATCH_SIZE)
+    # Pass both normalized input and integer indices as data for training
+    vae.fit(x_train, y_train_indices, epochs=EPOCHS, batch_size=BATCH_SIZE)
     print("VAE training complete.")
 
     # --- Save the trained decoder model and color map ---
     print(f"\nSaving trained decoder model to: {DECODER_MODEL_PATH}")
     os.makedirs(MODEL_SAVE_DIR, exist_ok=True)  # Create directory if it doesn't exist
-    # Corrected: Added .keras extension to the save path
     vae.decoder.save(DECODER_MODEL_PATH)
     print(f"Decoder model saved successfully.")
 
@@ -430,31 +453,17 @@ def generate_and_visualize_skin(vae_decoder, latent_dim, color_map, num_samples=
     """Generates new pixel art frames and visualizes them using the provided color map."""
     # Sample random points from the latent space (standard normal distribution)
     random_latent_vectors = tf.random.normal(shape=(num_samples, latent_dim))
-    # Decode these vectors into pixel art frames (normalized indices)
-    generated_frames_normalized = vae_decoder.predict(random_latent_vectors)
+    # Decode these vectors into pixel art frames (probabilities for each color)
+    generated_frames_probs = vae_decoder.predict(random_latent_vectors)
 
-    # --- Debugging: Print min/max of generated normalized values ---
-    print(
-        f"\nGenerated Normalized Frames (Raw Sigmoid Output) Min: {np.min(generated_frames_normalized):.4f}, Max: {np.max(generated_frames_normalized):.4f}"
+    # Get the index with the highest probability for each pixel
+    generated_frames_indices = (
+        tf.argmax(generated_frames_probs, axis=-1).numpy().astype(int)
     )
 
-    # Denormalize pixel values back to original integer indices (0 to NUM_COLORS-1)
-    # Use the max index from the color_map for denormalization (len(color_map) - 1)
-    max_color_index = len(color_map) - 1
-    generated_frames_denormalized_before_clip = (
-        generated_frames_normalized * max_color_index
-    )
-    generated_frames_indices = np.round(generated_frames_denormalized_before_clip)
-    generated_frames_indices = np.clip(
-        generated_frames_indices, 0, max_color_index
-    ).astype(int)
-
-    # --- Debugging: Print min/max of generated indices (before and after clip) ---
+    # --- Debugging: Print min/max of generated indices ---
     print(
-        f"Generated Indices (Before Round & Clip) Min: {np.min(generated_frames_denormalized_before_clip):.2f}, Max: {np.max(generated_frames_denormalized_before_clip):.2f}"
-    )
-    print(
-        f"Generated Indices (After Round & Clip) Min: {np.min(generated_frames_indices):.2f}, Max: {np.max(generated_frames_indices):.2f}"
+        f"\nGenerated Indices Min: {np.min(generated_frames_indices):.2f}, Max: {np.max(generated_frames_indices):.2f}"
     )
 
     print(f"\nGenerated {num_samples} new pixel art frames:")
@@ -464,7 +473,7 @@ def generate_and_visualize_skin(vae_decoder, latent_dim, color_map, num_samples=
 
     for i, skin_frame_indices in enumerate(generated_frames_indices):
         # Convert index frame to RGBA frame using the color map
-        # Reshape to 2D array of indices (remove the channel dimension)
+        # Squeeze to remove the channel dimension if it exists (e.g., (25, 25, 1) -> (25, 25))
         skin_frame_2d_indices = skin_frame_indices.squeeze()
         # Map each index to its corresponding RGBA color
         skin_frame_rgba = color_map[skin_frame_2d_indices]
@@ -489,6 +498,7 @@ if x_train.size > 0 and COLOR_MAP_RGBA.size > 0:
         "\nGenerating and visualizing new pixel art frames (from currently trained model)..."
     )
     num_generations = 5
+    # Pass NUM_COLORS to the decoder for correct loading
     generate_and_visualize_skin(
         vae.decoder, LATENT_DIM, COLOR_MAP_RGBA, num_samples=num_generations
     )
