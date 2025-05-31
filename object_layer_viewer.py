@@ -678,6 +678,29 @@ if __name__ == "__main__":
                     # If clicked outside palettes, keep the current selection or reset to white
                     pass  # Do not reset, keep the last selected color
 
+            # Display selected color RGB text and box
+            object_layer_render.draw_text(
+                selected_color_rgb_text,
+                UI_START_X,  # Use UI_START_X for consistent left alignment
+                current_y,
+                SUB_LINE_HEIGHT,
+                Color(255, 255, 255, 255),
+            )
+            # Calculate position for the color box next to the text
+            text_width = object_layer_render.measure_text(
+                selected_color_rgb_text, SUB_LINE_HEIGHT
+            )
+            color_box_x = UI_START_X + text_width + 10  # 10 pixels padding
+            color_box_size = 20  # Small box size
+            object_layer_render.draw_rectangle(
+                color_box_x,
+                current_y,
+                color_box_size,
+                color_box_size,
+                selected_color_box_color,
+            )
+            current_y += SUB_LINE_HEIGHT + PADDING
+
         # --- UI Text Display (Top-Left) ---
         UI_START_X = 10
         UI_START_Y = 10
@@ -798,29 +821,6 @@ if __name__ == "__main__":
                 SUB_LINE_HEIGHT,
                 Color(0, 255, 0, 255),
             )
-        current_y += SUB_LINE_HEIGHT + PADDING
-
-        # Display selected color RGB text and box
-        object_layer_render.draw_text(
-            selected_color_rgb_text,
-            UI_START_X,
-            current_y,
-            SUB_LINE_HEIGHT,
-            Color(255, 255, 255, 255),
-        )
-        # Calculate position for the color box next to the text
-        text_width = object_layer_render.measure_text(
-            selected_color_rgb_text, SUB_LINE_HEIGHT
-        )
-        color_box_x = UI_START_X + text_width + 10  # 10 pixels padding
-        color_box_size = 20  # Small box size
-        object_layer_render.draw_rectangle(
-            color_box_x,
-            current_y,
-            color_box_size,
-            color_box_size,
-            selected_color_box_color,
-        )
         current_y += SUB_LINE_HEIGHT + PADDING
 
         # FPS display at bottom left (fixed position)
