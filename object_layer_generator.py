@@ -4,6 +4,7 @@ from tensorflow.keras import layers
 import numpy as np
 import json
 import os
+import matplotlib.pyplot as plt  # Import matplotlib for visualization
 
 # --- Force TensorFlow to use CPU (as a last resort for persistent GPU issues) ---
 # This line tells TensorFlow to only use CPU devices, bypassing any GPU-related errors.
@@ -28,16 +29,13 @@ PIXEL_WIDTH = 25
 PIXEL_HEIGHT = 25
 
 # Latent dimension for the VAE
-LATENT_DIM = 64
+LATENT_DIM = (
+    64  # You can try increasing this (e.g., to 128) if the model needs more capacity
+)
 
 # Directory containing your JSON skin files
-# Based on the user's provided path: /home/dd/cyberia-client/object_layer/skin
+# This path is based on your provided information.
 SKIN_DATA_DIR = "/home/dd/cyberia-client/object_layer/skin"
-# For demonstration, we'll use the provided single file.
-# In a real scenario, you'd iterate through all files in SKIN_DATA_DIR.
-SAMPLE_JSON_FILENAME = "object_layer_data_anon.json"
-# Construct the full path to the sample JSON file
-SAMPLE_JSON_FILE_PATH = os.path.join(SKIN_DATA_DIR, SAMPLE_JSON_FILENAME)
 
 
 def preprocess_frame(frame_array, target_height, target_width):
@@ -71,97 +69,148 @@ def preprocess_frame(frame_array, target_height, target_width):
     return processed_frame
 
 
-def load_and_preprocess_data(json_file_path, target_height, target_width):
+def load_and_preprocess_data_from_file(json_file_path, target_height, target_width):
     """
     Loads pixel art data from a single JSON file and preprocesses it.
-    Dynamically determines NUM_COLORS and resizes frames.
+    Dynamically determines NUM_COLORS, resizes frames, and extracts the color map.
     """
     # Check if the file exists before attempting to open it
     if not os.path.exists(json_file_path):
         print(f"Error: File not found at {json_file_path}")
-        return np.array([]), 0
+        return np.array([]), 0, np.array([])
 
     with open(json_file_path, "r") as f:
         data = json.load(f)
 
-    all_frames = []
-    num_colors_in_data = 0
+    all_frames_in_file = []
+    num_colors_in_file = 0
+    color_map_rgba_in_file = np.array([])  # Initialize empty color map
 
-    # Determine NUM_COLORS dynamically from the 'COLORS' array
+    # Determine NUM_COLORS dynamically from the 'COLORS' array and extract the color map
     if "COLORS" in data["RENDER_DATA"] and data["RENDER_DATA"]["COLORS"]:
-        # The largest index used in the frames is the max pixel value.
-        # NUM_COLORS should be max_pixel_value + 1.
-        # For example, if colors are [0,1,2,3], max pixel value is 3, so NUM_COLORS is 4.
-        # We assume the colors array is ordered by index, and the last index is the highest value.
-        num_colors_in_data = len(data["RENDER_DATA"]["COLORS"])
+        num_colors_in_file = len(data["RENDER_DATA"]["COLORS"])
+        # Convert color map to a NumPy array and normalize RGBA values to 0-1 range
+        color_map_rgba_in_file = (
+            np.array(data["RENDER_DATA"]["COLORS"], dtype=np.float32) / 255.0
+        )
     else:
         print(
-            f"Warning: 'COLORS' array not found or empty in {json_file_path}. Assuming NUM_COLORS = 4."
+            f"Warning: 'COLORS' array not found or empty in {json_file_path}. Assuming NUM_COLORS = 4 and a default grayscale color map."
         )
-        num_colors_in_data = 4  # Default to 4 if not found
+        num_colors_in_file = 4  # Default to 4 if not found
+        # Create a default grayscale color map if not provided
+        color_map_rgba_in_file = np.array(
+            [
+                [0.0, 0.0, 0.0, 1.0],  # Black
+                [0.33, 0.33, 0.33, 1.0],  # Dark Gray
+                [0.66, 0.66, 0.66, 1.0],  # Light Gray
+                [1.0, 1.0, 1.0, 1.0],  # White
+            ],
+            dtype=np.float32,
+        )
 
     # Iterate through all animation states (e.g., UP_IDLE, DOWN_WALKING)
     for animation_state in data["RENDER_DATA"]["FRAMES"]:
         for frame_list in data["RENDER_DATA"]["FRAMES"][animation_state]:
             frame_array = np.array(frame_list, dtype=np.float32)
             processed_frame = preprocess_frame(frame_array, target_height, target_width)
-            all_frames.append(processed_frame)
+            all_frames_in_file.append(processed_frame)
 
-    if not all_frames:
+    if not all_frames_in_file:
         print(f"No valid frames found in {json_file_path}")
-        return np.array([]), 0
+        return np.array([]), 0, np.array([])
 
     # Convert list of frames to a numpy array
-    frames_array = np.array(all_frames)
+    frames_array = np.array(all_frames_in_file)
 
-    # Normalize pixel values to be between 0 and 1
-    # Use the dynamically determined num_colors_in_data for normalization
+    # Normalize pixel values (indices) to be between 0 and 1
+    # Use the dynamically determined num_colors_in_file for normalization
     normalized_frames = (
-        frames_array / (num_colors_in_data - 1)
-        if num_colors_in_data > 1
+        frames_array / (num_colors_in_file - 1)
+        if num_colors_in_file > 1
         else frames_array
     )
 
     # Reshape for CNN input: (num_samples, height, width, channels)
     input_shape = (normalized_frames.shape[0], target_height, target_width, 1)
-    return normalized_frames.reshape(input_shape), num_colors_in_data
-
-
-# Load data from the sample JSON file
-# In a real scenario, you would uncomment and use the loop below to load all files
-# from the SKIN_DATA_DIR and concatenate the preprocessed frames.
-# Example:
-# all_skin_files = [os.path.join(SKIN_DATA_DIR, f) for f in os.listdir(SKIN_DATA_DIR) if f.endswith('.json') and f.startswith('object_layer_data_')]
-# all_preprocessed_frames = []
-# max_num_colors = 0
-# for skin_file in all_skin_files:
-#     frames, current_num_colors = load_and_preprocess_data(skin_file, PIXEL_HEIGHT, PIXEL_WIDTH)
-#     if frames.size > 0:
-#         all_preprocessed_frames.append(frames)
-#         max_num_colors = max(max_num_colors, current_num_colors)
-# if all_preprocessed_frames:
-#     x_train = np.concatenate(all_preprocessed_frames, axis=0)
-#     NUM_COLORS = max_num_colors # Update global NUM_COLORS based on all loaded data
-# else:
-#     x_train = np.array([])
-# print(f"Total number of frames loaded: {x_train.shape[0]}")
-
-# For this example, we'll just use the single provided file
-try:
-    x_train, NUM_COLORS = load_and_preprocess_data(
-        SAMPLE_JSON_FILE_PATH, PIXEL_HEIGHT, PIXEL_WIDTH
+    return (
+        normalized_frames.reshape(input_shape),
+        num_colors_in_file,
+        color_map_rgba_in_file,
     )
-    if x_train.size == 0:
-        raise ValueError("No data loaded from the sample JSON file.")
-    print(f"Shape of loaded training data: {x_train.shape}")
-    print(f"Dynamically determined number of colors: {NUM_COLORS}")
-except Exception as e:
-    print(f"Error loading data: {e}")
-    print("Please ensure your data directory and file paths are correct.")
-    # Create dummy data for demonstration if loading fails
+
+
+# --- Load data from all JSON files in the specified directory ---
+all_skin_files = [
+    f
+    for f in os.listdir(SKIN_DATA_DIR)
+    if f.startswith("object_layer_data_") and f.endswith(".json")
+]
+all_skin_files_paths = [os.path.join(SKIN_DATA_DIR, f) for f in all_skin_files]
+
+all_preprocessed_frames = []
+max_num_colors = 0
+final_color_map_rgba = np.array([])
+
+if not all_skin_files_paths:
+    print(
+        f"No JSON files found in {SKIN_DATA_DIR}. Please ensure files are named 'object_layer_data_*.json'."
+    )
+    # Fallback to dummy data if no files are found
     x_train = np.random.rand(100, PIXEL_HEIGHT, PIXEL_WIDTH, 1).astype(np.float32)
     NUM_COLORS = 4  # Default to 4 for dummy data
+    COLOR_MAP_RGBA = np.array(
+        [
+            [0.0, 0.0, 0.0, 1.0],  # Black
+            [0.33, 0.33, 0.33, 1.0],  # Dark Gray
+            [0.66, 0.66, 0.66, 1.0],  # Light Gray
+            [1.0, 1.0, 1.0, 1.0],  # White
+        ],
+        dtype=np.float32,
+    )
     print(f"Using dummy data of shape: {x_train.shape} and NUM_COLORS={NUM_COLORS}")
+else:
+    try:
+        for skin_file_path in all_skin_files_paths:
+            print(f"Loading data from: {skin_file_path}")
+            frames, current_num_colors, current_color_map_rgba = (
+                load_and_preprocess_data_from_file(
+                    skin_file_path, PIXEL_HEIGHT, PIXEL_WIDTH
+                )
+            )
+            if frames.size > 0:
+                all_preprocessed_frames.append(frames)
+                if current_num_colors > max_num_colors:
+                    max_num_colors = current_num_colors
+                    final_color_map_rgba = current_color_map_rgba
+
+        if all_preprocessed_frames:
+            x_train = np.concatenate(all_preprocessed_frames, axis=0)
+            NUM_COLORS = max_num_colors
+            COLOR_MAP_RGBA = final_color_map_rgba
+            print(f"Total number of frames loaded: {x_train.shape[0]}")
+            print(f"Shape of loaded training data: {x_train.shape}")
+            print(f"Dynamically determined number of colors: {NUM_COLORS}")
+            print(f"Shape of final color map: {COLOR_MAP_RGBA.shape}")
+        else:
+            raise ValueError("No valid frames loaded from any JSON file.")
+
+    except Exception as e:
+        print(f"Error loading data from multiple files: {e}")
+        print("Falling back to dummy data for VAE training.")
+        # Fallback to dummy data if loading fails for any reason
+        x_train = np.random.rand(100, PIXEL_HEIGHT, PIXEL_WIDTH, 1).astype(np.float32)
+        NUM_COLORS = 4  # Default to 4 for dummy data
+        COLOR_MAP_RGBA = np.array(
+            [
+                [0.0, 0.0, 0.0, 1.0],  # Black
+                [0.33, 0.33, 0.33, 1.0],  # Dark Gray
+                [0.66, 0.66, 0.66, 1.0],  # Light Gray
+                [1.0, 1.0, 1.0, 1.0],  # White
+            ],
+            dtype=np.float32,
+        )
+        print(f"Using dummy data of shape: {x_train.shape} and NUM_COLORS={NUM_COLORS}")
 
 
 # --- 2. Define the VAE Model ---
@@ -292,7 +341,7 @@ vae = VAE(encoder, decoder)
 vae.compile(optimizer=keras.optimizers.Adam())
 
 # --- 3. Train the VAE ---
-EPOCHS = 50
+EPOCHS = 100  # Increased epochs for potentially better training
 BATCH_SIZE = 32
 
 if x_train.size > 0:
@@ -302,48 +351,59 @@ if x_train.size > 0:
 else:
     print("Cannot train VAE: No valid training data available.")
 
-# --- 4. Generate New Skins ---
+# --- 4. Generate New Skins and Visualize ---
 
 
-def generate_new_skin(
-    vae_decoder, latent_dim, num_samples=1, num_colors_for_denormalization=4
-):
-    """Generates new pixel art frames using the trained VAE decoder."""
+def generate_and_visualize_skin(vae_decoder, latent_dim, color_map, num_samples=1):
+    """Generates new pixel art frames and visualizes them using the provided color map."""
     # Sample random points from the latent space (standard normal distribution)
     random_latent_vectors = tf.random.normal(shape=(num_samples, latent_dim))
-    # Decode these vectors into pixel art frames
+    # Decode these vectors into pixel art frames (normalized indices)
     generated_frames_normalized = vae_decoder.predict(random_latent_vectors)
 
-    # Denormalize pixel values back to original range and round to nearest integer
-    # Use num_colors_for_denormalization to ensure correct scaling
-    generated_frames_denormalized = np.round(
-        generated_frames_normalized * (num_colors_for_denormalization - 1)
+    # Denormalize pixel values back to original integer indices (0 to NUM_COLORS-1)
+    # Use the max index from the color_map for denormalization (len(color_map) - 1)
+    generated_frames_indices = np.round(
+        generated_frames_normalized * (len(color_map) - 1)
     )
-    # Ensure values are integers and within the valid range (0 to NUM_COLORS-1)
-    generated_frames_denormalized = np.clip(
-        generated_frames_denormalized, 0, num_colors_for_denormalization - 1
+    generated_frames_indices = np.clip(
+        generated_frames_indices, 0, len(color_map) - 1
     ).astype(int)
 
-    return generated_frames_denormalized
+    print(f"\nGenerated {num_samples} new pixel art frames:")
+    plt.figure(
+        figsize=(num_samples * 3, 4)
+    )  # Adjust figure size based on number of samples
+
+    for i, skin_frame_indices in enumerate(generated_frames_indices):
+        # Convert index frame to RGBA frame using the color map
+        # Reshape to 2D array of indices (remove the channel dimension)
+        skin_frame_2d_indices = skin_frame_indices.squeeze()
+        # Map each index to its corresponding RGBA color
+        skin_frame_rgba = color_map[skin_frame_2d_indices]
+
+        # Plotting the generated frame
+        plt.subplot(1, num_samples, i + 1)
+        plt.imshow(skin_frame_rgba)
+        plt.title(f"Generated {i+1}")
+        plt.axis("off")  # Hide axes for cleaner pixel art display
+
+        # Also print the 2D array representation for inspection
+        print(f"\n--- Generated Skin Frame {i+1} (Indices) ---")
+        for row in skin_frame_2d_indices:
+            print(row.tolist())
+
+    plt.tight_layout()  # Adjust subplot params for a tight layout
+    plt.show()  # Display the plots
 
 
-# Generate a few new frames
-if x_train.size > 0:
-    print("\nGenerating new pixel art frames...")
+if x_train.size > 0 and COLOR_MAP_RGBA.size > 0:
+    print("\nGenerating and visualizing new pixel art frames...")
     num_generations = 5
-    # Pass the dynamically determined NUM_COLORS to the generation function
-    new_skins = generate_new_skin(
-        vae.decoder,
-        LATENT_DIM,
-        num_samples=num_generations,
-        num_colors_for_denormalization=NUM_COLORS,
+    generate_and_visualize_skin(
+        vae.decoder, LATENT_DIM, COLOR_MAP_RGBA, num_samples=num_generations
     )
-
-    print(f"\nGenerated {num_generations} new pixel art frames:")
-    for i, skin_frame in enumerate(new_skins):
-        print(f"\n--- Generated Skin Frame {i+1} ---")
-        # Print the 2D array representation
-        for row in skin_frame.squeeze():  # .squeeze() removes the channel dimension
-            print(row.tolist())  # Convert numpy array row to list for cleaner printing
 else:
-    print("\nSkipping generation: VAE was not trained due to lack of data.")
+    print(
+        "\nSkipping generation and visualization: VAE was not trained or no valid color map available."
+    )
