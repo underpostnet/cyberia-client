@@ -2,3 +2,5 @@
 __pycache__
 .vscode
 .env
+color_map.json
+decoder_model.keras
