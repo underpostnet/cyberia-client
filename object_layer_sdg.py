@@ -145,7 +145,7 @@ class HairSeed(SeedPosition):
     """Represents a 'hair' type seed position, generating a parametric curve stroke."""
 
     def __init__(self, row, col):
-        super().__init__(row, col, "x", "red", "white")
+        super().__init__(row, col, "H", "red", "none")  # Changed marker_char to 'H'
         self.type = "hair"
 
     def can_generate_stroke(self):
@@ -156,8 +156,19 @@ class FillSeed(SeedPosition):
     """Represents a 'fill' type seed position, which does not generate a parametric curve stroke."""
 
     def __init__(self, row, col):
-        super().__init__(row, col, "x", "black", "none")
+        super().__init__(row, col, "F", "black", "none")  # Changed marker_char to 'F'
         self.type = "fill"
+
+    def can_generate_stroke(self):
+        return False
+
+
+class FillGradientShadowSeed(SeedPosition):
+    """Represents a 'fill-gradient-shadow' type seed position."""
+
+    def __init__(self, row, col):
+        super().__init__(row, col, "G", "blue", "none")  # Changed marker_char to 'G'
+        self.type = "fill-gradient-shadow"
 
     def can_generate_stroke(self):
         return False
@@ -201,44 +212,99 @@ class PixelArtGenerator:
         selected_coords = random.sample(possible_coords, num_seeds)
         return [HairSeed(r, c) for r, c in selected_coords]
 
-    def _get_fill_seeds(self, specific_coords_xy, existing_hair_coords):
+    def _get_fill_seeds(self, specific_coords_xy, existing_hair_coords, mode=None):
         """
         Generates 'fill' seed positions based on specific (x,y) coordinates provided.
         If specific_coords_xy is empty, it defaults to a single fill seed at the center.
+        In 'skin-default-1' mode, adds 1 random fill-gradient-shadow seed and a default fill seed.
         """
         fill_seeds = []
-        if not specific_coords_xy:
-            fill_seeds.append(FillSeed(self.matrix_rows // 2, self.matrix_cols // 2))
-        else:
+
+        # Add explicitly defined fill seeds (these take precedence)
+        if specific_coords_xy:
             for x, y in specific_coords_xy:
                 if 0 <= y < self.matrix_rows and 0 <= x < self.matrix_cols:
                     fill_seeds.append(FillSeed(y, x))
                 else:
                     print(
-                        f"Warning: Fill seed coordinate ({x},{y}) is out of matrix bounds and will be skipped."
+                        f"Warning: Explicit fill seed coordinate ({x},{y}) is out of matrix bounds or already occupied and will be skipped."
                     )
+
+        # Handle mode-specific fill seeds
+        if mode == "skin-default-1":
+            # Add 1 random fill-gradient-shadow seed
+            num_gradient_seeds = 1
+            possible_coords_for_gradient = [
+                (r, c)
+                for r in range(self.hair_spawn_rows[0], self.hair_spawn_rows[1] + 1)
+                for c in range(self.hair_spawn_cols[0], self.hair_spawn_cols[1] + 1)
+            ]
+
+            # Collect all coordinates already taken (hair seeds + explicit fill seeds)
+            all_taken_coords = existing_hair_coords.union(
+                {seed.get_coordinates() for seed in fill_seeds}
+            )
+            available_coords_for_gradient = [
+                coord
+                for coord in possible_coords_for_gradient
+                if coord not in all_taken_coords
+            ]
+
+            if available_coords_for_gradient:  # Ensure there are available spots
+                selected_gradient_coords = random.sample(
+                    available_coords_for_gradient,
+                    min(num_gradient_seeds, len(available_coords_for_gradient)),
+                )
+                for r, c in selected_gradient_coords:
+                    fill_seeds.append(FillGradientShadowSeed(r, c))
+                    all_taken_coords.add(
+                        (r, c)
+                    )  # Update taken coords for the next check
+
+            # If no specific_coords_xy were provided, add a default FillSeed at the center
+            if not specific_coords_xy:
+                default_fill_coord = (self.matrix_rows // 2, self.matrix_cols // 2)
+                if default_fill_coord not in all_taken_coords:
+                    fill_seeds.append(
+                        FillSeed(default_fill_coord[0], default_fill_coord[1])
+                    )
+                else:
+                    print(
+                        f"Warning: Default fill seed position {default_fill_coord} is already occupied in skin-default-1 mode."
+                    )
+
+        # Default behavior if no specific fill seeds and not in 'skin-default-1' mode
+        elif (
+            not specific_coords_xy
+        ):  # This covers mode=None, skin-default, skin-default-0
+            if not fill_seeds:  # Only add if no other seeds were added yet
+                fill_seeds.append(
+                    FillSeed(self.matrix_rows // 2, self.matrix_cols // 2)
+                )
+
         return fill_seeds
 
-    def _flood_fill(
-        self, matrix, start_row, start_col, target_color_value, fill_color_value
+    def _flood_fill_get_coords(
+        self, matrix_to_check, start_row, start_col, target_color_value
     ):
         """
-        Performs a flood fill (paint bucket) operation on the matrix.
-        Changes contiguous pixels of target_color_value to fill_color_value.
+        Performs a flood fill operation and returns the coordinates of all filled pixels,
+        without modifying the matrix. It operates on a copy or the original matrix
+        to determine the fillable area based on a target color value.
         """
-        rows, cols = matrix.shape
+        rows, cols = matrix_to_check.shape
+        filled_coords = []
 
         if not (0 <= start_row < rows and 0 <= start_col < cols):
-            return
+            return filled_coords
 
-        if (
-            matrix[start_row, start_col] != target_color_value
-            or matrix[start_row, start_col] == fill_color_value
-        ):
-            return
+        if matrix_to_check[start_row, start_col] != target_color_value:
+            return filled_coords
 
         q = [(start_row, start_col)]
-        matrix[start_row, start_col] = fill_color_value
+        visited = set()
+        visited.add((start_row, start_col))
+        filled_coords.append((start_row, start_col))
 
         while q:
             r, c = q.pop(0)
@@ -249,10 +315,13 @@ class PixelArtGenerator:
                 if (
                     0 <= nr < rows
                     and 0 <= nc < cols
-                    and matrix[nr, nc] == target_color_value
+                    and matrix_to_check[nr, nc] == target_color_value
+                    and (nr, nc) not in visited
                 ):
-                    matrix[nr, nc] = fill_color_value
+                    visited.add((nr, nc))
+                    filled_coords.append((nr, nc))
                     q.append((nr, nc))
+        return filled_coords
 
     def _draw_curve_on_matrix(
         self, matrix, curve_obj, origin_coord, t_span, color_value, mode=None
@@ -290,9 +359,9 @@ class PixelArtGenerator:
             idx_at_seed = random.randint(0, len(t_values_base) - 1)
             t_offset = t_values_base[idx_at_seed]
             y_offset = y_values_base[idx_at_seed]
-        # For 'skin-default-0' mode or any other mode (including None),
-        # the curve starts/originates from the seed's coordinates
-        else:
+        # For 'skin-default-0' mode, 'skin-default-1' mode, or any other mode (including None),
+        # the curve starts/origina`tes from the seed's coordinates (t_offset=0, y_offset=0)
+        else:  # mode is None, 'skin-default-0', 'skin-default-1'
             t_offset = 0
             y_offset = 0
 
@@ -321,7 +390,7 @@ class PixelArtGenerator:
         hair_seeds = self._get_random_hair_seeds(hair_seed_range[0], hair_seed_range[1])
         hair_coords = {seed.get_coordinates() for seed in hair_seeds}
 
-        fill_seeds = self._get_fill_seeds(specific_fill_coords_xy, hair_coords)
+        fill_seeds = self._get_fill_seeds(specific_fill_coords_xy, hair_coords, mode)
 
         all_seeds = hair_seeds + fill_seeds
         random.shuffle(all_seeds)
@@ -342,6 +411,7 @@ class PixelArtGenerator:
 
         hair_seed_count = 0
         fill_seed_count = 0
+        fill_gradient_shadow_seed_count = 0
 
         # --- DRAW PARAMETRIC CURVES FIRST (from hair seeds) ---
         for seed in hair_seeds:
@@ -355,7 +425,7 @@ class PixelArtGenerator:
                 seed.get_coordinates(),
                 t_span=random.randint(10, 25),
                 color_value=stroke_color_index,
-                mode=mode,  # Pass the mode to the drawing function
+                mode=mode,
             )
             parent_coords = seed.get_coordinates()
             self.all_curve_instance_summaries.append(
@@ -371,28 +441,102 @@ class PixelArtGenerator:
             )
 
         # --- THEN PERFORM FLOOD FILL FOR FILL SEEDS ---
+        color_to_index_map = {
+            tuple(color): i for i, color in enumerate(plot_specific_colors)
+        }
+
         for seed in fill_seeds:
-            fill_seed_count += 1
             start_row, start_col = seed.get_coordinates()
-            target_color_value_at_seed = current_matrix[start_row, start_col]
 
-            fill_color_index_for_this_fill = random.randint(
-                len(BASE_COLORS), len(BASE_COLORS) + len(self.skin_tone_colors) - 1
-            )
+            # Get the color at the seed's position *after* curves have been drawn
+            target_color_value_for_fill = current_matrix[start_row, start_col]
 
-            self._flood_fill(
-                current_matrix,
-                start_row,
-                start_col,
-                target_color_value_at_seed,
-                fill_color_index_for_this_fill,
-            )
+            if seed.type == "fill-gradient-shadow":
+                fill_gradient_shadow_seed_count += 1
+                # Only apply gradient/shadow if the seed falls on a parametric curve's color
+                if target_color_value_for_fill != stroke_color_index:
+                    # If not on a curve (i.e., on white/black background), skip filling
+                    continue
+
+                # If it IS on a parametric curve, then perform flood fill on that curve's color
+                filled_coords = self._flood_fill_get_coords(
+                    current_matrix, start_row, start_col, target_color_value_for_fill
+                )
+
+                if not filled_coords:
+                    continue
+
+                min_col_filled = min(c for r, c in filled_coords)
+                max_col_filled = max(c for r, c in filled_coords)
+
+                # Use the actual parametric curve color as the base for the gradient
+                base_color_for_gradient = plot_specific_colors[stroke_color_index]
+
+                for r, c in filled_coords:
+                    # Calculate darkening factor based on column position
+                    if max_col_filled == min_col_filled:
+                        normalized_col = 0
+                    else:
+                        normalized_col = (c - min_col_filled) / (
+                            max_col_filled - min_col_filled
+                        )
+
+                    darkening_factor = normalized_col * 0.5
+
+                    darkened_rgba = [
+                        max(0, base_color_for_gradient[0] * (1 - darkening_factor)),
+                        max(0, base_color_for_gradient[1] * (1 - darkening_factor)),
+                        max(0, base_color_for_gradient[2] * (1 - darkening_factor)),
+                        base_color_for_gradient[3],
+                    ]
+
+                    noise_amount = normalized_col * 0.1 * random.random()
+                    final_rgba = [
+                        max(0, darkened_rgba[0] - noise_amount),
+                        max(0, darkened_rgba[1] - noise_amount),
+                        max(0, darkened_rgba[2] - noise_amount),
+                        darkened_rgba[3],
+                    ]
+
+                    final_rgba_tuple = tuple(final_rgba)
+
+                    if final_rgba_tuple not in color_to_index_map:
+                        color_to_index_map[final_rgba_tuple] = len(plot_specific_colors)
+                        plot_specific_colors.append(list(final_rgba_tuple))
+
+                    current_matrix[r, c] = color_to_index_map[final_rgba_tuple]
+
+            else:  # Regular fill seed (type == "fill")
+                fill_seed_count += 1
+                # For regular fill seeds, they should fill the contiguous area of the pixel they land on,
+                # respecting curves as boundaries.
+                filled_coords = self._flood_fill_get_coords(
+                    current_matrix, start_row, start_col, target_color_value_for_fill
+                )
+
+                if not filled_coords:
+                    continue
+
+                base_skin_tone_rgba = random.choice(self.skin_tone_colors)
+                base_skin_tone_tuple = tuple(base_skin_tone_rgba)
+                if base_skin_tone_tuple not in color_to_index_map:
+                    color_to_index_map[base_skin_tone_tuple] = len(plot_specific_colors)
+                    plot_specific_colors.append(list(base_skin_tone_tuple))
+
+                fill_color_index = color_to_index_map[base_skin_tone_tuple]
+
+                for r, c in filled_coords:
+                    current_matrix[r, c] = fill_color_index
+
+        # After all fills, update the colormap with all potentially new colors
+        current_cmap = plt.cm.colors.ListedColormap(plot_specific_colors)
 
         self.graph_seed_counts_summaries.append(
             {
                 "Graph ID": graph_id,
                 "Hair Seeds Count": hair_seed_count,
                 "Fill Seeds Count": fill_seed_count,
+                "Fill Gradient Shadow Seeds Count": fill_gradient_shadow_seed_count,
             }
         )
 
@@ -434,9 +578,15 @@ class PixelArtGenerator:
         print("\n--- Parametric Curve Instance Details ---\n")
         print(tabulate(main_table_data, headers=main_headers, tablefmt="grid"))
 
-        seed_summary_headers = ["Graph ID", "Hair Seeds Count", "Fill Seeds Count"]
+        # Updated headers for the seed summary table to include character symbols
+        seed_summary_headers = [
+            "Graph ID",
+            "Hair Seeds Count (H)",
+            "Fill Seeds Count (F)",
+            "Fill Gradient Shadow Seeds Count (G)",
+        ]
         seed_summary_data = [
-            [s[h] for h in seed_summary_headers]
+            [s[h.split("(")[0].strip()] for h in seed_summary_headers]
             for s in self.graph_seed_counts_summaries
         ]
         print("\n--- Seed Distribution Summary ---\n")
@@ -457,10 +607,12 @@ class PixelArtGenerator:
             for seed in seeds:
                 coords = seed.get_coordinates()
                 marker_props = seed.get_marker_properties()
+                # Updated text to only include the character
+                label_text = marker_props["s"]
                 axes[i].text(
                     coords[1],
                     coords[0],
-                    marker_props["s"],
+                    label_text,
                     color=marker_props["color"],
                     ha="center",
                     va="center",
@@ -497,7 +649,7 @@ if __name__ == "__main__":
         "--mode",
         type=str,
         default=None,
-        help='Special mode for rendering. Current options: "skin-default", "skin-default-0".',
+        help='Special mode for rendering. Current options: "skin-default", "skin-default-0", "skin-default-1".',
     )
 
     args = parser.parse_args()
