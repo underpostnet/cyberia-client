@@ -138,7 +138,7 @@ class SeedPosition:
 
     def can_generate_stroke(self):
         """Determines if this seed type should generate a parametric curve stroke."""
-        raise NotImplementedError("Subclasses must implement this method.")
+        raise NotImplementedError("Subclasses must implement this method unarmed.")
 
 
 class HairSeed(SeedPosition):
@@ -255,20 +255,21 @@ class PixelArtGenerator:
                     q.append((nr, nc))
 
     def _draw_curve_on_matrix(
-        self, matrix, curve_obj, origin_coord, t_span, color_value
+        self, matrix, curve_obj, origin_coord, t_span, color_value, mode=None
     ):
         """
         Draws a parametric curve stroke on the matrix.
         The curve is calculated relative to (0,0) and then translated to origin_coord.
         't_relative' is used as the parameter for the curve, effectively mapping to x-coordinates.
-        The curve starts at the origin_col and extends to the right, with increased pixel density.
+        The curve's intersection with the seed depends on the 'mode'.
         """
         curve_method = curve_obj.method
         origin_row, origin_col = origin_coord
 
-        t_start_relative = 0
-        t_end_relative = t_span - 1
+        density_factor = 5
+        num_points = max(2, t_span * density_factor)
 
+        # Random scaling for visual variety based on curve type (defined once per stroke)
         scale_y = (
             random.uniform(0.01, 0.05)
             if curve_obj.name == "parabola"
@@ -279,20 +280,37 @@ class PixelArtGenerator:
             )
         )
 
-        density_factor = 5
-        num_points = max(2, t_span * density_factor)
+        # Generate base t_values and y_values
+        t_values_base = np.linspace(0, t_span - 1, num_points)
+        y_values_base = np.array([curve_method(t, scale_y) for t in t_values_base])
 
-        for t_rel in np.linspace(t_start_relative, t_end_relative, num_points):
-            y_rel = curve_method(t_rel, scale_y)
+        # Determine the offset based on the mode
+        if mode == "skin-default":
+            # Choose a random point on the curve to intersect the seed
+            idx_at_seed = random.randint(0, len(t_values_base) - 1)
+            t_offset = t_values_base[idx_at_seed]
+            y_offset = y_values_base[idx_at_seed]
+        # For 'skin-default-0' mode or any other mode (including None),
+        # the curve starts/originates from the seed's coordinates
+        else:
+            t_offset = 0
+            y_offset = 0
 
-            abs_row = int(round(origin_row + y_rel))
-            abs_col = int(round(origin_col + t_rel))
+        for i in range(len(t_values_base)):
+            t_rel = t_values_base[i]
+            y_rel = y_values_base[i]
 
+            # Translate relative coordinates to absolute matrix coordinates
+            # Shift the curve so the chosen intersection point aligns with origin_col, origin_row
+            abs_col = int(round(origin_col + (t_rel - t_offset)))
+            abs_row = int(round(origin_row + (y_rel - y_offset)))
+
+            # Ensure coordinates are within matrix bounds
             if 0 <= abs_row < self.matrix_rows and 0 <= abs_col < self.matrix_cols:
                 matrix[abs_row, abs_col] = color_value
 
     def generate_single_graph_data(
-        self, graph_id, hair_seed_range, specific_fill_coords_xy
+        self, graph_id, hair_seed_range, specific_fill_coords_xy, mode=None
     ):
         """
         Generates all data for a single pixel art graph, including seed positions,
@@ -300,7 +318,6 @@ class PixelArtGenerator:
         """
         current_matrix = np.copy(self.base_matrix)
 
-        # random.seed(graph_id + 200) # Removed this line for true randomness across runs
         hair_seeds = self._get_random_hair_seeds(hair_seed_range[0], hair_seed_range[1])
         hair_coords = {seed.get_coordinates() for seed in hair_seeds}
 
@@ -311,7 +328,6 @@ class PixelArtGenerator:
 
         plot_specific_colors = BASE_COLORS.tolist()
 
-        # Add all skin tone colors to the plot's colormap
         skin_tone_start_index = len(plot_specific_colors)
         for color in self.skin_tone_colors:
             plot_specific_colors.append(color)
@@ -322,7 +338,6 @@ class PixelArtGenerator:
 
         current_cmap = plt.cm.colors.ListedColormap(plot_specific_colors)
 
-        # random.seed(graph_id + 300) # Removed this line for true randomness across runs
         chosen_curve_obj = random.choice(list(self.parametric_curve_types.values()))
 
         hair_seed_count = 0
@@ -340,6 +355,7 @@ class PixelArtGenerator:
                 seed.get_coordinates(),
                 t_span=random.randint(10, 25),
                 color_value=stroke_color_index,
+                mode=mode,  # Pass the mode to the drawing function
             )
             parent_coords = seed.get_coordinates()
             self.all_curve_instance_summaries.append(
@@ -360,8 +376,6 @@ class PixelArtGenerator:
             start_row, start_col = seed.get_coordinates()
             target_color_value_at_seed = current_matrix[start_row, start_col]
 
-            # Randomly pick one of the skin tones for the fill
-            # The indices for skin tones start after BASE_COLORS (0, 1)
             fill_color_index_for_this_fill = random.randint(
                 len(BASE_COLORS), len(BASE_COLORS) + len(self.skin_tone_colors) - 1
             )
@@ -385,14 +399,18 @@ class PixelArtGenerator:
         return current_matrix, current_cmap, all_seeds
 
     def render_graphs(
-        self, num_graphs=8, hair_seed_range=(1, 1), specific_fill_coords_xy=None
+        self,
+        num_graphs=8,
+        hair_seed_range=(1, 1),
+        specific_fill_coords_xy=None,
+        mode=None,
     ):
         """Generates and displays multiple pixel art graphs with summaries."""
         graph_data_list = []
         for i in range(num_graphs):
             graph_data_list.append(
                 self.generate_single_graph_data(
-                    i + 1, hair_seed_range, specific_fill_coords_xy
+                    i + 1, hair_seed_range, specific_fill_coords_xy, mode
                 )
             )
 
@@ -457,8 +475,7 @@ class PixelArtGenerator:
 
 # --- Main Execution ---
 if __name__ == "__main__":
-    # Initialize random seed once at the start for true randomness across script runs
-    random.seed()
+    random.seed()  # Initialize random seed once at the start for true randomness across script runs
 
     parser = argparse.ArgumentParser(
         description="Generate pixel art with parametric curves and seed positions."
@@ -475,6 +492,12 @@ if __name__ == "__main__":
         type=str,
         default=None,
         help='Specific (x,y) coordinates for fill seeds, e.g., "1-2,3-4". Default: center (1 seed).',
+    )
+    parser.add_argument(
+        "--mode",
+        type=str,
+        default=None,
+        help='Special mode for rendering. Current options: "skin-default", "skin-default-0".',
     )
 
     args = parser.parse_args()
@@ -515,4 +538,5 @@ if __name__ == "__main__":
         num_graphs=8,
         hair_seed_range=hair_seed_range,
         specific_fill_coords_xy=specific_fill_coords,
+        mode=args.mode,
     )
