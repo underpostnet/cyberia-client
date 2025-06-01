@@ -44,8 +44,17 @@ BASE_COLORS = np.array(
 )
 
 # Region for 'hair' seed positions
-HAIR_SPAWN_ROWS = (0, 3)
-HAIR_SPAWN_COLS = (5, 20)
+HAIR_SPAWN_ROWS = (0, 5)
+HAIR_SPAWN_COLS = (2, 22)
+
+# Five shades of common human skin tones (RGBA)
+SKIN_TONE_COLORS = [
+    [255 / 255, 224 / 255, 189 / 255, 225 / 255],  # Light
+    [240 / 255, 192 / 255, 150 / 255, 225 / 255],  # Medium-Light
+    [218 / 255, 166 / 255, 126 / 255, 225 / 255],  # Medium
+    [186 / 255, 128 / 255, 92 / 255, 225 / 255],  # Medium-Dark
+    [139 / 255, 69 / 255, 19 / 255, 225 / 255],  # Dark
+]
 
 
 # --- Parametric Curve Definitions ---
@@ -147,7 +156,7 @@ class FillSeed(SeedPosition):
     """Represents a 'fill' type seed position, which does not generate a parametric curve stroke."""
 
     def __init__(self, row, col):
-        super().__init__(row, col, "x", "black", "lightgray")
+        super().__init__(row, col, "x", "black", "none")
         self.type = "fill"
 
     def can_generate_stroke(self):
@@ -159,20 +168,22 @@ class PixelArtGenerator:
     """Generates and renders pixel art with dynamic elements and provides summaries."""
 
     def __init__(
-        self, base_matrix_data, hair_spawn_rows, hair_spawn_cols, parametric_curve_types
+        self,
+        base_matrix_data,
+        hair_spawn_rows,
+        hair_spawn_cols,
+        parametric_curve_types,
+        skin_tone_colors,
     ):
         self.base_matrix = np.array(base_matrix_data)
         self.matrix_rows, self.matrix_cols = self.base_matrix.shape
         self.hair_spawn_rows = hair_spawn_rows
         self.hair_spawn_cols = hair_spawn_cols
         self.parametric_curve_types = parametric_curve_types
-        self.all_curve_instance_summaries = (
-            []
-        )  # Stores details for each individual curve instance
-        self.graph_seed_counts_summaries = []  # Stores seed counts per graph
-        self._curve_instance_id_counter = (
-            0  # Unique ID for each parametric curve instance
-        )
+        self.skin_tone_colors = skin_tone_colors
+        self.all_curve_instance_summaries = []
+        self.graph_seed_counts_summaries = []
+        self._curve_instance_id_counter = 0
 
     def _generate_random_rgba_color(self):
         """Generates a random RGBA color."""
@@ -197,20 +208,51 @@ class PixelArtGenerator:
         """
         fill_seeds = []
         if not specific_coords_xy:
-            # Default to center if no specific coordinates are provided
             fill_seeds.append(FillSeed(self.matrix_rows // 2, self.matrix_cols // 2))
         else:
             for x, y in specific_coords_xy:
-                # Ensure coordinates are within bounds before creating the seed
                 if 0 <= y < self.matrix_rows and 0 <= x < self.matrix_cols:
-                    fill_seeds.append(
-                        FillSeed(y, x)
-                    )  # Note: SeedPosition expects (row, col) i.e., (y, x)
+                    fill_seeds.append(FillSeed(y, x))
                 else:
                     print(
                         f"Warning: Fill seed coordinate ({x},{y}) is out of matrix bounds and will be skipped."
                     )
         return fill_seeds
+
+    def _flood_fill(
+        self, matrix, start_row, start_col, target_color_value, fill_color_value
+    ):
+        """
+        Performs a flood fill (paint bucket) operation on the matrix.
+        Changes contiguous pixels of target_color_value to fill_color_value.
+        """
+        rows, cols = matrix.shape
+
+        if not (0 <= start_row < rows and 0 <= start_col < cols):
+            return
+
+        if (
+            matrix[start_row, start_col] != target_color_value
+            or matrix[start_row, start_col] == fill_color_value
+        ):
+            return
+
+        q = [(start_row, start_col)]
+        matrix[start_row, start_col] = fill_color_value
+
+        while q:
+            r, c = q.pop(0)
+
+            neighbors = [(r + 1, c), (r - 1, c), (r, c + 1), (r, c - 1)]
+
+            for nr, nc in neighbors:
+                if (
+                    0 <= nr < rows
+                    and 0 <= nc < cols
+                    and matrix[nr, nc] == target_color_value
+                ):
+                    matrix[nr, nc] = fill_color_value
+                    q.append((nr, nc))
 
     def _draw_curve_on_matrix(
         self, matrix, curve_obj, origin_coord, t_span, color_value
@@ -224,11 +266,9 @@ class PixelArtGenerator:
         curve_method = curve_obj.method
         origin_row, origin_col = origin_coord
 
-        # Curve starts at origin_col and extends to the right for t_span units
         t_start_relative = 0
         t_end_relative = t_span - 1
 
-        # Random scaling for visual variety based on curve type (defined once per stroke)
         scale_y = (
             random.uniform(0.01, 0.05)
             if curve_obj.name == "parabola"
@@ -237,22 +277,17 @@ class PixelArtGenerator:
                 if curve_obj.name == "sigmoid"
                 else random.uniform(3, 7)
             )
-        )  # Sine
+        )
 
-        # Introduce a density factor to draw more points for a smoother/wider curve
-        density_factor = 5  # Draw 5 points per unit of t_span
-        num_points = max(
-            2, t_span * density_factor
-        )  # Ensure at least 2 points for linspace
+        density_factor = 5
+        num_points = max(2, t_span * density_factor)
 
         for t_rel in np.linspace(t_start_relative, t_end_relative, num_points):
             y_rel = curve_method(t_rel, scale_y)
 
-            # Translate relative coordinates to absolute matrix coordinates
             abs_row = int(round(origin_row + y_rel))
-            abs_col = int(round(origin_col + t_rel))  # t_relative maps to x-coordinate
+            abs_col = int(round(origin_col + t_rel))
 
-            # Ensure coordinates are within matrix bounds
             if 0 <= abs_row < self.matrix_rows and 0 <= abs_col < self.matrix_cols:
                 matrix[abs_row, abs_col] = color_value
 
@@ -265,68 +300,80 @@ class PixelArtGenerator:
         """
         current_matrix = np.copy(self.base_matrix)
 
-        # Generate seed positions
-        random.seed(graph_id + 200)
+        # random.seed(graph_id + 200) # Removed this line for true randomness across runs
         hair_seeds = self._get_random_hair_seeds(hair_seed_range[0], hair_seed_range[1])
-        hair_coords = {
-            seed.get_coordinates() for seed in hair_seeds
-        }  # Store coords for fill seed exclusion
+        hair_coords = {seed.get_coordinates() for seed in hair_seeds}
 
-        # Generate fill seed positions based on specific coordinates or default
         fill_seeds = self._get_fill_seeds(specific_fill_coords_xy, hair_coords)
 
         all_seeds = hair_seeds + fill_seeds
         random.shuffle(all_seeds)
 
-        # Prepare plot-specific color map
         plot_specific_colors = BASE_COLORS.tolist()
+
+        # Add all skin tone colors to the plot's colormap
+        skin_tone_start_index = len(plot_specific_colors)
+        for color in self.skin_tone_colors:
+            plot_specific_colors.append(color)
+
         stroke_color = self._generate_random_rgba_color()
+        stroke_color_index = len(plot_specific_colors)
         plot_specific_colors.append(stroke_color)
-        stroke_color_value = len(plot_specific_colors) - 1
+
         current_cmap = plt.cm.colors.ListedColormap(plot_specific_colors)
 
-        # Choose one random parametric curve type for all strokes in this graph
-        random.seed(graph_id + 300)
+        # random.seed(graph_id + 300) # Removed this line for true randomness across runs
         chosen_curve_obj = random.choice(list(self.parametric_curve_types.values()))
 
         hair_seed_count = 0
         fill_seed_count = 0
 
-        # Draw parametric curve strokes for eligible seed positions
-        for seed in all_seeds:
-            if seed.type == "hair":
-                hair_seed_count += 1
-            elif seed.type == "fill":
-                fill_seed_count += 1
+        # --- DRAW PARAMETRIC CURVES FIRST (from hair seeds) ---
+        for seed in hair_seeds:
+            hair_seed_count += 1
+            self._curve_instance_id_counter += 1
+            parametric_curve_instance_id = self._curve_instance_id_counter
 
-            if seed.can_generate_stroke():
-                self._curve_instance_id_counter += (
-                    1  # Increment for each stroke instance
-                )
-                parametric_curve_instance_id = self._curve_instance_id_counter
+            self._draw_curve_on_matrix(
+                current_matrix,
+                chosen_curve_obj,
+                seed.get_coordinates(),
+                t_span=random.randint(10, 25),
+                color_value=stroke_color_index,
+            )
+            parent_coords = seed.get_coordinates()
+            self.all_curve_instance_summaries.append(
+                {
+                    "Graph ID": graph_id,
+                    "Parametric Curve Instance ID": parametric_curve_instance_id,
+                    "Parametric Curve": chosen_curve_obj.name.capitalize(),
+                    "Domain Type": chosen_curve_obj.domain_type,
+                    "Codomain Type": chosen_curve_obj.codomain_type,
+                    "Parent Seed Type": seed.type,
+                    "Parent Seed Coord": f"({parent_coords[1]}, {parent_coords[0]})",
+                }
+            )
 
-                self._draw_curve_on_matrix(
-                    current_matrix,
-                    chosen_curve_obj,
-                    seed.get_coordinates(),
-                    t_span=random.randint(10, 25),  # t_span for the parametric curve
-                    color_value=stroke_color_value,
-                )
-                # Store summary data for this individual curve instance
-                parent_coords = seed.get_coordinates()
-                self.all_curve_instance_summaries.append(
-                    {
-                        "Graph ID": graph_id,
-                        "Parametric Curve Instance ID": parametric_curve_instance_id,
-                        "Parametric Curve": chosen_curve_obj.name.capitalize(),
-                        "Domain Type": chosen_curve_obj.domain_type,
-                        "Codomain Type": chosen_curve_obj.codomain_type,
-                        "Parent Seed Type": seed.type,
-                        "Parent Seed Coord": f"({parent_coords[1]}, {parent_coords[0]})",  # Format as (x, y)
-                    }
-                )
+        # --- THEN PERFORM FLOOD FILL FOR FILL SEEDS ---
+        for seed in fill_seeds:
+            fill_seed_count += 1
+            start_row, start_col = seed.get_coordinates()
+            target_color_value_at_seed = current_matrix[start_row, start_col]
 
-        # Store seed counts for the current graph (for the separate table)
+            # Randomly pick one of the skin tones for the fill
+            # The indices for skin tones start after BASE_COLORS (0, 1)
+            fill_color_index_for_this_fill = random.randint(
+                len(BASE_COLORS), len(BASE_COLORS) + len(self.skin_tone_colors) - 1
+            )
+
+            self._flood_fill(
+                current_matrix,
+                start_row,
+                start_col,
+                target_color_value_at_seed,
+                fill_color_index_for_this_fill,
+            )
+
         self.graph_seed_counts_summaries.append(
             {
                 "Graph ID": graph_id,
@@ -341,7 +388,6 @@ class PixelArtGenerator:
         self, num_graphs=8, hair_seed_range=(1, 1), specific_fill_coords_xy=None
     ):
         """Generates and displays multiple pixel art graphs with summaries."""
-        # Generate all graph data first
         graph_data_list = []
         for i in range(num_graphs):
             graph_data_list.append(
@@ -350,15 +396,11 @@ class PixelArtGenerator:
                 )
             )
 
-        # Sort all_curve_instance_summaries by 'Graph ID' and then 'Parametric Curve Instance ID'
         self.all_curve_instance_summaries.sort(
             key=lambda x: (x["Graph ID"], x["Parametric Curve Instance ID"])
         )
-
-        # Sort graph_seed_counts_summaries by 'Graph ID'
         self.graph_seed_counts_summaries.sort(key=lambda x: x["Graph ID"])
 
-        # Print the main summary table (individual curve instances)
         main_headers = [
             "Graph ID",
             "Parametric Curve Instance ID",
@@ -374,7 +416,6 @@ class PixelArtGenerator:
         print("\n--- Parametric Curve Instance Details ---\n")
         print(tabulate(main_table_data, headers=main_headers, tablefmt="grid"))
 
-        # Print the seed count summary table (per graph)
         seed_summary_headers = ["Graph ID", "Hair Seeds Count", "Fill Seeds Count"]
         seed_summary_data = [
             [s[h] for h in seed_summary_headers]
@@ -385,7 +426,6 @@ class PixelArtGenerator:
             tabulate(seed_summary_data, headers=seed_summary_headers, tablefmt="grid")
         )
 
-        # Now display the plots
         fig, axes = plt.subplots(2, 4, figsize=(20, 10))
         axes = axes.flatten()
 
@@ -396,7 +436,6 @@ class PixelArtGenerator:
             axes[i].set_xticks([])
             axes[i].set_yticks([])
 
-            # Draw 'x' markers for seed positions
             for seed in seeds:
                 coords = seed.get_coordinates()
                 marker_props = seed.get_marker_properties()
@@ -418,6 +457,9 @@ class PixelArtGenerator:
 
 # --- Main Execution ---
 if __name__ == "__main__":
+    # Initialize random seed once at the start for true randomness across script runs
+    random.seed()
+
     parser = argparse.ArgumentParser(
         description="Generate pixel art with parametric curves and seed positions."
     )
@@ -437,7 +479,6 @@ if __name__ == "__main__":
 
     args = parser.parse_args()
 
-    # Process hair seed range
     if len(args.range_hair_seeds) == 1:
         hair_min_seeds = args.range_hair_seeds[0]
         hair_max_seeds = args.range_hair_seeds[0]
@@ -451,7 +492,6 @@ if __name__ == "__main__":
 
     hair_seed_range = (hair_min_seeds, hair_max_seeds)
 
-    # Process fill seed points
     specific_fill_coords = []
     if args.point_fill_seeds:
         try:
@@ -465,7 +505,11 @@ if __name__ == "__main__":
             )
 
     generator = PixelArtGenerator(
-        BASE_MATRIX, HAIR_SPAWN_ROWS, HAIR_SPAWN_COLS, PARAMETRIC_CURVE_TYPES
+        BASE_MATRIX,
+        HAIR_SPAWN_ROWS,
+        HAIR_SPAWN_COLS,
+        PARAMETRIC_CURVE_TYPES,
+        SKIN_TONE_COLORS,
     )
     generator.render_graphs(
         num_graphs=8,
