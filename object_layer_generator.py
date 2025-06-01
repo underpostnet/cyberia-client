@@ -36,7 +36,7 @@ COLOR_MAP_FILE = os.path.join(MODEL_LOAD_DIR, "color_map.json")
 DECODER_MODEL_PATH = os.path.join(MODEL_LOAD_DIR, "decoder_model.keras")
 
 # Latent dimension must match the one used during training
-LATENT_DIM = 128  # Ensure this matches the LATENT_DIM from your training script
+LATENT_DIM = 256  # Ensure this matches the LATENT_DIM from your training script
 
 
 # --- Define the Decoder's architecture (must match the saved model) ---
@@ -48,10 +48,14 @@ def build_decoder(latent_dim, output_shape=(25, 25, 1), num_colors=None):
         )
 
     decoder_inputs = keras.Input(shape=(latent_dim,))
-    initial_dense_dim = 7 * 7 * 64
+    # Adjust initial dense layer size based on encoder's last conv feature map
+    initial_dense_dim = 4 * 4 * 128  # Adjusted based on deeper encoder
     x = layers.Dense(initial_dense_dim, activation="relu")(decoder_inputs)
-    x = layers.Reshape((7, 7, 64))(x)
+    x = layers.Reshape((4, 4, 128))(x)
 
+    x = layers.Conv2DTranspose(128, 3, activation="relu", strides=2, padding="same")(
+        x
+    )  # Added layer
     x = layers.Conv2DTranspose(64, 3, activation="relu", strides=2, padding="same")(x)
     x = layers.Conv2DTranspose(32, 3, activation="relu", strides=2, padding="same")(x)
 

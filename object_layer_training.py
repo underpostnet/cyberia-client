@@ -44,8 +44,8 @@ print("TensorFlow is configured to attempt running on GPU.")
 PIXEL_WIDTH = 25
 PIXEL_HEIGHT = 25
 
-# Latent dimension for the VAE
-LATENT_DIM = 128  # Increased latent dimension for more capacity
+# Latent dimension for the VAE - Increased for more capacity
+LATENT_DIM = 256
 
 # Directory containing your JSON skin files
 SKIN_DATA_DIR = "/home/dd/cyberia-client/object_layer/skin"
@@ -58,6 +58,9 @@ DECODER_MODEL_PATH = os.path.join(MODEL_SAVE_DIR, "decoder_model.keras")
 # Global variables for the dynamically generated color map and number of colors
 GLOBAL_COLOR_MAP_RGBA = np.array([])
 GLOBAL_NUM_COLORS = 0
+
+# KL Divergence weight - Adjusted to encourage more diverse generations
+KL_WEIGHT = 0.0001  # A smaller weight can lead to more diverse, less blurry outputs
 
 
 def preprocess_frame(frame_array, target_height, target_width):
@@ -123,6 +126,7 @@ def load_and_preprocess_data_from_file(
     """
     Loads pixel art data from a single JSON file, preprocesses it,
     and maps local color indices to global color indices.
+    Crucially, now only loads frames from "RIGHT_IDLE" and clamps local indices.
     """
     if not os.path.exists(json_file_path):
         print(f"Error: File not found at {json_file_path}")
@@ -149,36 +153,44 @@ def load_and_preprocess_data_from_file(
             local_to_global_mapping[i] = color_to_global_index[color_tuple]
         else:
             # This should ideally not happen if build_global_color_map is comprehensive
-            # Handle gracefully by mapping to index 0 (transparent/black) or raise an error
+            # If it does, map to index 0 (transparent/black) as a fallback
             print(
                 f"Warning: Color {color_tuple} from {json_file_path} not found in global color map. Mapping to index 0."
             )
-            local_to_global_mapping[i] = 0  # Map to transparent/black
+            local_to_global_mapping[i] = 0
 
-    # Iterate through all animation states (e.g., UP_IDLE, DOWN_WALKING)
-    for animation_state in data["RENDER_DATA"]["FRAMES"]:
-        for frame_list in data["RENDER_DATA"]["FRAMES"][animation_state]:
+    # Iterate only through the "RIGHT_IDLE" animation state
+    if "RIGHT_IDLE" in data["RENDER_DATA"]["FRAMES"]:
+        for frame_list in data["RENDER_DATA"]["FRAMES"]["RIGHT_IDLE"]:
             frame_array = np.array(
                 frame_list, dtype=np.int32
             )  # Ensure integer type for indices
 
-            # Map local indices in the frame to global indices
-            global_indexed_frame = local_to_global_mapping[frame_array]
+            # CRITICAL FIX: Clamp local indices to valid range before mapping
+            # This prevents errors if original data has indices larger than its own local_color_map
+            max_local_index = len(local_color_map) - 1
+            frame_array_clamped_local = np.clip(frame_array, 0, max_local_index)
+
+            # Map clamped local indices in the frame to global indices
+            global_indexed_frame = local_to_global_mapping[frame_array_clamped_local]
 
             processed_frame = preprocess_frame(
                 global_indexed_frame, target_height, target_width
             )
             all_frames_in_file.append(processed_frame)
+    else:
+        print(
+            f"Warning: 'RIGHT_IDLE' frames not found in {json_file_path}. Skipping this file for training."
+        )
 
     if not all_frames_in_file:
-        print(f"No valid frames found in {json_file_path}")
+        print(f"No valid 'RIGHT_IDLE' frames found in {json_file_path}")
         return np.array([]), np.array([])
 
     frames_array = np.array(all_frames_in_file)
 
     # The frames_array now contains global integer indices.
     # Normalize these for the encoder input.
-    # The target for loss calculation will be the original integer indices.
     normalized_frames = (
         frames_array.astype(np.float32) / (GLOBAL_NUM_COLORS - 1)
         if GLOBAL_NUM_COLORS > 1
@@ -240,9 +252,16 @@ else:
                 all_integer_frames.append(frames_integer)
 
         if all_preprocessed_frames:
-            x_train = np.concatenate(all_preprocessed_frames, axis=0)
-            y_train_indices = np.concatenate(all_integer_frames, axis=0)
-            print(f"Total number of frames loaded: {x_train.shape[0]}")
+            x_train_initial = np.concatenate(all_preprocessed_frames, axis=0)
+            y_train_indices_initial = np.concatenate(all_integer_frames, axis=0)
+
+            # --- Clone initial data 3 times (total 4x original volume) ---
+            x_train = np.concatenate([x_train_initial] * 4, axis=0)
+            y_train_indices = np.concatenate([y_train_indices_initial] * 4, axis=0)
+            print(
+                f"Initial real data cloned 3 times. Total real frames: {x_train.shape[0]}"
+            )
+
             print(
                 f"Shape of loaded training data (normalized for encoder): {x_train.shape}"
             )
@@ -309,10 +328,11 @@ def build_encoder(latent_dim, input_shape):
         encoder_inputs
     )
     x = layers.Conv2D(64, 3, activation="relu", strides=2, padding="same")(x)
-    x = layers.Flatten()(x)
-    x = layers.Dense(128, activation="relu")(
+    x = layers.Conv2D(128, 3, activation="relu", strides=2, padding="same")(
         x
-    )  # Added a dense layer before latent space
+    )  # Added layer
+    x = layers.Flatten()(x)
+    x = layers.Dense(256, activation="relu")(x)  # Increased dense layer size
     z_mean = layers.Dense(latent_dim, name="z_mean")(x)
     z_log_var = layers.Dense(latent_dim, name="z_log_var")(x)
     z = Sampling()([z_mean, z_log_var])
@@ -322,11 +342,21 @@ def build_encoder(latent_dim, input_shape):
 def build_decoder(latent_dim, output_shape, num_colors):
     """Builds the decoder part of the VAE."""
     decoder_inputs = keras.Input(shape=(latent_dim,))
-    initial_dense_dim = 7 * 7 * 64
+    # Adjust initial dense layer size based on encoder's last conv feature map
+    # For a 25x25 input, with 3 conv layers (strides=2 each), the feature map size
+    # will be roughly (25 / 2 / 2 / 2) = 3.125, so 3x3 or 4x4. Let's aim for 4x4.
+    # If the last encoder conv output is 128 filters, then 4*4*128 = 2048
+    initial_dense_dim = 4 * 4 * 128  # Adjusted based on deeper encoder
     x = layers.Dense(initial_dense_dim, activation="relu")(decoder_inputs)
-    x = layers.Reshape((7, 7, 64))(x)
+    x = layers.Reshape((4, 4, 128))(x)  # Reshape to a 2D feature map
 
+    # Upsample to 8x8 (4 * 2 = 8)
+    x = layers.Conv2DTranspose(128, 3, activation="relu", strides=2, padding="same")(
+        x
+    )  # Added layer
+    # Upsample to 16x16 (8 * 2 = 16)
     x = layers.Conv2DTranspose(64, 3, activation="relu", strides=2, padding="same")(x)
+    # Upsample to 32x32 (16 * 2 = 32)
     x = layers.Conv2DTranspose(32, 3, activation="relu", strides=2, padding="same")(x)
 
     # Output layer: now outputs NUM_COLORS channels with softmax for probability distribution
@@ -334,7 +364,10 @@ def build_decoder(latent_dim, output_shape, num_colors):
         num_colors, 3, activation="softmax", padding="same"
     )(x)
 
-    # Crop the 28x28 output to the target output_shape (e.g., 25x25)
+    # Crop the 32x32 output to the target output_shape (25x25)
+    # (32 - 25) = 7 pixels difference in height and width.
+    # Cropping expects ((top_crop, bottom_crop), (left_crop, right_crop))
+    # To remove 7 pixels, we can remove 3 from top/left and 4 from bottom/right.
     crop_height = decoder_outputs.shape[1] - output_shape[0]
     crop_width = decoder_outputs.shape[2] - output_shape[1]
 
@@ -351,10 +384,11 @@ def build_decoder(latent_dim, output_shape, num_colors):
 
 
 class VAE(keras.Model):
-    def __init__(self, encoder, decoder, **kwargs):
+    def __init__(self, encoder, decoder, kl_weight, **kwargs):
         super().__init__(**kwargs)
         self.encoder = encoder
         self.decoder = decoder
+        self.kl_weight = kl_weight  # Store KL weight
         self.total_loss_tracker = keras.metrics.Mean(name="total_loss")
         self.reconstruction_loss_tracker = keras.metrics.Mean(
             name="reconstruction_loss"
@@ -388,7 +422,9 @@ class VAE(keras.Model):
 
             kl_loss = -0.5 * (1 + z_log_var - tf.square(z_mean) - tf.exp(z_log_var))
             kl_loss = tf.reduce_mean(tf.reduce_sum(kl_loss, axis=1))
-            total_loss = reconstruction_loss + kl_loss
+            total_loss = reconstruction_loss + (
+                self.kl_weight * kl_loss
+            )  # Apply KL weight
         grads = tape.gradient(total_loss, self.trainable_weights)
         self.optimizer.apply_gradients(zip(grads, self.trainable_weights))
         self.total_loss_tracker.update_state(total_loss)
@@ -412,13 +448,13 @@ encoder = build_encoder(LATENT_DIM, (PIXEL_HEIGHT, PIXEL_WIDTH, 1))
 decoder = build_decoder(LATENT_DIM, (PIXEL_HEIGHT, PIXEL_WIDTH, 1), GLOBAL_NUM_COLORS)
 
 # Create and compile the VAE model
-vae = VAE(encoder, decoder)
+vae = VAE(encoder, decoder, kl_weight=KL_WEIGHT)  # Pass KL_WEIGHT to VAE
 vae.compile(
     optimizer=keras.optimizers.Adam(learning_rate=0.0005)
 )  # Slightly reduced learning rate
 
 # --- 3. Train the VAE ---
-EPOCHS = 200  # Increased epochs for better learning with multi-class output
+EPOCHS = 500  # Increased epochs for better learning with multi-class output
 BATCH_SIZE = 32
 
 if x_train.size > 0:
