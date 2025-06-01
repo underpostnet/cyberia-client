@@ -53,7 +53,7 @@ LATENT_DIM = 256
 SKIN_DATA_DIR = "/home/dd/cyberia-client/object_layer/skin"
 
 # Directory to save the trained model and color map
-MODEL_SAVE_DIR = "trained_pixel_art_model"
+MODEL_SAVE_DIR = "."
 COLOR_MAP_FILE = os.path.join(MODEL_SAVE_DIR, "color_map.json")
 DECODER_MODEL_PATH = os.path.join(MODEL_SAVE_DIR, "decoder_model.keras")
 
