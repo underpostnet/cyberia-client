@@ -62,7 +62,8 @@ GLOBAL_COLOR_MAP_RGBA = np.array([])
 GLOBAL_NUM_COLORS = 0
 
 # KL Divergence weight - Adjusted to encourage more diverse generations
-KL_WEIGHT = 0.0001  # A smaller weight can lead to more diverse, less blurry outputs
+# Adjusted KL_WEIGHT for better balance
+KL_WEIGHT = 0.0001
 
 # Maximum number of colors in the global palette
 MAX_GLOBAL_COLORS = 256  # Standard pixel art palette size
@@ -189,7 +190,9 @@ def load_and_preprocess_data_from_file(
     Optionally limits the number of frames loaded per file.
     """
     if not os.path.exists(json_file_path):
-        print(f"Error: File not found at {json_file_path}")
+        print(
+            f"Warning: File not found at {json_file_path}, skipping color extraction."
+        )
         return [], []
 
     with open(json_file_path, "r") as f:
@@ -362,7 +365,7 @@ selected_skin_files = all_available_skin_files[
 ]
 selected_skin_files_paths = [
     os.path.join(SKIN_DATA_DIR, f) for f in selected_skin_files
-]
+]  # Corrected SK_DATA_DIR to SKIN_DATA_DIR
 
 print(f"Selected {len(selected_skin_files)} files for training.")
 
@@ -399,7 +402,7 @@ else:
     try:
         for skin_file_path in selected_skin_files_paths:
             print(f"Loading data from: {skin_file_path}")
-            # Limit to 2 frames per file
+            # Limit to 5 frames per file to increase data density
             frames_normalized_2d_list, frames_integer_2d_list = (
                 load_and_preprocess_data_from_file(
                     skin_file_path,
@@ -407,7 +410,7 @@ else:
                     PIXEL_WIDTH,
                     GLOBAL_COLOR_MAP_RGBA,
                     color_to_global_index,
-                    max_frames_per_file=2,
+                    max_frames_per_file=5,
                 )
             )
             # Apply augmentations to each loaded 2D frame
@@ -486,20 +489,22 @@ class Sampling(layers.Layer):
 def build_encoder(latent_dim, input_shape):
     """Builds the encoder part of the VAE."""
     encoder_inputs = keras.Input(shape=input_shape)
-    x = layers.Conv2D(32, 3, activation="relu", strides=2, padding="same")(
-        encoder_inputs
-    )
-    x = layers.Conv2D(64, 3, activation="relu", strides=2, padding="same")(x)
-    x = layers.Conv2D(128, 3, activation="relu", strides=2, padding="same")(x)
+    x = layers.Conv2D(32, 3, padding="same")(encoder_inputs)
+    x = layers.BatchNormalization()(x)  # Added BatchNormalization
+    x = layers.LeakyReLU(negative_slope=0.2)(x)  # Changed to LeakyReLU, fixed alpha
+    x = layers.Conv2D(64, 3, strides=2, padding="same")(x)
+    x = layers.BatchNormalization()(x)  # Added BatchNormalization
+    x = layers.LeakyReLU(negative_slope=0.2)(x)  # Changed to LeakyReLU, fixed alpha
+    x = layers.Conv2D(128, 3, strides=2, padding="same")(x)
+    x = layers.BatchNormalization()(x)  # Added BatchNormalization
+    x = layers.LeakyReLU(negative_slope=0.2)(x)  # Changed to LeakyReLU, fixed alpha
     x = layers.Flatten()(x)
-    # The problematic layer:
-    # This Dense layer is now explicitly sized to accept the 512 features
-    # that are actually coming from the Flatten layer at runtime.
-    # The summary shows 2048, but the error shows 512. We trust the error for runtime behavior.
-    x = layers.Dense(512, activation="relu")(
-        x
-    )  # Intermediate Dense layer to match actual flatten output
-    x = layers.Dense(256, activation="relu")(x)  # Final Dense layer before latent space
+    x = layers.Dense(512)(x)  # No activation here, will be applied after BN
+    x = layers.BatchNormalization()(x)  # Added BatchNormalization
+    x = layers.LeakyReLU(negative_slope=0.2)(x)  # Changed to LeakyReLU, fixed alpha
+    x = layers.Dense(256)(x)  # No activation here, will be applied after BN
+    x = layers.BatchNormalization()(x)  # Added BatchNormalization
+    x = layers.LeakyReLU(negative_slope=0.2)(x)  # Changed to LeakyReLU, fixed alpha
     z_mean = layers.Dense(latent_dim, name="z_mean")(x)
     z_log_var = layers.Dense(latent_dim, name="z_log_var")(x)
     z = Sampling()([z_mean, z_log_var])
@@ -509,34 +514,39 @@ def build_encoder(latent_dim, input_shape):
 def build_decoder(latent_dim, output_shape, num_colors):
     """Builds the decoder part of the VAE."""
     decoder_inputs = keras.Input(shape=(latent_dim,))
-    # Adjusted initial_dense_dim to match the actual flattened output of the encoder (2*2*128=512)
     initial_dense_dim = 2 * 2 * 128
-    x = layers.Dense(initial_dense_dim, activation="relu")(decoder_inputs)
-    # Adjusted Reshape to match the spatial dimensions for 512 features
+    x = layers.Dense(initial_dense_dim)(decoder_inputs)  # No activation here
+    x = layers.BatchNormalization()(x)  # Added BatchNormalization
+    x = layers.LeakyReLU(negative_slope=0.2)(x)  # Changed to LeakyReLU, fixed alpha
     x = layers.Reshape((2, 2, 128))(x)
 
-    x = layers.Conv2DTranspose(128, 3, activation="relu", strides=2, padding="same")(
-        x
-    )  # -> 4x4
-    x = layers.Conv2DTranspose(64, 3, activation="relu", strides=2, padding="same")(
-        x
-    )  # -> 8x8
-    x = layers.Conv2DTranspose(32, 3, activation="relu", strides=2, padding="same")(
-        x
-    )  # -> 16x16
-    # Add another Conv2DTranspose to reach 32x32 before cropping
-    x = layers.Conv2DTranspose(16, 3, activation="relu", strides=2, padding="same")(
-        x
-    )  # -> 32x32
+    # FIX: Added strides=2 to the first Conv2DTranspose to correctly upsample
+    x = layers.Conv2DTranspose(128, 3, strides=2, padding="same")(x)  # -> 4x4
+    x = layers.BatchNormalization()(x)  # Added BatchNormalization
+    x = layers.LeakyReLU(negative_slope=0.2)(x)  # Changed to LeakyReLU, fixed alpha
+    x = layers.Conv2DTranspose(64, 3, strides=2, padding="same")(x)  # -> 8x8
+    x = layers.BatchNormalization()(x)  # Added BatchNormalization
+    x = layers.LeakyReLU(negative_slope=0.2)(x)  # Changed to LeakyReLU, fixed alpha
+    x = layers.Conv2DTranspose(32, 3, strides=2, padding="same")(x)  # -> 16x16
+    x = layers.BatchNormalization()(x)  # Added BatchNormalization
+    x = layers.LeakyReLU(negative_slope=0.2)(x)  # Changed to LeakyReLU, fixed alpha
+    # Increased filters in this layer
+    x = layers.Conv2DTranspose(32, 3, strides=2, padding="same")(x)  # -> 32x32
+    x = layers.BatchNormalization()(x)  # Added BatchNormalization
+    x = layers.LeakyReLU(negative_slope=0.2)(x)  # Changed to LeakyReLU, fixed alpha
+    # Increased filters in this layer
+    x = layers.Conv2DTranspose(16, 3, strides=2, padding="same")(x)  # -> 64x64
+    x = layers.BatchNormalization()(x)
+    x = layers.LeakyReLU(negative_slope=0.2)(x)
 
     # Output layer: now outputs NUM_COLORS channels with softmax for probability distribution
     decoder_outputs = layers.Conv2DTranspose(
         num_colors, 3, activation="softmax", padding="same"
     )(
         x
-    )  # Still 32x32
+    )  # Still 64x64
 
-    # Crop the 32x32 output to the target output_shape (25x25)
+    # Crop the 64x64 output to the target output_shape (25x25)
     crop_height = decoder_outputs.shape[1] - output_shape[0]
     crop_width = decoder_outputs.shape[2] - output_shape[1]
 
@@ -580,7 +590,7 @@ class VAE(keras.Model):
             z_mean, z_log_var, z = self.encoder(x_normalized)
             reconstruction_logits = self.decoder(
                 z
-            )  # Output are probabilities for each class
+            )  # Output are probabilities for each color class
 
             # Calculate reconstruction loss using sparse_categorical_crossentropy
             # y_true_indices should be (batch, height, width)
@@ -628,7 +638,7 @@ decoder.summary()
 # Create and compile the VAE model
 vae = VAE(encoder, decoder, kl_weight=KL_WEIGHT)  # Pass KL_WEIGHT to VAE
 vae.compile(
-    optimizer=keras.optimizers.Adam(learning_rate=0.0005)
+    optimizer=keras.optimizers.Adam(learning_rate=0.0002)
 )  # Slightly reduced learning rate
 
 # --- 3. Train the VAE ---

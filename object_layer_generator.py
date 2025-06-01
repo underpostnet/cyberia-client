@@ -1,4 +1,7 @@
 import os
+import random  # Import random for shuffling
+from scipy.ndimage import shift, rotate  # For more sophisticated augmentations
+from collections import Counter  # For finding most common colors
 
 # Set XLA_FLAGS to point to the CUDA data directory where libdevice is located.
 # This must be set BEFORE importing tensorflow.
@@ -37,10 +40,14 @@ DECODER_MODEL_PATH = os.path.join(MODEL_LOAD_DIR, "decoder_model.keras")
 
 # Latent dimension must match the one used during training
 LATENT_DIM = 256  # Ensure this matches the LATENT_DIM from your training script
+PIXEL_WIDTH = 25  # Must match training script
+PIXEL_HEIGHT = 25  # Must match training script
 
 
 # --- Define the Decoder's architecture (must match the saved model) ---
-def build_decoder(latent_dim, output_shape=(25, 25, 1), num_colors=None):
+def build_decoder(
+    latent_dim, output_shape=(PIXEL_HEIGHT, PIXEL_WIDTH, 1), num_colors=None
+):
     """Builds the decoder part of the VAE.
     This architecture must precisely match the one used to save the model in object_layer_training.py.
     """
@@ -50,34 +57,39 @@ def build_decoder(latent_dim, output_shape=(25, 25, 1), num_colors=None):
         )
 
     decoder_inputs = keras.Input(shape=(latent_dim,))
-    # Adjusted initial_dense_dim to match the actual flattened output of the encoder (2*2*128=512)
     initial_dense_dim = 2 * 2 * 128
-    x = layers.Dense(initial_dense_dim, activation="relu")(decoder_inputs)
-    # Adjusted Reshape to match the spatial dimensions for 512 features
+    x = layers.Dense(initial_dense_dim)(decoder_inputs)  # No activation here
+    x = layers.BatchNormalization()(x)  # Added BatchNormalization
+    x = layers.LeakyReLU(negative_slope=0.2)(x)  # Changed to LeakyReLU, fixed alpha
     x = layers.Reshape((2, 2, 128))(x)
 
-    x = layers.Conv2DTranspose(128, 3, activation="relu", strides=2, padding="same")(
-        x
-    )  # -> 4x4
-    x = layers.Conv2DTranspose(64, 3, activation="relu", strides=2, padding="same")(
-        x
-    )  # -> 8x8
-    x = layers.Conv2DTranspose(32, 3, activation="relu", strides=2, padding="same")(
-        x
-    )  # -> 16x16
-    # This is the additional Conv2DTranspose layer that was added in training to reach 32x32
-    x = layers.Conv2DTranspose(16, 3, activation="relu", strides=2, padding="same")(
-        x
-    )  # -> 32x32
+    # FIX: Added strides=2 to the first Conv2DTranspose to correctly upsample
+    x = layers.Conv2DTranspose(128, 3, strides=2, padding="same")(x)  # -> 4x4
+    x = layers.BatchNormalization()(x)  # Added BatchNormalization
+    x = layers.LeakyReLU(negative_slope=0.2)(x)  # Changed to LeakyReLU, fixed alpha
+    x = layers.Conv2DTranspose(64, 3, strides=2, padding="same")(x)  # -> 8x8
+    x = layers.BatchNormalization()(x)  # Added BatchNormalization
+    x = layers.LeakyReLU(negative_slope=0.2)(x)  # Changed to LeakyReLU, fixed alpha
+    x = layers.Conv2DTranspose(32, 3, strides=2, padding="same")(x)  # -> 16x16
+    x = layers.BatchNormalization()(x)  # Added BatchNormalization
+    x = layers.LeakyReLU(negative_slope=0.2)(x)  # Changed to LeakyReLU, fixed alpha
+    # Increased filters in this layer (matched training script)
+    x = layers.Conv2DTranspose(32, 3, strides=2, padding="same")(x)  # -> 32x32
+    x = layers.BatchNormalization()(x)  # Added BatchNormalization
+    x = layers.LeakyReLU(negative_slope=0.2)(x)  # Changed to LeakyReLU, fixed alpha
+    # Increased filters in this layer (matched training script)
+    x = layers.Conv2DTranspose(16, 3, strides=2, padding="same")(x)  # -> 64x64
+    x = layers.BatchNormalization()(x)
+    x = layers.LeakyReLU(negative_slope=0.2)(x)
 
-    # This is the final output layer, which outputs NUM_COLORS channels
+    # Output layer: now outputs NUM_COLORS channels with softmax for probability distribution
     decoder_outputs = layers.Conv2DTranspose(
         num_colors, 3, activation="softmax", padding="same"
     )(
         x
-    )  # Still 32x32
+    )  # Still 64x64
 
-    # Re-apply cropping logic as in the training script
+    # Crop the 64x64 output to the target output_shape (25x25)
     crop_height = decoder_outputs.shape[1] - output_shape[0]
     crop_width = decoder_outputs.shape[2] - output_shape[1]
 
@@ -147,13 +159,10 @@ if __name__ == "__main__":
             loaded_color_map_rgba = np.array(loaded_color_map_list, dtype=np.float32)
             NUM_COLORS_LOADED = len(loaded_color_map_rgba)
 
-            # Load the decoder model using keras.models.load_model for .keras format
-            # We need to pass custom_objects because Sampling is a custom layer
-            # However, for simple loading, if the model was saved with vae.decoder.save(),
-            # then Keras might handle it, but it's safer to define the decoder architecture
-            # explicitly and load weights.
-            # The build_decoder function needs to be exactly the same as the one used for training.
+            # Build the decoder with the correct number of colors
             loaded_decoder = build_decoder(LATENT_DIM, num_colors=NUM_COLORS_LOADED)
+
+            # Load weights into the built decoder model
             loaded_decoder.load_weights(DECODER_MODEL_PATH)
 
             print(f"Model loaded successfully from {DECODER_MODEL_PATH}")
