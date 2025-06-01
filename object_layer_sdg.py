@@ -145,7 +145,7 @@ class HairSeed(SeedPosition):
     """Represents a 'hair' type seed position, generating a parametric curve stroke."""
 
     def __init__(self, row, col):
-        super().__init__(row, col, "H", "red", "none")  # Changed marker_char to 'H'
+        super().__init__(row, col, "H", "red", "none")
         self.type = "hair"
 
     def can_generate_stroke(self):
@@ -156,7 +156,7 @@ class FillSeed(SeedPosition):
     """Represents a 'fill' type seed position, which does not generate a parametric curve stroke."""
 
     def __init__(self, row, col):
-        super().__init__(row, col, "F", "black", "none")  # Changed marker_char to 'F'
+        super().__init__(row, col, "F", "black", "none")
         self.type = "fill"
 
     def can_generate_stroke(self):
@@ -167,7 +167,7 @@ class FillGradientShadowSeed(SeedPosition):
     """Represents a 'fill-gradient-shadow' type seed position."""
 
     def __init__(self, row, col):
-        super().__init__(row, col, "G", "blue", "none")  # Changed marker_char to 'G'
+        super().__init__(row, col, "G", "blue", "none")
         self.type = "fill-gradient-shadow"
 
     def can_generate_stroke(self):
@@ -217,6 +217,7 @@ class PixelArtGenerator:
         Generates 'fill' seed positions based on specific (x,y) coordinates provided.
         If specific_coords_xy is empty, it defaults to a single fill seed at the center.
         In 'skin-default-1' mode, adds 1 random fill-gradient-shadow seed and a default fill seed.
+        In 'skin-default-2' mode, adds 1 random fill-gradient-shadow seed and a default fill seed.
         """
         fill_seeds = []
 
@@ -231,7 +232,7 @@ class PixelArtGenerator:
                     )
 
         # Handle mode-specific fill seeds
-        if mode == "skin-default-1":
+        if mode in ["skin-default-1", "skin-default-2"]:
             # Add 1 random fill-gradient-shadow seed
             num_gradient_seeds = 1
             possible_coords_for_gradient = [
@@ -270,10 +271,10 @@ class PixelArtGenerator:
                     )
                 else:
                     print(
-                        f"Warning: Default fill seed position {default_fill_coord} is already occupied in skin-default-1 mode."
+                        f"Warning: Default fill seed position {default_fill_coord} is already occupied in {mode} mode."
                     )
 
-        # Default behavior if no specific fill seeds and not in 'skin-default-1' mode
+        # Default behavior if no specific fill seeds and not in a special mode
         elif (
             not specific_coords_xy
         ):  # This covers mode=None, skin-default, skin-default-0
@@ -355,13 +356,13 @@ class PixelArtGenerator:
 
         # Determine the offset based on the mode
         if mode == "skin-default":
-            # Choose a random point on the curve to intersect the seed
-            idx_at_seed = random.randint(0, len(t_values_base) - 1)
-            t_offset = t_values_base[idx_at_seed]
-            y_offset = y_values_base[idx_at_seed]
-        # For 'skin-default-0' mode, 'skin-default-1' mode, or any other mode (including None),
-        # the curve starts/origina`tes from the seed's coordinates (t_offset=0, y_offset=0)
-        else:  # mode is None, 'skin-default-0', 'skin-default-1'
+            # Choose a random t_relative value within the curve's span to align with the origin
+            random_t_at_origin = random.uniform(0, t_span - 1)
+            t_offset = random_t_at_origin
+            y_offset = curve_method(random_t_at_origin, scale_y)
+        # For 'skin-default-0' mode, 'skin-default-1' mode, 'skin-default-2' mode, or any other mode (including None),
+        # the curve starts/originates from the seed's coordinates (t_offset=0, y_offset=0)
+        else:  # mode is None, 'skin-default-0', 'skin-default-1', 'skin-default-2'
             t_offset = 0
             y_offset = 0
 
@@ -401,9 +402,13 @@ class PixelArtGenerator:
         for color in self.skin_tone_colors:
             plot_specific_colors.append(color)
 
+        # Determine stroke color (random for hair curves in all modes)
         stroke_color = self._generate_random_rgba_color()
         stroke_color_index = len(plot_specific_colors)
         plot_specific_colors.append(stroke_color)
+
+        # Add black color for the straight lines (ensure it's available if not already index 1)
+        black_color_index = 1  # Black is always at index 1 in BASE_COLORS
 
         current_cmap = plt.cm.colors.ListedColormap(plot_specific_colors)
 
@@ -440,6 +445,17 @@ class PixelArtGenerator:
                 }
             )
 
+        # --- Draw straight black lines for skin-default-2 mode ---
+        if mode == "skin-default-2":
+            # Line 1: from 9.17 to 15.17 (column 17, rows 9 to 15)
+            for r in range(9, 16):  # rows 9 to 15 inclusive
+                if 0 <= r < self.matrix_rows and 0 <= 17 < self.matrix_cols:
+                    current_matrix[r, 17] = black_color_index
+            # Line 2: from 8.20 to 16.20 (column 20, rows 8 to 16)
+            for r in range(8, 17):  # rows 8 to 16 inclusive
+                if 0 <= r < self.matrix_rows and 0 <= 20 < self.matrix_cols:
+                    current_matrix[r, 20] = black_color_index
+
         # --- THEN PERFORM FLOOD FILL FOR FILL SEEDS ---
         color_to_index_map = {
             tuple(color): i for i, color in enumerate(plot_specific_colors)
@@ -448,7 +464,7 @@ class PixelArtGenerator:
         for seed in fill_seeds:
             start_row, start_col = seed.get_coordinates()
 
-            # Get the color at the seed's position *after* curves have been drawn
+            # Get the color at the seed's position *after* curves and lines have been drawn
             target_color_value_for_fill = current_matrix[start_row, start_col]
 
             if seed.type == "fill-gradient-shadow":
@@ -466,22 +482,69 @@ class PixelArtGenerator:
                 if not filled_coords:
                     continue
 
+                # Determine min/max coordinates for gradient calculation
+                min_row_filled = min(r for r, c in filled_coords)
+                max_row_filled = max(r for r, c in filled_coords)
                 min_col_filled = min(c for r, c in filled_coords)
                 max_col_filled = max(c for r, c in filled_coords)
 
                 # Use the actual parametric curve color as the base for the gradient
                 base_color_for_gradient = plot_specific_colors[stroke_color_index]
 
-                for r, c in filled_coords:
-                    # Calculate darkening factor based on column position
-                    if max_col_filled == min_col_filled:
-                        normalized_col = 0
-                    else:
-                        normalized_col = (c - min_col_filled) / (
-                            max_col_filled - min_col_filled
-                        )
+                # Randomly choose gradient direction for skin-default-2 mode
+                gradient_direction = (
+                    random.choice(
+                        [
+                            "left-to-right",
+                            "right-to-left",
+                            "top-to-bottom",
+                            "bottom-to-top",
+                        ]
+                    )
+                    if mode == "skin-default-2"
+                    else "left-to-right"
+                )
 
-                    darkening_factor = normalized_col * 0.5
+                for r, c in filled_coords:
+                    darkening_factor = 0
+                    noise_amount = 0
+
+                    if gradient_direction == "left-to-right":
+                        if max_col_filled == min_col_filled:
+                            normalized_coord = 0
+                        else:
+                            normalized_coord = (c - min_col_filled) / (
+                                max_col_filled - min_col_filled
+                            )
+                        darkening_factor = normalized_coord * 0.5
+                        noise_amount = normalized_coord * 0.1 * random.random()
+                    elif gradient_direction == "right-to-left":
+                        if max_col_filled == min_col_filled:
+                            normalized_coord = 0
+                        else:
+                            normalized_coord = (max_col_filled - c) / (
+                                max_col_filled - min_col_filled
+                            )
+                        darkening_factor = normalized_coord * 0.5
+                        noise_amount = normalized_coord * 0.1 * random.random()
+                    elif gradient_direction == "top-to-bottom":
+                        if max_row_filled == min_row_filled:
+                            normalized_coord = 0
+                        else:
+                            normalized_coord = (r - min_row_filled) / (
+                                max_row_filled - min_row_filled
+                            )
+                        darkening_factor = normalized_coord * 0.5
+                        noise_amount = normalized_coord * 0.1 * random.random()
+                    elif gradient_direction == "bottom-to-top":
+                        if max_row_filled == min_row_filled:
+                            normalized_coord = 0
+                        else:
+                            normalized_coord = (max_row_filled - r) / (
+                                max_row_filled - min_row_filled
+                            )
+                        darkening_factor = normalized_coord * 0.5
+                        noise_amount = normalized_coord * 0.1 * random.random()
 
                     darkened_rgba = [
                         max(0, base_color_for_gradient[0] * (1 - darkening_factor)),
@@ -490,7 +553,6 @@ class PixelArtGenerator:
                         base_color_for_gradient[3],
                     ]
 
-                    noise_amount = normalized_col * 0.1 * random.random()
                     final_rgba = [
                         max(0, darkened_rgba[0] - noise_amount),
                         max(0, darkened_rgba[1] - noise_amount),
@@ -508,10 +570,14 @@ class PixelArtGenerator:
 
             else:  # Regular fill seed (type == "fill")
                 fill_seed_count += 1
-                # For regular fill seeds, they should fill the contiguous area of the pixel they land on,
-                # respecting curves as boundaries.
+                # For regular fill seeds, they should fill the contiguous area of the ORIGINAL background color,
+                # respecting curves and lines as boundaries.
+                original_background_color_value = self.base_matrix[start_row, start_col]
                 filled_coords = self._flood_fill_get_coords(
-                    current_matrix, start_row, start_col, target_color_value_for_fill
+                    current_matrix,
+                    start_row,
+                    start_col,
+                    original_background_color_value,
                 )
 
                 if not filled_coords:
@@ -649,7 +715,7 @@ if __name__ == "__main__":
         "--mode",
         type=str,
         default=None,
-        help='Special mode for rendering. Current options: "skin-default", "skin-default-0", "skin-default-1".',
+        help='Special mode for rendering. Current options: "skin-default", "skin-default-0", "skin-default-1", "skin-default-2".',
     )
 
     args = parser.parse_args()
