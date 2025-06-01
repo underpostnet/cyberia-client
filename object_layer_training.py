@@ -207,7 +207,9 @@ def load_and_preprocess_data_from_file(
 all_skin_files = [
     f
     for f in os.listdir(SKIN_DATA_DIR)
-    if f.startswith("object_layer_data_") and f.endswith(".json")
+    if f.startswith("object_layer_data_")
+    and f.endswith(".json")
+    and not f in ["object_layer_data_dog.json"]
 ]
 all_skin_files_paths = [os.path.join(SKIN_DATA_DIR, f) for f in all_skin_files]
 
