@@ -2,11 +2,11 @@ import matplotlib.pyplot as plt
 import numpy as np
 import random
 import math
+from tabulate import tabulate
 
-# Synthetic Data Generation (SDG) script/tool
-
-# Original MATRIX representing the pixel art drawing
-MATRIX = [
+# --- Configuration Constants ---
+# Original pixel art matrix
+BASE_MATRIX = [
     [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
     [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
     [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
@@ -35,179 +35,278 @@ MATRIX = [
     [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
 ]
 
-# Convert MATRIX to a NumPy array for easier manipulation
-matrix_np = np.array(MATRIX)
-matrix_rows, matrix_cols = matrix_np.shape
-
-
-# Function to generate a random RGBA color
-def generate_random_rgba_color():
-    """Generates a random RGBA color."""
-    return [random.random(), random.random(), random.random(), 1.0]
-
-
-# Define MAP_COLOR_BASE: Only white and black for the base pixel art
-MAP_COLOR_BASE = np.array(
+# Base color map for the pixel art (white and black)
+BASE_COLORS = np.array(
     [[1.0, 1.0, 1.0, 1.0], [0.0, 0.0, 0.0, 1.0]]  # Index 0: White  # Index 1: Black
 )
 
-# Define the region "above the head" for seed positions
-ABOVE_HEAD_ROWS_RANGE = (0, 3)
-ABOVE_HEAD_COLS_RANGE = (5, 20)  # Expanded range for horizontal dispersion
+# Region for 'hair' seed positions
+HAIR_SPAWN_ROWS = (0, 3)
+HAIR_SPAWN_COLS = (5, 20)
 
 
-def get_random_seed_positions(rows_range, cols_range, min_dots, max_dots):
-    """
-    Generates a random number of seed positions (coordinates) within the specified region.
+# --- Mathematical Stroke Definitions ---
+class MathematicalStroke:
+    """Defines various mathematical functions that can be used for strokes."""
 
-    Args:
-        rows_range (tuple): A tuple (start_row, end_row) defining the vertical range.
-        cols_range (tuple): A tuple (start_col, end_col) defining the horizontal range.
-        min_dots (int): Minimum number of seed positions to generate.
-        max_dots (int): Maximum number of seed positions to generate.
+    @staticmethod
+    def parabola(x_relative, scale_y):
+        """Calculates y for a parabola, with its vertex at (0,0) in relative coordinates."""
+        return scale_y * (x_relative**2)
 
-    Returns:
-        list: A list of (row, col) tuples for the seed positions.
-    """
-    num_dots = random.randint(min_dots, max_dots)
+    @staticmethod
+    def sigmoid(x_relative, scale_y):
+        """Calculates y for a sigmoid, with its inflection point at (0,0) in relative coordinates."""
+        # Scale x_relative to get a reasonable sigmoid curve
+        scaled_x = x_relative / 5
+        # Sigmoid function is 1 / (1 + e^(-x)). Subtract 0.5 to center it around 0.
+        return scale_y * (1 / (1 + math.exp(-scaled_x)) - 0.5)
 
-    possible_coords = []
-    for r in range(rows_range[0], rows_range[1] + 1):
-        for c in range(cols_range[0], cols_range[1] + 1):
-            possible_coords.append((r, c))
-
-    num_dots = min(num_dots, len(possible_coords))
-    selected_coords = random.sample(possible_coords, num_dots)
-    return selected_coords
-
-
-def draw_math_function_fragment_intersecting(
-    matrix, func_type, target_coord, x_span, color_value
-):
-    """
-    Draws a fragment of a mathematical function onto the matrix, ensuring it intersects
-    the target_coord.
-
-    Args:
-        matrix (np.array): The input pixel art matrix.
-        func_type (str): Type of function ('parabola', 'sigmoid', 'sine').
-        target_coord (tuple): (target_row, target_col) - the coordinate the function must intersect.
-        x_span (int): The total horizontal span of the function fragment.
-        color_value (int): The integer value to set pixels to for this trace's color.
-    """
-    target_row, target_col = target_coord
-    matrix_rows, matrix_cols = matrix.shape
-
-    # Define a random starting X for the fragment, ensuring target_col is within the span
-    start_x = random.randint(
-        max(0, target_col - x_span + 1), min(matrix_cols - x_span, target_col)
-    )
-    end_x = start_x + x_span - 1
-
-    # Adjust parameters to ensure intersection
-    for x in range(start_x, end_x + 1):
-        y = 0
-        if func_type == "parabola":
-            center_x = target_col
-            offset_y = target_row
-            scale_y = random.uniform(0.01, 0.05)
-            y = scale_y * ((x - center_x) ** 2) + offset_y
-        elif func_type == "sigmoid":
-            amplitude = random.uniform(8, 15)
-            steepness = random.uniform(0.5, 1.5)
-            x0 = target_col
-            y_base = target_row - 0.5 * amplitude
-            scaled_x = (x - x0) * steepness
-            y = amplitude / (1 + math.exp(-scaled_x)) + y_base
-        elif func_type == "sine":
-            amplitude = random.uniform(3, 7)
-            frequency = random.uniform(0.3, 0.8)
-            phase_shift_x = target_col
-            vertical_shift = target_row
-            y = amplitude * math.sin(frequency * (x - phase_shift_x)) + vertical_shift
-        else:
-            continue
-
-        row = int(round(y))
-        col = int(round(x))
-
-        if 0 <= row < matrix_rows and 0 <= col < matrix_cols:
-            matrix[row, col] = color_value
+    @staticmethod
+    def sine(x_relative, scale_y):
+        """Calculates y for a sine wave, with a zero-crossing at (0,0) in relative coordinates."""
+        frequency = 0.5  # Adjust frequency for more or less waves
+        return scale_y * math.sin(frequency * x_relative)
 
 
-# Generate and display 8 examples in a 2x4 grid
-fig, axes = plt.subplots(2, 4, figsize=(20, 10))  # 2 rows, 4 columns
-fig.suptitle(
-    "Pixel Art Drawing with Dynamic Colors and Intersecting Paths", fontsize=16
-)
+# --- Seed Position Abstractions ---
+class SeedPosition:
+    """Abstract base class for different types of seed positions."""
 
-# Flatten the axes array for easy iteration
-axes = axes.flatten()
+    def __init__(self, row, col, marker_char, marker_color, bbox_facecolor):
+        self.row = row
+        self.col = col
+        self.marker_char = marker_char
+        self.marker_color = marker_color
+        self.bbox_facecolor = bbox_facecolor
 
-# Define available function types
-function_types = ["parabola", "sigmoid", "sine"]
+    def get_coordinates(self):
+        """Returns the (row, col) coordinates of the seed position."""
+        return (self.row, self.col)
 
-for i in range(8):
-    # Start with a fresh copy of the base matrix for each example
-    current_matrix = np.copy(matrix_np)
+    def get_marker_properties(self):
+        """Returns properties for rendering the seed position marker on the plot."""
+        return {
+            "s": self.marker_char,
+            "color": self.marker_color,
+            "bbox": dict(
+                facecolor=self.bbox_facecolor,
+                alpha=0.7,
+                edgecolor="none",
+                boxstyle="round,pad=0.2",
+            ),
+        }
 
-    # Get random seed positions (these are not drawn into the matrix yet)
-    random.seed(i + 200)  # Seed for red dot positions
-    seed_positions = get_random_seed_positions(
-        ABOVE_HEAD_ROWS_RANGE, ABOVE_HEAD_COLS_RANGE, min_dots=3, max_dots=8
-    )
-    random.shuffle(
-        seed_positions
-    )  # Shuffle to ensure random assignment for each function
+    def can_generate_stroke(self):
+        """Determines if this seed type should generate a mathematical stroke."""
+        raise NotImplementedError("Subclasses must implement this method.")
 
-    # Create a plot-specific MAP_COLOR list
-    plot_specific_map_color_list = MAP_COLOR_BASE.tolist()
 
-    # Generate a single random color for all mathematical paths in this plot
-    random_math_path_color = generate_random_rgba_color()
-    plot_specific_map_color_list.append(random_math_path_color)
-    math_color_value = (
-        len(plot_specific_map_color_list) - 1
-    )  # This will be the index for the math path color
+class HairSeed(SeedPosition):
+    """Represents a 'hair' type seed position, generating a mathematical stroke."""
 
-    # Create the colormap for this specific plot
-    current_cmap = plt.cm.colors.ListedColormap(plot_specific_map_color_list)
+    def __init__(self, row, col):
+        super().__init__(row, col, "x", "red", "white")
+        self.type = "hair"
 
-    # Draw mathematical function fragments
-    random.seed(i + 300)  # Seed for function types and spans
+    def can_generate_stroke(self):
+        return True
 
-    for j, target_dot in enumerate(seed_positions):
-        func_type = random.choice(function_types)
-        draw_math_function_fragment_intersecting(
-            current_matrix,
-            func_type,
-            target_dot,
-            x_span=random.randint(10, 25),  # Random span for variety
-            color_value=math_color_value,  # Use the single random color for this plot
+
+class FillSeed(SeedPosition):
+    """Represents a 'fill' type seed position, which does not generate a mathematical stroke."""
+
+    def __init__(self, row, col):
+        super().__init__(row, col, "x", "black", "lightgray")
+        self.type = "fill"
+
+    def can_generate_stroke(self):
+        return False
+
+
+# --- Pixel Art Generation Logic ---
+class PixelArtGenerator:
+    """Manages the generation and rendering of pixel art with dynamic elements."""
+
+    def __init__(self, base_matrix_data, hair_spawn_rows, hair_spawn_cols):
+        self.base_matrix = np.array(base_matrix_data)
+        self.matrix_rows, self.matrix_cols = self.base_matrix.shape
+        self.hair_spawn_rows = hair_spawn_rows
+        self.hair_spawn_cols = hair_spawn_cols
+        self.available_functions = {
+            "parabola": MathematicalStroke.parabola,
+            "sigmoid": MathematicalStroke.sigmoid,
+            "sine": MathematicalStroke.sine,
+        }
+        self.graph_summaries = []
+
+    def _generate_random_rgba_color(self):
+        """Generates a random RGBA color."""
+        return [random.random(), random.random(), random.random(), 1.0]
+
+    def _get_random_hair_seeds(self, min_count, max_count):
+        """Generates random 'hair' seed positions within the defined spawn area."""
+        num_seeds = random.randint(min_count, max_count)
+        possible_coords = [
+            (r, c)
+            for r in range(self.hair_spawn_rows[0], self.hair_spawn_rows[1] + 1)
+            for c in range(self.hair_spawn_cols[0], self.hair_spawn_cols[1] + 1)
+        ]
+        num_seeds = min(num_seeds, len(possible_coords))
+        selected_coords = random.sample(possible_coords, num_seeds)
+        return [HairSeed(r, c) for r, c in selected_coords]
+
+    def _get_center_fill_seed(self):
+        """Generates the 'fill' seed position at the center of the matrix."""
+        return FillSeed(self.matrix_rows // 2, self.matrix_cols // 2)
+
+    def _draw_stroke_on_matrix(
+        self, matrix, func_name, origin_coord, x_span, color_value
+    ):
+        """
+        Draws a mathematical function stroke on the matrix.
+        The function is calculated relative to (0,0) and then translated to origin_coord.
+        """
+        func = self.available_functions[func_name]
+        origin_row, origin_col = origin_coord
+
+        # The stroke starts its 0 coordinate (relative x) at the origin_col
+        start_x_relative = 0
+        end_x_relative = x_span - 1
+
+        # Random scaling for visual variety based on function type
+        scale_y = (
+            random.uniform(0.01, 0.05)
+            if func_name == "parabola"
+            else (
+                random.uniform(5, 15)
+                if func_name == "sigmoid"
+                else random.uniform(3, 7)
+            )
+        )  # Sine
+
+        for x_rel in range(start_x_relative, end_x_relative + 1):
+            y_rel = func(x_rel, scale_y)
+
+            # Translate relative coordinates to absolute matrix coordinates
+            abs_row = int(round(origin_row + y_rel))
+            abs_col = int(round(origin_col + x_rel))
+
+            # Ensure coordinates are within matrix bounds
+            if 0 <= abs_row < self.matrix_rows and 0 <= abs_col < self.matrix_cols:
+                matrix[abs_row, abs_col] = color_value
+
+    def generate_single_graph_data(self, graph_id):
+        """
+        Generates all data for a single pixel art graph, including seed positions,
+        mathematical strokes, and summary information.
+        """
+        current_matrix = np.copy(self.base_matrix)
+
+        # Generate seed positions
+        random.seed(graph_id + 200)  # Consistent seed for hair positions
+        hair_seeds = self._get_random_hair_seeds(min_count=3, max_count=8)
+        fill_seed = self._get_center_fill_seed()
+
+        all_seeds = hair_seeds + [fill_seed]
+        random.shuffle(all_seeds)  # Randomize order for stroke assignment
+
+        # Prepare plot-specific color map
+        plot_specific_colors = BASE_COLORS.tolist()
+        stroke_color = self._generate_random_rgba_color()
+        plot_specific_colors.append(stroke_color)
+        stroke_color_value = len(plot_specific_colors) - 1
+        current_cmap = plt.cm.colors.ListedColormap(plot_specific_colors)
+
+        # Choose one random function type for all strokes in this graph
+        random.seed(graph_id + 300)  # Consistent seed for function type and spans
+        chosen_func_type_name = random.choice(list(self.available_functions.keys()))
+
+        strokes_drawn_count = 0
+        seed_types_present = set()
+
+        # Draw mathematical strokes for eligible seed positions
+        for seed in all_seeds:
+            seed_types_present.add(seed.type)
+            if seed.can_generate_stroke():
+                self._draw_stroke_on_matrix(
+                    current_matrix,
+                    chosen_func_type_name,
+                    seed.get_coordinates(),
+                    x_span=random.randint(10, 25),  # Random span for variety
+                    color_value=stroke_color_value,
+                )
+                strokes_drawn_count += 1
+
+        # Store summary data for the current graph
+        self.graph_summaries.append(
+            {
+                "Graph ID": graph_id,
+                "Mathematical Function": chosen_func_type_name.capitalize(),
+                "Seed Types": ", ".join(sorted(list(seed_types_present))),
+                "Number of Strokes": strokes_drawn_count,
+            }
         )
 
-    # Plot the matrix
-    axes[i].imshow(current_matrix, cmap=current_cmap, origin="upper")
-    axes[i].set_title(f"Example {i+1}")
-    axes[i].set_xticks([])
-    axes[i].set_yticks([])
+        return current_matrix, current_cmap, all_seeds
 
-    # Draw 'x' text for seed positions on top with a background
-    for r, c in seed_positions:
-        axes[i].text(
-            c,
-            r,
-            "x",
-            color="red",  # The color of the 'x' itself
-            ha="center",
-            va="center",
-            fontsize=10,
-            fontweight="bold",
-            bbox=dict(
-                facecolor="white", alpha=0.7, edgecolor="none", boxstyle="round,pad=0.2"
-            ),  # Added background
+    def render_graphs(self, num_graphs=8):
+        """Generates and displays multiple pixel art graphs with summaries."""
+        # Generate all graph data first
+        graph_data_list = []
+        for i in range(num_graphs):
+            graph_data_list.append(self.generate_single_graph_data(i + 1))
+
+        # Sort graph_summaries by 'Graph ID' for consistent table output
+        self.graph_summaries.sort(key=lambda x: x["Graph ID"])
+
+        # Print the summary table to the terminal
+        headers = [
+            "Graph ID",
+            "Mathematical Function",
+            "Seed Types",
+            "Number of Strokes",
+        ]
+        table_data = [[s[h] for h in headers] for s in self.graph_summaries]
+        print("\n--- Graph Generation Summary ---\n")
+        print(tabulate(table_data, headers=headers, tablefmt="grid"))
+        print("\n--------------------------------\n")
+
+        # Now display the plots
+        fig, axes = plt.subplots(2, 4, figsize=(20, 10))
+        fig.suptitle(
+            "Pixel Art Drawing with Seed Position Types and Dynamic Paths", fontsize=16
         )
+        axes = axes.flatten()
+
+        for i, (matrix, cmap, seeds) in enumerate(graph_data_list):
+            graph_id = i + 1  # Re-use graph_id for plotting title
+            axes[i].imshow(matrix, cmap=cmap, origin="upper")
+            axes[i].set_title(f"Graph ID: {graph_id}")
+            axes[i].set_xticks([])
+            axes[i].set_yticks([])
+
+            # Draw 'x' markers for seed positions
+            for seed in seeds:
+                coords = seed.get_coordinates()
+                marker_props = seed.get_marker_properties()
+                axes[i].text(
+                    coords[1],
+                    coords[0],
+                    marker_props["s"],
+                    color=marker_props["color"],
+                    ha="center",
+                    va="center",
+                    fontsize=10,
+                    fontweight="bold",
+                    bbox=marker_props["bbox"],
+                )
+
+        plt.tight_layout(rect=[0, 0.03, 1, 0.95])
+        plt.show()
 
 
-plt.tight_layout(rect=[0, 0.03, 1, 0.95])
-plt.show()
+# --- Main Execution ---
+if __name__ == "__main__":
+    generator = PixelArtGenerator(BASE_MATRIX, HAIR_SPAWN_ROWS, HAIR_SPAWN_COLS)
+    generator.render_graphs(num_graphs=8)
