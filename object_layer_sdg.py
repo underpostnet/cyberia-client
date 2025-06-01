@@ -447,14 +447,14 @@ class PixelArtGenerator:
 
         # --- Draw straight black lines for skin-default-2 mode ---
         if mode == "skin-default-2":
-            # Line 1: from 9.17 to 15.17 (column 17, rows 9 to 15)
-            for r in range(9, 16):  # rows 9 to 15 inclusive
-                if 0 <= r < self.matrix_rows and 0 <= 17 < self.matrix_cols:
-                    current_matrix[r, 17] = black_color_index
-            # Line 2: from 8.20 to 16.20 (column 20, rows 8 to 16)
-            for r in range(8, 17):  # rows 8 to 16 inclusive
-                if 0 <= r < self.matrix_rows and 0 <= 20 < self.matrix_cols:
-                    current_matrix[r, 20] = black_color_index
+            # Line 1: from (col 9, row 17) to (col 15, row 17)
+            for c in range(9, 16):  # columns 9 to 15 inclusive
+                if 0 <= 17 < self.matrix_rows and 0 <= c < self.matrix_cols:
+                    current_matrix[17, c] = black_color_index
+            # Line 2: from (col 8, row 20) to (col 16, row 20)
+            for c in range(8, 17):  # columns 8 to 16 inclusive
+                if 0 <= 20 < self.matrix_rows and 0 <= c < self.matrix_cols:
+                    current_matrix[20, c] = black_color_index
 
         # --- THEN PERFORM FLOOD FILL FOR FILL SEEDS ---
         color_to_index_map = {
