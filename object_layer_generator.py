@@ -41,28 +41,41 @@ LATENT_DIM = 256  # Ensure this matches the LATENT_DIM from your training script
 
 # --- Define the Decoder's architecture (must match the saved model) ---
 def build_decoder(latent_dim, output_shape=(25, 25, 1), num_colors=None):
-    """Builds the decoder part of the VAE."""
+    """Builds the decoder part of the VAE.
+    This architecture must precisely match the one used to save the model in object_layer_training.py.
+    """
     if num_colors is None:
         raise ValueError(
             "num_colors must be provided to build the decoder for generation."
         )
 
     decoder_inputs = keras.Input(shape=(latent_dim,))
-    # Adjust initial dense layer size based on encoder's last conv feature map
-    initial_dense_dim = 4 * 4 * 128  # Adjusted based on deeper encoder
+    # Adjusted initial_dense_dim to match the actual flattened output of the encoder (2*2*128=512)
+    initial_dense_dim = 2 * 2 * 128
     x = layers.Dense(initial_dense_dim, activation="relu")(decoder_inputs)
-    x = layers.Reshape((4, 4, 128))(x)
+    # Adjusted Reshape to match the spatial dimensions for 512 features
+    x = layers.Reshape((2, 2, 128))(x)
 
     x = layers.Conv2DTranspose(128, 3, activation="relu", strides=2, padding="same")(
         x
-    )  # Added layer
-    x = layers.Conv2DTranspose(64, 3, activation="relu", strides=2, padding="same")(x)
-    x = layers.Conv2DTranspose(32, 3, activation="relu", strides=2, padding="same")(x)
+    )  # -> 4x4
+    x = layers.Conv2DTranspose(64, 3, activation="relu", strides=2, padding="same")(
+        x
+    )  # -> 8x8
+    x = layers.Conv2DTranspose(32, 3, activation="relu", strides=2, padding="same")(
+        x
+    )  # -> 16x16
+    # This is the additional Conv2DTranspose layer that was added in training to reach 32x32
+    x = layers.Conv2DTranspose(16, 3, activation="relu", strides=2, padding="same")(
+        x
+    )  # -> 32x32
 
-    # Output layer: now outputs NUM_COLORS channels with softmax for probability distribution
+    # This is the final output layer, which outputs NUM_COLORS channels
     decoder_outputs = layers.Conv2DTranspose(
         num_colors, 3, activation="softmax", padding="same"
-    )(x)
+    )(
+        x
+    )  # Still 32x32
 
     # Re-apply cropping logic as in the training script
     crop_height = decoder_outputs.shape[1] - output_shape[0]
@@ -135,6 +148,11 @@ if __name__ == "__main__":
             NUM_COLORS_LOADED = len(loaded_color_map_rgba)
 
             # Load the decoder model using keras.models.load_model for .keras format
+            # We need to pass custom_objects because Sampling is a custom layer
+            # However, for simple loading, if the model was saved with vae.decoder.save(),
+            # then Keras might handle it, but it's safer to define the decoder architecture
+            # explicitly and load weights.
+            # The build_decoder function needs to be exactly the same as the one used for training.
             loaded_decoder = build_decoder(LATENT_DIM, num_colors=NUM_COLORS_LOADED)
             loaded_decoder.load_weights(DECODER_MODEL_PATH)
 

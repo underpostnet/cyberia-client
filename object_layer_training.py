@@ -1,4 +1,7 @@
 import os
+import random  # Import random for shuffling
+from scipy.ndimage import shift, rotate  # For more sophisticated augmentations
+from collections import Counter  # For finding most common colors
 
 # Set XLA_FLAGS to point to the CUDA data directory where libdevice is located.
 # This must be set BEFORE importing tensorflow.
@@ -21,7 +24,6 @@ if gpus:
         print(
             f"TensorFlow detected {len(gpus)} Physical GPUs, {len(logical_gpus)} Logical GPUs."
         )
-        print(f"Using GPU: {gpus[0].name}")
     except RuntimeError as e:
         # Visible devices must be set before GPUs have been initialized
         print(e)
@@ -62,11 +64,15 @@ GLOBAL_NUM_COLORS = 0
 # KL Divergence weight - Adjusted to encourage more diverse generations
 KL_WEIGHT = 0.0001  # A smaller weight can lead to more diverse, less blurry outputs
 
+# Maximum number of colors in the global palette
+MAX_GLOBAL_COLORS = 256  # Standard pixel art palette size
+
 
 def preprocess_frame(frame_array, target_height, target_width):
     """
     Resizes (crops or pads) a single pixel art frame to the target dimensions.
     Pads with zeros if smaller, center-crops if larger.
+    Returns a 2D array (height, width).
     """
     current_height, current_width = frame_array.shape
     processed_frame = np.zeros((target_height, target_width), dtype=frame_array.dtype)
@@ -88,12 +94,23 @@ def preprocess_frame(frame_array, target_height, target_width):
     return processed_frame
 
 
-def build_global_color_map(all_skin_files_paths):
+def find_closest_color_index(target_color_tuple, palette_rgba):
     """
-    Builds a comprehensive, unique color map from all JSON files.
+    Finds the index of the closest color in the given palette (RGBA)
+    to the target_color_tuple (RGBA). Uses Euclidean distance.
+    """
+    target_color_np = np.array(target_color_tuple, dtype=np.float32) / 255.0
+    distances = np.sum((palette_rgba - target_color_np) ** 2, axis=1)
+    return np.argmin(distances)
+
+
+def build_global_color_map(all_skin_files_paths, max_colors=MAX_GLOBAL_COLORS):
+    """
+    Builds a comprehensive, unique color map from all JSON files,
+    then truncates it to max_colors by selecting the most frequent ones.
     Returns the unique color map and a dictionary for quick index lookup.
     """
-    unique_colors_set = set()
+    all_colors_list = []
     for json_file_path in all_skin_files_paths:
         if not os.path.exists(json_file_path):
             print(
@@ -104,38 +121,74 @@ def build_global_color_map(all_skin_files_paths):
             data = json.load(f)
         if "COLORS" in data["RENDER_DATA"] and data["RENDER_DATA"]["COLORS"]:
             for color_rgba in data["RENDER_DATA"]["COLORS"]:
-                unique_colors_set.add(tuple(color_rgba))  # Use tuple for set hashing
+                all_colors_list.append(tuple(color_rgba))  # Use tuple for hashing
 
-    # Convert set back to list and sort for consistent indexing
-    sorted_unique_colors = sorted(list(unique_colors_set))
+    print(f"Initial unique colors found: {len(set(all_colors_list))}")
+
+    # Count color frequencies
+    color_counts = Counter(all_colors_list)
+
+    # Get the most common colors up to max_colors
+    most_common_colors = [color for color, _ in color_counts.most_common(max_colors)]
+
+    # Ensure (0,0,0,0) (transparent/black) is always included as index 0 for consistency
+    if (0, 0, 0, 0) not in most_common_colors:
+        # If not among most common, add it at the beginning if space allows, or replace least common
+        if len(most_common_colors) < max_colors:
+            most_common_colors.insert(0, (0, 0, 0, 0))
+        else:  # Replace the least common if palette is full
+            least_common_color = color_counts.most_common()[-1][0]
+            if least_common_color in most_common_colors:
+                most_common_colors.remove(least_common_color)
+            most_common_colors.insert(0, (0, 0, 0, 0))
+            # Ensure we don't exceed max_colors if we added one
+            if len(most_common_colors) > max_colors:
+                most_common_colors = most_common_colors[:max_colors]
+
+    # Sort the final selected unique colors for consistent indexing
+    # We sort to ensure determinism, but the order might not be visually intuitive.
+    # If a specific order is desired (e.g., by hue), custom sorting would be needed.
+    sorted_selected_colors = sorted(
+        list(set(most_common_colors))
+    )  # Use set to remove duplicates if (0,0,0,0) was already there
 
     # Create a mapping from original RGBA tuple to new global index
     color_to_global_index = {
-        color_tuple: i for i, color_tuple in enumerate(sorted_unique_colors)
+        color_tuple: i for i, color_tuple in enumerate(sorted_selected_colors)
     }
 
     # Convert to NumPy array and normalize to 0-1 range
-    global_color_map = np.array(sorted_unique_colors, dtype=np.float32) / 255.0
+    global_color_map = np.array(sorted_selected_colors, dtype=np.float32) / 255.0
 
+    print(
+        f"Final global color map size (capped at {max_colors}): {len(global_color_map)}"
+    )
     return global_color_map, color_to_global_index
 
 
 def load_and_preprocess_data_from_file(
-    json_file_path, target_height, target_width, color_to_global_index
+    json_file_path,
+    target_height,
+    target_width,
+    global_color_map_rgba,
+    color_to_global_index,
+    max_frames_per_file=None,
 ):
     """
     Loads pixel art data from a single JSON file, preprocesses it,
-    and maps local color indices to global color indices.
-    Crucially, now only loads frames from "RIGHT_IDLE" and clamps local indices.
+    and maps local color indices to global color indices (or closest in global map).
+    Returns 2D arrays (height, width) for each frame.
+    Optionally limits the number of frames loaded per file.
     """
     if not os.path.exists(json_file_path):
         print(f"Error: File not found at {json_file_path}")
-        return np.array([]), np.array([])
+        return [], []
 
     with open(json_file_path, "r") as f:
         data = json.load(f)
 
-    all_frames_in_file = []
+    frames_2d_in_file_normalized = []  # Store normalized 2D frames for X input
+    frames_2d_in_file_integer = []  # Store integer 2D frames for Y input
 
     # Get the local color map for this specific file
     local_color_map = data["RENDER_DATA"].get("COLORS", [])
@@ -143,78 +196,159 @@ def load_and_preprocess_data_from_file(
         print(
             f"Warning: 'COLORS' array not found or empty in {json_file_path}. Skipping frames from this file."
         )
-        return np.array([]), np.array([])
-
-    # Create a mapping from local index to global index
-    local_to_global_mapping = np.zeros(len(local_color_map), dtype=np.int32)
-    for i, color_rgba in enumerate(local_color_map):
-        color_tuple = tuple(color_rgba)
-        if color_tuple in color_to_global_index:
-            local_to_global_mapping[i] = color_to_global_index[color_tuple]
-        else:
-            # This should ideally not happen if build_global_color_map is comprehensive
-            # If it does, map to index 0 (transparent/black) as a fallback
-            print(
-                f"Warning: Color {color_tuple} from {json_file_path} not found in global color map. Mapping to index 0."
-            )
-            local_to_global_mapping[i] = 0
+        return [], []
 
     # Iterate only through the "RIGHT_IDLE" animation state
     if "RIGHT_IDLE" in data["RENDER_DATA"]["FRAMES"]:
+        frames_loaded_count = 0
         for frame_list in data["RENDER_DATA"]["FRAMES"]["RIGHT_IDLE"]:
+            if (
+                max_frames_per_file is not None
+                and frames_loaded_count >= max_frames_per_file
+            ):
+                break  # Stop loading if max_frames_per_file is reached
+
             frame_array = np.array(
                 frame_list, dtype=np.int32
             )  # Ensure integer type for indices
 
-            # CRITICAL FIX: Clamp local indices to valid range before mapping
-            # This prevents errors if original data has indices larger than its own local_color_map
-            max_local_index = len(local_color_map) - 1
-            frame_array_clamped_local = np.clip(frame_array, 0, max_local_index)
+            # Map local indices to original RGBA colors
+            original_rgba_frame = np.array(
+                [local_color_map[idx] for idx in frame_array.flatten()]
+            ).reshape(frame_array.shape[0], frame_array.shape[1], 4)
 
-            # Map clamped local indices in the frame to global indices
-            global_indexed_frame = local_to_global_mapping[frame_array_clamped_local]
+            # Convert RGBA frame to global indexed frame using the limited palette
+            global_indexed_frame_2d = np.zeros(frame_array.shape, dtype=np.int32)
+            for r_idx in range(original_rgba_frame.shape[0]):
+                for c_idx in range(original_rgba_frame.shape[1]):
+                    rgba_tuple = tuple(original_rgba_frame[r_idx, c_idx])
+                    if rgba_tuple in color_to_global_index:
+                        global_indexed_frame_2d[r_idx, c_idx] = color_to_global_index[
+                            rgba_tuple
+                        ]
+                    else:
+                        # Find closest color in the global palette
+                        closest_idx = find_closest_color_index(
+                            rgba_tuple, global_color_map_rgba
+                        )
+                        global_indexed_frame_2d[r_idx, c_idx] = closest_idx
 
-            processed_frame = preprocess_frame(
-                global_indexed_frame, target_height, target_width
+            processed_frame_2d = preprocess_frame(
+                global_indexed_frame_2d, target_height, target_width
             )
-            all_frames_in_file.append(processed_frame)
+
+            frames_2d_in_file_integer.append(processed_frame_2d)
+            # Normalize for X input (still 2D at this point)
+            normalized_frame_2d = (
+                processed_frame_2d.astype(np.float32) / (GLOBAL_NUM_COLORS - 1)
+                if GLOBAL_NUM_COLORS > 1
+                else processed_frame_2d.astype(np.float32)
+            )
+            frames_2d_in_file_normalized.append(normalized_frame_2d)
+
+            frames_loaded_count += 1
     else:
         print(
             f"Warning: 'RIGHT_IDLE' frames not found in {json_file_path}. Skipping this file for training."
         )
 
-    if not all_frames_in_file:
-        print(f"No valid 'RIGHT_IDLE' frames found in {json_file_path}")
-        return np.array([]), np.array([])
+    return frames_2d_in_file_normalized, frames_2d_in_file_integer
 
-    frames_array = np.array(all_frames_in_file)
 
-    # The frames_array now contains global integer indices.
-    # Normalize these for the encoder input.
-    normalized_frames = (
-        frames_array.astype(np.float32) / (GLOBAL_NUM_COLORS - 1)
-        if GLOBAL_NUM_COLORS > 1
-        else frames_array.astype(np.float32)
+def augment_frame_2d(frame_2d_normalized, frame_2d_integer, num_colors):
+    """
+    Applies 5 types of data augmentation to a single 2D frame.
+    Returns a list of (normalized_frame, integer_frame) tuples.
+    """
+    augmented_frames_x = []
+    augmented_frames_y = []
+
+    # 1. Original
+    augmented_frames_x.append(frame_2d_normalized)
+    augmented_frames_y.append(frame_2d_integer)
+
+    # 2. Horizontal Flip
+    flipped_frame_x = np.flip(frame_2d_normalized, axis=1)
+    flipped_frame_y = np.flip(frame_2d_integer, axis=1)
+    augmented_frames_x.append(flipped_frame_x)
+    augmented_frames_y.append(flipped_frame_y)
+
+    # 3. Random Shift (Translation)
+    # Max shift of +/- 2 pixels in any direction
+    shift_x = random.randint(-2, 2)
+    shift_y = random.randint(-2, 2)
+    # Use order=0 for nearest neighbor interpolation, crucial for pixel art
+    shifted_frame_y = shift(
+        frame_2d_integer, (shift_y, shift_x), mode="nearest", order=0
     )
+    shifted_frame_x = (
+        shifted_frame_y.astype(np.float32) / (num_colors - 1)
+        if num_colors > 1
+        else shifted_frame_y.astype(np.float32)
+    )
+    augmented_frames_x.append(shifted_frame_x)
+    augmented_frames_y.append(shifted_frame_y)
 
-    # Reshape for CNN input: (num_samples, height, width, channels)
-    input_shape = (normalized_frames.shape[0], target_height, target_width, 1)
+    # 4. Random 90-degree Rotation
+    # Rotate by 0, 90, 180, or 270 degrees
+    k = random.randint(0, 3)  # Number of 90-degree rotations
+    rotated_frame_y = np.rot90(frame_2d_integer, k=k)
+    rotated_frame_x = (
+        rotated_frame_y.astype(np.float32) / (num_colors - 1)
+        if num_colors > 1
+        else rotated_frame_y.astype(np.float32)
+    )
+    augmented_frames_x.append(rotated_frame_x)
+    augmented_frames_y.append(rotated_frame_y)
 
-    return normalized_frames.reshape(input_shape), frames_array.reshape(input_shape)
+    # 5. Random Pixel Noise
+    noisy_frame_y = np.copy(frame_2d_integer)
+    num_pixels = noisy_frame_y.shape[0] * noisy_frame_y.shape[1]
+    num_noisy_pixels = int(num_pixels * 0.01)  # 1% noise
+
+    if num_noisy_pixels == 0 and num_pixels > 0:
+        num_noisy_pixels = 1
+
+    if num_pixels > 0:
+        rows = np.random.randint(0, noisy_frame_y.shape[0], size=num_noisy_pixels)
+        cols = np.random.randint(0, noisy_frame_y.shape[1], size=num_noisy_pixels)
+        random_indices = np.random.randint(0, num_colors, size=num_noisy_pixels)
+        noisy_frame_y[rows, cols] = random_indices
+
+    noisy_frame_x = (
+        noisy_frame_y.astype(np.float32) / (num_colors - 1)
+        if num_colors > 1
+        else noisy_frame_y.astype(np.float32)
+    )
+    augmented_frames_x.append(noisy_frame_x)
+    augmented_frames_y.append(noisy_frame_y)
+
+    return augmented_frames_x, augmented_frames_y
 
 
 # --- Load data from all JSON files in the specified directory ---
-all_skin_files = [
+all_available_skin_files = [
     f
     for f in os.listdir(SKIN_DATA_DIR)
     if f.startswith("object_layer_data_")
     and f.endswith(".json")
-    and not f in ["object_layer_data_dog.json"]
+    and not f in ["object_layer_data_dog.json"]  # Exclude dog data
 ]
-all_skin_files_paths = [os.path.join(SKIN_DATA_DIR, f) for f in all_skin_files]
+random.shuffle(all_available_skin_files)  # Shuffle to get a random subset
+
+# Select up to 26 files
+NUM_SELECTED_FILES = 26
+selected_skin_files = all_available_skin_files[
+    : min(NUM_SELECTED_FILES, len(all_available_skin_files))
+]
+selected_skin_files_paths = [
+    os.path.join(SKIN_DATA_DIR, f) for f in selected_skin_files
+]
+
+print(f"Selected {len(selected_skin_files)} files for training.")
 
 # Build the global color map first
-if not all_skin_files_paths:
+if not selected_skin_files_paths:
     print(
         f"No JSON files found in {SKIN_DATA_DIR}. Please ensure files are named 'object_layer_data_*.json'."
     )
@@ -223,16 +357,16 @@ if not all_skin_files_paths:
         [[0.0, 0.0, 0.0, 0.0], [1.0, 1.0, 1.0, 1.0]], dtype=np.float32
     )
     GLOBAL_NUM_COLORS = len(GLOBAL_COLOR_MAP_RGBA)
-    x_train = np.random.rand(100, PIXEL_HEIGHT, PIXEL_WIDTH, 1).astype(np.float32)
-    y_train_indices = np.random.randint(
-        0, GLOBAL_NUM_COLORS, size=(100, PIXEL_HEIGHT, PIXEL_WIDTH, 1)
+    x_train_2d = np.random.rand(100, PIXEL_HEIGHT, PIXEL_WIDTH).astype(np.float32)
+    y_train_indices_2d = np.random.randint(
+        0, GLOBAL_NUM_COLORS, size=(100, PIXEL_HEIGHT, PIXEL_WIDTH)
     ).astype(np.int32)
     print(
-        f"Using dummy data of shape: {x_train.shape} and NUM_COLORS={GLOBAL_NUM_COLORS}"
+        f"Using dummy data of shape: {x_train_2d.shape} and NUM_COLORS={GLOBAL_NUM_COLORS}"
     )
 else:
     GLOBAL_COLOR_MAP_RGBA, color_to_global_index = build_global_color_map(
-        all_skin_files_paths
+        selected_skin_files_paths, max_colors=MAX_GLOBAL_COLORS
     )
     GLOBAL_NUM_COLORS = len(GLOBAL_COLOR_MAP_RGBA)
     print(f"Built global color map with {GLOBAL_NUM_COLORS} unique colors.")
@@ -240,73 +374,80 @@ else:
     print(GLOBAL_COLOR_MAP_RGBA)
     print(f"----------------------------------------")
 
-    all_preprocessed_frames = []
-    all_integer_frames = []
+    all_preprocessed_frames_2d = []  # List to hold 2D normalized frames
+    all_integer_frames_2d = []  # List to hold 2D integer frames
 
     try:
-        for skin_file_path in all_skin_files_paths:
+        for skin_file_path in selected_skin_files_paths:
             print(f"Loading data from: {skin_file_path}")
-            frames_normalized, frames_integer = load_and_preprocess_data_from_file(
-                skin_file_path, PIXEL_HEIGHT, PIXEL_WIDTH, color_to_global_index
+            # Limit to 2 frames per file
+            frames_normalized_2d_list, frames_integer_2d_list = (
+                load_and_preprocess_data_from_file(
+                    skin_file_path,
+                    PIXEL_HEIGHT,
+                    PIXEL_WIDTH,
+                    GLOBAL_COLOR_MAP_RGBA,
+                    color_to_global_index,
+                    max_frames_per_file=2,
+                )
             )
-            if frames_normalized.size > 0:
-                all_preprocessed_frames.append(frames_normalized)
-                all_integer_frames.append(frames_integer)
+            # Apply augmentations to each loaded 2D frame
+            for original_x_2d, original_y_2d in zip(
+                frames_normalized_2d_list, frames_integer_2d_list
+            ):
+                augmented_x, augmented_y = augment_frame_2d(
+                    original_x_2d, original_y_2d, GLOBAL_NUM_COLORS
+                )
+                all_preprocessed_frames_2d.extend(augmented_x)
+                all_integer_frames_2d.extend(augmented_y)
 
-        if all_preprocessed_frames:
-            x_train_initial = np.concatenate(all_preprocessed_frames, axis=0)
-            y_train_indices_initial = np.concatenate(all_integer_frames, axis=0)
-
-            # --- Clone initial data 3 times (total 4x original volume) ---
-            x_train = np.concatenate([x_train_initial] * 4, axis=0)
-            y_train_indices = np.concatenate([y_train_indices_initial] * 4, axis=0)
-            print(
-                f"Initial real data cloned 3 times. Total real frames: {x_train.shape[0]}"
-            )
+        if all_preprocessed_frames_2d:
+            x_train_real_augmented_2d = np.array(all_preprocessed_frames_2d)
+            y_train_indices_real_augmented_2d = np.array(all_integer_frames_2d)
 
             print(
-                f"Shape of loaded training data (normalized for encoder): {x_train.shape}"
+                f"Total real data after selection, limiting, and 5x augmentation: {x_train_real_augmented_2d.shape[0]} frames."
             )
             print(
-                f"Shape of loaded training data (integer indices for loss): {y_train_indices.shape}"
+                f"Shape of x_train_real_augmented_2d after concatenation: {x_train_real_augmented_2d.shape}"
             )
+
         else:
-            raise ValueError("No valid frames loaded from any JSON file.")
+            x_train_real_augmented_2d = np.array([])
+            y_train_indices_real_augmented_2d = np.array([])
+            print("No valid real frames loaded from any JSON file for augmentation.")
 
     except Exception as e:
-        print(f"Error loading data from multiple files: {e}")
-        print("Falling back to dummy data for VAE training.")
-        x_train = np.random.rand(100, PIXEL_HEIGHT, PIXEL_WIDTH, 1).astype(np.float32)
-        y_train_indices = np.random.randint(
-            0, GLOBAL_NUM_COLORS, size=(100, PIXEL_HEIGHT, PIXEL_WIDTH, 1)
-        ).astype(np.int32)
-        print(
-            f"Using dummy data of shape: {x_train.shape} and NUM_COLORS={GLOBAL_NUM_COLORS}"
-        )
+        print(f"Error loading and augmenting real data from multiple files: {e}")
+        x_train_real_augmented_2d = np.array([])
+        y_train_indices_real_augmented_2d = np.array([])
+        print("Skipping real data augmentation due to error.")
 
-# --- Add Synthetic Data (Random Pixel Art) ---
-NUM_SYNTHETIC_FRAMES = 500  # Number of synthetic frames to generate
-if x_train.size > 0 and GLOBAL_NUM_COLORS > 0:
-    print(f"\nGenerating {NUM_SYNTHETIC_FRAMES} synthetic frames...")
-    # Generate random integers from 0 to GLOBAL_NUM_COLORS-1 for synthetic data
-    synthetic_frames_indices = np.random.randint(
-        0, GLOBAL_NUM_COLORS, size=(NUM_SYNTHETIC_FRAMES, PIXEL_HEIGHT, PIXEL_WIDTH, 1)
+
+# --- Combine all data (only real data now, no synthetic) ---
+if x_train_real_augmented_2d.size > 0:
+    x_train_2d = x_train_real_augmented_2d
+    y_train_indices_2d = y_train_indices_real_augmented_2d
+else:
+    print("No valid training data available. Falling back to dummy data.")
+    x_train_2d = np.random.rand(100, PIXEL_HEIGHT, PIXEL_WIDTH).astype(np.float32)
+    y_train_indices_2d = np.random.randint(
+        0, GLOBAL_NUM_COLORS, size=(100, PIXEL_HEIGHT, PIXEL_WIDTH)
     ).astype(np.int32)
-    # Normalize synthetic frames for input to encoder
-    synthetic_frames_normalized = (
-        synthetic_frames_indices.astype(np.float32) / (GLOBAL_NUM_COLORS - 1)
-        if GLOBAL_NUM_COLORS > 1
-        else synthetic_frames_indices.astype(np.float32)
-    )
 
-    x_train = np.concatenate([x_train, synthetic_frames_normalized], axis=0)
-    y_train_indices = np.concatenate(
-        [y_train_indices, synthetic_frames_indices], axis=0
-    )
+print(f"\nFinal combined training data size (2D): {x_train_2d.shape[0]} frames.")
+print(f"Shape of final training data (2D): {x_train_2d.shape}")
 
-    print(
-        f"Total training data after adding synthetic frames: {x_train.shape[0]} frames."
-    )
+# --- Final Reshape to 4D for Keras Input ---
+# Add the channel dimension (1 for grayscale/indexed images)
+x_train = x_train_2d.reshape(-1, PIXEL_HEIGHT, PIXEL_WIDTH, 1)
+# y_train_indices should NOT have a channel dimension for sparse_categorical_crossentropy
+y_train_indices = y_train_indices_2d.reshape(-1, PIXEL_HEIGHT, PIXEL_WIDTH)
+
+print(f"Shape of final training data (normalized for encoder - 4D): {x_train.shape}")
+print(
+    f"Shape of final training data (integer indices for loss - 3D): {y_train_indices.shape}"
+)
 
 
 # --- 2. Define the VAE Model ---
@@ -330,11 +471,16 @@ def build_encoder(latent_dim, input_shape):
         encoder_inputs
     )
     x = layers.Conv2D(64, 3, activation="relu", strides=2, padding="same")(x)
-    x = layers.Conv2D(128, 3, activation="relu", strides=2, padding="same")(
-        x
-    )  # Added layer
+    x = layers.Conv2D(128, 3, activation="relu", strides=2, padding="same")(x)
     x = layers.Flatten()(x)
-    x = layers.Dense(256, activation="relu")(x)  # Increased dense layer size
+    # The problematic layer:
+    # This Dense layer is now explicitly sized to accept the 512 features
+    # that are actually coming from the Flatten layer at runtime.
+    # The summary shows 2048, but the error shows 512. We trust the error for runtime behavior.
+    x = layers.Dense(512, activation="relu")(
+        x
+    )  # Intermediate Dense layer to match actual flatten output
+    x = layers.Dense(256, activation="relu")(x)  # Final Dense layer before latent space
     z_mean = layers.Dense(latent_dim, name="z_mean")(x)
     z_log_var = layers.Dense(latent_dim, name="z_log_var")(x)
     z = Sampling()([z_mean, z_log_var])
@@ -344,32 +490,34 @@ def build_encoder(latent_dim, input_shape):
 def build_decoder(latent_dim, output_shape, num_colors):
     """Builds the decoder part of the VAE."""
     decoder_inputs = keras.Input(shape=(latent_dim,))
-    # Adjust initial dense layer size based on encoder's last conv feature map
-    # For a 25x25 input, with 3 conv layers (strides=2 each), the feature map size
-    # will be roughly (25 / 2 / 2 / 2) = 3.125, so 3x3 or 4x4. Let's aim for 4x4.
-    # If the last encoder conv output is 128 filters, then 4*4*128 = 2048
-    initial_dense_dim = 4 * 4 * 128  # Adjusted based on deeper encoder
+    # Adjusted initial_dense_dim to match the actual flattened output of the encoder (2*2*128=512)
+    initial_dense_dim = 2 * 2 * 128
     x = layers.Dense(initial_dense_dim, activation="relu")(decoder_inputs)
-    x = layers.Reshape((4, 4, 128))(x)  # Reshape to a 2D feature map
+    # Adjusted Reshape to match the spatial dimensions for 512 features
+    x = layers.Reshape((2, 2, 128))(x)
 
-    # Upsample to 8x8 (4 * 2 = 8)
     x = layers.Conv2DTranspose(128, 3, activation="relu", strides=2, padding="same")(
         x
-    )  # Added layer
-    # Upsample to 16x16 (8 * 2 = 16)
-    x = layers.Conv2DTranspose(64, 3, activation="relu", strides=2, padding="same")(x)
-    # Upsample to 32x32 (16 * 2 = 32)
-    x = layers.Conv2DTranspose(32, 3, activation="relu", strides=2, padding="same")(x)
+    )  # -> 4x4
+    x = layers.Conv2DTranspose(64, 3, activation="relu", strides=2, padding="same")(
+        x
+    )  # -> 8x8
+    x = layers.Conv2DTranspose(32, 3, activation="relu", strides=2, padding="same")(
+        x
+    )  # -> 16x16
+    # Add another Conv2DTranspose to reach 32x32 before cropping
+    x = layers.Conv2DTranspose(16, 3, activation="relu", strides=2, padding="same")(
+        x
+    )  # -> 32x32
 
     # Output layer: now outputs NUM_COLORS channels with softmax for probability distribution
     decoder_outputs = layers.Conv2DTranspose(
         num_colors, 3, activation="softmax", padding="same"
-    )(x)
+    )(
+        x
+    )  # Still 32x32
 
     # Crop the 32x32 output to the target output_shape (25x25)
-    # (32 - 25) = 7 pixels difference in height and width.
-    # Cropping expects ((top_crop, bottom_crop), (left_crop, right_crop))
-    # To remove 7 pixels, we can remove 3 from top/left and 4 from bottom/right.
     crop_height = decoder_outputs.shape[1] - output_shape[0]
     crop_width = decoder_outputs.shape[2] - output_shape[1]
 
@@ -416,6 +564,8 @@ class VAE(keras.Model):
             )  # Output are probabilities for each class
 
             # Calculate reconstruction loss using sparse_categorical_crossentropy
+            # y_true_indices should be (batch, height, width)
+            # reconstruction_logits should be (batch, height, width, num_classes)
             reconstruction_loss = tf.reduce_mean(
                 keras.losses.sparse_categorical_crossentropy(
                     y_true_indices, reconstruction_logits
@@ -446,8 +596,15 @@ class VAE(keras.Model):
 
 # Build the VAE components
 encoder = build_encoder(LATENT_DIM, (PIXEL_HEIGHT, PIXEL_WIDTH, 1))
+# Print encoder summary to confirm shapes
+print("\n--- Encoder Summary ---")
+encoder.summary()
+
 # Pass GLOBAL_NUM_COLORS to the decoder
 decoder = build_decoder(LATENT_DIM, (PIXEL_HEIGHT, PIXEL_WIDTH, 1), GLOBAL_NUM_COLORS)
+# Print decoder summary to confirm shapes
+print("\n--- Decoder Summary ---")
+decoder.summary()
 
 # Create and compile the VAE model
 vae = VAE(encoder, decoder, kl_weight=KL_WEIGHT)  # Pass KL_WEIGHT to VAE
