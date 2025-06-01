@@ -123,7 +123,9 @@ def build_global_color_map(all_skin_files_paths, max_colors=MAX_GLOBAL_COLORS):
             for color_rgba in data["RENDER_DATA"]["COLORS"]:
                 all_colors_list.append(tuple(color_rgba))  # Use tuple for hashing
 
-    print(f"Initial unique colors found: {len(set(all_colors_list))}")
+    print(
+        f"Initial unique colors found across all selected files: {len(set(all_colors_list))}"
+    )
 
     # Count color frequencies
     color_counts = Counter(all_colors_list)
@@ -137,9 +139,16 @@ def build_global_color_map(all_skin_files_paths, max_colors=MAX_GLOBAL_COLORS):
         if len(most_common_colors) < max_colors:
             most_common_colors.insert(0, (0, 0, 0, 0))
         else:  # Replace the least common if palette is full
-            least_common_color = color_counts.most_common()[-1][0]
-            if least_common_color in most_common_colors:
-                most_common_colors.remove(least_common_color)
+            # Find the least common color that is NOT (0,0,0,0) if it exists, to replace it
+            least_common_to_replace = None
+            for color, count in reversed(
+                color_counts.most_common()
+            ):  # Iterate from least common
+                if color != (0, 0, 0, 0) and color in most_common_colors:
+                    least_common_to_replace = color
+                    break
+            if least_common_to_replace:
+                most_common_colors.remove(least_common_to_replace)
             most_common_colors.insert(0, (0, 0, 0, 0))
             # Ensure we don't exceed max_colors if we added one
             if len(most_common_colors) > max_colors:
@@ -147,7 +156,6 @@ def build_global_color_map(all_skin_files_paths, max_colors=MAX_GLOBAL_COLORS):
 
     # Sort the final selected unique colors for consistent indexing
     # We sort to ensure determinism, but the order might not be visually intuitive.
-    # If a specific order is desired (e.g., by hue), custom sorting would be needed.
     sorted_selected_colors = sorted(
         list(set(most_common_colors))
     )  # Use set to remove duplicates if (0,0,0,0) was already there
@@ -332,7 +340,18 @@ all_available_skin_files = [
     for f in os.listdir(SKIN_DATA_DIR)
     if f.startswith("object_layer_data_")
     and f.endswith(".json")
-    and not f in ["object_layer_data_dog.json"]  # Exclude dog data
+    and not f
+    in [
+        "object_layer_data_dog.json",
+        "object_layer_data_ghost.json",
+        "object_layer_data_green.json",
+        "object_layer_data_kishins.json",
+        "object_layer_data_purple.json",
+        "object_layer_data_anon.json",
+        "object_layer_data_scp-2040.json",
+        "object_layer_data_marciano.json",
+        "object_layer_data_odisea.json",
+    ]
 ]
 random.shuffle(all_available_skin_files)  # Shuffle to get a random subset
 
@@ -613,7 +632,7 @@ vae.compile(
 )  # Slightly reduced learning rate
 
 # --- 3. Train the VAE ---
-EPOCHS = 500  # Increased epochs for better learning with multi-class output
+EPOCHS = 1000  # Increased epochs for better learning with multi-class output
 BATCH_SIZE = 32
 
 if x_train.size > 0:
