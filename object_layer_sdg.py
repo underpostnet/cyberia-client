@@ -1,3 +1,5 @@
+# Synthetic Data Generation (SDG) script/tool
+
 import matplotlib.pyplot as plt
 import numpy as np
 import random
@@ -45,28 +47,55 @@ HAIR_SPAWN_ROWS = (0, 3)
 HAIR_SPAWN_COLS = (5, 20)
 
 
-# --- Mathematical Stroke Definitions ---
-class MathematicalStroke:
-    """Defines various mathematical functions that can be used for strokes."""
+# --- Parametric Curve Definitions ---
+class ParametricCurve:
+    """Defines various parametric curves that can be used for strokes."""
+
+    def __init__(self, curve_name, curve_method, codomain_type, domain_type):
+        self.name = curve_name
+        self.method = curve_method
+        self.codomain_type = codomain_type
+        self.domain_type = domain_type
 
     @staticmethod
-    def parabola(x_relative, scale_y):
+    def _parabola_method(t_relative, scale_y):
         """Calculates y for a parabola, with its vertex at (0,0) in relative coordinates."""
-        return scale_y * (x_relative**2)
+        return scale_y * (t_relative**2)
 
     @staticmethod
-    def sigmoid(x_relative, scale_y):
+    def _sigmoid_method(t_relative, scale_y):
         """Calculates y for a sigmoid, with its inflection point at (0,0) in relative coordinates."""
-        # Scale x_relative to get a reasonable sigmoid curve
-        scaled_x = x_relative / 5
-        # Sigmoid function is 1 / (1 + e^(-x)). Subtract 0.5 to center it around 0.
-        return scale_y * (1 / (1 + math.exp(-scaled_x)) - 0.5)
+        scaled_t = t_relative / 5
+        return scale_y * (1 / (1 + math.exp(-scaled_t)) - 0.5)
 
     @staticmethod
-    def sine(x_relative, scale_y):
+    def _sine_method(t_relative, scale_y):
         """Calculates y for a sine wave, with a zero-crossing at (0,0) in relative coordinates."""
-        frequency = 0.5  # Adjust frequency for more or less waves
-        return scale_y * math.sin(frequency * x_relative)
+        frequency = 0.5
+        return scale_y * math.sin(frequency * t_relative)
+
+
+# Pre-defined parametric curve types with their codomain and domain types
+PARAMETRIC_CURVE_TYPES = {
+    "parabola": ParametricCurve(
+        "parabola",
+        ParametricCurve._parabola_method,
+        "Unbounded (Positive)",
+        "All Real Numbers",
+    ),
+    "sigmoid": ParametricCurve(
+        "sigmoid",
+        ParametricCurve._sigmoid_method,
+        "Bounded (0-1 Scaled)",
+        "All Real Numbers",
+    ),
+    "sine": ParametricCurve(
+        "sine",
+        ParametricCurve._sine_method,
+        "Bounded (-1 to 1 Scaled)",
+        "All Real Numbers",
+    ),
+}
 
 
 # --- Seed Position Abstractions ---
@@ -98,12 +127,12 @@ class SeedPosition:
         }
 
     def can_generate_stroke(self):
-        """Determines if this seed type should generate a mathematical stroke."""
+        """Determines if this seed type should generate a parametric curve stroke."""
         raise NotImplementedError("Subclasses must implement this method.")
 
 
 class HairSeed(SeedPosition):
-    """Represents a 'hair' type seed position, generating a mathematical stroke."""
+    """Represents a 'hair' type seed position, generating a parametric curve stroke."""
 
     def __init__(self, row, col):
         super().__init__(row, col, "x", "red", "white")
@@ -114,7 +143,7 @@ class HairSeed(SeedPosition):
 
 
 class FillSeed(SeedPosition):
-    """Represents a 'fill' type seed position, which does not generate a mathematical stroke."""
+    """Represents a 'fill' type seed position, which does not generate a parametric curve stroke."""
 
     def __init__(self, row, col):
         super().__init__(row, col, "x", "black", "lightgray")
@@ -126,18 +155,16 @@ class FillSeed(SeedPosition):
 
 # --- Pixel Art Generation Logic ---
 class PixelArtGenerator:
-    """Manages the generation and rendering of pixel art with dynamic elements."""
+    """Generates and renders pixel art with dynamic elements and provides summaries."""
 
-    def __init__(self, base_matrix_data, hair_spawn_rows, hair_spawn_cols):
+    def __init__(
+        self, base_matrix_data, hair_spawn_rows, hair_spawn_cols, parametric_curve_types
+    ):
         self.base_matrix = np.array(base_matrix_data)
         self.matrix_rows, self.matrix_cols = self.base_matrix.shape
         self.hair_spawn_rows = hair_spawn_rows
         self.hair_spawn_cols = hair_spawn_cols
-        self.available_functions = {
-            "parabola": MathematicalStroke.parabola,
-            "sigmoid": MathematicalStroke.sigmoid,
-            "sine": MathematicalStroke.sine,
-        }
+        self.parametric_curve_types = parametric_curve_types
         self.graph_summaries = []
 
     def _generate_random_rgba_color(self):
@@ -160,37 +187,37 @@ class PixelArtGenerator:
         """Generates the 'fill' seed position at the center of the matrix."""
         return FillSeed(self.matrix_rows // 2, self.matrix_cols // 2)
 
-    def _draw_stroke_on_matrix(
-        self, matrix, func_name, origin_coord, x_span, color_value
+    def _draw_curve_on_matrix(
+        self, matrix, curve_obj, origin_coord, t_span, color_value
     ):
         """
-        Draws a mathematical function stroke on the matrix.
-        The function is calculated relative to (0,0) and then translated to origin_coord.
+        Draws a parametric curve stroke on the matrix.
+        The curve is calculated relative to (0,0) and then translated to origin_coord.
+        't_relative' is used as the parameter for the curve, effectively mapping to x-coordinates.
         """
-        func = self.available_functions[func_name]
+        curve_method = curve_obj.method
         origin_row, origin_col = origin_coord
 
-        # The stroke starts its 0 coordinate (relative x) at the origin_col
-        start_x_relative = 0
-        end_x_relative = x_span - 1
+        t_start_relative = 0
+        t_end_relative = t_span - 1
 
-        # Random scaling for visual variety based on function type
+        # Random scaling for visual variety based on curve type
         scale_y = (
             random.uniform(0.01, 0.05)
-            if func_name == "parabola"
+            if curve_obj.name == "parabola"
             else (
                 random.uniform(5, 15)
-                if func_name == "sigmoid"
+                if curve_obj.name == "sigmoid"
                 else random.uniform(3, 7)
             )
         )  # Sine
 
-        for x_rel in range(start_x_relative, end_x_relative + 1):
-            y_rel = func(x_rel, scale_y)
+        for t_rel in range(t_start_relative, t_end_relative + 1):
+            y_rel = curve_method(t_rel, scale_y)
 
             # Translate relative coordinates to absolute matrix coordinates
             abs_row = int(round(origin_row + y_rel))
-            abs_col = int(round(origin_col + x_rel))
+            abs_col = int(round(origin_col + t_rel))  # t_relative maps to x-coordinate
 
             # Ensure coordinates are within matrix bounds
             if 0 <= abs_row < self.matrix_rows and 0 <= abs_col < self.matrix_cols:
@@ -199,17 +226,17 @@ class PixelArtGenerator:
     def generate_single_graph_data(self, graph_id):
         """
         Generates all data for a single pixel art graph, including seed positions,
-        mathematical strokes, and summary information.
+        parametric curve strokes, and summary information.
         """
         current_matrix = np.copy(self.base_matrix)
 
         # Generate seed positions
-        random.seed(graph_id + 200)  # Consistent seed for hair positions
+        random.seed(graph_id + 200)
         hair_seeds = self._get_random_hair_seeds(min_count=3, max_count=8)
         fill_seed = self._get_center_fill_seed()
 
         all_seeds = hair_seeds + [fill_seed]
-        random.shuffle(all_seeds)  # Randomize order for stroke assignment
+        random.shuffle(all_seeds)
 
         # Prepare plot-specific color map
         plot_specific_colors = BASE_COLORS.tolist()
@@ -218,33 +245,38 @@ class PixelArtGenerator:
         stroke_color_value = len(plot_specific_colors) - 1
         current_cmap = plt.cm.colors.ListedColormap(plot_specific_colors)
 
-        # Choose one random function type for all strokes in this graph
-        random.seed(graph_id + 300)  # Consistent seed for function type and spans
-        chosen_func_type_name = random.choice(list(self.available_functions.keys()))
+        # Choose one random parametric curve type for all strokes in this graph
+        random.seed(graph_id + 300)
+        chosen_curve_obj = random.choice(list(self.parametric_curve_types.values()))
 
-        strokes_drawn_count = 0
-        seed_types_present = set()
+        hair_seed_count = 0
+        fill_seed_count = 0
 
-        # Draw mathematical strokes for eligible seed positions
+        # Draw parametric curve strokes for eligible seed positions
         for seed in all_seeds:
-            seed_types_present.add(seed.type)
+            if seed.type == "hair":
+                hair_seed_count += 1
+            elif seed.type == "fill":
+                fill_seed_count += 1
+
             if seed.can_generate_stroke():
-                self._draw_stroke_on_matrix(
+                self._draw_curve_on_matrix(
                     current_matrix,
-                    chosen_func_type_name,
+                    chosen_curve_obj,
                     seed.get_coordinates(),
-                    x_span=random.randint(10, 25),  # Random span for variety
+                    t_span=random.randint(10, 25),  # t_span for the parametric curve
                     color_value=stroke_color_value,
                 )
-                strokes_drawn_count += 1
 
         # Store summary data for the current graph
         self.graph_summaries.append(
             {
                 "Graph ID": graph_id,
-                "Mathematical Function": chosen_func_type_name.capitalize(),
-                "Seed Types": ", ".join(sorted(list(seed_types_present))),
-                "Number of Strokes": strokes_drawn_count,
+                "Parametric Curve": chosen_curve_obj.name.capitalize(),
+                "Domain Type": chosen_curve_obj.domain_type,
+                "Codomain Type": chosen_curve_obj.codomain_type,
+                "Hair Seeds Count": hair_seed_count,
+                "Fill Seeds Count": fill_seed_count,
             }
         )
 
@@ -263,14 +295,14 @@ class PixelArtGenerator:
         # Print the summary table to the terminal
         headers = [
             "Graph ID",
-            "Mathematical Function",
-            "Seed Types",
-            "Number of Strokes",
+            "Parametric Curve",
+            "Domain Type",
+            "Codomain Type",
+            "Hair Seeds Count",
+            "Fill Seeds Count",
         ]
         table_data = [[s[h] for h in headers] for s in self.graph_summaries]
-        print("\n--- Graph Generation Summary ---\n")
         print(tabulate(table_data, headers=headers, tablefmt="grid"))
-        print("\n--------------------------------\n")
 
         # Now display the plots
         fig, axes = plt.subplots(2, 4, figsize=(20, 10))
@@ -280,7 +312,7 @@ class PixelArtGenerator:
         axes = axes.flatten()
 
         for i, (matrix, cmap, seeds) in enumerate(graph_data_list):
-            graph_id = i + 1  # Re-use graph_id for plotting title
+            graph_id = i + 1
             axes[i].imshow(matrix, cmap=cmap, origin="upper")
             axes[i].set_title(f"Graph ID: {graph_id}")
             axes[i].set_xticks([])
@@ -308,5 +340,7 @@ class PixelArtGenerator:
 
 # --- Main Execution ---
 if __name__ == "__main__":
-    generator = PixelArtGenerator(BASE_MATRIX, HAIR_SPAWN_ROWS, HAIR_SPAWN_COLS)
+    generator = PixelArtGenerator(
+        BASE_MATRIX, HAIR_SPAWN_ROWS, HAIR_SPAWN_COLS, PARAMETRIC_CURVE_TYPES
+    )
     generator.render_graphs(num_graphs=8)
