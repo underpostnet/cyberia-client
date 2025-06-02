@@ -360,7 +360,19 @@ if __name__ == "__main__":
             editor.flood_fill(9, 2, fill_color_id=shoes_color_id)
             editor.flood_fill(15, 2, fill_color_id=shoes_color_id)
         elif args.mode == "skin-default-0":
-            editor.draw_pixel(0, 0, 2)  # Draw red (color ID 2) at (0,0) - bottom-left
+
+            def render_lock_hair(initial_x_pos, initial_y_pos, color):
+                cords = [[0, 0], [-1, 1], [-1, 0]]
+                pointer = [initial_x_pos, initial_y_pos]
+                for cord in cords:
+                    editor.draw_pixel(pointer[0] + cord[0], pointer[1] + cord[1], color)
+                    pointer = [pointer[0] + cord[0], pointer[1] + cord[1]]
+
+            render_lock_hair(9, 21, 2)
+
+            render_lock_hair(11, 23, 3)
+
+            render_lock_hair(16, 21, 4)
 
         # Set subplot limits and labels
         ax.set_xlim(0, MATRIX_WIDTH)
