@@ -28,49 +28,95 @@ MATRIX_HEIGHT, MATRIX_WIDTH = DEFAULT_PLAYER_SKIN_FRAME_DOWN_IDLE.shape
 
 
 # --- Define Parametric Curve Functions ---
-# These functions will be passed to editor.draw_parametric_curve
+# These functions return x and y functions for a given curve type,
+# allowing for flexible positioning and scaling.
 
 
-def get_parabola_funcs(x_offset, y_offset, scale_x, scale_y, a):
-    """Returns x and y functions for a parabola."""
-    x_func = lambda t: x_offset + scale_x * t
-    y_func = lambda t: y_offset + scale_y * a * (t**2)
+def get_parabola_funcs(x_center, y_base, scale_x, scale_y, a):
+    """
+    Returns x and y functions for a parabola.
+    x_center: horizontal position of the parabola's vertex.
+    y_base: vertical position of the parabola's vertex.
+    scale_x, scale_y: scaling factors for the curve's spread.
+    a: controls the opening direction and width of the parabola.
+    """
+    x_func = lambda t: x_center + scale_x * t
+    y_func = lambda t: y_base + scale_y * a * (t**2)
     return x_func, y_func
 
 
-def get_sigmoid_funcs(x_offset, y_offset, scale_x, scale_y, k, x0):
-    """Returns x and y functions for a sigmoid curve."""
-    x_func = lambda t: x_offset + scale_x * t
-    y_func = lambda t: y_offset + scale_y * (1 / (1 + math.exp(-k * (t - x0))))
+def get_sigmoid_funcs(x_center, y_midpoint, scale_x, scale_y, k, x0):
+    """
+    Returns x and y functions for a sigmoid curve.
+    x_center: horizontal position of the sigmoid's center.
+    y_midpoint: vertical position of the sigmoid's midpoint.
+    scale_x, scale_y: scaling factors for the curve's spread.
+    k: steepness of the curve.
+    x0: x-value of the sigmoid's midpoint.
+    """
+    x_func = lambda t: x_center + scale_x * t
+    y_func = lambda t: y_midpoint + scale_y * (1 / (1 + math.exp(-k * (t - x0))))
     return x_func, y_func
 
 
-def get_sine_funcs(x_offset, y_offset, amplitude, frequency):
-    """Returns x and y functions for a sine wave."""
-    x_func = lambda t: x_offset + t
-    y_func = lambda t: y_offset + amplitude * math.sin(frequency * t)
+def get_sine_funcs(x_start, y_axis_offset, amplitude, frequency):
+    """
+    Returns x and y functions for a sine wave.
+    x_start: horizontal starting position of the sine wave.
+    y_axis_offset: vertical offset of the sine wave's central axis.
+    amplitude: height of the wave.
+    frequency: how many cycles in a given range.
+    """
+    x_func = lambda t: x_start + t
+    y_func = lambda t: y_axis_offset + amplitude * math.sin(frequency * t)
     return x_func, y_func
 
 
 def get_linear_funcs(x_start, y_start, x_end, y_end):
-    """Returns x and y functions for a linear curve."""
-    # Linear interpolation between two points
+    """
+    Returns x and y functions for a linear curve (straight line).
+    x_start, y_start: coordinates of the line's starting point.
+    x_end, y_end: coordinates of the line's ending point.
+    """
+    # Linear interpolation between two points using parameter t from 0 to 1
     x_func = lambda t: x_start + t * (x_end - x_start)
     y_func = lambda t: y_start + t * (y_end - y_start)
     return x_func, y_func
 
 
-def get_cubic_funcs(x_offset, y_offset, scale_x, scale_y, a, b, c):
-    """Returns x and y functions for a cubic curve."""
-    x_func = lambda t: x_offset + scale_x * t
-    y_func = lambda t: y_offset + scale_y * (a * (t**3) + b * (t**2) + c * t)
+def get_cubic_funcs(x_center, y_center, scale_x, scale_y, a, b, c):
+    """
+    Returns x and y functions for a cubic curve.
+    x_center, y_center: central position offsets for the cubic curve.
+    scale_x, scale_y: scaling factors for the curve's spread.
+    a, b, c: coefficients of the cubic polynomial.
+    """
+    x_func = lambda t: x_center + scale_x * t
+    y_func = lambda t: y_center + scale_y * (a * (t**3) + b * (t**2) + c * t)
     return x_func, y_func
 
 
 def get_circle_arc_funcs(center_x, center_y, radius, start_angle, end_angle):
-    """Returns x and y functions for a circular arc."""
+    """
+    Returns x and y functions for a circular arc.
+    center_x, center_y: coordinates of the center of the circle.
+    radius: radius of the arc.
+    start_angle, end_angle: angular range for the arc in radians.
+    """
     x_func = lambda t: center_x + radius * math.cos(t)
     y_func = lambda t: center_y + radius * math.sin(t)
+    return x_func, y_func
+
+
+def get_spiral_funcs(center_x, center_y, radius_growth_rate, angular_speed):
+    """
+    Returns x and y functions for a spiral curve.
+    center_x, center_y: coordinates of the spiral's origin.
+    radius_growth_rate: how quickly the spiral expands.
+    angular_speed: how quickly the spiral rotates.
+    """
+    x_func = lambda t: center_x + (radius_growth_rate * t) * math.cos(angular_speed * t)
+    y_func = lambda t: center_y + (radius_growth_rate * t) * math.sin(angular_speed * t)
     return x_func, y_func
 
 
@@ -101,14 +147,17 @@ for i, ax in enumerate(axes):
 
     # --- Add 2 random rectangles ---
     for _ in range(2):
-        rect_x = random.randint(0, MATRIX_WIDTH - 5)
-        rect_y = random.randint(0, MATRIX_HEIGHT - 5)
+        # Position variables for rectangle
+        rect_start_x = random.randint(0, MATRIX_WIDTH - 5)
+        rect_start_y = random.randint(0, MATRIX_HEIGHT - 5)
         rect_width = random.randint(3, 8)
         rect_height = random.randint(3, 8)
         rect_color = random.choice(
             [2, 3, 4, 5, 6, 7]
         )  # Random color excluding white/black
-        editor.draw_rectangle(rect_y, rect_x, rect_width, rect_height, rect_color)
+        editor.draw_rectangle(
+            rect_start_y, rect_start_x, rect_width, rect_height, rect_color
+        )
 
     # --- Add 2 random parametric curves ---
     curve_types = [
@@ -127,85 +176,98 @@ for i, ax in enumerate(axes):
         curve_type = random.choice(curve_types)
 
         if curve_type == "parabola":
-            x_offset = random.uniform(0, MATRIX_WIDTH / 4)
-            y_offset = random.uniform(0, MATRIX_HEIGHT / 4)
-            scale_x = random.uniform(5, 15) / MATRIX_WIDTH
-            scale_y = random.uniform(5, 15) / MATRIX_HEIGHT
-            a = random.uniform(-2, 2)
-            x_func, y_func = get_parabola_funcs(x_offset, y_offset, scale_x, scale_y, a)
+            # Position variables for parabola
+            parabola_center_x = random.uniform(0, MATRIX_WIDTH)
+            parabola_base_y = random.uniform(0, MATRIX_HEIGHT)
+            scale_x = random.uniform(5, 15)
+            scale_y = random.uniform(5, 15)
+            a = random.uniform(-0.5, 0.5)  # Controls opening direction and width
+            x_func, y_func = get_parabola_funcs(
+                parabola_center_x, parabola_base_y, scale_x, scale_y, a
+            )
             t_start = -1.0
             t_end = 1.0
 
         elif curve_type == "sigmoid":
-            x_offset = random.uniform(0, MATRIX_WIDTH / 4)
-            y_offset = random.uniform(0, MATRIX_HEIGHT / 4)
-            scale_x = random.uniform(5, 15) / MATRIX_WIDTH
+            # Position variables for sigmoid
+            sigmoid_center_x = random.uniform(0, MATRIX_WIDTH)
+            sigmoid_midpoint_y = random.uniform(0, MATRIX_HEIGHT)
+            scale_x = random.uniform(5, 15)
             scale_y = random.uniform(5, 15)
-            k = random.uniform(0.5, 5.0)
-            x0 = random.uniform(-0.5, 0.5)
+            k = random.uniform(0.5, 5.0)  # Steepness
+            x0 = random.uniform(-0.5, 0.5)  # x-value of midpoint
             x_func, y_func = get_sigmoid_funcs(
-                x_offset, y_offset, scale_x, scale_y, k, x0
+                sigmoid_center_x, sigmoid_midpoint_y, scale_x, scale_y, k, x0
             )
             t_start = -5.0
             t_end = 5.0
 
         elif curve_type == "sine":
-            x_offset = random.uniform(0, MATRIX_WIDTH / 2)
-            y_offset = random.uniform(0, MATRIX_HEIGHT)
+            # Position variables for sine wave
+            sine_start_x = random.uniform(0, MATRIX_WIDTH / 2)
+            sine_y_axis_offset = random.uniform(0, MATRIX_HEIGHT)
             amplitude = random.uniform(3, 10)
             frequency = random.uniform(0.5, 3.0)
-            x_func, y_func = get_sine_funcs(x_offset, y_offset, amplitude, frequency)
+            x_func, y_func = get_sine_funcs(
+                sine_start_x, sine_y_axis_offset, amplitude, frequency
+            )
             t_start = 0
             t_end = random.uniform(
                 MATRIX_WIDTH / 2, MATRIX_WIDTH
             )  # Spread horizontally
 
         elif curve_type == "linear":
-            x1 = random.uniform(0, MATRIX_WIDTH)
-            y1 = random.uniform(0, MATRIX_HEIGHT)
-            x2 = random.uniform(0, MATRIX_WIDTH)
-            y2 = random.uniform(0, MATRIX_HEIGHT)
-            x_func, y_func = get_linear_funcs(x1, y1, x2, y2)
+            # Position variables for linear curve
+            line_start_x = random.uniform(0, MATRIX_WIDTH)
+            line_start_y = random.uniform(0, MATRIX_HEIGHT)
+            line_end_x = random.uniform(0, MATRIX_WIDTH)
+            line_end_y = random.uniform(0, MATRIX_HEIGHT)
+            x_func, y_func = get_linear_funcs(
+                line_start_x, line_start_y, line_end_x, line_end_y
+            )
             t_start = 0.0
             t_end = 1.0  # t goes from 0 to 1 for linear interpolation
 
         elif curve_type == "cubic":
-            x_offset = random.uniform(0, MATRIX_WIDTH / 4)
-            y_offset = random.uniform(0, MATRIX_HEIGHT / 4)
-            scale_x = random.uniform(5, 15) / MATRIX_WIDTH
-            scale_y = random.uniform(5, 15) / MATRIX_HEIGHT
-            a = random.uniform(-1, 1)
-            b = random.uniform(-1, 1)
-            c = random.uniform(-1, 1)
+            # Position variables for cubic curve
+            cubic_center_x = random.uniform(0, MATRIX_WIDTH)
+            cubic_center_y = random.uniform(0, MATRIX_HEIGHT)
+            scale_x = random.uniform(5, 15)
+            scale_y = random.uniform(5, 15)
+            a = random.uniform(-0.1, 0.1)  # Coefficients for curve shape
+            b = random.uniform(-0.5, 0.5)
+            c = random.uniform(-0.5, 0.5)
             x_func, y_func = get_cubic_funcs(
-                x_offset, y_offset, scale_x, scale_y, a, b, c
+                cubic_center_x, cubic_center_y, scale_x, scale_y, a, b, c
             )
             t_start = -1.0
             t_end = 1.0
 
         elif curve_type == "circle_arc":
-            center_x = random.uniform(5, MATRIX_WIDTH - 5)
-            center_y = random.uniform(5, MATRIX_HEIGHT - 5)
+            # Position variables for circle arc
+            arc_center_x = random.uniform(5, MATRIX_WIDTH - 5)
+            arc_center_y = random.uniform(5, MATRIX_HEIGHT - 5)
             radius = random.uniform(5, min(MATRIX_WIDTH, MATRIX_HEIGHT) / 2 - 2)
             start_angle = random.uniform(0, 2 * math.pi)
             end_angle = start_angle + random.uniform(
                 math.pi / 4, 1.5 * math.pi
             )  # Arc length
             x_func, y_func = get_circle_arc_funcs(
-                center_x, center_y, radius, start_angle, end_angle
+                arc_center_x, arc_center_y, radius, start_angle, end_angle
             )
             t_start = start_angle
             t_end = end_angle
 
         elif curve_type == "spiral":
-            center_x = random.uniform(5, MATRIX_WIDTH - 5)
-            center_y = random.uniform(5, MATRIX_HEIGHT - 5)
-            radius_growth = random.uniform(0.5, 2.0)
+            # Position variables for spiral
+            spiral_center_x = random.uniform(5, MATRIX_WIDTH - 5)
+            spiral_center_y = random.uniform(5, MATRIX_HEIGHT - 5)
+            radius_growth_rate = random.uniform(0.5, 2.0)
             angular_speed = random.uniform(1.0, 3.0)
-            x_func = lambda t: center_x + (radius_growth * t) * math.cos(
+            x_func = lambda t: spiral_center_x + (radius_growth_rate * t) * math.cos(
                 angular_speed * t
             )
-            y_func = lambda t: center_y + (radius_growth * t) * math.sin(
+            y_func = lambda t: spiral_center_y + (radius_growth_rate * t) * math.sin(
                 angular_speed * t
             )
             t_start = 0
