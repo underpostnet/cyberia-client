@@ -21,7 +21,7 @@ COLOR_PALETTE = {
     5: (255, 255, 0, 255),  # Yellow (R, G, B, Alpha)
     6: (255, 0, 255, 255),  # Magenta (R, G, B, Alpha)
     7: (0, 255, 255, 255),  # Cyan (R, G, B, Alpha)
-    8: (128, 0, 128, 255),  # Purple (for "bad areas")
+    8: (128, 0, 128, 255),  # Purple (R, G, B, Alpha)
 }
 
 # Get the dimensions of the default matrix for boundary checks
@@ -160,50 +160,56 @@ for i, ax in enumerate(axes):
             rect_start_y, rect_start_x, rect_width, rect_height, rect_color
         )
 
-    # --- Define and Render "Bad Areas" (e.g., for hair positions) ---
+    # --- Define and Render "Draw Areas" (e.g., for draw positions) ---
     # This area will be highlighted with a specific color (e.g., Purple, color ID 8)
     # The area is defined by two (x,y) coordinates.
-    # For simulating "AI up", we define a region where hair might be.
-    hair_area_x1, hair_area_y1 = 5, 0  # Top-left corner of the hair area
-    hair_area_x2, hair_area_y2 = 20, 5  # Bottom-right corner of the hair area
+    # For simulating "AI up", we define a region where draw might be.
+    draw_area_x1, draw_area_y1 = 7, 3  # Top-left corner of the draw area
+    draw_area_x2, draw_area_y2 = 18, 6  # Bottom-right corner of the draw area
 
     # Get all coordinates within this defined "bad area"
-    seed_hair_positions = editor.get_coordinates_in_area(
-        hair_area_x1, hair_area_y1, hair_area_x2, hair_area_y2
+    seed_draw_positions = editor.get_coordinates_in_area(
+        draw_area_x1, draw_area_y1, draw_area_x2, draw_area_y2
     )
 
     # Draw the "bad area" with a distinct color (Purple, color ID 8)
-    # This visualizes the region where the AI might focus its "hair" drawing.
-    for r_coord, c_coord in seed_hair_positions:
+    # This visualizes the region where the AI might focus its "draw" drawing.
+    for r_coord, c_coord in seed_draw_positions:
         editor.draw_pixel(r_coord, c_coord, 8)  # Using color ID 8 for purple
 
-    # --- Add 2 random parametric curves, with one potentially starting from a "bad area" ---
-    curve_types = [
-        "parabola",
-        "sigmoid",
-        "sine",
-        "linear",
-        "cubic",
-        "circle_arc",
-        "spiral",
+        # "parabola",
+        # "sigmoid",
+        # "sine",
+        # "linear",
+        # "cubic",
+        # "circle_arc",
+        # "spiral",
+
+    draw_curves = [
+        {
+            "curve_color": random.choice([2, 3, 4, 5, 6, 7]),  # Random color
+            "num_points": random.randint(50, 200),
+            "curve_type": "parabola",
+            "initial_x_pos": random.uniform(0, MATRIX_WIDTH),
+            "initial_y_pos": random.uniform(0, MATRIX_HEIGHT),
+        }
     ]
-    for curve_num in range(0):  # Loop for 2 curves per graph
-        curve_color = random.choice([2, 3, 4, 5, 6, 7])  # Random color
-        num_points = random.randint(50, 200)
+    for curve_num in range(0, len(draw_curves)):
+        curve_color = draw_curves[curve_num]["curve_color"]
+        num_points = draw_curves[curve_num]["num_points"]
+        curve_type = draw_curves[curve_num]["curve_type"]
 
-        curve_type = random.choice(curve_types)
-
-        # For the first curve, try to start it from a "seed hair position"
-        if curve_num == 0 and seed_hair_positions:
+        # For the first curve, try to start it from a "seed draw position"
+        if curve_num == 0 and seed_draw_positions:
             # Randomly select a coordinate from the "bad area" for the curve's starting point/center
-            chosen_seed_coord = random.choice(seed_hair_positions)
+            chosen_seed_coord = random.choice(seed_draw_positions)
             # Remember: get_coordinates_in_area returns (row, col), so map to (x, y) for functions
             initial_x_pos = chosen_seed_coord[1]  # col_idx for x
             initial_y_pos = chosen_seed_coord[0]  # row_idx for y
         else:
             # For other curves, or if no seed positions, use random positions
-            initial_x_pos = random.uniform(0, MATRIX_WIDTH)
-            initial_y_pos = random.uniform(0, MATRIX_HEIGHT)
+            initial_x_pos = draw_curves[curve_num]["initial_x_pos"]
+            initial_y_pos = draw_curves[curve_num]["initial_y_pos"]
 
         if curve_type == "parabola":
             # Position variables for parabola
