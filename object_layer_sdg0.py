@@ -22,6 +22,11 @@ COLOR_PALETTE = {
     6: (255, 0, 255, 255),  # Magenta (R, G, B, Alpha)
     7: (0, 255, 255, 255),  # Cyan (R, G, B, Alpha)
     8: (128, 0, 128, 255),  # Purple (R, G, B, Alpha)
+    9: (255, 224, 189, 225),  # Light Skin
+    10: (240, 192, 150, 225),  # Medium-Light Skin
+    11: (218, 166, 126, 225),  # Medium Skin
+    12: (186, 128, 92, 225),  # Medium-Dark Skin
+    13: (139, 69, 19, 225),  # Dark Skin
 }
 
 # Get the dimensions of the default matrix for boundary checks
@@ -31,6 +36,7 @@ MATRIX_HEIGHT, MATRIX_WIDTH = DEFAULT_PLAYER_SKIN_FRAME_DOWN_IDLE.shape
 # --- Define Parametric Curve Functions ---
 # These functions return x and y functions for a given curve type,
 # allowing for flexible positioning and scaling.
+# These functions now return (x, y) coordinates where (0,0) is bottom-left.
 
 
 def get_parabola_funcs(x_center, y_base, scale_x, scale_y, a):
@@ -133,13 +139,13 @@ for i, ax in enumerate(axes):
     # This ensures each subplot starts with the original silhouette and independent drawings.
     editor = PixelArtEditor(DEFAULT_PLAYER_SKIN_FRAME_DOWN_IDLE.copy(), COLOR_PALETTE)
 
-    # --- Demonstrate Drawing by directly overwriting pixels (from previous request) ---
+    # --- Demonstrate Drawing by directly overwriting pixels ---
     # Example drawing operation: Draw a red pixel on the silhouette (border)
-    # editor.draw_pixel(0, 0, 2)  # Draw red (color ID 2) at (0,0)
-    # Draw more red pixels to create a visible pattern
-    # editor.draw_pixel(0, 1, 2)
-    # editor.draw_pixel(1, 0, 2)
-    # editor.draw_pixel(1, 1, 2)
+    # The draw_pixel now expects (x, y) where (0,0) is bottom-left
+    editor.draw_pixel(0, 0, 2)  # Draw red (color ID 2) at (0,0) - bottom-left
+    # editor.draw_pixel(1, 0, 2)  # Draw red (color ID 2) at (1,0)
+    # editor.draw_pixel(0, 1, 2)  # Draw red (color ID 2) at (0,1)
+    # editor.draw_pixel(1, 1, 2)  # Draw red (color ID 2) at (1,1)
 
     # Add your requested green pixel draws *after* the previous operations
     # editor.draw_pixel(11, 11, 3)  # Draw green (color ID 3)
@@ -147,8 +153,8 @@ for i, ax in enumerate(axes):
     # editor.draw_pixel(13, 13, 3)  # Draw green (color ID 3)
 
     # --- Add 2 random rectangles ---
-    for _ in range(0):
-        # Position variables for rectangle
+    for _ in range(0):  # Set to 0 for now as per original code
+        # Position variables for rectangle (using x, y for bottom-left)
         rect_start_x = random.randint(0, MATRIX_WIDTH - 5)
         rect_start_y = random.randint(0, MATRIX_HEIGHT - 5)
         rect_width = random.randint(3, 8)
@@ -157,15 +163,15 @@ for i, ax in enumerate(axes):
             [2, 3, 4, 5, 6, 7]
         )  # Random color excluding white/black
         editor.draw_rectangle(
-            rect_start_y, rect_start_x, rect_width, rect_height, rect_color
+            rect_start_x, rect_start_y, rect_width, rect_height, rect_color
         )
 
     # --- Define and Render "Draw Areas" (e.g., for draw positions) ---
     # This area will be highlighted with a specific color (e.g., Purple, color ID 8)
     # The area is defined by two (x,y) coordinates.
     # For simulating "AI up", we define a region where draw might be.
-    draw_area_x1, draw_area_y1 = 7, 3  # Top-left corner of the draw area
-    draw_area_x2, draw_area_y2 = 18, 6  # Bottom-right corner of the draw area
+    draw_area_x1, draw_area_y1 = 6, 23  # Bottom-left corner of the draw area
+    draw_area_x2, draw_area_y2 = 19, 18  # Top-right corner of the draw area
 
     # Get all coordinates within this defined "bad area"
     seed_draw_positions = editor.get_coordinates_in_area(
@@ -174,38 +180,35 @@ for i, ax in enumerate(axes):
 
     # Draw the "bad area" with a distinct color (Purple, color ID 8)
     # This visualizes the region where the AI might focus its "draw" drawing.
-    for r_coord, c_coord in seed_draw_positions:
-        editor.draw_pixel(r_coord, c_coord, 8)  # Using color ID 8 for purple
+    # for x_coord, y_coord in seed_draw_positions:
+    #     editor.draw_pixel(x_coord, y_coord, 8)  # Using color ID 8 for purple
 
-        # "parabola",
-        # "sigmoid",
-        # "sine",
-        # "linear",
-        # "cubic",
-        # "circle_arc",
-        # "spiral",
+    draw_curves = []
+    draw_hair_color = random.choice([2, 3, 4, 5, 6, 7])
 
-    draw_curves = [
-        {
-            "curve_color": random.choice([2, 3, 4, 5, 6, 7]),  # Random color
-            "num_points": random.randint(50, 200),
-            "curve_type": "parabola",
-            "initial_x_pos": random.uniform(0, MATRIX_WIDTH),
-            "initial_y_pos": random.uniform(0, MATRIX_HEIGHT),
-        }
-    ]
-    for curve_num in range(0, len(draw_curves)):
+    for _ in range(20):
+        draw_curves.append(
+            {
+                "curve_color": draw_hair_color,  # Random color
+                "num_points": random.randint(50, 50),
+                "curve_type": "parabola",
+                "initial_x_pos": random.uniform(0, MATRIX_WIDTH),
+                "initial_y_pos": random.uniform(0, MATRIX_HEIGHT),
+            }
+        )
+
+    for curve_num in range(len(draw_curves)):
         curve_color = draw_curves[curve_num]["curve_color"]
         num_points = draw_curves[curve_num]["num_points"]
         curve_type = draw_curves[curve_num]["curve_type"]
 
         # For the first curve, try to start it from a "seed draw position"
-        if curve_num == 0 and seed_draw_positions:
+        if True or curve_num == 0 and seed_draw_positions:
             # Randomly select a coordinate from the "bad area" for the curve's starting point/center
             chosen_seed_coord = random.choice(seed_draw_positions)
-            # Remember: get_coordinates_in_area returns (row, col), so map to (x, y) for functions
-            initial_x_pos = chosen_seed_coord[1]  # col_idx for x
-            initial_y_pos = chosen_seed_coord[0]  # row_idx for y
+            # seed_draw_positions returns (x, y)
+            initial_x_pos = chosen_seed_coord[0]
+            initial_y_pos = chosen_seed_coord[1]
         else:
             # For other curves, or if no seed positions, use random positions
             initial_x_pos = draw_curves[curve_num]["initial_x_pos"]
@@ -317,9 +320,19 @@ for i, ax in enumerate(axes):
 
     # --- Demonstrate the new flood_fill method ---
     # Apply flood fill only to the first graph for clear demonstration
-    # if i == 0:
-    #     # Find a non-white pixel to start the flood fill, if possible
-    #     editor.flood_fill(1, 1, fill_color_id=5)
+    skin_color_id = random.choice(list(range(9, 14)))
+
+    editor.flood_fill(12, 12, fill_color_id=skin_color_id)
+    editor.flood_fill(7, 4, fill_color_id=skin_color_id)
+    editor.flood_fill(18, 4, fill_color_id=skin_color_id)
+
+    editor.flood_fill(13, 7, fill_color_id=random.choice(list(range(2, 9))))
+
+    editor.flood_fill(12, 4, fill_color_id=random.choice(list(range(2, 9))))
+
+    shoes_color_id = random.choice(list(range(2, 9)))
+    editor.flood_fill(9, 2, fill_color_id=shoes_color_id)
+    editor.flood_fill(15, 2, fill_color_id=shoes_color_id)
 
     # Set subplot limits and labels
     ax.set_xlim(0, MATRIX_WIDTH)
@@ -330,6 +343,8 @@ for i, ax in enumerate(axes):
     ax.set_title(f"Pixel Art {i+1}")  # Add a title for each subplot
 
     # Iterate over the matrix to draw each pixel as a colored square
+    # The matrix now stores data as if (0,0) is top-left, but we plot it
+    # as if (0,0) is bottom-left. So, the plotting logic needs to invert Y.
     for row_idx in range(MATRIX_HEIGHT):
         for col_idx in range(MATRIX_WIDTH):
             pixel_value = editor.matrix[row_idx, col_idx]
@@ -337,6 +352,7 @@ for i, ax in enumerate(axes):
 
             # Calculate the coordinates for the current pixel's square
             # Invert y-coordinate for drawing to match matrix (0 at top) to plot (0 at bottom)
+            # This is the crucial part that aligns the matrix data with Matplotlib's y-axis.
             square_y_bottom = MATRIX_HEIGHT - 1 - row_idx
             square_x_left = col_idx
 

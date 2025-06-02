@@ -55,47 +55,67 @@ class PixelArtEditor:
         )  # Default to transparent black
         return self.rgba_to_mpl_color(*rgba_255)
 
-    def draw_pixel(self, row_idx, col_idx, color_id):
+    def _convert_xy_to_rowcol(self, x, y):
+        """
+        Converts (x, y) coordinates (where (0,0) is bottom-left) to
+        (row_idx, col_idx) for the internal matrix (where (0,0) is top-left).
+        Also clamps coordinates to be within matrix bounds.
+        """
+        matrix_height, matrix_width = self.matrix.shape
+
+        # Invert y to get row_idx (0 at top)
+        row_idx = matrix_height - 1 - y
+        col_idx = x
+
+        # Clamp coordinates to ensure they are within the matrix bounds
+        clamped_row_idx = max(0, min(row_idx, matrix_height - 1))
+        clamped_col_idx = max(0, min(col_idx, matrix_width - 1))
+        return clamped_row_idx, clamped_col_idx
+
+    def draw_pixel(self, x, y, color_id):
         """
         Draws a single pixel on the matrix with the specified color ID.
-        This method directly overwrites the pixel at the given coordinates.
+        This method directly overwrites the pixel at the given (x, y) coordinates,
+        where (0,0) is considered the bottom-left of the pixel art.
 
         Args:
-            row_idx (int): The row index of the pixel.
-            col_idx (int): The column index of the pixel.
+            x (int): The x-coordinate (column) of the pixel.
+            y (int): The y-coordinate (row) of the pixel.
             color_id (int): The integer ID of the color to draw.
         """
-        # Ensure coordinates are within bounds before drawing
-        if 0 <= row_idx < self.matrix.shape[0] and 0 <= col_idx < self.matrix.shape[1]:
-            self.matrix[row_idx, col_idx] = color_id
-            self.last_draw_color_id = color_id
-        # else:
-        # print(f"Warning: Attempted to draw outside matrix bounds at ({row_idx}, {col_idx})")
+        row_idx, col_idx = self._convert_xy_to_rowcol(x, y)
+        self.matrix[row_idx, col_idx] = color_id
+        self.last_draw_color_id = color_id
 
-    def draw_rectangle(self, start_row, start_col, width, height, color_id):
+    def draw_rectangle(self, start_x, start_y, width, height, color_id):
         """
         Draws a filled rectangle on the matrix.
+        The rectangle is defined by its bottom-left corner (start_x, start_y),
+        width, and height.
 
         Args:
-            start_row (int): The starting row (top-left corner) of the rectangle.
-            start_col (int): The starting column (top-left corner) of the rectangle.
+            start_x (int): The starting x-coordinate (bottom-left corner) of the rectangle.
+            start_y (int): The starting y-coordinate (bottom-left corner) of the rectangle.
             width (int): The width of the rectangle.
             height (int): The height of the rectangle.
             color_id (int): The integer ID of the color to draw the rectangle with.
         """
-        end_row = start_row + height
-        end_col = start_col + width
+        # Calculate the top-right corner in (x,y) coordinates
+        end_x = start_x + width
+        end_y = start_y + height
 
         # Iterate over the rectangle's area and draw each pixel
-        for r in range(start_row, end_row):
-            for c in range(start_col, end_col):
-                self.draw_pixel(r, c, color_id)
+        # We iterate over x from start_x to end_x-1, and y from start_y to end_y-1
+        for x in range(start_x, end_x):
+            for y in range(start_y, end_y):
+                self.draw_pixel(x, y, color_id)
 
     def draw_parametric_curve(
         self, x_func, y_func, t_start, t_end, num_points, color_id
     ):
         """
         Draws a parametric curve by plotting individual pixels.
+        The x_func and y_func should return coordinates where (0,0) is bottom-left.
 
         Args:
             x_func (callable): A function that returns the x-coordinate for a given parameter t.
@@ -108,20 +128,21 @@ class PixelArtEditor:
         t_values = np.linspace(t_start, t_end, num_points)
 
         for t in t_values:
-            # Calculate floating point coordinates
+            # Calculate floating point coordinates (x, y) where (0,0) is bottom-left
             x_float = x_func(t)
             y_float = y_func(t)
 
-            # Convert to integer pixel coordinates, clamping to matrix bounds
-            col_idx = int(round(x_float))
-            row_idx = int(round(y_float))
+            # Convert to integer pixel coordinates
+            x_int = int(round(x_float))
+            y_int = int(round(y_float))
 
-            self.draw_pixel(row_idx, col_idx, color_id)
+            self.draw_pixel(x_int, y_int, color_id)
 
     def get_coordinates_in_area(self, x1, y1, x2, y2):
         """
-        Returns a list of all integer (row, column) coordinates within a rectangular area
-        defined by two (x,y) input coordinates. The coordinates are clamped to the matrix bounds.
+        Returns a list of all integer (x, y) coordinates within a rectangular area
+        defined by two (x,y) input coordinates (where (0,0) is bottom-left).
+        The coordinates are clamped to the matrix bounds.
 
         Args:
             x1 (int): X-coordinate of the first point.
@@ -130,7 +151,7 @@ class PixelArtEditor:
             y2 (int): Y-coordinate of the second point.
 
         Returns:
-            list: A list of (row_idx, col_idx) tuples representing all integer coordinates
+            list: A list of (x, y) tuples representing all integer coordinates
                   within the specified area and clamped to the matrix boundaries.
         """
         # Determine the min and max x and y values to define the bounding box
@@ -143,34 +164,39 @@ class PixelArtEditor:
         matrix_height, matrix_width = self.matrix.shape
 
         # Iterate through the bounding box, clamping to matrix limits
-        for r in range(min_y, max_y + 1):
-            for c in range(min_x, max_x + 1):
-                # Clamp coordinates to ensure they are within the matrix bounds
-                clamped_r = max(0, min(r, matrix_height - 1))
-                clamped_c = max(0, min(c, matrix_width - 1))
-                coordinates.append((clamped_r, clamped_c))
+        for y in range(min_y, max_y + 1):
+            for x in range(min_x, max_x + 1):
+                # Clamp (x,y) coordinates to ensure they are within the plotting area
+                clamped_x = max(0, min(x, matrix_width - 1))
+                clamped_y = max(0, min(y, matrix_height - 1))
+                coordinates.append((clamped_x, clamped_y))
 
         # Using a set for uniqueness and then converting back to a list
         return list(set(coordinates))
 
-    def flood_fill(self, start_row, start_col, fill_color_id=0):
+    def flood_fill(self, start_x, start_y, fill_color_id=0):
         """
-        Performs a flood fill operation starting from a given coordinate.
+        Performs a flood fill operation starting from a given (x, y) coordinate
+        (where (0,0) is bottom-left).
         Changes the color of adjacent pixels to 'fill_color_id' (defaulting to 0/white)
         if their original color matches the starting pixel's color, until a different
         color value is found.
 
         Args:
-            start_row (int): The starting row for the flood fill.
-            start_col (int): The starting column for the flood fill.
+            start_x (int): The starting x-coordinate for the flood fill.
+            start_y (int): The starting y-coordinate for the flood fill.
             fill_color_id (int): The color ID to fill with. Defaults to 0 (white).
         """
+        # Convert start_x, start_y to internal matrix row_idx, col_idx
+        start_row, start_col = self._convert_xy_to_rowcol(start_x, start_y)
+
+        # Check bounds for the internal matrix coordinates
         if not (
             0 <= start_row < self.matrix.shape[0]
             and 0 <= start_col < self.matrix.shape[1]
         ):
             print(
-                f"Error: Start coordinates ({start_row}, {start_col}) are out of bounds for flood fill."
+                f"Error: Start coordinates ({start_x}, {start_y}) are out of bounds for flood fill."
             )
             return
 
@@ -190,7 +216,7 @@ class PixelArtEditor:
             # Change the color of the current pixel to the specified fill_color_id
             self.matrix[r, c] = fill_color_id
 
-            # Define neighbors (up, down, left, right)
+            # Define neighbors (up, down, left, right) in matrix coordinates
             neighbors = [(r + 1, c), (r - 1, c), (r, c + 1), (r, c - 1)]
 
             for nr, nc in neighbors:
@@ -205,5 +231,5 @@ class PixelArtEditor:
                     visited.add((nr, nc))
 
         print(
-            f"Flood fill completed from ({start_row}, {start_col}) with color ID {fill_color_id}."
+            f"Flood fill completed from ({start_x}, {start_y}) with color ID {fill_color_id}."
         )
