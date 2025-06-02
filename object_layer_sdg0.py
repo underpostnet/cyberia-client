@@ -1,21 +1,14 @@
 import matplotlib.pyplot as plt
 import numpy as np
 import random
+from pixel_art_editor import PixelArtEditor  # Import the new class
 
+# Import the default player skin frame. This is the authoritative matrix.
 from object_layer.object_layer_data import DEFAULT_PLAYER_SKIN_FRAME_DOWN_IDLE
-
-# Convert the imported list to a NumPy array
-DEFAULT_PLAYER_SKIN_FRAME_DOWN_IDLE = np.array(DEFAULT_PLAYER_SKIN_FRAME_DOWN_IDLE)
-
-
-# Function to convert RGBA (0-255) to Matplotlib's RGBA (0-1)
-def rgba_to_mpl_color(r, g, b, a):
-    """Converts RGBA color values from 0-255 range to 0-1 range."""
-    return (r / 255.0, g / 255.0, b / 255.0, a / 255.0)
 
 
 # Define the color mapping for 0 (white) and 1 (black) in RGBA (0-255) format
-map_color = {
+COLOR_PALETTE = {
     0: (255, 255, 255, 255),  # White (R, G, B, Alpha)
     1: (0, 0, 0, 255),  # Black (R, G, B, Alpha)
     2: (255, 0, 0, 255),  # Red (R, G, B, Alpha)
@@ -26,17 +19,35 @@ map_color = {
     7: (0, 255, 255, 255),  # Cyan (R, G, B, Alpha)
 }
 
-draw = [[1, 1, 2], [2, 2, 2]]
+# Initialize the PixelArtEditor with the authoritative DEFAULT_PLAYER_SKIN_FRAME_DOWN_IDLE
+# We use .copy() to ensure the editor works on its own instance of the matrix,
+# preventing unintended modifications to the original imported array if it were mutable.
+editor = PixelArtEditor(DEFAULT_PLAYER_SKIN_FRAME_DOWN_IDLE.copy(), COLOR_PALETTE)
 
-# Get the dimensions of the pixel art matrix
-MATRIX_HEIGHT, MATRIX_WIDTH = DEFAULT_PLAYER_SKIN_FRAME_DOWN_IDLE.shape
+
+# --- Demonstrate Drawing by directly overwriting pixels ---
+
+# Example drawing operation: Draw a red pixel on the silhouette (border)
+editor.draw_pixel(0, 0, 2)  # Draw red (color ID 2) at (0,0)
+print(f"Last drawn color ID after red draw: {editor.last_draw_color_id} (Red)")
+
+# Draw more red pixels to create a visible pattern
+editor.draw_pixel(0, 1, 2)
+editor.draw_pixel(1, 0, 2)
+editor.draw_pixel(1, 1, 2)
+
+
+# Add your requested green pixel draws *after* the previous operations
+editor.draw_pixel(11, 11, 3)  # Draw green (color ID 3)
+editor.draw_pixel(12, 12, 3)  # Draw green (color ID 3)
+editor.draw_pixel(13, 13, 3)  # Draw green (color ID 3)
+print(f"Last drawn color ID after green draws: {editor.last_draw_color_id} (Green)")
+
+
+# Get the dimensions of the pixel art matrix after all operations
+MATRIX_HEIGHT, MATRIX_WIDTH = editor.matrix.shape
 
 # Create a figure and a 2x4 grid of subplots
-# figsize is set to a larger value to ensure each 26x26 grid is clearly visible.
-# dpi is set to 100, meaning 100 pixels per inch.
-# With figsize=(26, 13) and dpi=100, each subplot (approx 6.5x6.5 inches)
-# will be rendered at roughly 650x650 pixels, making each of the 26x26 cells
-# about 25x25 screen pixels, ensuring high visibility.
 fig, axes = plt.subplots(2, 4, figsize=(26, 13), dpi=100)
 
 # Flatten the axes array for easy iteration
@@ -44,43 +55,24 @@ axes = axes.flatten()
 
 # Configure each subplot to display the pixel art on a 26x26 grid
 for i, ax in enumerate(axes):
-    # Set the limits for the x and y axes to define the 26x26 area
-    # These limits define the coordinate system for drawing the squares.
     ax.set_xlim(0, MATRIX_WIDTH)
     ax.set_ylim(0, MATRIX_HEIGHT)
-
-    # Set axis labels to indicate pixel units
     ax.set_xlabel("Pixel X")
     ax.set_ylabel("Pixel Y")
-
-    # Ensure the aspect ratio is equal, so each "pixel" cell is square
     ax.set_aspect("equal", adjustable="box")
+    ax.set_title(f"Pixel Art {i+1}")  # Add a title for each subplot
 
-    # Iterate over the matrix to draw each pixel as a colored square using ax.fill
+    # Iterate over the matrix to draw each pixel as a colored square
     for row_idx in range(MATRIX_HEIGHT):
         for col_idx in range(MATRIX_WIDTH):
-            pixel_value = DEFAULT_PLAYER_SKIN_FRAME_DOWN_IDLE[row_idx, col_idx]
-
-            # Get the RGBA (0-255) color from the map
-            rgba_255 = map_color[pixel_value]
-
-            # Convert to Matplotlib's RGBA (0-1) format
-            color = rgba_to_mpl_color(*rgba_255)
-
-            for draw_data in draw:
-                if draw_data[0] == row_idx and draw_data[1] == col_idx:
-                    color = rgba_to_mpl_color(*map_color[draw_data[2]])
+            pixel_value = editor.matrix[row_idx, col_idx]
+            color = editor.get_mpl_color(pixel_value)
 
             # Calculate the coordinates for the current pixel's square
-            # (x, y) specifies the bottom-left corner of the square.
-            # To render rows correctly (0 at top, 25 at bottom),
-            # we invert the y-coordinate for drawing.
-            # So, row_idx 0 (top of matrix) maps to y = MATRIX_HEIGHT - 1 (top of plot).
-            # row_idx 25 (bottom of matrix) maps to y = 0 (bottom of plot).
+            # Invert y-coordinate for drawing to match matrix (0 at top) to plot (0 at bottom)
             square_y_bottom = MATRIX_HEIGHT - 1 - row_idx
             square_x_left = col_idx
 
-            # Define the four corners of the square
             x_coords = [
                 square_x_left,
                 square_x_left + 1,
@@ -94,25 +86,17 @@ for i, ax in enumerate(axes):
                 square_y_bottom + 1,
             ]
 
-            # Use ax.fill to draw the colored square.
-            # edgecolor='none' prevents drawing a border around each pixel,
-            # which would interfere with the grid lines.
             ax.fill(x_coords, y_coords, color=color, edgecolor="none")
 
-    # Draw horizontal grid lines on top of the pixels
-    for y in range(
-        MATRIX_HEIGHT + 1
-    ):  # Go up to MATRIX_HEIGHT to draw the line at y=MATRIX_HEIGHT
+    # Draw horizontal grid lines
+    for y in range(MATRIX_HEIGHT + 1):
         ax.axhline(y, color="lightgray", linestyle="-", linewidth=0.5)
 
-    # Draw vertical grid lines on top of the pixels
-    for x in range(
-        MATRIX_WIDTH + 1
-    ):  # Go up to MATRIX_WIDTH to draw the line at x=MATRIX_WIDTH
+    # Draw vertical grid lines
+    for x in range(MATRIX_WIDTH + 1):
         ax.axvline(x, color="lightgray", linestyle="-", linewidth=0.5)
 
 # Adjust layout to prevent titles/labels from overlapping
-
 plt.tight_layout()
 
 # Display the plot
