@@ -1,5 +1,6 @@
 import numpy as np
 import math  # Import math for parametric curves
+import collections  # Import collections for deque used in flood_fill
 
 
 class PixelArtEditor:
@@ -149,6 +150,60 @@ class PixelArtEditor:
                 clamped_c = max(0, min(c, matrix_width - 1))
                 coordinates.append((clamped_r, clamped_c))
 
-        # Remove duplicates if any (e.g., due to clamping multiple points to the same edge pixel)
         # Using a set for uniqueness and then converting back to a list
         return list(set(coordinates))
+
+    def flood_fill(self, start_row, start_col, fill_color_id=0):
+        """
+        Performs a flood fill operation starting from a given coordinate.
+        Changes the color of adjacent pixels to 'fill_color_id' (defaulting to 0/white)
+        if their original color matches the starting pixel's color, until a different
+        color value is found.
+
+        Args:
+            start_row (int): The starting row for the flood fill.
+            start_col (int): The starting column for the flood fill.
+            fill_color_id (int): The color ID to fill with. Defaults to 0 (white).
+        """
+        if not (
+            0 <= start_row < self.matrix.shape[0]
+            and 0 <= start_col < self.matrix.shape[1]
+        ):
+            print(
+                f"Error: Start coordinates ({start_row}, {start_col}) are out of bounds for flood fill."
+            )
+            return
+
+        original_color_id = self.matrix[start_row, start_col]
+
+        # If the original color is already the fill color, do nothing
+        if original_color_id == fill_color_id:
+            return
+
+        # Use a queue for BFS (Breadth-First Search)
+        q = collections.deque([(start_row, start_col)])
+        visited = set([(start_row, start_col)])
+
+        while q:
+            r, c = q.popleft()
+
+            # Change the color of the current pixel to the specified fill_color_id
+            self.matrix[r, c] = fill_color_id
+
+            # Define neighbors (up, down, left, right)
+            neighbors = [(r + 1, c), (r - 1, c), (r, c + 1), (r, c - 1)]
+
+            for nr, nc in neighbors:
+                # Check bounds and if the neighbor has the original color and hasn't been visited
+                if (
+                    0 <= nr < self.matrix.shape[0]
+                    and 0 <= nc < self.matrix.shape[1]
+                    and self.matrix[nr, nc] == original_color_id
+                    and (nr, nc) not in visited
+                ):
+                    q.append((nr, nc))
+                    visited.add((nr, nc))
+
+        print(
+            f"Flood fill completed from ({start_row}, {start_col}) with color ID {fill_color_id}."
+        )

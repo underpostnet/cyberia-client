@@ -135,19 +135,19 @@ for i, ax in enumerate(axes):
 
     # --- Demonstrate Drawing by directly overwriting pixels (from previous request) ---
     # Example drawing operation: Draw a red pixel on the silhouette (border)
-    editor.draw_pixel(0, 0, 2)  # Draw red (color ID 2) at (0,0)
+    # editor.draw_pixel(0, 0, 2)  # Draw red (color ID 2) at (0,0)
     # Draw more red pixels to create a visible pattern
-    editor.draw_pixel(0, 1, 2)
-    editor.draw_pixel(1, 0, 2)
-    editor.draw_pixel(1, 1, 2)
+    # editor.draw_pixel(0, 1, 2)
+    # editor.draw_pixel(1, 0, 2)
+    # editor.draw_pixel(1, 1, 2)
 
     # Add your requested green pixel draws *after* the previous operations
-    editor.draw_pixel(11, 11, 3)  # Draw green (color ID 3)
-    editor.draw_pixel(12, 12, 3)  # Draw green (color ID 3)
-    editor.draw_pixel(13, 13, 3)  # Draw green (color ID 3)
+    # editor.draw_pixel(11, 11, 3)  # Draw green (color ID 3)
+    # editor.draw_pixel(12, 12, 3)  # Draw green (color ID 3)
+    # editor.draw_pixel(13, 13, 3)  # Draw green (color ID 3)
 
     # --- Add 2 random rectangles ---
-    for _ in range(2):
+    for _ in range(0):
         # Position variables for rectangle
         rect_start_x = random.randint(0, MATRIX_WIDTH - 5)
         rect_start_y = random.randint(0, MATRIX_HEIGHT - 5)
@@ -187,7 +187,7 @@ for i, ax in enumerate(axes):
         "circle_arc",
         "spiral",
     ]
-    for curve_num in range(2):  # Loop for 2 curves per graph
+    for curve_num in range(0):  # Loop for 2 curves per graph
         curve_color = random.choice([2, 3, 4, 5, 6, 7])  # Random color
         num_points = random.randint(50, 200)
 
@@ -308,6 +308,12 @@ for i, ax in enumerate(axes):
         editor.draw_parametric_curve(
             x_func, y_func, t_start, t_end, num_points, curve_color
         )
+
+    # --- Demonstrate the new flood_fill method ---
+    # Apply flood fill only to the first graph for clear demonstration
+    # if i == 0:
+    #     # Find a non-white pixel to start the flood fill, if possible
+    #     editor.flood_fill(1, 1, fill_color_id=5)
 
     # Set subplot limits and labels
     ax.set_xlim(0, MATRIX_WIDTH)
