@@ -5,7 +5,11 @@ import json
 import random
 
 from config import NETWORK_OBJECT_SIZE
-from object_layer.object_layer_data import OBJECT_LAYER_DATA, ObjectLayerMode, Direction
+from object_layer.object_layer_data import (
+    _load_object_layer_data,
+    ObjectLayerMode,
+    Direction,
+)
 from object_layer.object_layer_render import ObjectLayerRender
 from raylibpy import (
     KEY_DOWN,
@@ -37,6 +41,8 @@ from raylibpy import (
 logging.basicConfig(
     level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s"
 )
+
+OBJECT_LAYER_DATA = _load_object_layer_data()
 
 
 class MockObjectLayerDataProvider:

@@ -47,18 +47,21 @@ def _generate_seed_data() -> dict:
 OBJECT_LAYER_DATA = {}
 
 
-for dirpath, dirnames, filenames in os.walk("./object_layer"):
-    for filename in filenames:
-        if filename.startswith("object_layer_") and ".json" in filename:
-            with open(dirpath + "/" + filename) as json_file:
-                data = json.load(json_file)
-                object_layer_id = (
-                    filename.replace(".json", "")
-                    .replace("object_layer_data_", "")
-                    .upper()
-                )
-                print("Load object layer data", object_layer_id)
-                OBJECT_LAYER_DATA[object_layer_id] = data
+def _load_object_layer_data():
+    global OBJECT_LAYER_DATA
+    for dirpath, dirnames, filenames in os.walk("./object_layer"):
+        for filename in filenames:
+            if filename.startswith("object_layer_") and ".json" in filename:
+                with open(dirpath + "/" + filename) as json_file:
+                    data = json.load(json_file)
+                    object_layer_id = (
+                        filename.replace(".json", "")
+                        .replace("object_layer_data_", "")
+                        .upper()
+                    )
+                    print("Load object layer data", object_layer_id)
+                    OBJECT_LAYER_DATA[object_layer_id] = data
+    return OBJECT_LAYER_DATA
 
 
 DEFAULT_PLAYER_SKIN_FRAME_DOWN_IDLE = [

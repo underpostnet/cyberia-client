@@ -35,7 +35,6 @@ from config import (
     WORLD_HEIGHT,
     WORLD_WIDTH,
 )
-from object_layer.object_layer_data import ObjectLayerMode
 from object_layer.object_layer_render import ObjectLayerRender
 from network_state.network_object import NetworkObject
 from network_state.network_state import NetworkState

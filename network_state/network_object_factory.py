@@ -11,10 +11,13 @@ from config import (
     WORLD_WIDTH,
 )
 from network_state.network_object import NetworkObject
+from object_layer.object_layer_data import _load_object_layer_data
 
 logging.basicConfig(
     level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s"
 )
+
+OBJECT_LAYER_DATA = _load_object_layer_data()
 
 
 class NetworkObjectFactory:
@@ -22,8 +25,6 @@ class NetworkObjectFactory:
 
     def get_object_layer_data(self) -> dict:
         """Imports and returns the object layer data."""
-        from object_layer.object_layer_data import OBJECT_LAYER_DATA
-
         return OBJECT_LAYER_DATA
 
     def generate_initial_state_dict(self) -> dict:
