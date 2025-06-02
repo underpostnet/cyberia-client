@@ -56,8 +56,10 @@ SKIN_TONE_COLORS = [
     [139 / 255, 69 / 255, 19 / 255, 225 / 255],  # Dark
 ]
 
-
 # --- Parametric Curve Definitions ---
+import math
+
+
 class ParametricCurve:
     """Defines various parametric curves that can be used for strokes."""
 
@@ -84,6 +86,23 @@ class ParametricCurve:
         frequency = 0.5
         return scale_y * math.sin(frequency * t_relative)
 
+    @staticmethod
+    def _linear_method(t_relative, scale_y):
+        """Calculates y for a linear (straight line) function passing through the origin."""
+        return scale_y * t_relative
+
+    @staticmethod
+    def _cubic_method(t_relative, scale_y):
+        """Calculates y for a cubic function centered at the origin."""
+        return scale_y * (t_relative**3)
+
+    @staticmethod
+    def _circle_arc_method(t_relative, scale_y):
+        """Calculates y for a circular arc of unit radius centered at (0,0)."""
+        if abs(t_relative) > 1:
+            return None  # Out of domain
+        return scale_y * math.sqrt(1 - t_relative**2)
+
 
 # Pre-defined parametric curve types with their codomain and domain types
 PARAMETRIC_CURVE_TYPES = {
@@ -104,6 +123,24 @@ PARAMETRIC_CURVE_TYPES = {
         ParametricCurve._sine_method,
         "Bounded (-1 to 1 Scaled)",
         "All Real Numbers",
+    ),
+    "linear": ParametricCurve(
+        "linear",
+        ParametricCurve._linear_method,
+        "Unbounded (Both Directions)",
+        "All Real Numbers",
+    ),
+    "cubic": ParametricCurve(
+        "cubic",
+        ParametricCurve._cubic_method,
+        "Unbounded (Both Directions)",
+        "All Real Numbers",
+    ),
+    "circle_arc": ParametricCurve(
+        "circle_arc",
+        ParametricCurve._circle_arc_method,
+        "Bounded (Upper Semicircle)",
+        "[-1, 1]",
     ),
 }
 
