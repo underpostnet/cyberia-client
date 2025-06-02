@@ -619,17 +619,20 @@ class PixelArtGenerator:
                 # Determine fill color for FillSeed (F)
                 if target_color_value_for_fill == 0:  # If starting on a white pixel
                     # User wants random skin tones for default fills
-                    base_skin_tone_rgba = random.choice(self.skin_tone_colors)
-                    base_skin_tone_tuple = tuple(base_skin_tone_rgba)
-                    if base_skin_tone_tuple not in color_to_index_map:
-                        color_to_index_map[base_skin_tone_tuple] = len(
-                            plot_specific_colors
+                    if hair_seed_range[1] > 0:
+                        base_skin_tone_rgba = random.choice(self.skin_tone_colors)
+                        base_skin_tone_tuple = tuple(base_skin_tone_rgba)
+                        if base_skin_tone_tuple not in color_to_index_map:
+                            color_to_index_map[base_skin_tone_tuple] = len(
+                                plot_specific_colors
+                            )
+                            plot_specific_colors.append(list(base_skin_tone_tuple))
+                        fill_color_index = color_to_index_map[base_skin_tone_tuple]
+                        print(
+                            f"DEBUG: Graph ID {graph_id}, Chosen skin tone (random for white area): {base_skin_tone_rgba}"
                         )
-                        plot_specific_colors.append(list(base_skin_tone_tuple))
-                    fill_color_index = color_to_index_map[base_skin_tone_tuple]
-                    print(
-                        f"DEBUG: Graph ID {graph_id}, Chosen skin tone (random for white area): {base_skin_tone_rgba}"
-                    )
+                    else:
+                        fill_color_index = stroke_color_index
                 elif (
                     target_color_value_for_fill == stroke_color_index
                     and chosen_curve_obj
