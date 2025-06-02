@@ -18,7 +18,15 @@ def rgba_to_mpl_color(r, g, b, a):
 map_color = {
     0: (255, 255, 255, 255),  # White (R, G, B, Alpha)
     1: (0, 0, 0, 255),  # Black (R, G, B, Alpha)
+    2: (255, 0, 0, 255),  # Red (R, G, B, Alpha)
+    3: (0, 255, 0, 255),  # Green (R, G, B, Alpha)
+    4: (0, 0, 255, 255),  # Blue (R, G, B, Alpha)
+    5: (255, 255, 0, 255),  # Yellow (R, G, B, Alpha)
+    6: (255, 0, 255, 255),  # Magenta (R, G, B, Alpha)
+    7: (0, 255, 255, 255),  # Cyan (R, G, B, Alpha)
 }
+
+draw = [[1, 1, 2], [2, 2, 2]]
 
 # Get the dimensions of the pixel art matrix
 MATRIX_HEIGHT, MATRIX_WIDTH = DEFAULT_PLAYER_SKIN_FRAME_DOWN_IDLE.shape
@@ -58,6 +66,10 @@ for i, ax in enumerate(axes):
 
             # Convert to Matplotlib's RGBA (0-1) format
             color = rgba_to_mpl_color(*rgba_255)
+
+            for draw_data in draw:
+                if draw_data[0] == row_idx and draw_data[1] == col_idx:
+                    color = rgba_to_mpl_color(*map_color[draw_data[2]])
 
             # Calculate the coordinates for the current pixel's square
             # (x, y) specifies the bottom-left corner of the square.
