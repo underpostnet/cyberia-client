@@ -1,862 +1,386 @@
-# Synthetic Data Generation (SDG) script/tool
-
 import matplotlib.pyplot as plt
 import numpy as np
 import random
-import math
-import argparse
-from tabulate import tabulate
+import math  # Import math for trigonometric functions
+from pixel_art_editor import PixelArtEditor  # Import the new class
 
-# --- Configuration Constants ---
-# Original pixel art matrix
-BASE_MATRIX = [
-    [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-    [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-    [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-    [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-    [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-    [0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-    [0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0],
-    [0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0],
-    [0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0],
-    [0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0],
-    [0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0],
-    [0, 0, 0, 0, 0, 1, 0, 0, 0, 1, 1, 1, 0, 0, 1, 1, 1, 0, 0, 0, 1, 0, 0, 0, 0, 0],
-    [0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0],
-    [0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0],
-    [0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0],
-    [0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 1, 1, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0],
-    [0, 0, 0, 0, 0, 0, 1, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 1, 0, 0, 0, 0, 0, 0],
-    [0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 0, 0, 0, 0, 0, 0, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0],
-    [0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0],
-    [0, 0, 0, 0, 0, 0, 1, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 1, 0, 0, 0, 0, 0, 0],
-    [0, 0, 0, 0, 0, 0, 1, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 1, 0, 0, 0, 0, 0, 0],
-    [0, 0, 0, 0, 0, 0, 1, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 1, 0, 0, 0, 0, 0, 0],
-    [0, 0, 0, 0, 0, 0, 0, 1, 1, 0, 0, 0, 1, 1, 0, 0, 0, 1, 1, 0, 0, 0, 0, 0, 0, 0],
-    [0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 1, 0, 0, 1, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0],
-    [0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 0, 0, 0, 0, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-    [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-]
+# Import the default player skin frame. This is the authoritative matrix.
+from object_layer.object_layer_data import DEFAULT_PLAYER_SKIN_FRAME_DOWN_IDLE
 
-# Base color map for the pixel art (white and black)
-BASE_COLORS = np.array(
-    [[1.0, 1.0, 1.0, 1.0], [0.0, 0.0, 0.0, 1.0]]  # Index 0: White  # Index 1: Black
-)
-
-# Region for 'hair' seed positions
-HAIR_SPAWN_ROWS = (0, 5)
-HAIR_SPAWN_COLS = (2, 22)
-
-# Five shades of common human skin tones (RGBA)
-SKIN_TONE_COLORS = [
-    [255 / 255, 224 / 255, 189 / 255, 225 / 255],  # Light
-    [240 / 255, 192 / 255, 150 / 255, 225 / 255],  # Medium-Light
-    [218 / 255, 166 / 255, 126 / 255, 225 / 255],  # Medium
-    [186 / 255, 128 / 255, 92 / 255, 225 / 255],  # Medium-Dark
-    [139 / 255, 69 / 255, 19 / 255, 225 / 255],  # Dark
-]
-
-# --- Parametric Curve Definitions ---
-import math
+# Convert the imported list to a NumPy array
+DEFAULT_PLAYER_SKIN_FRAME_DOWN_IDLE = np.array(DEFAULT_PLAYER_SKIN_FRAME_DOWN_IDLE)
 
 
-class ParametricCurve:
-    """Defines various parametric curves that can be used for strokes."""
-
-    def __init__(self, curve_name, curve_method, codomain_type, domain_type):
-        self.name = curve_name
-        self.method = curve_method
-        self.codomain_type = codomain_type
-        self.domain_type = domain_type
-
-    @staticmethod
-    def _parabola_method(t_relative, scale_y):
-        """Calculates y for a parabola, with its vertex at (0,0) in relative coordinates."""
-        return scale_y * (t_relative**2)
-
-    @staticmethod
-    def _sigmoid_method(t_relative, scale_y):
-        """Calculates y for a sigmoid, with its inflection point at (0,0) in relative coordinates."""
-        scaled_t = t_relative / 5
-        return scale_y * (1 / (1 + math.exp(-scaled_t)) - 0.5)
-
-    @staticmethod
-    def _sine_method(t_relative, scale_y):
-        """Calculates y for a sine wave, with a zero-crossing at (0,0) in relative coordinates."""
-        frequency = 0.5
-        return scale_y * math.sin(frequency * t_relative)
-
-    # @staticmethod
-    # def _linear_method(t_relative, scale_y):
-    #     """Calculates y for a linear (straight line) function passing through the origin."""
-    #     return scale_y * t_relative
-
-    # @staticmethod
-    # def _cubic_method(t_relative, scale_y):
-    #     """Calculates y for a cubic function centered at the origin."""
-    #     return scale_y * (t_relative**3)
-
-    # @staticmethod
-    # def _circle_arc_method(t_relative, scale_y):
-    #     """Calculates y for a circular arc of unit radius centered at (0,0)."""
-    #     if abs(t_relative) > 1:
-    #         return None  # Out of domain
-    #     return scale_y * math.sqrt(1 - t_relative**2)
-
-
-# Pre-defined parametric curve types with their codomain and domain types
-PARAMETRIC_CURVE_TYPES = {
-    "parabola": ParametricCurve(
-        "parabola",
-        ParametricCurve._parabola_method,
-        "Unbounded (Positive)",
-        "All Real Numbers",
-    ),
-    "sigmoid": ParametricCurve(
-        "sigmoid",
-        ParametricCurve._sigmoid_method,
-        "Bounded (0-1 Scaled)",
-        "All Real Numbers",
-    ),
-    "sine": ParametricCurve(
-        "sine",
-        ParametricCurve._sine_method,
-        "Bounded (-1 to 1 Scaled)",
-        "All Real Numbers",
-    ),
-    # "linear": ParametricCurve(
-    #     "linear",
-    #     ParametricCurve._linear_method,
-    #     "Unbounded (Both Directions)",
-    #     "All Real Numbers",
-    # ),
-    # "cubic": ParametricCurve(
-    #     "cubic",
-    #     ParametricCurve._cubic_method,
-    #     "Unbounded (Both Directions)",
-    #     "All Real Numbers",
-    # ),
-    # "circle_arc": ParametricCurve(
-    #     "circle_arc",
-    #     ParametricCurve._circle_arc_method,
-    #     "Bounded (Upper Semicircle)",
-    #     "[-1, 1]",
-    # ),
+# Define the color mapping for 0 (white) and 1 (black) in RGBA (0-255) format
+COLOR_PALETTE = {
+    0: (255, 255, 255, 255),  # White (R, G, B, Alpha)
+    1: (0, 0, 0, 255),  # Black (R, G, B, Alpha)
+    2: (255, 0, 0, 255),  # Red (R, G, B, Alpha)
+    3: (0, 255, 0, 255),  # Green (R, G, B, Alpha)
+    4: (0, 0, 255, 255),  # Blue (R, G, B, Alpha)
+    5: (255, 255, 0, 255),  # Yellow (R, G, B, Alpha)
+    6: (255, 0, 255, 255),  # Magenta (R, G, B, Alpha)
+    7: (0, 255, 255, 255),  # Cyan (R, G, B, Alpha)
+    8: (128, 0, 128, 255),  # Purple (R, G, B, Alpha)
+    9: (255, 224, 189, 225),  # Light Skin
+    10: (240, 192, 150, 225),  # Medium-Light Skin
+    11: (218, 166, 126, 225),  # Medium Skin
+    12: (186, 128, 92, 225),  # Medium-Dark Skin
+    13: (139, 69, 19, 225),  # Dark Skin
 }
 
-
-# --- Seed Position Abstractions ---
-class SeedPosition:
-    """Abstract base class for different types of seed positions."""
-
-    def __init__(self, row, col, marker_char, marker_color, bbox_facecolor):
-        self.row = row
-        self.col = col
-        self.marker_char = marker_char
-        self.marker_color = marker_color
-        self.bbox_facecolor = bbox_facecolor
-
-    def get_coordinates(self):
-        """Returns the (row, col) coordinates of the seed position."""
-        return (self.row, self.col)
-
-    def get_marker_properties(self):
-        """Returns properties for rendering the seed position marker on the plot."""
-        return {
-            "s": self.marker_char,
-            "color": self.marker_color,
-            "bbox": dict(
-                facecolor=self.bbox_facecolor,
-                alpha=0.7,
-                edgecolor="none",
-                boxstyle="round,pad=0.2",
-            ),
-        }
-
-    def can_generate_stroke(self):
-        """Determines if this seed type should generate a parametric curve stroke."""
-        raise NotImplementedError("Subclasses must implement this method unarmed.")
+# Get the dimensions of the default matrix for boundary checks
+MATRIX_HEIGHT, MATRIX_WIDTH = DEFAULT_PLAYER_SKIN_FRAME_DOWN_IDLE.shape
 
 
-class HairSeed(SeedPosition):
-    """Represents a 'hair' type seed position, generating a parametric curve stroke."""
-
-    def __init__(self, row, col):
-        super().__init__(row, col, "H", "black", "none")
-        self.type = "hair"
-
-    def can_generate_stroke(self):
-        return True
+# --- Define Parametric Curve Functions ---
+# These functions return x and y functions for a given curve type,
+# allowing for flexible positioning and scaling.
+# These functions now return (x, y) coordinates where (0,0) is bottom-left.
 
 
-class FillSeed(SeedPosition):
-    """Represents a 'fill' type seed position, which does not generate a parametric curve stroke."""
-
-    def __init__(self, row, col):
-        super().__init__(row, col, "F", "black", "none")
-        self.type = "fill"
-
-    def can_generate_stroke(self):
-        return False
-
-
-class FillGradientShadowSeed(SeedPosition):
-    """Represents a 'fill-gradient-shadow' type seed position."""
-
-    def __init__(self, row, col):
-        super().__init__(row, col, "G", "black", "none")
-        self.type = "fill-gradient-shadow"
-
-    def can_generate_stroke(self):
-        return False
+def get_parabola_funcs(x_center, y_base, scale_x, scale_y, a):
+    """
+    Returns x and y functions for a parabola.
+    x_center: horizontal position of the parabola's vertex.
+    y_base: vertical position of the parabola's vertex.
+    scale_x, scale_y: scaling factors for the curve's spread.
+    a: controls the opening direction and width of the parabola.
+    """
+    x_func = lambda t: x_center + scale_x * t
+    y_func = lambda t: y_base + scale_y * a * (t**2)
+    return x_func, y_func
 
 
-# --- Pixel Art Generation Logic ---
-class PixelArtGenerator:
-    """Generates and renders pixel art with dynamic elements and provides summaries."""
+def get_sigmoid_funcs(x_center, y_midpoint, scale_x, scale_y, k, x0):
+    """
+    Returns x and y functions for a sigmoid curve.
+    x_center: horizontal position of the sigmoid's center.
+    y_midpoint: vertical position of the sigmoid's midpoint.
+    scale_x, scale_y: scaling factors for the curve's spread.
+    k: steepness of the curve.
+    x0: x-value of the sigmoid's midpoint.
+    """
+    x_func = lambda t: x_center + scale_x * t
+    y_func = lambda t: y_midpoint + scale_y * (1 / (1 + math.exp(-k * (t - x0))))
+    return x_func, y_func
 
-    def __init__(
-        self,
-        base_matrix_data,
-        hair_spawn_rows,
-        hair_spawn_cols,
-        parametric_curve_types,
-        skin_tone_colors,
-    ):
-        self.base_matrix = np.array(base_matrix_data)
-        self.matrix_rows, self.matrix_cols = self.base_matrix.shape
-        self.hair_spawn_rows = hair_spawn_rows
-        self.hair_spawn_cols = hair_spawn_cols
-        self.parametric_curve_types = parametric_curve_types
-        self.skin_tone_colors = skin_tone_colors
-        self.all_curve_instance_summaries = []
-        self.graph_seed_counts_summaries = []
-        self._curve_instance_id_counter = 0
 
-    def _generate_random_rgba_color(self):
-        """Generates a random RGBA color."""
-        return [random.random(), random.random(), random.random(), 1.0]
+def get_sine_funcs(x_start, y_axis_offset, amplitude, frequency):
+    """
+    Returns x and y functions for a sine wave.
+    x_start: horizontal starting position of the sine wave.
+    y_axis_offset: vertical offset of the sine wave's central axis.
+    amplitude: height of the wave.
+    frequency: how many cycles in a given range.
+    """
+    x_func = lambda t: x_start + t
+    y_func = lambda t: y_axis_offset + amplitude * math.sin(frequency * t)
+    return x_func, y_func
 
-    def _get_random_hair_seeds(self, min_count, max_count):
-        """Generates random 'hair' seed positions within the defined spawn area."""
-        num_seeds = random.randint(min_count, max_count)
-        possible_coords = [
-            (r, c)
-            for r in range(self.hair_spawn_rows[0], self.hair_spawn_rows[1] + 1)
-            for c in range(self.hair_spawn_cols[0], self.hair_spawn_cols[1] + 1)
-        ]
-        num_seeds = min(num_seeds, len(possible_coords))
-        selected_coords = random.sample(possible_coords, num_seeds)
-        return [HairSeed(r, c) for r, c in selected_coords]
 
-    def _get_fill_seeds(self, specific_coords_xy, existing_hair_coords, mode=None):
-        """
-        Generates 'fill' seed positions based on specific (x,y) coordinates provided.
-        If specific_coords_xy is empty, it defaults to a single fill seed at the center.
-        In 'skin-default-1' mode, adds 1 random fill-gradient-shadow seed and a default fill seed.
-        In 'skin-default-2' mode, adds 1 random fill-gradient-shadow seed and a default fill seed.
-        """
-        fill_seeds = []
+def get_linear_funcs(x_start, y_start, x_end, y_end):
+    """
+    Returns x and y functions for a linear curve (straight line).
+    x_start, y_start: coordinates of the line's starting point.
+    x_end, y_end: coordinates of the line's ending point.
+    """
+    # Linear interpolation between two points using parameter t from 0 to 1
+    x_func = lambda t: x_start + t * (x_end - x_start)
+    y_func = lambda t: y_start + t * (y_end - y_start)
+    return x_func, y_func
 
-        # Add explicitly defined fill seeds (these take precedence)
-        if specific_coords_xy:
-            for x, y in specific_coords_xy:
-                if 0 <= y < self.matrix_rows and 0 <= x < self.matrix_cols:
-                    fill_seeds.append(FillSeed(y, x))
-                else:
-                    print(
-                        f"Warning: Explicit fill seed coordinate ({x},{y}) is out of matrix bounds or already occupied and will be skipped."
-                    )
 
-        # Handle mode-specific fill seeds
-        if mode in ["skin-default-1", "skin-default-2"]:
-            # Add 1 random fill-gradient-shadow seed
-            num_gradient_seeds = 1
-            possible_coords_for_gradient = [
-                (r, c)
-                for r in range(self.hair_spawn_rows[0], self.hair_spawn_rows[1] + 1)
-                for c in range(self.hair_spawn_cols[0], self.hair_spawn_cols[1] + 1)
-            ]
+def get_cubic_funcs(x_center, y_center, scale_x, scale_y, a, b, c):
+    """
+    Returns x and y functions for a cubic curve.
+    x_center, y_center: central position offsets for the cubic curve.
+    scale_x, scale_y: scaling factors for the curve's spread.
+    a, b, c: coefficients of the cubic polynomial.
+    """
+    x_func = lambda t: x_center + scale_x * t
+    y_func = lambda t: y_center + scale_y * (a * (t**3) + b * (t**2) + c * t)
+    return x_func, y_func
 
-            # Collect all coordinates already taken (hair seeds + explicit fill seeds)
-            all_taken_coords = existing_hair_coords.union(
-                {seed.get_coordinates() for seed in fill_seeds}
-            )
-            available_coords_for_gradient = [
-                coord
-                for coord in possible_coords_for_gradient
-                if coord not in all_taken_coords
-            ]
 
-            if available_coords_for_gradient:  # Ensure there are available spots
-                selected_gradient_coords = random.sample(
-                    available_coords_for_gradient,
-                    min(num_gradient_seeds, len(available_coords_for_gradient)),
-                )
-                for r, c in selected_gradient_coords:
-                    fill_seeds.append(FillGradientShadowSeed(r, c))
-                    all_taken_coords.add(
-                        (r, c)
-                    )  # Update taken coords for the next check
+def get_circle_arc_funcs(center_x, center_y, radius, start_angle, end_angle):
+    """
+    Returns x and y functions for a circular arc.
+    center_x, center_y: coordinates of the center of the circle.
+    radius: radius of the arc.
+    start_angle, end_angle: angular range for the arc in radians.
+    """
+    x_func = lambda t: center_x + radius * math.cos(t)
+    y_func = lambda t: center_y + radius * math.sin(t)
+    return x_func, y_func
 
-            # If no specific_coords_xy were provided, add a default FillSeed at the center
-            if not specific_coords_xy:
-                default_fill_coord = (self.matrix_rows // 2, self.matrix_cols // 2)
-                if default_fill_coord not in all_taken_coords:
-                    fill_seeds.append(
-                        FillSeed(default_fill_coord[0], default_fill_coord[1])
-                    )
-                else:
-                    print(
-                        f"Warning: Default fill seed position {default_fill_coord} is already occupied in {mode} mode."
-                    )
 
-        # Default behavior if no specific fill seeds and not in a special mode
-        elif (
-            not specific_coords_xy
-        ):  # This covers mode=None, skin-default, skin-default-0
-            if not fill_seeds:  # Only add if no other seeds were added yet
-                fill_seeds.append(
-                    FillSeed(self.matrix_rows // 2, self.matrix_cols // 2)
-                )
+def get_spiral_funcs(center_x, center_y, radius_growth_rate, angular_speed):
+    """
+    Returns x and y functions for a spiral curve.
+    center_x, center_y: coordinates of the spiral's origin.
+    radius_growth_rate: how quickly the spiral expands.
+    angular_speed: how quickly the spiral rotates.
+    """
+    x_func = lambda t: center_x + (radius_growth_rate * t) * math.cos(angular_speed * t)
+    y_func = lambda t: center_y + (radius_growth_rate * t) * math.sin(angular_speed * t)
+    return x_func, y_func
 
-        return fill_seeds
 
-    def _flood_fill_get_coords(
-        self, matrix_to_check, start_row, start_col, target_color_value
-    ):
-        """
-        Performs a flood fill operation and returns the coordinates of all filled pixels,
-        without modifying the matrix. It operates on a copy or the original matrix
-        to determine the fillable area based on a target color value.
-        """
-        rows, cols = matrix_to_check.shape
-        filled_coords = []
+# Create a figure and a 2x4 grid of subplots
+fig, axes = plt.subplots(2, 4, figsize=(26, 13), dpi=100)
 
-        if not (0 <= start_row < rows and 0 <= start_col < cols):
-            return filled_coords
+# Flatten the axes array for easy iteration
+axes = axes.flatten()
 
-        if matrix_to_check[start_row, start_col] != target_color_value:
-            return filled_coords
+# Configure each subplot to display the pixel art on a 26x26 grid
+for i, ax in enumerate(axes):
+    # Initialize a new PixelArtEditor for each subplot with a fresh copy of the default matrix
+    # This ensures each subplot starts with the original silhouette and independent drawings.
+    editor = PixelArtEditor(DEFAULT_PLAYER_SKIN_FRAME_DOWN_IDLE.copy(), COLOR_PALETTE)
 
-        q = [(start_row, start_col)]
-        visited = set()
-        visited.add((start_row, start_col))
-        filled_coords.append((start_row, start_col))
+    # --- Demonstrate Drawing by directly overwriting pixels ---
+    # Example drawing operation: Draw a red pixel on the silhouette (border)
+    # The draw_pixel now expects (x, y) where (0,0) is bottom-left
+    editor.draw_pixel(0, 0, 2)  # Draw red (color ID 2) at (0,0) - bottom-left
+    # editor.draw_pixel(1, 0, 2)  # Draw red (color ID 2) at (1,0)
+    # editor.draw_pixel(0, 1, 2)  # Draw red (color ID 2) at (0,1)
+    # editor.draw_pixel(1, 1, 2)  # Draw red (color ID 2) at (1,1)
 
-        while q:
-            r, c = q.pop(0)
+    # Add your requested green pixel draws *after* the previous operations
+    # editor.draw_pixel(11, 11, 3)  # Draw green (color ID 3)
+    # editor.draw_pixel(12, 12, 3)  # Draw green (color ID 3)
+    # editor.draw_pixel(13, 13, 3)  # Draw green (color ID 3)
 
-            neighbors = [(r + 1, c), (r - 1, c), (r, c + 1), (r, c - 1)]
-
-            for nr, nc in neighbors:
-                if (
-                    0 <= nr < rows
-                    and 0 <= nc < cols
-                    and matrix_to_check[nr, nc] == target_color_value
-                    and (nr, nc) not in visited
-                ):
-                    visited.add((nr, nc))
-                    filled_coords.append((nr, nc))
-                    q.append((nr, nc))
-        return filled_coords
-
-    def _draw_curve_on_matrix(
-        self, matrix, curve_obj, origin_coord, t_span, color_value, mode=None
-    ):
-        """
-        Draws a parametric curve stroke on the matrix.
-        The curve is calculated relative to (0,0) and then translated to origin_coord.
-        't_relative' is used as the parameter for the curve, effectively mapping to x-coordinates.
-        The curve's intersection with the seed depends on the 'mode'.
-        """
-        curve_method = curve_obj.method
-        origin_row, origin_col = origin_coord
-
-        density_factor = 5
-        num_points = max(2, t_span * density_factor)
-
-        # Random scaling for visual variety based on curve type (defined once per stroke)
-        scale_y = (
-            random.uniform(0.01, 0.05)
-            if curve_obj.name == "parabola"
-            else (
-                random.uniform(5, 15)
-                if curve_obj.name == "sigmoid"
-                else random.uniform(3, 7)
-            )
+    # --- Add 2 random rectangles ---
+    for _ in range(0):  # Set to 0 for now as per original code
+        # Position variables for rectangle (using x, y for bottom-left)
+        rect_start_x = random.randint(0, MATRIX_WIDTH - 5)
+        rect_start_y = random.randint(0, MATRIX_HEIGHT - 5)
+        rect_width = random.randint(3, 8)
+        rect_height = random.randint(3, 8)
+        rect_color = random.choice(
+            [2, 3, 4, 5, 6, 7]
+        )  # Random color excluding white/black
+        editor.draw_rectangle(
+            rect_start_x, rect_start_y, rect_width, rect_height, rect_color
         )
 
-        # Generate base t_values and y_values
-        t_values_base = np.linspace(0, t_span - 1, num_points)
-        y_values_base = np.array([curve_method(t, scale_y) for t in t_values_base])
+    # --- Define and Render "Draw Areas" (e.g., for draw positions) ---
+    # This area will be highlighted with a specific color (e.g., Purple, color ID 8)
+    # The area is defined by two (x,y) coordinates.
+    # For simulating "AI up", we define a region where draw might be.
+    draw_area_x1, draw_area_y1 = 6, 23  # Bottom-left corner of the draw area
+    draw_area_x2, draw_area_y2 = 19, 18  # Top-right corner of the draw area
 
-        # Determine the offset based on the mode
-        if mode == "skin-default":
-            # Choose a random t_relative value within the curve's span to align with the origin
-            random_t_at_origin = random.uniform(0, t_span - 1)
-            t_offset = random_t_at_origin
-            y_offset = curve_method(random_t_at_origin, scale_y)
-        # For 'skin-default-0' mode, 'skin-default-1' mode, 'skin-default-2' mode, or any other mode (including None),
-        # the curve starts/originates from the seed's coordinates (t_offset=0, y_offset=0)
-        else:  # mode is None, 'skin-default-0', 'skin-default-1', 'skin-default-2'
-            t_offset = 0
-            y_offset = 0
+    # Get all coordinates within this defined "bad area"
+    seed_draw_positions = editor.get_coordinates_in_area(
+        draw_area_x1, draw_area_y1, draw_area_x2, draw_area_y2
+    )
 
-        for i in range(len(t_values_base)):
-            t_rel = t_values_base[i]
-            y_rel = y_values_base[i]
+    # Draw the "bad area" with a distinct color (Purple, color ID 8)
+    # This visualizes the region where the AI might focus its "draw" drawing.
+    # for x_coord, y_coord in seed_draw_positions:
+    #     editor.draw_pixel(x_coord, y_coord, 8)  # Using color ID 8 for purple
 
-            # Translate relative coordinates to absolute matrix coordinates
-            # Shift the curve so the chosen intersection point aligns with origin_col, origin_row
-            abs_col = int(round(origin_col + (t_rel - t_offset)))
-            abs_row = int(round(origin_row + (y_rel - y_offset)))
+    draw_curves = []
+    draw_hair_color = random.choice([2, 3, 4, 5, 6, 7])
 
-            if 0 <= abs_row < self.matrix_rows and 0 <= abs_col < self.matrix_cols:
-                matrix[abs_row, abs_col] = color_value
-
-    def generate_single_graph_data(
-        self, graph_id, hair_seed_range, specific_fill_coords_xy, mode=None
-    ):
-        """
-        Generates all data for a single pixel art graph, including seed positions,
-        parametric curve strokes, and summary information.
-        """
-        current_matrix = np.copy(self.base_matrix)
-
-        hair_seeds = self._get_random_hair_seeds(hair_seed_range[0], hair_seed_range[1])
-        hair_coords = {seed.get_coordinates() for seed in hair_seeds}
-        fill_seeds = self._get_fill_seeds(specific_fill_coords_xy, hair_coords, mode)
-
-        all_seeds = hair_seeds + fill_seeds
-
-        # Initialize color map and index map for this specific graph
-        plot_specific_colors = (
-            BASE_COLORS.tolist()
-        )  # Always starts with white (0) and black (1)
-        color_to_index_map = {
-            tuple(color): i for i, color in enumerate(plot_specific_colors)
-        }
-
-        # Add skin tones to the color map
-        for color in self.skin_tone_colors:
-            color_tuple = tuple(color)
-            if color_tuple not in color_to_index_map:
-                color_to_index_map[color_tuple] = len(plot_specific_colors)
-                plot_specific_colors.append(color)
-
-        # Determine stroke color (random for hair curves) and add to color map
-        stroke_color = (
-            self._generate_random_rgba_color()
-        )  # This is now a distinct color for debugging
-        stroke_color_tuple = tuple(stroke_color)
-        if stroke_color_tuple not in color_to_index_map:
-            color_to_index_map[stroke_color_tuple] = len(plot_specific_colors)
-            plot_specific_colors.append(stroke_color)
-        stroke_color_index = color_to_index_map[stroke_color_tuple]
-
-        # Black color index is always 1
-        black_color_index = 1
-
-        current_cmap = plt.cm.colors.ListedColormap(plot_specific_colors)
-
-        # Only choose a curve object if there are hair seeds to draw curves
-        chosen_curve_obj = None
-        if hair_seeds:
-            chosen_curve_obj = random.choice(list(self.parametric_curve_types.values()))
-        else:
-            print(
-                f"Graph ID {graph_id}: No hair seeds generated, skipping curve drawing."
-            )
-
-        hair_seed_count = 0
-        fill_seed_count = 0
-        fill_gradient_shadow_seed_count = 0
-
-        # --- DRAW PARAMETRIC CURVES FIRST (from hair seeds) ---
-        if (
-            chosen_curve_obj
-        ):  # Only draw curves if a curve object was chosen (i.e., hair seeds exist)
-            for seed in hair_seeds:
-                hair_seed_count += 1
-                self._curve_instance_id_counter += 1
-                parametric_curve_instance_id = self._curve_instance_id_counter
-
-                self._draw_curve_on_matrix(
-                    current_matrix,
-                    chosen_curve_obj,
-                    seed.get_coordinates(),
-                    t_span=random.randint(10, 25),
-                    color_value=stroke_color_index,
-                    mode=mode,
-                )
-                parent_coords = seed.get_coordinates()
-                self.all_curve_instance_summaries.append(
-                    {
-                        "Graph ID": graph_id,
-                        "Parametric Curve Instance ID": parametric_curve_instance_id,
-                        "Parametric Curve": chosen_curve_obj.name.capitalize(),
-                        "Domain Type": chosen_curve_obj.domain_type,
-                        "Codomain Type": chosen_curve_obj.codomain_type,
-                        "Parent Seed Type": seed.type,
-                        "Parent Seed Coord": f"({parent_coords[1]}, {parent_coords[0]})",
-                    }
-                )
-
-        # --- Draw straight black lines for skin-default-2 mode ---
-        if mode == "skin-default-2":
-            # TODO: this is a parametric type 'line'
-            # Line 1: from (col 9, row 17) to (col 15, row 17)
-            for c in range(9, 16):  # columns 9 to 15 inclusive
-                if 0 <= 17 < self.matrix_rows and 0 <= c < self.matrix_cols:
-                    current_matrix[17, c] = black_color_index
-            # Line 2: from (col 8, row 20) to (col 16, row 20)
-            for c in range(8, 17):  # columns 8 to 16 inclusive
-                if 0 <= 20 < self.matrix_rows and 0 <= c < self.matrix_cols:
-                    current_matrix[20, c] = black_color_index
-
-        # --- THEN PERFORM FLOOD FILL FOR FILL SEEDS ---
-        for seed in fill_seeds:
-            start_row, start_col = seed.get_coordinates()
-
-            # Get the color at the seed's position *after* curves and lines have been drawn
-            target_color_value_for_fill = current_matrix[start_row, start_col]
-
-            if seed.type == "fill-gradient-shadow":
-                fill_gradient_shadow_seed_count += 1
-                # Only apply gradient/shadow if the seed falls on a parametric curve's color
-                # This condition now correctly checks if the pixel is the stroke color,
-                # which implies a curve was drawn.
-                if target_color_value_for_fill == stroke_color_index:
-                    # If it IS on a parametric curve, then perform flood fill on that curve's color
-                    filled_coords = self._flood_fill_get_coords(
-                        current_matrix,
-                        start_row,
-                        start_col,
-                        target_color_value_for_fill,
-                    )
-
-                    if not filled_coords:
-                        continue
-
-                    # Determine min/max coordinates for gradient calculation
-                    min_row_filled = min(r for r, c in filled_coords)
-                    max_row_filled = max(r for r, c in filled_coords)
-                    min_col_filled = min(c for r, c in filled_coords)
-                    max_col_filled = max(c for r, c in filled_coords)
-
-                    # Use the actual parametric curve color as the base for the gradient
-                    base_color_for_gradient = plot_specific_colors[stroke_color_index]
-
-                    # Randomly choose gradient direction for skin-default-2 mode
-                    gradient_direction = (
-                        random.choice(
-                            [
-                                "left-to-right",
-                                "right-to-left",
-                                "top-to-bottom",
-                                "bottom-to-top",
-                            ]
-                        )
-                        if mode == "skin-default-2"
-                        else "left-to-right"
-                    )
-
-                    for r, c in filled_coords:
-                        darkening_factor = 0
-                        noise_amount = 0
-
-                        if gradient_direction == "left-to-right":
-                            if max_col_filled == min_col_filled:
-                                normalized_coord = 0
-                            else:
-                                normalized_coord = (c - min_col_filled) / (
-                                    max_col_filled - min_col_filled
-                                )
-                            darkening_factor = normalized_coord * 0.5
-                            noise_amount = normalized_coord * 0.1 * random.random()
-                        elif gradient_direction == "right-to-left":
-                            if max_col_filled == min_col_filled:
-                                normalized_coord = 0
-                            else:
-                                normalized_coord = (max_col_filled - c) / (
-                                    max_col_filled - min_col_filled
-                                )
-                            darkening_factor = normalized_coord * 0.5
-                            noise_amount = normalized_coord * 0.1 * random.random()
-                        elif gradient_direction == "top-to-bottom":
-                            if max_row_filled == min_row_filled:
-                                normalized_coord = 0
-                            else:
-                                normalized_coord = (r - min_row_filled) / (
-                                    max_row_filled - min_row_filled
-                                )
-                            darkening_factor = normalized_coord * 0.5
-                            noise_amount = normalized_coord * 0.1 * random.random()
-                        elif gradient_direction == "bottom-to-top":
-                            if max_row_filled == min_row_filled:
-                                normalized_coord = 0
-                            else:
-                                normalized_coord = (max_row_filled - r) / (
-                                    max_row_filled - min_row_filled
-                                )
-                            darkening_factor = normalized_coord * 0.5
-                            noise_amount = normalized_coord * 0.1 * random.random()
-
-                        darkened_rgba = [
-                            max(0, base_color_for_gradient[0] * (1 - darkening_factor)),
-                            max(0, base_color_for_gradient[1] * (1 - darkening_factor)),
-                            max(0, base_color_for_gradient[2] * (1 - darkening_factor)),
-                            base_color_for_gradient[3],
-                        ]
-
-                        final_rgba = [
-                            max(0, darkened_rgba[0] - noise_amount),
-                            max(0, darkened_rgba[1] - noise_amount),
-                            max(0, darkened_rgba[2] - noise_amount),
-                            darkened_rgba[3],
-                        ]
-
-                        final_rgba_tuple = tuple(final_rgba)
-
-                        if final_rgba_tuple not in color_to_index_map:
-                            color_to_index_map[final_rgba_tuple] = len(
-                                plot_specific_colors
-                            )
-                            plot_specific_colors.append(list(final_rgba_tuple))
-
-                        current_matrix[r, c] = color_to_index_map[final_rgba_tuple]
-                else:
-                    # If not on a curve (i.e., on white/black background), skip filling
-                    continue
-
-            else:  # Regular fill seed (type == "fill")
-                fill_seed_count += 1
-                # For regular fill seeds, they should fill the contiguous area of the ORIGINAL white background (0).
-                # They should never fill black pixels (1).
-
-                # Check if the starting point is an original black pixel. If so, skip.
-                # This check remains valid for preventing fills over original silhouette pixels.
-                if self.base_matrix[start_row, start_col] == 1:
-                    continue
-
-                # The target for flood fill for a regular FillSeed should always be the white background (0).
-                target_color_for_flood_fill = 0
-
-                filled_coords = self._flood_fill_get_coords(
-                    current_matrix, start_row, start_col, target_color_for_flood_fill
-                )
-
-                if not filled_coords:
-                    continue
-
-                # Debug print to show the mode for this fill seed
-                print(f"DEBUG: Graph ID {graph_id}, Mode for fill seed: {mode}")
-
-                # Determine fill color for FillSeed (F)
-                if target_color_value_for_fill == 0:  # If starting on a white pixel
-                    # User wants random skin tones for default fills
-                    if hair_seed_range[1] > 0:
-                        base_skin_tone_rgba = random.choice(self.skin_tone_colors)
-                        base_skin_tone_tuple = tuple(base_skin_tone_rgba)
-                        if base_skin_tone_tuple not in color_to_index_map:
-                            color_to_index_map[base_skin_tone_tuple] = len(
-                                plot_specific_colors
-                            )
-                            plot_specific_colors.append(list(base_skin_tone_tuple))
-                        fill_color_index = color_to_index_map[base_skin_tone_tuple]
-                        print(
-                            f"DEBUG: Graph ID {graph_id}, Chosen skin tone (random for white area): {base_skin_tone_rgba}"
-                        )
-                    else:
-                        fill_color_index = stroke_color_index
-                elif (
-                    target_color_value_for_fill == stroke_color_index
-                    and chosen_curve_obj
-                ):  # If starting on a parametric curve color
-                    # User wants to extend the parametric curve color
-                    fill_color_index = stroke_color_index
-                    print(
-                        f"DEBUG: Graph ID {graph_id}, Chosen fill color (extending curve): {plot_specific_colors[fill_color_index]}"
-                    )
-                else:
-                    # If it's neither white nor a curve color, do nothing (shouldn't happen often if logic is sound)
-                    continue
-
-                for r, c in filled_coords:
-                    # Crucial check: only fill if the pixel is currently white (0) or the target curve color
-                    # This prevents filling over original silhouette or other distinct elements.
-                    # The condition is now more flexible to allow filling over the curve color if that's the target.
-                    if (
-                        current_matrix[r, c] == target_color_value_for_fill
-                    ):  # Fill only if it matches the color we started on
-                        current_matrix[r, c] = fill_color_index
-
-        # After all fills, update the colormap with all potentially new colors
-        current_cmap = plt.cm.colors.ListedColormap(plot_specific_colors)
-
-        self.graph_seed_counts_summaries.append(
+    for _ in range(20):
+        draw_curves.append(
             {
-                "Graph ID": graph_id,
-                "Hair Seeds Count": hair_seed_count,
-                "Fill Seeds Count": fill_seed_count,
-                "Fill Gradient Shadow Seeds Count": fill_gradient_shadow_seed_count,
+                "curve_color": draw_hair_color,  # Random color
+                "num_points": random.randint(50, 50),
+                "curve_type": "parabola",
+                "initial_x_pos": random.uniform(0, MATRIX_WIDTH),
+                "initial_y_pos": random.uniform(0, MATRIX_HEIGHT),
             }
         )
 
-        return current_matrix, current_cmap, all_seeds
+    for curve_num in range(len(draw_curves)):
+        curve_color = draw_curves[curve_num]["curve_color"]
+        num_points = draw_curves[curve_num]["num_points"]
+        curve_type = draw_curves[curve_num]["curve_type"]
 
-    def render_graphs(
-        self,
-        num_graphs=8,
-        hair_seed_range=(0, 0),
-        specific_fill_coords_xy=None,
-        mode=None,
-    ):
-        """Generates and displays multiple pixel art graphs with summaries."""
-        graph_data_list = []
-        for i in range(num_graphs):
-            graph_data_list.append(
-                self.generate_single_graph_data(
-                    i + 1, hair_seed_range, specific_fill_coords_xy, mode
-                )
-            )
-
-        self.all_curve_instance_summaries.sort(
-            key=lambda x: (x["Graph ID"], x["Parametric Curve Instance ID"])
-        )
-        self.graph_seed_counts_summaries.sort(key=lambda x: x["Graph ID"])
-
-        main_headers = [
-            "Graph ID",
-            "Parametric Curve Instance ID",
-            "Parametric Curve",
-            "Domain Type",
-            "Codomain Type",
-            "Parent Seed Type",
-            "Parent Seed Coord",
-        ]
-        main_table_data = [
-            [s[h] for h in main_headers] for s in self.all_curve_instance_summaries
-        ]
-        print("\n--- Parametric Curve Instance Details ---\n")
-        # Ensure table is printed even if empty
-        if main_table_data:
-            print(tabulate(main_table_data, headers=main_headers, tablefmt="grid"))
+        # For the first curve, try to start it from a "seed draw position"
+        if True or curve_num == 0 and seed_draw_positions:
+            # Randomly select a coordinate from the "bad area" for the curve's starting point/center
+            chosen_seed_coord = random.choice(seed_draw_positions)
+            # seed_draw_positions returns (x, y)
+            initial_x_pos = chosen_seed_coord[0]
+            initial_y_pos = chosen_seed_coord[1]
         else:
-            print("No parametric curve instances generated.")
+            # For other curves, or if no seed positions, use random positions
+            initial_x_pos = draw_curves[curve_num]["initial_x_pos"]
+            initial_y_pos = draw_curves[curve_num]["initial_y_pos"]
 
-        # Updated headers for the seed summary table to include character symbols
-        seed_summary_headers = [
-            "Graph ID",
-            "Hair Seeds Count (H)",
-            "Fill Seeds Count (F)",
-            "Fill Gradient Shadow Seeds Count (G)",
-        ]
-        seed_summary_data = [
-            [s[h.split("(")[0].strip()] for h in seed_summary_headers]
-            for s in self.graph_seed_counts_summaries
-        ]
-        print("\n--- Seed Distribution Summary ---\n")
-        print(
-            tabulate(seed_summary_data, headers=seed_summary_headers, tablefmt="grid")
-        )
-
-        fig, axes = plt.subplots(2, 4, figsize=(20, 10))
-        axes = axes.flatten()
-
-        for i, (matrix, cmap, seeds) in enumerate(graph_data_list):
-            graph_id = i + 1
-            axes[i].imshow(matrix, cmap=cmap, origin="upper")
-            axes[i].set_title(f"Graph ID: {graph_id}")
-            axes[i].set_xticks([])
-            axes[i].set_yticks([])
-
-            for seed in seeds:
-                coords = seed.get_coordinates()
-                marker_props = seed.get_marker_properties()
-                # Updated text to only include the character
-                label_text = marker_props["s"]
-                axes[i].text(
-                    coords[1],
-                    coords[0],
-                    label_text,
-                    color=marker_props["color"],
-                    ha="center",
-                    va="center",
-                    fontsize=10,
-                    fontweight="bold",
-                    bbox=marker_props["bbox"],
-                )
-
-        plt.tight_layout(rect=[0, 0.03, 1, 0.95])
-        plt.show()
-
-
-# --- Main Execution ---
-if __name__ == "__main__":
-    random.seed()  # Initialize random seed once at the start for true randomness across script runs
-
-    parser = argparse.ArgumentParser(
-        description="Generate pixel art with parametric curves and seed positions."
-    )
-    parser.add_argument(
-        "--range-hair-seeds",
-        nargs="+",
-        type=int,
-        default=[0],
-        help="Range (min, max) for random uniform number of hair seeds per graph. Provide as: min_count max_count. Default: 1",
-    )
-    parser.add_argument(
-        "--point-fill-seeds",
-        type=str,
-        default=None,
-        help='Specific (x,y) coordinates for fill seeds, e.g., "1-2,3-4". Default: center (1 seed).',
-    )
-    parser.add_argument(
-        "--mode",
-        type=str,
-        default=None,
-        help='Special mode for rendering. Current options: "skin-default", "skin-default-0", "skin-default-1", "skin-default-2".',
-    )
-
-    args = parser.parse_args()
-
-    if len(args.range_hair_seeds) == 1:
-        hair_min_seeds = args.range_hair_seeds[0]
-        hair_max_seeds = args.range_hair_seeds[0]
-    elif len(args.range_hair_seeds) == 2:
-        hair_min_seeds = args.range_hair_seeds[0]
-        hair_max_seeds = args.range_hair_seeds[1]
-    else:
-        raise ValueError(
-            "range-hair-seeds must have 1 or 2 integer values (min_count or min_count max_count)."
-        )
-
-    hair_seed_range = (int(hair_min_seeds), int(hair_max_seeds))
-
-    specific_fill_coords = []
-    if args.point_fill_seeds:
-        try:
-            points_str = args.point_fill_seeds.split(",")
-            for point_str in points_str:
-                x_str, y_str = point_str.strip().split("-")
-                specific_fill_coords.append((int(x_str), int(y_str)))
-        except ValueError:
-            raise ValueError(
-                "Invalid format for --point-fill-seeds. Use 'x1-y1,x2-y2,...'."
+        if curve_type == "parabola":
+            # Position variables for parabola
+            parabola_center_x = initial_x_pos
+            parabola_base_y = initial_y_pos
+            scale_x = random.uniform(5, 15)
+            scale_y = random.uniform(5, 15)
+            a = random.uniform(-0.5, 0.5)  # Controls opening direction and width
+            x_func, y_func = get_parabola_funcs(
+                parabola_center_x, parabola_base_y, scale_x, scale_y, a
             )
+            t_start = -1.0
+            t_end = 1.0
 
-    generator = PixelArtGenerator(
-        BASE_MATRIX,
-        HAIR_SPAWN_ROWS,
-        HAIR_SPAWN_COLS,
-        PARAMETRIC_CURVE_TYPES,
-        SKIN_TONE_COLORS,
-    )
-    generator.render_graphs(
-        num_graphs=8,
-        hair_seed_range=hair_seed_range,
-        specific_fill_coords_xy=specific_fill_coords,
-        mode=args.mode,
-    )
+        elif curve_type == "sigmoid":
+            # Position variables for sigmoid
+            sigmoid_center_x = initial_x_pos
+            sigmoid_midpoint_y = initial_y_pos
+            scale_x = random.uniform(5, 15)
+            scale_y = random.uniform(5, 15)
+            k = random.uniform(0.5, 5.0)  # Steepness
+            x0 = random.uniform(-0.5, 0.5)  # x-value of midpoint
+            x_func, y_func = get_sigmoid_funcs(
+                sigmoid_center_x, sigmoid_midpoint_y, scale_x, scale_y, k, x0
+            )
+            t_start = -5.0
+            t_end = 5.0
+
+        elif curve_type == "sine":
+            # Position variables for sine wave
+            sine_start_x = initial_x_pos
+            sine_y_axis_offset = initial_y_pos
+            amplitude = random.uniform(3, 10)
+            frequency = random.uniform(0.5, 3.0)
+            x_func, y_func = get_sine_funcs(
+                sine_start_x, sine_y_axis_offset, amplitude, frequency
+            )
+            t_start = 0
+            t_end = random.uniform(
+                MATRIX_WIDTH / 2, MATRIX_WIDTH
+            )  # Spread horizontally
+
+        elif curve_type == "linear":
+            # Position variables for linear curve
+            line_start_x = initial_x_pos
+            line_start_y = initial_y_pos
+            line_end_x = random.uniform(0, MATRIX_WIDTH)
+            line_end_y = random.uniform(0, MATRIX_HEIGHT)
+            x_func, y_func = get_linear_funcs(
+                line_start_x, line_start_y, line_end_x, line_end_y
+            )
+            t_start = 0.0
+            t_end = 1.0  # t goes from 0 to 1 for linear interpolation
+
+        elif curve_type == "cubic":
+            # Position variables for cubic curve
+            cubic_center_x = initial_x_pos
+            cubic_center_y = initial_y_pos
+            scale_x = random.uniform(5, 15)
+            scale_y = random.uniform(5, 15)
+            a = random.uniform(-0.1, 0.1)  # Coefficients for curve shape
+            b = random.uniform(-0.5, 0.5)
+            c = random.uniform(-0.5, 0.5)
+            x_func, y_func = get_cubic_funcs(
+                cubic_center_x, cubic_center_y, scale_x, scale_y, a, b, c
+            )
+            t_start = -1.0
+            t_end = 1.0
+
+        elif curve_type == "circle_arc":
+            # Position variables for circle arc
+            arc_center_x = initial_x_pos
+            arc_center_y = initial_y_pos
+            radius = random.uniform(5, min(MATRIX_WIDTH, MATRIX_HEIGHT) / 2 - 2)
+            start_angle = random.uniform(0, 2 * math.pi)
+            end_angle = start_angle + random.uniform(
+                math.pi / 4, 1.5 * math.pi
+            )  # Arc length
+            x_func, y_func = get_circle_arc_funcs(
+                arc_center_x, arc_center_y, radius, start_angle, end_angle
+            )
+            t_start = start_angle
+            t_end = end_angle
+
+        elif curve_type == "spiral":
+            # Position variables for spiral
+            spiral_center_x = initial_x_pos
+            spiral_center_y = initial_y_pos
+            radius_growth_rate = random.uniform(0.5, 2.0)
+            angular_speed = random.uniform(1.0, 3.0)
+            x_func = lambda t: spiral_center_x + (radius_growth_rate * t) * math.cos(
+                angular_speed * t
+            )
+            y_func = lambda t: spiral_center_y + (radius_growth_rate * t) * math.sin(
+                angular_speed * t
+            )
+            t_start = 0
+            t_end = random.uniform(
+                2 * math.pi, 6 * math.pi
+            )  # Vary the length of the curve
+
+        editor.draw_parametric_curve(
+            x_func, y_func, t_start, t_end, num_points, curve_color
+        )
+
+    # --- Demonstrate the new flood_fill method ---
+    # Apply flood fill only to the first graph for clear demonstration
+    skin_color_id = random.choice(list(range(9, 14)))
+
+    editor.flood_fill(12, 12, fill_color_id=skin_color_id)
+    editor.flood_fill(7, 4, fill_color_id=skin_color_id)
+    editor.flood_fill(18, 4, fill_color_id=skin_color_id)
+
+    editor.flood_fill(13, 7, fill_color_id=random.choice(list(range(2, 9))))
+
+    editor.flood_fill(12, 4, fill_color_id=random.choice(list(range(2, 9))))
+
+    shoes_color_id = random.choice(list(range(2, 9)))
+    editor.flood_fill(9, 2, fill_color_id=shoes_color_id)
+    editor.flood_fill(15, 2, fill_color_id=shoes_color_id)
+
+    # Set subplot limits and labels
+    ax.set_xlim(0, MATRIX_WIDTH)
+    ax.set_ylim(0, MATRIX_HEIGHT)
+    ax.set_xlabel("Pixel X")
+    ax.set_ylabel("Pixel Y")
+    ax.set_aspect("equal", adjustable="box")
+    ax.set_title(f"Pixel Art {i+1}")  # Add a title for each subplot
+
+    # Iterate over the matrix to draw each pixel as a colored square
+    # The matrix now stores data as if (0,0) is top-left, but we plot it
+    # as if (0,0) is bottom-left. So, the plotting logic needs to invert Y.
+    for row_idx in range(MATRIX_HEIGHT):
+        for col_idx in range(MATRIX_WIDTH):
+            pixel_value = editor.matrix[row_idx, col_idx]
+            color = editor.get_mpl_color(pixel_value)
+
+            # Calculate the coordinates for the current pixel's square
+            # Invert y-coordinate for drawing to match matrix (0 at top) to plot (0 at bottom)
+            # This is the crucial part that aligns the matrix data with Matplotlib's y-axis.
+            square_y_bottom = MATRIX_HEIGHT - 1 - row_idx
+            square_x_left = col_idx
+
+            x_coords = [
+                square_x_left,
+                square_x_left + 1,
+                square_x_left + 1,
+                square_x_left,
+            ]
+            y_coords = [
+                square_y_bottom,
+                square_y_bottom,
+                square_y_bottom + 1,
+                square_y_bottom + 1,
+            ]
+
+            ax.fill(x_coords, y_coords, color=color, edgecolor="none")
+
+    # Draw horizontal grid lines
+    for y in range(MATRIX_HEIGHT + 1):
+        ax.axhline(y, color="lightgray", linestyle="-", linewidth=0.5)
+
+    # Draw vertical grid lines
+    for x in range(MATRIX_WIDTH + 1):
+        ax.axvline(x, color="lightgray", linestyle="-", linewidth=0.5)
+
+# Adjust layout to prevent titles/labels from overlapping
+plt.tight_layout()
+
+# Display the plot
+plt.show()
