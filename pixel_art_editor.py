@@ -1,7 +1,5 @@
 import numpy as np
-
-# collections is no longer needed as flood_fill is removed
-# import collections
+import math  # Import math for parametric curves
 
 
 class PixelArtEditor:
@@ -66,10 +64,59 @@ class PixelArtEditor:
             col_idx (int): The column index of the pixel.
             color_id (int): The integer ID of the color to draw.
         """
+        # Ensure coordinates are within bounds before drawing
         if 0 <= row_idx < self.matrix.shape[0] and 0 <= col_idx < self.matrix.shape[1]:
             self.matrix[row_idx, col_idx] = color_id
             self.last_draw_color_id = color_id
-        else:
-            print(
-                f"Warning: Attempted to draw outside matrix bounds at ({row_idx}, {col_idx})"
-            )
+        # else:
+        # print(f"Warning: Attempted to draw outside matrix bounds at ({row_idx}, {col_idx})")
+
+    def draw_rectangle(self, start_row, start_col, width, height, color_id):
+        """
+        Draws a filled rectangle on the matrix.
+
+        Args:
+            start_row (int): The starting row (top-left corner) of the rectangle.
+            start_col (int): The starting column (top-left corner) of the rectangle.
+            width (int): The width of the rectangle.
+            height (int): The height of the rectangle.
+            color_id (int): The integer ID of the color to draw the rectangle with.
+        """
+        end_row = start_row + height
+        end_col = start_col + width
+
+        # Iterate over the rectangle's area and draw each pixel
+        for r in range(start_row, end_row):
+            for c in range(start_col, end_col):
+                self.draw_pixel(r, c, color_id)
+
+    def draw_parametric_curve(
+        self, x_func, y_func, t_start, t_end, num_points, color_id
+    ):
+        """
+        Draws a parametric curve by plotting individual pixels.
+
+        Args:
+            x_func (callable): A function that returns the x-coordinate for a given parameter t.
+            y_func (callable): A function that returns the y-coordinate for a given parameter t.
+            t_start (float): The starting value of the parameter t.
+            t_end (float): The ending value of the parameter t.
+            num_points (int): The number of points to plot along the curve.
+            color_id (int): The integer ID of the color to draw the curve with.
+        """
+        t_values = np.linspace(t_start, t_end, num_points)
+        matrix_height, matrix_width = self.matrix.shape
+
+        for t in t_values:
+            # Calculate floating point coordinates
+            x_float = x_func(t)
+            y_float = y_func(t)
+
+            # Convert to integer pixel coordinates, clamping to matrix bounds
+            # We need to invert y for drawing to match matrix (0 at top) to plot (0 at bottom)
+            col_idx = int(round(x_float))
+            row_idx = int(
+                round(y_float)
+            )  # Matplotlib's y-axis is inverted relative to matrix rows
+
+            self.draw_pixel(row_idx, col_idx, color_id)

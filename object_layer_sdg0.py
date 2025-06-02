@@ -1,10 +1,14 @@
 import matplotlib.pyplot as plt
 import numpy as np
 import random
+import math  # Import math for trigonometric functions
 from pixel_art_editor import PixelArtEditor  # Import the new class
 
 # Import the default player skin frame. This is the authoritative matrix.
 from object_layer.object_layer_data import DEFAULT_PLAYER_SKIN_FRAME_DOWN_IDLE
+
+# Convert the imported list to a NumPy array
+DEFAULT_PLAYER_SKIN_FRAME_DOWN_IDLE = np.array(DEFAULT_PLAYER_SKIN_FRAME_DOWN_IDLE)
 
 
 # Define the color mapping for 0 (white) and 1 (black) in RGBA (0-255) format
@@ -19,27 +23,56 @@ COLOR_PALETTE = {
     7: (0, 255, 255, 255),  # Cyan (R, G, B, Alpha)
 }
 
-# Initialize the PixelArtEditor with the authoritative DEFAULT_PLAYER_SKIN_FRAME_DOWN_IDLE
-# We use .copy() to ensure the editor works on its own instance of the matrix,
-# preventing unintended modifications to the original imported array if it were mutable.
-editor = PixelArtEditor(DEFAULT_PLAYER_SKIN_FRAME_DOWN_IDLE.copy(), COLOR_PALETTE)
+# Get the dimensions of the default matrix for boundary checks
+MATRIX_HEIGHT, MATRIX_WIDTH = DEFAULT_PLAYER_SKIN_FRAME_DOWN_IDLE.shape
 
 
-# --- Demonstrate Drawing by directly overwriting pixels ---
+# --- Define Parametric Curve Functions ---
+# These functions will be passed to editor.draw_parametric_curve
 
-# Example drawing operation: Draw a red pixel on the silhouette (border)
-editor.draw_pixel(0, 0, 2)  # Draw red (color ID 2) at (0,0)
-editor.draw_pixel(0, 1, 2)
-editor.draw_pixel(1, 0, 2)
-editor.draw_pixel(1, 1, 2)
 
-# Add your requested green pixel draws *after* the previous operations
-editor.draw_pixel(11, 11, 3)  # Draw green (color ID 3)
-editor.draw_pixel(12, 12, 3)  # Draw green (color ID 3)
-editor.draw_pixel(13, 13, 3)  # Draw green (color ID 3)
+def get_parabola_funcs(x_offset, y_offset, scale_x, scale_y, a):
+    """Returns x and y functions for a parabola."""
+    x_func = lambda t: x_offset + scale_x * t
+    y_func = lambda t: y_offset + scale_y * a * (t**2)
+    return x_func, y_func
 
-# Get the dimensions of the pixel art matrix after all operations
-MATRIX_HEIGHT, MATRIX_WIDTH = editor.matrix.shape
+
+def get_sigmoid_funcs(x_offset, y_offset, scale_x, scale_y, k, x0):
+    """Returns x and y functions for a sigmoid curve."""
+    x_func = lambda t: x_offset + scale_x * t
+    y_func = lambda t: y_offset + scale_y * (1 / (1 + math.exp(-k * (t - x0))))
+    return x_func, y_func
+
+
+def get_sine_funcs(x_offset, y_offset, amplitude, frequency):
+    """Returns x and y functions for a sine wave."""
+    x_func = lambda t: x_offset + t
+    y_func = lambda t: y_offset + amplitude * math.sin(frequency * t)
+    return x_func, y_func
+
+
+def get_linear_funcs(x_start, y_start, x_end, y_end):
+    """Returns x and y functions for a linear curve."""
+    # Linear interpolation between two points
+    x_func = lambda t: x_start + t * (x_end - x_start)
+    y_func = lambda t: y_start + t * (y_end - y_start)
+    return x_func, y_func
+
+
+def get_cubic_funcs(x_offset, y_offset, scale_x, scale_y, a, b, c):
+    """Returns x and y functions for a cubic curve."""
+    x_func = lambda t: x_offset + scale_x * t
+    y_func = lambda t: y_offset + scale_y * (a * (t**3) + b * (t**2) + c * t)
+    return x_func, y_func
+
+
+def get_circle_arc_funcs(center_x, center_y, radius, start_angle, end_angle):
+    """Returns x and y functions for a circular arc."""
+    x_func = lambda t: center_x + radius * math.cos(t)
+    y_func = lambda t: center_y + radius * math.sin(t)
+    return x_func, y_func
+
 
 # Create a figure and a 2x4 grid of subplots
 fig, axes = plt.subplots(2, 4, figsize=(26, 13), dpi=100)
@@ -49,6 +82,142 @@ axes = axes.flatten()
 
 # Configure each subplot to display the pixel art on a 26x26 grid
 for i, ax in enumerate(axes):
+    # Initialize a new PixelArtEditor for each subplot with a fresh copy of the default matrix
+    # This ensures each subplot starts with the original silhouette and independent drawings.
+    editor = PixelArtEditor(DEFAULT_PLAYER_SKIN_FRAME_DOWN_IDLE.copy(), COLOR_PALETTE)
+
+    # --- Demonstrate Drawing by directly overwriting pixels (from previous request) ---
+    # Example drawing operation: Draw a red pixel on the silhouette (border)
+    editor.draw_pixel(0, 0, 2)  # Draw red (color ID 2) at (0,0)
+    # Draw more red pixels to create a visible pattern
+    editor.draw_pixel(0, 1, 2)
+    editor.draw_pixel(1, 0, 2)
+    editor.draw_pixel(1, 1, 2)
+
+    # Add your requested green pixel draws *after* the previous operations
+    editor.draw_pixel(11, 11, 3)  # Draw green (color ID 3)
+    editor.draw_pixel(12, 12, 3)  # Draw green (color ID 3)
+    editor.draw_pixel(13, 13, 3)  # Draw green (color ID 3)
+
+    # --- Add 2 random rectangles ---
+    for _ in range(2):
+        rect_x = random.randint(0, MATRIX_WIDTH - 5)
+        rect_y = random.randint(0, MATRIX_HEIGHT - 5)
+        rect_width = random.randint(3, 8)
+        rect_height = random.randint(3, 8)
+        rect_color = random.choice(
+            [2, 3, 4, 5, 6, 7]
+        )  # Random color excluding white/black
+        editor.draw_rectangle(rect_y, rect_x, rect_width, rect_height, rect_color)
+
+    # --- Add 2 random parametric curves ---
+    curve_types = [
+        "parabola",
+        "sigmoid",
+        "sine",
+        "linear",
+        "cubic",
+        "circle_arc",
+        "spiral",
+    ]
+    for _ in range(2):
+        curve_color = random.choice([2, 3, 4, 5, 6, 7])  # Random color
+        num_points = random.randint(50, 200)
+
+        curve_type = random.choice(curve_types)
+
+        if curve_type == "parabola":
+            x_offset = random.uniform(0, MATRIX_WIDTH / 4)
+            y_offset = random.uniform(0, MATRIX_HEIGHT / 4)
+            scale_x = random.uniform(5, 15) / MATRIX_WIDTH
+            scale_y = random.uniform(5, 15) / MATRIX_HEIGHT
+            a = random.uniform(-2, 2)
+            x_func, y_func = get_parabola_funcs(x_offset, y_offset, scale_x, scale_y, a)
+            t_start = -1.0
+            t_end = 1.0
+
+        elif curve_type == "sigmoid":
+            x_offset = random.uniform(0, MATRIX_WIDTH / 4)
+            y_offset = random.uniform(0, MATRIX_HEIGHT / 4)
+            scale_x = random.uniform(5, 15) / MATRIX_WIDTH
+            scale_y = random.uniform(5, 15)
+            k = random.uniform(0.5, 5.0)
+            x0 = random.uniform(-0.5, 0.5)
+            x_func, y_func = get_sigmoid_funcs(
+                x_offset, y_offset, scale_x, scale_y, k, x0
+            )
+            t_start = -5.0
+            t_end = 5.0
+
+        elif curve_type == "sine":
+            x_offset = random.uniform(0, MATRIX_WIDTH / 2)
+            y_offset = random.uniform(0, MATRIX_HEIGHT)
+            amplitude = random.uniform(3, 10)
+            frequency = random.uniform(0.5, 3.0)
+            x_func, y_func = get_sine_funcs(x_offset, y_offset, amplitude, frequency)
+            t_start = 0
+            t_end = random.uniform(
+                MATRIX_WIDTH / 2, MATRIX_WIDTH
+            )  # Spread horizontally
+
+        elif curve_type == "linear":
+            x1 = random.uniform(0, MATRIX_WIDTH)
+            y1 = random.uniform(0, MATRIX_HEIGHT)
+            x2 = random.uniform(0, MATRIX_WIDTH)
+            y2 = random.uniform(0, MATRIX_HEIGHT)
+            x_func, y_func = get_linear_funcs(x1, y1, x2, y2)
+            t_start = 0.0
+            t_end = 1.0  # t goes from 0 to 1 for linear interpolation
+
+        elif curve_type == "cubic":
+            x_offset = random.uniform(0, MATRIX_WIDTH / 4)
+            y_offset = random.uniform(0, MATRIX_HEIGHT / 4)
+            scale_x = random.uniform(5, 15) / MATRIX_WIDTH
+            scale_y = random.uniform(5, 15) / MATRIX_HEIGHT
+            a = random.uniform(-1, 1)
+            b = random.uniform(-1, 1)
+            c = random.uniform(-1, 1)
+            x_func, y_func = get_cubic_funcs(
+                x_offset, y_offset, scale_x, scale_y, a, b, c
+            )
+            t_start = -1.0
+            t_end = 1.0
+
+        elif curve_type == "circle_arc":
+            center_x = random.uniform(5, MATRIX_WIDTH - 5)
+            center_y = random.uniform(5, MATRIX_HEIGHT - 5)
+            radius = random.uniform(5, min(MATRIX_WIDTH, MATRIX_HEIGHT) / 2 - 2)
+            start_angle = random.uniform(0, 2 * math.pi)
+            end_angle = start_angle + random.uniform(
+                math.pi / 4, 1.5 * math.pi
+            )  # Arc length
+            x_func, y_func = get_circle_arc_funcs(
+                center_x, center_y, radius, start_angle, end_angle
+            )
+            t_start = start_angle
+            t_end = end_angle
+
+        elif curve_type == "spiral":
+            center_x = random.uniform(5, MATRIX_WIDTH - 5)
+            center_y = random.uniform(5, MATRIX_HEIGHT - 5)
+            radius_growth = random.uniform(0.5, 2.0)
+            angular_speed = random.uniform(1.0, 3.0)
+            x_func = lambda t: center_x + (radius_growth * t) * math.cos(
+                angular_speed * t
+            )
+            y_func = lambda t: center_y + (radius_growth * t) * math.sin(
+                angular_speed * t
+            )
+            t_start = 0
+            t_end = random.uniform(
+                2 * math.pi, 6 * math.pi
+            )  # Vary the length of the curve
+
+        editor.draw_parametric_curve(
+            x_func, y_func, t_start, t_end, num_points, curve_color
+        )
+
+    # Set subplot limits and labels
     ax.set_xlim(0, MATRIX_WIDTH)
     ax.set_ylim(0, MATRIX_HEIGHT)
     ax.set_xlabel("Pixel X")
