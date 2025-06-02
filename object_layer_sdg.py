@@ -145,7 +145,7 @@ class HairSeed(SeedPosition):
     """Represents a 'hair' type seed position, generating a parametric curve stroke."""
 
     def __init__(self, row, col):
-        super().__init__(row, col, "H", "red", "none")
+        super().__init__(row, col, "H", "black", "none")
         self.type = "hair"
 
     def can_generate_stroke(self):
@@ -167,7 +167,7 @@ class FillGradientShadowSeed(SeedPosition):
     """Represents a 'fill-gradient-shadow' type seed position."""
 
     def __init__(self, row, col):
-        super().__init__(row, col, "G", "blue", "none")
+        super().__init__(row, col, "G", "black", "none")
         self.type = "fill-gradient-shadow"
 
     def can_generate_stroke(self):
@@ -375,7 +375,6 @@ class PixelArtGenerator:
             abs_col = int(round(origin_col + (t_rel - t_offset)))
             abs_row = int(round(origin_row + (y_rel - y_offset)))
 
-            # Ensure coordinates are within matrix bounds
             if 0 <= abs_row < self.matrix_rows and 0 <= abs_col < self.matrix_cols:
                 matrix[abs_row, abs_col] = color_value
 
@@ -390,63 +389,86 @@ class PixelArtGenerator:
 
         hair_seeds = self._get_random_hair_seeds(hair_seed_range[0], hair_seed_range[1])
         hair_coords = {seed.get_coordinates() for seed in hair_seeds}
-
         fill_seeds = self._get_fill_seeds(specific_fill_coords_xy, hair_coords, mode)
 
         all_seeds = hair_seeds + fill_seeds
-        random.shuffle(all_seeds)
 
-        plot_specific_colors = BASE_COLORS.tolist()
+        # Initialize color map and index map for this specific graph
+        plot_specific_colors = (
+            BASE_COLORS.tolist()
+        )  # Always starts with white (0) and black (1)
+        color_to_index_map = {
+            tuple(color): i for i, color in enumerate(plot_specific_colors)
+        }
 
-        skin_tone_start_index = len(plot_specific_colors)
+        # Add skin tones to the color map
         for color in self.skin_tone_colors:
-            plot_specific_colors.append(color)
+            color_tuple = tuple(color)
+            if color_tuple not in color_to_index_map:
+                color_to_index_map[color_tuple] = len(plot_specific_colors)
+                plot_specific_colors.append(color)
 
-        # Determine stroke color (random for hair curves in all modes)
-        stroke_color = self._generate_random_rgba_color()
-        stroke_color_index = len(plot_specific_colors)
-        plot_specific_colors.append(stroke_color)
+        # Determine stroke color (random for hair curves) and add to color map
+        stroke_color = (
+            self._generate_random_rgba_color()
+        )  # This is now a distinct color for debugging
+        stroke_color_tuple = tuple(stroke_color)
+        if stroke_color_tuple not in color_to_index_map:
+            color_to_index_map[stroke_color_tuple] = len(plot_specific_colors)
+            plot_specific_colors.append(stroke_color)
+        stroke_color_index = color_to_index_map[stroke_color_tuple]
 
-        # Add black color for the straight lines (ensure it's available if not already index 1)
-        black_color_index = 1  # Black is always at index 1 in BASE_COLORS
+        # Black color index is always 1
+        black_color_index = 1
 
         current_cmap = plt.cm.colors.ListedColormap(plot_specific_colors)
 
-        chosen_curve_obj = random.choice(list(self.parametric_curve_types.values()))
+        # Only choose a curve object if there are hair seeds to draw curves
+        chosen_curve_obj = None
+        if hair_seeds:
+            chosen_curve_obj = random.choice(list(self.parametric_curve_types.values()))
+        else:
+            print(
+                f"Graph ID {graph_id}: No hair seeds generated, skipping curve drawing."
+            )
 
         hair_seed_count = 0
         fill_seed_count = 0
         fill_gradient_shadow_seed_count = 0
 
         # --- DRAW PARAMETRIC CURVES FIRST (from hair seeds) ---
-        for seed in hair_seeds:
-            hair_seed_count += 1
-            self._curve_instance_id_counter += 1
-            parametric_curve_instance_id = self._curve_instance_id_counter
+        if (
+            chosen_curve_obj
+        ):  # Only draw curves if a curve object was chosen (i.e., hair seeds exist)
+            for seed in hair_seeds:
+                hair_seed_count += 1
+                self._curve_instance_id_counter += 1
+                parametric_curve_instance_id = self._curve_instance_id_counter
 
-            self._draw_curve_on_matrix(
-                current_matrix,
-                chosen_curve_obj,
-                seed.get_coordinates(),
-                t_span=random.randint(10, 25),
-                color_value=stroke_color_index,
-                mode=mode,
-            )
-            parent_coords = seed.get_coordinates()
-            self.all_curve_instance_summaries.append(
-                {
-                    "Graph ID": graph_id,
-                    "Parametric Curve Instance ID": parametric_curve_instance_id,
-                    "Parametric Curve": chosen_curve_obj.name.capitalize(),
-                    "Domain Type": chosen_curve_obj.domain_type,
-                    "Codomain Type": chosen_curve_obj.codomain_type,
-                    "Parent Seed Type": seed.type,
-                    "Parent Seed Coord": f"({parent_coords[1]}, {parent_coords[0]})",
-                }
-            )
+                self._draw_curve_on_matrix(
+                    current_matrix,
+                    chosen_curve_obj,
+                    seed.get_coordinates(),
+                    t_span=random.randint(10, 25),
+                    color_value=stroke_color_index,
+                    mode=mode,
+                )
+                parent_coords = seed.get_coordinates()
+                self.all_curve_instance_summaries.append(
+                    {
+                        "Graph ID": graph_id,
+                        "Parametric Curve Instance ID": parametric_curve_instance_id,
+                        "Parametric Curve": chosen_curve_obj.name.capitalize(),
+                        "Domain Type": chosen_curve_obj.domain_type,
+                        "Codomain Type": chosen_curve_obj.codomain_type,
+                        "Parent Seed Type": seed.type,
+                        "Parent Seed Coord": f"({parent_coords[1]}, {parent_coords[0]})",
+                    }
+                )
 
         # --- Draw straight black lines for skin-default-2 mode ---
         if mode == "skin-default-2":
+            # TODO: this is a parametric type 'line'
             # Line 1: from (col 9, row 17) to (col 15, row 17)
             for c in range(9, 16):  # columns 9 to 15 inclusive
                 if 0 <= 17 < self.matrix_rows and 0 <= c < self.matrix_cols:
@@ -457,10 +479,6 @@ class PixelArtGenerator:
                     current_matrix[20, c] = black_color_index
 
         # --- THEN PERFORM FLOOD FILL FOR FILL SEEDS ---
-        color_to_index_map = {
-            tuple(color): i for i, color in enumerate(plot_specific_colors)
-        }
-
         for seed in fill_seeds:
             start_row, start_col = seed.get_coordinates()
 
@@ -470,129 +488,169 @@ class PixelArtGenerator:
             if seed.type == "fill-gradient-shadow":
                 fill_gradient_shadow_seed_count += 1
                 # Only apply gradient/shadow if the seed falls on a parametric curve's color
-                if target_color_value_for_fill != stroke_color_index:
+                # This condition now correctly checks if the pixel is the stroke color,
+                # which implies a curve was drawn.
+                if target_color_value_for_fill == stroke_color_index:
+                    # If it IS on a parametric curve, then perform flood fill on that curve's color
+                    filled_coords = self._flood_fill_get_coords(
+                        current_matrix,
+                        start_row,
+                        start_col,
+                        target_color_value_for_fill,
+                    )
+
+                    if not filled_coords:
+                        continue
+
+                    # Determine min/max coordinates for gradient calculation
+                    min_row_filled = min(r for r, c in filled_coords)
+                    max_row_filled = max(r for r, c in filled_coords)
+                    min_col_filled = min(c for r, c in filled_coords)
+                    max_col_filled = max(c for r, c in filled_coords)
+
+                    # Use the actual parametric curve color as the base for the gradient
+                    base_color_for_gradient = plot_specific_colors[stroke_color_index]
+
+                    # Randomly choose gradient direction for skin-default-2 mode
+                    gradient_direction = (
+                        random.choice(
+                            [
+                                "left-to-right",
+                                "right-to-left",
+                                "top-to-bottom",
+                                "bottom-to-top",
+                            ]
+                        )
+                        if mode == "skin-default-2"
+                        else "left-to-right"
+                    )
+
+                    for r, c in filled_coords:
+                        darkening_factor = 0
+                        noise_amount = 0
+
+                        if gradient_direction == "left-to-right":
+                            if max_col_filled == min_col_filled:
+                                normalized_coord = 0
+                            else:
+                                normalized_coord = (c - min_col_filled) / (
+                                    max_col_filled - min_col_filled
+                                )
+                            darkening_factor = normalized_coord * 0.5
+                            noise_amount = normalized_coord * 0.1 * random.random()
+                        elif gradient_direction == "right-to-left":
+                            if max_col_filled == min_col_filled:
+                                normalized_coord = 0
+                            else:
+                                normalized_coord = (max_col_filled - c) / (
+                                    max_col_filled - min_col_filled
+                                )
+                            darkening_factor = normalized_coord * 0.5
+                            noise_amount = normalized_coord * 0.1 * random.random()
+                        elif gradient_direction == "top-to-bottom":
+                            if max_row_filled == min_row_filled:
+                                normalized_coord = 0
+                            else:
+                                normalized_coord = (r - min_row_filled) / (
+                                    max_row_filled - min_row_filled
+                                )
+                            darkening_factor = normalized_coord * 0.5
+                            noise_amount = normalized_coord * 0.1 * random.random()
+                        elif gradient_direction == "bottom-to-top":
+                            if max_row_filled == min_row_filled:
+                                normalized_coord = 0
+                            else:
+                                normalized_coord = (max_row_filled - r) / (
+                                    max_row_filled - min_row_filled
+                                )
+                            darkening_factor = normalized_coord * 0.5
+                            noise_amount = normalized_coord * 0.1 * random.random()
+
+                        darkened_rgba = [
+                            max(0, base_color_for_gradient[0] * (1 - darkening_factor)),
+                            max(0, base_color_for_gradient[1] * (1 - darkening_factor)),
+                            max(0, base_color_for_gradient[2] * (1 - darkening_factor)),
+                            base_color_for_gradient[3],
+                        ]
+
+                        final_rgba = [
+                            max(0, darkened_rgba[0] - noise_amount),
+                            max(0, darkened_rgba[1] - noise_amount),
+                            max(0, darkened_rgba[2] - noise_amount),
+                            darkened_rgba[3],
+                        ]
+
+                        final_rgba_tuple = tuple(final_rgba)
+
+                        if final_rgba_tuple not in color_to_index_map:
+                            color_to_index_map[final_rgba_tuple] = len(
+                                plot_specific_colors
+                            )
+                            plot_specific_colors.append(list(final_rgba_tuple))
+
+                        current_matrix[r, c] = color_to_index_map[final_rgba_tuple]
+                else:
                     # If not on a curve (i.e., on white/black background), skip filling
                     continue
 
-                # If it IS on a parametric curve, then perform flood fill on that curve's color
-                filled_coords = self._flood_fill_get_coords(
-                    current_matrix, start_row, start_col, target_color_value_for_fill
-                )
-
-                if not filled_coords:
-                    continue
-
-                # Determine min/max coordinates for gradient calculation
-                min_row_filled = min(r for r, c in filled_coords)
-                max_row_filled = max(r for r, c in filled_coords)
-                min_col_filled = min(c for r, c in filled_coords)
-                max_col_filled = max(c for r, c in filled_coords)
-
-                # Use the actual parametric curve color as the base for the gradient
-                base_color_for_gradient = plot_specific_colors[stroke_color_index]
-
-                # Randomly choose gradient direction for skin-default-2 mode
-                gradient_direction = (
-                    random.choice(
-                        [
-                            "left-to-right",
-                            "right-to-left",
-                            "top-to-bottom",
-                            "bottom-to-top",
-                        ]
-                    )
-                    if mode == "skin-default-2"
-                    else "left-to-right"
-                )
-
-                for r, c in filled_coords:
-                    darkening_factor = 0
-                    noise_amount = 0
-
-                    if gradient_direction == "left-to-right":
-                        if max_col_filled == min_col_filled:
-                            normalized_coord = 0
-                        else:
-                            normalized_coord = (c - min_col_filled) / (
-                                max_col_filled - min_col_filled
-                            )
-                        darkening_factor = normalized_coord * 0.5
-                        noise_amount = normalized_coord * 0.1 * random.random()
-                    elif gradient_direction == "right-to-left":
-                        if max_col_filled == min_col_filled:
-                            normalized_coord = 0
-                        else:
-                            normalized_coord = (max_col_filled - c) / (
-                                max_col_filled - min_col_filled
-                            )
-                        darkening_factor = normalized_coord * 0.5
-                        noise_amount = normalized_coord * 0.1 * random.random()
-                    elif gradient_direction == "top-to-bottom":
-                        if max_row_filled == min_row_filled:
-                            normalized_coord = 0
-                        else:
-                            normalized_coord = (r - min_row_filled) / (
-                                max_row_filled - min_row_filled
-                            )
-                        darkening_factor = normalized_coord * 0.5
-                        noise_amount = normalized_coord * 0.1 * random.random()
-                    elif gradient_direction == "bottom-to-top":
-                        if max_row_filled == min_row_filled:
-                            normalized_coord = 0
-                        else:
-                            normalized_coord = (max_row_filled - r) / (
-                                max_row_filled - min_row_filled
-                            )
-                        darkening_factor = normalized_coord * 0.5
-                        noise_amount = normalized_coord * 0.1 * random.random()
-
-                    darkened_rgba = [
-                        max(0, base_color_for_gradient[0] * (1 - darkening_factor)),
-                        max(0, base_color_for_gradient[1] * (1 - darkening_factor)),
-                        max(0, base_color_for_gradient[2] * (1 - darkening_factor)),
-                        base_color_for_gradient[3],
-                    ]
-
-                    final_rgba = [
-                        max(0, darkened_rgba[0] - noise_amount),
-                        max(0, darkened_rgba[1] - noise_amount),
-                        max(0, darkened_rgba[2] - noise_amount),
-                        darkened_rgba[3],
-                    ]
-
-                    final_rgba_tuple = tuple(final_rgba)
-
-                    if final_rgba_tuple not in color_to_index_map:
-                        color_to_index_map[final_rgba_tuple] = len(plot_specific_colors)
-                        plot_specific_colors.append(list(final_rgba_tuple))
-
-                    current_matrix[r, c] = color_to_index_map[final_rgba_tuple]
-
             else:  # Regular fill seed (type == "fill")
                 fill_seed_count += 1
-                # For regular fill seeds, they should fill the contiguous area of the ORIGINAL background color,
-                # respecting curves and lines as boundaries.
-                original_background_color_value = self.base_matrix[start_row, start_col]
+                # For regular fill seeds, they should fill the contiguous area of the ORIGINAL white background (0).
+                # They should never fill black pixels (1).
+
+                # Check if the starting point is an original black pixel. If so, skip.
+                # This check remains valid for preventing fills over original silhouette pixels.
+                if self.base_matrix[start_row, start_col] == 1:
+                    continue
+
+                # The target for flood fill for a regular FillSeed should always be the white background (0).
+                target_color_for_flood_fill = 0
+
                 filled_coords = self._flood_fill_get_coords(
-                    current_matrix,
-                    start_row,
-                    start_col,
-                    original_background_color_value,
+                    current_matrix, start_row, start_col, target_color_for_flood_fill
                 )
 
                 if not filled_coords:
                     continue
 
-                base_skin_tone_rgba = random.choice(self.skin_tone_colors)
-                base_skin_tone_tuple = tuple(base_skin_tone_rgba)
-                if base_skin_tone_tuple not in color_to_index_map:
-                    color_to_index_map[base_skin_tone_tuple] = len(plot_specific_colors)
-                    plot_specific_colors.append(list(base_skin_tone_tuple))
+                # Debug print to show the mode for this fill seed
+                print(f"DEBUG: Graph ID {graph_id}, Mode for fill seed: {mode}")
 
-                fill_color_index = color_to_index_map[base_skin_tone_tuple]
+                # Determine fill color for FillSeed (F)
+                if target_color_value_for_fill == 0:  # If starting on a white pixel
+                    # User wants random skin tones for default fills
+                    base_skin_tone_rgba = random.choice(self.skin_tone_colors)
+                    base_skin_tone_tuple = tuple(base_skin_tone_rgba)
+                    if base_skin_tone_tuple not in color_to_index_map:
+                        color_to_index_map[base_skin_tone_tuple] = len(
+                            plot_specific_colors
+                        )
+                        plot_specific_colors.append(list(base_skin_tone_tuple))
+                    fill_color_index = color_to_index_map[base_skin_tone_tuple]
+                    print(
+                        f"DEBUG: Graph ID {graph_id}, Chosen skin tone (random for white area): {base_skin_tone_rgba}"
+                    )
+                elif (
+                    target_color_value_for_fill == stroke_color_index
+                    and chosen_curve_obj
+                ):  # If starting on a parametric curve color
+                    # User wants to extend the parametric curve color
+                    fill_color_index = stroke_color_index
+                    print(
+                        f"DEBUG: Graph ID {graph_id}, Chosen fill color (extending curve): {plot_specific_colors[fill_color_index]}"
+                    )
+                else:
+                    # If it's neither white nor a curve color, do nothing (shouldn't happen often if logic is sound)
+                    continue
 
                 for r, c in filled_coords:
-                    current_matrix[r, c] = fill_color_index
+                    # Crucial check: only fill if the pixel is currently white (0) or the target curve color
+                    # This prevents filling over original silhouette or other distinct elements.
+                    # The condition is now more flexible to allow filling over the curve color if that's the target.
+                    if (
+                        current_matrix[r, c] == target_color_value_for_fill
+                    ):  # Fill only if it matches the color we started on
+                        current_matrix[r, c] = fill_color_index
 
         # After all fills, update the colormap with all potentially new colors
         current_cmap = plt.cm.colors.ListedColormap(plot_specific_colors)
@@ -611,7 +669,7 @@ class PixelArtGenerator:
     def render_graphs(
         self,
         num_graphs=8,
-        hair_seed_range=(1, 1),
+        hair_seed_range=(0, 0),
         specific_fill_coords_xy=None,
         mode=None,
     ):
@@ -642,7 +700,11 @@ class PixelArtGenerator:
             [s[h] for h in main_headers] for s in self.all_curve_instance_summaries
         ]
         print("\n--- Parametric Curve Instance Details ---\n")
-        print(tabulate(main_table_data, headers=main_headers, tablefmt="grid"))
+        # Ensure table is printed even if empty
+        if main_table_data:
+            print(tabulate(main_table_data, headers=main_headers, tablefmt="grid"))
+        else:
+            print("No parametric curve instances generated.")
 
         # Updated headers for the seed summary table to include character symbols
         seed_summary_headers = [
@@ -702,7 +764,7 @@ if __name__ == "__main__":
         "--range-hair-seeds",
         nargs="+",
         type=int,
-        default=[1],
+        default=[0],
         help="Range (min, max) for random uniform number of hair seeds per graph. Provide as: min_count max_count. Default: 1",
     )
     parser.add_argument(
@@ -731,7 +793,7 @@ if __name__ == "__main__":
             "range-hair-seeds must have 1 or 2 integer values (min_count or min_count max_count)."
         )
 
-    hair_seed_range = (hair_min_seeds, hair_max_seeds)
+    hair_seed_range = (int(hair_min_seeds), int(hair_max_seeds))
 
     specific_fill_coords = []
     if args.point_fill_seeds:
