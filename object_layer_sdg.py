@@ -362,7 +362,7 @@ if __name__ == "__main__":
         elif args.mode == "skin-default-0":
 
             def render_lock_hair(initial_x_pos, initial_y_pos, color):
-                cords = [[0, 0], [-1, 1], [-1, 0]]
+                cords = [[0, 0], [-1, 1], [-1, 0], [-1, 0], [-1, -1], [-1, -1]]
                 pointer = [initial_x_pos, initial_y_pos]
                 for cord in cords:
                     editor.draw_pixel(pointer[0] + cord[0], pointer[1] + cord[1], color)
