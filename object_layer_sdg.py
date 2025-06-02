@@ -161,201 +161,206 @@ if __name__ == "__main__":
         editor = PixelArtEditor(
             DEFAULT_PLAYER_SKIN_FRAME_DOWN_IDLE.copy(), COLOR_PALETTE
         )
+        if args.mode == "skin-default":
 
-        # --- Demonstrate Drawing by directly overwriting pixels ---
-        # Example drawing operation: Draw a red pixel on the silhouette (border)
-        # The draw_pixel now expects (x, y) where (0,0) is bottom-left
-        editor.draw_pixel(0, 0, 2)  # Draw red (color ID 2) at (0,0) - bottom-left
-        # editor.draw_pixel(1, 0, 2)  # Draw red (color ID 2) at (1,0)
-        # editor.draw_pixel(0, 1, 2)  # Draw red (color ID 2) at (0,1)
-        # editor.draw_pixel(1, 1, 2)  # Draw red (color ID 2) at (1,1)
+            # --- Demonstrate Drawing by directly overwriting pixels ---
+            # Example drawing operation: Draw a red pixel on the silhouette (border)
+            # The draw_pixel now expects (x, y) where (0,0) is bottom-left
+            # editor.draw_pixel(0, 0, 2)  # Draw red (color ID 2) at (0,0) - bottom-left
+            # editor.draw_pixel(1, 0, 2)  # Draw red (color ID 2) at (1,0)
+            # editor.draw_pixel(0, 1, 2)  # Draw red (color ID 2) at (0,1)
+            # editor.draw_pixel(1, 1, 2)  # Draw red (color ID 2) at (1,1)
 
-        # Add your requested green pixel draws *after* the previous operations
-        # editor.draw_pixel(11, 11, 3)  # Draw green (color ID 3)
-        # editor.draw_pixel(12, 12, 3)  # Draw green (color ID 3)
-        # editor.draw_pixel(13, 13, 3)  # Draw green (color ID 3)
+            # Add your requested green pixel draws *after* the previous operations
+            # editor.draw_pixel(11, 11, 3)  # Draw green (color ID 3)
+            # editor.draw_pixel(12, 12, 3)  # Draw green (color ID 3)
+            # editor.draw_pixel(13, 13, 3)  # Draw green (color ID 3)
 
-        # --- Add 2 random rectangles ---
-        for _ in range(0):  # Set to 0 for now as per original code
-            # Position variables for rectangle (using x, y for bottom-left)
-            rect_start_x = random.randint(0, MATRIX_WIDTH - 5)
-            rect_start_y = random.randint(0, MATRIX_HEIGHT - 5)
-            rect_width = random.randint(3, 8)
-            rect_height = random.randint(3, 8)
-            rect_color = random.choice(
-                [2, 3, 4, 5, 6, 7]
-            )  # Random color excluding white/black
-            editor.draw_rectangle(
-                rect_start_x, rect_start_y, rect_width, rect_height, rect_color
+            # --- Add 2 random rectangles ---
+            for _ in range(0):  # Set to 0 for now as per original code
+                # Position variables for rectangle (using x, y for bottom-left)
+                rect_start_x = random.randint(0, MATRIX_WIDTH - 5)
+                rect_start_y = random.randint(0, MATRIX_HEIGHT - 5)
+                rect_width = random.randint(3, 8)
+                rect_height = random.randint(3, 8)
+                rect_color = random.choice(
+                    [2, 3, 4, 5, 6, 7]
+                )  # Random color excluding white/black
+                editor.draw_rectangle(
+                    rect_start_x, rect_start_y, rect_width, rect_height, rect_color
+                )
+
+            # --- Define and Render "Draw Areas" (e.g., for draw positions) ---
+            # This area will be highlighted with a specific color (e.g., Purple, color ID 8)
+            # The area is defined by two (x,y) coordinates.
+            # For simulating "AI up", we define a region where draw might be.
+            draw_area_x1, draw_area_y1 = 6, 23  # Bottom-left corner of the draw area
+            draw_area_x2, draw_area_y2 = 19, 18  # Top-right corner of the draw area
+
+            # Get all coordinates within this defined "bad area"
+            seed_draw_positions = editor.get_coordinates_in_area(
+                draw_area_x1, draw_area_y1, draw_area_x2, draw_area_y2
             )
 
-        # --- Define and Render "Draw Areas" (e.g., for draw positions) ---
-        # This area will be highlighted with a specific color (e.g., Purple, color ID 8)
-        # The area is defined by two (x,y) coordinates.
-        # For simulating "AI up", we define a region where draw might be.
-        draw_area_x1, draw_area_y1 = 6, 23  # Bottom-left corner of the draw area
-        draw_area_x2, draw_area_y2 = 19, 18  # Top-right corner of the draw area
+            # Draw the "bad area" with a distinct color (Purple, color ID 8)
+            # This visualizes the region where the AI might focus its "draw" drawing.
+            # for x_coord, y_coord in seed_draw_positions:
+            #     editor.draw_pixel(x_coord, y_coord, 8)  # Using color ID 8 for purple
 
-        # Get all coordinates within this defined "bad area"
-        seed_draw_positions = editor.get_coordinates_in_area(
-            draw_area_x1, draw_area_y1, draw_area_x2, draw_area_y2
-        )
+            draw_curves = []
+            draw_hair_color = random.choice([2, 3, 4, 5, 6, 7])
 
-        # Draw the "bad area" with a distinct color (Purple, color ID 8)
-        # This visualizes the region where the AI might focus its "draw" drawing.
-        # for x_coord, y_coord in seed_draw_positions:
-        #     editor.draw_pixel(x_coord, y_coord, 8)  # Using color ID 8 for purple
-
-        draw_curves = []
-        draw_hair_color = random.choice([2, 3, 4, 5, 6, 7])
-
-        for _ in range(20):
-            draw_curves.append(
-                {
-                    "curve_color": draw_hair_color,  # Random color
-                    "num_points": random.randint(50, 50),
-                    "curve_type": "parabola",
-                    "initial_x_pos": random.uniform(0, MATRIX_WIDTH),
-                    "initial_y_pos": random.uniform(0, MATRIX_HEIGHT),
-                }
-            )
-
-        for curve_num in range(len(draw_curves)):
-            curve_color = draw_curves[curve_num]["curve_color"]
-            num_points = draw_curves[curve_num]["num_points"]
-            curve_type = draw_curves[curve_num]["curve_type"]
-
-            # For the first curve, try to start it from a "seed draw position"
-            if True or curve_num == 0 and seed_draw_positions:
-                # Randomly select a coordinate from the "bad area" for the curve's starting point/center
-                chosen_seed_coord = random.choice(seed_draw_positions)
-                # seed_draw_positions returns (x, y)
-                initial_x_pos = chosen_seed_coord[0]
-                initial_y_pos = chosen_seed_coord[1]
-            else:
-                # For other curves, or if no seed positions, use random positions
-                initial_x_pos = draw_curves[curve_num]["initial_x_pos"]
-                initial_y_pos = draw_curves[curve_num]["initial_y_pos"]
-
-            if curve_type == "parabola":
-                # Position variables for parabola
-                parabola_center_x = initial_x_pos
-                parabola_base_y = initial_y_pos
-                scale_x = random.uniform(5, 15)
-                scale_y = random.uniform(5, 15)
-                a = random.uniform(-0.5, 0.5)  # Controls opening direction and width
-                x_func, y_func = get_parabola_funcs(
-                    parabola_center_x, parabola_base_y, scale_x, scale_y, a
+            for _ in range(20):
+                draw_curves.append(
+                    {
+                        "curve_color": draw_hair_color,  # Random color
+                        "num_points": random.randint(50, 50),
+                        "curve_type": "parabola",
+                        "initial_x_pos": random.uniform(0, MATRIX_WIDTH),
+                        "initial_y_pos": random.uniform(0, MATRIX_HEIGHT),
+                    }
                 )
-                t_start = -1.0
-                t_end = 1.0
 
-            elif curve_type == "sigmoid":
-                # Position variables for sigmoid
-                sigmoid_center_x = initial_x_pos
-                sigmoid_midpoint_y = initial_y_pos
-                scale_x = random.uniform(5, 15)
-                scale_y = random.uniform(5, 15)
-                k = random.uniform(0.5, 5.0)  # Steepness
-                x0 = random.uniform(-0.5, 0.5)  # x-value of midpoint
-                x_func, y_func = get_sigmoid_funcs(
-                    sigmoid_center_x, sigmoid_midpoint_y, scale_x, scale_y, k, x0
+            for curve_num in range(len(draw_curves)):
+                curve_color = draw_curves[curve_num]["curve_color"]
+                num_points = draw_curves[curve_num]["num_points"]
+                curve_type = draw_curves[curve_num]["curve_type"]
+
+                # For the first curve, try to start it from a "seed draw position"
+                if True or curve_num == 0 and seed_draw_positions:
+                    # Randomly select a coordinate from the "bad area" for the curve's starting point/center
+                    chosen_seed_coord = random.choice(seed_draw_positions)
+                    # seed_draw_positions returns (x, y)
+                    initial_x_pos = chosen_seed_coord[0]
+                    initial_y_pos = chosen_seed_coord[1]
+                else:
+                    # For other curves, or if no seed positions, use random positions
+                    initial_x_pos = draw_curves[curve_num]["initial_x_pos"]
+                    initial_y_pos = draw_curves[curve_num]["initial_y_pos"]
+
+                if curve_type == "parabola":
+                    # Position variables for parabola
+                    parabola_center_x = initial_x_pos
+                    parabola_base_y = initial_y_pos
+                    scale_x = random.uniform(5, 15)
+                    scale_y = random.uniform(5, 15)
+                    a = random.uniform(
+                        -0.5, 0.5
+                    )  # Controls opening direction and width
+                    x_func, y_func = get_parabola_funcs(
+                        parabola_center_x, parabola_base_y, scale_x, scale_y, a
+                    )
+                    t_start = -1.0
+                    t_end = 1.0
+
+                elif curve_type == "sigmoid":
+                    # Position variables for sigmoid
+                    sigmoid_center_x = initial_x_pos
+                    sigmoid_midpoint_y = initial_y_pos
+                    scale_x = random.uniform(5, 15)
+                    scale_y = random.uniform(5, 15)
+                    k = random.uniform(0.5, 5.0)  # Steepness
+                    x0 = random.uniform(-0.5, 0.5)  # x-value of midpoint
+                    x_func, y_func = get_sigmoid_funcs(
+                        sigmoid_center_x, sigmoid_midpoint_y, scale_x, scale_y, k, x0
+                    )
+                    t_start = -5.0
+                    t_end = 5.0
+
+                elif curve_type == "sine":
+                    # Position variables for sine wave
+                    sine_start_x = initial_x_pos
+                    sine_y_axis_offset = initial_y_pos
+                    amplitude = random.uniform(3, 10)
+                    frequency = random.uniform(0.5, 3.0)
+                    x_func, y_func = get_sine_funcs(
+                        sine_start_x, sine_y_axis_offset, amplitude, frequency
+                    )
+                    t_start = 0
+                    t_end = random.uniform(
+                        MATRIX_WIDTH / 2, MATRIX_WIDTH
+                    )  # Spread horizontally
+
+                elif curve_type == "linear":
+                    # Position variables for linear curve
+                    line_start_x = initial_x_pos
+                    line_start_y = initial_y_pos
+                    line_end_x = random.uniform(0, MATRIX_WIDTH)
+                    line_end_y = random.uniform(0, MATRIX_HEIGHT)
+                    x_func, y_func = get_linear_funcs(
+                        line_start_x, line_start_y, line_end_x, line_end_y
+                    )
+                    t_start = 0.0
+                    t_end = 1.0  # t goes from 0 to 1 for linear interpolation
+
+                elif curve_type == "cubic":
+                    # Position variables for cubic curve
+                    cubic_center_x = initial_x_pos
+                    cubic_center_y = initial_y_pos
+                    scale_x = random.uniform(5, 15)
+                    scale_y = random.uniform(5, 15)
+                    a = random.uniform(-0.1, 0.1)  # Coefficients for curve shape
+                    b = random.uniform(-0.5, 0.5)
+                    c = random.uniform(-0.5, 0.5)
+                    x_func, y_func = get_cubic_funcs(
+                        cubic_center_x, cubic_center_y, scale_x, scale_y, a, b, c
+                    )
+                    t_start = -1.0
+                    t_end = 1.0
+
+                elif curve_type == "circle_arc":
+                    # Position variables for circle arc
+                    arc_center_x = initial_x_pos
+                    arc_center_y = initial_y_pos
+                    radius = random.uniform(5, min(MATRIX_WIDTH, MATRIX_HEIGHT) / 2 - 2)
+                    start_angle = random.uniform(0, 2 * math.pi)
+                    end_angle = start_angle + random.uniform(
+                        math.pi / 4, 1.5 * math.pi
+                    )  # Arc length
+                    x_func, y_func = get_circle_arc_funcs(
+                        arc_center_x, arc_center_y, radius, start_angle, end_angle
+                    )
+                    t_start = start_angle
+                    t_end = end_angle
+
+                elif curve_type == "spiral":
+                    # Position variables for spiral
+                    spiral_center_x = initial_x_pos
+                    spiral_center_y = initial_y_pos
+                    radius_growth_rate = random.uniform(0.5, 2.0)
+                    angular_speed = random.uniform(1.0, 3.0)
+                    x_func = lambda t: spiral_center_x + (
+                        radius_growth_rate * t
+                    ) * math.cos(angular_speed * t)
+                    y_func = lambda t: spiral_center_y + (
+                        radius_growth_rate * t
+                    ) * math.sin(angular_speed * t)
+                    t_start = 0
+                    t_end = random.uniform(
+                        2 * math.pi, 6 * math.pi
+                    )  # Vary the length of the curve
+
+                editor.draw_parametric_curve(
+                    x_func, y_func, t_start, t_end, num_points, curve_color
                 )
-                t_start = -5.0
-                t_end = 5.0
 
-            elif curve_type == "sine":
-                # Position variables for sine wave
-                sine_start_x = initial_x_pos
-                sine_y_axis_offset = initial_y_pos
-                amplitude = random.uniform(3, 10)
-                frequency = random.uniform(0.5, 3.0)
-                x_func, y_func = get_sine_funcs(
-                    sine_start_x, sine_y_axis_offset, amplitude, frequency
-                )
-                t_start = 0
-                t_end = random.uniform(
-                    MATRIX_WIDTH / 2, MATRIX_WIDTH
-                )  # Spread horizontally
+            # --- Demonstrate the new flood_fill method ---
+            # Apply flood fill only to the first graph for clear demonstration
+            skin_color_id = random.choice(list(range(9, 14)))
 
-            elif curve_type == "linear":
-                # Position variables for linear curve
-                line_start_x = initial_x_pos
-                line_start_y = initial_y_pos
-                line_end_x = random.uniform(0, MATRIX_WIDTH)
-                line_end_y = random.uniform(0, MATRIX_HEIGHT)
-                x_func, y_func = get_linear_funcs(
-                    line_start_x, line_start_y, line_end_x, line_end_y
-                )
-                t_start = 0.0
-                t_end = 1.0  # t goes from 0 to 1 for linear interpolation
+            editor.flood_fill(12, 12, fill_color_id=skin_color_id)
+            editor.flood_fill(7, 4, fill_color_id=skin_color_id)
+            editor.flood_fill(18, 4, fill_color_id=skin_color_id)
 
-            elif curve_type == "cubic":
-                # Position variables for cubic curve
-                cubic_center_x = initial_x_pos
-                cubic_center_y = initial_y_pos
-                scale_x = random.uniform(5, 15)
-                scale_y = random.uniform(5, 15)
-                a = random.uniform(-0.1, 0.1)  # Coefficients for curve shape
-                b = random.uniform(-0.5, 0.5)
-                c = random.uniform(-0.5, 0.5)
-                x_func, y_func = get_cubic_funcs(
-                    cubic_center_x, cubic_center_y, scale_x, scale_y, a, b, c
-                )
-                t_start = -1.0
-                t_end = 1.0
+            editor.flood_fill(13, 7, fill_color_id=random.choice(list(range(2, 9))))
 
-            elif curve_type == "circle_arc":
-                # Position variables for circle arc
-                arc_center_x = initial_x_pos
-                arc_center_y = initial_y_pos
-                radius = random.uniform(5, min(MATRIX_WIDTH, MATRIX_HEIGHT) / 2 - 2)
-                start_angle = random.uniform(0, 2 * math.pi)
-                end_angle = start_angle + random.uniform(
-                    math.pi / 4, 1.5 * math.pi
-                )  # Arc length
-                x_func, y_func = get_circle_arc_funcs(
-                    arc_center_x, arc_center_y, radius, start_angle, end_angle
-                )
-                t_start = start_angle
-                t_end = end_angle
+            editor.flood_fill(12, 4, fill_color_id=random.choice(list(range(2, 9))))
 
-            elif curve_type == "spiral":
-                # Position variables for spiral
-                spiral_center_x = initial_x_pos
-                spiral_center_y = initial_y_pos
-                radius_growth_rate = random.uniform(0.5, 2.0)
-                angular_speed = random.uniform(1.0, 3.0)
-                x_func = lambda t: spiral_center_x + (
-                    radius_growth_rate * t
-                ) * math.cos(angular_speed * t)
-                y_func = lambda t: spiral_center_y + (
-                    radius_growth_rate * t
-                ) * math.sin(angular_speed * t)
-                t_start = 0
-                t_end = random.uniform(
-                    2 * math.pi, 6 * math.pi
-                )  # Vary the length of the curve
-
-            editor.draw_parametric_curve(
-                x_func, y_func, t_start, t_end, num_points, curve_color
-            )
-
-        # --- Demonstrate the new flood_fill method ---
-        # Apply flood fill only to the first graph for clear demonstration
-        skin_color_id = random.choice(list(range(9, 14)))
-
-        editor.flood_fill(12, 12, fill_color_id=skin_color_id)
-        editor.flood_fill(7, 4, fill_color_id=skin_color_id)
-        editor.flood_fill(18, 4, fill_color_id=skin_color_id)
-
-        editor.flood_fill(13, 7, fill_color_id=random.choice(list(range(2, 9))))
-
-        editor.flood_fill(12, 4, fill_color_id=random.choice(list(range(2, 9))))
-
-        shoes_color_id = random.choice(list(range(2, 9)))
-        editor.flood_fill(9, 2, fill_color_id=shoes_color_id)
-        editor.flood_fill(15, 2, fill_color_id=shoes_color_id)
+            shoes_color_id = random.choice(list(range(2, 9)))
+            editor.flood_fill(9, 2, fill_color_id=shoes_color_id)
+            editor.flood_fill(15, 2, fill_color_id=shoes_color_id)
+        elif args.mode == "skin-default-0":
+            editor.draw_pixel(0, 0, 2)  # Draw red (color ID 2) at (0,0) - bottom-left
 
         # Set subplot limits and labels
         ax.set_xlim(0, MATRIX_WIDTH)
