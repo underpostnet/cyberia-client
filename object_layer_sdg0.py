@@ -134,19 +134,19 @@ for i, ax in enumerate(axes):
 
     # --- Demonstrate Drawing by directly overwriting pixels (from previous request) ---
     # Example drawing operation: Draw a red pixel on the silhouette (border)
-    editor.draw_pixel(0, 0, 2)  # Draw red (color ID 2) at (0,0)
-    # Draw more red pixels to create a visible pattern
-    editor.draw_pixel(0, 1, 2)
-    editor.draw_pixel(1, 0, 2)
-    editor.draw_pixel(1, 1, 2)
+    # editor.draw_pixel(0, 0, 2)  # Draw red (color ID 2) at (0,0)
+    # # Draw more red pixels to create a visible pattern
+    # editor.draw_pixel(0, 1, 2)
+    # editor.draw_pixel(1, 0, 2)
+    # editor.draw_pixel(1, 1, 2)
 
-    # Add your requested green pixel draws *after* the previous operations
-    editor.draw_pixel(11, 11, 3)  # Draw green (color ID 3)
-    editor.draw_pixel(12, 12, 3)  # Draw green (color ID 3)
-    editor.draw_pixel(13, 13, 3)  # Draw green (color ID 3)
+    # # Add your requested green pixel draws *after* the previous operations
+    # editor.draw_pixel(11, 11, 3)  # Draw green (color ID 3)
+    # editor.draw_pixel(12, 12, 3)  # Draw green (color ID 3)
+    # editor.draw_pixel(13, 13, 3)  # Draw green (color ID 3)
 
     # --- Add 2 random rectangles ---
-    for _ in range(2):
+    for _ in range(0):
         # Position variables for rectangle
         rect_start_x = random.randint(0, MATRIX_WIDTH - 5)
         rect_start_y = random.randint(0, MATRIX_HEIGHT - 5)
@@ -162,14 +162,14 @@ for i, ax in enumerate(axes):
     # --- Add 2 random parametric curves ---
     curve_types = [
         "parabola",
-        "sigmoid",
-        "sine",
-        "linear",
-        "cubic",
-        "circle_arc",
-        "spiral",
+        # "sigmoid",
+        # "sine",
+        # "linear",
+        # "cubic",
+        # "circle_arc",
+        # "spiral",
     ]
-    for _ in range(2):
+    for _ in range(1):
         curve_color = random.choice([2, 3, 4, 5, 6, 7])  # Random color
         num_points = random.randint(50, 200)
 
@@ -182,6 +182,11 @@ for i, ax in enumerate(axes):
             scale_x = random.uniform(5, 15)
             scale_y = random.uniform(5, 15)
             a = random.uniform(-0.5, 0.5)  # Controls opening direction and width
+            # parabola_center_x = random.uniform(0, 0)
+            # parabola_base_y = random.uniform(0, 0)
+            # scale_x = random.uniform(5, 5)
+            # scale_y = random.uniform(5, 5)
+            # a = 1.0
             x_func, y_func = get_parabola_funcs(
                 parabola_center_x, parabola_base_y, scale_x, scale_y, a
             )
