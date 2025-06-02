@@ -105,7 +105,6 @@ class PixelArtEditor:
             color_id (int): The integer ID of the color to draw the curve with.
         """
         t_values = np.linspace(t_start, t_end, num_points)
-        matrix_height, matrix_width = self.matrix.shape
 
         for t in t_values:
             # Calculate floating point coordinates
@@ -113,10 +112,43 @@ class PixelArtEditor:
             y_float = y_func(t)
 
             # Convert to integer pixel coordinates, clamping to matrix bounds
-            # We need to invert y for drawing to match matrix (0 at top) to plot (0 at bottom)
             col_idx = int(round(x_float))
-            row_idx = int(
-                round(y_float)
-            )  # Matplotlib's y-axis is inverted relative to matrix rows
+            row_idx = int(round(y_float))
 
             self.draw_pixel(row_idx, col_idx, color_id)
+
+    def get_coordinates_in_area(self, x1, y1, x2, y2):
+        """
+        Returns a list of all integer (row, column) coordinates within a rectangular area
+        defined by two (x,y) input coordinates. The coordinates are clamped to the matrix bounds.
+
+        Args:
+            x1 (int): X-coordinate of the first point.
+            y1 (int): Y-coordinate of the first point.
+            x2 (int): X-coordinate of the second point.
+            y2 (int): Y-coordinate of the second point.
+
+        Returns:
+            list: A list of (row_idx, col_idx) tuples representing all integer coordinates
+                  within the specified area and clamped to the matrix boundaries.
+        """
+        # Determine the min and max x and y values to define the bounding box
+        min_x = min(x1, x2)
+        max_x = max(x1, x2)
+        min_y = min(y1, y2)
+        max_y = max(y1, y2)
+
+        coordinates = []
+        matrix_height, matrix_width = self.matrix.shape
+
+        # Iterate through the bounding box, clamping to matrix limits
+        for r in range(min_y, max_y + 1):
+            for c in range(min_x, max_x + 1):
+                # Clamp coordinates to ensure they are within the matrix bounds
+                clamped_r = max(0, min(r, matrix_height - 1))
+                clamped_c = max(0, min(c, matrix_width - 1))
+                coordinates.append((clamped_r, clamped_c))
+
+        # Remove duplicates if any (e.g., due to clamping multiple points to the same edge pixel)
+        # Using a set for uniqueness and then converting back to a list
+        return list(set(coordinates))

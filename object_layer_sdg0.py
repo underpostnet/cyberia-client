@@ -21,6 +21,7 @@ COLOR_PALETTE = {
     5: (255, 255, 0, 255),  # Yellow (R, G, B, Alpha)
     6: (255, 0, 255, 255),  # Magenta (R, G, B, Alpha)
     7: (0, 255, 255, 255),  # Cyan (R, G, B, Alpha)
+    8: (128, 0, 128, 255),  # Purple (for "bad areas")
 }
 
 # Get the dimensions of the default matrix for boundary checks
@@ -134,19 +135,19 @@ for i, ax in enumerate(axes):
 
     # --- Demonstrate Drawing by directly overwriting pixels (from previous request) ---
     # Example drawing operation: Draw a red pixel on the silhouette (border)
-    # editor.draw_pixel(0, 0, 2)  # Draw red (color ID 2) at (0,0)
-    # # Draw more red pixels to create a visible pattern
-    # editor.draw_pixel(0, 1, 2)
-    # editor.draw_pixel(1, 0, 2)
-    # editor.draw_pixel(1, 1, 2)
+    editor.draw_pixel(0, 0, 2)  # Draw red (color ID 2) at (0,0)
+    # Draw more red pixels to create a visible pattern
+    editor.draw_pixel(0, 1, 2)
+    editor.draw_pixel(1, 0, 2)
+    editor.draw_pixel(1, 1, 2)
 
-    # # Add your requested green pixel draws *after* the previous operations
-    # editor.draw_pixel(11, 11, 3)  # Draw green (color ID 3)
-    # editor.draw_pixel(12, 12, 3)  # Draw green (color ID 3)
-    # editor.draw_pixel(13, 13, 3)  # Draw green (color ID 3)
+    # Add your requested green pixel draws *after* the previous operations
+    editor.draw_pixel(11, 11, 3)  # Draw green (color ID 3)
+    editor.draw_pixel(12, 12, 3)  # Draw green (color ID 3)
+    editor.draw_pixel(13, 13, 3)  # Draw green (color ID 3)
 
     # --- Add 2 random rectangles ---
-    for _ in range(0):
+    for _ in range(2):
         # Position variables for rectangle
         rect_start_x = random.randint(0, MATRIX_WIDTH - 5)
         rect_start_y = random.randint(0, MATRIX_HEIGHT - 5)
@@ -159,34 +160,58 @@ for i, ax in enumerate(axes):
             rect_start_y, rect_start_x, rect_width, rect_height, rect_color
         )
 
-    # --- Add 2 random parametric curves ---
+    # --- Define and Render "Bad Areas" (e.g., for hair positions) ---
+    # This area will be highlighted with a specific color (e.g., Purple, color ID 8)
+    # The area is defined by two (x,y) coordinates.
+    # For simulating "AI up", we define a region where hair might be.
+    hair_area_x1, hair_area_y1 = 5, 0  # Top-left corner of the hair area
+    hair_area_x2, hair_area_y2 = 20, 5  # Bottom-right corner of the hair area
+
+    # Get all coordinates within this defined "bad area"
+    seed_hair_positions = editor.get_coordinates_in_area(
+        hair_area_x1, hair_area_y1, hair_area_x2, hair_area_y2
+    )
+
+    # Draw the "bad area" with a distinct color (Purple, color ID 8)
+    # This visualizes the region where the AI might focus its "hair" drawing.
+    for r_coord, c_coord in seed_hair_positions:
+        editor.draw_pixel(r_coord, c_coord, 8)  # Using color ID 8 for purple
+
+    # --- Add 2 random parametric curves, with one potentially starting from a "bad area" ---
     curve_types = [
         "parabola",
-        # "sigmoid",
-        # "sine",
-        # "linear",
-        # "cubic",
-        # "circle_arc",
-        # "spiral",
+        "sigmoid",
+        "sine",
+        "linear",
+        "cubic",
+        "circle_arc",
+        "spiral",
     ]
-    for _ in range(1):
+    for curve_num in range(2):  # Loop for 2 curves per graph
         curve_color = random.choice([2, 3, 4, 5, 6, 7])  # Random color
         num_points = random.randint(50, 200)
 
         curve_type = random.choice(curve_types)
 
+        # For the first curve, try to start it from a "seed hair position"
+        if curve_num == 0 and seed_hair_positions:
+            # Randomly select a coordinate from the "bad area" for the curve's starting point/center
+            chosen_seed_coord = random.choice(seed_hair_positions)
+            # Remember: get_coordinates_in_area returns (row, col), so map to (x, y) for functions
+            initial_x_pos = chosen_seed_coord[1]  # col_idx for x
+            initial_y_pos = chosen_seed_coord[0]  # row_idx for y
+        else:
+            # For other curves, or if no seed positions, use random positions
+            initial_x_pos = random.uniform(0, MATRIX_WIDTH)
+            initial_y_pos = random.uniform(0, MATRIX_HEIGHT)
+
         if curve_type == "parabola":
             # Position variables for parabola
-            parabola_center_x = random.uniform(0, MATRIX_WIDTH)
-            parabola_base_y = random.uniform(0, MATRIX_HEIGHT)
+            parabola_center_x = initial_x_pos
+            parabola_base_y = initial_y_pos
             scale_x = random.uniform(5, 15)
             scale_y = random.uniform(5, 15)
             a = random.uniform(-0.5, 0.5)  # Controls opening direction and width
-            # parabola_center_x = random.uniform(0, 0)
-            # parabola_base_y = random.uniform(0, 0)
-            # scale_x = random.uniform(5, 5)
-            # scale_y = random.uniform(5, 5)
-            # a = 1.0
             x_func, y_func = get_parabola_funcs(
                 parabola_center_x, parabola_base_y, scale_x, scale_y, a
             )
@@ -195,8 +220,8 @@ for i, ax in enumerate(axes):
 
         elif curve_type == "sigmoid":
             # Position variables for sigmoid
-            sigmoid_center_x = random.uniform(0, MATRIX_WIDTH)
-            sigmoid_midpoint_y = random.uniform(0, MATRIX_HEIGHT)
+            sigmoid_center_x = initial_x_pos
+            sigmoid_midpoint_y = initial_y_pos
             scale_x = random.uniform(5, 15)
             scale_y = random.uniform(5, 15)
             k = random.uniform(0.5, 5.0)  # Steepness
@@ -209,8 +234,8 @@ for i, ax in enumerate(axes):
 
         elif curve_type == "sine":
             # Position variables for sine wave
-            sine_start_x = random.uniform(0, MATRIX_WIDTH / 2)
-            sine_y_axis_offset = random.uniform(0, MATRIX_HEIGHT)
+            sine_start_x = initial_x_pos
+            sine_y_axis_offset = initial_y_pos
             amplitude = random.uniform(3, 10)
             frequency = random.uniform(0.5, 3.0)
             x_func, y_func = get_sine_funcs(
@@ -223,8 +248,8 @@ for i, ax in enumerate(axes):
 
         elif curve_type == "linear":
             # Position variables for linear curve
-            line_start_x = random.uniform(0, MATRIX_WIDTH)
-            line_start_y = random.uniform(0, MATRIX_HEIGHT)
+            line_start_x = initial_x_pos
+            line_start_y = initial_y_pos
             line_end_x = random.uniform(0, MATRIX_WIDTH)
             line_end_y = random.uniform(0, MATRIX_HEIGHT)
             x_func, y_func = get_linear_funcs(
@@ -235,8 +260,8 @@ for i, ax in enumerate(axes):
 
         elif curve_type == "cubic":
             # Position variables for cubic curve
-            cubic_center_x = random.uniform(0, MATRIX_WIDTH)
-            cubic_center_y = random.uniform(0, MATRIX_HEIGHT)
+            cubic_center_x = initial_x_pos
+            cubic_center_y = initial_y_pos
             scale_x = random.uniform(5, 15)
             scale_y = random.uniform(5, 15)
             a = random.uniform(-0.1, 0.1)  # Coefficients for curve shape
@@ -250,8 +275,8 @@ for i, ax in enumerate(axes):
 
         elif curve_type == "circle_arc":
             # Position variables for circle arc
-            arc_center_x = random.uniform(5, MATRIX_WIDTH - 5)
-            arc_center_y = random.uniform(5, MATRIX_HEIGHT - 5)
+            arc_center_x = initial_x_pos
+            arc_center_y = initial_y_pos
             radius = random.uniform(5, min(MATRIX_WIDTH, MATRIX_HEIGHT) / 2 - 2)
             start_angle = random.uniform(0, 2 * math.pi)
             end_angle = start_angle + random.uniform(
@@ -265,8 +290,8 @@ for i, ax in enumerate(axes):
 
         elif curve_type == "spiral":
             # Position variables for spiral
-            spiral_center_x = random.uniform(5, MATRIX_WIDTH - 5)
-            spiral_center_y = random.uniform(5, MATRIX_HEIGHT - 5)
+            spiral_center_x = initial_x_pos
+            spiral_center_y = initial_y_pos
             radius_growth_rate = random.uniform(0.5, 2.0)
             angular_speed = random.uniform(1.0, 3.0)
             x_func = lambda t: spiral_center_x + (radius_growth_rate * t) * math.cos(
