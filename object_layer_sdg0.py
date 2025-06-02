@@ -29,20 +29,14 @@ editor = PixelArtEditor(DEFAULT_PLAYER_SKIN_FRAME_DOWN_IDLE.copy(), COLOR_PALETT
 
 # Example drawing operation: Draw a red pixel on the silhouette (border)
 editor.draw_pixel(0, 0, 2)  # Draw red (color ID 2) at (0,0)
-print(f"Last drawn color ID after red draw: {editor.last_draw_color_id} (Red)")
-
-# Draw more red pixels to create a visible pattern
 editor.draw_pixel(0, 1, 2)
 editor.draw_pixel(1, 0, 2)
 editor.draw_pixel(1, 1, 2)
-
 
 # Add your requested green pixel draws *after* the previous operations
 editor.draw_pixel(11, 11, 3)  # Draw green (color ID 3)
 editor.draw_pixel(12, 12, 3)  # Draw green (color ID 3)
 editor.draw_pixel(13, 13, 3)  # Draw green (color ID 3)
-print(f"Last drawn color ID after green draws: {editor.last_draw_color_id} (Green)")
-
 
 # Get the dimensions of the pixel art matrix after all operations
 MATRIX_HEIGHT, MATRIX_WIDTH = editor.matrix.shape
