@@ -173,6 +173,24 @@ def cords_factory(type):
     return cords
 
 
+def render_factory(editor, type="skin-bald-rainbow"):
+    if type == "skin-bald-rainbow":
+        COLOR_PALETTE[1] = (0, 0, 0, 255)
+        skin_color_id = random.choice(list(range(9, 14)))
+
+        editor.flood_fill(12, 12, fill_color_id=skin_color_id)
+        editor.flood_fill(7, 4, fill_color_id=skin_color_id)
+        editor.flood_fill(18, 4, fill_color_id=skin_color_id)
+
+        editor.flood_fill(13, 7, fill_color_id=random.choice(list(range(2, 9))))
+
+        editor.flood_fill(12, 4, fill_color_id=random.choice(list(range(2, 9))))
+
+        shoes_color_id = random.choice(list(range(2, 9)))
+        editor.flood_fill(9, 2, fill_color_id=shoes_color_id)
+        editor.flood_fill(15, 2, fill_color_id=shoes_color_id)
+
+
 # --- Main Execution ---
 if __name__ == "__main__":
     random.seed()  # Initialize random seed once at the start for true randomness across script runs
@@ -206,7 +224,9 @@ if __name__ == "__main__":
             DEFAULT_PLAYER_SKIN_FRAME_DOWN_IDLE.copy(), COLOR_PALETTE
         )
         if args.mode == "skin-default":
-            COLOR_PALETTE[1] = (0, 0, 0, 255)
+            render_factory(editor)
+
+        if args.mode == "skin-default-0":
 
             # --- Demonstrate Drawing by directly overwriting pixels ---
             # Example drawing operation: Draw a red pixel on the silhouette (border)
@@ -391,20 +411,9 @@ if __name__ == "__main__":
 
             # --- Demonstrate the new flood_fill method ---
             # Apply flood fill only to the first graph for clear demonstration
-            skin_color_id = random.choice(list(range(9, 14)))
+            render_factory(editor)
 
-            editor.flood_fill(12, 12, fill_color_id=skin_color_id)
-            editor.flood_fill(7, 4, fill_color_id=skin_color_id)
-            editor.flood_fill(18, 4, fill_color_id=skin_color_id)
-
-            editor.flood_fill(13, 7, fill_color_id=random.choice(list(range(2, 9))))
-
-            editor.flood_fill(12, 4, fill_color_id=random.choice(list(range(2, 9))))
-
-            shoes_color_id = random.choice(list(range(2, 9)))
-            editor.flood_fill(9, 2, fill_color_id=shoes_color_id)
-            editor.flood_fill(15, 2, fill_color_id=shoes_color_id)
-        elif args.mode == "skin-default-0":
+        elif args.mode == "skin-default-1":
 
             render_color_hair = random.choice([14, 17, 20])
 
@@ -448,6 +457,8 @@ if __name__ == "__main__":
                 cords_render(
                     editor, x, y - 2, render_color_hair + 2, cords_factory("hair-lock")
                 )
+
+            render_factory(editor)
 
         # Set subplot limits and labels
         ax.set_xlim(0, MATRIX_WIDTH)
