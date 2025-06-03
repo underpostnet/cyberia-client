@@ -286,6 +286,46 @@ def render_factory(
 
         tool_api.apply_default_skin_template_fill(DISPLAY_COLOR_PALETTE)
 
+    elif mode == "gfx-shadow-ball":
+        canvas_size = 15
+        tool_api.create_empty_canvas(
+            canvas_size, fill_value=0
+        )  # Create a 15x15 white canvas
+
+        # Define colors for the two circles
+        color_ball_1 = 2  # Red
+        color_ball_2 = 4  # Blue
+
+        # Draw first circle
+        center_x_1, center_y_1, radius_1 = 4, 4, 3
+        tool_api.draw_circle(center_x_1, center_y_1, radius_1, color_ball_1)
+        # Apply shadow gradient to the first circle
+        data_generator.contiguous_region_fill(
+            center_x_1,
+            center_y_1,
+            fill_value_id=color_ball_1,
+            gradient_shadow=True,
+            intensity_factor=0.6,
+            direction=random.choice(
+                ["left_to_right", "right_to_left", "top_to_bottom", "bottom_to_top"]
+            ),
+        )
+
+        # Draw second circle
+        center_x_2, center_y_2, radius_2 = 10, 10, 4
+        tool_api.draw_circle(center_x_2, center_y_2, radius_2, color_ball_2)
+        # Apply shadow gradient to the second circle
+        data_generator.contiguous_region_fill(
+            center_x_2,
+            center_y_2,
+            fill_value_id=color_ball_2,
+            gradient_shadow=True,
+            intensity_factor=0.7,
+            direction=random.choice(
+                ["left_to_right", "right_to_left", "top_to_bottom", "bottom_to_top"]
+            ),
+        )
+
 
 # --- Main Execution ---
 if __name__ == "__main__":
@@ -299,7 +339,7 @@ if __name__ == "__main__":
         "--mode",
         type=str,
         default="skin-default",
-        help='Special mode for rendering. Current options: "skin-default", "skin-default-0", "skin-default-1".',
+        help='Special mode for rendering. Current options: "skin-default", "skin-default-0", "skin-default-1", "gfx-shadow-ball".',
     )
 
     args = parser.parse_args()
@@ -312,16 +352,24 @@ if __name__ == "__main__":
     # Flatten the axes array for easy iteration
     axes = axes.flatten()
 
-    # Configure each subplot to display the synthetic data on a 26x26 grid
+    # Configure each subplot to display the synthetic data
     for i, ax in enumerate(axes):
-        # Initialize a new SyntheticDataGenerator for each subplot with a fresh copy of the default matrix
-        # This ensures each subplot starts with the original template and independent generations.
-        data_generator = SyntheticDataGenerator(
-            DEFAULT_PLAYER_SKIN_FRAME_DOWN_IDLE.copy(), DISPLAY_COLOR_PALETTE
-        )
+        # Initialize a new SyntheticDataGenerator for each subplot
+        # For "gfx-shadow-ball", the canvas will be created inside render_factory
+        # For other modes, use the default skin template.
+        if args.mode == "gfx-shadow-ball":
+            data_generator = SyntheticDataGenerator(
+                np.zeros((1, 1), dtype=int), DISPLAY_COLOR_PALETTE
+            )  # Dummy initial matrix, will be replaced
+        else:
+            data_generator = SyntheticDataGenerator(
+                DEFAULT_PLAYER_SKIN_FRAME_DOWN_IDLE.copy(), DISPLAY_COLOR_PALETTE
+            )
+
         # Initialize the SyntheticDataToolAPI for the current data generator
         tool_api = SyntheticDataToolAPI(data_generator)
 
+        # Apply rendering based on the selected mode
         render_factory(data_generator, tool_api, args.mode)
 
         # Render the data matrix to the current subplot using the tool API

@@ -1,22 +1,34 @@
 import numpy as np
-import math  # Import math for parametric curves
-import collections  # Import collections for deque used in contiguous_region_fill
+import math
+import collections
+import random
+from typing import Union  # Import Union for type hinting compatibility
 
 
 class SyntheticDataGenerator:
     """
-    A class to manage and generate synthetic data matrices.
+    Manages and generates synthetic 2D data matrices with associated color mappings.
 
     Attributes:
         data_matrix (np.array): The 2D NumPy array representing the synthetic data.
-        value_map (dict): A mapping from integer data values to RGBA color tuples (0-255)
-                          for display purposes.
-        last_generated_value_id (int): Stores the value ID of the last data generation operation.
+                                Each element is an integer 'value_id'.
+        value_map (dict): A mapping from integer data 'value_id's to RGBA color tuples (0-255).
+                          Used for display purposes.
+        last_generated_value_id (int | None): Stores the value ID of the last data
+                                              generation operation.
     """
 
-    def __init__(self, initial_data_matrix, value_mapping):
+    # Constants for gradient shadow generation
+    NUM_GRADIENT_SHADES = 10
+    # Offset to create unique value_ids for gradient shades.
+    # Assumes that normal value_ids do not exceed 999.
+    VALUE_ID_GRADIENT_OFFSET = 1000
+
+    def __init__(
+        self, initial_data_matrix: Union[list, np.ndarray], value_mapping: dict
+    ):
         """
-        Initializes the SyntheticDataGenerator with an initial data matrix and value mapping.
+        Initializes the SyntheticDataGenerator.
 
         Args:
             initial_data_matrix (list or np.array): The starting synthetic data matrix.
@@ -24,11 +36,11 @@ class SyntheticDataGenerator:
         """
         self.data_matrix = np.array(initial_data_matrix)
         self.value_map = value_mapping
-        self.last_generated_value_id = (
-            None  # To store the value of the last generation operation
-        )
+        self.last_generated_value_id = None
 
-    def rgba_to_display_color(self, r, g, b, a):
+    def _convert_rgba_to_display_format(
+        self, r: int, g: int, b: int, a: int
+    ) -> tuple[float, float, float, float]:
         """
         Converts RGBA color values from 0-255 range to 0-1 range for Matplotlib display.
 
@@ -43,54 +55,67 @@ class SyntheticDataGenerator:
         """
         return (r / 255.0, g / 255.0, b / 255.0, a / 255.0)
 
-    def get_display_color(self, data_value):
+    def get_display_color(self, data_value: int) -> tuple[float, float, float, float]:
         """
-        Retrieves the Matplotlib-compatible RGBA color for a given data value.
+        Retrieves the Matplotlib-compatible RGBA color for a given data value ID.
 
         Args:
-            data_value (int): The integer value representing the data in the matrix.
+            data_value (int): The integer ID representing the data in the matrix.
 
         Returns:
             tuple: A tuple (r, g, b, a) with color values in the 0-1 range.
         """
-        rgba_255 = self.value_map.get(
-            data_value, (0, 0, 0, 0)
-        )  # Default to transparent black
-        return self.rgba_to_display_color(*rgba_255)
+        rgba_255 = self.value_map.get(data_value, (0, 0, 0, 0))
+        return self._convert_rgba_to_display_format(*rgba_255)
 
-    def _convert_coordinates_to_indices(self, x, y):
+    def _map_coordinates_to_matrix_indices(self, x: int, y: int) -> tuple[int, int]:
         """
         Converts (x, y) coordinates (where (0,0) is bottom-left) to
         (row_idx, col_idx) for the internal data matrix (where (0,0) is top-left).
-        Also clamps coordinates to be within matrix bounds.
+        Clamps coordinates to be within matrix bounds.
+
+        Args:
+            x (int): The x-coordinate.
+            y (int): The y-coordinate.
+
+        Returns:
+            tuple[int, int]: The corresponding (row_idx, col_idx) in the matrix.
         """
         matrix_height, matrix_width = self.data_matrix.shape
 
-        # Invert y to get row_idx (0 at top)
         row_idx = matrix_height - 1 - y
         col_idx = x
 
-        # Clamp coordinates to ensure they are within the matrix bounds
         clamped_row_idx = max(0, min(row_idx, matrix_height - 1))
         clamped_col_idx = max(0, min(col_idx, matrix_width - 1))
         return clamped_row_idx, clamped_col_idx
 
-    def generate_data_point(self, x, y, value_id):
+    def set_data_point(self, x: int, y: int, value_id: int):
         """
-        Generates a single data point on the matrix with the specified value ID.
-        This method directly overwrites the data point at the given (x, y) coordinates,
-        where (0,0) is considered the bottom-left of the data matrix.
+        Sets a single data point on the matrix with the specified value ID.
+        (0,0) is considered the bottom-left of the data matrix.
 
         Args:
             x (int): The x-coordinate (column) of the data point.
             y (int): The y-coordinate (row) of the data point.
-            value_id (int): The integer ID of the value to generate.
+            value_id (int): The integer ID of the value to set.
         """
-        row_idx, col_idx = self._convert_coordinates_to_indices(x, y)
-        self.data_matrix[row_idx, col_idx] = value_id
-        self.last_generated_value_id = value_id
+        row_idx, col_idx = self._map_coordinates_to_matrix_indices(x, y)
+        # Ensure coordinates are within bounds before setting
+        if (
+            0 <= row_idx < self.data_matrix.shape[0]
+            and 0 <= col_idx < self.data_matrix.shape[1]
+        ):
+            self.data_matrix[row_idx, col_idx] = value_id
+            self.last_generated_value_id = value_id
+        else:
+            # Optionally, log a warning or raise an error if out of bounds
+            # print(f"Warning: Attempted to set data point at ({x}, {y}) which is out of bounds.")
+            pass
 
-    def generate_rectangular_region(self, start_x, start_y, width, height, value_id):
+    def generate_rectangular_region(
+        self, start_x: int, start_y: int, width: int, height: int, value_id: int
+    ):
         """
         Generates a filled rectangular region on the data matrix.
         The rectangle is defined by its bottom-left corner (start_x, start_y),
@@ -103,18 +128,21 @@ class SyntheticDataGenerator:
             height (int): The height of the rectangle.
             value_id (int): The integer ID of the value to fill the rectangle with.
         """
-        # Calculate the top-right corner in (x,y) coordinates
         end_x = start_x + width
         end_y = start_y + height
 
-        # Iterate over the rectangle's area and generate each data point
-        # We iterate over x from start_x to end_x-1, and y from start_y to end_y-1
         for x in range(start_x, end_x):
             for y in range(start_y, end_y):
-                self.generate_data_point(x, y, value_id)
+                self.set_data_point(x, y, value_id)
 
     def generate_parametric_curve_data(
-        self, x_func, y_func, t_start, t_end, num_points, value_id
+        self,
+        x_func: callable,
+        y_func: callable,
+        t_start: float,
+        t_end: float,
+        num_points: int,
+        value_id: int,
     ):
         """
         Generates data points along a parametric curve.
@@ -131,17 +159,17 @@ class SyntheticDataGenerator:
         t_values = np.linspace(t_start, t_end, num_points)
 
         for t in t_values:
-            # Calculate floating point coordinates (x, y) where (0,0) is bottom-left
             x_float = x_func(t)
             y_float = y_func(t)
 
-            # Convert to integer data point coordinates
             x_int = int(round(x_float))
             y_int = int(round(y_float))
 
-            self.generate_data_point(x_int, y_int, value_id)
+            self.set_data_point(x_int, y_int, value_id)
 
-    def get_coordinates_in_region(self, x1, y1, x2, y2):
+    def get_coordinates_in_region(
+        self, x1: int, y1: int, x2: int, y2: int
+    ) -> list[tuple[int, int]]:
         """
         Returns a list of all integer (x, y) coordinates within a rectangular region
         defined by two (x,y) input coordinates (where (0,0) is bottom-left).
@@ -157,7 +185,6 @@ class SyntheticDataGenerator:
             list: A list of (x, y) tuples representing all integer coordinates
                   within the specified area and clamped to the matrix boundaries.
         """
-        # Determine the min and max x and y values to define the bounding box
         min_x = min(x1, x2)
         max_x = max(x1, x2)
         min_y = min(y1, y2)
@@ -166,34 +193,142 @@ class SyntheticDataGenerator:
         coordinates = []
         matrix_height, matrix_width = self.data_matrix.shape
 
-        # Iterate through the bounding box, clamping to matrix limits
         for y in range(min_y, max_y + 1):
             for x in range(min_x, max_x + 1):
-                # Clamp (x,y) coordinates to ensure they are within the plotting area
                 clamped_x = max(0, min(x, matrix_width - 1))
                 clamped_y = max(0, min(y, matrix_height - 1))
                 coordinates.append((clamped_x, clamped_y))
 
-        # Using a set for uniqueness and then converting back to a list
+        # Use a set to remove duplicates and then convert back to list
         return list(set(coordinates))
 
-    def contiguous_region_fill(self, start_x, start_y, fill_value_id=0):
+    def _apply_gradient_shadow(
+        self,
+        filled_coordinates: list[tuple[int, int]],
+        base_value_id: int,
+        intensity_factor: float,
+        direction: str,
+    ):
+        """
+        Applies a gradient shadow to the specified coordinates within the filled region.
+        This modifies the `data_matrix` by assigning new `value_id`s for gradient shades
+        and updating the `value_map` accordingly.
+
+        Args:
+            filled_coordinates (list[tuple[int, int]]): List of (row, col) matrix indices
+                                                         of the filled region.
+            base_value_id (int): The original value ID used for the fill.
+            intensity_factor (float): Factor (0.0 to 1.0) controlling shadow intensity.
+            direction (str): Direction of the gradient ("left_to_right", "right_to_left",
+                             "top_to_bottom", "bottom_to_top").
+        """
+        if not filled_coordinates:
+            return
+
+        # Convert (x,y) coordinates to (row,col) matrix indices for internal use
+        # and then back to (x,y) for min/max calculations to get the bounding box
+        # of the *filled region* in the original coordinate system.
+        # This is important for consistent gradient direction.
+        x_coords_filled = [col for _, col in filled_coordinates]
+        y_coords_filled = [
+            self.data_matrix.shape[0] - 1 - row for row, _ in filled_coordinates
+        ]
+
+        min_x_filled = min(x_coords_filled)
+        max_x_filled = max(x_coords_filled)
+        min_y_filled = min(y_coords_filled)
+        max_y_filled = max(y_coords_filled)
+
+        base_rgba_255 = self.value_map.get(base_value_id, (0, 0, 0, 255))
+        base_r, base_g, base_b, base_a = base_rgba_255
+
+        for row_idx, col_idx in filled_coordinates:
+            # Convert matrix indices back to (x,y) for gradient calculation
+            x = col_idx
+            y = self.data_matrix.shape[0] - 1 - row_idx
+
+            distance = 0
+            max_distance = 0
+
+            if direction == "left_to_right":
+                distance = x - min_x_filled
+                max_distance = max_x_filled - min_x_filled
+            elif direction == "right_to_left":
+                distance = max_x_filled - x
+                max_distance = max_x_filled - min_x_filled
+            elif direction == "top_to_bottom":
+                distance = y - min_y_filled
+                max_distance = max_y_filled - min_y_filled
+            elif direction == "bottom_to_top":
+                distance = max_y_filled - y
+                max_distance = max_y_filled - min_y_filled
+
+            # Calculate shadow factor (0.0 to 1.0)
+            shadow_factor = distance / max_distance if max_distance != 0 else 0
+
+            # Map shadow factor to a shade index
+            shade_index = int(shadow_factor * (self.NUM_GRADIENT_SHADES - 1))
+            shade_index = max(0, min(shade_index, self.NUM_GRADIENT_SHADES - 1))
+
+            # Calculate darkening amount
+            # The darkening should be more pronounced for higher shade_index
+            current_darken_amount = (
+                (shade_index / (self.NUM_GRADIENT_SHADES - 1)) * intensity_factor * 255
+            )
+            current_darken_amount = min(current_darken_amount, 255)
+
+            # Apply darkening to RGB components
+            shaded_r = max(0, int(base_r - current_darken_amount))
+            shaded_g = max(0, int(base_g - current_darken_amount))
+            shaded_b = max(0, int(base_b - current_darken_amount))
+
+            # Generate a unique value ID for this specific shade
+            # Ensure the generated ID does not clash with existing base IDs
+            gradient_value_id = (
+                (base_value_id * self.VALUE_ID_GRADIENT_OFFSET) + shade_index + 1
+            )
+
+            # Add the new gradient color to the value_map if it doesn't exist
+            if gradient_value_id not in self.value_map:
+                self.value_map[gradient_value_id] = (
+                    shaded_r,
+                    shaded_g,
+                    shaded_b,
+                    base_a,
+                )
+
+            # Set the data matrix point to the new gradient value ID
+            self.data_matrix[row_idx, col_idx] = gradient_value_id
+
+    def contiguous_region_fill(
+        self,
+        start_x: int,
+        start_y: int,
+        fill_value_id: int = 0,
+        gradient_shadow: bool = False,  # Renamed from apply_gradient_shadow
+        intensity_factor: float = 0.5,
+        direction: str = None,  # Renamed from gradient_direction
+    ):
         """
         Performs a contiguous region fill operation starting from a given (x, y) coordinate
         (where (0,0) is bottom-left).
-        Changes the value of adjacent data points to 'fill_value_id' (defaulting to 0/white)
+        Changes the value of adjacent data points to 'fill_value_id'
         if their original value matches the starting data point's value, until a different
-        value is found.
+        value is found. Optionally applies a gradient shadow.
 
         Args:
             start_x (int): The starting x-coordinate for the fill.
             start_y (int): The starting y-coordinate for the fill.
             fill_value_id (int): The value ID to fill with. Defaults to 0 (white).
+            gradient_shadow (bool): If True, a gradient shadow will be applied over the filled area.
+            intensity_factor (float): A factor (0.0 to 1.0) controlling the intensity of the shadow.
+                                      0.0 means no shadow, 1.0 means maximum darkening.
+            direction (str, optional): The direction of the gradient shadow.
+                                       Can be "left_to_right", "right_to_left", "top_to_bottom",
+                                       "bottom_to_top". If None, a random direction is chosen.
         """
-        # Convert start_x, start_y to internal matrix row_idx, col_idx
-        start_row, start_col = self._convert_coordinates_to_indices(start_x, start_y)
+        start_row, start_col = self._map_coordinates_to_matrix_indices(start_x, start_y)
 
-        # Check bounds for the internal matrix coordinates
         if not (
             0 <= start_row < self.data_matrix.shape[0]
             and 0 <= start_col < self.data_matrix.shape[1]
@@ -205,25 +340,24 @@ class SyntheticDataGenerator:
 
         original_value_id = self.data_matrix[start_row, start_col]
 
-        # If the original value is already the fill value, do nothing
-        if original_value_id == fill_value_id:
+        # If the original value is already the fill value and no gradient is requested, do nothing.
+        if original_value_id == fill_value_id and not gradient_shadow:
             return
 
-        # Use a queue for BFS (Breadth-First Search)
         q = collections.deque([(start_row, start_col)])
         visited = set([(start_row, start_col)])
+        filled_coordinates = []
 
         while q:
             r, c = q.popleft()
 
-            # Change the value of the current data point to the specified fill_value_id
-            self.data_matrix[r, c] = fill_value_id
+            # Add to filled_coordinates regardless of gradient_shadow, as we need this list
+            # for both direct fill and gradient application.
+            filled_coordinates.append((r, c))
 
-            # Define neighbors (up, down, left, right) in matrix coordinates
             neighbors = [(r + 1, c), (r - 1, c), (r, c + 1), (r, c - 1)]
 
             for nr, nc in neighbors:
-                # Check bounds and if the neighbor has the original value and hasn't been visited
                 if (
                     0 <= nr < self.data_matrix.shape[0]
                     and 0 <= nc < self.data_matrix.shape[1]
@@ -233,9 +367,26 @@ class SyntheticDataGenerator:
                     q.append((nr, nc))
                     visited.add((nr, nc))
 
-        print(
-            f"Contiguous region fill completed from ({start_x}, {start_y}) with value ID {fill_value_id}."
-        )
+        # First, fill all identified coordinates with the base fill_value_id
+        # This ensures a consistent base color before applying any gradient.
+        for r, c in filled_coordinates:
+            self.data_matrix[r, c] = fill_value_id
+
+        if gradient_shadow:
+            if direction is None:
+                directions = [
+                    "left_to_right",
+                    "right_to_left",
+                    "top_to_bottom",
+                    "bottom_to_top",
+                ]
+                selected_direction = random.choice(directions)
+            else:
+                selected_direction = direction
+
+            self._apply_gradient_shadow(
+                filled_coordinates, fill_value_id, intensity_factor, selected_direction
+            )
 
 
 def clarify_and_contrast_rgba(
@@ -254,9 +405,8 @@ def clarify_and_contrast_rgba(
                                                         and keep it unchanged).
         clarification_factor (float): A factor between 0.0 and 1.0 to control clarification.
                                       Higher values mean more clarification (closer to white).
-                                      Default is 0.05.
         contrast_factor (float): A factor to control contrast. Values > 1.0 increase contrast,
-                                 values < 1.0 decrease contrast. Default is 1.1.
+                                 values < 1.0 decrease contrast.
 
     Returns:
         tuple[int, int, int, int]: A new tuple (r, g, b, a) with the clarified and contrasted color components,
@@ -269,37 +419,24 @@ def clarify_and_contrast_rgba(
 
     r, g, b, a = rgba_tuple
 
-    # Ensure initial R, G, B values are within 0-255
     r = max(0, min(255, r))
     g = max(0, min(255, g))
     b = max(0, min(255, b))
-    # Alpha can be 0-1 or 0-255, we'll just pass it through as is.
-    # If it's expected to be 0-1 and needs to be converted, add that logic here.
-    # For now, we assume it's consistent with R,G,B or handled externally.
-    a = (
-        max(0, min(255, a)) if a > 1 else max(0, min(1, a))
-    )  # Clamp alpha if it's 0-1 or 0-255
+    a = max(0, min(255, a)) if a > 1 else max(0, min(1, a))
 
-    # Apply clarification (lightening)
-    # Blends the color towards white (255, 255, 255)
     clarified_r = r + (255 - r) * clarification_factor
     clarified_g = g + (255 - g) * clarification_factor
     clarified_b = b + (255 - b) * clarification_factor
 
-    # Apply contrast enhancement
-    # Stretches values away from the midpoint (127.5)
     midpoint = 127.5
     contrasted_r = midpoint + (clarified_r - midpoint) * contrast_factor
     contrasted_g = midpoint + (clarified_g - midpoint) * contrast_factor
     contrasted_b = midpoint + (clarified_b - midpoint) * contrast_factor
 
-    # Clamp the final R, G, B values to the 0-255 range
     final_r = int(max(0, min(255, contrasted_r)))
     final_g = int(max(0, min(255, contrasted_g)))
     final_b = int(max(0, min(255, contrasted_b)))
 
-    # The alpha channel is typically not affected by clarification or contrast,
-    # so we return it as is, or clamped to 0-255 if it was originally 0-1.
     final_a = int(max(0, min(255, a))) if a > 1 else a
 
     return (final_r, final_g, final_b, final_a)

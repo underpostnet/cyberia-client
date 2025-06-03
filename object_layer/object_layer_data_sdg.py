@@ -31,6 +31,39 @@ class SyntheticDataToolAPI:
             self.data_generator.data_matrix.shape
         )
 
+    def create_empty_canvas(self, size: int, fill_value: int = 0):
+        """
+        Creates a new empty NxN canvas matrix and sets it as the data_matrix
+        for the SyntheticDataGenerator.
+
+        Args:
+            size (int): The dimension (N) of the square canvas (NxN).
+            fill_value (int): The integer value to fill the canvas with. Defaults to 0 (white).
+        """
+        if size <= 0:
+            raise ValueError("Canvas size must be a positive integer.")
+        new_matrix = np.full((size, size), fill_value, dtype=int)
+        self.data_generator.data_matrix = new_matrix
+        self.data_matrix_height, self.data_matrix_width = new_matrix.shape
+
+    def draw_circle(self, center_x: int, center_y: int, radius: int, value_id: int):
+        """
+        Draws a filled circle on the data matrix.
+
+        Args:
+            center_x (int): The x-coordinate of the circle's center.
+            center_y (int): The y-coordinate of the circle's center.
+            radius (int): The radius of the circle.
+            value_id (int): The integer ID of the value to fill the circle with.
+        """
+        for y_offset in range(-radius, radius + 1):
+            for x_offset in range(-radius, radius + 1):
+                if x_offset**2 + y_offset**2 <= radius**2:
+                    x = center_x + x_offset
+                    y = center_y + y_offset
+                    # set_data_point handles bounds checking internally
+                    self.data_generator.set_data_point(x, y, value_id)
+
     def generate_pattern_from_coordinates(
         self,
         initial_x_pos: int,
@@ -55,7 +88,7 @@ class SyntheticDataToolAPI:
         for dx, dy in coordinates_list:
             if filter_func:
                 dx, dy = filter_func(dx, dy)
-            self.data_generator.generate_data_point(
+            self.data_generator.set_data_point(  # Changed from generate_data_point to set_data_point
                 pointer[0] + dx, pointer[1] + dy, value_id
             )
             pointer = [pointer[0] + dx, pointer[1] + dy]
@@ -111,7 +144,12 @@ class SyntheticDataToolAPI:
 
         # Fill specific internal regions with random colors
         self.data_generator.contiguous_region_fill(
-            13, 7, fill_value_id=random.choice(list(range(2, 9)))
+            13,
+            7,
+            fill_value_id=random.choice(list(range(2, 9))),
+            gradient_shadow=True,
+            intensity_factor=0.5,
+            direction="bottom_to_top",
         )
         self.data_generator.contiguous_region_fill(
             12, 4, fill_value_id=random.choice(list(range(2, 9)))
@@ -237,6 +275,11 @@ class SyntheticDataToolAPI:
             ax (matplotlib.axes.Axes): The Matplotlib axes object to draw on.
             subplot_index (int): The index of the current subplot for titling.
         """
+        # Update matrix dimensions in case they changed (e.g., with create_empty_canvas)
+        self.data_matrix_height, self.data_matrix_width = (
+            self.data_generator.data_matrix.shape
+        )
+
         # Set subplot limits and labels
         ax.set_xlim(0, self.data_matrix_width)
         ax.set_ylim(0, self.data_matrix_height)
