@@ -1,30 +1,11 @@
-import json
 import logging
 import threading
 import time
-import uuid
 
-import websocket
 from raylibpy import (
-    BLACK,
     MOUSE_BUTTON_LEFT,
     RAYWHITE,
     Vector2,
-    KEY_ENTER,
-    KEY_ZERO,
-    KEY_ONE,
-    KEY_TWO,
-    KEY_THREE,
-    KEY_FOUR,
-    KEY_FIVE,
-    KEY_SIX,
-    KEY_SEVEN,
-    KEY_EIGHT,
-    KEY_NINE,
-    KEY_Q,
-    KEY_W,
-    KEY_E,
-    KEY_R,
     Color,
 )
 
@@ -39,10 +20,10 @@ from config import (
     UI_MODAL_HEIGHT,
     UI_MODAL_PADDING_TOP,
     UI_MODAL_PADDING_RIGHT,
-    UI_MODAL_BACKGROUND_COLOR,  # Import new modal background color
+    UI_MODAL_BACKGROUND_COLOR,
     UI_TEXT_COLOR_PRIMARY,
     UI_TEXT_COLOR_SHADING,
-    UI_FONT_SIZE,  # Import new font size
+    UI_FONT_SIZE,
 )
 from object_layer.object_layer_render import ObjectLayerRender
 from network_state.network_object import NetworkObject
@@ -401,10 +382,9 @@ class NetworkStateClient:
                         camera_target_pos, smoothness=CAMERA_SMOOTHNESS
                     )
 
-                    # Draw My Pos and My Player ID at top-left
+                    # Draw My Pos at top-left
                     pos_text = f"My Pos: ({int(self.my_network_object.x)}, {int(self.my_network_object.y)})"
-                    player_id_text = f"My Player ID: {self.my_player_id}"
-                    font_size = UI_FONT_SIZE  # Use the new UI_FONT_SIZE
+                    font_size = UI_FONT_SIZE
                     padding = 10
 
                     # Draw shading first for My Pos
@@ -423,27 +403,10 @@ class NetworkStateClient:
                         font_size,
                         Color(*UI_TEXT_COLOR_PRIMARY),
                     )
-
-                    # Draw shading first for My Player ID (on the second row)
-                    self.object_layer_render.draw_text(
-                        player_id_text,
-                        padding + 1,
-                        padding + font_size + 5 + 1,
-                        font_size,
-                        Color(*UI_TEXT_COLOR_SHADING),
-                    )
-                    # Draw actual text for My Player ID
-                    self.object_layer_render.draw_text(
-                        player_id_text,
-                        padding,
-                        padding + font_size + 5,
-                        font_size,
-                        Color(*UI_TEXT_COLOR_PRIMARY),
-                    )
                 else:
                     # Draw "Connecting..." at top-left
                     connecting_text = "Connecting..."
-                    font_size = UI_FONT_SIZE  # Use the new UI_FONT_SIZE
+                    font_size = UI_FONT_SIZE
                     padding = 10
                     self.object_layer_render.draw_text(
                         connecting_text,
@@ -466,7 +429,7 @@ class NetworkStateClient:
             # Draw FPS at bottom-left
             frame_time = self.object_layer_render.get_frame_time()
             fps_text = f"FPS: {int(1.0 / frame_time) if frame_time > 0 else 'N/A'}"
-            font_size = UI_FONT_SIZE  # Use the new UI_FONT_SIZE
+            font_size = UI_FONT_SIZE
             padding = 10
             # Draw shading first
             self.object_layer_render.draw_text(

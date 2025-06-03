@@ -31,9 +31,18 @@ from raylibpy import (
     measure_text as raylib_measure_text,
 )
 
-from config import CAMERA_SMOOTHNESS, DIRECTION_HISTORY_LENGTH
+from config import (
+    CAMERA_SMOOTHNESS,
+    DIRECTION_HISTORY_LENGTH,
+    UI_FONT_SIZE,
+    UI_TEXT_COLOR_PRIMARY,
+    UI_TEXT_COLOR_SHADING,
+)
 from object_layer.object_layer_data import ObjectLayerMode, Direction
-from network_state.network_object import NetworkObject
+from network_state.network_object import (
+    NetworkObject,
+)
+
 
 logging.basicConfig(
     level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s"
@@ -488,7 +497,7 @@ class ObjectLayerRender:
             )
 
             # Update direction and mode for non-stateless animations
-            if not object_layer_info["IS_STATELESS"]:  # Corrected typo here
+            if not object_layer_info["IS_STATELESS"]:
                 self.update_object_layer_direction_for_object(
                     obj_id=network_object.obj_id,
                     object_layer_id=object_layer_id,
@@ -517,6 +526,35 @@ class ObjectLayerRender:
                 screen_x=draw_x,
                 screen_y=draw_y,
                 timestamp=current_timestamp,
+            )
+
+        # Draw label above the object if applicable
+        display_label = network_object.get_display_label()
+        if display_label:
+            # Measure text to center it
+            text_width = self.measure_text(display_label, UI_FONT_SIZE)
+            label_x = int(
+                smoothed_pos.x + (self.network_object_size / 2) - (text_width / 2)
+            )
+            label_y = int(
+                smoothed_pos.y - UI_FONT_SIZE - 5
+            )  # 5 pixels above the object
+
+            # Draw shading
+            self.draw_text(
+                display_label,
+                label_x + 1,
+                label_y + 1,
+                UI_FONT_SIZE,
+                Color(*UI_TEXT_COLOR_SHADING),
+            )
+            # Draw actual text
+            self.draw_text(
+                display_label,
+                label_x,
+                label_y,
+                UI_FONT_SIZE,
+                Color(*UI_TEXT_COLOR_PRIMARY),
             )
 
     def _render_object_layer_frame(
@@ -620,7 +658,7 @@ class ObjectLayerRender:
         }
 
         # Manage direction history for non-stateless animations
-        if not object_layer_info["IS_STATELESS"]:  # Corrected typo here
+        if not object_layer_info["IS_STATELESS"]:
             history_key = (obj_id, object_layer_id)
             if history_key not in self._object_layer_direction_histories:
                 self._object_layer_direction_histories[history_key] = collections.deque(

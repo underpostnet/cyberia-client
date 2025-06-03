@@ -268,6 +268,18 @@ class NetworkObject:
                 # If no path found, reset cooldown to try again soon
                 self._last_path_time = current_time
 
+    def get_display_label(self) -> str | None:
+        """
+        Returns a string label to be displayed above the network object,
+        or None if no label should be displayed.
+        """
+        if self.network_object_type == "PLAYER":
+            return f"ID: {self.obj_id}"
+        elif self.network_object_type == "BOT-QUEST-PROVIDER":
+            if self.object_layer_ids and len(self.object_layer_ids) > 0:
+                return self.object_layer_ids[0]
+        return None  # No label for other types or if conditions not met
+
     @classmethod
     def from_dict(cls, data: dict):
         """Creates a NetworkObject instance from a dictionary."""
