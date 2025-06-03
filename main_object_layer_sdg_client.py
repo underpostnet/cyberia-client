@@ -4,7 +4,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import random
 import math  # Import math for trigonometric functions
-from object_layer_sdg import (
+from object_layer.object_layer_sdg import (
     PixelArtEditor,
     clarify_and_contrast_rgba,
 )  # Import the new class
