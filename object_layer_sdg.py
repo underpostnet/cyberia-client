@@ -144,9 +144,12 @@ def get_spiral_funcs(center_x, center_y, radius_growth_rate, angular_speed):
     return x_func, y_func
 
 
-def cords_render(editor, initial_x_pos, initial_y_pos, color, cords):
+def cords_render(
+    editor, initial_x_pos, initial_y_pos, color, cords, filter=lambda x, y: [x, y]
+):
     pointer = [initial_x_pos, initial_y_pos]
     for cord in cords:
+        cord = filter(cord[0], cord[1])
         editor.draw_pixel(pointer[0] + cord[0], pointer[1] + cord[1], color)
         pointer = [pointer[0] + cord[0], pointer[1] + cord[1]]
 
@@ -421,6 +424,23 @@ if __name__ == "__main__":
                 x, y = cord
                 cords_render(
                     editor, x, y, render_color_hair, cords_factory("hair-lock")
+                )
+                cords_render(
+                    editor, x, y - 1, render_color_hair + 1, cords_factory("hair-lock")
+                )
+                cords_render(
+                    editor, x, y - 2, render_color_hair + 2, cords_factory("hair-lock")
+                )
+
+            for cord in editor.get_coordinates_in_area(11, 22, 15, 18):
+                x, y = cord
+                cords_render(
+                    editor,
+                    x,
+                    y,
+                    render_color_hair,
+                    cords_factory("hair-lock"),
+                    lambda x, y: [x * -1, y],
                 )
                 cords_render(
                     editor, x, y - 1, render_color_hair + 1, cords_factory("hair-lock")
