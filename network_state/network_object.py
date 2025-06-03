@@ -129,7 +129,7 @@ class NetworkObject:
     def configure_autonomous_movement(
         self,
         initial_pos: Vector2,
-        wander_radius: float = 500.0,
+        wander_radius: float = 30.0,
         path_cooldown: float = 5.0,
     ):
         """
