@@ -80,9 +80,8 @@ def render_factory(
         tool_api (SyntheticDataToolAPI): The tool API instance for complex operations.
         mode (str): The rendering mode.
     """
+    DISPLAY_COLOR_PALETTE[1] = (0, 0, 0, 255)
     if mode == "skin-default":
-        # Adjust a specific color in the palette for this render mode
-        DISPLAY_COLOR_PALETTE[1] = (0, 0, 0, 255)
         tool_api.apply_default_skin_template_fill(DISPLAY_COLOR_PALETTE)
 
     elif mode == "skin-default-0":
@@ -100,26 +99,111 @@ def render_factory(
             list(range(2, 9))
         )  # Random color for curves
 
-        for _ in range(20):
-            generation_curves.append(
-                {
-                    "curve_value_id": generation_value_id,
-                    "num_points": random.randint(50, 50),
-                    "curve_type": random.choice(
-                        [
-                            "parabola",
-                            "sigmoid",
-                            "sine",
-                            "linear",
-                            "cubic",
-                            "circle_arc",
-                            "spiral",
-                        ]
-                    ),
-                    "initial_x_pos": random.uniform(0, DATA_MATRIX_WIDTH),
-                    "initial_y_pos": random.uniform(0, DATA_MATRIX_HEIGHT),
-                }
+        for _ in range(3):
+            curve_type = random.choice(
+                [
+                    "parabola",
+                    "sigmoid",
+                    "sine",
+                    "linear",
+                    "cubic",
+                    "circle_arc",
+                    "spiral",
+                ]
             )
+
+            # Default parameters for less messy curves
+            num_points = 50
+            initial_x_pos = random.uniform(5, DATA_MATRIX_WIDTH - 5)
+            initial_y_pos = random.uniform(5, DATA_MATRIX_HEIGHT - 5)
+
+            # Adjust parameters based on curve type for better visual appeal
+            if curve_type == "parabola":
+                scale_x = random.uniform(2, 8)
+                scale_y = random.uniform(2, 8)
+                a = random.uniform(-0.2, 0.2)
+            elif curve_type == "sigmoid":
+                scale_x = random.uniform(2, 8)
+                scale_y = random.uniform(2, 8)
+                k = random.uniform(0.8, 3.0)
+                x0 = random.uniform(-0.2, 0.2)
+            elif curve_type == "sine":
+                amplitude = random.uniform(2, 6)
+                frequency = random.uniform(0.2, 1.0)
+                initial_x_pos = random.uniform(
+                    0, DATA_MATRIX_WIDTH - 10
+                )  # Start further left
+                initial_y_pos = random.uniform(5, DATA_MATRIX_HEIGHT - 5)
+            elif curve_type == "linear":
+                # Linear curves are inherently less "messy"
+                pass
+            elif curve_type == "cubic":
+                scale_x = random.uniform(2, 8)
+                scale_y = random.uniform(2, 8)
+                a = random.uniform(-0.05, 0.05)
+                b = random.uniform(-0.2, 0.2)
+                c = random.uniform(-0.2, 0.2)
+            elif curve_type == "circle_arc":
+                radius = random.uniform(
+                    5, min(DATA_MATRIX_WIDTH, DATA_MATRIX_HEIGHT) / 4
+                )
+                start_angle = random.uniform(0, 2 * math.pi)
+                end_angle = start_angle + random.uniform(
+                    math.pi / 6, math.pi
+                )  # Smaller arcs
+            elif curve_type == "spiral":
+                radius_growth_rate = random.uniform(0.2, 1.0)
+                angular_speed = random.uniform(0.5, 2.0)
+                num_points = 100  # More points for smoother spiral
+                initial_x_pos = DATA_MATRIX_WIDTH / 2
+                initial_y_pos = DATA_MATRIX_HEIGHT / 2
+
+            curve_config = {
+                "curve_value_id": generation_value_id,
+                "num_points": num_points,
+                "curve_type": curve_type,
+                "initial_x_pos": initial_x_pos,
+                "initial_y_pos": initial_y_pos,
+                # Add specific parameters for each curve type here if needed
+                "parabola_params": (
+                    {"scale_x": scale_x, "scale_y": scale_y, "a": a}
+                    if curve_type == "parabola"
+                    else None
+                ),
+                "sigmoid_params": (
+                    {"scale_x": scale_x, "scale_y": scale_y, "k": k, "x0": x0}
+                    if curve_type == "sigmoid"
+                    else None
+                ),
+                "sine_params": (
+                    {"amplitude": amplitude, "frequency": frequency}
+                    if curve_type == "sine"
+                    else None
+                ),
+                "cubic_params": (
+                    {"scale_x": scale_x, "scale_y": scale_y, "a": a, "b": b, "c": c}
+                    if curve_type == "cubic"
+                    else None
+                ),
+                "circle_arc_params": (
+                    {
+                        "radius": radius,
+                        "start_angle": start_angle,
+                        "end_angle": end_angle,
+                    }
+                    if curve_type == "circle_arc"
+                    else None
+                ),
+                "spiral_params": (
+                    {
+                        "radius_growth_rate": radius_growth_rate,
+                        "angular_speed": angular_speed,
+                    }
+                    if curve_type == "spiral"
+                    else None
+                ),
+            }
+            generation_curves.append(curve_config)
 
         for curve_config in generation_curves:
             initial_x_pos = curve_config["initial_x_pos"]
