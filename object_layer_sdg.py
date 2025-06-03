@@ -405,7 +405,19 @@ if __name__ == "__main__":
 
             render_color_hair = random.choice([14, 17, 20])
 
-            for cord in [[9, 21], [11, 23], [16, 21]]:
+            for cord in editor.get_coordinates_in_area(7, 21, 10, 20):
+                x, y = cord
+                cords_render(
+                    editor, x, y, render_color_hair, cords_factory("hair-lock")
+                )
+                cords_render(
+                    editor, x, y - 1, render_color_hair + 1, cords_factory("hair-lock")
+                )
+                cords_render(
+                    editor, x, y - 2, render_color_hair + 2, cords_factory("hair-lock")
+                )
+
+            for cord in editor.get_coordinates_in_area(8, 23, 14, 22):
                 x, y = cord
                 cords_render(
                     editor, x, y, render_color_hair, cords_factory("hair-lock")
