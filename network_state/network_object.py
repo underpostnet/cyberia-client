@@ -1,19 +1,16 @@
 import logging
 import math
-import random  # Import random for autonomous movement
-import time  # Import time for autonomous movement
+import random
+import time
 
-from raylibpy import (
-    Color,
-    Vector2,
-)  # Import Vector2 for initial_pos in autonomous movement
+from raylibpy import Color, Vector2
 
 from config import (
     NETWORK_OBJECT_TYPE_DEFAULT_OBJECT_LAYER_IDS,
     NETWORK_OBJECT_SIZE,
     WORLD_WIDTH,
     WORLD_HEIGHT,
-)  # Import config values for autonomous movement
+)
 
 logging.basicConfig(
     level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s"
@@ -179,16 +176,54 @@ class NetworkObject:
             # Find a new random target within the radius of the initial position
             initial_x, initial_y = self._initial_pos.x, self._initial_pos.y
 
-            # Generate random angle and distance within radius
-            angle = random.uniform(0, 2 * math.pi)
-            distance = random.uniform(0, self._wander_radius)
+            # Try to find a valid target location that is not on an obstacle
+            max_attempts = 10
+            found_valid_target = False
+            target_x, target_y = (
+                self.x,
+                self.y,
+            )  # Default to current position if no valid target found
 
-            target_x = initial_x + distance * math.cos(angle)
-            target_y = initial_y + distance * math.sin(angle)
+            for attempt in range(max_attempts):
+                angle = random.uniform(0, 2 * math.pi)
+                distance = random.uniform(0, self._wander_radius)
 
-            # Clamp target coordinates to world boundaries
-            target_x = max(0, min(target_x, WORLD_WIDTH - NETWORK_OBJECT_SIZE))
-            target_y = max(0, min(target_y, WORLD_HEIGHT - NETWORK_OBJECT_SIZE))
+                potential_target_x = initial_x + distance * math.cos(angle)
+                potential_target_y = initial_y + distance * math.sin(angle)
+
+                # Clamp potential target coordinates to world boundaries
+                potential_target_x = max(
+                    0, min(potential_target_x, WORLD_WIDTH - NETWORK_OBJECT_SIZE)
+                )
+                potential_target_y = max(
+                    0, min(potential_target_y, WORLD_HEIGHT - NETWORK_OBJECT_SIZE)
+                )
+
+                target_grid_x, target_grid_y = (
+                    offline_network_state._world_to_grid_coords(
+                        potential_target_x, potential_target_y
+                    )
+                )
+
+                # Check if the target grid cell is within bounds and not an obstacle
+                if (
+                    0 <= target_grid_x < offline_network_state.grid_cells_x
+                    and 0 <= target_grid_y < offline_network_state.grid_cells_y
+                    and offline_network_state.simplified_maze[target_grid_y][
+                        target_grid_x
+                    ]
+                    == 0
+                ):
+                    target_x, target_y = potential_target_x, potential_target_y
+                    found_valid_target = True
+                    break
+
+            if not found_valid_target:
+                logging.warning(
+                    f"Autonomous agent {self.obj_id}: Could not find a valid non-obstacle target after {max_attempts} attempts. Staying put for this cycle."
+                )
+                self._last_path_time = current_time  # Reset cooldown to try again
+                return  # Exit if no valid target found
 
             start_grid_x, start_grid_y = offline_network_state._world_to_grid_coords(
                 self.x, self.y
@@ -228,7 +263,7 @@ class NetworkObject:
                 )
             else:
                 logging.warning(
-                    f"No path found for autonomous agent {self.obj_id} from ({start_grid_x},{start_grid_y}) to ({end_grid_x},{end_grid_y})."
+                    f"No path found for autonomous agent {self.obj_id} from ({start_grid_x},{start_grid_y}) to ({end_grid_x},{end_grid_y}). This might indicate an unreachable area or a bug in pathfinding."
                 )
                 # If no path found, reset cooldown to try again soon
                 self._last_path_time = current_time
