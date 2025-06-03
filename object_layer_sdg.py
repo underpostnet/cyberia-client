@@ -132,6 +132,32 @@ def get_spiral_funcs(center_x, center_y, radius_growth_rate, angular_speed):
     return x_func, y_func
 
 
+def cords_render(editor, initial_x_pos, initial_y_pos, color, cords):
+    pointer = [initial_x_pos, initial_y_pos]
+    for cord in cords:
+        editor.draw_pixel(pointer[0] + cord[0], pointer[1] + cord[1], color)
+        pointer = [pointer[0] + cord[0], pointer[1] + cord[1]]
+
+
+def cords_factory(type):
+    cords = []
+    if type == "hair-lock":
+        cords = [
+            [0, 0],
+            [-1, 1],
+            [-1, 0],
+            [-1, 0],
+            [-1, -1],
+            [-1, -1],
+            [-1, -1],
+            [0, -1],
+        ]
+        length_factor = random.randint(0, 5)
+        for i in range(length_factor):
+            cords.append([0, -1])
+    return cords
+
+
 # --- Main Execution ---
 if __name__ == "__main__":
     random.seed()  # Initialize random seed once at the start for true randomness across script runs
@@ -365,29 +391,13 @@ if __name__ == "__main__":
             editor.flood_fill(15, 2, fill_color_id=shoes_color_id)
         elif args.mode == "skin-default-0":
 
-            def render_lock_hair(initial_x_pos, initial_y_pos, color):
-                cords = [
-                    [0, 0],
-                    [-1, 1],
-                    [-1, 0],
-                    [-1, 0],
-                    [-1, -1],
-                    [-1, -1],
-                    [-1, -1],
-                    [0, -1],
-                ]
-                pointer = [initial_x_pos, initial_y_pos]
-                for cord in cords:
-                    editor.draw_pixel(pointer[0] + cord[0], pointer[1] + cord[1], color)
-                    pointer = [pointer[0] + cord[0], pointer[1] + cord[1]]
-
             render_color_hair = random.choice([14, 15, 16])
 
-            render_lock_hair(9, 21, render_color_hair)
+            cords_render(editor, 9, 21, render_color_hair, cords_factory("hair-lock"))
 
-            render_lock_hair(11, 23, render_color_hair)
+            cords_render(editor, 11, 23, render_color_hair, cords_factory("hair-lock"))
 
-            render_lock_hair(16, 21, render_color_hair)
+            cords_render(editor, 16, 21, render_color_hair, cords_factory("hair-lock"))
 
         # Set subplot limits and labels
         ax.set_xlim(0, MATRIX_WIDTH)
