@@ -2,7 +2,10 @@ import matplotlib.pyplot as plt
 import numpy as np
 import random
 import math  # Import math for trigonometric functions
-from pixel_art_editor import PixelArtEditor  # Import the new class
+from pixel_art_editor import (
+    PixelArtEditor,
+    clarify_and_contrast_rgba,
+)  # Import the new class
 
 import argparse
 
@@ -30,9 +33,18 @@ COLOR_PALETTE = {
     12: (186, 128, 92, 225),  # Medium-Dark Skin
     13: (139, 69, 19, 225),  # Dark Skin
     14: (0, 0, 0, 255),  # Hair black 0
-    15: (150, 148, 0, 255),  # Hair yellow 0
-    16: (104, 62, 0, 255),  # Hair brown 0
+    17: (150, 148, 0, 255),  # Hair yellow 0
+    20: (104, 62, 0, 255),  # Hair brown 0
 }
+
+COLOR_PALETTE[15] = clarify_and_contrast_rgba(COLOR_PALETTE[14], 0.5, 1.3)
+COLOR_PALETTE[16] = clarify_and_contrast_rgba(COLOR_PALETTE[15], 0.5, 1.3)
+
+COLOR_PALETTE[18] = clarify_and_contrast_rgba(COLOR_PALETTE[17], 0.5, 1.3)
+COLOR_PALETTE[19] = clarify_and_contrast_rgba(COLOR_PALETTE[18], 0.5, 1.3)
+
+COLOR_PALETTE[21] = clarify_and_contrast_rgba(COLOR_PALETTE[20], 0.5, 1.3)
+COLOR_PALETTE[22] = clarify_and_contrast_rgba(COLOR_PALETTE[21], 0.5, 1.3)
 
 # Get the dimensions of the default matrix for boundary checks
 MATRIX_HEIGHT, MATRIX_WIDTH = DEFAULT_PLAYER_SKIN_FRAME_DOWN_IDLE.shape
@@ -391,13 +403,19 @@ if __name__ == "__main__":
             editor.flood_fill(15, 2, fill_color_id=shoes_color_id)
         elif args.mode == "skin-default-0":
 
-            render_color_hair = random.choice([14, 15, 16])
+            render_color_hair = random.choice([14, 17, 20])
 
-            cords_render(editor, 9, 21, render_color_hair, cords_factory("hair-lock"))
-
-            cords_render(editor, 11, 23, render_color_hair, cords_factory("hair-lock"))
-
-            cords_render(editor, 16, 21, render_color_hair, cords_factory("hair-lock"))
+            for cord in [[9, 21], [11, 23], [16, 21]]:
+                x, y = cord
+                cords_render(
+                    editor, x, y, render_color_hair, cords_factory("hair-lock")
+                )
+                cords_render(
+                    editor, x, y - 1, render_color_hair + 1, cords_factory("hair-lock")
+                )
+                cords_render(
+                    editor, x, y - 2, render_color_hair + 2, cords_factory("hair-lock")
+                )
 
         # Set subplot limits and labels
         ax.set_xlim(0, MATRIX_WIDTH)

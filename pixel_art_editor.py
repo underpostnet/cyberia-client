@@ -233,3 +233,70 @@ class PixelArtEditor:
         print(
             f"Flood fill completed from ({start_x}, {start_y}) with color ID {fill_color_id}."
         )
+
+
+def clarify_and_contrast_rgba(
+    rgba_tuple: tuple[float, float, float, float],
+    clarification_factor: float = 0.05,
+    contrast_factor: float = 1.1,
+) -> tuple[int, int, int, int]:
+    """
+    Clarifies (lightens) and enhances the contrast of an RGBA color tuple.
+
+    Args:
+        rgba_tuple (tuple[float, float, float, float]): A tuple representing the RGBA color, e.g., (r, g, b, a).
+                                                        Each component (r, g, b) should be between 0 and 255.
+                                                        The alpha (a) component should be between 0 and 255
+                                                        (or 0 and 1, the function will handle it as 0-255 for consistency
+                                                        and keep it unchanged).
+        clarification_factor (float): A factor between 0.0 and 1.0 to control clarification.
+                                      Higher values mean more clarification (closer to white).
+                                      Default is 0.05.
+        contrast_factor (float): A factor to control contrast. Values > 1.0 increase contrast,
+                                 values < 1.0 decrease contrast. Default is 1.1.
+
+    Returns:
+        tuple[int, int, int, int]: A new tuple (r, g, b, a) with the clarified and contrasted color components,
+                                   clamped to integer values between 0 and 255.
+    """
+    if not (isinstance(rgba_tuple, tuple) and len(rgba_tuple) == 4):
+        raise ValueError(
+            "Input rgba_tuple must be a tuple of 4 elements: (r, g, b, a)."
+        )
+
+    r, g, b, a = rgba_tuple
+
+    # Ensure initial R, G, B values are within 0-255
+    r = max(0, min(255, r))
+    g = max(0, min(255, g))
+    b = max(0, min(255, b))
+    # Alpha can be 0-1 or 0-255, we'll just pass it through as is.
+    # If it's expected to be 0-1 and needs to be converted, add that logic here.
+    # For now, we assume it's consistent with R,G,B or handled externally.
+    a = (
+        max(0, min(255, a)) if a > 1 else max(0, min(1, a))
+    )  # Clamp alpha if it's 0-1 or 0-255
+
+    # Apply clarification (lightening)
+    # Blends the color towards white (255, 255, 255)
+    clarified_r = r + (255 - r) * clarification_factor
+    clarified_g = g + (255 - g) * clarification_factor
+    clarified_b = b + (255 - b) * clarification_factor
+
+    # Apply contrast enhancement
+    # Stretches values away from the midpoint (127.5)
+    midpoint = 127.5
+    contrasted_r = midpoint + (clarified_r - midpoint) * contrast_factor
+    contrasted_g = midpoint + (clarified_g - midpoint) * contrast_factor
+    contrasted_b = midpoint + (clarified_b - midpoint) * contrast_factor
+
+    # Clamp the final R, G, B values to the 0-255 range
+    final_r = int(max(0, min(255, contrasted_r)))
+    final_g = int(max(0, min(255, contrasted_g)))
+    final_b = int(max(0, min(255, contrasted_b)))
+
+    # The alpha channel is typically not affected by clarification or contrast,
+    # so we return it as is, or clamped to 0-255 if it was originally 0-1.
+    final_a = int(max(0, min(255, a))) if a > 1 else a
+
+    return (final_r, final_g, final_b, final_a)
