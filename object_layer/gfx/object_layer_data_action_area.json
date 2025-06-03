@@ -1,0 +1,35 @@
+{
+  "RENDER_DATA": {
+    "FRAMES": {
+      "NONE_IDLE": [
+        [
+          [1, 1, 1],
+          [1, 1, 1],
+          [1, 1, 1]
+        ]
+      ],
+      "DEFAULT_IDLE": [
+        [
+          [1, 1, 1],
+          [1, 1, 1],
+          [1, 1, 1]
+        ]
+      ]
+    },
+    "COLORS": [
+      [0, 0, 0, 0],
+      [0, 200, 255, 180]
+    ],
+    "FRAME_DURATION": 0.1,
+    "IS_STATELESS": true
+  },
+  "SEED_DATA": {
+    "EFFECT": 0,
+    "RESISTANCE": 0,
+    "AGILITY": 0,
+    "RANGE": 0,
+    "INTELLIGENCE": 0,
+    "UTILITY": 0
+  },
+  "MODIFIED": false
+}
