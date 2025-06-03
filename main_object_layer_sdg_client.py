@@ -326,6 +326,66 @@ def render_factory(
             ),
         )
 
+    elif mode == "skin-fluff":
+        canvas_size = 20
+        tool_api.create_empty_canvas(
+            canvas_size, fill_value=0
+        )  # Create a 20x20 white canvas
+
+        # Body
+        body_color = random.choice(list(range(2, 9)))  # Random vibrant color
+        data_generator.generate_rectangular_region(
+            5, 5, 10, 10, body_color
+        )  # Corrected call
+        data_generator.contiguous_region_fill(
+            7,
+            7,
+            fill_value_id=body_color,
+            gradient_shadow=True,
+            intensity_factor=0.4,
+            direction=random.choice(["top_to_bottom", "bottom_to_top"]),
+        )
+
+        # Eyes (box eyes)
+        eye_color = 14  # Black
+        data_generator.generate_rectangular_region(
+            7, 12, 2, 2, eye_color
+        )  # Corrected call
+        data_generator.generate_rectangular_region(
+            11, 12, 2, 2, eye_color
+        )  # Corrected call
+
+        # Mouth
+        mouth_color = 2  # Red
+        data_generator.generate_rectangular_region(
+            9, 9, 2, 1, mouth_color
+        )  # Corrected call
+
+        # Feet/Base
+        feet_color = random.choice(list(range(2, 9)))
+        data_generator.generate_rectangular_region(
+            6, 3, 3, 2, feet_color
+        )  # Corrected call
+        data_generator.generate_rectangular_region(
+            11, 3, 3, 2, feet_color
+        )  # Corrected call
+
+        # Antenna
+        antenna_color = random.choice(list(range(2, 9)))
+        data_generator.generate_rectangular_region(
+            9, 15, 2, 3, antenna_color
+        )  # Corrected call
+        tool_api.draw_circle(10, 19, 1, antenna_color)  # Top of antenna
+
+        # Random spots/details
+        for _ in range(random.randint(2, 5)):
+            spot_x = random.randint(6, 13)
+            spot_y = random.randint(6, 13)
+            spot_color = random.choice(list(range(2, 9)))
+            data_generator.generate_rectangular_region(
+                spot_x, spot_y, 1, 1, spot_color
+            )  # Corrected call
+
 
 # --- Main Execution ---
 if __name__ == "__main__":
@@ -339,7 +399,7 @@ if __name__ == "__main__":
         "--mode",
         type=str,
         default="skin-default",
-        help='Special mode for rendering. Current options: "skin-default", "skin-default-0", "skin-default-1", "gfx-shadow-ball".',
+        help='Special mode for rendering. Current options: "skin-default", "skin-default-0", "skin-default-1", "gfx-shadow-ball", "skin-fluff".',
     )
 
     args = parser.parse_args()
@@ -355,9 +415,9 @@ if __name__ == "__main__":
     # Configure each subplot to display the synthetic data
     for i, ax in enumerate(axes):
         # Initialize a new SyntheticDataGenerator for each subplot
-        # For "gfx-shadow-ball", the canvas will be created inside render_factory
+        # For "gfx-shadow-ball" and "skin-fluff", the canvas will be created inside render_factory
         # For other modes, use the default skin template.
-        if args.mode == "gfx-shadow-ball":
+        if args.mode in ["gfx-shadow-ball", "skin-fluff"]:
             data_generator = SyntheticDataGenerator(
                 np.zeros((1, 1), dtype=int), DISPLAY_COLOR_PALETTE
             )  # Dummy initial matrix, will be replaced
