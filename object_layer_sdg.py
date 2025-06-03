@@ -15,20 +15,23 @@ DEFAULT_PLAYER_SKIN_FRAME_DOWN_IDLE = np.array(DEFAULT_PLAYER_SKIN_FRAME_DOWN_ID
 
 # Define the color mapping for 0 (white) and 1 (black) in RGBA (0-255) format
 COLOR_PALETTE = {
-    0: (255, 255, 255, 255),  # White (R, G, B, Alpha)
-    1: (0, 0, 0, 255),  # Black (R, G, B, Alpha)
-    2: (255, 0, 0, 255),  # Red (R, G, B, Alpha)
-    3: (0, 255, 0, 255),  # Green (R, G, B, Alpha)
-    4: (0, 0, 255, 255),  # Blue (R, G, B, Alpha)
-    5: (255, 255, 0, 255),  # Yellow (R, G, B, Alpha)
-    6: (255, 0, 255, 255),  # Magenta (R, G, B, Alpha)
-    7: (0, 255, 255, 255),  # Cyan (R, G, B, Alpha)
-    8: (128, 0, 128, 255),  # Purple (R, G, B, Alpha)
+    0: (255, 255, 255, 255),  # White
+    1: (224, 224, 224, 255),  # Gray light
+    2: (255, 0, 0, 255),  # Red
+    3: (0, 255, 0, 255),  # Green
+    4: (0, 0, 255, 255),  # Blue
+    5: (255, 255, 0, 255),  # Yellow
+    6: (255, 0, 255, 255),  # Magenta
+    7: (0, 255, 255, 255),  # Cyan
+    8: (128, 0, 128, 255),  # Purple
     9: (255, 224, 189, 225),  # Light Skin
     10: (240, 192, 150, 225),  # Medium-Light Skin
     11: (218, 166, 126, 225),  # Medium Skin
     12: (186, 128, 92, 225),  # Medium-Dark Skin
     13: (139, 69, 19, 225),  # Dark Skin
+    14: (0, 0, 0, 255),  # Hair black 0
+    15: (150, 148, 0, 255),  # Hair yellow 0
+    16: (104, 62, 0, 255),  # Hair brown 0
 }
 
 # Get the dimensions of the default matrix for boundary checks
@@ -162,6 +165,7 @@ if __name__ == "__main__":
             DEFAULT_PLAYER_SKIN_FRAME_DOWN_IDLE.copy(), COLOR_PALETTE
         )
         if args.mode == "skin-default":
+            COLOR_PALETTE[1] = (0, 0, 0, 255)
 
             # --- Demonstrate Drawing by directly overwriting pixels ---
             # Example drawing operation: Draw a red pixel on the silhouette (border)
@@ -362,17 +366,28 @@ if __name__ == "__main__":
         elif args.mode == "skin-default-0":
 
             def render_lock_hair(initial_x_pos, initial_y_pos, color):
-                cords = [[0, 0], [-1, 1], [-1, 0], [-1, 0], [-1, -1], [-1, -1]]
+                cords = [
+                    [0, 0],
+                    [-1, 1],
+                    [-1, 0],
+                    [-1, 0],
+                    [-1, -1],
+                    [-1, -1],
+                    [-1, -1],
+                    [0, -1],
+                ]
                 pointer = [initial_x_pos, initial_y_pos]
                 for cord in cords:
                     editor.draw_pixel(pointer[0] + cord[0], pointer[1] + cord[1], color)
                     pointer = [pointer[0] + cord[0], pointer[1] + cord[1]]
 
-            render_lock_hair(9, 21, 2)
+            render_color_hair = random.choice([14, 15, 16])
 
-            render_lock_hair(11, 23, 3)
+            render_lock_hair(9, 21, render_color_hair)
 
-            render_lock_hair(16, 21, 4)
+            render_lock_hair(11, 23, render_color_hair)
+
+            render_lock_hair(16, 21, render_color_hair)
 
         # Set subplot limits and labels
         ax.set_xlim(0, MATRIX_WIDTH)
