@@ -1,512 +1,302 @@
-import matplotlib.pyplot as plt
 import numpy as np
-import random
-import math  # Import math for trigonometric functions
-from pixel_art_editor import (
-    PixelArtEditor,
-    clarify_and_contrast_rgba,
-)  # Import the new class
-
-import argparse
-
-# Import the default player skin frame. This is the authoritative matrix.
-from object_layer.object_layer_data import DEFAULT_PLAYER_SKIN_FRAME_DOWN_IDLE
-
-# Convert the imported list to a NumPy array
-DEFAULT_PLAYER_SKIN_FRAME_DOWN_IDLE = np.array(DEFAULT_PLAYER_SKIN_FRAME_DOWN_IDLE)
+import math  # Import math for parametric curves
+import collections  # Import collections for deque used in flood_fill
 
 
-# Define the color mapping for 0 (white) and 1 (black) in RGBA (0-255) format
-COLOR_PALETTE = {
-    0: (255, 255, 255, 255),  # White
-    1: (224, 224, 224, 255),  # Gray light
-    2: (255, 0, 0, 255),  # Red
-    3: (0, 255, 0, 255),  # Green
-    4: (0, 0, 255, 255),  # Blue
-    5: (255, 255, 0, 255),  # Yellow
-    6: (255, 0, 255, 255),  # Magenta
-    7: (0, 255, 255, 255),  # Cyan
-    8: (128, 0, 128, 255),  # Purple
-    9: (255, 224, 189, 225),  # Light Skin
-    10: (240, 192, 150, 225),  # Medium-Light Skin
-    11: (218, 166, 126, 225),  # Medium Skin
-    12: (186, 128, 92, 225),  # Medium-Dark Skin
-    13: (139, 69, 19, 225),  # Dark Skin
-    14: (0, 0, 0, 255),  # Hair black 0
-    17: (150, 148, 0, 255),  # Hair yellow 0
-    20: (104, 62, 0, 255),  # Hair brown 0
-}
-
-COLOR_PALETTE[15] = clarify_and_contrast_rgba(COLOR_PALETTE[14], 0.5, 1.3)
-COLOR_PALETTE[16] = clarify_and_contrast_rgba(COLOR_PALETTE[15], 0.5, 1.3)
-
-COLOR_PALETTE[18] = clarify_and_contrast_rgba(COLOR_PALETTE[17], 0.5, 1.3)
-COLOR_PALETTE[19] = clarify_and_contrast_rgba(COLOR_PALETTE[18], 0.5, 1.3)
-
-COLOR_PALETTE[21] = clarify_and_contrast_rgba(COLOR_PALETTE[20], 0.5, 1.3)
-COLOR_PALETTE[22] = clarify_and_contrast_rgba(COLOR_PALETTE[21], 0.5, 1.3)
-
-# Get the dimensions of the default matrix for boundary checks
-MATRIX_HEIGHT, MATRIX_WIDTH = DEFAULT_PLAYER_SKIN_FRAME_DOWN_IDLE.shape
-
-
-# --- Define Parametric Curve Functions ---
-# These functions return x and y functions for a given curve type,
-# allowing for flexible positioning and scaling.
-# These functions now return (x, y) coordinates where (0,0) is bottom-left.
-
-
-def get_parabola_funcs(x_center, y_base, scale_x, scale_y, a):
+class PixelArtEditor:
     """
-    Returns x and y functions for a parabola.
-    x_center: horizontal position of the parabola's vertex.
-    y_base: vertical position of the parabola's vertex.
-    scale_x, scale_y: scaling factors for the curve's spread.
-    a: controls the opening direction and width of the parabola.
+    A class to manage and edit pixel art matrices.
+
+    Attributes:
+        matrix (np.array): The 2D NumPy array representing the pixel art.
+        color_map (dict): A mapping from integer pixel values to RGBA color tuples (0-255).
+        last_draw_color_id (int): Stores the color ID of the last drawing operation.
     """
-    x_func = lambda t: x_center + scale_x * t
-    y_func = lambda t: y_base + scale_y * a * (t**2)
-    return x_func, y_func
 
+    def __init__(self, initial_matrix, color_mapping):
+        """
+        Initializes the PixelArtEditor with an initial matrix and color mapping.
 
-def get_sigmoid_funcs(x_center, y_midpoint, scale_x, scale_y, k, x0):
-    """
-    Returns x and y functions for a sigmoid curve.
-    x_center: horizontal position of the sigmoid's center.
-    y_midpoint: vertical position of the sigmoid's midpoint.
-    scale_x, scale_y: scaling factors for the curve's spread.
-    k: steepness of the curve.
-    x0: x-value of the sigmoid's midpoint.
-    """
-    x_func = lambda t: x_center + scale_x * t
-    y_func = lambda t: y_midpoint + scale_y * (1 / (1 + math.exp(-k * (t - x0))))
-    return x_func, y_func
+        Args:
+            initial_matrix (list or np.array): The starting pixel art matrix.
+            color_mapping (dict): A dictionary mapping integer pixel values to RGBA tuples.
+        """
+        self.matrix = np.array(initial_matrix)
+        self.color_map = color_mapping
+        self.last_draw_color_id = None  # To store the color of the last draw operation
 
+    def rgba_to_mpl_color(self, r, g, b, a):
+        """
+        Converts RGBA color values from 0-255 range to 0-1 range for Matplotlib.
 
-def get_sine_funcs(x_start, y_axis_offset, amplitude, frequency):
-    """
-    Returns x and y functions for a sine wave.
-    x_start: horizontal starting position of the sine wave.
-    y_axis_offset: vertical offset of the sine wave's central axis.
-    amplitude: height of the wave.
-    frequency: how many cycles in a given range.
-    """
-    x_func = lambda t: x_start + t
-    y_func = lambda t: y_axis_offset + amplitude * math.sin(frequency * t)
-    return x_func, y_func
+        Args:
+            r (int): Red component (0-255).
+            g (int): Green component (0-255).
+            b (int): Blue component (0-255).
+            a (int): Alpha component (0-255).
 
+        Returns:
+            tuple: A tuple (r, g, b, a) with values in the 0-1 range.
+        """
+        return (r / 255.0, g / 255.0, b / 255.0, a / 255.0)
 
-def get_linear_funcs(x_start, y_start, x_end, y_end):
-    """
-    Returns x and y functions for a linear curve (straight line).
-    x_start, y_start: coordinates of the line's starting point.
-    x_end, y_end: coordinates of the line's ending point.
-    """
-    # Linear interpolation between two points using parameter t from 0 to 1
-    x_func = lambda t: x_start + t * (x_end - x_start)
-    y_func = lambda t: y_start + t * (y_end - y_start)
-    return x_func, y_func
+    def get_mpl_color(self, pixel_value):
+        """
+        Retrieves the Matplotlib-compatible RGBA color for a given pixel value.
 
+        Args:
+            pixel_value (int): The integer value representing the color in the matrix.
 
-def get_cubic_funcs(x_center, y_center, scale_x, scale_y, a, b, c):
-    """
-    Returns x and y functions for a cubic curve.
-    x_center, y_center: central position offsets for the cubic curve.
-    scale_x, scale_y: scaling factors for the curve's spread.
-    a, b, c: coefficients of the cubic polynomial.
-    """
-    x_func = lambda t: x_center + scale_x * t
-    y_func = lambda t: y_center + scale_y * (a * (t**3) + b * (t**2) + c * t)
-    return x_func, y_func
+        Returns:
+            tuple: A tuple (r, g, b, a) with color values in the 0-1 range.
+        """
+        rgba_255 = self.color_map.get(
+            pixel_value, (0, 0, 0, 0)
+        )  # Default to transparent black
+        return self.rgba_to_mpl_color(*rgba_255)
 
+    def _convert_xy_to_rowcol(self, x, y):
+        """
+        Converts (x, y) coordinates (where (0,0) is bottom-left) to
+        (row_idx, col_idx) for the internal matrix (where (0,0) is top-left).
+        Also clamps coordinates to be within matrix bounds.
+        """
+        matrix_height, matrix_width = self.matrix.shape
 
-def get_circle_arc_funcs(center_x, center_y, radius, start_angle, end_angle):
-    """
-    Returns x and y functions for a circular arc.
-    center_x, center_y: coordinates of the center of the circle.
-    radius: radius of the arc.
-    start_angle, end_angle: angular range for the arc in radians.
-    """
-    x_func = lambda t: center_x + radius * math.cos(t)
-    y_func = lambda t: center_y + radius * math.sin(t)
-    return x_func, y_func
+        # Invert y to get row_idx (0 at top)
+        row_idx = matrix_height - 1 - y
+        col_idx = x
 
+        # Clamp coordinates to ensure they are within the matrix bounds
+        clamped_row_idx = max(0, min(row_idx, matrix_height - 1))
+        clamped_col_idx = max(0, min(col_idx, matrix_width - 1))
+        return clamped_row_idx, clamped_col_idx
 
-def get_spiral_funcs(center_x, center_y, radius_growth_rate, angular_speed):
-    """
-    Returns x and y functions for a spiral curve.
-    center_x, center_y: coordinates of the spiral's origin.
-    radius_growth_rate: how quickly the spiral expands.
-    angular_speed: how quickly the spiral rotates.
-    """
-    x_func = lambda t: center_x + (radius_growth_rate * t) * math.cos(angular_speed * t)
-    y_func = lambda t: center_y + (radius_growth_rate * t) * math.sin(angular_speed * t)
-    return x_func, y_func
+    def draw_pixel(self, x, y, color_id):
+        """
+        Draws a single pixel on the matrix with the specified color ID.
+        This method directly overwrites the pixel at the given (x, y) coordinates,
+        where (0,0) is considered the bottom-left of the pixel art.
 
+        Args:
+            x (int): The x-coordinate (column) of the pixel.
+            y (int): The y-coordinate (row) of the pixel.
+            color_id (int): The integer ID of the color to draw.
+        """
+        row_idx, col_idx = self._convert_xy_to_rowcol(x, y)
+        self.matrix[row_idx, col_idx] = color_id
+        self.last_draw_color_id = color_id
 
-def cords_render(
-    editor, initial_x_pos, initial_y_pos, color, cords, filter=lambda x, y: [x, y]
-):
-    pointer = [initial_x_pos, initial_y_pos]
-    for cord in cords:
-        cord = filter(cord[0], cord[1])
-        editor.draw_pixel(pointer[0] + cord[0], pointer[1] + cord[1], color)
-        pointer = [pointer[0] + cord[0], pointer[1] + cord[1]]
+    def draw_rectangle(self, start_x, start_y, width, height, color_id):
+        """
+        Draws a filled rectangle on the matrix.
+        The rectangle is defined by its bottom-left corner (start_x, start_y),
+        width, and height.
 
+        Args:
+            start_x (int): The starting x-coordinate (bottom-left corner) of the rectangle.
+            start_y (int): The starting y-coordinate (bottom-left corner) of the rectangle.
+            width (int): The width of the rectangle.
+            height (int): The height of the rectangle.
+            color_id (int): The integer ID of the color to draw the rectangle with.
+        """
+        # Calculate the top-right corner in (x,y) coordinates
+        end_x = start_x + width
+        end_y = start_y + height
 
-def cords_factory(type):
-    cords = []
-    if type == "hair-lock":
-        cords = [
-            [0, 0],
-            [-1, 1],
-            [-1, 0],
-            [-1, 0],
-            [-1, -1],
-            [-1, -1],
-            [-1, -1],
-            [0, -1],
-        ]
-        length_factor = random.randint(0, 5)
-        for i in range(length_factor):
-            cords.append([0, -1])
-    return cords
+        # Iterate over the rectangle's area and draw each pixel
+        # We iterate over x from start_x to end_x-1, and y from start_y to end_y-1
+        for x in range(start_x, end_x):
+            for y in range(start_y, end_y):
+                self.draw_pixel(x, y, color_id)
 
+    def draw_parametric_curve(
+        self, x_func, y_func, t_start, t_end, num_points, color_id
+    ):
+        """
+        Draws a parametric curve by plotting individual pixels.
+        The x_func and y_func should return coordinates where (0,0) is bottom-left.
 
-def render_factory(editor, type="skin-bald-rainbow"):
-    if type == "skin-bald-rainbow":
-        COLOR_PALETTE[1] = (0, 0, 0, 255)
-        skin_color_id = random.choice(list(range(9, 14)))
+        Args:
+            x_func (callable): A function that returns the x-coordinate for a given parameter t.
+            y_func (callable): A function that returns the y-coordinate for a given parameter t.
+            t_start (float): The starting value of the parameter t.
+            t_end (float): The ending value of the parameter t.
+            num_points (int): The number of points to plot along the curve.
+            color_id (int): The integer ID of the color to draw the curve with.
+        """
+        t_values = np.linspace(t_start, t_end, num_points)
 
-        editor.flood_fill(12, 12, fill_color_id=skin_color_id)
-        editor.flood_fill(7, 4, fill_color_id=skin_color_id)
-        editor.flood_fill(18, 4, fill_color_id=skin_color_id)
+        for t in t_values:
+            # Calculate floating point coordinates (x, y) where (0,0) is bottom-left
+            x_float = x_func(t)
+            y_float = y_func(t)
 
-        editor.flood_fill(13, 7, fill_color_id=random.choice(list(range(2, 9))))
+            # Convert to integer pixel coordinates
+            x_int = int(round(x_float))
+            y_int = int(round(y_float))
 
-        editor.flood_fill(12, 4, fill_color_id=random.choice(list(range(2, 9))))
+            self.draw_pixel(x_int, y_int, color_id)
 
-        shoes_color_id = random.choice(list(range(2, 9)))
-        editor.flood_fill(9, 2, fill_color_id=shoes_color_id)
-        editor.flood_fill(15, 2, fill_color_id=shoes_color_id)
+    def get_coordinates_in_area(self, x1, y1, x2, y2):
+        """
+        Returns a list of all integer (x, y) coordinates within a rectangular area
+        defined by two (x,y) input coordinates (where (0,0) is bottom-left).
+        The coordinates are clamped to the matrix bounds.
 
+        Args:
+            x1 (int): X-coordinate of the first point.
+            y1 (int): Y-coordinate of the first point.
+            x2 (int): X-coordinate of the second point.
+            y2 (int): Y-coordinate of the second point.
 
-# --- Main Execution ---
-if __name__ == "__main__":
-    random.seed()  # Initialize random seed once at the start for true randomness across script runs
+        Returns:
+            list: A list of (x, y) tuples representing all integer coordinates
+                  within the specified area and clamped to the matrix boundaries.
+        """
+        # Determine the min and max x and y values to define the bounding box
+        min_x = min(x1, x2)
+        max_x = max(x1, x2)
+        min_y = min(y1, y2)
+        max_y = max(y1, y2)
 
-    parser = argparse.ArgumentParser(
-        description="Generate pixel art with parametric curves and seed positions."
-    )
+        coordinates = []
+        matrix_height, matrix_width = self.matrix.shape
 
-    parser.add_argument(
-        "--mode",
-        type=str,
-        default="skin-default",
-        help='Special mode for rendering. Current options: "skin-default", "skin-default-0", "skin-default-1", "skin-default-2".',
-    )
+        # Iterate through the bounding box, clamping to matrix limits
+        for y in range(min_y, max_y + 1):
+            for x in range(min_x, max_x + 1):
+                # Clamp (x,y) coordinates to ensure they are within the plotting area
+                clamped_x = max(0, min(x, matrix_width - 1))
+                clamped_y = max(0, min(y, matrix_height - 1))
+                coordinates.append((clamped_x, clamped_y))
 
-    args = parser.parse_args()
+        # Using a set for uniqueness and then converting back to a list
+        return list(set(coordinates))
 
-    print(f"Running in mode: {args.mode}")
+    def flood_fill(self, start_x, start_y, fill_color_id=0):
+        """
+        Performs a flood fill operation starting from a given (x, y) coordinate
+        (where (0,0) is bottom-left).
+        Changes the color of adjacent pixels to 'fill_color_id' (defaulting to 0/white)
+        if their original color matches the starting pixel's color, until a different
+        color value is found.
 
-    # Create a figure and a 2x4 grid of subplots
-    fig, axes = plt.subplots(2, 4, figsize=(26, 13), dpi=100)
+        Args:
+            start_x (int): The starting x-coordinate for the flood fill.
+            start_y (int): The starting y-coordinate for the flood fill.
+            fill_color_id (int): The color ID to fill with. Defaults to 0 (white).
+        """
+        # Convert start_x, start_y to internal matrix row_idx, col_idx
+        start_row, start_col = self._convert_xy_to_rowcol(start_x, start_y)
 
-    # Flatten the axes array for easy iteration
-    axes = axes.flatten()
-
-    # Configure each subplot to display the pixel art on a 26x26 grid
-    for i, ax in enumerate(axes):
-        # Initialize a new PixelArtEditor for each subplot with a fresh copy of the default matrix
-        # This ensures each subplot starts with the original silhouette and independent drawings.
-        editor = PixelArtEditor(
-            DEFAULT_PLAYER_SKIN_FRAME_DOWN_IDLE.copy(), COLOR_PALETTE
-        )
-        if args.mode == "skin-default":
-            render_factory(editor)
-
-        if args.mode == "skin-default-0":
-
-            # --- Demonstrate Drawing by directly overwriting pixels ---
-            # Example drawing operation: Draw a red pixel on the silhouette (border)
-            # The draw_pixel now expects (x, y) where (0,0) is bottom-left
-            # editor.draw_pixel(0, 0, 2)  # Draw red (color ID 2) at (0,0) - bottom-left
-            # editor.draw_pixel(1, 0, 2)  # Draw red (color ID 2) at (1,0)
-            # editor.draw_pixel(0, 1, 2)  # Draw red (color ID 2) at (0,1)
-            # editor.draw_pixel(1, 1, 2)  # Draw red (color ID 2) at (1,1)
-
-            # Add your requested green pixel draws *after* the previous operations
-            # editor.draw_pixel(11, 11, 3)  # Draw green (color ID 3)
-            # editor.draw_pixel(12, 12, 3)  # Draw green (color ID 3)
-            # editor.draw_pixel(13, 13, 3)  # Draw green (color ID 3)
-
-            # --- Add 2 random rectangles ---
-            for _ in range(0):  # Set to 0 for now as per original code
-                # Position variables for rectangle (using x, y for bottom-left)
-                rect_start_x = random.randint(0, MATRIX_WIDTH - 5)
-                rect_start_y = random.randint(0, MATRIX_HEIGHT - 5)
-                rect_width = random.randint(3, 8)
-                rect_height = random.randint(3, 8)
-                rect_color = random.choice(
-                    [2, 3, 4, 5, 6, 7]
-                )  # Random color excluding white/black
-                editor.draw_rectangle(
-                    rect_start_x, rect_start_y, rect_width, rect_height, rect_color
-                )
-
-            # --- Define and Render "Draw Areas" (e.g., for draw positions) ---
-            # This area will be highlighted with a specific color (e.g., Purple, color ID 8)
-            # The area is defined by two (x,y) coordinates.
-            # For simulating "AI up", we define a region where draw might be.
-            draw_area_x1, draw_area_y1 = 6, 23  # Bottom-left corner of the draw area
-            draw_area_x2, draw_area_y2 = 19, 18  # Top-right corner of the draw area
-
-            # Get all coordinates within this defined "bad area"
-            seed_draw_positions = editor.get_coordinates_in_area(
-                draw_area_x1, draw_area_y1, draw_area_x2, draw_area_y2
+        # Check bounds for the internal matrix coordinates
+        if not (
+            0 <= start_row < self.matrix.shape[0]
+            and 0 <= start_col < self.matrix.shape[1]
+        ):
+            print(
+                f"Error: Start coordinates ({start_x}, {start_y}) are out of bounds for flood fill."
             )
+            return
 
-            # Draw the "bad area" with a distinct color (Purple, color ID 8)
-            # This visualizes the region where the AI might focus its "draw" drawing.
-            # for x_coord, y_coord in seed_draw_positions:
-            #     editor.draw_pixel(x_coord, y_coord, 8)  # Using color ID 8 for purple
+        original_color_id = self.matrix[start_row, start_col]
 
-            draw_curves = []
-            draw_hair_color = random.choice([2, 3, 4, 5, 6, 7])
+        # If the original color is already the fill color, do nothing
+        if original_color_id == fill_color_id:
+            return
 
-            for _ in range(20):
-                draw_curves.append(
-                    {
-                        "curve_color": draw_hair_color,  # Random color
-                        "num_points": random.randint(50, 50),
-                        "curve_type": "parabola",
-                        "initial_x_pos": random.uniform(0, MATRIX_WIDTH),
-                        "initial_y_pos": random.uniform(0, MATRIX_HEIGHT),
-                    }
-                )
+        # Use a queue for BFS (Breadth-First Search)
+        q = collections.deque([(start_row, start_col)])
+        visited = set([(start_row, start_col)])
 
-            for curve_num in range(len(draw_curves)):
-                curve_color = draw_curves[curve_num]["curve_color"]
-                num_points = draw_curves[curve_num]["num_points"]
-                curve_type = draw_curves[curve_num]["curve_type"]
+        while q:
+            r, c = q.popleft()
 
-                # For the first curve, try to start it from a "seed draw position"
-                if True or curve_num == 0 and seed_draw_positions:
-                    # Randomly select a coordinate from the "bad area" for the curve's starting point/center
-                    chosen_seed_coord = random.choice(seed_draw_positions)
-                    # seed_draw_positions returns (x, y)
-                    initial_x_pos = chosen_seed_coord[0]
-                    initial_y_pos = chosen_seed_coord[1]
-                else:
-                    # For other curves, or if no seed positions, use random positions
-                    initial_x_pos = draw_curves[curve_num]["initial_x_pos"]
-                    initial_y_pos = draw_curves[curve_num]["initial_y_pos"]
+            # Change the color of the current pixel to the specified fill_color_id
+            self.matrix[r, c] = fill_color_id
 
-                if curve_type == "parabola":
-                    # Position variables for parabola
-                    parabola_center_x = initial_x_pos
-                    parabola_base_y = initial_y_pos
-                    scale_x = random.uniform(5, 15)
-                    scale_y = random.uniform(5, 15)
-                    a = random.uniform(
-                        -0.5, 0.5
-                    )  # Controls opening direction and width
-                    x_func, y_func = get_parabola_funcs(
-                        parabola_center_x, parabola_base_y, scale_x, scale_y, a
-                    )
-                    t_start = -1.0
-                    t_end = 1.0
+            # Define neighbors (up, down, left, right) in matrix coordinates
+            neighbors = [(r + 1, c), (r - 1, c), (r, c + 1), (r, c - 1)]
 
-                elif curve_type == "sigmoid":
-                    # Position variables for sigmoid
-                    sigmoid_center_x = initial_x_pos
-                    sigmoid_midpoint_y = initial_y_pos
-                    scale_x = random.uniform(5, 15)
-                    scale_y = random.uniform(5, 15)
-                    k = random.uniform(0.5, 5.0)  # Steepness
-                    x0 = random.uniform(-0.5, 0.5)  # x-value of midpoint
-                    x_func, y_func = get_sigmoid_funcs(
-                        sigmoid_center_x, sigmoid_midpoint_y, scale_x, scale_y, k, x0
-                    )
-                    t_start = -5.0
-                    t_end = 5.0
+            for nr, nc in neighbors:
+                # Check bounds and if the neighbor has the original color and hasn't been visited
+                if (
+                    0 <= nr < self.matrix.shape[0]
+                    and 0 <= nc < self.matrix.shape[1]
+                    and self.matrix[nr, nc] == original_color_id
+                    and (nr, nc) not in visited
+                ):
+                    q.append((nr, nc))
+                    visited.add((nr, nc))
 
-                elif curve_type == "sine":
-                    # Position variables for sine wave
-                    sine_start_x = initial_x_pos
-                    sine_y_axis_offset = initial_y_pos
-                    amplitude = random.uniform(3, 10)
-                    frequency = random.uniform(0.5, 3.0)
-                    x_func, y_func = get_sine_funcs(
-                        sine_start_x, sine_y_axis_offset, amplitude, frequency
-                    )
-                    t_start = 0
-                    t_end = random.uniform(
-                        MATRIX_WIDTH / 2, MATRIX_WIDTH
-                    )  # Spread horizontally
+        print(
+            f"Flood fill completed from ({start_x}, {start_y}) with color ID {fill_color_id}."
+        )
 
-                elif curve_type == "linear":
-                    # Position variables for linear curve
-                    line_start_x = initial_x_pos
-                    line_start_y = initial_y_pos
-                    line_end_x = random.uniform(0, MATRIX_WIDTH)
-                    line_end_y = random.uniform(0, MATRIX_HEIGHT)
-                    x_func, y_func = get_linear_funcs(
-                        line_start_x, line_start_y, line_end_x, line_end_y
-                    )
-                    t_start = 0.0
-                    t_end = 1.0  # t goes from 0 to 1 for linear interpolation
 
-                elif curve_type == "cubic":
-                    # Position variables for cubic curve
-                    cubic_center_x = initial_x_pos
-                    cubic_center_y = initial_y_pos
-                    scale_x = random.uniform(5, 15)
-                    scale_y = random.uniform(5, 15)
-                    a = random.uniform(-0.1, 0.1)  # Coefficients for curve shape
-                    b = random.uniform(-0.5, 0.5)
-                    c = random.uniform(-0.5, 0.5)
-                    x_func, y_func = get_cubic_funcs(
-                        cubic_center_x, cubic_center_y, scale_x, scale_y, a, b, c
-                    )
-                    t_start = -1.0
-                    t_end = 1.0
+def clarify_and_contrast_rgba(
+    rgba_tuple: tuple[float, float, float, float],
+    clarification_factor: float = 0.05,
+    contrast_factor: float = 1.1,
+) -> tuple[int, int, int, int]:
+    """
+    Clarifies (lightens) and enhances the contrast of an RGBA color tuple.
 
-                elif curve_type == "circle_arc":
-                    # Position variables for circle arc
-                    arc_center_x = initial_x_pos
-                    arc_center_y = initial_y_pos
-                    radius = random.uniform(5, min(MATRIX_WIDTH, MATRIX_HEIGHT) / 2 - 2)
-                    start_angle = random.uniform(0, 2 * math.pi)
-                    end_angle = start_angle + random.uniform(
-                        math.pi / 4, 1.5 * math.pi
-                    )  # Arc length
-                    x_func, y_func = get_circle_arc_funcs(
-                        arc_center_x, arc_center_y, radius, start_angle, end_angle
-                    )
-                    t_start = start_angle
-                    t_end = end_angle
+    Args:
+        rgba_tuple (tuple[float, float, float, float]): A tuple representing the RGBA color, e.g., (r, g, b, a).
+                                                        Each component (r, g, b) should be between 0 and 255.
+                                                        The alpha (a) component should be between 0 and 255
+                                                        (or 0 and 1, the function will handle it as 0-255 for consistency
+                                                        and keep it unchanged).
+        clarification_factor (float): A factor between 0.0 and 1.0 to control clarification.
+                                      Higher values mean more clarification (closer to white).
+                                      Default is 0.05.
+        contrast_factor (float): A factor to control contrast. Values > 1.0 increase contrast,
+                                 values < 1.0 decrease contrast. Default is 1.1.
 
-                elif curve_type == "spiral":
-                    # Position variables for spiral
-                    spiral_center_x = initial_x_pos
-                    spiral_center_y = initial_y_pos
-                    radius_growth_rate = random.uniform(0.5, 2.0)
-                    angular_speed = random.uniform(1.0, 3.0)
-                    x_func = lambda t: spiral_center_x + (
-                        radius_growth_rate * t
-                    ) * math.cos(angular_speed * t)
-                    y_func = lambda t: spiral_center_y + (
-                        radius_growth_rate * t
-                    ) * math.sin(angular_speed * t)
-                    t_start = 0
-                    t_end = random.uniform(
-                        2 * math.pi, 6 * math.pi
-                    )  # Vary the length of the curve
+    Returns:
+        tuple[int, int, int, int]: A new tuple (r, g, b, a) with the clarified and contrasted color components,
+                                   clamped to integer values between 0 and 255.
+    """
+    if not (isinstance(rgba_tuple, tuple) and len(rgba_tuple) == 4):
+        raise ValueError(
+            "Input rgba_tuple must be a tuple of 4 elements: (r, g, b, a)."
+        )
 
-                editor.draw_parametric_curve(
-                    x_func, y_func, t_start, t_end, num_points, curve_color
-                )
+    r, g, b, a = rgba_tuple
 
-            # --- Demonstrate the new flood_fill method ---
-            # Apply flood fill only to the first graph for clear demonstration
-            render_factory(editor)
+    # Ensure initial R, G, B values are within 0-255
+    r = max(0, min(255, r))
+    g = max(0, min(255, g))
+    b = max(0, min(255, b))
+    # Alpha can be 0-1 or 0-255, we'll just pass it through as is.
+    # If it's expected to be 0-1 and needs to be converted, add that logic here.
+    # For now, we assume it's consistent with R,G,B or handled externally.
+    a = (
+        max(0, min(255, a)) if a > 1 else max(0, min(1, a))
+    )  # Clamp alpha if it's 0-1 or 0-255
 
-        elif args.mode == "skin-default-1":
+    # Apply clarification (lightening)
+    # Blends the color towards white (255, 255, 255)
+    clarified_r = r + (255 - r) * clarification_factor
+    clarified_g = g + (255 - g) * clarification_factor
+    clarified_b = b + (255 - b) * clarification_factor
 
-            render_color_hair = random.choice([14, 17, 20])
+    # Apply contrast enhancement
+    # Stretches values away from the midpoint (127.5)
+    midpoint = 127.5
+    contrasted_r = midpoint + (clarified_r - midpoint) * contrast_factor
+    contrasted_g = midpoint + (clarified_g - midpoint) * contrast_factor
+    contrasted_b = midpoint + (clarified_b - midpoint) * contrast_factor
 
-            for cord in editor.get_coordinates_in_area(7, 21, 10, 20):
-                x, y = cord
-                cords_render(
-                    editor, x, y, render_color_hair, cords_factory("hair-lock")
-                )
-                cords_render(
-                    editor, x, y - 1, render_color_hair + 1, cords_factory("hair-lock")
-                )
-                cords_render(
-                    editor, x, y - 2, render_color_hair + 2, cords_factory("hair-lock")
-                )
+    # Clamp the final R, G, B values to the 0-255 range
+    final_r = int(max(0, min(255, contrasted_r)))
+    final_g = int(max(0, min(255, contrasted_g)))
+    final_b = int(max(0, min(255, contrasted_b)))
 
-            for cord in editor.get_coordinates_in_area(8, 23, 14, 22):
-                x, y = cord
-                cords_render(
-                    editor, x, y, render_color_hair, cords_factory("hair-lock")
-                )
-                cords_render(
-                    editor, x, y - 1, render_color_hair + 1, cords_factory("hair-lock")
-                )
-                cords_render(
-                    editor, x, y - 2, render_color_hair + 2, cords_factory("hair-lock")
-                )
+    # The alpha channel is typically not affected by clarification or contrast,
+    # so we return it as is, or clamped to 0-255 if it was originally 0-1.
+    final_a = int(max(0, min(255, a))) if a > 1 else a
 
-            for cord in editor.get_coordinates_in_area(11, 22, 15, 18):
-                x, y = cord
-                cords_render(
-                    editor,
-                    x,
-                    y,
-                    render_color_hair,
-                    cords_factory("hair-lock"),
-                    lambda x, y: [x * -1, y],
-                )
-                cords_render(
-                    editor, x, y - 1, render_color_hair + 1, cords_factory("hair-lock")
-                )
-                cords_render(
-                    editor, x, y - 2, render_color_hair + 2, cords_factory("hair-lock")
-                )
-
-            render_factory(editor)
-
-        # Set subplot limits and labels
-        ax.set_xlim(0, MATRIX_WIDTH)
-        ax.set_ylim(0, MATRIX_HEIGHT)
-        ax.set_xlabel("Pixel X")
-        ax.set_ylabel("Pixel Y")
-        ax.set_aspect("equal", adjustable="box")
-        ax.set_title(f"Pixel Art {i+1}")  # Add a title for each subplot
-
-        # Iterate over the matrix to draw each pixel as a colored square
-        # The matrix now stores data as if (0,0) is top-left, but we plot it
-        # as if (0,0) is bottom-left. So, the plotting logic needs to invert Y.
-        for row_idx in range(MATRIX_HEIGHT):
-            for col_idx in range(MATRIX_WIDTH):
-                pixel_value = editor.matrix[row_idx, col_idx]
-                color = editor.get_mpl_color(pixel_value)
-
-                # Calculate the coordinates for the current pixel's square
-                # Invert y-coordinate for drawing to match matrix (0 at top) to plot (0 at bottom)
-                # This is the crucial part that aligns the matrix data with Matplotlib's y-axis.
-                square_y_bottom = MATRIX_HEIGHT - 1 - row_idx
-                square_x_left = col_idx
-
-                x_coords = [
-                    square_x_left,
-                    square_x_left + 1,
-                    square_x_left + 1,
-                    square_x_left,
-                ]
-                y_coords = [
-                    square_y_bottom,
-                    square_y_bottom,
-                    square_y_bottom + 1,
-                    square_y_bottom + 1,
-                ]
-
-                ax.fill(x_coords, y_coords, color=color, edgecolor="none")
-
-        # Draw horizontal grid lines
-        for y in range(MATRIX_HEIGHT + 1):
-            ax.axhline(y, color="lightgray", linestyle="-", linewidth=0.5)
-
-        # Draw vertical grid lines
-        for x in range(MATRIX_WIDTH + 1):
-            ax.axvline(x, color="lightgray", linestyle="-", linewidth=0.5)
-
-    # Adjust layout to prevent titles/labels from overlapping
-    plt.tight_layout()
-
-    # Display the plot
-    plt.show()
+    return (final_r, final_g, final_b, final_a)
