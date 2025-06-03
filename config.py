@@ -15,6 +15,9 @@ WEBSOCKET_PATH = "/ws"
 DIRECTION_HISTORY_LENGTH = 15
 CAMERA_SMOOTHNESS = 0.1
 
+# UI Settings
+UI_MODAL_HEIGHT = 80  # Height of the top-bar UI modal
+
 # Network object type to object layer IDs mapping
 NETWORK_OBJECT_TYPE_DEFAULT_OBJECT_LAYER_IDS = {
     "PLAYER": ["ACTION_AREA", "ANON"],

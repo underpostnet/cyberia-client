@@ -34,6 +34,7 @@ from config import (
     SCREEN_WIDTH,
     WORLD_HEIGHT,
     WORLD_WIDTH,
+    UI_MODAL_HEIGHT,  # Import the new UI modal height
 )
 from object_layer.object_layer_render import ObjectLayerRender
 from network_state.network_object import NetworkObject
@@ -41,6 +42,7 @@ from network_state.network_state import NetworkState
 from network_state.network_object_factory import NetworkObjectFactory
 from network_state.network_state_proxy import NetworkStateProxy
 from network_state.astar import astar
+from ui.modal import Modal  # Import the new Modal class
 
 
 logging.basicConfig(
@@ -86,6 +88,15 @@ class NetworkStateClient:
             client_message_queue=self.message_queue,
             client_connection_ready_event=self.connection_ready_event,
             client_player_id_setter=self._set_my_player_id,
+        )
+
+        # Initialize the UI modal for displaying information
+        self.ui_modal = Modal(
+            screen_width=SCREEN_WIDTH,
+            screen_height=SCREEN_HEIGHT,
+            render_content_callback=self._render_ui_info,
+            mode="top-bar",
+            height=UI_MODAL_HEIGHT,  # Use the height from config
         )
 
     def _set_my_player_id(self, player_id: str):
@@ -200,6 +211,53 @@ class NetworkStateClient:
             time.sleep(delay_per_point)
         logging.debug(
             f"Generated {len(path_coords)} client-side path GFX points asynchronously."
+        )
+
+    def _render_ui_info(
+        self,
+        object_layer_render_instance: ObjectLayerRender,
+        x: int,
+        y: int,
+        width: int,
+        height: int,
+    ):
+        """
+        Renders the UI information (Player ID, Position, FPS) within the modal's area.
+        This method is passed as a callback to the Modal.
+        """
+        # Calculate positions relative to the modal's top-left corner (x, y)
+        text_offset_x = x + 10
+        text_offset_y = y + 10
+        line_height = 20
+
+        with self.network_state.lock:
+            if self.my_network_object:
+                object_layer_render_instance.draw_text(
+                    f"My Player ID: {self.my_player_id}",
+                    text_offset_x,
+                    text_offset_y,
+                    line_height,
+                    BLACK,
+                )
+                object_layer_render_instance.draw_text(
+                    f"My Pos: ({int(self.my_network_object.x)}, {int(self.my_network_object.y)})",
+                    text_offset_x,
+                    text_offset_y + line_height + 5,
+                    line_height,
+                    BLACK,
+                )
+            else:
+                object_layer_render_instance.draw_text(
+                    "Connecting...", text_offset_x, text_offset_y, line_height, BLACK
+                )
+
+        frame_time = object_layer_render_instance.get_frame_time()
+        object_layer_render_instance.draw_text(
+            f"FPS: {int(1.0 / frame_time) if frame_time > 0 else 'N/A'}",
+            text_offset_x,
+            text_offset_y + (2 * line_height) + 10,  # Position below player info
+            line_height,
+            BLACK,
         )
 
     def run(self):
@@ -362,29 +420,8 @@ class NetworkStateClient:
                         camera_target_pos, smoothness=CAMERA_SMOOTHNESS
                     )
 
-                    self.object_layer_render.draw_text(
-                        f"My Player ID: {self.my_player_id}", 10, 10, 20, BLACK
-                    )
-                    self.object_layer_render.draw_text(
-                        f"My Pos: ({int(self.my_network_object.x)}, {int(self.my_network_object.y)})",
-                        10,
-                        40,
-                        20,
-                        BLACK,
-                    )
-                else:
-                    self.object_layer_render.draw_text(
-                        "Connecting...", 10, 10, 20, BLACK
-                    )
-
-            frame_time = self.object_layer_render.get_frame_time()
-            self.object_layer_render.draw_text(
-                f"FPS: {int(1.0 / frame_time) if frame_time > 0 else 'N/A'}",
-                10,
-                SCREEN_HEIGHT - 30,
-                20,
-                BLACK,
-            )
+            # Render the UI modal
+            self.ui_modal.render(self.object_layer_render)
 
             self.object_layer_render.update_all_active_object_layer_animations(
                 delta_time, current_time
