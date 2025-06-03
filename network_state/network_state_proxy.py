@@ -20,6 +20,7 @@ from network_state.network_state import NetworkState
 from network_state.network_object_factory import NetworkObjectFactory
 from network_state.astar import astar  # For offline pathfinding
 
+
 logging.basicConfig(
     level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s"
 )
@@ -58,15 +59,6 @@ class NetworkStateProxy:
         self.my_player_id: str | None = None
         self.offline_player_target_pos: Vector2 | None = None
         self.offline_player_path: list[dict[str, float]] = []
-
-        # BOT-QUEST-PROVIDER specific attributes
-        self.bot_quest_provider_id: str | None = None
-        self.bot_quest_provider_initial_pos: Vector2 | None = None
-        self.bot_quest_provider_path_radius = 500.0  # Radius for bot's movement loop
-        self.bot_quest_provider_last_path_time = 0.0
-        self.bot_quest_provider_path_cooldown = (
-            5.0  # Cooldown before assigning new path
-        )
 
         self.offline_mode_update_thread = threading.Thread(
             target=self._offline_mode_update_loop, daemon=True
@@ -183,58 +175,33 @@ class NetworkStateProxy:
         # Always extract the player ID from the newly generated initial state
         # and update the proxy's my_player_id and inform the client.
         player_id_found = False
-        for obj_id, obj_data in initial_state_data["network_objects"].items():
-            if obj_data.get("network_object_type") == "PLAYER":
+
+        # Update the offline network state with the generated initial objects
+        # This also creates the NetworkObject instances in offline_network_state
+        self.offline_network_state.update_from_dict(
+            initial_state_data["network_objects"]
+        )
+
+        for obj_id, obj in self.offline_network_state.get_all_network_objects().items():
+            if obj.network_object_type == "PLAYER":
                 self.my_player_id = obj_id
                 self.client_player_id_setter(self.my_player_id)
                 logging.info(f"Proxy assigned offline player ID: {self.my_player_id}.")
                 player_id_found = True
-                break
+            elif obj.network_object_type == "BOT-QUEST-PROVIDER":
+                # Configure autonomous movement for each bot directly on the NetworkObject
+                # Using default values from NetworkObject.configure_autonomous_movement
+                obj.configure_autonomous_movement(
+                    initial_pos=Vector2(obj.x, obj.y)  # Use current position as initial
+                )
+                logging.info(
+                    f"Proxy configured BOT-QUEST-PROVIDER {obj_id} for autonomous movement."
+                )
 
         if not player_id_found:
             logging.warning(
                 "No player object found in generated initial offline state."
             )
-
-        # Generate BOT-QUEST-PROVIDER object
-        bot_id = str(uuid.uuid4())
-        # Random position around the center of the map
-        center_x = WORLD_WIDTH / 2
-        center_y = WORLD_HEIGHT / 2
-
-        # Define a smaller radius for initial spawn to ensure it's not too far off
-        spawn_radius = 200
-        random_offset_x = random.uniform(-spawn_radius, spawn_radius)
-        random_offset_y = random.uniform(-spawn_radius, spawn_radius)
-
-        bot_x = center_x + random_offset_x
-        bot_y = center_y + random_offset_y
-
-        # Ensure bot spawns within world boundaries
-        bot_x = max(0, min(bot_x, WORLD_WIDTH - NETWORK_OBJECT_SIZE))
-        bot_y = max(0, min(bot_y, WORLD_HEIGHT - NETWORK_OBJECT_SIZE))
-
-        bot_quest_provider = NetworkObject(
-            obj_id=bot_id,
-            x=bot_x,
-            y=bot_y,
-            color=Color(255, 0, 255, 255),  # Magenta color for the bot
-            network_object_type="BOT-QUEST-PROVIDER",
-            is_obstacle=False,
-            speed=150.0,  # Slightly slower speed than player
-            is_persistent=True,
-        )
-        initial_state_data["network_objects"][bot_id] = bot_quest_provider.to_dict()
-        self.bot_quest_provider_id = bot_id
-        self.bot_quest_provider_initial_pos = Vector2(bot_x, bot_y)
-        logging.info(
-            f"Proxy created BOT-QUEST-PROVIDER with ID: {self.bot_quest_provider_id} at ({bot_x}, {bot_y})."
-        )
-
-        # Update the offline network state with the generated initial objects
-        self.offline_network_state.update_from_dict(
-            initial_state_data["network_objects"]
-        )
 
         # Send the initial state to the client
         self._send_to_client(initial_state_data)
@@ -268,14 +235,17 @@ class NetworkStateProxy:
                             player_obj.path_index = 0
                             self.offline_player_path = []  # Clear proxy's path as well
 
-                # Handle BOT-QUEST-PROVIDER movement
-                self._handle_bot_quest_provider_movement(current_time, delta_time)
-
-                # The proxy's offline_network_state should only contain persistent game objects (players, walls).
-                # GFX objects (POINT_PATH, CLICK_POINTER) are handled client-side and should not be in this state.
-                # Therefore, cleanup_expired_network_objects here would only apply to any non-persistent objects
-                # the proxy *might* create, but in this architecture, it shouldn't create GFX objects.
-                # We remove the explicit cleanup and message sending here, as client will handle its own GFX cleanup.
+                # Update all autonomous agents (BOT-QUEST-PROVIDERs)
+                for obj_id, obj in list(
+                    self.offline_network_state.get_all_network_objects().items()
+                ):
+                    if obj.network_object_type == "BOT-QUEST-PROVIDER":
+                        obj.update_autonomous_movement(
+                            offline_network_state=self.offline_network_state,
+                            current_time=current_time,
+                            delta_time=delta_time,
+                            send_to_client_callback=self._send_to_client,
+                        )
 
                 # Send the current state of *persistent* offline objects to the client.
                 # This ensures only actual game state is sent, not client-side GFX.
@@ -349,99 +319,6 @@ class NetworkStateProxy:
             logging.warning(
                 f"No offline path found for player {self.my_player_id} from ({start_grid_x},{start_grid_y}) to ({end_grid_x},{end_grid_y})."
             )
-
-    def _handle_bot_quest_provider_movement(
-        self, current_time: float, delta_time: float
-    ):
-        """
-        Manages the movement of the BOT-QUEST-PROVIDER in offline mode.
-        The bot moves in a loop within a defined radius around its initial position.
-        """
-        if not self.bot_quest_provider_id or not self.bot_quest_provider_initial_pos:
-            return
-
-        bot_obj = self.offline_network_state.get_network_object(
-            self.bot_quest_provider_id
-        )
-        if not bot_obj:
-            logging.warning(
-                f"BOT-QUEST-PROVIDER object with ID {self.bot_quest_provider_id} not found in offline state."
-            )
-            return
-
-        # Update bot's position along its current path
-        if bot_obj.path:
-            bot_obj.update_position(delta_time)
-            # If path completed, clear it
-            if bot_obj.path_index >= len(bot_obj.path):
-                bot_obj.path = []
-                bot_obj.path_index = 0
-                self.bot_quest_provider_last_path_time = (
-                    current_time  # Mark time for cooldown
-                )
-
-        # Assign a new path if current path is complete and cooldown is over
-        if (
-            not bot_obj.path
-            and (current_time - self.bot_quest_provider_last_path_time)
-            >= self.bot_quest_provider_path_cooldown
-        ):
-            # Find a new random target within the radius of the initial position
-            initial_x, initial_y = (
-                self.bot_quest_provider_initial_pos.x,
-                self.bot_quest_provider_initial_pos.y,
-            )
-
-            # Generate random angle and distance within radius
-            angle = random.uniform(0, 2 * math.pi)
-            distance = random.uniform(0, self.bot_quest_provider_path_radius)
-
-            target_x = initial_x + distance * math.cos(angle)
-            target_y = initial_y + distance * math.sin(angle)
-
-            # Clamp target coordinates to world boundaries
-            target_x = max(0, min(target_x, WORLD_WIDTH - NETWORK_OBJECT_SIZE))
-            target_y = max(0, min(target_y, WORLD_HEIGHT - NETWORK_OBJECT_SIZE))
-
-            start_grid_x, start_grid_y = (
-                self.offline_network_state._world_to_grid_coords(bot_obj.x, bot_obj.y)
-            )
-            end_grid_x, end_grid_y = self.offline_network_state._world_to_grid_coords(
-                target_x, target_y
-            )
-
-            maze = self.offline_network_state.simplified_maze
-            path_grid = astar(
-                maze, (start_grid_y, start_grid_x), (end_grid_y, end_grid_x)
-            )
-
-            if path_grid:
-                path_world_coords = []
-                for grid_y, grid_x in path_grid:
-                    world_x, world_y = self.offline_network_state._grid_to_world_coords(
-                        grid_x, grid_y
-                    )
-                    path_world_coords.append({"X": world_x, "Y": world_y})
-
-                bot_obj.set_path(path_world_coords)
-                logging.info(
-                    f"BOT-QUEST-PROVIDER {self.bot_quest_provider_id} assigned new path with {len(path_world_coords)} points."
-                )
-
-                # Broadcast bot's path update to client
-                self._send_to_client(
-                    {
-                        "type": "player_path_update",  # Re-use player_path_update for bot movement
-                        "player_id": self.bot_quest_provider_id,
-                        "path": path_world_coords,
-                    }
-                )
-            else:
-                logging.warning(
-                    f"No path found for BOT-QUEST-PROVIDER from ({start_grid_x},{start_grid_y}) to ({end_grid_x},{end_grid_y})."
-                )
-                # If no path found, reset cooldown to try again soon
-                self.bot_quest_provider_last_path_time = current_time
 
     def close(self):
         """Closes the WebSocket connection if open."""

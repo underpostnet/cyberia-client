@@ -2,7 +2,7 @@ import logging
 import random
 import uuid
 
-from raylibpy import Color
+from raylibpy import Color, Vector2
 
 from config import (
     NETWORK_OBJECT_SIZE,
@@ -30,7 +30,7 @@ class NetworkObjectFactory:
     def generate_initial_state_dict(self) -> dict:
         """
         Generates an initial set of network objects for the game world,
-        including a player and obstacle mounds.
+        including a player, obstacle mounds, bots.
         """
         initial_network_objects = {}
 
@@ -102,10 +102,72 @@ class NetworkObjectFactory:
                 is_persistent=True,
             ).to_dict()
 
+        # Generate BOT-QUEST-PROVIDERs
+        # Bot 1: Default layer ID (AYLEEN)
+        bot1_obj = self.generate_bot_quest_provider(
+            object_layer_ids=NETWORK_OBJECT_TYPE_DEFAULT_OBJECT_LAYER_IDS[
+                "BOT-QUEST-PROVIDER"
+            ],
+            color=Color(255, 0, 255, 255),  # Magenta
+            initial_x_offset=-200,  # Offset from center for positioning
+            initial_y_offset=-200,
+        )
+        initial_network_objects[bot1_obj.obj_id] = bot1_obj.to_dict()
+
+        # Bot 2: PUNK layer ID
+        bot2_obj = self.generate_bot_quest_provider(
+            object_layer_ids=["PUNK"],  # Explicitly set PUNK as the layer ID
+            color=Color(0, 255, 255, 255),  # Cyan
+            initial_x_offset=200,  # Offset from center for positioning
+            initial_y_offset=200,
+        )
+        initial_network_objects[bot2_obj.obj_id] = bot2_obj.to_dict()
+
         return {
             "type": "network_state_update",
             "network_objects": initial_network_objects,
         }
+
+    def generate_bot_quest_provider(
+        self,
+        object_layer_ids: list[str],
+        color: Color,
+        initial_x_offset: float = 0.0,
+        initial_y_offset: float = 0.0,
+    ) -> NetworkObject:
+        """
+        Generates a NetworkObject representing a BOT-QUEST-PROVIDER.
+        """
+        bot_id = str(uuid.uuid4())
+
+        # Random position around the center of the map with an offset
+        center_x = WORLD_WIDTH / 2 + initial_x_offset
+        center_y = WORLD_HEIGHT / 2 + initial_y_offset
+
+        # Define a smaller radius for initial spawn to ensure it's not too far off
+        spawn_radius = 50
+        random_offset_x = random.uniform(-spawn_radius, spawn_radius)
+        random_offset_y = random.uniform(-spawn_radius, spawn_radius)
+
+        bot_x = center_x + random_offset_x
+        bot_y = center_y + random_offset_y
+
+        # Ensure bot spawns within world boundaries
+        bot_x = max(0, min(bot_x, WORLD_WIDTH - NETWORK_OBJECT_SIZE))
+        bot_y = max(0, min(bot_y, WORLD_HEIGHT - NETWORK_OBJECT_SIZE))
+
+        bot_quest_provider = NetworkObject(
+            obj_id=bot_id,
+            x=bot_x,
+            y=bot_y,
+            color=color,
+            network_object_type="BOT-QUEST-PROVIDER",
+            is_obstacle=False,
+            speed=150.0,  # Slightly slower speed than player
+            object_layer_ids=object_layer_ids,
+            is_persistent=True,
+        )
+        return bot_quest_provider
 
     def generate_point_path(
         self, path_coords: list[dict[str, float]], current_time: float

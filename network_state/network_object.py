@@ -1,9 +1,19 @@
 import logging
 import math
+import random  # Import random for autonomous movement
+import time  # Import time for autonomous movement
 
-from raylibpy import Color
+from raylibpy import (
+    Color,
+    Vector2,
+)  # Import Vector2 for initial_pos in autonomous movement
 
-from config import NETWORK_OBJECT_TYPE_DEFAULT_OBJECT_LAYER_IDS
+from config import (
+    NETWORK_OBJECT_TYPE_DEFAULT_OBJECT_LAYER_IDS,
+    NETWORK_OBJECT_SIZE,
+    WORLD_WIDTH,
+    WORLD_HEIGHT,
+)  # Import config values for autonomous movement
 
 logging.basicConfig(
     level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s"
@@ -13,7 +23,7 @@ logging.basicConfig(
 class NetworkObject:
     """
     Represents an object in the network state, with properties like position, color,
-    type, movement path, and persistence.
+    type, movement path, and persistence. Can also be configured for autonomous movement.
     """
 
     def __init__(
@@ -58,6 +68,12 @@ class NetworkObject:
         self.is_persistent = (
             is_persistent  # If True, object is not automatically removed
         )
+
+        # Autonomous movement attributes (specific to BOT-QUEST-PROVIDER)
+        self._initial_pos: Vector2 | None = None
+        self._wander_radius: float = 0.0
+        self._path_cooldown: float = 0.0
+        self._last_path_time: float = 0.0
 
     @property
     def decay_time(self) -> float | None:
@@ -113,6 +129,110 @@ class NetworkObject:
 
         return current_dx, current_dy
 
+    def configure_autonomous_movement(
+        self,
+        initial_pos: Vector2,
+        wander_radius: float = 500.0,
+        path_cooldown: float = 5.0,
+    ):
+        """
+        Configures this network object for autonomous movement.
+        This method is intended for objects like 'BOT-QUEST-PROVIDER'.
+        Args:
+            initial_pos: The initial position around which the agent will wander.
+            wander_radius: The maximum radius for wandering.
+            path_cooldown: The cooldown time before generating a new path.
+        """
+        self._initial_pos = initial_pos
+        self._wander_radius = wander_radius
+        self._path_cooldown = path_cooldown
+        self._last_path_time = 0.0  # Initialize cooldown
+
+    def update_autonomous_movement(
+        self,
+        offline_network_state,  # Type hint cannot be NetworkState due to circular import
+        current_time: float,
+        delta_time: float,
+        send_to_client_callback,
+    ) -> None:
+        """
+        Updates the autonomous agent's position and path based on its strategy.
+        This method should only be called if network_object_type is 'BOT-QUEST-PROVIDER'.
+        """
+        if self.network_object_type != "BOT-QUEST-PROVIDER":
+            return
+
+        # Update object's position along its current path
+        if self.path:
+            self.update_position(delta_time)
+            # If path completed, clear it
+            if self.path_index >= len(self.path):
+                self.path = []
+                self.path_index = 0
+                self._last_path_time = current_time  # Mark time for cooldown
+
+        # Assign a new path if current path is complete and cooldown is over
+        if (
+            not self.path
+            and (current_time - self._last_path_time) >= self._path_cooldown
+        ):
+            # Find a new random target within the radius of the initial position
+            initial_x, initial_y = self._initial_pos.x, self._initial_pos.y
+
+            # Generate random angle and distance within radius
+            angle = random.uniform(0, 2 * math.pi)
+            distance = random.uniform(0, self._wander_radius)
+
+            target_x = initial_x + distance * math.cos(angle)
+            target_y = initial_y + distance * math.sin(angle)
+
+            # Clamp target coordinates to world boundaries
+            target_x = max(0, min(target_x, WORLD_WIDTH - NETWORK_OBJECT_SIZE))
+            target_y = max(0, min(target_y, WORLD_HEIGHT - NETWORK_OBJECT_SIZE))
+
+            start_grid_x, start_grid_y = offline_network_state._world_to_grid_coords(
+                self.x, self.y
+            )
+            end_grid_x, end_grid_y = offline_network_state._world_to_grid_coords(
+                target_x, target_y
+            )
+
+            maze = offline_network_state.simplified_maze
+            # Ensure astar is imported or passed
+            from network_state.astar import astar
+
+            path_grid = astar(
+                maze, (start_grid_y, start_grid_x), (end_grid_y, end_grid_x)
+            )
+
+            if path_grid:
+                path_world_coords = []
+                for grid_y, grid_x in path_grid:
+                    world_x, world_y = offline_network_state._grid_to_world_coords(
+                        grid_x, grid_y
+                    )
+                    path_world_coords.append({"X": world_x, "Y": world_y})
+
+                self.set_path(path_world_coords)
+                logging.info(
+                    f"Autonomous agent {self.obj_id} assigned new path with {len(path_world_coords)} points."
+                )
+
+                # Broadcast agent's path update to client
+                send_to_client_callback(
+                    {
+                        "type": "player_path_update",  # Re-use player_path_update for bot movement
+                        "player_id": self.obj_id,
+                        "path": path_world_coords,
+                    }
+                )
+            else:
+                logging.warning(
+                    f"No path found for autonomous agent {self.obj_id} from ({start_grid_x},{start_grid_y}) to ({end_grid_x},{end_grid_y})."
+                )
+                # If no path found, reset cooldown to try again soon
+                self._last_path_time = current_time
+
     @classmethod
     def from_dict(cls, data: dict):
         """Creates a NetworkObject instance from a dictionary."""
@@ -147,11 +267,31 @@ class NetworkObject:
         )
         if "path" in data:
             obj.set_path(data["path"])
+
+        # Load autonomous movement attributes if present and object type is BOT-QUEST-PROVIDER
+        if network_object_type.upper() == "BOT-QUEST-PROVIDER":
+            initial_pos_data = data.get("initial_pos")
+            if initial_pos_data:
+                initial_pos = Vector2(initial_pos_data["x"], initial_pos_data["y"])
+            else:
+                initial_pos = Vector2(
+                    x, y
+                )  # Default to current position if not specified
+
+            obj.configure_autonomous_movement(
+                initial_pos=initial_pos,
+                wander_radius=data.get("wander_radius", 500.0),
+                path_cooldown=data.get("path_cooldown", 5.0),
+            )
+            obj._last_path_time = data.get(
+                "last_path_time", 0.0
+            )  # Ensure last_path_time is loaded
+
         return obj
 
     def to_dict(self) -> dict:
         """Converts the NetworkObject instance to a dictionary."""
-        return {
+        data = {
             "obj_id": self.obj_id,
             "x": self.x,
             "y": self.y,
@@ -167,3 +307,16 @@ class NetworkObject:
             "decay_time": self._decay_time,
             "is_persistent": self.is_persistent,
         }
+        # Include autonomous movement attributes if it's a BOT-QUEST-PROVIDER
+        if self.network_object_type == "BOT-QUEST-PROVIDER":
+            if self._initial_pos:
+                data["initial_pos"] = {
+                    "x": self._initial_pos.x,
+                    "y": self._initial_pos.y,
+                }
+            data["wander_radius"] = self._wander_radius
+            data["path_cooldown"] = self._path_cooldown
+            data["last_path_time"] = (
+                self._last_path_time
+            )  # Ensure last_path_time is saved
+        return data

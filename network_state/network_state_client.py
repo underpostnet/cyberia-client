@@ -106,14 +106,10 @@ class NetworkStateClient:
         msg_type = data.get("type")
         if msg_type == "network_state_update":
             if "network_objects" in data:
-                filtered_network_objects_data = {
-                    obj_id: obj_data
-                    for obj_id, obj_data in data["network_objects"].items()
-                    if NetworkObject.from_dict(obj_data).is_persistent
-                }
-
+                # The proxy now sends all persistent objects, including autonomous agents,
+                # so we don't need to filter by is_persistent here in the client's update
                 object_layer_ids_to_remove_from_rendering_system = (
-                    self.network_state.update_from_dict(filtered_network_objects_data)
+                    self.network_state.update_from_dict(data["network_objects"])
                 )
 
                 for (
