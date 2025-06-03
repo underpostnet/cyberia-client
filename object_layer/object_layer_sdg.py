@@ -1,33 +1,36 @@
 import numpy as np
 import math  # Import math for parametric curves
-import collections  # Import collections for deque used in flood_fill
+import collections  # Import collections for deque used in contiguous_region_fill
 
 
-class PixelArtEditor:
+class SyntheticDataGenerator:
     """
-    A class to manage and edit pixel art matrices.
+    A class to manage and generate synthetic data matrices.
 
     Attributes:
-        matrix (np.array): The 2D NumPy array representing the pixel art.
-        color_map (dict): A mapping from integer pixel values to RGBA color tuples (0-255).
-        last_draw_color_id (int): Stores the color ID of the last drawing operation.
+        data_matrix (np.array): The 2D NumPy array representing the synthetic data.
+        value_map (dict): A mapping from integer data values to RGBA color tuples (0-255)
+                          for display purposes.
+        last_generated_value_id (int): Stores the value ID of the last data generation operation.
     """
 
-    def __init__(self, initial_matrix, color_mapping):
+    def __init__(self, initial_data_matrix, value_mapping):
         """
-        Initializes the PixelArtEditor with an initial matrix and color mapping.
+        Initializes the SyntheticDataGenerator with an initial data matrix and value mapping.
 
         Args:
-            initial_matrix (list or np.array): The starting pixel art matrix.
-            color_mapping (dict): A dictionary mapping integer pixel values to RGBA tuples.
+            initial_data_matrix (list or np.array): The starting synthetic data matrix.
+            value_mapping (dict): A dictionary mapping integer data values to RGBA tuples.
         """
-        self.matrix = np.array(initial_matrix)
-        self.color_map = color_mapping
-        self.last_draw_color_id = None  # To store the color of the last draw operation
+        self.data_matrix = np.array(initial_data_matrix)
+        self.value_map = value_mapping
+        self.last_generated_value_id = (
+            None  # To store the value of the last generation operation
+        )
 
-    def rgba_to_mpl_color(self, r, g, b, a):
+    def rgba_to_display_color(self, r, g, b, a):
         """
-        Converts RGBA color values from 0-255 range to 0-1 range for Matplotlib.
+        Converts RGBA color values from 0-255 range to 0-1 range for Matplotlib display.
 
         Args:
             r (int): Red component (0-255).
@@ -40,28 +43,28 @@ class PixelArtEditor:
         """
         return (r / 255.0, g / 255.0, b / 255.0, a / 255.0)
 
-    def get_mpl_color(self, pixel_value):
+    def get_display_color(self, data_value):
         """
-        Retrieves the Matplotlib-compatible RGBA color for a given pixel value.
+        Retrieves the Matplotlib-compatible RGBA color for a given data value.
 
         Args:
-            pixel_value (int): The integer value representing the color in the matrix.
+            data_value (int): The integer value representing the data in the matrix.
 
         Returns:
             tuple: A tuple (r, g, b, a) with color values in the 0-1 range.
         """
-        rgba_255 = self.color_map.get(
-            pixel_value, (0, 0, 0, 0)
+        rgba_255 = self.value_map.get(
+            data_value, (0, 0, 0, 0)
         )  # Default to transparent black
-        return self.rgba_to_mpl_color(*rgba_255)
+        return self.rgba_to_display_color(*rgba_255)
 
-    def _convert_xy_to_rowcol(self, x, y):
+    def _convert_coordinates_to_indices(self, x, y):
         """
         Converts (x, y) coordinates (where (0,0) is bottom-left) to
-        (row_idx, col_idx) for the internal matrix (where (0,0) is top-left).
+        (row_idx, col_idx) for the internal data matrix (where (0,0) is top-left).
         Also clamps coordinates to be within matrix bounds.
         """
-        matrix_height, matrix_width = self.matrix.shape
+        matrix_height, matrix_width = self.data_matrix.shape
 
         # Invert y to get row_idx (0 at top)
         row_idx = matrix_height - 1 - y
@@ -72,24 +75,24 @@ class PixelArtEditor:
         clamped_col_idx = max(0, min(col_idx, matrix_width - 1))
         return clamped_row_idx, clamped_col_idx
 
-    def draw_pixel(self, x, y, color_id):
+    def generate_data_point(self, x, y, value_id):
         """
-        Draws a single pixel on the matrix with the specified color ID.
-        This method directly overwrites the pixel at the given (x, y) coordinates,
-        where (0,0) is considered the bottom-left of the pixel art.
+        Generates a single data point on the matrix with the specified value ID.
+        This method directly overwrites the data point at the given (x, y) coordinates,
+        where (0,0) is considered the bottom-left of the data matrix.
 
         Args:
-            x (int): The x-coordinate (column) of the pixel.
-            y (int): The y-coordinate (row) of the pixel.
-            color_id (int): The integer ID of the color to draw.
+            x (int): The x-coordinate (column) of the data point.
+            y (int): The y-coordinate (row) of the data point.
+            value_id (int): The integer ID of the value to generate.
         """
-        row_idx, col_idx = self._convert_xy_to_rowcol(x, y)
-        self.matrix[row_idx, col_idx] = color_id
-        self.last_draw_color_id = color_id
+        row_idx, col_idx = self._convert_coordinates_to_indices(x, y)
+        self.data_matrix[row_idx, col_idx] = value_id
+        self.last_generated_value_id = value_id
 
-    def draw_rectangle(self, start_x, start_y, width, height, color_id):
+    def generate_rectangular_region(self, start_x, start_y, width, height, value_id):
         """
-        Draws a filled rectangle on the matrix.
+        Generates a filled rectangular region on the data matrix.
         The rectangle is defined by its bottom-left corner (start_x, start_y),
         width, and height.
 
@@ -98,23 +101,23 @@ class PixelArtEditor:
             start_y (int): The starting y-coordinate (bottom-left corner) of the rectangle.
             width (int): The width of the rectangle.
             height (int): The height of the rectangle.
-            color_id (int): The integer ID of the color to draw the rectangle with.
+            value_id (int): The integer ID of the value to fill the rectangle with.
         """
         # Calculate the top-right corner in (x,y) coordinates
         end_x = start_x + width
         end_y = start_y + height
 
-        # Iterate over the rectangle's area and draw each pixel
+        # Iterate over the rectangle's area and generate each data point
         # We iterate over x from start_x to end_x-1, and y from start_y to end_y-1
         for x in range(start_x, end_x):
             for y in range(start_y, end_y):
-                self.draw_pixel(x, y, color_id)
+                self.generate_data_point(x, y, value_id)
 
-    def draw_parametric_curve(
-        self, x_func, y_func, t_start, t_end, num_points, color_id
+    def generate_parametric_curve_data(
+        self, x_func, y_func, t_start, t_end, num_points, value_id
     ):
         """
-        Draws a parametric curve by plotting individual pixels.
+        Generates data points along a parametric curve.
         The x_func and y_func should return coordinates where (0,0) is bottom-left.
 
         Args:
@@ -122,8 +125,8 @@ class PixelArtEditor:
             y_func (callable): A function that returns the y-coordinate for a given parameter t.
             t_start (float): The starting value of the parameter t.
             t_end (float): The ending value of the parameter t.
-            num_points (int): The number of points to plot along the curve.
-            color_id (int): The integer ID of the color to draw the curve with.
+            num_points (int): The number of points to generate along the curve.
+            value_id (int): The integer ID of the value to generate for the curve.
         """
         t_values = np.linspace(t_start, t_end, num_points)
 
@@ -132,17 +135,17 @@ class PixelArtEditor:
             x_float = x_func(t)
             y_float = y_func(t)
 
-            # Convert to integer pixel coordinates
+            # Convert to integer data point coordinates
             x_int = int(round(x_float))
             y_int = int(round(y_float))
 
-            self.draw_pixel(x_int, y_int, color_id)
+            self.generate_data_point(x_int, y_int, value_id)
 
-    def get_coordinates_in_area(self, x1, y1, x2, y2):
+    def get_coordinates_in_region(self, x1, y1, x2, y2):
         """
-        Returns a list of all integer (x, y) coordinates within a rectangular area
+        Returns a list of all integer (x, y) coordinates within a rectangular region
         defined by two (x,y) input coordinates (where (0,0) is bottom-left).
-        The coordinates are clamped to the matrix bounds.
+        The coordinates are clamped to the data matrix bounds.
 
         Args:
             x1 (int): X-coordinate of the first point.
@@ -161,7 +164,7 @@ class PixelArtEditor:
         max_y = max(y1, y2)
 
         coordinates = []
-        matrix_height, matrix_width = self.matrix.shape
+        matrix_height, matrix_width = self.data_matrix.shape
 
         # Iterate through the bounding box, clamping to matrix limits
         for y in range(min_y, max_y + 1):
@@ -174,36 +177,36 @@ class PixelArtEditor:
         # Using a set for uniqueness and then converting back to a list
         return list(set(coordinates))
 
-    def flood_fill(self, start_x, start_y, fill_color_id=0):
+    def contiguous_region_fill(self, start_x, start_y, fill_value_id=0):
         """
-        Performs a flood fill operation starting from a given (x, y) coordinate
+        Performs a contiguous region fill operation starting from a given (x, y) coordinate
         (where (0,0) is bottom-left).
-        Changes the color of adjacent pixels to 'fill_color_id' (defaulting to 0/white)
-        if their original color matches the starting pixel's color, until a different
-        color value is found.
+        Changes the value of adjacent data points to 'fill_value_id' (defaulting to 0/white)
+        if their original value matches the starting data point's value, until a different
+        value is found.
 
         Args:
-            start_x (int): The starting x-coordinate for the flood fill.
-            start_y (int): The starting y-coordinate for the flood fill.
-            fill_color_id (int): The color ID to fill with. Defaults to 0 (white).
+            start_x (int): The starting x-coordinate for the fill.
+            start_y (int): The starting y-coordinate for the fill.
+            fill_value_id (int): The value ID to fill with. Defaults to 0 (white).
         """
         # Convert start_x, start_y to internal matrix row_idx, col_idx
-        start_row, start_col = self._convert_xy_to_rowcol(start_x, start_y)
+        start_row, start_col = self._convert_coordinates_to_indices(start_x, start_y)
 
         # Check bounds for the internal matrix coordinates
         if not (
-            0 <= start_row < self.matrix.shape[0]
-            and 0 <= start_col < self.matrix.shape[1]
+            0 <= start_row < self.data_matrix.shape[0]
+            and 0 <= start_col < self.data_matrix.shape[1]
         ):
             print(
-                f"Error: Start coordinates ({start_x}, {start_y}) are out of bounds for flood fill."
+                f"Error: Start coordinates ({start_x}, {start_y}) are out of bounds for region fill."
             )
             return
 
-        original_color_id = self.matrix[start_row, start_col]
+        original_value_id = self.data_matrix[start_row, start_col]
 
-        # If the original color is already the fill color, do nothing
-        if original_color_id == fill_color_id:
+        # If the original value is already the fill value, do nothing
+        if original_value_id == fill_value_id:
             return
 
         # Use a queue for BFS (Breadth-First Search)
@@ -213,25 +216,25 @@ class PixelArtEditor:
         while q:
             r, c = q.popleft()
 
-            # Change the color of the current pixel to the specified fill_color_id
-            self.matrix[r, c] = fill_color_id
+            # Change the value of the current data point to the specified fill_value_id
+            self.data_matrix[r, c] = fill_value_id
 
             # Define neighbors (up, down, left, right) in matrix coordinates
             neighbors = [(r + 1, c), (r - 1, c), (r, c + 1), (r, c - 1)]
 
             for nr, nc in neighbors:
-                # Check bounds and if the neighbor has the original color and hasn't been visited
+                # Check bounds and if the neighbor has the original value and hasn't been visited
                 if (
-                    0 <= nr < self.matrix.shape[0]
-                    and 0 <= nc < self.matrix.shape[1]
-                    and self.matrix[nr, nc] == original_color_id
+                    0 <= nr < self.data_matrix.shape[0]
+                    and 0 <= nc < self.data_matrix.shape[1]
+                    and self.data_matrix[nr, nc] == original_value_id
                     and (nr, nc) not in visited
                 ):
                     q.append((nr, nc))
                     visited.add((nr, nc))
 
         print(
-            f"Flood fill completed from ({start_x}, {start_y}) with color ID {fill_color_id}."
+            f"Contiguous region fill completed from ({start_x}, {start_y}) with value ID {fill_value_id}."
         )
 
 
