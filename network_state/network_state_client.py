@@ -25,6 +25,7 @@ from raylibpy import (
     KEY_W,
     KEY_E,
     KEY_R,
+    Color,
 )
 
 from config import (
@@ -34,7 +35,14 @@ from config import (
     SCREEN_WIDTH,
     WORLD_HEIGHT,
     WORLD_WIDTH,
-    UI_MODAL_HEIGHT,  # Import the new UI modal height
+    UI_MODAL_WIDTH,
+    UI_MODAL_HEIGHT,
+    UI_MODAL_PADDING_TOP,
+    UI_MODAL_PADDING_RIGHT,
+    UI_MODAL_BACKGROUND_COLOR,  # Import new modal background color
+    UI_TEXT_COLOR_PRIMARY,
+    UI_TEXT_COLOR_SHADING,
+    UI_FONT_SIZE,  # Import new font size
 )
 from object_layer.object_layer_render import ObjectLayerRender
 from network_state.network_object import NetworkObject
@@ -42,7 +50,7 @@ from network_state.network_state import NetworkState
 from network_state.network_object_factory import NetworkObjectFactory
 from network_state.network_state_proxy import NetworkStateProxy
 from network_state.astar import astar
-from ui.modal import Modal  # Import the new Modal class
+from ui.modal import Modal
 
 
 logging.basicConfig(
@@ -94,9 +102,13 @@ class NetworkStateClient:
         self.ui_modal = Modal(
             screen_width=SCREEN_WIDTH,
             screen_height=SCREEN_HEIGHT,
-            render_content_callback=self._render_ui_info,
-            mode="top-bar",
-            height=UI_MODAL_HEIGHT,  # Use the height from config
+            render_content_callback=self._render_modal_content,
+            mode="fixed",
+            width=UI_MODAL_WIDTH,
+            height=UI_MODAL_HEIGHT,
+            padding_top=UI_MODAL_PADDING_TOP,
+            padding_right=UI_MODAL_PADDING_RIGHT,
+            background_color=Color(*UI_MODAL_BACKGROUND_COLOR),
         )
 
     def _set_my_player_id(self, player_id: str):
@@ -213,7 +225,7 @@ class NetworkStateClient:
             f"Generated {len(path_coords)} client-side path GFX points asynchronously."
         )
 
-    def _render_ui_info(
+    def _render_modal_content(
         self,
         object_layer_render_instance: ObjectLayerRender,
         x: int,
@@ -222,43 +234,12 @@ class NetworkStateClient:
         height: int,
     ):
         """
-        Renders the UI information (Player ID, Position, FPS) within the modal's area.
+        Renders content specific to the modal (currently empty as per new requirements).
         This method is passed as a callback to the Modal.
         """
-        # Calculate positions relative to the modal's top-left corner (x, y)
-        text_offset_x = x + 10
-        text_offset_y = y + 10
-        line_height = 20
-
-        with self.network_state.lock:
-            if self.my_network_object:
-                object_layer_render_instance.draw_text(
-                    f"My Player ID: {self.my_player_id}",
-                    text_offset_x,
-                    text_offset_y,
-                    line_height,
-                    BLACK,
-                )
-                object_layer_render_instance.draw_text(
-                    f"My Pos: ({int(self.my_network_object.x)}, {int(self.my_network_object.y)})",
-                    text_offset_x,
-                    text_offset_y + line_height + 5,
-                    line_height,
-                    BLACK,
-                )
-            else:
-                object_layer_render_instance.draw_text(
-                    "Connecting...", text_offset_x, text_offset_y, line_height, BLACK
-                )
-
-        frame_time = object_layer_render_instance.get_frame_time()
-        object_layer_render_instance.draw_text(
-            f"FPS: {int(1.0 / frame_time) if frame_time > 0 else 'N/A'}",
-            text_offset_x,
-            text_offset_y + (2 * line_height) + 10,  # Position below player info
-            line_height,
-            BLACK,
-        )
+        # No content to render inside the modal as per new requirements.
+        # This callback can be used if future modal-specific content is needed.
+        pass
 
     def run(self):
         """Runs the main client loop."""
@@ -420,8 +401,89 @@ class NetworkStateClient:
                         camera_target_pos, smoothness=CAMERA_SMOOTHNESS
                     )
 
-            # Render the UI modal
+                    # Draw My Pos and My Player ID at top-left
+                    pos_text = f"My Pos: ({int(self.my_network_object.x)}, {int(self.my_network_object.y)})"
+                    player_id_text = f"My Player ID: {self.my_player_id}"
+                    font_size = UI_FONT_SIZE  # Use the new UI_FONT_SIZE
+                    padding = 10
+
+                    # Draw shading first for My Pos
+                    self.object_layer_render.draw_text(
+                        pos_text,
+                        padding + 1,
+                        padding + 1,
+                        font_size,
+                        Color(*UI_TEXT_COLOR_SHADING),
+                    )
+                    # Draw actual text for My Pos
+                    self.object_layer_render.draw_text(
+                        pos_text,
+                        padding,
+                        padding,
+                        font_size,
+                        Color(*UI_TEXT_COLOR_PRIMARY),
+                    )
+
+                    # Draw shading first for My Player ID (on the second row)
+                    self.object_layer_render.draw_text(
+                        player_id_text,
+                        padding + 1,
+                        padding + font_size + 5 + 1,
+                        font_size,
+                        Color(*UI_TEXT_COLOR_SHADING),
+                    )
+                    # Draw actual text for My Player ID
+                    self.object_layer_render.draw_text(
+                        player_id_text,
+                        padding,
+                        padding + font_size + 5,
+                        font_size,
+                        Color(*UI_TEXT_COLOR_PRIMARY),
+                    )
+                else:
+                    # Draw "Connecting..." at top-left
+                    connecting_text = "Connecting..."
+                    font_size = UI_FONT_SIZE  # Use the new UI_FONT_SIZE
+                    padding = 10
+                    self.object_layer_render.draw_text(
+                        connecting_text,
+                        padding + 1,
+                        padding + 1,
+                        font_size,
+                        Color(*UI_TEXT_COLOR_SHADING),
+                    )
+                    self.object_layer_render.draw_text(
+                        connecting_text,
+                        padding,
+                        padding,
+                        font_size,
+                        Color(*UI_TEXT_COLOR_PRIMARY),
+                    )
+
+            # Render the UI modal (now a fixed size modal on the right)
             self.ui_modal.render(self.object_layer_render)
+
+            # Draw FPS at bottom-left
+            frame_time = self.object_layer_render.get_frame_time()
+            fps_text = f"FPS: {int(1.0 / frame_time) if frame_time > 0 else 'N/A'}"
+            font_size = UI_FONT_SIZE  # Use the new UI_FONT_SIZE
+            padding = 10
+            # Draw shading first
+            self.object_layer_render.draw_text(
+                fps_text,
+                padding + 1,
+                SCREEN_HEIGHT - 30 + 1,
+                font_size,
+                Color(*UI_TEXT_COLOR_SHADING),
+            )
+            # Draw actual text
+            self.object_layer_render.draw_text(
+                fps_text,
+                padding,
+                SCREEN_HEIGHT - 30,
+                font_size,
+                Color(*UI_TEXT_COLOR_PRIMARY),
+            )
 
             self.object_layer_render.update_all_active_object_layer_animations(
                 delta_time, current_time
