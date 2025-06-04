@@ -13,9 +13,7 @@ from config import (
     NETWORK_OBJECT_SIZE,
     WORLD_WIDTH,
     WORLD_HEIGHT,
-    MAZE_CELL_WORLD_SIZE,
 )
-from network_state.network_object import NetworkObject
 from network_state.network_state import NetworkState
 from network_state.network_object_factory import NetworkObjectFactory
 from network_state.astar import astar  # For offline pathfinding
