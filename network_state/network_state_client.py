@@ -39,6 +39,90 @@ logging.basicConfig(
 )
 
 
+class InteractionManager:
+    """
+    Manages interactions between game objects, specifically detecting when a
+    BOT-QUEST-PROVIDER intersects the player's ACTION_AREA.
+    """
+
+    def __init__(self, network_object_size: int):
+        self.network_object_size = network_object_size
+        # Scale for ACTION_AREA, matching the rendering scale in ObjectLayerRender
+        self.action_area_scale = 2.5
+
+    def _get_bounding_box(
+        self, obj: NetworkObject, is_action_area: bool = False
+    ) -> tuple[float, float, float, float]:
+        """
+        Calculates the bounding box (x, y, width, height) for a given network object.
+        Adjusts size and position if it's the player's ACTION_AREA.
+        """
+        obj_x = obj.x
+        obj_y = obj.y
+        obj_size = self.network_object_size
+
+        if is_action_area:
+            scaled_size = obj_size * self.action_area_scale
+            # Calculate offset to center the scaled action area
+            offset = (scaled_size - obj_size) / 2
+            obj_x -= offset
+            obj_y -= offset
+            obj_size = scaled_size
+
+        return obj_x, obj_y, obj_size, obj_size
+
+    def check_for_bot_interaction(
+        self, network_state: NetworkState, my_player_id: str
+    ) -> bool:
+        """
+        Checks if any BOT-QUEST-PROVIDER object is intersecting the main player's
+        ACTION_AREA.
+
+        Args:
+            network_state: The current NetworkState instance.
+            my_player_id: The ID of the controlling client's player.
+
+        Returns:
+            True if an intersection is detected, False otherwise.
+        """
+        with network_state.lock:
+            player_obj = network_state.get_network_object(my_player_id)
+            if not player_obj or "ACTION_AREA" not in player_obj.object_layer_ids:
+                return False  # Player or ACTION_AREA not found
+
+            # Get player's ACTION_AREA bounding box
+            player_bb_x, player_bb_y, player_bb_width, player_bb_height = (
+                self._get_bounding_box(player_obj, is_action_area=True)
+            )
+
+            for obj_id, obj in network_state.get_all_network_objects().items():
+                if obj.network_object_type == "BOT-QUEST-PROVIDER":
+                    # Get bot's bounding box (standard size)
+                    bot_bb_x, bot_bb_y, bot_bb_width, bot_bb_height = (
+                        self._get_bounding_box(obj, is_action_area=False)
+                    )
+
+                    # Check for intersection using AABB collision detection
+                    # Two rectangles intersect if their x-intervals and y-intervals overlap
+                    x_overlap = max(
+                        0,
+                        min(player_bb_x + player_bb_width, bot_bb_x + bot_bb_width)
+                        - max(player_bb_x, bot_bb_x),
+                    )
+                    y_overlap = max(
+                        0,
+                        min(player_bb_y + player_bb_height, bot_bb_y + bot_bb_height)
+                        - max(player_bb_y, bot_bb_y),
+                    )
+
+                    if x_overlap > 0 and y_overlap > 0:
+                        logging.debug(
+                            f"Intersection detected between player ACTION_AREA and BOT-QUEST-PROVIDER {obj_id}"
+                        )
+                        return True
+        return False
+
+
 class NetworkStateClient:
     """Manages the client-side application, rendering the world and handling user input."""
 
@@ -79,6 +163,9 @@ class NetworkStateClient:
             client_player_id_setter=self._set_my_player_id,
         )
 
+        # Initialize the InteractionManager
+        self.interaction_manager = InteractionManager(NETWORK_OBJECT_SIZE)
+
         # Initialize the UI modal for displaying information
         self.ui_modal = Modal(
             screen_width=SCREEN_WIDTH,
@@ -91,6 +178,7 @@ class NetworkStateClient:
             padding_right=UI_MODAL_PADDING_RIGHT,
             background_color=Color(*UI_MODAL_BACKGROUND_COLOR),
         )
+        self.show_modal = False  # Control modal visibility
 
     def _set_my_player_id(self, player_id: str):
         """Sets the client's player ID, called by the proxy."""
@@ -215,12 +303,31 @@ class NetworkStateClient:
         height: int,
     ):
         """
-        Renders content specific to the modal (currently empty as per new requirements).
+        Renders content specific to the modal.
         This method is passed as a callback to the Modal.
         """
-        # No content to render inside the modal as per new requirements.
-        # This callback can be used if future modal-specific content is needed.
-        pass
+        # Example content for the modal (can be customized)
+        modal_text = "Quest Available!"
+        text_width = object_layer_render_instance.measure_text(modal_text, UI_FONT_SIZE)
+
+        # Center the text within the modal
+        text_x = x + (width - text_width) // 2
+        text_y = y + (height - UI_FONT_SIZE) // 2
+
+        object_layer_render_instance.draw_text(
+            modal_text,
+            text_x + 1,
+            text_y + 1,
+            UI_FONT_SIZE,
+            Color(*UI_TEXT_COLOR_SHADING),
+        )
+        object_layer_render_instance.draw_text(
+            modal_text,
+            text_x,
+            text_y,
+            UI_FONT_SIZE,
+            Color(*UI_TEXT_COLOR_PRIMARY),
+        )
 
     def run(self):
         """Runs the main client loop."""
@@ -261,6 +368,11 @@ class NetworkStateClient:
                     if obj.path and obj.path_index >= len(obj.path):
                         obj.path = []
                         obj.path_index = 0
+
+            # Check for BOT-QUEST-PROVIDER interaction and control modal visibility
+            self.show_modal = self.interaction_manager.check_for_bot_interaction(
+                self.network_state, self.my_player_id
+            )
 
             if self.object_layer_render.is_mouse_button_pressed(MOUSE_BUTTON_LEFT):
                 world_mouse_pos = self.object_layer_render.get_world_mouse_position()
@@ -423,8 +535,9 @@ class NetworkStateClient:
                         Color(*UI_TEXT_COLOR_PRIMARY),
                     )
 
-            # Render the UI modal (now a fixed size modal on the right)
-            self.ui_modal.render(self.object_layer_render)
+            # Conditionally render the UI modal based on interaction
+            if self.show_modal:
+                self.ui_modal.render(self.object_layer_render)
 
             # Draw FPS at bottom-left
             frame_time = self.object_layer_render.get_frame_time()

@@ -482,9 +482,30 @@ class ObjectLayerRender:
 
             # Calculate the size of each pixel in the display based on network object size and matrix dimension
             matrix_dimension = self.get_object_layer_matrix_dimension(object_layer_id)
-            target_object_layer_size_pixels = (
-                self.network_object_size / matrix_dimension
-            )
+
+            # Special handling for ACTION_AREA layer size and centering
+            if object_layer_id == "ACTION_AREA":
+                # Set OBJECT_SIZE to x2.5 for ACTION_AREA
+                action_area_scale = 2.5
+                scaled_network_object_size = (
+                    self.network_object_size * action_area_scale
+                )
+                target_object_layer_size_pixels = (
+                    scaled_network_object_size / matrix_dimension
+                )
+
+                # Center the ACTION_AREA relative to the network object
+                offset_x = (scaled_network_object_size - self.network_object_size) / 2
+                offset_y = (scaled_network_object_size - self.network_object_size) / 2
+                draw_x = draw_x_base - offset_x
+                draw_y = draw_y_base - offset_y
+            else:
+                target_object_layer_size_pixels = (
+                    self.network_object_size / matrix_dimension
+                )
+                draw_x = draw_x_base
+                draw_y = draw_y_base
+
             if target_object_layer_size_pixels == 0:
                 target_object_layer_size_pixels = 1
 
@@ -515,9 +536,6 @@ class ObjectLayerRender:
                     anim_instance.set_state(
                         Direction.NONE, ObjectLayerMode.IDLE, current_timestamp
                     )
-
-            draw_x = draw_x_base
-            draw_y = draw_y_base
 
             # Render the animation frame
             self.render_object_layer_animation(
