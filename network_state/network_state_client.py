@@ -7,6 +7,9 @@ from raylibpy import (
     RAYWHITE,
     Vector2,
     Color,
+    is_window_resized,
+    get_screen_width,
+    get_screen_height,
 )
 
 from config import (
@@ -32,6 +35,7 @@ from network_state.network_object_factory import NetworkObjectFactory
 from network_state.network_state_proxy import NetworkStateProxy
 from network_state.astar import astar
 from ui.modal import Modal
+from object_layer.camera_manager import CameraManager  # Import the new CameraManager
 
 
 logging.basicConfig(
@@ -133,6 +137,9 @@ class NetworkStateClient:
 
         self.network_object_factory = NetworkObjectFactory()
 
+        # Initialize CameraManager first
+        self.camera_manager = CameraManager(SCREEN_WIDTH, SCREEN_HEIGHT)
+
         self.object_layer_render = ObjectLayerRender(
             screen_width=SCREEN_WIDTH,
             screen_height=SCREEN_HEIGHT,
@@ -163,9 +170,6 @@ class NetworkStateClient:
             client_player_id_setter=self._set_my_player_id,
         )
 
-        # Initialize the InteractionManager
-        self.interaction_manager = InteractionManager(NETWORK_OBJECT_SIZE)
-
         # Initialize the UI modal for displaying information
         self.ui_modal = Modal(
             screen_width=SCREEN_WIDTH,
@@ -179,6 +183,9 @@ class NetworkStateClient:
             background_color=Color(*UI_MODAL_BACKGROUND_COLOR),
         )
         self.show_modal = False  # Control modal visibility
+
+        # Initialize the InteractionManager
+        self.interaction_manager = InteractionManager(NETWORK_OBJECT_SIZE)
 
     def _set_my_player_id(self, player_id: str):
         """Sets the client's player ID, called by the proxy."""
@@ -346,6 +353,18 @@ class NetworkStateClient:
             delta_time = current_time - last_frame_time
             last_frame_time = current_time
 
+            # Handle window resize
+            if is_window_resized():  # Changed from IsWindowResized
+                self.camera_manager.handle_window_resize()
+                # Update modal's screen dimensions as well
+                self.ui_modal.screen_width = (
+                    get_screen_width()
+                )  # Changed from GetScreenWidth
+                self.ui_modal.screen_height = (
+                    get_screen_height()
+                )  # Changed from GetScreenHeight
+                self.ui_modal._configure_mode()  # Re-configure modal position
+
             self._process_queued_messages()
 
             object_layer_ids_to_remove_from_rendering_system = (
@@ -375,7 +394,10 @@ class NetworkStateClient:
             )
 
             if self.object_layer_render.is_mouse_button_pressed(MOUSE_BUTTON_LEFT):
-                world_mouse_pos = self.object_layer_render.get_world_mouse_position()
+                # Pass camera from camera_manager to get_world_mouse_position
+                world_mouse_pos = self.object_layer_render.get_world_mouse_position(
+                    self.camera_manager.camera
+                )
 
                 click_pointer_obj = self.network_object_factory.generate_click_pointer(
                     world_mouse_pos.x, world_mouse_pos.y, current_time
@@ -456,7 +478,8 @@ class NetworkStateClient:
 
             self.object_layer_render.begin_drawing()
             self.object_layer_render.clear_background(RAYWHITE)
-            self.object_layer_render.begin_camera_mode()
+            # Pass camera from camera_manager to begin_camera_mode
+            self.object_layer_render.begin_camera_mode(self.camera_manager.camera)
 
             self.object_layer_render.draw_grid()
 
@@ -490,7 +513,8 @@ class NetworkStateClient:
                         )
                         + NETWORK_OBJECT_SIZE / 2,
                     )
-                    self.object_layer_render.update_camera_target(
+                    # Use camera_manager to update camera target
+                    self.camera_manager.update_camera_target(
                         camera_target_pos, smoothness=CAMERA_SMOOTHNESS
                     )
 

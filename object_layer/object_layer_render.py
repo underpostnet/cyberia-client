@@ -284,12 +284,6 @@ class ObjectLayerRender:
 
         init_window(self.screen_width, self.screen_height, self.title)
 
-        self.camera = Camera2D()
-        self.camera.offset = Vector2(self.screen_width / 2, self.screen_height / 2)
-        self.camera.rotation = 0.0
-        self.camera.zoom = 1.0
-        self.camera.target = Vector2(0, 0)
-
         self._object_layer_animation_instances: dict[str, dict] = {}
         self._object_layer_direction_histories: dict[
             tuple[str, str], collections.deque[Direction]
@@ -309,9 +303,12 @@ class ObjectLayerRender:
         """Clears the background with a specified color."""
         clear_background(color)
 
-    def begin_camera_mode(self):
-        """Starts 2D camera mode for drawing world elements."""
-        begin_mode2d(self.camera)
+    def begin_camera_mode(self, camera: Camera2D):
+        """Starts 2D camera mode for drawing world elements.
+        Args:
+            camera: The Camera2D instance to use for rendering.
+        """
+        begin_mode2d(camera)
 
     def end_camera_mode(self):
         """Ends 2D camera mode."""
@@ -347,9 +344,12 @@ class ObjectLayerRender:
         """Returns the current mouse cursor position in screen coordinates."""
         return get_mouse_position()
 
-    def get_world_mouse_position(self) -> Vector2:
-        """Returns the current mouse cursor position in world coordinates (considering camera)."""
-        return get_screen_to_world2d(get_mouse_position(), self.camera)
+    def get_world_mouse_position(self, camera: Camera2D) -> Vector2:
+        """Returns the current mouse cursor position in world coordinates (considering camera).
+        Args:
+            camera: The Camera2D instance to use for coordinate conversion.
+        """
+        return get_screen_to_world2d(get_mouse_position(), camera)
 
     def is_mouse_button_pressed(self, button: int) -> bool:
         """Checks if a mouse button has been pressed in the current frame."""
@@ -366,19 +366,6 @@ class ObjectLayerRender:
     def close_window(self):
         """Closes the Raylib window."""
         close_window()
-
-    def update_camera_target(self, target_world_pos: Vector2, smoothness: float = 1.0):
-        """Smoothly moves the camera target towards a world position."""
-        self.camera.target.x += (target_world_pos.x - self.camera.target.x) * smoothness
-        self.camera.target.y += (target_world_pos.y - self.camera.target.y) * smoothness
-
-    def set_camera_zoom(self, zoom_factor: float):
-        """Sets the camera zoom level."""
-        self.camera.zoom = zoom_factor
-
-    def get_camera_zoom(self) -> float:
-        """Returns the current camera zoom level."""
-        return self.camera.zoom
 
     def draw_grid(self):
         """Draws a grid over the world based on network object size."""
