@@ -274,7 +274,7 @@ class NetworkObject:
         or None if no label should be displayed.
         """
         if self.network_object_type == "PLAYER":
-            return f"ID: {self.obj_id}"
+            return f"{self.obj_id}"
         elif self.network_object_type == "BOT-QUEST-PROVIDER":
             if self.object_layer_ids and len(self.object_layer_ids) > 0:
                 return self.object_layer_ids[0]

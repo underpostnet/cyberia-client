@@ -495,7 +495,7 @@ class NetworkStateClient:
                     )
 
                     # Draw My Pos at top-left
-                    pos_text = f"My Pos: ({int(self.my_network_object.x)}, {int(self.my_network_object.y)})"
+                    pos_text = f" {int(self.my_network_object.x)}, {int(self.my_network_object.y)}"
                     font_size = UI_FONT_SIZE
                     padding = 10
 
@@ -542,7 +542,7 @@ class NetworkStateClient:
             # Draw FPS at bottom-left
             frame_time = self.object_layer_render.get_frame_time()
             fps_text = f"FPS: {int(1.0 / frame_time) if frame_time > 0 else 'N/A'}"
-            font_size = UI_FONT_SIZE
+            font_size = UI_FONT_SIZE - 3
             padding = 10
             # Draw shading first
             self.object_layer_render.draw_text(
