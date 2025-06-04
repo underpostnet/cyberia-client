@@ -19,10 +19,6 @@ from config import (
     SCREEN_WIDTH,
     WORLD_HEIGHT,
     WORLD_WIDTH,
-    UI_MODAL_WIDTH,
-    UI_MODAL_HEIGHT,
-    UI_MODAL_PADDING_TOP,
-    UI_MODAL_PADDING_RIGHT,
     UI_MODAL_BACKGROUND_COLOR,
     UI_TEXT_COLOR_PRIMARY,
     UI_TEXT_COLOR_SHADING,
@@ -170,19 +166,44 @@ class NetworkStateClient:
             client_player_id_setter=self._set_my_player_id,
         )
 
-        # Initialize the UI modal for displaying information
-        self.ui_modal = Modal(
+        # Initialize the single large modal for quest interaction (top-right)
+        # Using explicit values for width, height, padding_top, and padding_right
+        self.modal_quest_discovery = Modal(
             screen_width=SCREEN_WIDTH,
             screen_height=SCREEN_HEIGHT,
-            render_content_callback=self._render_modal_content,
-            mode="fixed",
-            width=UI_MODAL_WIDTH,
-            height=UI_MODAL_HEIGHT,
-            padding_top=UI_MODAL_PADDING_TOP,
-            padding_right=UI_MODAL_PADDING_RIGHT,
+            render_content_callback=self._render_modal_quest_discovery_content,
+            width=280,  # Explicit value for UI_MODAL_WIDTH
+            height=80,  # Explicit value for UI_MODAL_HEIGHT
+            padding_bottom=SCREEN_HEIGHT
+            - 5
+            - 80,  # Explicit values for UI_MODAL_PADDING_TOP (5) and UI_MODAL_HEIGHT (80)
+            padding_right=5,  # Explicit value for UI_MODAL_PADDING_RIGHT
+            horizontal_offset=0,  # No horizontal offset for a single modal
             background_color=Color(*UI_MODAL_BACKGROUND_COLOR),
         )
-        self.show_modal = False  # Control modal visibility
+        self.show_modal_quest_discovery = False  # Control quest modal visibility
+
+        # Initialize the five small modals for UI MMO boxes (bottom-right)
+        self.modal_btn_icon_modals = []
+        num_modal_btn_icon_modals = 5
+
+        for i in range(num_modal_btn_icon_modals):
+            # Calculate horizontal offset for each modal, stacking from right to left
+            horizontal_offset = i * (
+                40 + 5
+            )  # Explicit values for width (40) and padding (5)
+            modal = Modal(
+                screen_width=SCREEN_WIDTH,
+                screen_height=SCREEN_HEIGHT,
+                render_content_callback=self._render_modal_btn_icon_content,
+                width=40,  # Explicit value
+                height=40,  # Explicit value
+                padding_bottom=5,  # Explicit value
+                padding_right=5,  # Explicit value
+                horizontal_offset=horizontal_offset,
+                background_color=Color(*UI_MODAL_BACKGROUND_COLOR),
+            )
+            self.modal_btn_icon_modals.append(modal)
 
         # Initialize the InteractionManager
         self.interaction_manager = InteractionManager(NETWORK_OBJECT_SIZE)
@@ -301,7 +322,7 @@ class NetworkStateClient:
             f"Generated {len(path_coords)} client-side path GFX points asynchronously."
         )
 
-    def _render_modal_content(
+    def _render_modal_quest_discovery_content(
         self,
         object_layer_render_instance: ObjectLayerRender,
         x: int,
@@ -310,11 +331,42 @@ class NetworkStateClient:
         height: int,
     ):
         """
-        Renders content specific to the modal.
-        This method is passed as a callback to the Modal.
+        Renders content specific to the quest discovery modal.
         """
-        # Example content for the modal (can be customized)
         modal_text = "Quest Available!"
+        text_width = object_layer_render_instance.measure_text(modal_text, UI_FONT_SIZE)
+
+        # Center the text within the modal
+        text_x = x + (width - text_width) // 2
+        text_y = y + (height - UI_FONT_SIZE) // 2
+
+        object_layer_render_instance.draw_text(
+            modal_text,
+            text_x + 1,
+            text_y + 1,
+            UI_FONT_SIZE,
+            Color(*UI_TEXT_COLOR_SHADING),
+        )
+        object_layer_render_instance.draw_text(
+            modal_text,
+            text_x,
+            text_y,
+            UI_FONT_SIZE,
+            Color(*UI_TEXT_COLOR_PRIMARY),
+        )
+
+    def _render_modal_btn_icon_content(
+        self,
+        object_layer_render_instance: ObjectLayerRender,
+        x: int,
+        y: int,
+        width: int,
+        height: int,
+    ):
+        """
+        Renders content specific to the modal button icons.
+        """
+        modal_text = "BTN"  # Placeholder text for modal button icon
         text_width = object_layer_render_instance.measure_text(modal_text, UI_FONT_SIZE)
 
         # Center the text within the modal
@@ -354,16 +406,34 @@ class NetworkStateClient:
             last_frame_time = current_time
 
             # Handle window resize
-            if is_window_resized():  # Changed from IsWindowResized
+            if is_window_resized():
                 self.camera_manager.handle_window_resize()
-                # Update modal's screen dimensions as well
-                self.ui_modal.screen_width = (
-                    get_screen_width()
-                )  # Changed from GetScreenWidth
-                self.ui_modal.screen_height = (
-                    get_screen_height()
-                )  # Changed from GetScreenHeight
-                self.ui_modal._configure_mode()  # Re-configure modal position
+                new_screen_width = get_screen_width()
+                new_screen_height = get_screen_height()
+
+                # Update quest discovery modal dimensions and position
+                self.modal_quest_discovery.screen_width = new_screen_width
+                self.modal_quest_discovery.screen_height = new_screen_height
+                # Using explicit values for width (280), height (80), padding_top (5), and padding_right (5)
+                self.modal_quest_discovery.x = new_screen_width - 280 - 5
+                self.modal_quest_discovery.y = (
+                    new_screen_height - (new_screen_height - 5 - 80) - 80
+                )
+
+                # Update modal button icon modals dimensions and positions
+                for i, modal in enumerate(self.modal_btn_icon_modals):
+                    modal.screen_width = new_screen_width
+                    modal.screen_height = new_screen_height
+                    horizontal_offset = i * (
+                        40 + 5
+                    )  # Explicit values for width (40) and padding (5)
+                    modal.x = (
+                        modal.screen_width
+                        - modal.width
+                        - modal.padding_right
+                        - horizontal_offset
+                    )
+                    modal.y = modal.screen_height - modal.height - modal.padding_bottom
 
             self._process_queued_messages()
 
@@ -388,9 +458,11 @@ class NetworkStateClient:
                         obj.path = []
                         obj.path_index = 0
 
-            # Check for BOT-QUEST-PROVIDER interaction and control modal visibility
-            self.show_modal = self.interaction_manager.check_for_bot_interaction(
-                self.network_state, self.my_player_id
+            # Check for BOT-QUEST-PROVIDER interaction and control quest discovery modal visibility
+            self.show_modal_quest_discovery = (
+                self.interaction_manager.check_for_bot_interaction(
+                    self.network_state, self.my_player_id
+                )
             )
 
             if self.object_layer_render.is_mouse_button_pressed(MOUSE_BUTTON_LEFT):
@@ -559,9 +631,13 @@ class NetworkStateClient:
                         Color(*UI_TEXT_COLOR_PRIMARY),
                     )
 
-            # Conditionally render the UI modal based on interaction
-            if self.show_modal:
-                self.ui_modal.render(self.object_layer_render)
+            # Conditionally render the quest discovery modal
+            if self.show_modal_quest_discovery:
+                self.modal_quest_discovery.render(self.object_layer_render)
+
+            # Always render the modal button icon modals
+            for modal in self.modal_btn_icon_modals:
+                modal.render(self.object_layer_render)
 
             # Draw FPS at bottom-left
             frame_time = self.object_layer_render.get_frame_time()

@@ -8,9 +8,8 @@ logging.basicConfig(
 
 class Modal:
     """
-    A UI component responsible for rendering a modal overlay.
-    Supports different modes, with 'fixed' being the default,
-    rendering a transparent bar at the top of the screen.
+    A UI component responsible for rendering a fixed-position modal overlay.
+    It renders a transparent bar at a specified position on the screen.
     """
 
     def __init__(
@@ -18,12 +17,12 @@ class Modal:
         screen_width: int,
         screen_height: int,
         render_content_callback,
-        mode: str = "fixed",  # Default mode is "fixed"
-        width: int = 280,  # Default width for fixed mode
-        height: int = 80,  # Default height for fixed mode
-        padding_top: int = 5,
+        width: int = 40,
+        height: int = 40,
+        padding_bottom: int = 5,
         padding_right: int = 5,
-        background_color: Color = Color(0, 0, 0, 150),  # Semi-transparent black
+        horizontal_offset: int = 0,
+        background_color: Color = Color(0, 0, 0, 150),
     ):
         """
         Initializes the Modal.
@@ -33,41 +32,28 @@ class Modal:
             screen_height: The height of the game screen.
             render_content_callback: A callable that takes (x, y, width, height)
                                      and renders the modal's internal content.
-            mode: The display mode of the modal (e.g., "fixed").
-            width: The width of the modal in pixels (primarily for "fixed" mode).
-            height: The height of the modal in pixels (primarily for "fixed" mode).
-            padding_top: Padding from the top of the screen.
+            width: The width of the modal in pixels.
+            height: The height of the modal in pixels.
+            padding_bottom: Padding from the bottom of the screen.
             padding_right: Padding from the right of the screen.
+            horizontal_offset: Horizontal offset for positioning multiple modals.
             background_color: The background color of the modal.
         """
         self.screen_width = screen_width
         self.screen_height = screen_height
         self.render_content_callback = render_content_callback
-        self.mode = mode
         self.background_color = background_color
         self.width = width
         self.height = height
-        self.padding_top = padding_top
+        self.padding_bottom = padding_bottom
         self.padding_right = padding_right
+        self.horizontal_offset = horizontal_offset
 
-        self.x = 0
-        self.y = 0
-
-        self._configure_mode()
-
-    def _configure_mode(self):
-        """Configures modal dimensions and position based on the selected mode."""
-        if self.mode == "fixed":
-            # Position the modal at the top-right with specified padding
-            self.x = self.screen_width - self.width - self.padding_right
-            self.y = self.padding_top
-        else:
-            logging.warning(
-                f"Unsupported modal mode: {self.mode}. Defaulting to fixed behavior."
-            )
-            self.mode = "fixed"
-            self.x = self.screen_width - self.width - self.padding_right
-            self.y = self.padding_top
+        # Position the modal at the bottom-right with specified padding and offset
+        self.x = (
+            self.screen_width - self.width - self.padding_right - self.horizontal_offset
+        )
+        self.y = self.screen_height - self.height - self.padding_bottom
 
     def render(self, object_layer_render_instance):
         """
