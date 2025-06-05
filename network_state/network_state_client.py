@@ -36,6 +36,15 @@ from network_state.network_state_proxy import NetworkStateProxy
 from network_state.astar import astar
 from ui.components.core.modal_core_component import ModalCoreComponent
 from object_layer.camera_manager import CameraManager
+from ui.views.cyberia.bag_cyberia_view import BagCyberiaView
+
+# Import rendering utilities from the new path
+from ui.components.cyberia.modal_render_cyberia import (
+    render_modal_quest_discovery_content,
+    render_modal_bag_view_content,
+    render_modal_close_btn_content,
+    render_modal_btn_icon_content,
+)
 
 
 logging.basicConfig(
@@ -174,10 +183,7 @@ class NetworkStateClient:
         self.modal_quest_discovery = ModalCoreComponent(
             screen_width=SCREEN_WIDTH,
             screen_height=SCREEN_HEIGHT,
-            # Use partial to bind only the static method, allowing ModalCoreComponent to pass its own 'self'
-            render_content_callback=partial(
-                NetworkStateClient._render_modal_quest_discovery_content
-            ),
+            render_content_callback=partial(render_modal_quest_discovery_content),
             width=280,
             height=80,
             padding_bottom=SCREEN_HEIGHT - 5 - 80,
@@ -186,6 +192,41 @@ class NetworkStateClient:
             background_color=Color(*UI_MODAL_BACKGROUND_COLOR),
         )
         self.show_modal_quest_discovery = False
+
+        # Initialize the large modal for the bag view (right side)
+        self.modal_bag_view = ModalCoreComponent(
+            screen_width=SCREEN_WIDTH,
+            screen_height=SCREEN_HEIGHT,
+            render_content_callback=partial(render_modal_bag_view_content),
+            width=300,  # Fixed width
+            height=SCREEN_HEIGHT,  # Same as screen height
+            padding_bottom=0,
+            padding_right=0,  # Fixed to the right edge
+            horizontal_offset=0,
+            background_color=Color(0, 0, 0, 200),  # Slightly darker for view
+        )
+        self.show_modal_bag_view = False  # State to control visibility
+
+        # Initialize the close button for modal_bag_view (top right of bag modal)
+        try:
+            self.close_icon_texture = load_texture("ui/assets/icons/close.png")
+        except Exception as e:
+            logging.error(f"Failed to load close.png texture: {e}")
+            self.close_icon_texture = None
+
+        self.modal_bag_close_btn = ModalCoreComponent(
+            screen_width=SCREEN_WIDTH,
+            screen_height=SCREEN_HEIGHT,
+            render_content_callback=partial(render_modal_close_btn_content),
+            width=30,
+            height=30,
+            padding_bottom=SCREEN_HEIGHT - 35,  # 5px from top, 30px height
+            padding_right=5,  # 5px from right
+            horizontal_offset=0,
+            background_color=Color(200, 0, 0, 200),  # Reddish for close button
+            icon_texture=self.close_icon_texture,  # Pass the loaded texture
+        )
+        self.show_modal_bag_close_btn = False  # State to control visibility
 
         # Initialize the five small modals for UI MMO boxes (bottom-right)
         self.modal_btn_icon_modals = []
@@ -211,14 +252,10 @@ class NetworkStateClient:
             horizontal_offset = i * (40 + 5)
 
             icon_texture = self.modal_icons[i] if i < len(self.modal_icons) else None
-            # Pass the icon_texture directly to ModalCoreComponent
             modal = ModalCoreComponent(
                 screen_width=SCREEN_WIDTH,
                 screen_height=SCREEN_HEIGHT,
-                # Use partial to bind only the static method, allowing ModalCoreComponent to pass its own 'self'
-                render_content_callback=partial(
-                    NetworkStateClient._render_modal_btn_icon_content
-                ),
+                render_content_callback=partial(render_modal_btn_icon_content),
                 width=40,
                 height=40,
                 padding_bottom=5,
@@ -346,134 +383,6 @@ class NetworkStateClient:
             f"Generated {len(path_coords)} client-side path GFX points asynchronously."
         )
 
-    @staticmethod
-    def _render_modal_quest_discovery_content(
-        modal_component,  # This argument is required by ModalCoreComponent's render method, but not directly used here for rendering text.
-        object_layer_render_instance: ObjectLayerRender,
-        x: int,
-        y: int,
-        width: int,
-        height: int,
-    ):
-        """
-        Renders content specific to the quest discovery modal.
-        """
-        modal_text = "Quest Available!"
-        text_width = object_layer_render_instance.measure_text(modal_text, UI_FONT_SIZE)
-
-        # Center the text within the modal
-        text_x = x + (width - text_width) // 2
-        text_y = y + (height - UI_FONT_SIZE) // 2
-
-        object_layer_render_instance.draw_text(
-            modal_text,
-            text_x + 1,
-            text_y + 1,
-            UI_FONT_SIZE,
-            Color(*UI_TEXT_COLOR_SHADING),
-        )
-        object_layer_render_instance.draw_text(
-            modal_text,
-            text_x,
-            text_y,
-            UI_FONT_SIZE,
-            Color(*UI_TEXT_COLOR_PRIMARY),
-        )
-
-    @staticmethod
-    def _draw_icon_in_modal(
-        object_layer_render_instance: ObjectLayerRender,
-        x: int,
-        y: int,
-        width: int,
-        height: int,
-        icon_texture,
-        padding: int,
-    ):
-        """
-        Helper function to draw and center an icon within the modal's bounds with dynamic padding.
-        """
-        if not icon_texture:
-            return  # Do nothing if no texture is provided
-
-        # Calculate effective drawing area considering padding
-        effective_width = width - 2 * padding
-        effective_height = height - 2 * padding
-
-        if effective_width <= 0 or effective_height <= 0:
-            logging.warning(
-                "Effective drawing area for icon is too small. Skipping icon render."
-            )
-            return
-
-        # Determine scaling factor to fit the icon within the effective area while maintaining aspect ratio
-        scale_x = effective_width / icon_texture.width
-        scale_y = effective_height / icon_texture.height
-        scale_factor = min(scale_x, scale_y)
-
-        # Calculate scaled icon dimensions
-        scaled_icon_width = icon_texture.width * scale_factor
-        scaled_icon_height = icon_texture.height * scale_factor
-
-        # Calculate position to center the scaled icon within the padded area
-        draw_x = x + padding + (effective_width - scaled_icon_width) / 2
-        draw_y = y + padding + (effective_height - scaled_icon_height) / 2
-
-        # Draw the texture with scaling using the object_layer_render_instance
-        object_layer_render_instance.draw_texture_ex(
-            icon_texture, Vector2(draw_x, draw_y), 0.0, scale_factor, RAYWHITE
-        )
-
-    @staticmethod
-    def _render_modal_btn_icon_content(
-        modal_component,
-        object_layer_render_instance: ObjectLayerRender,
-        x: int,
-        y: int,
-        width: int,
-        height: int,
-    ):
-        """
-        Renders content specific to the modal button icons, including the icon image.
-        This method is now a callback for ModalCoreComponent and relies on the modal's
-        internal state (modal_component.icon_texture and modal_component.is_hovered).
-        """
-        icon_texture = modal_component.icon_texture
-        current_padding = 2 if modal_component.is_hovered else 4  # Dynamic padding
-
-        if icon_texture:
-            NetworkStateClient._draw_icon_in_modal(  # Call static helper method
-                object_layer_render_instance,
-                x,
-                y,
-                width,
-                height,
-                icon_texture,
-                current_padding,  # Pass the dynamic padding
-            )
-        else:
-            # Fallback to placeholder text if icon not loaded
-            modal_text = "BTN"
-            text_width = object_layer_render_instance.measure_text(
-                modal_text, UI_FONT_SIZE
-            )
-            text_x = x + (width - text_width) // 2
-            text_y = y + (height - UI_FONT_SIZE) // 2
-            object_layer_render_instance.draw_text(
-                modal_text,
-                text_x + 1,
-                text_y + 1,
-                UI_FONT_SIZE,
-                Color(*UI_TEXT_COLOR_SHADING),
-            )
-            object_layer_render_instance.draw_text(
-                modal_text,
-                text_x,
-                text_y,
-                UI_FONT_SIZE,
-                Color(*UI_TEXT_COLOR_PRIMARY),
-            )
-
     def run(self):
         """Runs the main client loop."""
         self.proxy.connect()
@@ -483,6 +392,8 @@ class NetworkStateClient:
             for texture in self.modal_icons:
                 if texture:
                     unload_texture(texture)
+            if self.close_icon_texture:
+                unload_texture(self.close_icon_texture)
             self.object_layer_render.close_window()
             self.proxy.close()
             return
@@ -514,6 +425,20 @@ class NetworkStateClient:
                 self.modal_quest_discovery.y = (
                     new_screen_height - (new_screen_height - 5 - 80) - 80
                 )
+
+                # Update modal_bag_view dimensions and position
+                self.modal_bag_view.screen_width = new_screen_width
+                self.modal_bag_view.screen_height = new_screen_height
+                self.modal_bag_view.x = new_screen_width - self.modal_bag_view.width
+                self.modal_bag_view.y = 0  # Top of the screen
+
+                # Update modal_bag_close_btn dimensions and position
+                self.modal_bag_close_btn.screen_width = new_screen_width
+                self.modal_bag_close_btn.screen_height = new_screen_height
+                self.modal_bag_close_btn.x = (
+                    new_screen_width - self.modal_bag_close_btn.width - 5
+                )
+                self.modal_bag_close_btn.y = 5  # 5px padding from top
 
                 # Update modal button icon modals dimensions and positions
                 for i, modal in enumerate(self.modal_btn_icon_modals):
@@ -552,25 +477,56 @@ class NetworkStateClient:
                         obj.path_index = 0
 
             # Check for BOT-QUEST-PROVIDER interaction and control quest discovery modal visibility
-            self.show_modal_quest_discovery = (
-                self.interaction_manager.check_for_bot_interaction(
-                    self.network_state, self.my_player_id
+            # modal_quest_discovery should not be activated if modal_bag_view is active
+            if not self.show_modal_bag_view:
+                self.show_modal_quest_discovery = (
+                    self.interaction_manager.check_for_bot_interaction(
+                        self.network_state, self.my_player_id
+                    )
                 )
-            )
+            else:
+                self.show_modal_quest_discovery = (
+                    False  # Deactivate quest modal if bag view is open
+                )
 
             # Check for modal clicks BEFORE processing world clicks
             modal_was_clicked_this_frame = False
-            if self.show_modal_quest_discovery:
+
+            # Handle clicks for the new bag modals first, if they are active
+            if self.show_modal_bag_view:
+                if self.modal_bag_close_btn.check_click(
+                    mouse_x, mouse_y, is_mouse_left_button_pressed
+                ):
+                    modal_was_clicked_this_frame = True
+                    logging.info("Close button clicked. Closing bag view.")
+                    self.show_modal_bag_view = False
+                    self.show_modal_bag_close_btn = False
+
+                # Check if the bag view itself was clicked to block world interaction
+                if self.modal_bag_view.check_click(
+                    mouse_x, mouse_y, is_mouse_left_button_pressed
+                ):
+                    modal_was_clicked_this_frame = True
+                    logging.debug("Bag view background clicked.")
+
+            # Check existing button modals (Character, Bag, Chat, Quest, Map)
+            for i, modal in enumerate(self.modal_btn_icon_modals):
+                if modal.check_click(mouse_x, mouse_y, is_mouse_left_button_pressed):
+                    modal_was_clicked_this_frame = True
+                    if i == 1:  # Assuming bag.png is the second icon (index 1)
+                        logging.info("Bag icon clicked. Opening bag view.")
+                        self.show_modal_bag_view = True
+                        self.show_modal_bag_close_btn = True
+                    # Add more logic for other buttons if needed
+                    # elif i == 0: # Character button
+                    #     ...
+                    # break # Exit the loop after handling a button click to prevent further clicks this frame
+
+            if self.show_modal_quest_discovery:  # Only check if quest modal is visible
                 if self.modal_quest_discovery.check_click(
                     mouse_x, mouse_y, is_mouse_left_button_pressed
                 ):
                     modal_was_clicked_this_frame = True
-
-            for modal in self.modal_btn_icon_modals:
-                if modal.check_click(mouse_x, mouse_y, is_mouse_left_button_pressed):
-                    modal_was_clicked_this_frame = True
-                    # Optionally, add specific logic for each button modal here
-                    # For example: if modal.icon_texture == self.modal_icons[0]: # Character button clicked
 
             # Only process world clicks if no modal was clicked
             if not modal_was_clicked_this_frame and is_mouse_left_button_pressed:
@@ -740,6 +696,14 @@ class NetworkStateClient:
                     )
 
             # Render modals AFTER world rendering to ensure they are on top
+            # Render the bag view and its close button first if active, so they are highest
+            if self.show_modal_bag_view:
+                self.modal_bag_view.render(self.object_layer_render, mouse_x, mouse_y)
+            if self.show_modal_bag_close_btn:
+                self.modal_bag_close_btn.render(
+                    self.object_layer_render, mouse_x, mouse_y
+                )
+
             if self.show_modal_quest_discovery:
                 # Pass mouse_x, mouse_y to enable hover effect logic in ModalCoreComponent
                 self.modal_quest_discovery.render(
@@ -783,6 +747,8 @@ class NetworkStateClient:
         for texture in self.modal_icons:
             if texture:
                 unload_texture(texture)
+        if self.close_icon_texture:
+            unload_texture(self.close_icon_texture)
 
         self.proxy.close()
         self.object_layer_render.close_window()
