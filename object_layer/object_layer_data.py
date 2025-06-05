@@ -54,6 +54,7 @@ def _load_object_layer_data():
             if filename.startswith("object_layer_") and ".json" in filename:
                 with open(dirpath + "/" + filename) as json_file:
                     data = json.load(json_file)
+                    data["TYPE"] = dirpath.split("/")[-1]
                     object_layer_id = (
                         filename.replace(".json", "")
                         .replace("object_layer_data_", "")
