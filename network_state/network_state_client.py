@@ -224,7 +224,7 @@ class NetworkStateClient:
             padding_bottom=SCREEN_HEIGHT - 35,  # 5px from top, 30px height
             padding_right=5,  # 5px from right
             horizontal_offset=0,
-            background_color=Color(200, 0, 0, 200),  # Reddish for close button
+            background_color=Color(10, 10, 10, 100),  # Reddish for close button
             icon_texture=self.close_icon_texture,  # Pass the loaded texture
         )
         self.show_modal_bag_close_btn = False  # State to control visibility

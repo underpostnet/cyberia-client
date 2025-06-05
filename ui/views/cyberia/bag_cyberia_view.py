@@ -176,11 +176,12 @@ class BagCyberiaView:
         current_y = y + padding_around_grid
 
         # Title for the bag
-        title_text = "Cyberia Bag"
+        title_text = "Bag"
         title_width = object_layer_render_instance.measure_text(
             title_text, UI_FONT_SIZE + 4
         )  # Slightly larger font for title
-        title_x = x + (width - title_width) // 2
+        # set ' + (width - title_width) // 2' for center alignment
+        title_x = x + 5
         object_layer_render_instance.draw_text(
             title_text,
             title_x + 1,
