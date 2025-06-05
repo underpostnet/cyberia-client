@@ -292,6 +292,10 @@ class ObjectLayerRender:
         self._rendered_network_object_positions: dict[str, Vector2] = {}
         self.object_layer_data = object_layer_data
 
+        logging.info(
+            f"ObjectLayerRender: Initialized with object_layer_data keys: {list(self.object_layer_data.keys())}"
+        )
+
     def begin_drawing(self):
         """Starts the Raylib drawing phase."""
         begin_drawing()
@@ -390,6 +394,14 @@ class ObjectLayerRender:
         """Retrieves animation data for a specific object layer ID from the loaded data."""
         object_data = self.object_layer_data.get(object_layer_id)
         return object_data.get("RENDER_DATA") if object_data else None
+
+    def get_object_layer_definition(self, object_layer_id: str) -> dict | None:
+        """Retrieves the full object layer definition for a specific ID."""
+        definition = self.object_layer_data.get(object_layer_id)
+        logging.debug(
+            f"get_object_layer_definition for '{object_layer_id}': {definition}"
+        )
+        return definition
 
     def get_object_layer_matrix_dimension(self, object_layer_id: str) -> int:
         """Determines the dimension (e.g., 8 for an 8x8 sprite) of the animation matrix for a given object layer ID."""
@@ -573,6 +585,19 @@ class ObjectLayerRender:
                 UI_FONT_SIZE,
                 Color(*UI_TEXT_COLOR_PRIMARY),
             )
+
+    def render_specific_object_layer_frame(
+        self,
+        frame_matrix: list[list[int]],
+        color_map: list[Color],
+        screen_x: float,
+        screen_y: float,
+        pixel_size_in_display: float,
+    ):
+        """Public method to render a specific object layer frame at given screen coordinates."""
+        self._render_object_layer_frame(
+            frame_matrix, color_map, screen_x, screen_y, pixel_size_in_display
+        )
 
     def _render_object_layer_frame(
         self,

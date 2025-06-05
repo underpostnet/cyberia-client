@@ -44,6 +44,7 @@ from ui.components.cyberia.modal_render_cyberia import (
     render_modal_bag_view_content,
     render_modal_close_btn_content,
     render_modal_btn_icon_content,
+    render_modal_object_layer_item_content,
 )
 
 
@@ -502,13 +503,6 @@ class NetworkStateClient:
                     self.show_modal_bag_view = False
                     self.show_modal_bag_close_btn = False
 
-                # Check if the bag view itself was clicked to block world interaction
-                if self.modal_bag_view.check_click(
-                    mouse_x, mouse_y, is_mouse_left_button_pressed
-                ):
-                    modal_was_clicked_this_frame = True
-                    logging.debug("Bag view background clicked.")
-
             # Check existing button modals (Character, Bag, Chat, Quest, Map)
             for i, modal in enumerate(self.modal_btn_icon_modals):
                 if modal.check_click(mouse_x, mouse_y, is_mouse_left_button_pressed):
@@ -698,7 +692,20 @@ class NetworkStateClient:
             # Render modals AFTER world rendering to ensure they are on top
             # Render the bag view and its close button first if active, so they are highest
             if self.show_modal_bag_view:
+                player_obj_layer_ids = []
+                with self.network_state.lock:
+                    if self.my_network_object:
+                        player_obj_layer_ids = self.my_network_object.object_layer_ids
+                        logging.info(
+                            f"NetworkStateClient: Player's current object_layer_ids: {player_obj_layer_ids}"
+                        )
+
+                # Pass the player's object layer IDs through data_to_pass
+                self.modal_bag_view.data_to_pass = {
+                    "player_object_layer_ids": player_obj_layer_ids
+                }
                 self.modal_bag_view.render(self.object_layer_render, mouse_x, mouse_y)
+
             if self.show_modal_bag_close_btn:
                 self.modal_bag_close_btn.render(
                     self.object_layer_render, mouse_x, mouse_y

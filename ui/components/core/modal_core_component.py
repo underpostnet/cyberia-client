@@ -31,7 +31,7 @@ class ModalCoreComponent:
         Args:
             screen_width: The width of the game screen.
             screen_height: The height of the game screen.
-            render_content_callback: A callable that takes (x, y, width, height)
+            render_content_callback: A callable that takes (modal_component, object_layer_render_instance, x, y, width, height, data_to_pass)
                                      and renders the modal's internal content.
             width: The width of the modal in pixels.
             height: The height of the modal in pixels.
@@ -53,6 +53,7 @@ class ModalCoreComponent:
         self.icon_texture = icon_texture  # Store the icon texture
         self.is_hovered = False  # State for hover effect
         self.is_clicked = False  # New state for click detection
+        self.data_to_pass = {}  # New attribute to pass additional data to the callback
 
         # Position the modal at the bottom-right with specified padding and offset
         self.x = (
@@ -92,7 +93,7 @@ class ModalCoreComponent:
     ):
         """
         Renders the modal's background and then calls the content rendering callback.
-        Now includes mouse coordinates to determine hover state.
+        Now includes mouse coordinates to determine hover state and passes additional data.
 
         Args:
             object_layer_render_instance: An instance of ObjectLayerRender
@@ -114,8 +115,6 @@ class ModalCoreComponent:
         )
 
         # Call the external callback to render content within the modal's bounds
-        # The callback now has access to 'self' (this ModalCoreComponent instance)
-        # to get icon_texture and is_hovered.
         self.render_content_callback(
             self,  # Pass the modal component instance itself
             object_layer_render_instance,
@@ -123,4 +122,5 @@ class ModalCoreComponent:
             self.y,
             self.width,
             self.height,
+            self.data_to_pass,  # Pass the additional data
         )

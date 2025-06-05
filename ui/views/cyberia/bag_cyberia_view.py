@@ -1,7 +1,18 @@
 import logging
-from raylibpy import Color, RAYWHITE, Vector2  # Import Vector2 for slot positioning
-from config import UI_FONT_SIZE, UI_TEXT_COLOR_PRIMARY, UI_TEXT_COLOR_SHADING
+from raylibpy import Color, RAYWHITE, Vector2
+from config import (
+    UI_FONT_SIZE,
+    UI_TEXT_COLOR_PRIMARY,
+    UI_TEXT_COLOR_SHADING,
+    BAG_INVENTORY_ROWS,
+    BAG_INVENTORY_COLS,
+    BAG_SLOT_SIZE,  # Imported from config
+    BAG_SLOT_PADDING,  # Imported from config
+)
 from object_layer.object_layer_render import ObjectLayerRender
+from ui.components.cyberia.modal_render_cyberia import (
+    render_modal_object_layer_item_content,
+)
 
 logging.basicConfig(
     level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s"
@@ -12,10 +23,17 @@ class BagCyberiaSlot:
     """
     Represents a single slot within the Cyberia Bag UI.
     This class handles the rendering of an individual inventory slot,
-    which can potentially hold an item.
+    which can potentially hold an item, specifically an object layer "skin".
     """
 
-    def __init__(self, x: int, y: int, width: int, height: int):
+    def __init__(
+        self,
+        x: int,
+        y: int,
+        width: int,
+        height: int,
+        object_layer_id_to_render: str = None,
+    ):
         """
         Initializes a BagCyberiaSlot.
 
@@ -24,6 +42,8 @@ class BagCyberiaSlot:
             y: The Y coordinate of the top-left corner of the slot.
             width: The width of the slot.
             height: The height of the slot.
+            object_layer_id_to_render: The ID of the object layer (e.g., "ANON", "AYLEEN")
+                                       to render within this slot if it's a "skin" item.
         """
         self.x = x
         self.y = y
@@ -33,10 +53,14 @@ class BagCyberiaSlot:
             50, 50, 50, 200
         )  # Darker grey for slot background
         self.border_color = Color(100, 100, 100, 255)  # Light grey for slot border
+        self.object_layer_id_to_render = (
+            object_layer_id_to_render  # Store object layer ID
+        )
 
     def render(self, object_layer_render_instance: ObjectLayerRender):
         """
-        Renders the individual bag slot.
+        Renders the individual bag slot. If an object_layer_id_to_render is set,
+        it delegates the rendering of that object layer's animation frame.
 
         Args:
             object_layer_render_instance: An instance of ObjectLayerRender used for drawing operations.
@@ -57,20 +81,37 @@ class BagCyberiaSlot:
             self.background_color,
         )
 
-        # Placeholder for future item rendering within the slot
-        # if self.item:
-        #     self.item.render(object_layer_render_instance, self.x, self.y, self.width, self.height)
+        if self.object_layer_id_to_render:
+            logging.info(
+                f"BagCyberiaSlot rendering item: {self.object_layer_id_to_render} at ({self.x}, {self.y})"
+            )
+
+            # Create a dummy object to mimic ModalCoreComponent for passing data
+            # This allows render_modal_object_layer_item_content to access the ID
+            class DummyModalComponent:
+                def __init__(self, obj_id):
+                    self.object_layer_id_to_render = obj_id
+
+            dummy_modal = DummyModalComponent(self.object_layer_id_to_render)
+
+            render_modal_object_layer_item_content(
+                dummy_modal,  # Pass the dummy component
+                object_layer_render_instance,
+                self.x,
+                self.y,
+                self.width,
+                self.height,
+            )
+        else:
+            logging.debug("BagCyberiaSlot rendering empty slot.")
 
 
 class BagCyberiaView:
     """
     A view responsible for rendering the content of the Cyberia Bag modal.
     This class encapsulates the UI elements and their drawing logic for the bag inventory.
-    It now manages a grid of BagCyberiaSlot entities.
+    It now manages a grid of BagCyberiaSlot entities and displays "skin" type object layers.
     """
-
-    SLOT_SIZE = 40  # Each slot will be 40px x 40px
-    SLOT_PADDING = 10  # Padding between slots
 
     @staticmethod
     def render_content(
@@ -79,10 +120,14 @@ class BagCyberiaView:
         y: int,
         width: int,
         height: int,
+        player_object_layer_ids: list[
+            str
+        ],  # New argument to receive player's object layers
     ):
         """
         Renders the detailed content of the bag view within the given bounds.
-        This now includes a grid of inventory slots.
+        This now includes a grid of inventory slots, populating them with player's
+        "skin" object layers.
 
         Args:
             object_layer_render_instance: An instance of ObjectLayerRender used for drawing operations.
@@ -90,6 +135,7 @@ class BagCyberiaView:
             y: The Y coordinate of the top-left corner of the modal's content area.
             width: The width of the modal's content area.
             height: The height of the modal's content area.
+            player_object_layer_ids: A list of object layer IDs currently associated with the player.
         """
         padding_around_grid = 20
         current_y = y + padding_around_grid
@@ -116,16 +162,31 @@ class BagCyberiaView:
         )
         current_y += (UI_FONT_SIZE + 4) + padding_around_grid  # Space after title
 
-        # Calculate grid dimensions and starting position
-        num_rows = 5
-        num_cols = 6
+        logging.info(
+            f"BagCyberiaView: Player object layer IDs received: {player_object_layer_ids}"
+        )
 
-        grid_width = (BagCyberiaView.SLOT_SIZE * num_cols) + (
-            BagCyberiaView.SLOT_PADDING * (num_cols - 1)
+        # Filter "skin" object layers from the player's active layers
+        skin_object_layer_ids = []
+        for obj_layer_id in player_object_layer_ids:
+            obj_def = object_layer_render_instance.get_object_layer_definition(
+                obj_layer_id
+            )
+            if obj_def and obj_def.get("TYPE") == "skin":
+                skin_object_layer_ids.append(obj_layer_id)
+
+        logging.info(
+            f"BagCyberiaView: Filtered skin object layer IDs: {skin_object_layer_ids}"
         )
-        grid_height = (BagCyberiaView.SLOT_SIZE * num_rows) + (
-            BagCyberiaView.SLOT_PADDING * (num_rows - 1)
-        )
+
+        current_skin_index = 0  # To track which skin item to assign to a slot
+
+        # Calculate grid dimensions and starting position
+        num_rows = BAG_INVENTORY_ROWS
+        num_cols = BAG_INVENTORY_COLS
+
+        grid_width = (BAG_SLOT_SIZE * num_cols) + (BAG_SLOT_PADDING * (num_cols - 1))
+        grid_height = (BAG_SLOT_SIZE * num_rows) + (BAG_SLOT_PADDING * (num_rows - 1))
 
         # Center the grid within the available content area
         grid_start_x = x + (width - grid_width) // 2
@@ -134,14 +195,19 @@ class BagCyberiaView:
         # Render the grid of slots
         for row in range(num_rows):
             for col in range(num_cols):
-                slot_x = grid_start_x + col * (
-                    BagCyberiaView.SLOT_SIZE + BagCyberiaView.SLOT_PADDING
-                )
-                slot_y = grid_start_y + row * (
-                    BagCyberiaView.SLOT_SIZE + BagCyberiaView.SLOT_PADDING
-                )
+                slot_x = grid_start_x + col * (BAG_SLOT_SIZE + BAG_SLOT_PADDING)
+                slot_y = grid_start_y + row * (BAG_SLOT_SIZE + BAG_SLOT_PADDING)
+
+                object_layer_id_for_slot = None
+                if current_skin_index < len(skin_object_layer_ids):
+                    object_layer_id_for_slot = skin_object_layer_ids[current_skin_index]
+                    current_skin_index += 1
 
                 bag_slot = BagCyberiaSlot(
-                    slot_x, slot_y, BagCyberiaView.SLOT_SIZE, BagCyberiaView.SLOT_SIZE
+                    slot_x,
+                    slot_y,
+                    BAG_SLOT_SIZE,
+                    BAG_SLOT_SIZE,
+                    object_layer_id_for_slot,  # Pass the object layer ID for rendering
                 )
                 bag_slot.render(object_layer_render_instance)
