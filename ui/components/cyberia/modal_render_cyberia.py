@@ -74,9 +74,9 @@ def render_modal_bag_view_content(
     if data_to_pass and "player_object_layer_ids" in data_to_pass:
         player_object_layer_ids = data_to_pass["player_object_layer_ids"]
 
-    logging.info(
-        f"render_modal_bag_view_content: Calling BagCyberiaView.render_content with player_object_layer_ids: {player_object_layer_ids}"
-    )
+    # logging.info(
+    #     f"render_modal_bag_view_content: Calling BagCyberiaView.render_content with player_object_layer_ids: {player_object_layer_ids}"
+    # )
 
     # Now calling the static method from the BagCyberiaView class with the new argument
     BagCyberiaView.render_content(
@@ -198,9 +198,9 @@ def render_modal_object_layer_item_content(
         )
         return
 
-    logging.info(
-        f"render_modal_object_layer_item_content: Rendering object layer ID: {object_layer_id}"
-    )
+    # logging.info(
+    #     f"render_modal_object_layer_item_content: Rendering object layer ID: {object_layer_id}"
+    # )
 
     # Get the object layer definition to determine matrix dimension and other properties
     object_layer_info = object_layer_render_instance.get_object_layer_definition(

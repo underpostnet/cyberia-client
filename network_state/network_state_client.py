@@ -696,9 +696,9 @@ class NetworkStateClient:
                 with self.network_state.lock:
                     if self.my_network_object:
                         player_obj_layer_ids = self.my_network_object.object_layer_ids
-                        logging.info(
-                            f"NetworkStateClient: Player's current object_layer_ids: {player_obj_layer_ids}"
-                        )
+                        # logging.info(
+                        #     f"NetworkStateClient: Player's current object_layer_ids: {player_obj_layer_ids}"
+                        # )
 
                 # Pass the player's object layer IDs through data_to_pass
                 self.modal_bag_view.data_to_pass = {

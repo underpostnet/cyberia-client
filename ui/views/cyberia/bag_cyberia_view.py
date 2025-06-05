@@ -82,9 +82,9 @@ class BagCyberiaSlot:
         )
 
         if self.object_layer_id_to_render:
-            logging.info(
-                f"BagCyberiaSlot rendering item: {self.object_layer_id_to_render} at ({self.x}, {self.y})"
-            )
+            # logging.info(
+            #     f"BagCyberiaSlot rendering item: {self.object_layer_id_to_render} at ({self.x}, {self.y})"
+            # )
 
             # Create a dummy object to mimic ModalCoreComponent for passing data
             # This allows render_modal_object_layer_item_content to access the ID
@@ -162,9 +162,9 @@ class BagCyberiaView:
         )
         current_y += (UI_FONT_SIZE + 4) + padding_around_grid  # Space after title
 
-        logging.info(
-            f"BagCyberiaView: Player object layer IDs received: {player_object_layer_ids}"
-        )
+        # logging.info(
+        #     f"BagCyberiaView: Player object layer IDs received: {player_object_layer_ids}"
+        # )
 
         # Filter "skin" object layers from the player's active layers
         skin_object_layer_ids = []
@@ -175,9 +175,9 @@ class BagCyberiaView:
             if obj_def and obj_def.get("TYPE") == "skin":
                 skin_object_layer_ids.append(obj_layer_id)
 
-        logging.info(
-            f"BagCyberiaView: Filtered skin object layer IDs: {skin_object_layer_ids}"
-        )
+        # logging.info(
+        #     f"BagCyberiaView: Filtered skin object layer IDs: {skin_object_layer_ids}"
+        # )
 
         current_skin_index = 0  # To track which skin item to assign to a slot
 
