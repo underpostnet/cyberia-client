@@ -1,6 +1,7 @@
 import logging
 import threading
 import time
+from functools import partial
 
 from raylibpy import (
     MOUSE_BUTTON_LEFT,
@@ -10,19 +11,22 @@ from raylibpy import (
     is_window_resized,
     get_screen_width,
     get_screen_height,
+    load_texture,
+    unload_texture,
+    get_mouse_position,
 )
 
 from config import (
     CAMERA_SMOOTHNESS,
-    NETWORK_OBJECT_SIZE,
+    UI_FONT_SIZE,
+    UI_TEXT_COLOR_PRIMARY,
+    UI_TEXT_COLOR_SHADING,
     SCREEN_HEIGHT,
     SCREEN_WIDTH,
     WORLD_HEIGHT,
     WORLD_WIDTH,
+    NETWORK_OBJECT_SIZE,
     UI_MODAL_BACKGROUND_COLOR,
-    UI_TEXT_COLOR_PRIMARY,
-    UI_TEXT_COLOR_SHADING,
-    UI_FONT_SIZE,
 )
 from object_layer.object_layer_render import ObjectLayerRender
 from network_state.network_object import NetworkObject
@@ -31,7 +35,7 @@ from network_state.network_object_factory import NetworkObjectFactory
 from network_state.network_state_proxy import NetworkStateProxy
 from network_state.astar import astar
 from ui.components.core.modal_core_component import ModalCoreComponent
-from object_layer.camera_manager import CameraManager  # Import the new CameraManager
+from object_layer.camera_manager import CameraManager
 
 
 logging.basicConfig(
@@ -167,41 +171,61 @@ class NetworkStateClient:
         )
 
         # Initialize the single large modal for quest interaction (top-right)
-        # Using explicit values for width, height, padding_top, and padding_right
         self.modal_quest_discovery = ModalCoreComponent(
             screen_width=SCREEN_WIDTH,
             screen_height=SCREEN_HEIGHT,
-            render_content_callback=self._render_modal_quest_discovery_content,
-            width=280,  # Explicit value for UI_MODAL_WIDTH
-            height=80,  # Explicit value for UI_MODAL_HEIGHT
-            padding_bottom=SCREEN_HEIGHT
-            - 5
-            - 80,  # Explicit values for UI_MODAL_PADDING_TOP (5) and UI_MODAL_HEIGHT (80)
-            padding_right=5,  # Explicit value for UI_MODAL_PADDING_RIGHT
-            horizontal_offset=0,  # No horizontal offset for a single modal
+            # Use partial to bind only the static method, allowing ModalCoreComponent to pass its own 'self'
+            render_content_callback=partial(
+                NetworkStateClient._render_modal_quest_discovery_content
+            ),
+            width=280,
+            height=80,
+            padding_bottom=SCREEN_HEIGHT - 5 - 80,
+            padding_right=5,
+            horizontal_offset=0,
             background_color=Color(*UI_MODAL_BACKGROUND_COLOR),
         )
-        self.show_modal_quest_discovery = False  # Control quest modal visibility
+        self.show_modal_quest_discovery = False
 
         # Initialize the five small modals for UI MMO boxes (bottom-right)
         self.modal_btn_icon_modals = []
+        icon_paths = [
+            "ui/assets/icons/character.png",
+            "ui/assets/icons/bag.png",
+            "ui/assets/icons/chat.png",
+            "ui/assets/icons/quest.png",  # Renamed mission.png to quest.png
+            "ui/assets/icons/map.png",
+        ]
+        self.modal_icons = []
+        for path in icon_paths:
+            try:
+                texture = load_texture(path)
+                self.modal_icons.append(texture)
+            except Exception as e:
+                logging.error(f"Failed to load texture {path}: {e}")
+                self.modal_icons.append(None)
+
         num_modal_btn_icon_modals = 5
 
         for i in range(num_modal_btn_icon_modals):
-            # Calculate horizontal offset for each modal, stacking from right to left
-            horizontal_offset = i * (
-                40 + 5
-            )  # Explicit values for width (40) and padding (5)
+            horizontal_offset = i * (40 + 5)
+
+            icon_texture = self.modal_icons[i] if i < len(self.modal_icons) else None
+            # Pass the icon_texture directly to ModalCoreComponent
             modal = ModalCoreComponent(
                 screen_width=SCREEN_WIDTH,
                 screen_height=SCREEN_HEIGHT,
-                render_content_callback=self._render_modal_btn_icon_content,
-                width=40,  # Explicit value
-                height=40,  # Explicit value
-                padding_bottom=5,  # Explicit value
-                padding_right=5,  # Explicit value
+                # Use partial to bind only the static method, allowing ModalCoreComponent to pass its own 'self'
+                render_content_callback=partial(
+                    NetworkStateClient._render_modal_btn_icon_content
+                ),
+                width=40,
+                height=40,
+                padding_bottom=5,
+                padding_right=5,
                 horizontal_offset=horizontal_offset,
                 background_color=Color(*UI_MODAL_BACKGROUND_COLOR),
+                icon_texture=icon_texture,  # Pass icon texture to modal
             )
             self.modal_btn_icon_modals.append(modal)
 
@@ -322,8 +346,9 @@ class NetworkStateClient:
             f"Generated {len(path_coords)} client-side path GFX points asynchronously."
         )
 
+    @staticmethod
     def _render_modal_quest_discovery_content(
-        self,
+        modal_component,  # This argument is required by ModalCoreComponent's render method, but not directly used here for rendering text.
         object_layer_render_instance: ObjectLayerRender,
         x: int,
         y: int,
@@ -355,8 +380,53 @@ class NetworkStateClient:
             Color(*UI_TEXT_COLOR_PRIMARY),
         )
 
+    @staticmethod
+    def _draw_icon_in_modal(
+        object_layer_render_instance: ObjectLayerRender,
+        x: int,
+        y: int,
+        width: int,
+        height: int,
+        icon_texture,
+        padding: int,
+    ):
+        """
+        Helper function to draw and center an icon within the modal's bounds with dynamic padding.
+        """
+        if not icon_texture:
+            return  # Do nothing if no texture is provided
+
+        # Calculate effective drawing area considering padding
+        effective_width = width - 2 * padding
+        effective_height = height - 2 * padding
+
+        if effective_width <= 0 or effective_height <= 0:
+            logging.warning(
+                "Effective drawing area for icon is too small. Skipping icon render."
+            )
+            return
+
+        # Determine scaling factor to fit the icon within the effective area while maintaining aspect ratio
+        scale_x = effective_width / icon_texture.width
+        scale_y = effective_height / icon_texture.height
+        scale_factor = min(scale_x, scale_y)
+
+        # Calculate scaled icon dimensions
+        scaled_icon_width = icon_texture.width * scale_factor
+        scaled_icon_height = icon_texture.height * scale_factor
+
+        # Calculate position to center the scaled icon within the padded area
+        draw_x = x + padding + (effective_width - scaled_icon_width) / 2
+        draw_y = y + padding + (effective_height - scaled_icon_height) / 2
+
+        # Draw the texture with scaling using the object_layer_render_instance
+        object_layer_render_instance.draw_texture_ex(
+            icon_texture, Vector2(draw_x, draw_y), 0.0, scale_factor, RAYWHITE
+        )
+
+    @staticmethod
     def _render_modal_btn_icon_content(
-        self,
+        modal_component,
         object_layer_render_instance: ObjectLayerRender,
         x: int,
         y: int,
@@ -364,29 +434,45 @@ class NetworkStateClient:
         height: int,
     ):
         """
-        Renders content specific to the modal button icons.
+        Renders content specific to the modal button icons, including the icon image.
+        This method is now a callback for ModalCoreComponent and relies on the modal's
+        internal state (modal_component.icon_texture and modal_component.is_hovered).
         """
-        modal_text = "BTN"  # Placeholder text for modal button icon
-        text_width = object_layer_render_instance.measure_text(modal_text, UI_FONT_SIZE)
+        icon_texture = modal_component.icon_texture
+        current_padding = 2 if modal_component.is_hovered else 4  # Dynamic padding
 
-        # Center the text within the modal
-        text_x = x + (width - text_width) // 2
-        text_y = y + (height - UI_FONT_SIZE) // 2
-
-        object_layer_render_instance.draw_text(
-            modal_text,
-            text_x + 1,
-            text_y + 1,
-            UI_FONT_SIZE,
-            Color(*UI_TEXT_COLOR_SHADING),
-        )
-        object_layer_render_instance.draw_text(
-            modal_text,
-            text_x,
-            text_y,
-            UI_FONT_SIZE,
-            Color(*UI_TEXT_COLOR_PRIMARY),
-        )
+        if icon_texture:
+            NetworkStateClient._draw_icon_in_modal(  # Call static helper method
+                object_layer_render_instance,
+                x,
+                y,
+                width,
+                height,
+                icon_texture,
+                current_padding,  # Pass the dynamic padding
+            )
+        else:
+            # Fallback to placeholder text if icon not loaded
+            modal_text = "BTN"
+            text_width = object_layer_render_instance.measure_text(
+                modal_text, UI_FONT_SIZE
+            )
+            text_x = x + (width - text_width) // 2
+            text_y = y + (height - UI_FONT_SIZE) // 2
+            object_layer_render_instance.draw_text(
+                modal_text,
+                text_x + 1,
+                text_y + 1,
+                UI_FONT_SIZE,
+                Color(*UI_TEXT_COLOR_SHADING),
+            )
+            object_layer_render_instance.draw_text(
+                modal_text,
+                text_x,
+                text_y,
+                UI_FONT_SIZE,
+                Color(*UI_TEXT_COLOR_PRIMARY),
+            )
 
     def run(self):
         """Runs the main client loop."""
@@ -394,6 +480,9 @@ class NetworkStateClient:
 
         if not self.connection_ready_event.wait(timeout=10):
             logging.error("Failed to establish connection via proxy within timeout.")
+            for texture in self.modal_icons:
+                if texture:
+                    unload_texture(texture)
             self.object_layer_render.close_window()
             self.proxy.close()
             return
@@ -404,6 +493,9 @@ class NetworkStateClient:
             current_time = time.time()
             delta_time = current_time - last_frame_time
             last_frame_time = current_time
+
+            mouse_pos = get_mouse_position()
+            mouse_x, mouse_y = int(mouse_pos.x), int(mouse_pos.y)
 
             # Handle window resize
             if is_window_resized():
@@ -424,9 +516,7 @@ class NetworkStateClient:
                 for i, modal in enumerate(self.modal_btn_icon_modals):
                     modal.screen_width = new_screen_width
                     modal.screen_height = new_screen_height
-                    horizontal_offset = i * (
-                        40 + 5
-                    )  # Explicit values for width (40) and padding (5)
+                    horizontal_offset = i * (40 + 5)
                     modal.x = (
                         modal.screen_width
                         - modal.width
@@ -631,13 +721,15 @@ class NetworkStateClient:
                         Color(*UI_TEXT_COLOR_PRIMARY),
                     )
 
-            # Conditionally render the quest discovery modal
             if self.show_modal_quest_discovery:
-                self.modal_quest_discovery.render(self.object_layer_render)
+                # Pass mouse_x, mouse_y to enable hover effect logic in ModalCoreComponent
+                self.modal_quest_discovery.render(
+                    self.object_layer_render, mouse_x, mouse_y
+                )
 
-            # Always render the modal button icon modals
+            # Render modal button icon modals, passing mouse coordinates for hover effect
             for modal in self.modal_btn_icon_modals:
-                modal.render(self.object_layer_render)
+                modal.render(self.object_layer_render, mouse_x, mouse_y)
 
             # Draw FPS at bottom-left
             frame_time = self.object_layer_render.get_frame_time()
@@ -668,6 +760,10 @@ class NetworkStateClient:
             self.object_layer_render.end_drawing()
 
             time.sleep(0.001)
+
+        for texture in self.modal_icons:
+            if texture:
+                unload_texture(texture)
 
         self.proxy.close()
         self.object_layer_render.close_window()

@@ -1,5 +1,5 @@
 import logging
-from raylibpy import Color, Rectangle
+from raylibpy import Color, Rectangle, Vector2
 
 logging.basicConfig(
     level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s"
@@ -23,6 +23,7 @@ class ModalCoreComponent:
         padding_right: int = 5,
         horizontal_offset: int = 0,
         background_color: Color = Color(0, 0, 0, 150),
+        icon_texture=None,
     ):
         """
         Initializes the ModalCoreComponent.
@@ -38,6 +39,7 @@ class ModalCoreComponent:
             padding_right: Padding from the right of the screen.
             horizontal_offset: Horizontal offset for positioning multiple modals.
             background_color: The background color of the modal.
+            icon_texture: The raylibpy Texture object for the icon, if any.
         """
         self.screen_width = screen_width
         self.screen_height = screen_height
@@ -48,6 +50,8 @@ class ModalCoreComponent:
         self.padding_bottom = padding_bottom
         self.padding_right = padding_right
         self.horizontal_offset = horizontal_offset
+        self.icon_texture = icon_texture  # Store the icon texture
+        self.is_hovered = False  # New state for hover effect
 
         # Position the modal at the bottom-right with specified padding and offset
         self.x = (
@@ -55,20 +59,40 @@ class ModalCoreComponent:
         )
         self.y = self.screen_height - self.height - self.padding_bottom
 
-    def render(self, object_layer_render_instance):
+    def render(
+        self, object_layer_render_instance, mouse_x: int = -1, mouse_y: int = -1
+    ):
         """
         Renders the modal's background and then calls the content rendering callback.
+        Now includes mouse coordinates to determine hover state.
 
         Args:
             object_layer_render_instance: An instance of ObjectLayerRender
                                           used for drawing operations.
+            mouse_x: Current X coordinate of the mouse.
+            mouse_y: Current Y coordinate of the mouse.
         """
+        # Update hover state
+        self.is_hovered = (
+            mouse_x >= self.x
+            and mouse_x <= (self.x + self.width)
+            and mouse_y >= self.y
+            and mouse_y <= (self.y + self.height)
+        )
+
         # Draw the modal background
         object_layer_render_instance.draw_rectangle(
             self.x, self.y, self.width, self.height, self.background_color
         )
 
         # Call the external callback to render content within the modal's bounds
+        # The callback now has access to 'self' (this ModalCoreComponent instance)
+        # to get icon_texture and is_hovered.
         self.render_content_callback(
-            object_layer_render_instance, self.x, self.y, self.width, self.height
+            self,  # Pass the modal component instance itself
+            object_layer_render_instance,
+            self.x,
+            self.y,
+            self.width,
+            self.height,
         )

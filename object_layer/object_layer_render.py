@@ -29,6 +29,7 @@ from raylibpy import (
     window_should_close,
     Camera2D,
     measure_text as raylib_measure_text,
+    draw_texture_ex,
 )
 
 from config import (
@@ -366,6 +367,17 @@ class ObjectLayerRender:
     def close_window(self):
         """Closes the Raylib window."""
         close_window()
+
+    def draw_texture_ex(
+        self,
+        texture,
+        position: Vector2,
+        rotation: float,
+        scale: float,
+        tint: Color,
+    ):
+        """Draws a texture with extended parameters (rotation, scale, tint)."""
+        draw_texture_ex(texture, position, rotation, scale, tint)
 
     def draw_grid(self):
         """Draws a grid over the world based on network object size."""
