@@ -9,9 +9,7 @@ from object_layer.object_layer_render import ObjectLayerRender
 from ui.components.cyberia.modal_render_cyberia import (
     render_modal_object_layer_item_content,
 )
-from ui.components.core.modal_core_component import (
-    ModalCoreComponent,
-)  # Changed import back
+from ui.components.core.modal_core_component import ModalCoreComponent
 
 logging.basicConfig(
     level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s"
@@ -28,7 +26,7 @@ class BagCyberiaSlot:
     """
     Represents a single slot within the Cyberia Bag UI.
     This class handles the rendering of an individual inventory slot,
-    which can potentially hold an item, specifically an object layer "skin".
+    which can potentially hold an item, specifically an layer "skin".
     """
 
     def __init__(
@@ -57,24 +55,50 @@ class BagCyberiaSlot:
         self.background_color = Color(
             50, 50, 50, 200
         )  # Darker grey for slot background
-        self.border_color = Color(100, 100, 100, 255)  # Light grey for slot border
+        self.border_color = Color(
+            100, 100, 100, 255
+        )  # Default light grey for slot border
         self.object_layer_id_to_render = (
             object_layer_id_to_render  # Store object layer ID
         )
+        self.is_hovered = False  # New: Track hover state for this slot
 
-    def render(self, object_layer_render_instance: ObjectLayerRender):
+    def render(
+        self,
+        object_layer_render_instance: ObjectLayerRender,
+        mouse_x: int,
+        mouse_y: int,
+    ):
         """
         Renders the individual bag slot. If an object_layer_id_to_render is set,
         it delegates the rendering of that object layer's animation frame.
 
         Args:
             object_layer_render_instance: An instance of ObjectLayerRender used for drawing operations.
+            mouse_x: Current X coordinate of the mouse.
+            mouse_y: Current Y coordinate of the mouse.
         """
+        # Update hover state
+        self.is_hovered = (
+            mouse_x >= self.x
+            and mouse_x <= (self.x + self.width)
+            and mouse_y >= self.y
+            and mouse_y <= (self.y + self.height)
+        )
+
+        # Determine border color based on hover state
+        current_border_color = (
+            Color(*UI_TEXT_COLOR_PRIMARY) if self.is_hovered else self.border_color
+        )
+
         # Draw slot background
         object_layer_render_instance.draw_rectangle(
             self.x, self.y, self.width, self.height, self.background_color
         )
         # Draw slot border (slightly larger rectangle then inner filled rectangle)
+        object_layer_render_instance.draw_rectangle(
+            self.x, self.y, self.width, self.height, current_border_color
+        )
         object_layer_render_instance.draw_rectangle(
             self.x + 1,
             self.y + 1,
@@ -90,7 +114,7 @@ class BagCyberiaSlot:
 
             # Create a dummy object to mimic ModalCoreComponent for passing data
             # This allows render_modal_object_layer_item_content to access the ID
-            dummy_modal = ModalCoreComponent(  # Changed to ModalCoreComponent
+            dummy_modal = ModalCoreComponent(
                 screen_width=0,  # Not relevant for this specific usage
                 screen_height=0,  # Not relevant for this specific usage
                 render_content_callback=None,  # Will be overridden by the specific render function
@@ -130,6 +154,8 @@ class BagCyberiaView:
         player_object_layer_ids: list[
             str
         ],  # New argument to receive player's object layers
+        mouse_x: int,  # New: mouse_x
+        mouse_y: int,  # New: mouse_y
     ):
         """
         Renders the detailed content of the bag view within the given bounds.
@@ -143,6 +169,8 @@ class BagCyberiaView:
             width: The width of the modal's content area.
             height: The height of the modal's content area.
             player_object_layer_ids: A list of object layer IDs currently associated with the player.
+            mouse_x: Current X coordinate of the mouse.
+            mouse_y: Current Y coordinate of the mouse.
         """
         padding_around_grid = 20
         current_y = y + padding_around_grid
@@ -217,4 +245,4 @@ class BagCyberiaView:
                     BAG_SLOT_SIZE,
                     object_layer_id_for_slot,  # Pass the object layer ID for rendering
                 )
-                bag_slot.render(object_layer_render_instance)
+                bag_slot.render(object_layer_render_instance, mouse_x, mouse_y)

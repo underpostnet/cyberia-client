@@ -496,11 +496,15 @@ class NetworkStateClient:
             # Handle clicks for the new bag modals first, if they are active
             if self.show_modal_bag_view:
                 # Check if the bag view modal itself was clicked
+                # This needs to be done before its child elements, so it can "consume" the click
                 if self.modal_bag_view.check_click(
                     mouse_x, mouse_y, is_mouse_left_button_pressed
                 ):
-                    modal_was_clicked_this_frame = True
+                    modal_was_clicked_this_frame = (
+                        True  # Click was handled by the bag view modal itself
+                    )
 
+                # Then check the close button
                 if self.modal_bag_close_btn.check_click(
                     mouse_x, mouse_y, is_mouse_left_button_pressed
                 ):
@@ -706,9 +710,11 @@ class NetworkStateClient:
                         #     f"NetworkStateClient: Player's current object_layer_ids: {player_obj_layer_ids}"
                         # )
 
-                # Pass the player's object layer IDs through data_to_pass
+                # Pass the player's object layer IDs through data_to_pass, along with mouse coords
                 self.modal_bag_view.data_to_pass = {
-                    "player_object_layer_ids": player_obj_layer_ids
+                    "player_object_layer_ids": player_obj_layer_ids,
+                    "mouse_x": mouse_x,
+                    "mouse_y": mouse_y,
                 }
                 self.modal_bag_view.render(self.object_layer_render, mouse_x, mouse_y)
 

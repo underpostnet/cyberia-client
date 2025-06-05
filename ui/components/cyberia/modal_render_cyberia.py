@@ -79,13 +79,19 @@ def render_modal_bag_view_content(
     if data_to_pass and "player_object_layer_ids" in data_to_pass:
         player_object_layer_ids = data_to_pass["player_object_layer_ids"]
 
-    # logging.info(
-    #     f"render_modal_bag_view_content: Calling BagCyberiaView.render_content with player_object_layer_ids: {player_object_layer_ids}"
-    # )
+    mouse_x = data_to_pass.get("mouse_x", -1)
+    mouse_y = data_to_pass.get("mouse_y", -1)
 
     # Now calling the static method from the BagCyberiaView class with the new argument
     BagCyberiaView.render_content(
-        object_layer_render_instance, x, y, width, height, player_object_layer_ids
+        object_layer_render_instance,
+        x,
+        y,
+        width,
+        height,
+        player_object_layer_ids,
+        mouse_x,
+        mouse_y,
     )
 
 
@@ -196,7 +202,7 @@ def render_modal_object_layer_item_content(
     typically for inventory display of "skin" items.
     The animation is set to DOWN_WALKING_IDLE and will now animate.
     """
-    object_layer_id = modal_component.object_layer_id_to_render
+    object_layer_id = modal_component.object_layer_id_to_render  # Access directly
     if not object_layer_id:
         logging.warning(
             "No object_layer_id_to_render specified for modal_object_layer_item_content."
