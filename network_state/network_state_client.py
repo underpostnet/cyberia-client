@@ -30,7 +30,7 @@ from network_state.network_state import NetworkState
 from network_state.network_object_factory import NetworkObjectFactory
 from network_state.network_state_proxy import NetworkStateProxy
 from network_state.astar import astar
-from ui.modal import Modal
+from ui.components.core.modal_core_component import ModalCoreComponent
 from object_layer.camera_manager import CameraManager  # Import the new CameraManager
 
 
@@ -168,7 +168,7 @@ class NetworkStateClient:
 
         # Initialize the single large modal for quest interaction (top-right)
         # Using explicit values for width, height, padding_top, and padding_right
-        self.modal_quest_discovery = Modal(
+        self.modal_quest_discovery = ModalCoreComponent(
             screen_width=SCREEN_WIDTH,
             screen_height=SCREEN_HEIGHT,
             render_content_callback=self._render_modal_quest_discovery_content,
@@ -192,7 +192,7 @@ class NetworkStateClient:
             horizontal_offset = i * (
                 40 + 5
             )  # Explicit values for width (40) and padding (5)
-            modal = Modal(
+            modal = ModalCoreComponent(
                 screen_width=SCREEN_WIDTH,
                 screen_height=SCREEN_HEIGHT,
                 render_content_callback=self._render_modal_btn_icon_content,

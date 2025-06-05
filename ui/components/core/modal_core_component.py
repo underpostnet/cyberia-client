@@ -6,7 +6,7 @@ logging.basicConfig(
 )
 
 
-class Modal:
+class ModalCoreComponent:
     """
     A UI component responsible for rendering a fixed-position modal overlay.
     It renders a transparent bar at a specified position on the screen.
@@ -25,7 +25,7 @@ class Modal:
         background_color: Color = Color(0, 0, 0, 150),
     ):
         """
-        Initializes the Modal.
+        Initializes the ModalCoreComponent.
 
         Args:
             screen_width: The width of the game screen.
