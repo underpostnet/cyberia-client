@@ -51,13 +51,41 @@ class ModalCoreComponent:
         self.padding_right = padding_right
         self.horizontal_offset = horizontal_offset
         self.icon_texture = icon_texture  # Store the icon texture
-        self.is_hovered = False  # New state for hover effect
+        self.is_hovered = False  # State for hover effect
+        self.is_clicked = False  # New state for click detection
 
         # Position the modal at the bottom-right with specified padding and offset
         self.x = (
             self.screen_width - self.width - self.padding_right - self.horizontal_offset
         )
         self.y = self.screen_height - self.height - self.padding_bottom
+
+    def check_click(
+        self, mouse_x: int, mouse_y: int, is_mouse_button_pressed: bool
+    ) -> bool:
+        """
+        Checks if the modal was clicked in the current frame.
+        Updates hover state and sets is_clicked if a click occurred within its bounds.
+
+        Args:
+            mouse_x: Current X coordinate of the mouse.
+            mouse_y: Current Y coordinate of the mouse.
+            is_mouse_button_pressed: Boolean indicating if the primary mouse button is pressed.
+
+        Returns:
+            True if the modal was clicked in this frame, False otherwise.
+        """
+        # Update hover state
+        self.is_hovered = (
+            mouse_x >= self.x
+            and mouse_x <= (self.x + self.width)
+            and mouse_y >= self.y
+            and mouse_y <= (self.y + self.height)
+        )
+
+        # Update click state
+        self.is_clicked = self.is_hovered and is_mouse_button_pressed
+        return self.is_clicked
 
     def render(
         self, object_layer_render_instance, mouse_x: int = -1, mouse_y: int = -1
@@ -72,7 +100,7 @@ class ModalCoreComponent:
             mouse_x: Current X coordinate of the mouse.
             mouse_y: Current Y coordinate of the mouse.
         """
-        # Update hover state
+        # Update hover state (redundant if check_click is called first, but kept for standalone render calls)
         self.is_hovered = (
             mouse_x >= self.x
             and mouse_x <= (self.x + self.width)

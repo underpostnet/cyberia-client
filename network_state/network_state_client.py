@@ -496,6 +496,9 @@ class NetworkStateClient:
 
             mouse_pos = get_mouse_position()
             mouse_x, mouse_y = int(mouse_pos.x), int(mouse_pos.y)
+            is_mouse_left_button_pressed = (
+                self.object_layer_render.is_mouse_button_pressed(MOUSE_BUTTON_LEFT)
+            )
 
             # Handle window resize
             if is_window_resized():
@@ -555,7 +558,22 @@ class NetworkStateClient:
                 )
             )
 
-            if self.object_layer_render.is_mouse_button_pressed(MOUSE_BUTTON_LEFT):
+            # Check for modal clicks BEFORE processing world clicks
+            modal_was_clicked_this_frame = False
+            if self.show_modal_quest_discovery:
+                if self.modal_quest_discovery.check_click(
+                    mouse_x, mouse_y, is_mouse_left_button_pressed
+                ):
+                    modal_was_clicked_this_frame = True
+
+            for modal in self.modal_btn_icon_modals:
+                if modal.check_click(mouse_x, mouse_y, is_mouse_left_button_pressed):
+                    modal_was_clicked_this_frame = True
+                    # Optionally, add specific logic for each button modal here
+                    # For example: if modal.icon_texture == self.modal_icons[0]: # Character button clicked
+
+            # Only process world clicks if no modal was clicked
+            if not modal_was_clicked_this_frame and is_mouse_left_button_pressed:
                 # Pass camera from camera_manager to get_world_mouse_position
                 world_mouse_pos = self.object_layer_render.get_world_mouse_position(
                     self.camera_manager.camera
@@ -721,6 +739,7 @@ class NetworkStateClient:
                         Color(*UI_TEXT_COLOR_PRIMARY),
                     )
 
+            # Render modals AFTER world rendering to ensure they are on top
             if self.show_modal_quest_discovery:
                 # Pass mouse_x, mouse_y to enable hover effect logic in ModalCoreComponent
                 self.modal_quest_discovery.render(
