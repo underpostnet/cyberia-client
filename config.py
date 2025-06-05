@@ -30,7 +30,7 @@ UI_FONT_SIZE = 18  # Reduced font size for all UI text
 BAG_INVENTORY_ROWS = 5
 BAG_INVENTORY_COLS = 6
 BAG_SLOT_SIZE = 40  # Each slot will be 40px x 40px
-BAG_SLOT_PADDING = 3  # Padding between slots
+BAG_SLOT_PADDING = 10  # Padding between slots
 
 # Network object type to object layer IDs mapping
 NETWORK_OBJECT_TYPE_DEFAULT_OBJECT_LAYER_IDS = {
