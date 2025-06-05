@@ -4,19 +4,24 @@ from config import (
     UI_FONT_SIZE,
     UI_TEXT_COLOR_PRIMARY,
     UI_TEXT_COLOR_SHADING,
-    BAG_INVENTORY_ROWS,
-    BAG_INVENTORY_COLS,
-    BAG_SLOT_SIZE,  # Imported from config
-    BAG_SLOT_PADDING,  # Imported from config
 )
 from object_layer.object_layer_render import ObjectLayerRender
 from ui.components.cyberia.modal_render_cyberia import (
     render_modal_object_layer_item_content,
 )
+from ui.components.core.modal_core_component import (
+    ModalCoreComponent,
+)  # Changed import back
 
 logging.basicConfig(
     level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s"
 )
+
+# Explicitly set bag inventory constants
+BAG_INVENTORY_ROWS = 5
+BAG_INVENTORY_COLS = 6
+BAG_SLOT_SIZE = 40
+BAG_SLOT_PADDING = 10
 
 
 class BagCyberiaSlot:
@@ -71,9 +76,6 @@ class BagCyberiaSlot:
         )
         # Draw slot border (slightly larger rectangle then inner filled rectangle)
         object_layer_render_instance.draw_rectangle(
-            self.x, self.y, self.width, self.height, self.border_color
-        )
-        object_layer_render_instance.draw_rectangle(
             self.x + 1,
             self.y + 1,
             self.width - 2,
@@ -88,11 +90,16 @@ class BagCyberiaSlot:
 
             # Create a dummy object to mimic ModalCoreComponent for passing data
             # This allows render_modal_object_layer_item_content to access the ID
-            class DummyModalComponent:
-                def __init__(self, obj_id):
-                    self.object_layer_id_to_render = obj_id
-
-            dummy_modal = DummyModalComponent(self.object_layer_id_to_render)
+            dummy_modal = ModalCoreComponent(  # Changed to ModalCoreComponent
+                screen_width=0,  # Not relevant for this specific usage
+                screen_height=0,  # Not relevant for this specific usage
+                render_content_callback=None,  # Will be overridden by the specific render function
+                width=self.width,
+                height=self.height,
+            )
+            # Assign the object_layer_id_to_render directly to the dummy_modal
+            # This is specifically for render_modal_object_layer_item_content to access it
+            dummy_modal.object_layer_id_to_render = self.object_layer_id_to_render
 
             render_modal_object_layer_item_content(
                 dummy_modal,  # Pass the dummy component

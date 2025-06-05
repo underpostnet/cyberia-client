@@ -26,12 +26,6 @@ UI_TEXT_COLOR_PRIMARY = (255, 204, 0, 255)  # RGBA for yellow/orange
 UI_TEXT_COLOR_SHADING = (0, 0, 0, 255)  # RGBA for black (shading)
 UI_FONT_SIZE = 18  # Reduced font size for all UI text
 
-# Bag Inventory Settings
-BAG_INVENTORY_ROWS = 5
-BAG_INVENTORY_COLS = 6
-BAG_SLOT_SIZE = 40  # Each slot will be 40px x 40px
-BAG_SLOT_PADDING = 10  # Padding between slots
-
 # Network object type to object layer IDs mapping
 NETWORK_OBJECT_TYPE_DEFAULT_OBJECT_LAYER_IDS = {
     "PLAYER": ["ACTION_AREA", "ANON"],

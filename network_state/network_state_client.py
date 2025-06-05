@@ -495,6 +495,12 @@ class NetworkStateClient:
 
             # Handle clicks for the new bag modals first, if they are active
             if self.show_modal_bag_view:
+                # Check if the bag view modal itself was clicked
+                if self.modal_bag_view.check_click(
+                    mouse_x, mouse_y, is_mouse_left_button_pressed
+                ):
+                    modal_was_clicked_this_frame = True
+
                 if self.modal_bag_close_btn.check_click(
                     mouse_x, mouse_y, is_mouse_left_button_pressed
                 ):

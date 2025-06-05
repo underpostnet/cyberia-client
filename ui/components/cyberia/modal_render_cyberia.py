@@ -4,7 +4,6 @@ from config import (
     UI_FONT_SIZE,
     UI_TEXT_COLOR_PRIMARY,
     UI_TEXT_COLOR_SHADING,
-    BAG_SLOT_SIZE,  # Imported from config
 )
 from object_layer.object_layer_render import ObjectLayerRender
 
@@ -17,6 +16,12 @@ from object_layer.object_layer_data import (
 logging.basicConfig(
     level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s"
 )
+
+# Explicitly set bag inventory constants
+BAG_INVENTORY_ROWS = 5
+BAG_INVENTORY_COLS = 6
+BAG_SLOT_SIZE = 40
+BAG_SLOT_PADDING = 10
 
 
 def render_modal_quest_discovery_content(
@@ -178,7 +183,7 @@ def render_modal_btn_icon_content(
 
 
 def render_modal_object_layer_item_content(
-    modal_component,  # This will be a DummyModalComponent holding object_layer_id_to_render
+    modal_component,  # This will be a ModalCoreComponent holding object_layer_id_to_render
     object_layer_render_instance: ObjectLayerRender,
     x: int,
     y: int,
