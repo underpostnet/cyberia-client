@@ -24,6 +24,7 @@ class ModalCoreComponent:
         horizontal_offset: int = 0,
         background_color: Color = Color(0, 0, 0, 150),
         icon_texture=None,
+        title_text: str = "",  # New: Default title for the modal
     ):
         """
         Initializes the ModalCoreComponent.
@@ -40,6 +41,7 @@ class ModalCoreComponent:
             horizontal_offset: Horizontal offset for positioning multiple modals.
             background_color: The background color of the modal.
             icon_texture: The raylibpy Texture object for the icon, if any.
+            title_text: The initial title text for the modal.
         """
         self.screen_width = screen_width
         self.screen_height = screen_height
@@ -54,12 +56,17 @@ class ModalCoreComponent:
         self.is_hovered = False  # State for hover effect
         self.is_clicked = False  # New state for click detection
         self.data_to_pass = {}  # New attribute to pass additional data to the callback
+        self.title_text = title_text  # Store the title text
 
         # Position the modal at the bottom-right with specified padding and offset
         self.x = (
             self.screen_width - self.width - self.padding_right - self.horizontal_offset
         )
         self.y = self.screen_height - self.height - self.padding_bottom
+
+    def set_title(self, new_title: str):
+        """Sets the title text for the modal."""
+        self.title_text = new_title
 
     def check_click(
         self, mouse_x: int, mouse_y: int, is_mouse_button_pressed: bool
@@ -113,6 +120,9 @@ class ModalCoreComponent:
         object_layer_render_instance.draw_rectangle(
             self.x, self.y, self.width, self.height, self.background_color
         )
+
+        # Pass the current title text to the render_content_callback
+        self.data_to_pass["title_text"] = self.title_text
 
         # Call the external callback to render content within the modal's bounds
         self.render_content_callback(

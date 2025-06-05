@@ -70,21 +70,28 @@ def render_modal_bag_view_content(
 ):
     """
     Renders content specific to the bag view modal.
-    Delegates rendering to the BagCyberiaView class, passing player's object layer IDs.
+    Delegates rendering to the BagCyberiaView instance, passing player's object layer IDs
+    and current mouse coordinates.
     """
     # Import BagCyberiaView locally to avoid circular dependency at top-level
     from ui.views.cyberia.bag_cyberia_view import BagCyberiaView
 
-    player_object_layer_ids = []
-    if data_to_pass and "player_object_layer_ids" in data_to_pass:
-        player_object_layer_ids = data_to_pass["player_object_layer_ids"]
+    bag_view_instance: BagCyberiaView = data_to_pass.get("bag_view_instance")
+    if not bag_view_instance:
+        logging.error(
+            "BagCyberiaView instance not passed to render_modal_bag_view_content."
+        )
+        return
 
+    player_object_layer_ids = data_to_pass.get("player_object_layer_ids", [])
     mouse_x = data_to_pass.get("mouse_x", -1)
     mouse_y = data_to_pass.get("mouse_y", -1)
 
-    # Now calling the static method from the BagCyberiaView class with the new argument
-    BagCyberiaView.render_content(
-        object_layer_render_instance,
+    # Update modal_component's title to match BagCyberiaView's internal title
+    modal_component.set_title(bag_view_instance.title_text)
+
+    # The BagCyberiaView instance now handles its own content rendering logic (grid vs. single item)
+    bag_view_instance.render_content(
         x,
         y,
         width,
@@ -105,8 +112,8 @@ def render_modal_close_btn_content(
     data_to_pass: dict = None,
 ):
     """
-    Renders content specific to the close button modal.
-    Draws the close icon within the button's bounds.
+    Renders content specific to the close button modal or any button with an icon.
+    Draws the icon within the button's bounds or fallback text.
     """
     icon_texture = modal_component.icon_texture
     current_padding = (
@@ -124,8 +131,8 @@ def render_modal_close_btn_content(
             current_padding,
         )
     else:
-        # Fallback text if icon not loaded
-        modal_text = "X"
+        # Fallback text if icon not loaded, use modal's title text
+        modal_text = modal_component.title_text if modal_component.title_text else "X"
         text_width = object_layer_render_instance.measure_text(modal_text, UI_FONT_SIZE)
         text_x = x + (width - text_width) // 2
         text_y = y + (height - UI_FONT_SIZE) // 2
@@ -209,10 +216,6 @@ def render_modal_object_layer_item_content(
         )
         return
 
-    # logging.info(
-    #     f"render_modal_object_layer_item_content: Rendering object layer ID: {object_layer_id}"
-    # )
-
     # Get the object layer definition to determine matrix dimension and other properties
     object_layer_info = object_layer_render_instance.get_object_layer_definition(
         object_layer_id
@@ -240,7 +243,7 @@ def render_modal_object_layer_item_content(
         return
 
     # Calculate pixel size to fit exactly within the slot, using integer division for precision
-    pixel_size_in_display = BAG_SLOT_SIZE // matrix_dimension
+    pixel_size_in_display = width // matrix_dimension
     if pixel_size_in_display == 0:
         pixel_size_in_display = 1
 
@@ -249,8 +252,8 @@ def render_modal_object_layer_item_content(
     rendered_height = pixel_size_in_display * matrix_dimension
 
     # Calculate offset to center the rendered animation within the slot
-    offset_x = (BAG_SLOT_SIZE - rendered_width) // 2
-    offset_y = (BAG_SLOT_SIZE - rendered_height) // 2
+    offset_x = (width - rendered_width) // 2
+    offset_y = (height - rendered_height) // 2
 
     # Get or create the animation instance for this specific item in the bag context
     # Use a unique ID for the animation instance to avoid conflicts with world objects
