@@ -49,11 +49,21 @@ class GridCoreComponent:
         self.slot_hover_color = slot_hover_color
         self.slot_selected_color = slot_selected_color
 
-        self.total_grid_width = (
-            self.num_cols * (self.item_width + self.item_padding) - self.item_padding
-        )
-        self.total_grid_height = (
-            self.num_rows * (self.item_height + self.item_padding) - self.item_padding
+        self.total_grid_width = self._calculate_total_grid_width()
+        self.total_grid_height = self._calculate_total_grid_height()
+
+    def _calculate_total_grid_width(self) -> int:
+        """Calculates the total width of the grid."""
+        if self.num_cols == 0:
+            return 0
+        return self.num_cols * self.item_width + (self.num_cols - 1) * self.item_padding
+
+    def _calculate_total_grid_height(self) -> int:
+        """Calculates the total height of the grid."""
+        if self.num_rows == 0:
+            return 0
+        return (
+            self.num_rows * self.item_height + (self.num_rows - 1) * self.item_padding
         )
 
     def update_grid_dimensions(self, new_rows: int = None, new_cols: int = None):
@@ -63,17 +73,20 @@ class GridCoreComponent:
         if new_cols is not None:
             self.num_cols = new_cols
 
-        self.total_grid_width = (
-            self.num_cols * (self.item_width + self.item_padding) - self.item_padding
-        )
-        self.total_grid_height = (
-            self.num_rows * (self.item_height + self.item_padding) - self.item_padding
-        )
-        # Ensure minimum dimensions if grid becomes empty
-        if self.num_rows == 0:
-            self.total_grid_height = 0
-        if self.num_cols == 0:
-            self.total_grid_width = 0
+        self.total_grid_width = self._calculate_total_grid_width()
+        self.total_grid_height = self._calculate_total_grid_height()
+
+    def calculate_centered_offset_x(self, container_width: int) -> int:
+        """
+        Calculates the X offset needed to center the grid horizontally within a container.
+
+        Args:
+            container_width: The width of the container.
+
+        Returns:
+            The X offset for centering.
+        """
+        return (container_width - self.total_grid_width) // 2
 
     def render(
         self,

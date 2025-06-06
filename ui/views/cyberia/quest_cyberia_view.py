@@ -152,6 +152,7 @@ class QuestCyberiaView:
 
     def _render_single_quest_detail(
         self,
+        modal_component,  # Added modal_component to access its set_title method
         x: int,
         y: int,
         width: int,
@@ -175,6 +176,7 @@ class QuestCyberiaView:
         self.title_text = (
             title  # Update QuestCyberiaView's internal title (for modal to pick up)
         )
+        modal_component.set_title(self.title_text)  # Set the modal's title
 
         # Draw Title
         title_width = self.object_layer_render.measure_text(title, UI_FONT_SIZE + 5)
@@ -302,6 +304,7 @@ class QuestCyberiaView:
 
     def render_content(
         self,
+        modal_component,  # Added modal_component
         x: int,
         y: int,
         width: int,
@@ -319,7 +322,8 @@ class QuestCyberiaView:
         """
         if self.selected_quest_index is None:
             # Render the quest list
-            self.title_text = "Quests"  # Reset title for list view
+            self.title_text = "Quests"  # Reset internal title for list view
+            modal_component.set_title(self.title_text)  # Set the modal's title
 
             # Draw the title for the grid
             title_text = self.title_text
@@ -348,9 +352,14 @@ class QuestCyberiaView:
             # Adjust grid offset to make space for the title
             grid_offset_y = y + title_font_size + 30  # 30 pixels padding after title
 
+            # Calculate horizontal offset to center the grid using the new method
+            centered_grid_x_offset = self.grid_component.calculate_centered_offset_x(
+                width
+            )
+
             self.grid_component.update_grid_dimensions(len(self.quests), 1)
             self.grid_component.render(
-                offset_x=x,
+                offset_x=x + centered_grid_x_offset,  # Apply centering offset
                 offset_y=grid_offset_y,
                 container_width=width,
                 container_height=height
@@ -366,6 +375,7 @@ class QuestCyberiaView:
             # Render single quest detail view
             selected_quest_data = self.quests[self.selected_quest_index]
             self._render_single_quest_detail(
+                modal_component,  # Pass modal_component
                 x,
                 y,
                 width,
@@ -397,8 +407,12 @@ class QuestCyberiaView:
             title_font_size = UI_FONT_SIZE + 2
             grid_offset_y = offset_y + title_font_size + 30
 
+            centered_grid_x_offset = self.grid_component.calculate_centered_offset_x(
+                container_width
+            )
+
             clicked_index = self.grid_component.get_clicked_item_index(
-                offset_x=offset_x,
+                offset_x=offset_x + centered_grid_x_offset,  # Apply centering offset
                 offset_y=grid_offset_y,  # Use adjusted offset for click detection
                 mouse_x=mouse_x,
                 mouse_y=mouse_y,

@@ -82,11 +82,10 @@ def render_modal_bag_view_content(
     mouse_y = data_to_pass.get("mouse_y", -1)
     is_mouse_button_pressed = data_to_pass.get("is_mouse_button_pressed", False)
 
-    # Update modal_component's title to match BagCyberiaView's internal title
-    modal_component.set_title(bag_view_instance.title_text)
-
     # The BagCyberiaView instance now handles its own content rendering logic (grid vs. single item)
+    # and also sets the modal_component's title.
     bag_view_instance.render_content(
+        modal_component,  # Pass modal_component to the view
         x,
         y,
         width,
@@ -95,6 +94,149 @@ def render_modal_bag_view_content(
         mouse_x,
         mouse_y,
         is_mouse_button_pressed,
+    )
+
+
+def render_modal_quest_list_content(
+    modal_component,
+    object_layer_render_instance: ObjectLayerRender,
+    x: int,
+    y: int,
+    width: int,
+    height: int,
+    data_to_pass: dict = None,
+):
+    """
+    Renders content specific to the quest list modal.
+    Delegates rendering to the QuestCyberiaView instance.
+    """
+    from ui.views.cyberia.quest_cyberia_view import QuestCyberiaView
+
+    quest_view_instance: QuestCyberiaView = data_to_pass.get("quest_view_instance")
+    if not quest_view_instance:
+        logging.error(
+            "QuestCyberiaView instance not passed to render_modal_quest_list_content."
+        )
+        return
+
+    mouse_x = data_to_pass.get("mouse_x", -1)
+    mouse_y = data_to_pass.get("mouse_y", -1)
+    is_mouse_button_pressed = data_to_pass.get("is_mouse_button_pressed", False)
+
+    quest_view_instance.render_content(
+        modal_component,  # Pass modal_component to the view
+        x,
+        y,
+        width,
+        height,
+        mouse_x,
+        mouse_y,
+        is_mouse_button_pressed,
+    )
+
+
+def render_modal_character_view_content(
+    modal_component,
+    object_layer_render_instance: ObjectLayerRender,
+    x: int,
+    y: int,
+    width: int,
+    height: int,
+    data_to_pass: dict = None,
+):
+    """
+    Renders content specific to the character view modal.
+    """
+    modal_component.set_title("Character")
+    modal_text = "Character View (Under Construction)"
+    text_width = object_layer_render_instance.measure_text(modal_text, UI_FONT_SIZE)
+
+    text_x = x + (width - text_width) // 2
+    text_y = y + (height - UI_FONT_SIZE) // 2
+
+    object_layer_render_instance.draw_text(
+        modal_text,
+        text_x + 1,
+        text_y + 1,
+        UI_FONT_SIZE,
+        Color(*UI_TEXT_COLOR_SHADING),
+    )
+    object_layer_render_instance.draw_text(
+        modal_text,
+        text_x,
+        text_y,
+        UI_FONT_SIZE,
+        Color(*UI_TEXT_COLOR_PRIMARY),
+    )
+
+
+def render_modal_chat_view_content(
+    modal_component,
+    object_layer_render_instance: ObjectLayerRender,
+    x: int,
+    y: int,
+    width: int,
+    height: int,
+    data_to_pass: dict = None,
+):
+    """
+    Renders content specific to the chat view modal.
+    """
+    modal_component.set_title("Chat")
+    modal_text = "Chat View (Under Construction)"
+    text_width = object_layer_render_instance.measure_text(modal_text, UI_FONT_SIZE)
+
+    text_x = x + (width - text_width) // 2
+    text_y = y + (height - UI_FONT_SIZE) // 2
+
+    object_layer_render_instance.draw_text(
+        modal_text,
+        text_x + 1,
+        text_y + 1,
+        UI_FONT_SIZE,
+        Color(*UI_TEXT_COLOR_SHADING),
+    )
+    object_layer_render_instance.draw_text(
+        modal_text,
+        text_x,
+        text_y,
+        UI_FONT_SIZE,
+        Color(*UI_TEXT_COLOR_PRIMARY),
+    )
+
+
+def render_modal_map_view_content(
+    modal_component,
+    object_layer_render_instance: ObjectLayerRender,
+    x: int,
+    y: int,
+    width: int,
+    height: int,
+    data_to_pass: dict = None,
+):
+    """
+    Renders content specific to the map view modal.
+    """
+    modal_component.set_title("Map")
+    modal_text = "Map View (Under Construction)"
+    text_width = object_layer_render_instance.measure_text(modal_text, UI_FONT_SIZE)
+
+    text_x = x + (width - text_width) // 2
+    text_y = y + (height - UI_FONT_SIZE) // 2
+
+    object_layer_render_instance.draw_text(
+        modal_text,
+        text_x + 1,
+        text_y + 1,
+        UI_FONT_SIZE,
+        Color(*UI_TEXT_COLOR_SHADING),
+    )
+    object_layer_render_instance.draw_text(
+        modal_text,
+        text_x,
+        text_y,
+        UI_FONT_SIZE,
+        Color(*UI_TEXT_COLOR_PRIMARY),
     )
 
 
@@ -171,7 +313,7 @@ def render_modal_btn_icon_content(
         )
     else:
         # Fallback to placeholder text if icon not loaded
-        modal_text = "BTN"
+        modal_text = modal_component.title_text if modal_component.title_text else "BTN"
         text_width = object_layer_render_instance.measure_text(modal_text, UI_FONT_SIZE)
         text_x = x + (width - text_width) // 2
         text_y = y + (height - UI_FONT_SIZE) // 2

@@ -164,6 +164,7 @@ class BagCyberiaView:
 
     def _render_single_item_detail(
         self,
+        modal_component,  # Added modal_component to access its set_title method
         x: int,
         y: int,
         width: int,
@@ -181,7 +182,9 @@ class BagCyberiaView:
 
         # Title for the item
         item_name = self.selected_object_layer_id.replace("_", " ").title()
-        self.title_text = item_name  # Update modal title
+        self.title_text = item_name  # Update internal title
+        modal_component.set_title(self.title_text)  # Set the modal's title
+
         text_width = self.object_layer_render.measure_text(item_name, UI_FONT_SIZE + 5)
         self.object_layer_render.draw_text(
             item_name,
@@ -300,6 +303,7 @@ class BagCyberiaView:
 
     def render_content(
         self,
+        modal_component,  # Added modal_component
         x: int,
         y: int,
         width: int,
@@ -322,7 +326,8 @@ class BagCyberiaView:
 
         if self.selected_object_layer_id is None:
             # Render the inventory grid
-            self.title_text = "Bag"  # Reset title for grid view
+            self.title_text = "Bag"  # Reset internal title for grid view
+            modal_component.set_title(self.title_text)  # Set the modal's title
 
             # Draw the title for the grid
             title_text = self.title_text
@@ -351,11 +356,10 @@ class BagCyberiaView:
             # Adjust grid offset to make space for the title
             grid_offset_y = y + title_font_size + 30  # 30 pixels padding after title
 
-            # Calculate horizontal offset to center the grid
-            total_grid_width = (
-                self.grid_component.num_cols * self.grid_component.item_width
-            ) + ((self.grid_component.num_cols - 1) * self.grid_component.item_padding)
-            centered_grid_x_offset = (width - total_grid_width) // 2
+            # Calculate horizontal offset to center the grid using the new method
+            centered_grid_x_offset = self.grid_component.calculate_centered_offset_x(
+                width
+            )
 
             self.grid_component.render(
                 offset_x=x + centered_grid_x_offset,  # Apply centering offset
@@ -373,6 +377,7 @@ class BagCyberiaView:
         else:
             # Render single item detail view
             self._render_single_item_detail(
+                modal_component,  # Pass modal_component
                 x,
                 y,
                 width,
@@ -416,10 +421,9 @@ class BagCyberiaView:
             grid_offset_y = offset_y + title_font_size + 30
 
             # Calculate horizontal offset to center the grid for click detection
-            total_grid_width = (
-                self.grid_component.num_cols * self.grid_component.item_width
-            ) + ((self.grid_component.num_cols - 1) * self.grid_component.item_padding)
-            centered_grid_x_offset = (container_width - total_grid_width) // 2
+            centered_grid_x_offset = self.grid_component.calculate_centered_offset_x(
+                container_width
+            )
 
             clicked_index = self.grid_component.get_clicked_item_index(
                 offset_x=offset_x + centered_grid_x_offset,  # Apply centering offset
