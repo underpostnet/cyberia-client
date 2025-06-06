@@ -38,6 +38,7 @@ from ui.components.core.modal_core_component import ModalCoreComponent
 from object_layer.camera_manager import CameraManager
 from ui.views.cyberia.bag_cyberia_view import BagCyberiaView
 from ui.views.cyberia.quest_cyberia_view import QuestCyberiaView
+from ui.views.cyberia.character_cyberia_view import CharacterCyberiaView
 
 # Import rendering utilities from the new path
 from ui.components.cyberia.modal_render_cyberia import (
@@ -238,6 +239,11 @@ class NetworkStateClient:
         )
         self.show_modal_quest_list_view = False
 
+        # Initialize CharacterCyberiaView instance (stateful)
+        self.character_cyberia_view = CharacterCyberiaView(
+            object_layer_render_instance=self.object_layer_render
+        )
+
         # Initialize Character View Modal
         self.modal_character_view = ModalCoreComponent(
             screen_width=SCREEN_WIDTH,
@@ -249,7 +255,7 @@ class NetworkStateClient:
             padding_right=0,
             horizontal_offset=0,
             background_color=Color(0, 0, 0, 200),
-            title_text="Character",
+            title_text=self.character_cyberia_view.title_text,
         )
         self.show_modal_character_view = False
 
@@ -350,6 +356,21 @@ class NetworkStateClient:
             icon_texture=self.arrow_left_icon_texture,  # Reusing arrow-left icon
         )
         self.show_modal_quest_to_list_btn = False
+
+        # New: Initialize the "Back to Character Grid" button
+        self.modal_character_to_grid_btn = ModalCoreComponent(
+            screen_width=SCREEN_WIDTH,
+            screen_height=SCREEN_HEIGHT,
+            render_content_callback=partial(render_modal_close_btn_content),
+            width=30,
+            height=30,
+            padding_bottom=SCREEN_HEIGHT - 35,
+            padding_right=5 + 30 + 5,  # Positioned next to close button
+            horizontal_offset=0,
+            background_color=Color(10, 10, 10, 100),
+            icon_texture=self.arrow_left_icon_texture,
+        )
+        self.show_modal_character_to_grid_btn = False
 
         # Initialize the five small modals for UI MMO boxes (bottom-right)
         self.modal_btn_icon_modals = []
@@ -528,11 +549,11 @@ class NetworkStateClient:
         self.show_modal_right_panel_close_btn = False
         self.show_modal_bag_to_grid_btn = False
         self.show_modal_quest_to_list_btn = False
+        self.show_modal_character_to_grid_btn = False  # New: Hide character back button
         self.active_right_panel_modal = None
 
         # Reset modal titles to their default *only if they are views without internal state*
-        # Views with internal state (Bag, Quest) will handle their own title setting
-        self.modal_character_view.set_title("Character")
+        # Views with internal state (Bag, Quest, Character) will handle their own title setting
         self.modal_chat_view.set_title("Chat")
         self.modal_map_view.set_title("Map")
 
@@ -603,7 +624,11 @@ class NetworkStateClient:
                 self.modal_right_panel_close_btn.y = 5  # 5px padding from top
 
                 # Update back buttons dimensions and position
-                for modal in [self.modal_bag_to_grid_btn, self.modal_quest_to_list_btn]:
+                for modal in [
+                    self.modal_bag_to_grid_btn,
+                    self.modal_quest_to_list_btn,
+                    self.modal_character_to_grid_btn,
+                ]:  # New: include character back button
                     modal.screen_width = new_screen_width
                     modal.screen_height = new_screen_height
                     modal.x = self.modal_right_panel_close_btn.x - modal.width - 5
@@ -676,6 +701,8 @@ class NetworkStateClient:
                         self.bag_cyberia_view.reset_view()
                     elif self.active_right_panel_modal == "quest":
                         self.quest_cyberia_view.reset_view()
+                    elif self.active_right_panel_modal == "character":
+                        self.character_cyberia_view.reset_view()
                     # Then hide all modals
                     self._hide_all_right_panel_modals()
                     modal_was_clicked_this_frame = True  # Consume the click
@@ -757,12 +784,44 @@ class NetworkStateClient:
                         self.show_modal_quest_to_list_btn = (
                             self.quest_cyberia_view.selected_quest_index is not None
                         )
-            # Generic handling for other right panel modals (no complex internal clicks yet)
             elif self.show_modal_character_view:
-                if current_mouse_is_pressed and self.modal_character_view.check_click(
-                    mouse_x, mouse_y, current_mouse_is_pressed
+                if current_mouse_is_pressed and (
+                    mouse_x >= self.modal_character_view.x
+                    and mouse_x
+                    <= (self.modal_character_view.x + self.modal_character_view.width)
+                    and mouse_y >= self.modal_character_view.y
+                    and mouse_y
+                    <= (self.modal_character_view.y + self.modal_character_view.height)
                 ):
                     modal_was_clicked_this_frame = True
+
+                # New: Handle character back button click
+                if (
+                    self.show_modal_character_to_grid_btn
+                    and self.modal_character_to_grid_btn.check_click(
+                        mouse_x, mouse_y, current_mouse_is_pressed
+                    )
+                ):
+                    logging.info(
+                        "Back to Character Grid button clicked. Resetting character view."
+                    )
+                    self.character_cyberia_view.reset_view()
+                    self.show_modal_character_to_grid_btn = False
+
+                elif current_mouse_is_pressed:
+                    if self.character_cyberia_view.handle_slot_clicks(
+                        self.modal_character_view.x,
+                        self.modal_character_view.y,
+                        self.modal_character_view.width,
+                        self.modal_character_view.height,
+                        mouse_x,
+                        mouse_y,
+                        current_mouse_is_pressed,
+                    ):
+                        self.show_modal_character_to_grid_btn = (  # New: Show character back button when a detail is selected
+                            self.character_cyberia_view.selected_slot_key is not None
+                        )
+
             elif self.show_modal_chat_view:
                 if current_mouse_is_pressed and self.modal_chat_view.check_click(
                     mouse_x, mouse_y, current_mouse_is_pressed
@@ -801,6 +860,9 @@ class NetworkStateClient:
                         elif self.active_right_panel_modal == "quest":
                             self.quest_cyberia_view.reset_view()
                             logging.info("Resetting Quest view state.")
+                        elif self.active_right_panel_modal == "character":
+                            self.character_cyberia_view.reset_view()
+                            logging.info("Resetting Character view state.")
                         # Hide all modals (including the one just reset, if any)
                         self._hide_all_right_panel_modals()
 
@@ -821,7 +883,6 @@ class NetworkStateClient:
                         logging.info(f"Opened {target_modal_key} modal.")
 
                     # Update back button visibility based on the newly opened modal
-                    # This needs to be done *after* potentially opening the modal
                     self.show_modal_bag_to_grid_btn = (
                         self.show_modal_bag_view
                         and self.bag_cyberia_view.selected_object_layer_id is not None
@@ -829,6 +890,10 @@ class NetworkStateClient:
                     self.show_modal_quest_to_list_btn = (
                         self.show_modal_quest_list_view
                         and self.quest_cyberia_view.selected_quest_index is not None
+                    )
+                    self.show_modal_character_to_grid_btn = (  # New: Set character back button visibility
+                        self.show_modal_character_view
+                        and self.character_cyberia_view.selected_slot_key is not None
                     )
 
             # Only process world clicks if no modal was clicked in this frame
@@ -1031,9 +1096,16 @@ class NetworkStateClient:
                     self.quest_cyberia_view.selected_quest_index is not None
                 )
             elif self.show_modal_character_view:
+                self.modal_character_view.data_to_pass = {
+                    "character_view_instance": self.character_cyberia_view,
+                    "mouse_x": mouse_x,
+                    "mouse_y": mouse_y,
+                    "is_mouse_button_pressed": is_mouse_left_button_pressed,
+                }
                 self.modal_character_view.render(
                     self.object_layer_render, mouse_x, mouse_y
                 )
+
             elif self.show_modal_chat_view:
                 self.modal_chat_view.render(self.object_layer_render, mouse_x, mouse_y)
             elif self.show_modal_map_view:
@@ -1054,6 +1126,12 @@ class NetworkStateClient:
             # The "Back to Quest List" button is only rendered when a quest is selected AND the quest view is open
             if self.show_modal_quest_to_list_btn and self.show_modal_quest_list_view:
                 self.modal_quest_to_list_btn.render(
+                    self.object_layer_render, mouse_x, mouse_y
+                )
+
+            # New: The "Back to Character Grid" button is only rendered when an item is selected AND the character view is open
+            if self.show_modal_character_to_grid_btn and self.show_modal_character_view:
+                self.modal_character_to_grid_btn.render(
                     self.object_layer_render, mouse_x, mouse_y
                 )
 

@@ -146,27 +146,32 @@ def render_modal_character_view_content(
 ):
     """
     Renders content specific to the character view modal.
+    Delegates rendering to the CharacterCyberiaView instance.
     """
-    modal_component.set_title("Character")
-    modal_text = "Character View (Under Construction)"
-    text_width = object_layer_render_instance.measure_text(modal_text, UI_FONT_SIZE)
+    from ui.views.cyberia.character_cyberia_view import CharacterCyberiaView
 
-    text_x = x + (width - text_width) // 2
-    text_y = y + (height - UI_FONT_SIZE) // 2
-
-    object_layer_render_instance.draw_text(
-        modal_text,
-        text_x + 1,
-        text_y + 1,
-        UI_FONT_SIZE,
-        Color(*UI_TEXT_COLOR_SHADING),
+    character_view_instance: CharacterCyberiaView = data_to_pass.get(
+        "character_view_instance"
     )
-    object_layer_render_instance.draw_text(
-        modal_text,
-        text_x,
-        text_y,
-        UI_FONT_SIZE,
-        Color(*UI_TEXT_COLOR_PRIMARY),
+    if not character_view_instance:
+        logging.error(
+            "CharacterCyberiaView instance not passed to render_modal_character_view_content."
+        )
+        return
+
+    mouse_x = data_to_pass.get("mouse_x", -1)
+    mouse_y = data_to_pass.get("mouse_y", -1)
+    is_mouse_button_pressed = data_to_pass.get("is_mouse_button_pressed", False)
+
+    character_view_instance.render_content(
+        modal_component,
+        x,
+        y,
+        width,
+        height,
+        mouse_x,
+        mouse_y,
+        is_mouse_button_pressed,
     )
 
 

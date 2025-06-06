@@ -16,6 +16,7 @@ from raylibpy import (
     draw_circle,
     draw_line,
     draw_rectangle,
+    draw_rectangle_lines,  # This import is present at the top
     draw_text,
     end_drawing,
     end_mode2d,
@@ -203,7 +204,13 @@ class ObjectLayerAnimation:
         frames_list = self.frames_map.get(object_layer_key)
 
         if not frames_list:
-            return [[[0]]], self.color_map, False, 0  # Default if no frames
+            # Default if no frames, ensuring the matrix is a list of lists of integers
+            return (
+                [[[-1]]],
+                self.color_map,
+                False,
+                0,
+            )  # Changed [[0]] to [[[-1]]] to correctly represent an empty pixel
 
         current_frame_index_to_use = self.current_frame_index
         if self.is_paused:
@@ -323,6 +330,12 @@ class ObjectLayerRender:
         """Draws a filled rectangle."""
         draw_rectangle(x, y, width, height, color)
 
+    def draw_rectangle_lines(
+        self, x: int, y: int, width: int, height: int, color: Color
+    ):
+        """Draws a rectangle outline."""
+        draw_rectangle_lines(x, y, width, height, color)  # Added this missing method
+
     def draw_circle(self, center_x: int, center_y: int, radius: float, color: Color):
         """Draws a filled circle."""
         draw_circle(center_x, center_y, radius, color)
@@ -419,8 +432,10 @@ class ObjectLayerRender:
         ):
             frames_list = object_layer_info["FRAMES"].get(key)
             if frames_list and len(frames_list) > 0:
-                first_frame = frames_list[0]
-                break
+                # Assuming frames are lists of lists of integers
+                if isinstance(frames_list[0], list) and len(frames_list[0]) > 0:
+                    first_frame = frames_list[0]
+                    break
 
         if first_frame and len(first_frame) > 0:
             return len(first_frame)
@@ -800,14 +815,14 @@ class ObjectLayerRender:
             # Special handling for viewer demo to reverse directions if needed
             if not reverse:
                 direction_map = {
-                    (0, -1): Direction.DOWN,
-                    (1, -1): Direction.DOWN_LEFT,
-                    (1, 0): Direction.LEFT,
-                    (1, 1): Direction.UP_LEFT,
-                    (0, 1): Direction.UP,
-                    (-1, 1): Direction.UP_RIGHT,
-                    (-1, 0): Direction.RIGHT,
-                    (-1, -1): Direction.DOWN_RIGHT,
+                    (0, -1): Direction.DOWN,  # Original: UP
+                    (1, -1): Direction.DOWN_LEFT,  # Original: UP_RIGHT
+                    (1, 0): Direction.LEFT,  # Original: RIGHT
+                    (1, 1): Direction.UP_LEFT,  # Original: DOWN_RIGHT
+                    (0, 1): Direction.UP,  # Original: DOWN
+                    (-1, 1): Direction.UP_RIGHT,  # Original: DOWN_LEFT
+                    (-1, 0): Direction.RIGHT,  # Original: LEFT
+                    (-1, -1): Direction.DOWN_RIGHT,  # Original: UP_LEFT
                 }
 
             instantaneous_direction = direction_map.get(
