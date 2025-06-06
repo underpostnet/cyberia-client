@@ -37,6 +37,7 @@ from network_state.astar import astar
 from ui.components.core.modal_core_component import ModalCoreComponent
 from object_layer.camera_manager import CameraManager
 from ui.views.cyberia.bag_cyberia_view import BagCyberiaView
+from ui.views.cyberia.quest_cyberia_view import QuestCyberiaView
 
 # Import rendering utilities from the new path
 from ui.components.cyberia.modal_render_cyberia import (
@@ -44,7 +45,6 @@ from ui.components.cyberia.modal_render_cyberia import (
     render_modal_bag_view_content,
     render_modal_close_btn_content,
     render_modal_btn_icon_content,
-    render_modal_object_layer_item_content,
 )
 
 
@@ -214,26 +214,52 @@ class NetworkStateClient:
         )
         self.show_modal_bag_view = False  # State to control visibility
 
-        # Initialize the close button for modal_bag_view (top right of bag modal)
+        # Initialize QuestCyberiaView instance (stateful)
+        self.quest_cyberia_view = QuestCyberiaView(
+            object_layer_render_instance=self.object_layer_render
+        )
+
+        # Initialize the large modal for the quest list view (right side, overlapping bag)
+        self.modal_quest_list_view = ModalCoreComponent(
+            screen_width=SCREEN_WIDTH,
+            screen_height=SCREEN_HEIGHT,
+            render_content_callback=partial(
+                self._render_modal_quest_list_content
+            ),  # Custom render callback
+            width=300,
+            height=SCREEN_HEIGHT,
+            padding_bottom=0,
+            padding_right=0,
+            horizontal_offset=0,
+            background_color=Color(0, 0, 0, 200),
+            title_text=self.quest_cyberia_view.title_text,
+        )
+        self.show_modal_quest_list_view = False
+
+        # Initialize the close button for modal_bag_view and modal_quest_list_view
         try:
             self.close_icon_texture = load_texture("ui/assets/icons/close.png")
         except Exception as e:
             logging.error(f"Failed to load close.png texture: {e}")
             self.close_icon_texture = None
 
-        self.modal_bag_close_btn = ModalCoreComponent(
-            screen_width=SCREEN_WIDTH,
-            screen_height=SCREEN_HEIGHT,
-            render_content_callback=partial(render_modal_close_btn_content),
-            width=30,
-            height=30,
-            padding_bottom=SCREEN_HEIGHT - 35,  # 5px from top, 30px height
-            padding_right=5,  # 5px from right
-            horizontal_offset=0,
-            background_color=Color(10, 10, 10, 100),  # Dark background for consistency
-            icon_texture=self.close_icon_texture,  # Pass the loaded texture
+        self.modal_right_panel_close_btn = (
+            ModalCoreComponent(  # Renamed for reusability
+                screen_width=SCREEN_WIDTH,
+                screen_height=SCREEN_HEIGHT,
+                render_content_callback=partial(render_modal_close_btn_content),
+                width=30,
+                height=30,
+                padding_bottom=SCREEN_HEIGHT - 35,  # 5px from top, 30px height
+                padding_right=5,  # 5px from right
+                horizontal_offset=0,
+                background_color=Color(
+                    10, 10, 10, 100
+                ),  # Dark background for consistency
+                icon_texture=self.close_icon_texture,  # Pass the loaded texture
+            )
         )
-        self.show_modal_bag_close_btn = False  # State to control visibility
+        self.show_modal_right_panel_close_btn = False  # State to control visibility
 
         # Initialize the arrow-left button for modal_bag_to_grid_btn
         try:
@@ -263,13 +289,28 @@ class NetworkStateClient:
         )
         self.show_modal_bag_to_grid_btn = False  # Initially hidden
 
+        # Initialize the "Back to Quest List" button (similar to bag's back button)
+        self.modal_quest_to_list_btn = ModalCoreComponent(
+            screen_width=SCREEN_WIDTH,
+            screen_height=SCREEN_HEIGHT,
+            render_content_callback=partial(render_modal_close_btn_content),
+            width=30,
+            height=30,
+            padding_bottom=SCREEN_HEIGHT - 35,
+            padding_right=5 + 30 + 5,
+            horizontal_offset=0,
+            background_color=Color(10, 10, 10, 100),
+            icon_texture=self.arrow_left_icon_texture,  # Reusing arrow-left icon
+        )
+        self.show_modal_quest_to_list_btn = False
+
         # Initialize the five small modals for UI MMO boxes (bottom-right)
         self.modal_btn_icon_modals = []
         icon_paths = [
             "ui/assets/icons/character.png",
             "ui/assets/icons/bag.png",
             "ui/assets/icons/chat.png",
-            "ui/assets/icons/quest.png",  # Renamed mission.png to quest.png
+            "ui/assets/icons/quest.png",
             "ui/assets/icons/map.png",
         ]
         self.modal_icons = []
@@ -418,6 +459,43 @@ class NetworkStateClient:
             f"Generated {len(path_coords)} client-side path GFX points asynchronously."
         )
 
+    def _render_modal_quest_list_content(
+        self,
+        modal_component,
+        object_layer_render_instance: ObjectLayerRender,
+        x: int,
+        y: int,
+        width: int,
+        height: int,
+        data_to_pass: dict = None,
+    ):
+        """
+        Custom render callback for the quest list modal.
+        Delegates rendering to the QuestCyberiaView instance.
+        """
+        # Pass necessary data from modal_component's data_to_pass
+        mouse_x = data_to_pass.get("mouse_x", -1)
+        mouse_y = data_to_pass.get("mouse_y", -1)
+        is_mouse_button_pressed = data_to_pass.get("is_mouse_button_pressed", False)
+
+        # Update modal_component's title to match QuestCyberiaView's internal title
+        # This needs to be called within the render_content as quest_cyberia_view sets it.
+        # So we pass it as a parameter to the quest_cyberia_view's render_content method
+        # and let the quest_cyberia_view set the modal_component's title.
+
+        self.quest_cyberia_view.render_content(
+            x,
+            y,
+            width,
+            height,
+            mouse_x,
+            mouse_y,
+            is_mouse_button_pressed,
+        )
+        # After quest_cyberia_view.render_content runs and potentially updates its title,
+        # update the modal_component's title.
+        modal_component.set_title(self.quest_cyberia_view.title_text)
+
     def run(self):
         """Runs the main client loop."""
         self.proxy.connect()
@@ -469,22 +547,42 @@ class NetworkStateClient:
                 self.modal_bag_view.x = new_screen_width - self.modal_bag_view.width
                 self.modal_bag_view.y = 0  # Top of the screen
 
-                # Update modal_bag_close_btn dimensions and position
-                self.modal_bag_close_btn.screen_width = new_screen_width
-                self.modal_bag_close_btn.screen_height = new_screen_height
-                self.modal_bag_close_btn.x = (
-                    new_screen_width - self.modal_bag_close_btn.width - 5
+                # Update modal_quest_list_view dimensions and position
+                self.modal_quest_list_view.screen_width = new_screen_width
+                self.modal_quest_list_view.screen_height = new_screen_height
+                self.modal_quest_list_view.x = (
+                    new_screen_width - self.modal_quest_list_view.width
                 )
-                self.modal_bag_close_btn.y = 5  # 5px padding from top
+                self.modal_quest_list_view.y = 0  # Top of the screen
+
+                # Update modal_right_panel_close_btn dimensions and position
+                self.modal_right_panel_close_btn.screen_width = new_screen_width
+                self.modal_right_panel_close_btn.screen_height = new_screen_height
+                self.modal_right_panel_close_btn.x = (
+                    new_screen_width - self.modal_right_panel_close_btn.width - 5
+                )
+                self.modal_right_panel_close_btn.y = 5  # 5px padding from top
 
                 # Update modal_bag_to_grid_btn dimensions and position
                 self.modal_bag_to_grid_btn.screen_width = new_screen_width
                 self.modal_bag_to_grid_btn.screen_height = new_screen_height
                 # Position it to the left of the close button with padding
                 self.modal_bag_to_grid_btn.x = (
-                    self.modal_bag_close_btn.x - self.modal_bag_to_grid_btn.width - 5
+                    self.modal_right_panel_close_btn.x
+                    - self.modal_bag_to_grid_btn.width
+                    - 5
                 )
                 self.modal_bag_to_grid_btn.y = 5
+
+                # Update modal_quest_to_list_btn dimensions and position
+                self.modal_quest_to_list_btn.screen_width = new_screen_width
+                self.modal_quest_to_list_btn.screen_height = new_screen_height
+                self.modal_quest_to_list_btn.x = (
+                    self.modal_right_panel_close_btn.x
+                    - self.modal_quest_to_list_btn.width
+                    - 5
+                )
+                self.modal_quest_to_list_btn.y = 5
 
                 # Update modal button icon modals dimensions and positions
                 for i, modal in enumerate(self.modal_btn_icon_modals):
@@ -523,8 +621,8 @@ class NetworkStateClient:
                         obj.path_index = 0
 
             # Check for BOT-QUEST-PROVIDER interaction and control quest discovery modal visibility
-            # modal_quest_discovery should not be activated if modal_bag_view is active
-            if not self.show_modal_bag_view:
+            # modal_quest_discovery should not be activated if modal_bag_view or modal_quest_list_view is active
+            if not (self.show_modal_bag_view or self.show_modal_quest_list_view):
                 self.show_modal_quest_discovery = (
                     self.interaction_manager.check_for_bot_interaction(
                         self.network_state, self.my_player_id
@@ -532,7 +630,7 @@ class NetworkStateClient:
                 )
             else:
                 self.show_modal_quest_discovery = (
-                    False  # Deactivate quest modal if bag view is open
+                    False  # Deactivate quest modal if a right panel is open
                 )
 
             # Check for modal clicks BEFORE processing world clicks
@@ -541,15 +639,30 @@ class NetworkStateClient:
                 is_mouse_left_button_pressed  # Store original state for checks
             )
 
-            # --- Handle clicks for the bag modals first, if they are active ---
-            if self.show_modal_bag_view:
-                player_obj_layer_ids = []
-                with self.network_state.lock:
-                    if self.my_network_object:
-                        player_obj_layer_ids = self.my_network_object.object_layer_ids
+            # --- Handle clicks for the right panel modals first, if they are active ---
+            # Prioritize close button if any right panel is open
+            if self.show_modal_right_panel_close_btn:
+                if self.modal_right_panel_close_btn.check_click(
+                    mouse_x, mouse_y, current_mouse_is_pressed
+                ):
+                    logging.info("Close button clicked. Closing right panel views.")
+                    self.show_modal_bag_view = False
+                    self.show_modal_quest_list_view = False
+                    self.show_modal_right_panel_close_btn = False
+                    self.show_modal_bag_to_grid_btn = False
+                    self.show_modal_quest_to_list_btn = False  # Hide quest back button
+                    self.bag_cyberia_view.reset_view()
+                    # Title is now handled by bag_cyberia_view's render_content
+                    # self.modal_bag_view.set_title(self.bag_cyberia_view.title_text)
+                    self.quest_cyberia_view.reset_view()
+                    # Title is now handled by quest_cyberia_view's render_content
+                    # self.modal_quest_list_view.set_title(
+                    #     self.quest_cyberia_view.title_text
+                    # )
+                    modal_was_clicked_this_frame = True  # Consume the click
 
-                # If mouse is pressed and within modal_bag_view bounds, consume the click immediately.
-                # This ensures no world clicks happen when the bag is open.
+            if self.show_modal_bag_view:
+                # Consume click if mouse is within modal bounds, regardless of what's inside
                 if current_mouse_is_pressed and (
                     mouse_x >= self.modal_bag_view.x
                     and mouse_x <= (self.modal_bag_view.x + self.modal_bag_view.width)
@@ -558,22 +671,13 @@ class NetworkStateClient:
                 ):
                     modal_was_clicked_this_frame = True
 
-                # Check the close button (highest priority within the modal)
-                if self.modal_bag_close_btn.check_click(
-                    mouse_x, mouse_y, current_mouse_is_pressed
-                ):
-                    logging.info("Close button clicked. Closing bag view.")
-                    self.show_modal_bag_view = False
-                    self.show_modal_bag_close_btn = False
-                    self.show_modal_bag_to_grid_btn = False  # Hide back button too
-                    self.bag_cyberia_view.reset_view()  # Reset bag view state
-                    self.modal_bag_view.set_title(
-                        self.bag_cyberia_view.title_text
-                    )  # Reset modal title
+                player_obj_layer_ids = []
+                with self.network_state.lock:
+                    if self.my_network_object:
+                        player_obj_layer_ids = self.my_network_object.object_layer_ids
 
                 # Check the "Back to Grid" button (only if it's visible and clicked)
-                # This explicitly handles going back to grid.
-                elif (
+                if (
                     self.show_modal_bag_to_grid_btn
                     and self.modal_bag_to_grid_btn.check_click(
                         mouse_x, mouse_y, current_mouse_is_pressed
@@ -585,13 +689,12 @@ class NetworkStateClient:
                         self.bag_cyberia_view.title_text
                     )  # Reset modal title
                     self.show_modal_bag_to_grid_btn = False  # Hide back button
+                    # modal_was_clicked_this_frame is already True if within main modal bounds
 
-                # Handle clicks on bag slots (only if currently in grid view, not item detail view)
-                # This ensures slot clicks transition to item view and consume the click
+                # Handle clicks on bag slots or item detail view
                 elif (
-                    not self.bag_cyberia_view.selected_object_layer_id
-                    and current_mouse_is_pressed
-                ):
+                    current_mouse_is_pressed
+                ):  # Only proceed if the click wasn't consumed by the "back" button
                     if self.bag_cyberia_view.handle_slot_clicks(
                         self.modal_bag_view.x,
                         self.modal_bag_view.y,
@@ -607,75 +710,136 @@ class NetworkStateClient:
                         self.show_modal_bag_to_grid_btn = (
                             self.bag_cyberia_view.selected_object_layer_id is not None
                         )
+                        # modal_was_clicked_this_frame is already True if within main modal bounds
 
-                # If an item is selected (i.e., we are in the item detail view), and
-                # a click occurred within the modal's area (caught by the initial check),
-                # and it wasn't on a specific button (close/back/slot), then just consume it.
-                # This prevents unintended redirection to grid.
-                # The user explicitly asked to NOT redirect to grid if body modal is clicked.
-                elif (
-                    self.bag_cyberia_view.selected_object_layer_id
-                    and current_mouse_is_pressed
-                ):
-                    # Simply consume the click within the modal's background, no state change.
-                    logging.debug(
-                        "Bag modal item detail background clicked. Consuming event without redirecting to grid."
+            elif self.show_modal_quest_list_view:  # Handle clicks for Quest List View
+                # Consume click if mouse is within modal bounds, regardless of what's inside
+                if current_mouse_is_pressed and (
+                    mouse_x >= self.modal_quest_list_view.x
+                    and mouse_x
+                    <= (self.modal_quest_list_view.x + self.modal_quest_list_view.width)
+                    and mouse_y >= self.modal_quest_list_view.y
+                    and mouse_y
+                    <= (
+                        self.modal_quest_list_view.y + self.modal_quest_list_view.height
                     )
+                ):
+                    modal_was_clicked_this_frame = True
 
-            # Check existing button modals (Character, Bag, Chat, Quest, Map)
-            # This logic should remain the same, as these buttons toggle main UI elements
+                # Check the "Back to Quest List" button
+                if (
+                    self.show_modal_quest_to_list_btn
+                    and self.modal_quest_to_list_btn.check_click(
+                        mouse_x, mouse_y, current_mouse_is_pressed
+                    )
+                ):
+                    logging.info(
+                        "Back to Quest List button clicked. Resetting quest view."
+                    )
+                    self.quest_cyberia_view.reset_view()
+                    self.modal_quest_list_view.set_title(
+                        self.quest_cyberia_view.title_text
+                    )
+                    self.show_modal_quest_to_list_btn = False
+                    # modal_was_clicked_this_frame is already True if within main modal bounds
+
+                # Handle clicks on quest items or quest detail view
+                elif (
+                    current_mouse_is_pressed
+                ):  # Only proceed if the click wasn't consumed by the "back" button
+                    if self.quest_cyberia_view.handle_item_clicks(
+                        self.modal_quest_list_view.x,
+                        self.modal_quest_list_view.y,
+                        self.modal_quest_list_view.width,
+                        self.modal_quest_list_view.height,
+                        mouse_x,
+                        mouse_y,
+                        current_mouse_is_pressed,
+                    ):
+                        # The quest_cyberia_view will update its internal title based on selection
+                        # and then we update the modal's title.
+                        self.modal_quest_list_view.set_title(
+                            self.quest_cyberia_view.title_text
+                        )
+                        self.show_modal_quest_to_list_btn = (
+                            self.quest_cyberia_view.selected_quest_index is not None
+                        )
+                        # modal_was_clicked_this_frame is already True if within main modal bounds
+
+            # Check if any non-right-panel modal (e.g., quest discovery) was clicked
+            # This block should also contribute to `modal_was_clicked_this_frame` if clicked.
+            if self.show_modal_quest_discovery:
+                if self.modal_quest_discovery.check_click(
+                    mouse_x, mouse_y, current_mouse_is_pressed
+                ):
+                    modal_was_clicked_this_frame = True
+
+            # Check general UI buttons (Character, Bag, Chat, Quest, Map)
+            # These are *not* right panel modals, so their clicks should also set the flag.
             for i, modal in enumerate(self.modal_btn_icon_modals):
                 if modal.check_click(mouse_x, mouse_y, current_mouse_is_pressed):
-                    modal_was_clicked_this_frame = (
-                        True  # Consume this click for the overall frame
-                    )
-                    if i == 1:  # Assuming bag.png is the second icon (index 1)
-                        # If the bag view is active and the main bag button is clicked
+                    modal_was_clicked_this_frame = True
+                    # Logic for each button based on its index
+                    if i == 1:  # Bag icon (index 1)
                         if self.show_modal_bag_view:
-                            # If an item is selected in the bag view (item detail view is active),
-                            # then clicking the main bag button should behave like the "Back to Grid" button.
+                            # If an item is selected, return to grid
                             if self.bag_cyberia_view.selected_object_layer_id:
                                 logging.info(
-                                    "Main Bag button clicked while item selected. Redirecting to grid."
+                                    "Bag button clicked while item selected. Redirecting to grid."
                                 )
                                 self.bag_cyberia_view.reset_view()
                                 self.modal_bag_view.set_title(
                                     self.bag_cyberia_view.title_text
                                 )
-                                self.show_modal_bag_close_btn = (
-                                    True  # Ensure close button is still visible
-                                )
                                 self.show_modal_bag_to_grid_btn = (
                                     False  # Hide back button when returning to grid
                                 )
-                            else:  # If bag is open but already in grid view, close the bag.
-                                logging.info(
-                                    "Main Bag button clicked. Closing bag view."
-                                )
+                            else:  # If bag is open and in grid view, close it
+                                logging.info("Bag button clicked. Closing bag view.")
                                 self.show_modal_bag_view = False
-                                self.show_modal_bag_close_btn = False
-                                self.show_modal_bag_to_grid_btn = False
-                        else:  # If bag is closed, open it
-                            logging.info("Main Bag button clicked. Opening bag view.")
+                                self.show_modal_right_panel_close_btn = False
+                        else:  # If bag is closed, open it (and close quest view if open)
+                            logging.info("Bag button clicked. Opening bag view.")
                             self.show_modal_bag_view = True
-                            self.show_modal_bag_close_btn = True
-                            self.show_modal_bag_to_grid_btn = (
-                                self.bag_cyberia_view.selected_object_layer_id
-                                is not None
-                            )
+                            self.show_modal_quest_list_view = False  # Close quest view
+                            self.show_modal_right_panel_close_btn = True
+                            # The back button visibility is now handled by bag_cyberia_view's render_content
+                            # self.show_modal_bag_to_grid_btn = (
+                            #     self.bag_cyberia_view.selected_object_layer_id
+                            #     is not None
+                            # )
                             self.modal_bag_view.set_title(
                                 self.bag_cyberia_view.title_text
                             )
-                    # Add more logic for other buttons if needed
-                    # elif i == 0: # Character button
-                    #     ...
-                    # break # Exit the loop after handling a button click to prevent further clicks this frame
+                            self.quest_cyberia_view.reset_view()
+                            self.show_modal_quest_to_list_btn = (
+                                False  # Ensure quest back button is hidden
+                            )
 
-            if self.show_modal_quest_discovery:  # Only check if quest modal is visible
-                if self.modal_quest_discovery.check_click(
-                    mouse_x, mouse_y, current_mouse_is_pressed
-                ):
-                    modal_was_clicked_this_frame = True
+                    elif i == 3:  # Quest icon (index 3)
+                        # Check if quest view is currently shown
+                        if self.show_modal_quest_list_view:
+                            logging.info("Quest button clicked. Closing quest view.")
+                            self.show_modal_quest_list_view = False
+                            self.show_modal_right_panel_close_btn = False
+                        else:  # If quest view is closed, open it (and close bag view if open)
+                            logging.info("Quest button clicked. Opening quest view.")
+                            self.show_modal_quest_list_view = True
+                            self.show_modal_bag_view = False  # Close bag view
+                            self.show_modal_right_panel_close_btn = True
+                            self.modal_quest_list_view.set_title(
+                                self.quest_cyberia_view.title_text
+                            )
+                            self.bag_cyberia_view.reset_view()
+                            self.show_modal_bag_to_grid_btn = (
+                                False  # Ensure bag back button is hidden
+                            )
+                            self.show_modal_quest_to_list_btn = (
+                                self.quest_cyberia_view.selected_quest_index is not None
+                            )
+                        # Add more logic for other buttons if needed
+                        # elif i == 0: # Character button
+                        #     ...
 
             # Only process world clicks if no modal was clicked in this frame
             if not modal_was_clicked_this_frame and current_mouse_is_pressed:
@@ -808,7 +972,7 @@ class NetworkStateClient:
                     font_size = UI_FONT_SIZE
                     padding = 10
 
-                    # Draw shading first for My Pos
+                    # Draw shading first
                     self.object_layer_render.draw_text(
                         pos_text,
                         padding + 1,
@@ -816,7 +980,7 @@ class NetworkStateClient:
                         font_size,
                         Color(*UI_TEXT_COLOR_SHADING),
                     )
-                    # Draw actual text for My Pos
+                    # Draw actual text
                     self.object_layer_render.draw_text(
                         pos_text,
                         padding,
@@ -845,7 +1009,7 @@ class NetworkStateClient:
                     )
 
             # Render modals AFTER world rendering to ensure they are on top
-            # Render the bag view and its close button first if active, so they are highest
+            # Render right panel modals (bag or quest list) if active
             if self.show_modal_bag_view:
                 player_obj_layer_ids = []
                 with self.network_state.lock:
@@ -858,17 +1022,40 @@ class NetworkStateClient:
                     "player_object_layer_ids": player_obj_layer_ids,
                     "mouse_x": mouse_x,
                     "mouse_y": mouse_y,
+                    "is_mouse_button_pressed": is_mouse_left_button_pressed,
                 }
                 self.modal_bag_view.render(self.object_layer_render, mouse_x, mouse_y)
-
-            if self.show_modal_bag_close_btn:
-                self.modal_bag_close_btn.render(
+                # Update back button visibility *after* bag_cyberia_view.render_content,
+                # as render_content might change selected_object_layer_id
+                self.show_modal_bag_to_grid_btn = (
+                    self.bag_cyberia_view.selected_object_layer_id is not None
+                )
+            elif self.show_modal_quest_list_view:
+                self.modal_quest_list_view.data_to_pass = {
+                    "quest_view_instance": self.quest_cyberia_view,
+                    "mouse_x": mouse_x,
+                    "mouse_y": mouse_y,
+                    "is_mouse_button_pressed": is_mouse_left_button_pressed,
+                }
+                self.modal_quest_list_view.render(
                     self.object_layer_render, mouse_x, mouse_y
                 )
 
-            # The "Back to Grid" button is only rendered when an item is selected
-            if self.show_modal_bag_to_grid_btn:
+            # Render close button and back-to-grid button if a right panel is open
+            if self.show_modal_right_panel_close_btn:
+                self.modal_right_panel_close_btn.render(
+                    self.object_layer_render, mouse_x, mouse_y
+                )
+
+            # The "Back to Grid" button is only rendered when an item is selected AND the bag view is open
+            if self.show_modal_bag_to_grid_btn and self.show_modal_bag_view:
                 self.modal_bag_to_grid_btn.render(
+                    self.object_layer_render, mouse_x, mouse_y
+                )
+
+            # The "Back to Quest List" button is only rendered when a quest is selected AND the quest view is open
+            if self.show_modal_quest_to_list_btn and self.show_modal_quest_list_view:
+                self.modal_quest_to_list_btn.render(
                     self.object_layer_render, mouse_x, mouse_y
                 )
 
