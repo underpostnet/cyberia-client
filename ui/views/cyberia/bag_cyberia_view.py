@@ -51,9 +51,11 @@ class BagCyberiaView:
             background_color=Color(
                 0, 0, 0, 0
             ),  # Transparent, parent modal draws background
+            border_color=Color(50, 50, 50, 200),  # Added border color for consistency
             slot_background_color=Color(30, 30, 30, 180),
             slot_hover_color=Color(50, 50, 50, 200),
             slot_selected_color=Color(100, 100, 0, 200),
+            grid_type="rectangle",  # Explicitly set to rectangle
         )
 
     def _render_bag_slot_item(

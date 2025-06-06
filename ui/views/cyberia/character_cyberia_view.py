@@ -7,19 +7,24 @@ from config import (
     UI_TEXT_COLOR_SHADING,
 )
 from object_layer.object_layer_render import ObjectLayerRender
+from ui.components.core.grid_core_component import (
+    GridCoreComponent,
+)  # Import GridCoreComponent
 from object_layer.object_layer_data import (
     Direction,
     ObjectLayerMode,
-)
+)  # Import Direction and ObjectLayerMode
 
 logging.basicConfig(
     level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s"
 )
 
 # Constants for the character view layout
-CHARACTER_SLOT_SIZE = 60  # Size of each hexagonal slot
-CHARACTER_HEXAGON_RADIUS = 80  # Distance from center to the middle of outer slots
-CHARACTER_MAX_HEIGHT_CONSTRAINT = 300  # Max height for the hexagon container
+# CHARACTER_SLOT_WIDTH/HEIGHT now refer to the inner content area within the hexagon
+CHARACTER_SLOT_WIDTH = 60
+CHARACTER_SLOT_HEIGHT = 60
+CHARACTER_HEXAGON_VISUAL_RADIUS = 40  # This controls the size of the drawn hexagon
+
 
 # Placeholder for empty slot in character view
 EMPTY_SLOT_ID = "EMPTY_SLOT"  # Using a placeholder for now
@@ -28,7 +33,8 @@ EMPTY_SLOT_ID = "EMPTY_SLOT"  # Using a placeholder for now
 class CharacterCyberiaView:
     """
     Manages the display and interaction for the player's character equipment interface.
-    Displays 7 slots in a hexagonal layout: one center, six around it.
+    Displays 7 slots in a hexagonal arrangement, with visually hexagonal slots.
+    Uses GridCoreComponent for rendering and click detection.
     """
 
     def __init__(self, object_layer_render_instance: ObjectLayerRender):
@@ -45,6 +51,7 @@ class CharacterCyberiaView:
             "feet": EMPTY_SLOT_ID,
             "weapon": EMPTY_SLOT_ID,
         }
+        # The slot order is conceptually for the hexagonal layout, but handled by grid_layout
         self.slot_order = [
             "head",
             "weapon",
@@ -52,31 +59,68 @@ class CharacterCyberiaView:
             "hands",
             "legs",
             "feet",
-        ]  # Clockwise from top-left
+        ]
+
+        # Map for grid-based rendering: row, col, and the actual slot key
+        self.grid_slots_map = self._create_character_grid_map()
 
         # Track selected item for detail view
         self.selected_slot_key: str | None = None
         self.selected_object_layer_id: str | None = None
 
-        # Calculate hexagonal slot positions relative to the hexagon's center
-        self._calculate_slot_positions()
+        # Initialize GridCoreComponent for the 3x3 conceptual grid that holds the 7 slots
+        self.grid_component = GridCoreComponent(
+            object_layer_render_instance=self.object_layer_render,
+            num_rows=3,  # Fixed to 3 rows for the 3x3 conceptual grid
+            num_cols=3,  # Fixed to 3 columns for the 3x3 conceptual grid
+            item_width=CHARACTER_SLOT_WIDTH,  # Inner content size
+            item_height=CHARACTER_SLOT_HEIGHT,  # Inner content size
+            item_padding=0,  # Padding is implicitly handled by hexagon positioning and radius
+            render_item_callback=self._render_character_slot_item,
+            background_color=Color(0, 0, 0, 0),  # Transparent, main modal draws it
+            border_color=Color(50, 50, 50, 200),
+            slot_background_color=Color(30, 30, 30, 180),
+            slot_hover_color=Color(50, 50, 50, 200),
+            slot_selected_color=Color(100, 100, 0, 200),
+            grid_type="hexagon",  # Specify hexagon grid type
+            hexagon_radius=CHARACTER_HEXAGON_VISUAL_RADIUS,  # Pass the visual radius for hexagons
+        )
 
-    def _calculate_slot_positions(self):
+    def _create_character_grid_map(self) -> list[dict]:
         """
-        Calculates the relative (x, y) coordinates for each of the 7 hexagonal slots.
+        Creates a list representing the conceptual 3x3 rectangular grid for character equipment,
+        mapping grid indices to actual slot keys.
+        The layout is designed to visually represent a hexagon with a center slot.
         """
-        self.slot_positions = {}
+        # Define the 3x3 grid layout with slot keys or None for empty visual cells
+        # This determines the visual arrangement of the square slots
+        grid_layout_keys = [
+            "head",
+            None,
+            "weapon",
+            "hands",
+            "center",
+            "chest",
+            "feet",
+            None,
+            "legs",
+        ]
 
-        # Center slot
-        self.slot_positions["center"] = Vector2(0, 0)
-
-        # Outer 6 slots
-        for i, key in enumerate(self.slot_order):
-            angle_deg = 90 + (i * 60)  # Start from top (90 deg), then 60 deg increments
-            angle_rad = math.radians(angle_deg)
-            x = CHARACTER_HEXAGON_RADIUS * math.cos(angle_rad)
-            y = CHARACTER_HEXAGON_RADIUS * math.sin(angle_rad)
-            self.slot_positions[key] = Vector2(x, y)
+        processed_grid_layout = []
+        for slot_key in grid_layout_keys:
+            if slot_key:
+                processed_grid_layout.append(
+                    {
+                        "key": slot_key,
+                        "item_id": self.equipped_object_layer_ids.get(
+                            slot_key, EMPTY_SLOT_ID
+                        ),
+                    }
+                )
+            else:
+                # For None slots, include a placeholder dictionary
+                processed_grid_layout.append({"key": None, "item_id": EMPTY_SLOT_ID})
+        return processed_grid_layout
 
     def _render_character_slot_item(
         self,
@@ -85,14 +129,42 @@ class CharacterCyberiaView:
         y: int,
         width: int,
         height: int,
-        item_object_layer_id: str,  # item_data is the object_layer_id
+        item_data: dict,  # Receives a dict containing 'key' and 'item_id'
         is_hovered: bool,
         is_selected: bool,
     ):
         """
         Renders a single character slot item.
-        Similar to bag slot rendering, it displays the object layer animation.
+        Displays the object layer animation or a placeholder within the slot.
         """
+        slot_key = item_data.get("key")
+        item_object_layer_id = item_data.get("item_id")
+
+        # Draw slot name *above* the item, centered within the slot's width
+        if slot_key:  # Only draw slot name if it's an actual slot
+            slot_name_text = slot_key.replace("_", " ").title()
+            text_font_size = UI_FONT_SIZE - 6  # Smaller font for slot names
+            text_width = object_layer_render_instance.measure_text(
+                slot_name_text, text_font_size
+            )
+            text_x = x + (width - text_width) // 2
+            text_y = y - text_font_size - 2  # Position above the slot
+
+            object_layer_render_instance.draw_text(
+                slot_name_text,
+                text_x + 1,
+                text_y + 1,
+                text_font_size,
+                Color(*UI_TEXT_COLOR_SHADING),
+            )
+            object_layer_render_instance.draw_text(
+                slot_name_text,
+                text_x,
+                text_y,
+                text_font_size,
+                Color(*UI_TEXT_COLOR_PRIMARY),
+            )
+
         # Ensure item_object_layer_id is valid for rendering, otherwise use placeholder
         if (
             item_object_layer_id == EMPTY_SLOT_ID
@@ -100,33 +172,32 @@ class CharacterCyberiaView:
                 item_object_layer_id
             )
         ):
-            placeholder_text = (
-                item_object_layer_id.replace("_", " ").title()
-                if item_object_layer_id
-                else "Empty"
-            )
+            # Draw an 'Empty' placeholder if no item or item definition is missing
+            placeholder_text = "Empty"
+            text_font_size = UI_FONT_SIZE - 4
             text_width = object_layer_render_instance.measure_text(
-                placeholder_text, UI_FONT_SIZE - 4
+                placeholder_text, text_font_size
             )
             text_x = x + (width - text_width) // 2
-            text_y = y + (height - (UI_FONT_SIZE - 4)) // 2
+            text_y = y + (height - text_font_size) // 2
 
             object_layer_render_instance.draw_text(
                 placeholder_text,
                 text_x + 1,
                 text_y + 1,
-                UI_FONT_SIZE - 4,
+                text_font_size,
                 Color(*UI_TEXT_COLOR_SHADING),
             )
             object_layer_render_instance.draw_text(
                 placeholder_text,
                 text_x,
                 text_y,
-                UI_FONT_SIZE - 4,
+                text_font_size,
                 Color(*UI_TEXT_COLOR_PRIMARY),
             )
             return
 
+        # Render the actual item's animation
         matrix_dimension = (
             object_layer_render_instance.get_object_layer_matrix_dimension(
                 item_object_layer_id
@@ -140,15 +211,15 @@ class CharacterCyberiaView:
 
         pixel_size_in_display = width // matrix_dimension
         if pixel_size_in_display == 0:
-            pixel_size_in_display = 1
+            pixel_size_in_display = 1  # Ensure pixel size is at least 1
 
         rendered_width = pixel_size_in_display * matrix_dimension
         rendered_height = pixel_size_in_display * matrix_dimension
 
+        # Center the item within its slot's content area
         offset_x_centering = (width - rendered_width) // 2
         offset_y_centering = (height - rendered_height) // 2
 
-        # Get or create the animation instance
         anim_props = object_layer_render_instance.get_or_create_object_layer_animation(
             obj_id=f"char_slot_item_{item_object_layer_id}",
             object_layer_id=item_object_layer_id,
@@ -162,7 +233,7 @@ class CharacterCyberiaView:
             object_layer_render_instance.get_frame_time()
         )
 
-        self.object_layer_render.render_specific_object_layer_frame(
+        object_layer_render_instance.render_specific_object_layer_frame(
             frame_matrix=frame_matrix,
             color_map=color_map,
             screen_x=x + offset_x_centering,
@@ -327,10 +398,10 @@ class CharacterCyberiaView:
     ):
         """
         Main render method for the character view.
-        Switches between hexagon layout and single item detail view.
+        Switches between hexagonal-slot layout and single item detail view.
         """
         if self.selected_slot_key is None:
-            # Render the hexagonal layout
+            # Render the hexagonal-slot layout using GridCoreComponent
             self.title_text = "Character"
             modal_component.set_title(self.title_text)
 
@@ -358,95 +429,34 @@ class CharacterCyberiaView:
                 Color(*UI_TEXT_COLOR_PRIMARY),
             )
 
-            # Calculate the center of the hexagon relative to the modal content area
-            # This accounts for the title and padding to keep hexagon within MAX_HEIGHT_CONSTRAINT
-            available_height = CHARACTER_MAX_HEIGHT_CONSTRAINT - (title_y - y)
-            if (
-                available_height < CHARACTER_SLOT_SIZE * 2
-            ):  # Ensure enough space for slots
-                available_height = CHARACTER_SLOT_SIZE * 2
+            # Calculate available vertical space for the grid (below title and padding)
+            grid_top_y_after_title = y + title_font_size + 40
+            available_height_for_grid = height - (grid_top_y_after_title - y)
 
-            hexagon_center_x = x + width // 2
-            hexagon_center_y = (
-                y + (title_y - y) + available_height // 2 + 20
-            )  # Offset below title
+            # Calculate vertical offset to center the grid within its available space
+            total_grid_height = self.grid_component.total_grid_height
+            vertical_offset_centering = (
+                available_height_for_grid - total_grid_height
+            ) // 2
 
-            # Render each slot
-            all_slots = {"center": self.equipped_object_layer_ids["center"]}
-            all_slots.update(
-                {k: self.equipped_object_layer_ids[k] for k in self.slot_order}
+            # Final Y offset for the grid (ensure it's not negative)
+            grid_offset_y = grid_top_y_after_title + max(0, vertical_offset_centering)
+
+            # Update the grid_slots_map to reflect current equipped items
+            self.grid_slots_map = self._create_character_grid_map()
+
+            # Pass the grid_slots_map as items_data. The _render_character_slot_item will use 'item_id' from it.
+            self.grid_component.render(
+                offset_x=x + self.grid_component.calculate_centered_offset_x(width),
+                offset_y=grid_offset_y,
+                container_width=width,
+                container_height=height
+                - (grid_offset_y - y),  # Pass the remaining height for the grid to use
+                items_data=self.grid_slots_map,
+                mouse_x=mouse_x,
+                mouse_y=mouse_y,
+                selected_key=self.selected_slot_key,  # Pass selected key for highlighting
             )
-
-            for slot_key, rel_pos in self.slot_positions.items():
-                slot_x = hexagon_center_x + rel_pos.x - CHARACTER_SLOT_SIZE // 2
-                slot_y = hexagon_center_y + rel_pos.y - CHARACTER_SLOT_SIZE // 2
-
-                # Check for hover state
-                is_hovered = (
-                    mouse_x >= slot_x
-                    and mouse_x <= (slot_x + CHARACTER_SLOT_SIZE)
-                    and mouse_y >= slot_y
-                    and mouse_y <= (slot_y + CHARACTER_SLOT_SIZE)
-                )
-                is_selected = self.selected_slot_key == slot_key
-
-                # Determine slot background color based on hover and selection state
-                slot_bg_color = Color(30, 30, 30, 180)  # Default
-                if is_selected:
-                    slot_bg_color = Color(100, 100, 0, 200)  # Selected color
-                elif is_hovered:
-                    slot_bg_color = Color(50, 50, 50, 200)  # Hover color
-
-                self.object_layer_render.draw_rectangle(
-                    slot_x,
-                    slot_y,
-                    CHARACTER_SLOT_SIZE,
-                    CHARACTER_SLOT_SIZE,
-                    slot_bg_color,
-                )
-                self.object_layer_render.draw_rectangle_lines(
-                    slot_x,
-                    slot_y,
-                    CHARACTER_SLOT_SIZE,
-                    CHARACTER_SLOT_SIZE,
-                    Color(50, 50, 50, 200),  # Border
-                )
-
-                # Render item content
-                item_id = all_slots.get(slot_key, EMPTY_SLOT_ID)
-                self._render_character_slot_item(
-                    self.object_layer_render,
-                    slot_x,
-                    slot_y,
-                    CHARACTER_SLOT_SIZE,
-                    CHARACTER_SLOT_SIZE,
-                    item_id,
-                    is_hovered,
-                    is_selected,
-                )
-
-                # Draw slot name
-                slot_name_text = slot_key.replace("_", " ").title()
-                text_width = self.object_layer_render.measure_text(
-                    slot_name_text, UI_FONT_SIZE - 5
-                )
-                text_x = slot_x + (CHARACTER_SLOT_SIZE - text_width) // 2
-                text_y = slot_y + CHARACTER_SLOT_SIZE + 2  # A little below the slot
-
-                self.object_layer_render.draw_text(
-                    slot_name_text,
-                    text_x + 1,
-                    text_y + 1,
-                    UI_FONT_SIZE - 5,
-                    Color(*UI_TEXT_COLOR_SHADING),
-                )
-                self.object_layer_render.draw_text(
-                    slot_name_text,
-                    text_x,
-                    text_y,
-                    UI_FONT_SIZE - 5,
-                    Color(*UI_TEXT_COLOR_PRIMARY),
-                )
 
         else:
             # Render single item detail view
@@ -478,32 +488,37 @@ class CharacterCyberiaView:
             return False
 
         if self.selected_slot_key is None:
-            # In hexagon view, check for slot clicks
+            # In slot grid view, check for slot clicks using the grid component
             title_font_size = UI_FONT_SIZE + 2
-            available_height = CHARACTER_MAX_HEIGHT_CONSTRAINT - (
-                20
-            )  # Approx title height + padding
-            if available_height < CHARACTER_SLOT_SIZE * 2:
-                available_height = CHARACTER_SLOT_SIZE * 2
 
-            hexagon_center_x = offset_x + container_width // 2
-            hexagon_center_y = (
-                offset_y + (20) + available_height // 2 + 20
-            )  # Offset below title
+            # Calculate grid_offset_y consistently with render_content
+            grid_top_y_after_title = offset_y + title_font_size + 40
+            total_grid_height = self.grid_component.total_grid_height
+            available_height_for_grid = container_height - (
+                grid_top_y_after_title - offset_y
+            )
+            vertical_offset_centering = (
+                available_height_for_grid - total_grid_height
+            ) // 2
+            grid_offset_y = grid_top_y_after_title + max(0, vertical_offset_centering)
 
-            for slot_key, rel_pos in self.slot_positions.items():
-                slot_x = hexagon_center_x + rel_pos.x - CHARACTER_SLOT_SIZE // 2
-                slot_y = hexagon_center_y + rel_pos.y - CHARACTER_SLOT_SIZE // 2
+            clicked_index = self.grid_component.get_clicked_item_index(
+                offset_x=offset_x
+                + self.grid_component.calculate_centered_offset_x(container_width),
+                offset_y=grid_offset_y,
+                mouse_x=mouse_x,
+                mouse_y=mouse_y,
+                is_mouse_button_pressed=is_mouse_button_pressed,
+            )
 
+            if clicked_index is not None and clicked_index < len(self.grid_slots_map):
+                clicked_item_data = self.grid_slots_map[clicked_index]
                 if (
-                    mouse_x >= slot_x
-                    and mouse_x <= (slot_x + CHARACTER_SLOT_SIZE)
-                    and mouse_y >= slot_y
-                    and mouse_y <= (slot_y + CHARACTER_SLOT_SIZE)
-                ):
-                    self.selected_slot_key = slot_key
+                    clicked_item_data["key"] is not None
+                ):  # Ensure a valid slot was clicked (not a None placeholder)
+                    self.selected_slot_key = clicked_item_data["key"]
                     self.selected_object_layer_id = self.equipped_object_layer_ids.get(
-                        slot_key, EMPTY_SLOT_ID
+                        self.selected_slot_key, EMPTY_SLOT_ID
                     )
                     logging.info(
                         f"Selected character slot: {self.selected_slot_key}, Item: {self.selected_object_layer_id}"
@@ -527,13 +542,20 @@ class CharacterCyberiaView:
                     f"Unequip button clicked for {self.selected_object_layer_id}"
                 )
                 # Placeholder for unequip logic (e.g., send to server, update equipped_object_layer_ids)
-                self.equipped_object_layer_ids[self.selected_slot_key] = EMPTY_SLOT_ID
+                if (
+                    self.selected_slot_key and self.selected_slot_key != "center"
+                ):  # Prevent unequipping the main body
+                    self.equipped_object_layer_ids[self.selected_slot_key] = (
+                        EMPTY_SLOT_ID
+                    )
                 self.reset_view()  # Go back to grid view after unequipping
                 return True
             return False
 
     def reset_view(self):
-        """Resets the character view to its initial hexagon grid state, clearing selection."""
+        """Resets the character view to its initial grid state, clearing selection."""
         self.selected_slot_key = None
         self.selected_object_layer_id = None
         self.title_text = "Character"
+        # Re-create grid map to reflect any unequipped items
+        self.grid_slots_map = self._create_character_grid_map()

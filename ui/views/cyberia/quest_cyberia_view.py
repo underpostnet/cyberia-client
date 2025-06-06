@@ -86,6 +86,7 @@ class QuestCyberiaView:
             slot_selected_color=Color(
                 150, 150, 0, 200
             ),  # More prominent selected color
+            grid_type="rectangle",  # Explicitly set to rectangle
         )
 
     def _render_quest_item(

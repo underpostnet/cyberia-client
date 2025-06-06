@@ -377,7 +377,7 @@ class NetworkStateClient:
         icon_paths = [
             "ui/assets/icons/character.png",
             "ui/assets/icons/bag.png",
-            "ui/assets/icons/chat.png",
+            "ui/assets/icons/chat.png",  # Corrected path
             "ui/assets/icons/quest.png",
             "ui/assets/icons/map.png",
         ]

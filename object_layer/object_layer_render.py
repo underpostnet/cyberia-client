@@ -16,7 +16,7 @@ from raylibpy import (
     draw_circle,
     draw_line,
     draw_rectangle,
-    draw_rectangle_lines,  # This import is present at the top
+    draw_rectangle_lines,
     draw_text,
     end_drawing,
     end_mode2d,
@@ -31,6 +31,7 @@ from raylibpy import (
     Camera2D,
     measure_text as raylib_measure_text,
     draw_texture_ex,
+    draw_poly,  # New import for drawing polygons (used by hexagons)
 )
 
 from config import (
@@ -334,7 +335,7 @@ class ObjectLayerRender:
         self, x: int, y: int, width: int, height: int, color: Color
     ):
         """Draws a rectangle outline."""
-        draw_rectangle_lines(x, y, width, height, color)  # Added this missing method
+        draw_rectangle_lines(x, y, width, height, color)
 
     def draw_circle(self, center_x: int, center_y: int, radius: float, color: Color):
         """Draws a filled circle."""
