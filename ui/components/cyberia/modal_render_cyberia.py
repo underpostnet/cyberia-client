@@ -17,12 +17,6 @@ logging.basicConfig(
     level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s"
 )
 
-# Explicitly set bag inventory constants (might be moved to config later if generalized)
-BAG_INVENTORY_ROWS = 5
-BAG_INVENTORY_COLS = 6
-BAG_SLOT_SIZE = 40
-BAG_SLOT_PADDING = 10
-
 
 def render_modal_quest_discovery_content(
     modal_component,
