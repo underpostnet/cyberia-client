@@ -784,16 +784,16 @@ class NetworkStateClient:
                         if self.show_modal_bag_view:
                             # If an item is selected, return to grid
                             if self.bag_cyberia_view.selected_object_layer_id:
-                                logging.info(
-                                    "Bag button clicked while item selected. Redirecting to grid."
-                                )
-                                self.bag_cyberia_view.reset_view()
-                                self.modal_bag_view.set_title(
-                                    self.bag_cyberia_view.title_text
-                                )
-                                self.show_modal_bag_to_grid_btn = (
-                                    False  # Hide back button when returning to grid
-                                )
+                                logging.info("Bag button clicked while item selected.")
+                                # self.bag_cyberia_view.reset_view()
+                                # self.modal_bag_view.set_title(
+                                #     self.bag_cyberia_view.title_text
+                                # )
+                                # self.show_modal_bag_to_grid_btn = (
+                                #     False  # Hide back button when returning to grid
+                                # )
+                                self.show_modal_bag_view = False
+                                self.show_modal_right_panel_close_btn = False
                             else:  # If bag is open and in grid view, close it
                                 logging.info("Bag button clicked. Closing bag view.")
                                 self.show_modal_bag_view = False
