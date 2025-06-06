@@ -39,7 +39,9 @@ from object_layer.camera_manager import CameraManager
 from ui.views.cyberia.bag_cyberia_view import BagCyberiaView
 from ui.views.cyberia.quest_cyberia_view import QuestCyberiaView
 from ui.views.cyberia.character_cyberia_view import CharacterCyberiaView
-from ui.views.cyberia.chat_cyberia_view import ChatCyberiaView  # New Import
+from ui.views.cyberia.chat_cyberia_view import ChatCyberiaView
+from ui.views.cyberia.map_cyberia_view import MapCyberiaView
+
 
 # Import rendering utilities from the new path
 from ui.components.cyberia.modal_render_cyberia import (
@@ -280,6 +282,11 @@ class NetworkStateClient:
         )
         self.show_modal_chat_view = False
 
+        # Initialize MapCyberiaView instance (stateful)
+        self.map_cyberia_view = MapCyberiaView(
+            object_layer_render_instance=self.object_layer_render
+        )
+
         # Initialize Map View Modal
         self.modal_map_view = ModalCoreComponent(
             screen_width=SCREEN_WIDTH,
@@ -291,7 +298,7 @@ class NetworkStateClient:
             padding_right=0,
             horizontal_offset=0,
             background_color=Color(0, 0, 0, 200),
-            title_text="Map",
+            title_text=self.map_cyberia_view.title_text,  # Updated: Use map_cyberia_view's title
         )
         self.show_modal_map_view = False
 
@@ -398,7 +405,7 @@ class NetworkStateClient:
         icon_paths = [
             "ui/assets/icons/character.png",
             "ui/assets/icons/bag.png",
-            "ui/assets/icons/chat.png",  # Corrected path
+            "ui/assets/icons/chat.png",
             "ui/assets/icons/quest.png",
             "ui/assets/icons/map.png",
         ]
@@ -571,12 +578,17 @@ class NetworkStateClient:
         self.show_modal_bag_to_grid_btn = False
         self.show_modal_quest_to_list_btn = False
         self.show_modal_character_to_grid_btn = False
-        self.show_modal_chat_to_list_btn = False  # New: Hide chat back button
+        self.show_modal_chat_to_list_btn = False
         self.active_right_panel_modal = None
 
         # Reset modal titles to their default *only if they are views without internal state*
-        # Views with internal state (Bag, Quest, Character, Chat) will handle their own title setting
-        self.modal_map_view.set_title("Map")
+        # Views with internal state (Bag, Quest, Character, Chat, Map) will handle their own title setting
+        # Updated: Reset map view's state
+        # self.bag_cyberia_view.reset_view()
+        # self.quest_cyberia_view.reset_view()
+        # self.character_cyberia_view.reset_view()
+        # self.chat_cyberia_view.reset_view()
+        # self.map_cyberia_view.reset_view()
 
     def run(self):
         """Runs the main client loop."""
@@ -628,7 +640,7 @@ class NetworkStateClient:
                     self.modal_bag_view,
                     self.modal_quest_list_view,
                     self.modal_character_view,
-                    self.modal_chat_view,  # New: update chat modal
+                    self.modal_chat_view,
                     self.modal_map_view,
                 ]:
                     modal.screen_width = new_screen_width
@@ -649,7 +661,7 @@ class NetworkStateClient:
                     self.modal_bag_to_grid_btn,
                     self.modal_quest_to_list_btn,
                     self.modal_character_to_grid_btn,
-                    self.modal_chat_to_list_btn,  # New: include chat back button
+                    self.modal_chat_to_list_btn,
                 ]:
                     modal.screen_width = new_screen_width
                     modal.screen_height = new_screen_height
@@ -725,10 +737,10 @@ class NetworkStateClient:
                         self.quest_cyberia_view.reset_view()
                     elif self.active_right_panel_modal == "character":
                         self.character_cyberia_view.reset_view()
-                    elif (
-                        self.active_right_panel_modal == "chat"
-                    ):  # New: Reset chat view
+                    elif self.active_right_panel_modal == "chat":
                         self.chat_cyberia_view.reset_view()
+                    elif self.active_right_panel_modal == "map":
+                        self.map_cyberia_view.reset_view()
                     # Then hide all modals
                     self._hide_all_right_panel_modals()
                     modal_was_clicked_this_frame = True  # Consume the click
@@ -848,7 +860,7 @@ class NetworkStateClient:
                             self.character_cyberia_view.selected_slot_key is not None
                         )
 
-            elif self.show_modal_chat_view:  # New: Chat modal handling
+            elif self.show_modal_chat_view:
                 if current_mouse_is_pressed and (
                     mouse_x >= self.modal_chat_view.x
                     and mouse_x <= (self.modal_chat_view.x + self.modal_chat_view.width)
@@ -883,10 +895,24 @@ class NetworkStateClient:
                             self.chat_cyberia_view.selected_chat_index is not None
                         )
             elif self.show_modal_map_view:
-                if current_mouse_is_pressed and self.modal_map_view.check_click(
-                    mouse_x, mouse_y, current_mouse_is_pressed
+                if current_mouse_is_pressed and (
+                    mouse_x >= self.modal_map_view.x
+                    and mouse_x <= (self.modal_map_view.x + self.modal_map_view.width)
+                    and mouse_y >= self.modal_map_view.y
+                    and mouse_y <= (self.modal_map_view.y + self.modal_map_view.height)
                 ):
+                    # No specific click handlers for map view content, but register click if within modal
                     modal_was_clicked_this_frame = True
+                # Call handle_item_clicks for the map view (it will return False)
+                self.map_cyberia_view.handle_item_clicks(
+                    self.modal_map_view.x,
+                    self.modal_map_view.y,
+                    self.modal_map_view.width,
+                    self.modal_map_view.height,
+                    mouse_x,
+                    mouse_y,
+                    current_mouse_is_pressed,
+                )
 
             # Check quest discovery modal
             if self.show_modal_quest_discovery:
@@ -918,11 +944,12 @@ class NetworkStateClient:
                         elif self.active_right_panel_modal == "character":
                             self.character_cyberia_view.reset_view()
                             logging.info("Resetting Character view state.")
-                        elif (
-                            self.active_right_panel_modal == "chat"
-                        ):  # New: Reset chat view
+                        elif self.active_right_panel_modal == "chat":
                             self.chat_cyberia_view.reset_view()
                             logging.info("Resetting Chat view state.")
+                        elif self.active_right_panel_modal == "map":
+                            self.map_cyberia_view.reset_view()
+                            logging.info("Resetting Map view state.")
                         # Hide all modals (including the one just reset, if any)
                         self._hide_all_right_panel_modals()
 
@@ -955,10 +982,11 @@ class NetworkStateClient:
                         self.show_modal_character_view
                         and self.character_cyberia_view.selected_slot_key is not None
                     )
-                    self.show_modal_chat_to_list_btn = (  # New: Set chat back button visibility
+                    self.show_modal_chat_to_list_btn = (
                         self.show_modal_chat_view
                         and self.chat_cyberia_view.selected_chat_index is not None
                     )
+                    # No specific "back" button for map view as it's a static display.
 
             # Only process world clicks if no modal was clicked in this frame
             if not modal_was_clicked_this_frame and current_mouse_is_pressed:
@@ -1170,7 +1198,7 @@ class NetworkStateClient:
                     self.object_layer_render, mouse_x, mouse_y
                 )
 
-            elif self.show_modal_chat_view:  # New: Render chat modal
+            elif self.show_modal_chat_view:
                 self.modal_chat_view.data_to_pass = {
                     "chat_view_instance": self.chat_cyberia_view,
                     "mouse_x": mouse_x,
@@ -1179,6 +1207,12 @@ class NetworkStateClient:
                 }
                 self.modal_chat_view.render(self.object_layer_render, mouse_x, mouse_y)
             elif self.show_modal_map_view:
+                self.modal_map_view.data_to_pass = {
+                    "map_view_instance": self.map_cyberia_view,
+                    "mouse_x": mouse_x,
+                    "mouse_y": mouse_y,
+                    "is_mouse_button_pressed": is_mouse_left_button_pressed,
+                }
                 self.modal_map_view.render(self.object_layer_render, mouse_x, mouse_y)
 
             # Render close button and back-to-grid button if a right panel is open

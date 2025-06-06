@@ -175,7 +175,7 @@ def render_modal_character_view_content(
     )
 
 
-def render_modal_chat_view_content(  # Modified
+def render_modal_chat_view_content(
     modal_component,
     object_layer_render_instance: ObjectLayerRender,
     x: int,
@@ -188,7 +188,7 @@ def render_modal_chat_view_content(  # Modified
     Renders content specific to the chat view modal.
     Delegates rendering to the ChatCyberiaView instance.
     """
-    from ui.views.cyberia.chat_cyberia_view import ChatCyberiaView  # Local import
+    from ui.views.cyberia.chat_cyberia_view import ChatCyberiaView
 
     chat_view_instance: ChatCyberiaView = data_to_pass.get("chat_view_instance")
     if not chat_view_instance:
@@ -224,27 +224,30 @@ def render_modal_map_view_content(
 ):
     """
     Renders content specific to the map view modal.
+    Delegates rendering to the MapCyberiaView instance.
     """
-    modal_component.set_title("Map")
-    modal_text = "Map View (Under Construction)"
-    text_width = object_layer_render_instance.measure_text(modal_text, UI_FONT_SIZE)
+    from ui.views.cyberia.map_cyberia_view import MapCyberiaView
 
-    text_x = x + (width - text_width) // 2
-    text_y = y + (height - UI_FONT_SIZE) // 2
+    map_view_instance: MapCyberiaView = data_to_pass.get("map_view_instance")
+    if not map_view_instance:
+        logging.error(
+            "MapCyberiaView instance not passed to render_modal_map_view_content."
+        )
+        return
 
-    object_layer_render_instance.draw_text(
-        modal_text,
-        text_x + 1,
-        text_y + 1,
-        UI_FONT_SIZE,
-        Color(*UI_TEXT_COLOR_SHADING),
-    )
-    object_layer_render_instance.draw_text(
-        modal_text,
-        text_x,
-        text_y,
-        UI_FONT_SIZE,
-        Color(*UI_TEXT_COLOR_PRIMARY),
+    mouse_x = data_to_pass.get("mouse_x", -1)
+    mouse_y = data_to_pass.get("mouse_y", -1)
+    is_mouse_button_pressed = data_to_pass.get("is_mouse_button_pressed", False)
+
+    map_view_instance.render_content(
+        modal_component,
+        x,
+        y,
+        width,
+        height,
+        mouse_x,
+        mouse_y,
+        is_mouse_button_pressed,
     )
 
 
