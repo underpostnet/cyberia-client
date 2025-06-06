@@ -39,6 +39,7 @@ from object_layer.camera_manager import CameraManager
 from ui.views.cyberia.bag_cyberia_view import BagCyberiaView
 from ui.views.cyberia.quest_cyberia_view import QuestCyberiaView
 from ui.views.cyberia.character_cyberia_view import CharacterCyberiaView
+from ui.views.cyberia.chat_cyberia_view import ChatCyberiaView  # New Import
 
 # Import rendering utilities from the new path
 from ui.components.cyberia.modal_render_cyberia import (
@@ -259,6 +260,11 @@ class NetworkStateClient:
         )
         self.show_modal_character_view = False
 
+        # Initialize ChatCyberiaView instance (stateful)
+        self.chat_cyberia_view = ChatCyberiaView(
+            object_layer_render_instance=self.object_layer_render
+        )
+
         # Initialize Chat View Modal
         self.modal_chat_view = ModalCoreComponent(
             screen_width=SCREEN_WIDTH,
@@ -270,7 +276,7 @@ class NetworkStateClient:
             padding_right=0,
             horizontal_offset=0,
             background_color=Color(0, 0, 0, 200),
-            title_text="Chat",
+            title_text=self.chat_cyberia_view.title_text,  # Initial title
         )
         self.show_modal_chat_view = False
 
@@ -371,6 +377,21 @@ class NetworkStateClient:
             icon_texture=self.arrow_left_icon_texture,
         )
         self.show_modal_character_to_grid_btn = False
+
+        # New: Initialize the "Back to Chat List" button
+        self.modal_chat_to_list_btn = ModalCoreComponent(
+            screen_width=SCREEN_WIDTH,
+            screen_height=SCREEN_HEIGHT,
+            render_content_callback=partial(render_modal_close_btn_content),
+            width=30,
+            height=30,
+            padding_bottom=SCREEN_HEIGHT - 35,
+            padding_right=5 + 30 + 5,  # Positioned next to close button
+            horizontal_offset=0,
+            background_color=Color(10, 10, 10, 100),
+            icon_texture=self.arrow_left_icon_texture,
+        )
+        self.show_modal_chat_to_list_btn = False
 
         # Initialize the five small modals for UI MMO boxes (bottom-right)
         self.modal_btn_icon_modals = []
@@ -549,12 +570,12 @@ class NetworkStateClient:
         self.show_modal_right_panel_close_btn = False
         self.show_modal_bag_to_grid_btn = False
         self.show_modal_quest_to_list_btn = False
-        self.show_modal_character_to_grid_btn = False  # New: Hide character back button
+        self.show_modal_character_to_grid_btn = False
+        self.show_modal_chat_to_list_btn = False  # New: Hide chat back button
         self.active_right_panel_modal = None
 
         # Reset modal titles to their default *only if they are views without internal state*
-        # Views with internal state (Bag, Quest, Character) will handle their own title setting
-        self.modal_chat_view.set_title("Chat")
+        # Views with internal state (Bag, Quest, Character, Chat) will handle their own title setting
         self.modal_map_view.set_title("Map")
 
     def run(self):
@@ -607,7 +628,7 @@ class NetworkStateClient:
                     self.modal_bag_view,
                     self.modal_quest_list_view,
                     self.modal_character_view,
-                    self.modal_chat_view,
+                    self.modal_chat_view,  # New: update chat modal
                     self.modal_map_view,
                 ]:
                     modal.screen_width = new_screen_width
@@ -628,7 +649,8 @@ class NetworkStateClient:
                     self.modal_bag_to_grid_btn,
                     self.modal_quest_to_list_btn,
                     self.modal_character_to_grid_btn,
-                ]:  # New: include character back button
+                    self.modal_chat_to_list_btn,  # New: include chat back button
+                ]:
                     modal.screen_width = new_screen_width
                     modal.screen_height = new_screen_height
                     modal.x = self.modal_right_panel_close_btn.x - modal.width - 5
@@ -703,6 +725,10 @@ class NetworkStateClient:
                         self.quest_cyberia_view.reset_view()
                     elif self.active_right_panel_modal == "character":
                         self.character_cyberia_view.reset_view()
+                    elif (
+                        self.active_right_panel_modal == "chat"
+                    ):  # New: Reset chat view
+                        self.chat_cyberia_view.reset_view()
                     # Then hide all modals
                     self._hide_all_right_panel_modals()
                     modal_was_clicked_this_frame = True  # Consume the click
@@ -822,11 +848,40 @@ class NetworkStateClient:
                             self.character_cyberia_view.selected_slot_key is not None
                         )
 
-            elif self.show_modal_chat_view:
-                if current_mouse_is_pressed and self.modal_chat_view.check_click(
-                    mouse_x, mouse_y, current_mouse_is_pressed
+            elif self.show_modal_chat_view:  # New: Chat modal handling
+                if current_mouse_is_pressed and (
+                    mouse_x >= self.modal_chat_view.x
+                    and mouse_x <= (self.modal_chat_view.x + self.modal_chat_view.width)
+                    and mouse_y >= self.modal_chat_view.y
+                    and mouse_y
+                    <= (self.modal_chat_view.y + self.modal_chat_view.height)
                 ):
                     modal_was_clicked_this_frame = True
+
+                if (
+                    self.show_modal_chat_to_list_btn
+                    and self.modal_chat_to_list_btn.check_click(
+                        mouse_x, mouse_y, current_mouse_is_pressed
+                    )
+                ):
+                    logging.info(
+                        "Back to Chat List button clicked. Resetting chat view."
+                    )
+                    self.chat_cyberia_view.reset_view()
+                    self.show_modal_chat_to_list_btn = False
+                elif current_mouse_is_pressed:
+                    if self.chat_cyberia_view.handle_item_clicks(
+                        self.modal_chat_view.x,
+                        self.modal_chat_view.y,
+                        self.modal_chat_view.width,
+                        self.modal_chat_view.height,
+                        mouse_x,
+                        mouse_y,
+                        current_mouse_is_pressed,
+                    ):
+                        self.show_modal_chat_to_list_btn = (
+                            self.chat_cyberia_view.selected_chat_index is not None
+                        )
             elif self.show_modal_map_view:
                 if current_mouse_is_pressed and self.modal_map_view.check_click(
                     mouse_x, mouse_y, current_mouse_is_pressed
@@ -863,6 +918,11 @@ class NetworkStateClient:
                         elif self.active_right_panel_modal == "character":
                             self.character_cyberia_view.reset_view()
                             logging.info("Resetting Character view state.")
+                        elif (
+                            self.active_right_panel_modal == "chat"
+                        ):  # New: Reset chat view
+                            self.chat_cyberia_view.reset_view()
+                            logging.info("Resetting Chat view state.")
                         # Hide all modals (including the one just reset, if any)
                         self._hide_all_right_panel_modals()
 
@@ -891,9 +951,13 @@ class NetworkStateClient:
                         self.show_modal_quest_list_view
                         and self.quest_cyberia_view.selected_quest_index is not None
                     )
-                    self.show_modal_character_to_grid_btn = (  # New: Set character back button visibility
+                    self.show_modal_character_to_grid_btn = (
                         self.show_modal_character_view
                         and self.character_cyberia_view.selected_slot_key is not None
+                    )
+                    self.show_modal_chat_to_list_btn = (  # New: Set chat back button visibility
+                        self.show_modal_chat_view
+                        and self.chat_cyberia_view.selected_chat_index is not None
                     )
 
             # Only process world clicks if no modal was clicked in this frame
@@ -1106,7 +1170,13 @@ class NetworkStateClient:
                     self.object_layer_render, mouse_x, mouse_y
                 )
 
-            elif self.show_modal_chat_view:
+            elif self.show_modal_chat_view:  # New: Render chat modal
+                self.modal_chat_view.data_to_pass = {
+                    "chat_view_instance": self.chat_cyberia_view,
+                    "mouse_x": mouse_x,
+                    "mouse_y": mouse_y,
+                    "is_mouse_button_pressed": is_mouse_left_button_pressed,
+                }
                 self.modal_chat_view.render(self.object_layer_render, mouse_x, mouse_y)
             elif self.show_modal_map_view:
                 self.modal_map_view.render(self.object_layer_render, mouse_x, mouse_y)
@@ -1132,6 +1202,12 @@ class NetworkStateClient:
             # New: The "Back to Character Grid" button is only rendered when an item is selected AND the character view is open
             if self.show_modal_character_to_grid_btn and self.show_modal_character_view:
                 self.modal_character_to_grid_btn.render(
+                    self.object_layer_render, mouse_x, mouse_y
+                )
+
+            # New: The "Back to Chat List" button is only rendered when a chat is selected AND the chat view is open
+            if self.show_modal_chat_to_list_btn and self.show_modal_chat_view:
+                self.modal_chat_to_list_btn.render(
                     self.object_layer_render, mouse_x, mouse_y
                 )
 
