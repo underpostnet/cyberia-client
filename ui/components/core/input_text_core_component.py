@@ -197,37 +197,25 @@ class InputTextCoreComponent:
 
         # Handle special keys
         if key_pressed:
-            # If a key press occurs and there is a selection, clear it unless it's a special selection-related key (Shift, Ctrl+X/C/V/A)
-            # This ensures typing or simple arrow keys collapse the selection
-            is_selection_modifier_key = is_shift_down or (
-                is_control_down and key_pressed in [KEY_A, KEY_C, KEY_X, KEY_V]
-            )
-            if (
+            # Determine if a selection is active and valid (non-empty)
+            has_active_selection = (
                 self.selection_start is not None
                 and self.selection_end is not None
                 and self.selection_start != self.selection_end
-                and not is_selection_modifier_key
-            ):
-                # Collapse selection to cursor position (start of selection if moving, or end depending on direction)
-                if key_pressed == KEY_LEFT:
-                    self.cursor_position = min(self.selection_start, self.selection_end)
-                elif key_pressed == KEY_RIGHT:
-                    self.cursor_position = max(self.selection_start, self.selection_end)
-                else:
-                    self.cursor_position = min(
+            )
+
+            # Helper to get normalized selection indices
+            def get_normalized_selection():
+                if has_active_selection:
+                    return min(self.selection_start, self.selection_end), max(
                         self.selection_start, self.selection_end
-                    )  # Default collapse to start of selection
-                self.clear_selection()
+                    )
+                return None, None
 
             if key_pressed == KEY_BACKSPACE:
                 # If there's a selection, delete the selected text
-                if (
-                    self.selection_start is not None
-                    and self.selection_end is not None
-                    and self.selection_start != self.selection_end
-                ):
-                    start_idx = min(self.selection_start, self.selection_end)
-                    end_idx = max(self.selection_start, self.selection_end)
+                if has_active_selection:
+                    start_idx, end_idx = get_normalized_selection()
                     self.text = self.text[:start_idx] + self.text[end_idx:]
                     self.cursor_position = start_idx
                     self.clear_selection()
@@ -237,16 +225,10 @@ class InputTextCoreComponent:
                         + self.text[self.cursor_position :]
                     )
                     self.cursor_position -= 1
-                    self.clear_selection()
             elif key_pressed == KEY_DELETE:
                 # If there's a selection, delete the selected text
-                if (
-                    self.selection_start is not None
-                    and self.selection_end is not None
-                    and self.selection_start != self.selection_end
-                ):
-                    start_idx = min(self.selection_start, self.selection_end)
-                    end_idx = max(self.selection_start, self.selection_end)
+                if has_active_selection:
+                    start_idx, end_idx = get_normalized_selection()
                     self.text = self.text[:start_idx] + self.text[end_idx:]
                     self.cursor_position = start_idx
                     self.clear_selection()
@@ -255,7 +237,6 @@ class InputTextCoreComponent:
                         self.text[: self.cursor_position]
                         + self.text[self.cursor_position + 1 :]
                     )
-                    self.clear_selection()
             elif key_pressed == KEY_LEFT:
                 new_cursor_pos = max(0, self.cursor_position - 1)
                 if is_shift_down:
@@ -308,13 +289,8 @@ class InputTextCoreComponent:
                 )  # Move cursor to end of selected text
                 logging.info("Select All triggered.")
             elif key_pressed == KEY_C and is_control_down:  # Ctrl+C (Copy)
-                if (
-                    self.selection_start is not None
-                    and self.selection_end is not None
-                    and self.selection_start != self.selection_end
-                ):
-                    start_idx = min(self.selection_start, self.selection_end)
-                    end_idx = max(self.selection_start, self.selection_end)
+                if has_active_selection:
+                    start_idx, end_idx = get_normalized_selection()
                     selected_text = self.text[start_idx:end_idx]
                     set_clipboard_text(selected_text)
                     logging.info(
@@ -324,13 +300,8 @@ class InputTextCoreComponent:
                     set_clipboard_text(self.text)
                     logging.info("All text copied to clipboard.")
             elif key_pressed == KEY_X and is_control_down:  # Ctrl+X (Cut)
-                if (
-                    self.selection_start is not None
-                    and self.selection_end is not None
-                    and self.selection_start != self.selection_end
-                ):
-                    start_idx = min(self.selection_start, self.selection_end)
-                    end_idx = max(self.selection_start, self.selection_end)
+                if has_active_selection:
+                    start_idx, end_idx = get_normalized_selection()
                     selected_text = self.text[start_idx:end_idx]
                     set_clipboard_text(selected_text)
 
@@ -348,14 +319,9 @@ class InputTextCoreComponent:
             elif key_pressed == KEY_V and is_control_down:  # Ctrl+V (Paste)
                 clipboard_text = get_clipboard_text()
                 if clipboard_text:
-                    if (
-                        self.selection_start is not None
-                        and self.selection_end is not None
-                        and self.selection_start != self.selection_end
-                    ):
+                    if has_active_selection:
                         # Replace selected text with clipboard content
-                        start_idx = min(self.selection_start, self.selection_end)
-                        end_idx = max(self.selection_start, self.selection_end)
+                        start_idx, end_idx = get_normalized_selection()
                         new_text = (
                             self.text[:start_idx] + clipboard_text + self.text[end_idx:]
                         )
@@ -560,9 +526,7 @@ class InputTextCoreComponent:
                 self.object_layer_render.draw_rectangle(
                     int(clamped_draw_sel_x),
                     int(display_y),
-                    int(
-                        clamped_draw_sel_width
-                    ),  # Changed this to clamped_draw_sel_width
+                    int(clamped_draw_sel_width),
                     int(self.font_size),
                     self.selection_color,
                 )
