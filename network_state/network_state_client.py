@@ -12,6 +12,7 @@ from raylibpy import (
     get_screen_width,
     get_screen_height,
     get_mouse_position,
+    get_mouse_wheel_move,  # Import get_mouse_wheel_move
 )
 
 from config import (
@@ -368,9 +369,12 @@ class NetworkStateClient:
         delay_per_point = 0.02
 
         for point in path_coords:
+            # Correctly generate POINT_PATH objects instead of CLICK_POINTER
             obj = self.network_object_factory.generate_point_path(
                 [point], current_time
             )[0]
+            obj.is_persistent = False  # Ensure path points decay
+            obj.decay_time = current_time + 1.0  # Decay after 1 second
             with self.network_state.lock:
                 self.network_state.add_or_update_network_object(obj)
             time.sleep(delay_per_point)
@@ -411,16 +415,10 @@ class NetworkStateClient:
                 self.router.update_screen_dimensions(
                     new_screen_width, new_screen_height
                 )
-                self.modal_action_area_discovery.screen_width = (
-                    new_screen_width  # Updated name
-                )
-                self.modal_action_area_discovery.screen_height = (
-                    new_screen_height  # Updated name
-                )
-                self.modal_action_area_discovery.x = (
-                    new_screen_width - 280 - 5
-                )  # Updated name
-                self.modal_action_area_discovery.y = (  # Updated name
+                self.modal_action_area_discovery.screen_width = new_screen_width
+                self.modal_action_area_discovery.screen_height = new_screen_height
+                self.modal_action_area_discovery.x = new_screen_width - 280 - 5
+                self.modal_action_area_discovery.y = (
                     new_screen_height - (new_screen_height - 5 - 80) - 80
                 )
 
@@ -451,16 +449,37 @@ class NetworkStateClient:
             # modal_action_area_discovery should not be activated if any right panel is active
             right_panel_active = self.router.active_route_path is not None
             if not right_panel_active:
-                self.show_modal_action_area_discovery = (  # Updated flag
+                self.show_modal_action_area_discovery = (
                     self.interaction_manager.check_for_bot_interaction(
                         self.network_state, self.my_player_id
                     )
                 )
             else:
-                self.show_modal_action_area_discovery = False  # Updated flag
+                self.show_modal_action_area_discovery = False
 
             # Handle clicks for UI buttons (delegated to router)
             modal_was_clicked_this_frame = False
+            # Check for mouse wheel movement and pass it to the router's active view
+            # This is specifically for the map view's zoom
+            mouse_wheel_move = get_mouse_wheel_move()
+            if mouse_wheel_move != 0:
+                # If there's an active view and it's the map, let it handle the scroll
+                if self.router.active_view_modal:
+                    current_route_data = next(
+                        (
+                            r
+                            for r in self.router.routes
+                            if r["path"] == self.router.active_route_path
+                        ),
+                        None,
+                    )
+                    if current_route_data and current_route_data["path"] == "/map":
+                        # The map view itself will call get_mouse_wheel_move() internally
+                        # We just need to ensure the render method is called which then calls _handle_zoom_input
+                        logging.debug(
+                            "Mouse wheel scroll detected over active map view."
+                        )
+
             if is_mouse_left_button_pressed:  # Only proceed if mouse button is pressed
                 if self.router.handle_control_button_clicks(
                     mouse_x, mouse_y, is_mouse_left_button_pressed
@@ -501,8 +520,8 @@ class NetworkStateClient:
                         modal_was_clicked_this_frame = True
 
                 # Check action area discovery modal
-                if self.show_modal_action_area_discovery:  # Updated flag
-                    if self.modal_action_area_discovery.check_click(  # Updated name
+                if self.show_modal_action_area_discovery:
+                    if self.modal_action_area_discovery.check_click(
                         mouse_x, mouse_y, is_mouse_left_button_pressed
                     ):
                         modal_was_clicked_this_frame = True
@@ -510,18 +529,17 @@ class NetworkStateClient:
                     # even if no specific internal interactive element was clicked, consider it handled
                     # by the UI to prevent world interaction.
                     elif (
-                        mouse_x >= self.modal_action_area_discovery.x  # Updated name
+                        mouse_x >= self.modal_action_area_discovery.x
                         and mouse_x
                         <= (
-                            self.modal_action_area_discovery.x  # Updated name
-                            + self.modal_action_area_discovery.width  # Updated name
+                            self.modal_action_area_discovery.x
+                            + self.modal_action_area_discovery.width
                         )
-                        and mouse_y
-                        >= self.modal_action_area_discovery.y  # Updated name
+                        and mouse_y >= self.modal_action_area_discovery.y
                         and mouse_y
                         <= (
-                            self.modal_action_area_discovery.y  # Updated name
-                            + self.modal_action_area_discovery.height  # Updated name
+                            self.modal_action_area_discovery.y
+                            + self.modal_action_area_discovery.height
                         )
                     ):
                         logging.debug(
@@ -697,9 +715,9 @@ class NetworkStateClient:
                     )
 
             # Render modals AFTER world rendering to ensure they are on top
-            if self.show_modal_action_area_discovery:  # Updated flag
+            if self.show_modal_action_area_discovery:
                 # Pass mouse_x, mouse_y to enable hover effect logic in ModalCoreComponent
-                self.modal_action_area_discovery.render(  # Updated name
+                self.modal_action_area_discovery.render(
                     self.object_layer_render, mouse_x, mouse_y
                 )
 
@@ -708,7 +726,7 @@ class NetworkStateClient:
             with self.network_state.lock:
                 if self.my_network_object:
                     player_obj_layer_ids = self.my_network_object.object_layer_ids
-            # Pass player_object_layer_ids through the router's data_to_pass mechanism
+            # Pass player_object_layer_ids, network_state, and my_network_object through the router's data_to_pass mechanism
             # Update the data_to_pass for router's current active view.
             # This is critical for views like BagCyberiaView that need player-specific data.
             if self.router.active_view_modal:
@@ -724,6 +742,8 @@ class NetworkStateClient:
                     self.router.active_view_modal.data_to_pass.update(
                         {
                             "player_object_layer_ids": player_obj_layer_ids,
+                            "network_state": self.network_state,  # Pass network_state
+                            "my_network_object": self.my_network_object,  # Pass my_network_object
                         }
                     )
 

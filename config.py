@@ -6,6 +6,14 @@ WORLD_HEIGHT = 3000
 NETWORK_OBJECT_SIZE = 50
 MAZE_CELL_WORLD_SIZE = 50
 
+# Map Viewport Settings
+MAP_VIEWPORT_WIDTH = 300
+MAP_VIEWPORT_HEIGHT = 300
+# MAP_OBJECT_SIZE_PX removed: The size of map objects/cells will now be dynamically calculated
+# Removed reduced zoom levels for performance and visual clarity
+MAP_ZOOM_LEVELS = [0.1, 0.2, 0.5, 1.0, 2.0]  # Zoom factors: 1.0x, 2.0x
+
+
 # Server Connection Settings
 SERVER_HOST = "localhost"
 SERVER_PORT = 5000

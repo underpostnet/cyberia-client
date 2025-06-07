@@ -77,6 +77,11 @@ class NetworkObject:
         """Returns the decay time of the object."""
         return self._decay_time
 
+    @decay_time.setter
+    def decay_time(self, value: float | None):
+        """Sets the decay time of the object."""
+        self._decay_time = value
+
     def set_path(self, path: list[dict[str, float]]):
         """Sets a new movement path for the object."""
         self.path = path
