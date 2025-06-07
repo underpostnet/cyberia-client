@@ -61,7 +61,11 @@ class ModalCoreComponent:
         # New attributes for maximization
         self.is_maximized: bool = False
         self.original_width: int = width
+        self.original_height: int = height  # Store original height
         self.original_padding_right: int = padding_right
+        self.original_padding_bottom: int = (
+            padding_bottom  # Store original padding bottom
+        )
 
         # Position the modal at the bottom-right with specified padding and offset
         self.x = (
@@ -74,7 +78,12 @@ class ModalCoreComponent:
         self.title_text = new_title
 
     def set_maximized_state(
-        self, is_maximized: bool, new_width: int = None, new_padding_right: int = None
+        self,
+        is_maximized: bool,
+        new_width: int = None,
+        new_padding_right: int = None,
+        new_height: int = None,
+        new_padding_bottom: int = None,
     ):
         """
         Sets the maximized state of the modal and adjusts its dimensions and position.
@@ -84,14 +93,19 @@ class ModalCoreComponent:
             # Store original dimensions only if not already maximized
             if not self.is_maximized:
                 self.original_width = self.width
+                self.original_height = self.height
                 self.original_padding_right = self.padding_right
+                self.original_padding_bottom = self.padding_bottom
 
             self.is_maximized = True
-            # Maximize to full available width/height, potentially adjusting padding_right
+            # Maximize to full available width/height, potentially adjusting padding_right and padding_bottom
             self.width = new_width if new_width is not None else self.screen_width
-            self.height = self.screen_height  # Always maximize height
+            self.height = new_height if new_height is not None else self.screen_height
             self.padding_right = (
                 new_padding_right if new_padding_right is not None else 0
+            )
+            self.padding_bottom = (
+                new_padding_bottom if new_padding_bottom is not None else 0
             )
             self.x = 0  # Maximize to left edge
             self.y = 0  # Maximize to top edge
@@ -99,10 +113,9 @@ class ModalCoreComponent:
             self.is_maximized = False
             # Restore original dimensions
             self.width = self.original_width
-            self.height = (
-                self.screen_height
-            )  # Height is always screen_height based on Router
+            self.height = self.original_height
             self.padding_right = self.original_padding_right
+            self.padding_bottom = self.original_padding_bottom
             # Reposition based on original settings
             self.x = (
                 self.screen_width

@@ -7,6 +7,9 @@ from raylibpy import Color
 from ui.components.core.modal_core_component import ModalCoreComponent
 from ui.components.core.texture_manager import TextureManager
 from object_layer.object_layer_render import ObjectLayerRender
+from ui.components.core.modal_main_bar_component import (
+    ModalMainBarComponent,
+)  # Updated Import Path
 
 
 logging.basicConfig(
@@ -42,7 +45,7 @@ class RouterCoreComponent:
         btn_modal_padding_right: int = 5,
         close_btn_width: int = 30,
         close_btn_height: int = 30,
-        close_btn_padding_bottom: int = 5,  # Top of screen
+        close_btn_padding_bottom: int = 0,  # Top of screen
         close_btn_padding_right: int = 5,
         back_btn_offset_from_close: int = 5,  # Distance from close button
         # New offsets for maximize button positioning
@@ -72,7 +75,7 @@ class RouterCoreComponent:
         self.modal_padding_right = modal_padding_right
         self.modal_padding_bottom = modal_padding_bottom
 
-        # Configuration for button modals (bottom right UI elements)
+        # Configuration for button modals (bottom right UI elements) - now managed by ModalMainBarComponent
         self.btn_modal_width = btn_modal_width
         self.btn_modal_height = btn_modal_height
         self.btn_modal_padding_bottom = btn_modal_padding_bottom
@@ -122,14 +125,34 @@ class RouterCoreComponent:
             )
         )
 
+        # Initialize the main bar component
+        self.main_bar = ModalMainBarComponent(
+            screen_width=self.screen_width,
+            screen_height=self.screen_height,
+            object_layer_render_instance=self.object_layer_render,
+            texture_manager=self.texture_manager,
+            routes=self.routes,  # Pass all routes, main bar will filter for navigation buttons
+            ui_modal_background_color=self.ui_modal_background_color,
+            btn_modal_width=self.btn_modal_width,
+            btn_modal_height=self.btn_modal_height,
+            btn_modal_padding_bottom=self.btn_modal_padding_bottom,
+            btn_modal_padding_right=self.btn_modal_padding_right,
+            render_modal_btn_icon_content_callback=self.render_modal_btn_icon_content_callback,
+        )
+
+        # Adjust modal height based on main bar height
+        # The main modals should not overlap with the main bar
+        self.modal_height_adjusted = self.screen_height - self.main_bar.height
+
         self._initialize_view_modals()
-        self._initialize_navigation_buttons()
+        # Navigation buttons are now managed by main_bar, so remove _initialize_navigation_buttons() call
         self._initialize_control_buttons()
 
     def _initialize_view_modals(self):
         """
         Initializes the ModalCoreComponent instances for each view.
         These are the large modals that show the actual UI content (Bag, Quest, etc.).
+        The height is adjusted to account for the main bar at the bottom.
         """
         self.view_modals: Dict[str, ModalCoreComponent] = {}
         for route in self.routes:
@@ -138,8 +161,8 @@ class RouterCoreComponent:
                 screen_height=self.screen_height,
                 render_content_callback=partial(route["render_callback"]),
                 width=self.modal_width,
-                height=self.modal_height,
-                padding_bottom=self.modal_padding_bottom,
+                height=self.modal_height_adjusted,  # Use adjusted height
+                padding_bottom=self.main_bar.height,  # Start modals above the main bar
                 padding_right=self.modal_padding_right,
                 horizontal_offset=0,
                 background_color=Color(0, 0, 0, 200),  # Slightly darker for view
@@ -149,36 +172,9 @@ class RouterCoreComponent:
             # Assign the modal instance back to the route for easy access during rendering
             route["modal_instance"] = modal
 
-    def _initialize_navigation_buttons(self):
-        """
-        Initializes the small ModalCoreComponent instances for navigation buttons
-        (Character, Bag, Chat, Quest, Map) at the bottom right.
-        """
-        self.navigation_buttons: List[ModalCoreComponent] = []
-        for i, route in enumerate(self.routes):
-            icon_texture = self.texture_manager.load_texture(route["icon_path"])
-            horizontal_offset = i * (
-                self.btn_modal_width + self.btn_modal_padding_right
-            )
-
-            modal_btn = ModalCoreComponent(
-                screen_width=self.screen_width,
-                screen_height=self.screen_height,
-                render_content_callback=partial(
-                    self.render_modal_btn_icon_content_callback
-                ),
-                width=self.btn_modal_width,
-                height=self.btn_modal_height,
-                padding_bottom=self.btn_modal_padding_bottom,
-                padding_right=self.btn_modal_padding_right,
-                horizontal_offset=horizontal_offset,
-                background_color=self.ui_modal_background_color,
-                icon_texture=icon_texture,
-                title_text=route["name"],  # Name for the button
-            )
-            self.navigation_buttons.append(modal_btn)
-            # Store a reference to the route in the button's data for click handling
-            modal_btn.data_to_pass["route_path"] = route["path"]
+    # Remove _initialize_navigation_buttons as it's now in ModalMainBarComponent
+    # def _initialize_navigation_buttons(self):
+    #     ...
 
     def _initialize_control_buttons(self):
         """
@@ -317,18 +313,16 @@ class RouterCoreComponent:
     ) -> bool:
         """
         Handles clicks on the bottom-right navigation buttons.
+        Delegates to ModalMainBarComponent.
         Returns True if a button was clicked.
         """
-        clicked = False
-        for button in self.navigation_buttons:
-            if button.check_click(mouse_x, mouse_y, is_mouse_button_pressed):
-                route_path = button.data_to_pass.get("route_path")
-                if route_path:
-                    self.navigate_to(route_path)
-                    clicked = True
-                    break  # Only one button can be clicked at a time
-
-        return clicked
+        route_path = self.main_bar.handle_clicks(
+            mouse_x, mouse_y, is_mouse_button_pressed
+        )
+        if route_path:
+            self.navigate_to(route_path)
+            return True
+        return False
 
     def handle_control_button_clicks(
         self, mouse_x: int, mouse_y: int, is_mouse_button_pressed: bool
@@ -383,28 +377,36 @@ class RouterCoreComponent:
                     False,
                     self.active_view_modal.original_width,
                     self.active_view_modal.original_padding_right,
+                    self.active_view_modal.original_height,
+                    self.active_view_modal.original_padding_bottom,
                 )
                 logging.info(f"Restored modal size for {self.active_route_path}")
             else:
-                # Maximize to full screen (entire width)
+                # Maximize to full screen (entire width), height adjusted for main bar
                 available_width = self.screen_width
-                new_padding_right = (
-                    0  # No padding from right when maximized to full screen
-                )
+                # New height for the modal when maximized, considering the main bar at the bottom
+                maximized_height = self.screen_height - self.main_bar.height
+
+                # We need to set the padding_bottom for the maximized modal so it sits just above the main bar
+                # The padding_bottom of the modal will be the height of the main bar
+                new_padding_bottom = self.main_bar.height
 
                 self.active_view_modal.set_maximized_state(
-                    True, available_width, new_padding_right
+                    True,
+                    available_width,
+                    0,
+                    maximized_height,
+                    new_padding_bottom,  # Pass new height and padding_bottom
                 )
                 logging.info(f"Maximized modal size for {self.active_route_path}")
 
     def render(self, mouse_x: int, mouse_y: int, is_mouse_button_pressed: bool):
         """
-        Renders the active view modal and all navigation buttons.
+        Renders the active view modal and all control buttons and the main bar.
         """
         # Render the currently active view modal
         if self.active_view_modal:
             # Pass mouse coordinates and button state to the view's render_content
-            # The view instance itself will receive these via the data_to_pass dictionary
             current_route_data = next(
                 (r for r in self.routes if r["path"] == self.active_route_path), None
             )
@@ -454,9 +456,8 @@ class RouterCoreComponent:
                     )
                 self.maximize_button.render(self.object_layer_render, mouse_x, mouse_y)
 
-        # Render all navigation buttons
-        for button in self.navigation_buttons:
-            button.render(self.object_layer_render, mouse_x, mouse_y)
+        # Render the main bar with navigation buttons
+        self.main_bar.render(mouse_x, mouse_y)
 
     def handle_view_clicks(
         self, mouse_x: int, mouse_y: int, is_mouse_button_pressed: bool
@@ -509,15 +510,31 @@ class RouterCoreComponent:
         self.screen_width = new_screen_width
         self.screen_height = new_screen_height
 
+        # Update the main bar component's screen dimensions and reposition its buttons
+        self.main_bar.update_screen_dimensions(new_screen_width, new_screen_height)
+
+        # Recalculate adjusted modal height based on new screen height and main bar height
+        self.modal_height_adjusted = new_screen_height - self.main_bar.height
+
         # Update view modals
         for modal in self.view_modals.values():
             modal.screen_width = new_screen_width
-            modal.screen_height = new_screen_height
+            modal.screen_height = (
+                new_screen_height  # Pass full screen height for internal calculations
+            )
+
+            # Update modal height and padding_bottom to ensure it fits above the main bar
+            modal.height = self.modal_height_adjusted
+            modal.padding_bottom = self.main_bar.height
+
             # If modal is maximized, recalculate its maximized position
             if modal.is_maximized:
-                # When maximized, modal takes full screen, so no padding from right
-                modal.set_maximized_state(True, new_screen_width, 0)
+                # When maximized, modal takes full screen width, and adjusted height
+                modal.set_maximized_state(
+                    True, new_screen_width, 0, modal.height, modal.padding_bottom
+                )
             else:
+                # In normal mode, reposition based on its original width and the new adjusted height/padding
                 modal.x = new_screen_width - modal.width - modal.padding_right
                 modal.y = new_screen_height - modal.height - modal.padding_bottom
 
@@ -543,17 +560,4 @@ class RouterCoreComponent:
         self.maximize_button.screen_width = new_screen_width
         self.maximize_button.screen_height = new_screen_height
 
-        # Update navigation buttons
-        for i, modal in enumerate(self.navigation_buttons):
-            modal.screen_width = new_screen_width
-            modal.screen_height = new_screen_height
-            horizontal_offset = i * (
-                self.btn_modal_width + self.btn_modal_padding_right
-            )
-            modal.x = (
-                self.screen_width
-                - modal.width
-                - modal.padding_right
-                - horizontal_offset
-            )
-            modal.y = self.screen_height - modal.height - self.padding_bottom
+        # Navigation buttons update is now handled by self.main_bar.update_screen_dimensions()
