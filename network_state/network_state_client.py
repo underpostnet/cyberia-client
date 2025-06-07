@@ -27,12 +27,13 @@ from config import (
     NETWORK_OBJECT_SIZE,
     UI_MODAL_BACKGROUND_COLOR,
     UI_ROUTES,
+    KEYBOARD_BACKSPACE_INITIAL_DELAY,  # New import
+    KEYBOARD_BACKSPACE_REPEAT_RATE,  # New import
 )
 from object_layer.object_layer_render import ObjectLayerRender
 from network_state.network_object import NetworkObject
 from network_state.network_state import NetworkState
 from network_state.network_object_factory import NetworkObjectFactory
-from network_state.network_state_proxy import NetworkStateProxy
 from network_state.astar import astar
 from ui.components.core.modal_core_component import ModalCoreComponent
 from object_layer.camera_manager import CameraManager
@@ -59,6 +60,10 @@ from ui.components.cyberia.modal_render_cyberia import (
 # Import new core components
 from ui.components.core.router_core_component import RouterCoreComponent
 from ui.components.core.texture_manager import TextureManager
+from ui.components.core.keyboard_core_component import KeyboardCoreComponent
+from network_state.network_state_proxy import (
+    NetworkStateProxy,
+)  # Added import for NetworkStateProxy
 
 
 logging.basicConfig(
@@ -166,6 +171,12 @@ class NetworkStateClient:
         # Initialize CameraManager
         self.camera_manager = CameraManager(SCREEN_WIDTH, SCREEN_HEIGHT)
 
+        # Initialize KeyboardCoreComponent
+        self.keyboard_core_component = KeyboardCoreComponent(
+            backspace_initial_delay=KEYBOARD_BACKSPACE_INITIAL_DELAY,
+            backspace_repeat_rate=KEYBOARD_BACKSPACE_REPEAT_RATE,
+        )
+
         self.object_layer_render = ObjectLayerRender(
             screen_width=SCREEN_WIDTH,
             screen_height=SCREEN_HEIGHT,
@@ -255,6 +266,7 @@ class NetworkStateClient:
             screen_height=SCREEN_HEIGHT,
             object_layer_render_instance=self.object_layer_render,
             texture_manager=self.texture_manager,
+            keyboard_core_component=self.keyboard_core_component,
             routes=UI_ROUTES,
             ui_modal_background_color=Color(*UI_MODAL_BACKGROUND_COLOR),
             # Pass rendering callbacks for generic button content
@@ -399,6 +411,9 @@ class NetworkStateClient:
             current_time = time.time()
             delta_time = current_time - last_frame_time
             last_frame_time = current_time
+
+            # Update keyboard state at the beginning of the frame
+            self.keyboard_core_component.update(delta_time)
 
             mouse_pos = get_mouse_position()
             mouse_x, mouse_y = int(mouse_pos.x), int(mouse_pos.y)
@@ -747,7 +762,9 @@ class NetworkStateClient:
                         }
                     )
 
-            self.router.render(mouse_x, mouse_y, is_mouse_left_button_pressed)
+            self.router.render(
+                mouse_x, mouse_y, is_mouse_left_button_pressed, delta_time
+            )
 
             # Draw FPS at bottom-left
             frame_time = self.object_layer_render.get_frame_time()

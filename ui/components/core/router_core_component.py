@@ -6,6 +6,9 @@ from raylibpy import Color
 
 from ui.components.core.modal_core_component import ModalCoreComponent
 from ui.components.core.texture_manager import TextureManager
+from ui.components.core.keyboard_core_component import (
+    KeyboardCoreComponent,
+)  # New import
 from object_layer.object_layer_render import ObjectLayerRender
 from ui.components.core.modal_main_bar_component import (
     ModalMainBarComponent,
@@ -33,6 +36,7 @@ class RouterCoreComponent:
         screen_height: int,
         object_layer_render_instance: ObjectLayerRender,
         texture_manager: TextureManager,
+        keyboard_core_component: KeyboardCoreComponent,  # New parameter
         routes: List[Dict[str, Any]],
         ui_modal_background_color: Color,
         modal_width: int = 300,
@@ -63,6 +67,9 @@ class RouterCoreComponent:
         self.screen_height = screen_height
         self.object_layer_render = object_layer_render_instance
         self.texture_manager = texture_manager
+        self.keyboard_core_component = (
+            keyboard_core_component  # Store keyboard component
+        )
         self.ui_modal_background_color = ui_modal_background_color
 
         self.routes = routes
@@ -222,7 +229,7 @@ class RouterCoreComponent:
         self.show_back_button = False
 
         # Maximize button. Its position will be dynamically set in the render loop.
-        # Initialize with minimal padding to ensure ModalCoreComponent's internal x,y don't interfere.
+        # Initialize with minimal padding to ensure ModalCoreComponent's internal x,y donop interfere.
         self.maximize_button = ModalCoreComponent(
             screen_width=self.screen_width,
             screen_height=self.screen_height,
@@ -400,7 +407,9 @@ class RouterCoreComponent:
                 )
                 logging.info(f"Maximized modal size for {self.active_route_path}")
 
-    def render(self, mouse_x: int, mouse_y: int, is_mouse_button_pressed: bool):
+    def render(
+        self, mouse_x: int, mouse_y: int, is_mouse_button_pressed: bool, dt: float = 0.0
+    ):  # Added dt parameter
         """
         Renders the active view modal and all control buttons and the main bar.
         """
@@ -418,6 +427,10 @@ class RouterCoreComponent:
                         "mouse_x": mouse_x,
                         "mouse_y": mouse_y,
                         "is_mouse_button_pressed": is_mouse_button_pressed,
+                        "char_pressed": self.keyboard_core_component.get_char_pressed(),  # Pass keyboard data
+                        "key_pressed": self.keyboard_core_component.get_key_pressed(),  # Pass keyboard data
+                        "is_key_down_map": self.keyboard_core_component.get_is_key_down_map(),  # Pass keyboard data
+                        "dt": dt,  # Pass delta time
                     }
                 )
                 # Update modal title dynamically from the view instance

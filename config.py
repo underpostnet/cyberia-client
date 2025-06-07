@@ -34,6 +34,12 @@ UI_TEXT_COLOR_PRIMARY = (255, 204, 0, 255)  # RGBA for yellow/orange
 UI_TEXT_COLOR_SHADING = (0, 0, 0, 255)  # RGBA for black (shading)
 UI_FONT_SIZE = 18  # Reduced font size for all UI text
 
+# Keyboard Settings
+KEYBOARD_BACKSPACE_INITIAL_DELAY = (
+    0.4  # Initial delay before backspace starts repeating
+)
+KEYBOARD_BACKSPACE_REPEAT_RATE = 0.05  # Rate at which backspace repeats
+
 # Network object type to object layer IDs mapping
 NETWORK_OBJECT_TYPE_DEFAULT_OBJECT_LAYER_IDS = {
     "PLAYER": ["ACTION_AREA", "ANON"],

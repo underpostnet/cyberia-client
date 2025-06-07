@@ -33,7 +33,10 @@ from raylibpy import (
     draw_texture_ex,
     draw_poly,
     ConfigFlags,
-    set_config_flags,  # New import for set_config_flags
+    set_config_flags,
+    get_char_pressed,
+    get_key_pressed,
+    is_key_down,
 )
 
 from config import (
@@ -381,6 +384,18 @@ class ObjectLayerRender:
     def is_key_pressed(self, key: int) -> bool:
         """Checks if a keyboard key has been pressed in the current frame."""
         return is_key_pressed(key)
+
+    def get_char_pressed(self) -> int | None:
+        """Returns the character value of the key pressed in the current frame, or None."""
+        return get_char_pressed()
+
+    def get_key_pressed(self) -> int | None:
+        """Returns the key code of the key pressed in the current frame, or None."""
+        return get_key_pressed()
+
+    def is_key_down(self, key: int) -> bool:
+        """Checks if a keyboard key is currently being held down."""
+        return is_key_down(key)
 
     def window_should_close(self) -> bool:
         """Checks if the window close button has been pressed or ESC key is pressed."""

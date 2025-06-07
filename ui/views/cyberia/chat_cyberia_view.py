@@ -1,7 +1,16 @@
 import logging
 from raylibpy import Color
-from config import UI_FONT_SIZE, UI_TEXT_COLOR_PRIMARY, UI_TEXT_COLOR_SHADING
+from config import (
+    UI_FONT_SIZE,
+    UI_TEXT_COLOR_PRIMARY,
+    UI_TEXT_COLOR_SHADING,
+    KEYBOARD_BACKSPACE_INITIAL_DELAY,
+    KEYBOARD_BACKSPACE_REPEAT_RATE,
+)
 from ui.components.core.grid_core_component import GridCoreComponent
+from ui.components.core.input_text_core_component import (
+    InputTextCoreComponent,
+)  # New import
 from object_layer.object_layer_render import ObjectLayerRender
 
 logging.basicConfig(
@@ -103,6 +112,21 @@ class ChatCyberiaView:
             grid_type="rectangle",  # Explicitly set to rectangle
         )
 
+        # Initialize InputTextCoreComponent for message input
+        self.message_input = InputTextCoreComponent(
+            object_layer_render_instance=self.object_layer_render,
+            x=0,  # Will be set dynamically in render_single_chat_detail
+            y=0,  # Will be set dynamically
+            width=0,  # Will be set dynamically
+            height=40,
+            font_size=UI_FONT_SIZE,
+            text_color=Color(*UI_TEXT_COLOR_PRIMARY),
+            background_color=Color(50, 50, 50, 200),
+            border_color=Color(100, 100, 100, 255),
+            shading_color=Color(*UI_TEXT_COLOR_SHADING),
+            initial_text="Type your message...",
+        )
+
     def _render_chat_room_item(
         self,
         object_layer_render_instance: ObjectLayerRender,
@@ -173,6 +197,10 @@ class ChatCyberiaView:
         mouse_x: int,
         mouse_y: int,
         is_mouse_button_pressed: bool,
+        char_pressed: int | None,  # New: character pressed
+        key_pressed: int | None,  # New: key pressed
+        is_key_down_map: dict,  # New: map of keys currently down
+        dt: float,  # New: delta time
     ):
         """
         Renders the detailed view of a single selected chat room.
@@ -226,7 +254,21 @@ class ChatCyberiaView:
         current_y += UI_FONT_SIZE + 5
 
         message_display_limit = 5  # Display last 5 messages for brevity
-        for msg in messages[-message_display_limit:]:
+        # Calculate available height for messages to avoid overlap with input box
+        available_message_height = (
+            height - (current_y - y) - 60
+        )  # 60 for input box and padding
+        message_line_height = (UI_FONT_SIZE - 4) + 2
+        max_messages_to_display = int(available_message_height / message_line_height)
+
+        # Display messages, ensuring they fit and are bottom-aligned if many
+        start_message_index = max(0, len(messages) - max_messages_to_display)
+
+        # Adjust current_y to draw messages from the bottom up, or fill from top down
+        # For simplicity, we'll draw from top down, and if it exceeds space, the last ones will be visible.
+        # A more complex solution would involve a scrollable message area.
+
+        for msg in messages[start_message_index:]:
             msg_text = f"[{msg.get('time')}] {msg.get('sender')}: {msg.get('text')}"
             self.object_layer_render.draw_text(
                 msg_text, x + 20 + 1, current_y + 1, UI_FONT_SIZE - 4, shading_color
@@ -234,29 +276,22 @@ class ChatCyberiaView:
             self.object_layer_render.draw_text(
                 msg_text, x + 20, current_y, UI_FONT_SIZE - 4, text_color
             )
-            current_y += (UI_FONT_SIZE - 4) + 2
+            current_y += message_line_height
 
-        # Placeholder for message input/send functionality (future)
-        input_text = "Type your message..."
-        input_box_y = height - 60
-        input_box_height = 40
-        self.object_layer_render.draw_rectangle(
-            x + 20, input_box_y, width - 40, input_box_height, Color(50, 50, 50, 200)
-        )
-        self.object_layer_render.draw_text(
-            input_text,
-            x + 30 + 1,
-            input_box_y + (input_box_height - UI_FONT_SIZE) // 2 + 1,
-            UI_FONT_SIZE,
-            shading_color,
-        )
-        self.object_layer_render.draw_text(
-            input_text,
-            x + 30,
-            input_box_y + (input_box_height - UI_FONT_SIZE) // 2,
-            UI_FONT_SIZE,
-            text_color,
-        )
+        # Position and render message input field
+        input_box_y = (
+            y + height - self.message_input.height - 10
+        )  # 10 pixels from bottom
+        input_box_x = x + 20
+        input_box_width = width - 40
+
+        self.message_input.x = input_box_x
+        self.message_input.y = input_box_y
+        self.message_input.width = input_box_width
+
+        # Update input text component with keyboard events and delta time
+        self.message_input.update(dt, char_pressed, key_pressed, is_key_down_map)
+        self.message_input.render()
 
     def _wrap_text(self, text: str, max_width: int, font_size: int) -> list[str]:
         """Wraps text to fit within a maximum width."""
@@ -291,7 +326,15 @@ class ChatCyberiaView:
             x, y, width, height: Dimensions of the modal container.
             mouse_x, mouse_y: Current mouse coordinates.
             is_mouse_button_pressed: True if the mouse button is pressed.
+            modal_component: The modal component instance (contains data_to_pass including keyboard data)
         """
+        # Extract keyboard data and delta time from data_to_pass
+        data_to_pass = modal_component.data_to_pass
+        char_pressed = data_to_pass.get("char_pressed")
+        key_pressed = data_to_pass.get("key_pressed")
+        is_key_down_map = data_to_pass.get("is_key_down_map")
+        dt = data_to_pass.get("dt")
+
         if self.selected_chat_index is None:
             # Render the chat room list
             self.title_text = "Chat Rooms"  # Reset internal title for list view
@@ -340,6 +383,8 @@ class ChatCyberiaView:
                 mouse_y=mouse_y,
                 selected_index=self.selected_chat_index,
             )
+            # Ensure message input is not active when in list view
+            self.message_input.set_active(False)
         else:
             # Render single chat detail view
             selected_chat_data = self.chat_rooms[self.selected_chat_index]
@@ -353,6 +398,10 @@ class ChatCyberiaView:
                 mouse_x,
                 mouse_y,
                 is_mouse_button_pressed,
+                char_pressed,
+                key_pressed,
+                is_key_down_map,
+                dt,
             )
 
     def handle_item_clicks(
@@ -368,6 +417,26 @@ class ChatCyberiaView:
         """
         Handles clicks within the chat modal. Returns True if a click was handled.
         """
+        # Handle message input field clicks first if in detail view
+        if self.selected_chat_index is not None:
+            # The input field's coordinates are relative to the modal content area
+            input_box_x = offset_x + 20
+            input_box_y = (
+                offset_y + container_height - self.message_input.height - 10
+            )  # 10 pixels from bottom
+
+            # Temporarily update input field's position for click check
+            self.message_input.x = input_box_x
+            self.message_input.y = input_box_y
+            self.message_input.width = (
+                container_width - 40
+            )  # width - 40 for input_box_width
+
+            if self.message_input.check_click(
+                mouse_x, mouse_y, is_mouse_button_pressed
+            ):
+                return True  # Input field handled the click
+
         if not is_mouse_button_pressed:
             return False
 
@@ -393,13 +462,19 @@ class ChatCyberiaView:
                 logging.info(
                     f"Chat room clicked: {self.chat_rooms[clicked_index].get('name')}"
                 )
+                self.message_input.set_active(
+                    False
+                )  # Deactivate input on chat room selection
+                self.message_input.set_text("")  # Clear text on chat room change
                 return True
             return False
         else:
-            # In single chat detail view, currently no interactive elements
-            return False  # No specific button clicks to handle yet
+            # In single chat detail view, if click was not handled by input field, no other elements are interactive yet
+            return False
 
     def reset_view(self):
-        """Resets the view state, e.g., deselects any selected chat room."""
+        """Resets the view state, e.g., deselects any selected chat room and clears input."""
         self.selected_chat_index = None
         self.title_text = "Chat Rooms"
+        self.message_input.set_active(False)
+        self.message_input.set_text("Type your message...")
