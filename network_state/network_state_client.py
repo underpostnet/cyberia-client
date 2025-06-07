@@ -11,8 +11,6 @@ from raylibpy import (
     is_window_resized,
     get_screen_width,
     get_screen_height,
-    load_texture,
-    unload_texture,
     get_mouse_position,
 )
 
@@ -27,6 +25,7 @@ from config import (
     WORLD_WIDTH,
     NETWORK_OBJECT_SIZE,
     UI_MODAL_BACKGROUND_COLOR,
+    UI_ROUTES,  # Import the new UI_ROUTES from config
 )
 from object_layer.object_layer_render import ObjectLayerRender
 from network_state.network_object import NetworkObject
@@ -36,24 +35,29 @@ from network_state.network_state_proxy import NetworkStateProxy
 from network_state.astar import astar
 from ui.components.core.modal_core_component import ModalCoreComponent
 from object_layer.camera_manager import CameraManager
+
+# Import UI Views
 from ui.views.cyberia.bag_cyberia_view import BagCyberiaView
 from ui.views.cyberia.quest_cyberia_view import QuestCyberiaView
 from ui.views.cyberia.character_cyberia_view import CharacterCyberiaView
 from ui.views.cyberia.chat_cyberia_view import ChatCyberiaView
 from ui.views.cyberia.map_cyberia_view import MapCyberiaView
 
-
-# Import rendering utilities from the new path
+# Import rendering utilities (these are passed as callbacks, not directly managed here)
 from ui.components.cyberia.modal_render_cyberia import (
     render_modal_quest_discovery_content,
     render_modal_bag_view_content,
-    render_modal_close_btn_content,
+    render_modal_close_btn_content,  # Reused for close and back buttons
     render_modal_btn_icon_content,
     render_modal_character_view_content,
     render_modal_chat_view_content,
     render_modal_map_view_content,
     render_modal_quest_list_content,
 )
+
+# Import new core components
+from ui.components.core.router_core_component import RouterCoreComponent
+from ui.components.core.texture_manager import TextureManager
 
 
 logging.basicConfig(
@@ -155,7 +159,10 @@ class NetworkStateClient:
 
         self.network_object_factory = NetworkObjectFactory()
 
-        # Initialize CameraManager first
+        # Initialize TextureManager FIRST
+        self.texture_manager = TextureManager()
+
+        # Initialize CameraManager
         self.camera_manager = CameraManager(SCREEN_WIDTH, SCREEN_HEIGHT)
 
         self.object_layer_render = ObjectLayerRender(
@@ -202,253 +209,56 @@ class NetworkStateClient:
         )
         self.show_modal_quest_discovery = False
 
-        # Initialize BagCyberiaView instance (stateful)
+        # Initialize UI Views (these will be passed to the router)
         self.bag_cyberia_view = BagCyberiaView(
             object_layer_render_instance=self.object_layer_render
         )
-
-        # Initialize the large modal for the bag view (right side)
-        self.modal_bag_view = ModalCoreComponent(
-            screen_width=SCREEN_WIDTH,
-            screen_height=SCREEN_HEIGHT,
-            render_content_callback=partial(render_modal_bag_view_content),
-            width=300,  # Fixed width
-            height=SCREEN_HEIGHT,  # Same as screen height
-            padding_bottom=0,
-            padding_right=0,  # Fixed to the right edge
-            horizontal_offset=0,
-            background_color=Color(0, 0, 0, 200),  # Slightly darker for view
-            title_text=self.bag_cyberia_view.title_text,  # Initial title
-        )
-        self.show_modal_bag_view = False  # State to control visibility
-
-        # Initialize QuestCyberiaView instance (stateful)
         self.quest_cyberia_view = QuestCyberiaView(
             object_layer_render_instance=self.object_layer_render
         )
-
-        # Initialize the large modal for the quest list view (right side, overlapping bag)
-        self.modal_quest_list_view = ModalCoreComponent(
-            screen_width=SCREEN_WIDTH,
-            screen_height=SCREEN_HEIGHT,
-            render_content_callback=partial(render_modal_quest_list_content),
-            width=300,
-            height=SCREEN_HEIGHT,
-            padding_bottom=0,
-            padding_right=0,
-            horizontal_offset=0,
-            background_color=Color(0, 0, 0, 200),
-            title_text=self.quest_cyberia_view.title_text,
-        )
-        self.show_modal_quest_list_view = False
-
-        # Initialize CharacterCyberiaView instance (stateful)
         self.character_cyberia_view = CharacterCyberiaView(
             object_layer_render_instance=self.object_layer_render
         )
-
-        # Initialize Character View Modal
-        self.modal_character_view = ModalCoreComponent(
-            screen_width=SCREEN_WIDTH,
-            screen_height=SCREEN_HEIGHT,
-            render_content_callback=partial(render_modal_character_view_content),
-            width=300,
-            height=SCREEN_HEIGHT,
-            padding_bottom=0,
-            padding_right=0,
-            horizontal_offset=0,
-            background_color=Color(0, 0, 0, 200),
-            title_text=self.character_cyberia_view.title_text,
-        )
-        self.show_modal_character_view = False
-
-        # Initialize ChatCyberiaView instance (stateful)
         self.chat_cyberia_view = ChatCyberiaView(
             object_layer_render_instance=self.object_layer_render
         )
-
-        # Initialize Chat View Modal
-        self.modal_chat_view = ModalCoreComponent(
-            screen_width=SCREEN_WIDTH,
-            screen_height=SCREEN_HEIGHT,
-            render_content_callback=partial(render_modal_chat_view_content),
-            width=300,
-            height=SCREEN_HEIGHT,
-            padding_bottom=0,
-            padding_right=0,
-            horizontal_offset=0,
-            background_color=Color(0, 0, 0, 200),
-            title_text=self.chat_cyberia_view.title_text,  # Initial title
-        )
-        self.show_modal_chat_view = False
-
-        # Initialize MapCyberiaView instance (stateful)
         self.map_cyberia_view = MapCyberiaView(
             object_layer_render_instance=self.object_layer_render
         )
 
-        # Initialize Map View Modal
-        self.modal_map_view = ModalCoreComponent(
+        # Populate UI_ROUTES with view instances and render callbacks
+        for route in UI_ROUTES:
+            if route["path"] == "/character":
+                route["view_instance"] = self.character_cyberia_view
+                route["render_callback"] = render_modal_character_view_content
+            elif route["path"] == "/bag":
+                route["view_instance"] = self.bag_cyberia_view
+                route["render_callback"] = render_modal_bag_view_content
+            elif route["path"] == "/chat":
+                route["view_instance"] = self.chat_cyberia_view
+                route["render_callback"] = render_modal_chat_view_content
+            elif route["path"] == "/quest":
+                route["view_instance"] = self.quest_cyberia_view
+                route["render_callback"] = render_modal_quest_list_content
+            elif route["path"] == "/map":
+                route["view_instance"] = self.map_cyberia_view
+                route["render_callback"] = render_modal_map_view_content
+
+        # Initialize RouterCoreComponent
+        self.router = RouterCoreComponent(
             screen_width=SCREEN_WIDTH,
             screen_height=SCREEN_HEIGHT,
-            render_content_callback=partial(render_modal_map_view_content),
-            width=300,
-            height=SCREEN_HEIGHT,
-            padding_bottom=0,
-            padding_right=0,
-            horizontal_offset=0,
-            background_color=Color(0, 0, 0, 200),
-            title_text=self.map_cyberia_view.title_text,  # Updated: Use map_cyberia_view's title
+            object_layer_render_instance=self.object_layer_render,
+            texture_manager=self.texture_manager,
+            routes=UI_ROUTES,
+            ui_modal_background_color=Color(*UI_MODAL_BACKGROUND_COLOR),
+            # Pass rendering callbacks for generic button content
+            render_modal_btn_icon_content_callback=render_modal_btn_icon_content,
+            render_modal_close_btn_content_callback=render_modal_close_btn_content,
         )
-        self.show_modal_map_view = False
-
-        # Initialize the close button for modal_bag_view and modal_quest_list_view
-        try:
-            self.close_icon_texture = load_texture("ui/assets/icons/close.png")
-        except Exception as e:
-            logging.error(f"Failed to load close.png texture: {e}")
-            self.close_icon_texture = None
-
-        self.modal_right_panel_close_btn = (
-            ModalCoreComponent(  # Renamed for reusability
-                screen_width=SCREEN_WIDTH,
-                screen_height=SCREEN_HEIGHT,
-                render_content_callback=partial(render_modal_close_btn_content),
-                width=30,
-                height=30,
-                padding_bottom=SCREEN_HEIGHT - 35,  # 5px from top, 30px height
-                padding_right=5,  # 5px from right
-                horizontal_offset=0,
-                background_color=Color(
-                    10, 10, 10, 100
-                ),  # Dark background for consistency
-                icon_texture=self.close_icon_texture,  # Pass the loaded texture
-            )
-        )
-        self.show_modal_right_panel_close_btn = False  # State to control visibility
-
-        # Initialize the arrow-left button for modal_bag_to_grid_btn
-        try:
-            self.arrow_left_icon_texture = load_texture(
-                "ui/assets/icons/arrow-left.png"
-            )
-        except Exception as e:
-            logging.error(f"Failed to load arrow-left.png texture: {e}")
-            self.arrow_left_icon_texture = None
-
-        # Initialize the "Back to Grid" button for modal_bag_view (adjacent to close button)
-        self.modal_bag_to_grid_btn = ModalCoreComponent(
-            screen_width=SCREEN_WIDTH,
-            screen_height=SCREEN_HEIGHT,
-            render_content_callback=partial(
-                render_modal_close_btn_content
-            ),  # Use close button content renderer for consistency
-            width=30,  # A bit wider than close button
-            height=30,
-            padding_bottom=SCREEN_HEIGHT - 35,  # Same vertical position as close button
-            padding_right=5
-            + 30
-            + 5,  # 5px from close button + close button width + its padding
-            horizontal_offset=0,
-            background_color=Color(10, 10, 10, 100),  # Dark background as requested
-            icon_texture=self.arrow_left_icon_texture,  # Assign the arrow-left icon
-        )
-        self.show_modal_bag_to_grid_btn = False  # Initially hidden
-
-        # Initialize the "Back to Quest List" button (similar to bag's back button)
-        self.modal_quest_to_list_btn = ModalCoreComponent(
-            screen_width=SCREEN_WIDTH,
-            screen_height=SCREEN_HEIGHT,
-            render_content_callback=partial(render_modal_close_btn_content),
-            width=30,
-            height=30,
-            padding_bottom=SCREEN_HEIGHT - 35,
-            padding_right=5 + 30 + 5,
-            horizontal_offset=0,
-            background_color=Color(10, 10, 10, 100),
-            icon_texture=self.arrow_left_icon_texture,  # Reusing arrow-left icon
-        )
-        self.show_modal_quest_to_list_btn = False
-
-        # New: Initialize the "Back to Character Grid" button
-        self.modal_character_to_grid_btn = ModalCoreComponent(
-            screen_width=SCREEN_WIDTH,
-            screen_height=SCREEN_HEIGHT,
-            render_content_callback=partial(render_modal_close_btn_content),
-            width=30,
-            height=30,
-            padding_bottom=SCREEN_HEIGHT - 35,
-            padding_right=5 + 30 + 5,  # Positioned next to close button
-            horizontal_offset=0,
-            background_color=Color(10, 10, 10, 100),
-            icon_texture=self.arrow_left_icon_texture,
-        )
-        self.show_modal_character_to_grid_btn = False
-
-        # New: Initialize the "Back to Chat List" button
-        self.modal_chat_to_list_btn = ModalCoreComponent(
-            screen_width=SCREEN_WIDTH,
-            screen_height=SCREEN_HEIGHT,
-            render_content_callback=partial(render_modal_close_btn_content),
-            width=30,
-            height=30,
-            padding_bottom=SCREEN_HEIGHT - 35,
-            padding_right=5 + 30 + 5,  # Positioned next to close button
-            horizontal_offset=0,
-            background_color=Color(10, 10, 10, 100),
-            icon_texture=self.arrow_left_icon_texture,
-        )
-        self.show_modal_chat_to_list_btn = False
-
-        # Initialize the five small modals for UI MMO boxes (bottom-right)
-        self.modal_btn_icon_modals = []
-        icon_paths = [
-            "ui/assets/icons/character.png",
-            "ui/assets/icons/bag.png",
-            "ui/assets/icons/chat.png",
-            "ui/assets/icons/quest.png",
-            "ui/assets/icons/map.png",
-        ]
-        self.modal_icons = []
-        for path in icon_paths:
-            try:
-                texture = load_texture(path)
-                self.modal_icons.append(texture)
-            except Exception as e:
-                logging.error(f"Failed to load texture {path}: {e}")
-                self.modal_icons.append(None)
-
-        num_modal_btn_icon_modals = 5
-
-        for i in range(num_modal_btn_icon_modals):
-            horizontal_offset = i * (40 + 5)
-
-            icon_texture = self.modal_icons[i] if i < len(self.modal_icons) else None
-            modal_title = ["Character", "Bag", "Chat", "Quest", "Map"][
-                i
-            ]  # Define titles for buttons
-            modal = ModalCoreComponent(
-                screen_width=SCREEN_WIDTH,
-                screen_height=SCREEN_HEIGHT,
-                render_content_callback=partial(render_modal_btn_icon_content),
-                width=40,
-                height=40,
-                padding_bottom=5,
-                padding_right=5,
-                horizontal_offset=horizontal_offset,
-                background_color=Color(*UI_MODAL_BACKGROUND_COLOR),
-                icon_texture=icon_texture,  # Pass icon texture to modal
-                title_text=modal_title,  # Pass title text to modal
-            )
-            self.modal_btn_icon_modals.append(modal)
 
         # Initialize the InteractionManager
         self.interaction_manager = InteractionManager(NETWORK_OBJECT_SIZE)
-
-        # Track the currently active right-panel modal for toggle behavior
-        self.active_right_panel_modal: str | None = (
-            None  # "bag", "quest", "character", "chat", "map"
-        )
 
     def _set_my_player_id(self, player_id: str):
         """Sets the client's player ID, called by the proxy."""
@@ -564,45 +374,13 @@ class NetworkStateClient:
             f"Generated {len(path_coords)} client-side path GFX points asynchronously."
         )
 
-    def _hide_all_right_panel_modals(self):
-        """
-        Helper to hide all right-panel modals and associated back/close buttons.
-        This function does NOT reset the view states.
-        """
-        self.show_modal_bag_view = False
-        self.show_modal_quest_list_view = False
-        self.show_modal_character_view = False
-        self.show_modal_chat_view = False
-        self.show_modal_map_view = False
-        self.show_modal_right_panel_close_btn = False
-        self.show_modal_bag_to_grid_btn = False
-        self.show_modal_quest_to_list_btn = False
-        self.show_modal_character_to_grid_btn = False
-        self.show_modal_chat_to_list_btn = False
-        self.active_right_panel_modal = None
-
-        # Reset modal titles to their default *only if they are views without internal state*
-        # Views with internal state (Bag, Quest, Character, Chat, Map) will handle their own title setting
-        # Updated: Reset map view's state
-        # self.bag_cyberia_view.reset_view()
-        # self.quest_cyberia_view.reset_view()
-        # self.character_cyberia_view.reset_view()
-        # self.chat_cyberia_view.reset_view()
-        # self.map_cyberia_view.reset_view()
-
     def run(self):
         """Runs the main client loop."""
         self.proxy.connect()
 
         if not self.connection_ready_event.wait(timeout=10):
             logging.error("Failed to establish connection via proxy within timeout.")
-            for texture in self.modal_icons:
-                if texture:
-                    unload_texture(texture)
-            if self.close_icon_texture:
-                unload_texture(self.close_icon_texture)
-            if self.arrow_left_icon_texture:
-                unload_texture(self.arrow_left_icon_texture)
+            self.texture_manager.unload_all_textures()  # Unload textures on exit
             self.object_layer_render.close_window()
             self.proxy.close()
             return
@@ -625,61 +403,16 @@ class NetworkStateClient:
                 self.camera_manager.handle_window_resize()
                 new_screen_width = get_screen_width()
                 new_screen_height = get_screen_height()
-
-                # Update quest discovery modal dimensions and position
+                # Update router and quest discovery modal dimensions and position
+                self.router.update_screen_dimensions(
+                    new_screen_width, new_screen_height
+                )
                 self.modal_quest_discovery.screen_width = new_screen_width
                 self.modal_quest_discovery.screen_height = new_screen_height
-                # Using explicit values for width (280), height (80), padding_top (5), and padding_right (5)
                 self.modal_quest_discovery.x = new_screen_width - 280 - 5
                 self.modal_quest_discovery.y = (
                     new_screen_height - (new_screen_height - 5 - 80) - 80
                 )
-
-                # Update right panel modals dimensions and position
-                for modal in [
-                    self.modal_bag_view,
-                    self.modal_quest_list_view,
-                    self.modal_character_view,
-                    self.modal_chat_view,
-                    self.modal_map_view,
-                ]:
-                    modal.screen_width = new_screen_width
-                    modal.screen_height = new_screen_height
-                    modal.x = new_screen_width - modal.width
-                    modal.y = 0  # Top of the screen
-
-                # Update modal_right_panel_close_btn dimensions and position
-                self.modal_right_panel_close_btn.screen_width = new_screen_width
-                self.modal_right_panel_close_btn.screen_height = new_screen_height
-                self.modal_right_panel_close_btn.x = (
-                    new_screen_width - self.modal_right_panel_close_btn.width - 5
-                )
-                self.modal_right_panel_close_btn.y = 5  # 5px padding from top
-
-                # Update back buttons dimensions and position
-                for modal in [
-                    self.modal_bag_to_grid_btn,
-                    self.modal_quest_to_list_btn,
-                    self.modal_character_to_grid_btn,
-                    self.modal_chat_to_list_btn,
-                ]:
-                    modal.screen_width = new_screen_width
-                    modal.screen_height = new_screen_height
-                    modal.x = self.modal_right_panel_close_btn.x - modal.width - 5
-                    modal.y = 5
-
-                # Update modal button icon modals dimensions and positions
-                for i, modal in enumerate(self.modal_btn_icon_modals):
-                    modal.screen_width = new_screen_width
-                    modal.screen_height = new_screen_height
-                    horizontal_offset = i * (40 + 5)
-                    modal.x = (
-                        modal.screen_width
-                        - modal.width
-                        - modal.padding_right
-                        - horizontal_offset
-                    )
-                    modal.y = modal.screen_height - modal.height - modal.padding_bottom
 
             self._process_queued_messages()
 
@@ -706,7 +439,7 @@ class NetworkStateClient:
 
             # Check for BOT-QUEST-PROVIDER interaction and control quest discovery modal visibility
             # modal_quest_discovery should not be activated if any right panel is active
-            right_panel_active = self.active_right_panel_modal is not None
+            right_panel_active = self.router.active_route_path is not None
             if not right_panel_active:
                 self.show_modal_quest_discovery = (
                     self.interaction_manager.check_for_bot_interaction(
@@ -716,280 +449,35 @@ class NetworkStateClient:
             else:
                 self.show_modal_quest_discovery = False
 
-            # Check for modal clicks BEFORE processing world clicks
+            # Handle clicks for UI buttons (delegated to router)
             modal_was_clicked_this_frame = False
-            current_mouse_is_pressed = (
-                is_mouse_left_button_pressed  # Store original state for checks
-            )
+            if self.router.handle_control_button_clicks(
+                mouse_x, mouse_y, is_mouse_left_button_pressed
+            ):
+                modal_was_clicked_this_frame = True
+            elif self.router.handle_navigation_button_clicks(
+                mouse_x, mouse_y, is_mouse_left_button_pressed
+            ):
+                modal_was_clicked_this_frame = True
 
-            # --- Handle clicks for the right panel modals first, if they are active ---
-            if self.show_modal_right_panel_close_btn:
-                if self.modal_right_panel_close_btn.check_click(
-                    mouse_x, mouse_y, current_mouse_is_pressed
-                ):
-                    logging.info(
-                        "Close button clicked. Closing right panel views and resetting state."
-                    )
-                    # Explicitly reset the view of the currently active modal
-                    if self.active_right_panel_modal == "bag":
-                        self.bag_cyberia_view.reset_view()
-                    elif self.active_right_panel_modal == "quest":
-                        self.quest_cyberia_view.reset_view()
-                    elif self.active_right_panel_modal == "character":
-                        self.character_cyberia_view.reset_view()
-                    elif self.active_right_panel_modal == "chat":
-                        self.chat_cyberia_view.reset_view()
-                    elif self.active_right_panel_modal == "map":
-                        self.map_cyberia_view.reset_view()
-                    # Then hide all modals
-                    self._hide_all_right_panel_modals()
-                    modal_was_clicked_this_frame = True  # Consume the click
-
-            if self.show_modal_bag_view:
-                if current_mouse_is_pressed and (
-                    mouse_x >= self.modal_bag_view.x
-                    and mouse_x <= (self.modal_bag_view.x + self.modal_bag_view.width)
-                    and mouse_y >= self.modal_bag_view.y
-                    and mouse_y <= (self.modal_bag_view.y + self.modal_bag_view.height)
+            # If a right panel modal is active, allow it to handle its internal clicks
+            # This must be called *after* the router's control/navigation buttons,
+            # as those might change the active view.
+            if self.router.active_view_modal:
+                if self.router.handle_view_clicks(
+                    mouse_x, mouse_y, is_mouse_left_button_pressed
                 ):
                     modal_was_clicked_this_frame = True
-
-                player_obj_layer_ids = []
-                with self.network_state.lock:
-                    if self.my_network_object:
-                        player_obj_layer_ids = self.my_network_object.object_layer_ids
-
-                if (
-                    self.show_modal_bag_to_grid_btn
-                    and self.modal_bag_to_grid_btn.check_click(
-                        mouse_x, mouse_y, current_mouse_is_pressed
-                    )
-                ):
-                    logging.info("Back to Grid button clicked. Resetting bag view.")
-                    self.bag_cyberia_view.reset_view()
-                    self.show_modal_bag_to_grid_btn = False
-
-                elif current_mouse_is_pressed:
-                    if self.bag_cyberia_view.handle_slot_clicks(
-                        self.modal_bag_view.x,
-                        self.modal_bag_view.y,
-                        self.modal_bag_view.width,
-                        self.modal_bag_view.height,
-                        player_obj_layer_ids,
-                        mouse_x,
-                        mouse_y,
-                        current_mouse_is_pressed,
-                    ):
-                        self.show_modal_bag_to_grid_btn = (
-                            self.bag_cyberia_view.selected_object_layer_id is not None
-                        )
-
-            elif self.show_modal_quest_list_view:
-                if current_mouse_is_pressed and (
-                    mouse_x >= self.modal_quest_list_view.x
-                    and mouse_x
-                    <= (self.modal_quest_list_view.x + self.modal_quest_list_view.width)
-                    and mouse_y >= self.modal_quest_list_view.y
-                    and mouse_y
-                    <= (
-                        self.modal_quest_list_view.y + self.modal_quest_list_view.height
-                    )
-                ):
-                    modal_was_clicked_this_frame = True
-
-                if (
-                    self.show_modal_quest_to_list_btn
-                    and self.modal_quest_to_list_btn.check_click(
-                        mouse_x, mouse_y, current_mouse_is_pressed
-                    )
-                ):
-                    logging.info(
-                        "Back to Quest List button clicked. Resetting quest view."
-                    )
-                    self.quest_cyberia_view.reset_view()
-                    self.show_modal_quest_to_list_btn = False
-
-                elif current_mouse_is_pressed:
-                    if self.quest_cyberia_view.handle_item_clicks(
-                        self.modal_quest_list_view.x,
-                        self.modal_quest_list_view.y,
-                        self.modal_quest_list_view.width,
-                        self.modal_quest_list_view.height,
-                        mouse_x,
-                        mouse_y,
-                        current_mouse_is_pressed,
-                    ):
-                        self.show_modal_quest_to_list_btn = (
-                            self.quest_cyberia_view.selected_quest_index is not None
-                        )
-            elif self.show_modal_character_view:
-                if current_mouse_is_pressed and (
-                    mouse_x >= self.modal_character_view.x
-                    and mouse_x
-                    <= (self.modal_character_view.x + self.modal_character_view.width)
-                    and mouse_y >= self.modal_character_view.y
-                    and mouse_y
-                    <= (self.modal_character_view.y + self.modal_character_view.height)
-                ):
-                    modal_was_clicked_this_frame = True
-
-                # New: Handle character back button click
-                if (
-                    self.show_modal_character_to_grid_btn
-                    and self.modal_character_to_grid_btn.check_click(
-                        mouse_x, mouse_y, current_mouse_is_pressed
-                    )
-                ):
-                    logging.info(
-                        "Back to Character Grid button clicked. Resetting character view."
-                    )
-                    self.character_cyberia_view.reset_view()
-                    self.show_modal_character_to_grid_btn = False
-
-                elif current_mouse_is_pressed:
-                    if self.character_cyberia_view.handle_slot_clicks(
-                        self.modal_character_view.x,
-                        self.modal_character_view.y,
-                        self.modal_character_view.width,
-                        self.modal_character_view.height,
-                        mouse_x,
-                        mouse_y,
-                        current_mouse_is_pressed,
-                    ):
-                        self.show_modal_character_to_grid_btn = (  # New: Show character back button when a detail is selected
-                            self.character_cyberia_view.selected_slot_key is not None
-                        )
-
-            elif self.show_modal_chat_view:
-                if current_mouse_is_pressed and (
-                    mouse_x >= self.modal_chat_view.x
-                    and mouse_x <= (self.modal_chat_view.x + self.modal_chat_view.width)
-                    and mouse_y >= self.modal_chat_view.y
-                    and mouse_y
-                    <= (self.modal_chat_view.y + self.modal_chat_view.height)
-                ):
-                    modal_was_clicked_this_frame = True
-
-                if (
-                    self.show_modal_chat_to_list_btn
-                    and self.modal_chat_to_list_btn.check_click(
-                        mouse_x, mouse_y, current_mouse_is_pressed
-                    )
-                ):
-                    logging.info(
-                        "Back to Chat List button clicked. Resetting chat view."
-                    )
-                    self.chat_cyberia_view.reset_view()
-                    self.show_modal_chat_to_list_btn = False
-                elif current_mouse_is_pressed:
-                    if self.chat_cyberia_view.handle_item_clicks(
-                        self.modal_chat_view.x,
-                        self.modal_chat_view.y,
-                        self.modal_chat_view.width,
-                        self.modal_chat_view.height,
-                        mouse_x,
-                        mouse_y,
-                        current_mouse_is_pressed,
-                    ):
-                        self.show_modal_chat_to_list_btn = (
-                            self.chat_cyberia_view.selected_chat_index is not None
-                        )
-            elif self.show_modal_map_view:
-                if current_mouse_is_pressed and (
-                    mouse_x >= self.modal_map_view.x
-                    and mouse_x <= (self.modal_map_view.x + self.modal_map_view.width)
-                    and mouse_y >= self.modal_map_view.y
-                    and mouse_y <= (self.modal_map_view.y + self.modal_map_view.height)
-                ):
-                    # No specific click handlers for map view content, but register click if within modal
-                    modal_was_clicked_this_frame = True
-                # Call handle_item_clicks for the map view (it will return False)
-                self.map_cyberia_view.handle_item_clicks(
-                    self.modal_map_view.x,
-                    self.modal_map_view.y,
-                    self.modal_map_view.width,
-                    self.modal_map_view.height,
-                    mouse_x,
-                    mouse_y,
-                    current_mouse_is_pressed,
-                )
 
             # Check quest discovery modal
             if self.show_modal_quest_discovery:
                 if self.modal_quest_discovery.check_click(
-                    mouse_x, mouse_y, current_mouse_is_pressed
+                    mouse_x, mouse_y, is_mouse_left_button_pressed
                 ):
                     modal_was_clicked_this_frame = True
 
-            # Check general UI buttons (Character, Bag, Chat, Quest, Map)
-            for i, modal_btn in enumerate(self.modal_btn_icon_modals):
-                if modal_btn.check_click(mouse_x, mouse_y, current_mouse_is_pressed):
-                    modal_was_clicked_this_frame = True
-                    target_modal_key = ["character", "bag", "chat", "quest", "map"][i]
-
-                    if self.active_right_panel_modal == target_modal_key:
-                        # If clicked the active modal, close it WITHOUT resetting its view state
-                        self._hide_all_right_panel_modals()
-                        logging.info(
-                            f"Closed {target_modal_key} modal without resetting view."
-                        )
-                    else:
-                        # Close any currently open modal, AND reset its view state (it's the 'old' modal)
-                        if self.active_right_panel_modal == "bag":
-                            self.bag_cyberia_view.reset_view()
-                            logging.info("Resetting Bag view state.")
-                        elif self.active_right_panel_modal == "quest":
-                            self.quest_cyberia_view.reset_view()
-                            logging.info("Resetting Quest view state.")
-                        elif self.active_right_panel_modal == "character":
-                            self.character_cyberia_view.reset_view()
-                            logging.info("Resetting Character view state.")
-                        elif self.active_right_panel_modal == "chat":
-                            self.chat_cyberia_view.reset_view()
-                            logging.info("Resetting Chat view state.")
-                        elif self.active_right_panel_modal == "map":
-                            self.map_cyberia_view.reset_view()
-                            logging.info("Resetting Map view state.")
-                        # Hide all modals (including the one just reset, if any)
-                        self._hide_all_right_panel_modals()
-
-                        # Open the newly clicked modal
-                        if target_modal_key == "character":
-                            self.show_modal_character_view = True
-                        elif target_modal_key == "bag":
-                            self.show_modal_bag_view = True
-                        elif target_modal_key == "chat":
-                            self.show_modal_chat_view = True
-                        elif target_modal_key == "quest":
-                            self.show_modal_quest_list_view = True
-                        elif target_modal_key == "map":
-                            self.show_modal_map_view = True
-
-                        self.show_modal_right_panel_close_btn = True
-                        self.active_right_panel_modal = target_modal_key
-                        logging.info(f"Opened {target_modal_key} modal.")
-
-                    # Update back button visibility based on the newly opened modal
-                    self.show_modal_bag_to_grid_btn = (
-                        self.show_modal_bag_view
-                        and self.bag_cyberia_view.selected_object_layer_id is not None
-                    )
-                    self.show_modal_quest_to_list_btn = (
-                        self.show_modal_quest_list_view
-                        and self.quest_cyberia_view.selected_quest_index is not None
-                    )
-                    self.show_modal_character_to_grid_btn = (
-                        self.show_modal_character_view
-                        and self.character_cyberia_view.selected_slot_key is not None
-                    )
-                    self.show_modal_chat_to_list_btn = (
-                        self.show_modal_chat_view
-                        and self.chat_cyberia_view.selected_chat_index is not None
-                    )
-                    # No specific "back" button for map view as it's a static display.
-
             # Only process world clicks if no modal was clicked in this frame
-            if not modal_was_clicked_this_frame and current_mouse_is_pressed:
+            if not modal_was_clicked_this_frame and is_mouse_left_button_pressed:
                 # Pass camera from camera_manager to get_world_mouse_position
                 world_mouse_pos = self.object_layer_render.get_world_mouse_position(
                     self.camera_manager.camera
@@ -1156,104 +644,37 @@ class NetworkStateClient:
                     )
 
             # Render modals AFTER world rendering to ensure they are on top
-            # Render right panel modals if active
-            if self.show_modal_bag_view:
-                player_obj_layer_ids = []
-                with self.network_state.lock:
-                    if self.my_network_object:
-                        player_obj_layer_ids = self.my_network_object.object_layer_ids
-
-                self.modal_bag_view.data_to_pass = {
-                    "bag_view_instance": self.bag_cyberia_view,
-                    "player_object_layer_ids": player_obj_layer_ids,
-                    "mouse_x": mouse_x,
-                    "mouse_y": mouse_y,
-                    "is_mouse_button_pressed": is_mouse_left_button_pressed,
-                }
-                self.modal_bag_view.render(self.object_layer_render, mouse_x, mouse_y)
-                self.show_modal_bag_to_grid_btn = (
-                    self.bag_cyberia_view.selected_object_layer_id is not None
-                )
-            elif self.show_modal_quest_list_view:
-                self.modal_quest_list_view.data_to_pass = {
-                    "quest_view_instance": self.quest_cyberia_view,
-                    "mouse_x": mouse_x,
-                    "mouse_y": mouse_y,
-                    "is_mouse_button_pressed": is_mouse_left_button_pressed,
-                }
-                self.modal_quest_list_view.render(
-                    self.object_layer_render, mouse_x, mouse_y
-                )
-                self.show_modal_quest_to_list_btn = (
-                    self.quest_cyberia_view.selected_quest_index is not None
-                )
-            elif self.show_modal_character_view:
-                self.modal_character_view.data_to_pass = {
-                    "character_view_instance": self.character_cyberia_view,
-                    "mouse_x": mouse_x,
-                    "mouse_y": mouse_y,
-                    "is_mouse_button_pressed": is_mouse_left_button_pressed,
-                }
-                self.modal_character_view.render(
-                    self.object_layer_render, mouse_x, mouse_y
-                )
-
-            elif self.show_modal_chat_view:
-                self.modal_chat_view.data_to_pass = {
-                    "chat_view_instance": self.chat_cyberia_view,
-                    "mouse_x": mouse_x,
-                    "mouse_y": mouse_y,
-                    "is_mouse_button_pressed": is_mouse_left_button_pressed,
-                }
-                self.modal_chat_view.render(self.object_layer_render, mouse_x, mouse_y)
-            elif self.show_modal_map_view:
-                self.modal_map_view.data_to_pass = {
-                    "map_view_instance": self.map_cyberia_view,
-                    "mouse_x": mouse_x,
-                    "mouse_y": mouse_y,
-                    "is_mouse_button_pressed": is_mouse_left_button_pressed,
-                }
-                self.modal_map_view.render(self.object_layer_render, mouse_x, mouse_y)
-
-            # Render close button and back-to-grid button if a right panel is open
-            if self.show_modal_right_panel_close_btn:
-                self.modal_right_panel_close_btn.render(
-                    self.object_layer_render, mouse_x, mouse_y
-                )
-
-            # The "Back to Grid" button is only rendered when an item is selected AND the bag view is open
-            if self.show_modal_bag_to_grid_btn and self.show_modal_bag_view:
-                self.modal_bag_to_grid_btn.render(
-                    self.object_layer_render, mouse_x, mouse_y
-                )
-
-            # The "Back to Quest List" button is only rendered when a quest is selected AND the quest view is open
-            if self.show_modal_quest_to_list_btn and self.show_modal_quest_list_view:
-                self.modal_quest_to_list_btn.render(
-                    self.object_layer_render, mouse_x, mouse_y
-                )
-
-            # New: The "Back to Character Grid" button is only rendered when an item is selected AND the character view is open
-            if self.show_modal_character_to_grid_btn and self.show_modal_character_view:
-                self.modal_character_to_grid_btn.render(
-                    self.object_layer_render, mouse_x, mouse_y
-                )
-
-            # New: The "Back to Chat List" button is only rendered when a chat is selected AND the chat view is open
-            if self.show_modal_chat_to_list_btn and self.show_modal_chat_view:
-                self.modal_chat_to_list_btn.render(
-                    self.object_layer_render, mouse_x, mouse_y
-                )
-
             if self.show_modal_quest_discovery:
                 # Pass mouse_x, mouse_y to enable hover effect logic in ModalCoreComponent
                 self.modal_quest_discovery.render(
                     self.object_layer_render, mouse_x, mouse_y
                 )
 
-            # Render modal button icon modals, passing mouse coordinates for hover effect
-            for modal in self.modal_btn_icon_modals:
-                modal.render(self.object_layer_render, mouse_x, mouse_y)
+            # Render UI through the router
+            player_obj_layer_ids = []
+            with self.network_state.lock:
+                if self.my_network_object:
+                    player_obj_layer_ids = self.my_network_object.object_layer_ids
+            # Pass player_object_layer_ids through the router's data_to_pass mechanism
+            # Update the data_to_pass for router's current active view.
+            # This is critical for views like BagCyberiaView that need player-specific data.
+            if self.router.active_view_modal:
+                current_route_data = next(
+                    (
+                        r
+                        for r in self.router.routes
+                        if r["path"] == self.router.active_route_path
+                    ),
+                    None,
+                )
+                if current_route_data:
+                    self.router.active_view_modal.data_to_pass.update(
+                        {
+                            "player_object_layer_ids": player_obj_layer_ids,
+                        }
+                    )
+
+            self.router.render(mouse_x, mouse_y, is_mouse_left_button_pressed)
 
             # Draw FPS at bottom-left
             frame_time = self.object_layer_render.get_frame_time()
@@ -1268,7 +689,6 @@ class NetworkStateClient:
                 font_size,
                 Color(*UI_TEXT_COLOR_SHADING),
             )
-            # Draw actual text
             self.object_layer_render.draw_text(
                 fps_text,
                 padding,
@@ -1283,16 +703,7 @@ class NetworkStateClient:
 
             self.object_layer_render.end_drawing()
 
-            time.sleep(0.001)
-
-        for texture in self.modal_icons:
-            if texture:
-                unload_texture(texture)
-        if self.close_icon_texture:
-            unload_texture(self.close_icon_texture)
-        if self.arrow_left_icon_texture:  # Unload new texture
-            unload_texture(self.arrow_left_icon_texture)
-
+        self.texture_manager.unload_all_textures()  # Unload all textures managed by the TextureManager
         self.proxy.close()
         self.object_layer_render.close_window()
         logging.info("Client window closed.")

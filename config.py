@@ -35,3 +35,48 @@ NETWORK_OBJECT_TYPE_DEFAULT_OBJECT_LAYER_IDS = {
     "BOT-QUEST-PROVIDER": ["AYLEEN"],
     "UNKNOWN": [],
 }
+
+# UI Route Definitions (for RouterCoreComponent)
+# Each route defines a UI panel/modal and its associated navigation icon.
+# 'name': Display name for the navigation button.
+# 'path': Unique identifier for the route.
+# 'icon_path': Path to the icon image for the navigation button.
+# 'view_instance': Placeholder for the actual view class instance (e.g., BagCyberiaView).
+# 'render_callback': Reference to the function that renders the view's content.
+UI_ROUTES = [
+    {
+        "name": "Character",
+        "path": "/character",
+        "icon_path": "ui/assets/icons/character.png",
+        "view_instance": None,  # Will be set in NetworkStateClient
+        "render_callback": None,  # Will be set in NetworkStateClient
+    },
+    {
+        "name": "Bag",
+        "path": "/bag",
+        "icon_path": "ui/assets/icons/bag.png",
+        "view_instance": None,  # Will be set in NetworkStateClient
+        "render_callback": None,  # Will be set in NetworkStateClient
+    },
+    {
+        "name": "Chat",
+        "path": "/chat",
+        "icon_path": "ui/assets/icons/chat.png",
+        "view_instance": None,  # Will be set in NetworkStateClient
+        "render_callback": None,  # Will be set in NetworkStateClient
+    },
+    {
+        "name": "Quest",
+        "path": "/quest",
+        "icon_path": "ui/assets/icons/quest.png",
+        "view_instance": None,  # Will be set in NetworkStateClient
+        "render_callback": None,  # Will be set in NetworkStateClient
+    },
+    {
+        "name": "Map",
+        "path": "/map",
+        "icon_path": "ui/assets/icons/map.png",
+        "view_instance": None,  # Will be set in NetworkStateClient
+        "render_callback": None,  # Will be set in NetworkStateClient
+    },
+]

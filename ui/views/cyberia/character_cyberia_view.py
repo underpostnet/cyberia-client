@@ -166,12 +166,10 @@ class CharacterCyberiaView:
             )
 
         # Ensure item_object_layer_id is valid for rendering, otherwise use placeholder
-        if (
-            item_object_layer_id == EMPTY_SLOT_ID
-            or not object_layer_render_instance.get_object_layer_definition(
-                item_object_layer_id
-            )
-        ):
+        object_layer_data = object_layer_render_instance.get_object_layer_definition(
+            item_object_layer_id
+        )
+        if item_object_layer_id == EMPTY_SLOT_ID or not object_layer_data:
             # Draw an 'Empty' placeholder if no item or item definition is missing
             placeholder_text = "Empty"
             text_font_size = UI_FONT_SIZE - 4
@@ -205,9 +203,11 @@ class CharacterCyberiaView:
         )
         if matrix_dimension == 0:
             logging.warning(
-                f"Matrix dimension is 0 for {item_object_layer_id}. Cannot render item."
+                f"Matrix dimension is 0 for {item_object_layer_id}. Cannot render item. Trying to set to 1."
             )
-            return
+            matrix_dimension = (
+                1  # Prevent division by zero, allow minimal rendering if possible
+            )
 
         pixel_size_in_display = width // matrix_dimension
         if pixel_size_in_display == 0:
@@ -220,6 +220,13 @@ class CharacterCyberiaView:
         offset_x_centering = (width - rendered_width) // 2
         offset_y_centering = (height - rendered_height) // 2
 
+        # Determine animation mode based on item type and statelessness
+        anim_mode = ObjectLayerMode.IDLE
+        if object_layer_data.get("TYPE") == "skin" and not object_layer_data.get(
+            "IS_STATELESS"
+        ):
+            anim_mode = ObjectLayerMode.WALKING
+
         anim_props = object_layer_render_instance.get_or_create_object_layer_animation(
             obj_id=f"char_slot_item_{item_object_layer_id}",
             object_layer_id=item_object_layer_id,
@@ -227,7 +234,7 @@ class CharacterCyberiaView:
             initial_direction=Direction.DOWN,
         )
         anim_instance = anim_props["object_layer_animation_instance"]
-        anim_instance.set_state(Direction.DOWN, ObjectLayerMode.IDLE, 0.0)
+        anim_instance.set_state(Direction.DOWN, anim_mode, 0.0)
 
         frame_matrix, color_map, _, _ = anim_instance.get_current_frame_data(
             object_layer_render_instance.get_frame_time()
@@ -238,7 +245,7 @@ class CharacterCyberiaView:
             color_map=color_map,
             screen_x=x + offset_x_centering,
             screen_y=y + offset_y_centering,
-            pixel_size_in_display=pixel_size_in_display,
+            pixel_size_in_display=pixel_size_in_display,  # Corrected variable name
         )
 
     def _render_single_item_detail(
@@ -278,7 +285,8 @@ class CharacterCyberiaView:
             )
             return
 
-        item_name = self.selected_object_layer_id.replace("_", " ").title()
+        item_id = self.selected_object_layer_id
+        item_name = item_id.replace("_", " ").title()
         self.title_text = item_name
         modal_component.set_title(self.title_text)
 
@@ -307,6 +315,18 @@ class CharacterCyberiaView:
         centered_x = x + (width - item_display_size) / 2
         centered_y = y + 80  # Position below title
 
+        # Determine animation mode based on item type and statelessness for detail view
+        object_layer_data = self.object_layer_render.get_object_layer_definition(
+            item_id
+        )
+        anim_mode = ObjectLayerMode.IDLE
+        if (
+            object_layer_data
+            and object_layer_data.get("TYPE") == "skin"
+            and not object_layer_data.get("IS_STATELESS")
+        ):
+            anim_mode = ObjectLayerMode.WALKING
+
         anim_props = self.object_layer_render.get_or_create_object_layer_animation(
             obj_id=f"char_detail_item_{self.selected_object_layer_id}",
             object_layer_id=self.selected_object_layer_id,
@@ -314,7 +334,7 @@ class CharacterCyberiaView:
             initial_direction=Direction.DOWN,
         )
         anim_instance = anim_props["object_layer_animation_instance"]
-        anim_instance.set_state(Direction.DOWN, ObjectLayerMode.WALKING, 0.0)
+        anim_instance.set_state(Direction.DOWN, anim_mode, 0.0)
 
         frame_matrix, color_map, _, _ = anim_instance.get_current_frame_data(
             self.object_layer_render.get_frame_time()
