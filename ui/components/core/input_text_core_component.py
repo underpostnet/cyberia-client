@@ -355,7 +355,7 @@ class InputTextCoreComponent:
         Handles mouse input for click-to-activate and drag-to-select functionality.
         This should be called continuously while the modal is active.
         """
-        is_hovered = (
+        is_hovered_over_self = (
             mouse_x >= self.x
             and mouse_x <= (self.x + self.width)
             and mouse_y >= self.y
@@ -364,7 +364,7 @@ class InputTextCoreComponent:
 
         if is_mouse_button_down:
             if (
-                is_hovered
+                is_hovered_over_self
             ):  # If mouse button is down and hovered, we are either starting or continuing a drag
                 if not self.is_active:  # If not active, activate it and start selection
                     self.set_active(True)
@@ -377,10 +377,9 @@ class InputTextCoreComponent:
                     self.selection_end = self.get_char_index_from_x(mouse_x)
                     self.cursor_position = self.selection_end  # Cursor follows drag end
                 elif self.is_active and not self.is_dragging_selection:
-                    # Clicked inside active field without dragging, this might be a new click
+                    # Clicked inside active field without dragging, this might be a new click to reposition cursor
                     self.cursor_position = self.get_char_index_from_x(mouse_x)
-                    self.selection_start = self.cursor_position
-                    self.selection_end = self.cursor_position
+                    self.clear_selection()  # Clear any existing selection
                     self.is_dragging_selection = True  # Start new drag possibility
             else:  # Mouse button is down but not hovered over input field, so if dragging was active, stop it
                 if self.is_dragging_selection:
@@ -417,9 +416,6 @@ class InputTextCoreComponent:
                                 self.selection_end,
                                 self.selection_start,
                             )
-            elif self.is_active and not is_hovered:
-                # Clicked outside and not dragging, deactivate and clear selection
-                self.set_active(False)
 
     def render(self):
         """Renders the input text box, selection highlight, and cursor."""
