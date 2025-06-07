@@ -166,9 +166,16 @@ class MapCyberiaView:
 
         with network_state.lock:
             # Calculate the world area visible in the map viewport
-            # The player should be centered in the map viewport
-            player_world_center_x = my_network_object.x + NETWORK_OBJECT_SIZE / 2
-            player_world_center_y = my_network_object.y + NETWORK_OBJECT_SIZE / 2
+            # The player should be centered in the map viewport using its smoothed position
+            smoothed_player_pos = self.object_layer_render.get_smoothed_object_position(
+                my_network_object.obj_id
+            )
+            player_world_center_x = (
+                smoothed_player_pos.x if smoothed_player_pos else my_network_object.x
+            ) + NETWORK_OBJECT_SIZE / 2
+            player_world_center_y = (
+                smoothed_player_pos.y if smoothed_player_pos else my_network_object.y
+            ) + NETWORK_OBJECT_SIZE / 2
 
             # Calculate world dimensions of the visible area based on current zoom
             world_view_width_at_zoom = (
@@ -206,9 +213,12 @@ class MapCyberiaView:
 
             # Iterate through all network objects
             for obj_id, obj in network_state.network_objects.items():
-                # Calculate world coordinates of this grid cell's top-left
-                obj_world_x = obj.x
-                obj_world_y = obj.y
+                # Use smoothed position for drawing on map if available, otherwise fall back to raw
+                smoothed_obj_pos = (
+                    self.object_layer_render.get_smoothed_object_position(obj_id)
+                )
+                obj_world_x = smoothed_obj_pos.x if smoothed_obj_pos else obj.x
+                obj_world_y = smoothed_obj_pos.y if smoothed_obj_pos else obj.y
 
                 # Convert this object's world coordinates to map viewport coordinates
                 map_x_relative = obj_world_x - world_render_x_start

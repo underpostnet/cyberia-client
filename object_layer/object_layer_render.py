@@ -31,7 +31,9 @@ from raylibpy import (
     Camera2D,
     measure_text as raylib_measure_text,
     draw_texture_ex,
-    draw_poly,  # New import for drawing polygons (used by hexagons)
+    draw_poly,
+    ConfigFlags,
+    set_config_flags,  # New import for set_config_flags
 )
 
 from config import (
@@ -291,6 +293,8 @@ class ObjectLayerRender:
         self.title = title
         set_target_fps(target_fps)
 
+        # Enable anti-aliasing (MSAA 4X) before window initialization
+        set_config_flags(ConfigFlags.FLAG_MSAA_4X_HINT)
         init_window(self.screen_width, self.screen_height, self.title)
 
         self._object_layer_animation_instances: dict[str, dict] = {}
