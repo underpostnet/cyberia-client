@@ -25,7 +25,7 @@ from config import (
     WORLD_WIDTH,
     NETWORK_OBJECT_SIZE,
     UI_MODAL_BACKGROUND_COLOR,
-    UI_ROUTES,  # Import the new UI_ROUTES from config
+    UI_ROUTES,
 )
 from object_layer.object_layer_render import ObjectLayerRender
 from network_state.network_object import NetworkObject
@@ -47,7 +47,7 @@ from ui.views.cyberia.map_cyberia_view import MapCyberiaView
 from ui.components.cyberia.modal_render_cyberia import (
     render_modal_quest_discovery_content,
     render_modal_bag_view_content,
-    render_modal_close_btn_content,  # Reused for close and back buttons
+    render_modal_close_btn_content,
     render_modal_btn_icon_content,
     render_modal_character_view_content,
     render_modal_chat_view_content,
@@ -451,30 +451,72 @@ class NetworkStateClient:
 
             # Handle clicks for UI buttons (delegated to router)
             modal_was_clicked_this_frame = False
-            if self.router.handle_control_button_clicks(
-                mouse_x, mouse_y, is_mouse_left_button_pressed
-            ):
-                modal_was_clicked_this_frame = True
-            elif self.router.handle_navigation_button_clicks(
-                mouse_x, mouse_y, is_mouse_left_button_pressed
-            ):
-                modal_was_clicked_this_frame = True
-
-            # If a right panel modal is active, allow it to handle its internal clicks
-            # This must be called *after* the router's control/navigation buttons,
-            # as those might change the active view.
-            if self.router.active_view_modal:
-                if self.router.handle_view_clicks(
+            if is_mouse_left_button_pressed:  # Only proceed if mouse button is pressed
+                if self.router.handle_control_button_clicks(
+                    mouse_x, mouse_y, is_mouse_left_button_pressed
+                ):
+                    modal_was_clicked_this_frame = True
+                elif self.router.handle_navigation_button_clicks(
                     mouse_x, mouse_y, is_mouse_left_button_pressed
                 ):
                     modal_was_clicked_this_frame = True
 
-            # Check quest discovery modal
-            if self.show_modal_quest_discovery:
-                if self.modal_quest_discovery.check_click(
-                    mouse_x, mouse_y, is_mouse_left_button_pressed
-                ):
-                    modal_was_clicked_this_frame = True
+                # If a right panel modal is active, allow it to handle its internal clicks
+                # This also sets modal_was_clicked_this_frame if an internal element was clicked
+                if self.router.active_view_modal:
+                    if self.router.handle_view_clicks(
+                        mouse_x, mouse_y, is_mouse_left_button_pressed
+                    ):
+                        modal_was_clicked_this_frame = True
+                    # If a view modal is active and a click occurred within its bounds,
+                    # even if no specific internal interactive element was clicked, consider it handled
+                    # by the UI to prevent world interaction.
+                    elif (
+                        mouse_x >= self.router.active_view_modal.x
+                        and mouse_x
+                        <= (
+                            self.router.active_view_modal.x
+                            + self.router.active_view_modal.width
+                        )
+                        and mouse_y >= self.router.active_view_modal.y
+                        and mouse_y
+                        <= (
+                            self.router.active_view_modal.y
+                            + self.router.active_view_modal.height
+                        )
+                    ):
+                        logging.debug(
+                            "Click on active view modal background, preventing world interaction."
+                        )
+                        modal_was_clicked_this_frame = True
+
+                # Check quest discovery modal
+                if self.show_modal_quest_discovery:
+                    if self.modal_quest_discovery.check_click(
+                        mouse_x, mouse_y, is_mouse_left_button_pressed
+                    ):
+                        modal_was_clicked_this_frame = True
+                    # If quest discovery modal is active and a click occurred within its bounds,
+                    # even if no specific internal interactive element was clicked, consider it handled
+                    # by the UI to prevent world interaction.
+                    elif (
+                        mouse_x >= self.modal_quest_discovery.x
+                        and mouse_x
+                        <= (
+                            self.modal_quest_discovery.x
+                            + self.modal_quest_discovery.width
+                        )
+                        and mouse_y >= self.modal_quest_discovery.y
+                        and mouse_y
+                        <= (
+                            self.modal_quest_discovery.y
+                            + self.modal_quest_discovery.height
+                        )
+                    ):
+                        logging.debug(
+                            "Click on quest discovery modal background, preventing world interaction."
+                        )
+                        modal_was_clicked_this_frame = True
 
             # Only process world clicks if no modal was clicked in this frame
             if not modal_was_clicked_this_frame and is_mouse_left_button_pressed:
