@@ -2,11 +2,14 @@ import logging
 from typing import Callable, Dict, Any, List
 from functools import partial
 
-from raylibpy import Color
-
+from raylibpy import (
+    Color,
+    Rectangle,
+    Vector2,
+)  # Added Vector2 for potential use in draw_rectangle
 from ui.components.core.modal_core_component import ModalCoreComponent
 from ui.components.core.texture_manager import TextureManager
-from object_layer.object_layer_render import ObjectLayerRender  # Added missing import
+from object_layer.object_layer_render import ObjectLayerRender
 
 
 logging.basicConfig(
@@ -27,7 +30,7 @@ class ModalMainBarComponent:
         object_layer_render_instance: ObjectLayerRender,
         texture_manager: TextureManager,
         routes: List[Dict[str, Any]],
-        ui_modal_background_color: Color,
+        ui_modal_background_color: Color,  # This is the default background color from config
         btn_modal_width: int = 40,
         btn_modal_height: int = 40,
         btn_modal_padding_bottom: int = 5,
@@ -51,8 +54,12 @@ class ModalMainBarComponent:
         self.navigation_buttons: List[ModalCoreComponent] = []
         self._initialize_navigation_buttons()
 
-        # Calculate the height of the main bar
-        self.height = self.btn_modal_height + self.btn_modal_padding_bottom
+        # Calculate the height of the main bar. This defines the overall bar's height.
+        self.height = (
+            self.btn_modal_height + self.btn_modal_padding_bottom * 2
+        )  # Add padding to top and bottom for the bar itself
+        # Calculate the Y position of the main bar at the bottom of the screen
+        self.y_position = self.screen_height - self.height
 
     def _initialize_navigation_buttons(self):
         """
@@ -74,10 +81,13 @@ class ModalMainBarComponent:
                 ),
                 width=self.btn_modal_width,
                 height=self.btn_modal_height,
-                padding_bottom=self.btn_modal_padding_bottom,
+                # Position buttons relative to the bar's bottom padding.
+                # The bar's Y position is self.y_position.
+                # Buttons should be placed at self.y_position + self.btn_modal_padding_bottom
+                padding_bottom=self.btn_modal_padding_bottom,  # This padding is *from the bottom of the button*
                 padding_right=self.btn_modal_padding_right,
                 horizontal_offset=horizontal_offset,
-                background_color=self.ui_modal_background_color,
+                background_color=self.ui_modal_background_color,  # Use the default background color
                 icon_texture=icon_texture,
                 title_text=route["name"],  # Name for the button
             )
@@ -87,8 +97,17 @@ class ModalMainBarComponent:
 
     def render(self, mouse_x: int, mouse_y: int):
         """
-        Renders all navigation buttons in the main bar.
+        Renders the main bar's background and then all navigation buttons.
         """
+        # Draw the background of the entire main bar
+        self.object_layer_render.draw_rectangle(
+            0,  # X starts from left edge of screen
+            self.y_position,  # Y starts at the calculated position for the bar
+            self.screen_width,  # Bar spans full width
+            self.height,  # Bar has its calculated height
+            self.ui_modal_background_color,  # Use the default background color
+        )
+
         for button in self.navigation_buttons:
             button.render(self.object_layer_render, mouse_x, mouse_y)
 
@@ -109,22 +128,28 @@ class ModalMainBarComponent:
 
     def update_screen_dimensions(self, new_screen_width: int, new_screen_height: int):
         """
-        Updates the screen dimensions for all navigation buttons and repositions them.
+        Updates the screen dimensions for the main bar and all navigation buttons and repositions them.
         """
         self.screen_width = new_screen_width
         self.screen_height = new_screen_height
 
+        # Recalculate bar's height and position based on new screen height
+        self.height = self.btn_modal_height + self.btn_modal_padding_bottom * 2
+        self.y_position = self.screen_height - self.height
+
         # Update position for all navigation buttons
         for i, modal in enumerate(self.navigation_buttons):
             modal.screen_width = new_screen_width
-            modal.screen_height = new_screen_height
+            modal.screen_height = new_screen_height  # Pass full screen height for consistency, though buttons are relative to bar
             horizontal_offset = i * (
                 self.btn_modal_width + self.btn_modal_padding_right
             )
+            # Recalculate button's X and Y relative to the new screen dimensions and bar position
             modal.x = (
                 self.screen_width
                 - modal.width
-                - modal.padding_right
+                - modal.padding_right  # Original padding_right from constructor
                 - horizontal_offset
             )
-            modal.y = self.screen_height - modal.height - modal.padding_bottom
+            # The button's y is based on the bar's y_position plus its own padding_bottom
+            modal.y = self.y_position + self.btn_modal_padding_bottom
