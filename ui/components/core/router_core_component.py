@@ -2,13 +2,15 @@ import logging
 from typing import Callable, Dict, Any, List
 from functools import partial
 
-from raylibpy import Color
+from raylibpy import (
+    Color,
+    is_mouse_button_down,
+    MOUSE_BUTTON_LEFT,
+)  # Import is_mouse_button_down
 
 from ui.components.core.modal_core_component import ModalCoreComponent
 from ui.components.core.texture_manager import TextureManager
-from ui.components.core.keyboard_core_component import (
-    KeyboardCoreComponent,
-)  # New import
+from ui.components.core.keyboard_core_component import KeyboardCoreComponent
 from object_layer.object_layer_render import ObjectLayerRender
 from ui.components.core.modal_main_bar_component import (
     ModalMainBarComponent,
@@ -36,7 +38,7 @@ class RouterCoreComponent:
         screen_height: int,
         object_layer_render_instance: ObjectLayerRender,
         texture_manager: TextureManager,
-        keyboard_core_component: KeyboardCoreComponent,  # New parameter
+        keyboard_core_component: KeyboardCoreComponent,
         routes: List[Dict[str, Any]],
         ui_modal_background_color: Color,
         modal_width: int = 300,
@@ -67,9 +69,7 @@ class RouterCoreComponent:
         self.screen_height = screen_height
         self.object_layer_render = object_layer_render_instance
         self.texture_manager = texture_manager
-        self.keyboard_core_component = (
-            keyboard_core_component  # Store keyboard component
-        )
+        self.keyboard_core_component = keyboard_core_component
         self.ui_modal_background_color = ui_modal_background_color
 
         self.routes = routes
@@ -409,10 +409,13 @@ class RouterCoreComponent:
 
     def render(
         self, mouse_x: int, mouse_y: int, is_mouse_button_pressed: bool, dt: float = 0.0
-    ):  # Added dt parameter
+    ):
         """
         Renders the active view modal and all control buttons and the main bar.
         """
+        # Determine if the mouse button is currently held down
+        is_mouse_left_button_down = is_mouse_button_down(MOUSE_BUTTON_LEFT)
+
         # Render the currently active view modal
         if self.active_view_modal:
             # Pass mouse coordinates and button state to the view's render_content
@@ -427,25 +430,36 @@ class RouterCoreComponent:
                         "mouse_x": mouse_x,
                         "mouse_y": mouse_y,
                         "is_mouse_button_pressed": is_mouse_button_pressed,
-                        "char_pressed": self.keyboard_core_component.get_char_pressed(),  # Pass keyboard data
-                        "key_pressed": self.keyboard_core_component.get_key_pressed(),  # Pass keyboard data
-                        "is_key_down_map": self.keyboard_core_component.get_is_key_down_map(),  # Pass keyboard data
-                        "dt": dt,  # Pass delta time
+                        "is_mouse_button_down": is_mouse_left_button_down,  # Pass mouse button down state
+                        "char_pressed": self.keyboard_core_component.get_char_pressed(),
+                        "key_pressed": self.keyboard_core_component.get_key_pressed(),
+                        "is_key_down_map": self.keyboard_core_component.get_is_key_down_map(),
+                        "dt": dt,
                     }
                 )
                 # Update modal title dynamically from the view instance
                 self.active_view_modal.set_title(view_instance.title_text)
                 self.active_view_modal.render(
-                    self.object_layer_render, mouse_x, mouse_y
+                    self.object_layer_render,
+                    mouse_x,
+                    mouse_y,
+                    is_mouse_left_button_down,  # Pass is_mouse_button_down
                 )
                 # After rendering, update the back button visibility based on the view's potentially changed state
                 self._update_back_button_visibility()
 
         # Render close and back buttons if a view modal is active
         if self.active_view_modal:
-            self.close_button.render(self.object_layer_render, mouse_x, mouse_y)
+            self.close_button.render(
+                self.object_layer_render, mouse_x, mouse_y, is_mouse_left_button_down
+            )
             if self.show_back_button:
-                self.back_button.render(self.object_layer_render, mouse_x, mouse_y)
+                self.back_button.render(
+                    self.object_layer_render,
+                    mouse_x,
+                    mouse_y,
+                    is_mouse_left_button_down,
+                )
 
             # Position and render maximize button based on modal state
             if self.show_maximize_button:
@@ -467,7 +481,12 @@ class RouterCoreComponent:
                         self.active_view_modal.y
                         + self.maximize_btn_normal_top_padding_from_modal
                     )
-                self.maximize_button.render(self.object_layer_render, mouse_x, mouse_y)
+                self.maximize_button.render(
+                    self.object_layer_render,
+                    mouse_x,
+                    mouse_y,
+                    is_mouse_left_button_down,
+                )
 
         # Render the main bar with navigation buttons
         self.main_bar.render(mouse_x, mouse_y)

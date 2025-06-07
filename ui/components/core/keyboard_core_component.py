@@ -6,14 +6,17 @@ from raylibpy import (
     KEY_BACKSPACE,
     KEY_LEFT_SHIFT,
     KEY_RIGHT_SHIFT,
+    KEY_LEFT_CONTROL,
+    KEY_RIGHT_CONTROL,
     KEY_C,
     KEY_V,
-    KEY_A,
+    KEY_X,
     KEY_HOME,
     KEY_END,
     KEY_LEFT,
     KEY_RIGHT,
     KEY_DELETE,
+    KEY_A,
 )
 
 logging.basicConfig(
@@ -55,8 +58,13 @@ class KeyboardCoreComponent:
         self.is_key_down_map[KEY_BACKSPACE] = is_key_down(KEY_BACKSPACE)
         self.is_key_down_map[KEY_LEFT_SHIFT] = is_key_down(KEY_LEFT_SHIFT)
         self.is_key_down_map[KEY_RIGHT_SHIFT] = is_key_down(KEY_RIGHT_SHIFT)
+        self.is_key_down_map[KEY_LEFT_CONTROL] = is_key_down(KEY_LEFT_CONTROL)
+        self.is_key_down_map[KEY_RIGHT_CONTROL] = is_key_down(KEY_RIGHT_CONTROL)
         self.is_key_down_map[KEY_C] = is_key_down(KEY_C)
         self.is_key_down_map[KEY_V] = is_key_down(KEY_V)
+        self.is_key_down_map[KEY_X] = is_key_down(
+            KEY_X
+        )  # Corrected: KEY_X added to map
         self.is_key_down_map[KEY_A] = is_key_down(KEY_A)
         self.is_key_down_map[KEY_HOME] = is_key_down(KEY_HOME)
         self.is_key_down_map[KEY_END] = is_key_down(KEY_END)

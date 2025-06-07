@@ -10,14 +10,18 @@ from raylibpy import (
     KEY_BACKSPACE,
     KEY_LEFT_SHIFT,
     KEY_RIGHT_SHIFT,
+    KEY_LEFT_CONTROL,
+    KEY_RIGHT_CONTROL,
     KEY_C,
     KEY_V,
+    KEY_X,
     KEY_HOME,
     KEY_END,
     KEY_LEFT,
     KEY_RIGHT,
     KEY_DELETE,
     KEY_A,
+    MOUSE_BUTTON_LEFT,
 )
 
 logging.basicConfig(
@@ -28,6 +32,7 @@ logging.basicConfig(
 class InputTextCoreComponent:
     """
     A UI component for text input, handling rendering, user input, and cursor blinking.
+    Includes text selection, visual highlighting, and Ctrl+A/C/V/X functionality.
     """
 
     def __init__(
@@ -75,11 +80,61 @@ class InputTextCoreComponent:
         self.cursor_visible = True
         self.cursor_position = len(initial_text)  # Cursor at end of initial text
 
+        # Selection specific attributes
+        self.selection_start: int | None = (
+            None  # Index of the start of the selection (inclusive)
+        )
+        self.selection_end: int | None = (
+            None  # Index of the end of the selection (exclusive)
+        )
+        self.is_dragging_selection: bool = False
+        self.selection_color: Color = Color(
+            50, 150, 200, 100
+        )  # Light blue with transparency
+
+        # Internal rendering properties, updated during render()
+        # Initial values; these will be properly set in render() based on scrolling
+        self._display_x = self.x + 5
+        self._text_offset_char_idx = 0
+
     def set_active(self, active: bool):
         """Sets the active state of the input field."""
         self.is_active = active
         self.cursor_blink_timer = 0.0  # Reset timer when activation changes
         self.cursor_visible = True  # Ensure cursor is visible when activated
+        if not active:
+            self.clear_selection()
+
+    def clear_selection(self):
+        """Clears any active text selection."""
+        self.selection_start = None
+        self.selection_end = None
+        self.is_dragging_selection = False
+
+    def get_char_index_from_x(self, mouse_x: int) -> int:
+        """
+        Calculates the character index closest to a given mouse X coordinate
+        within the input field's text area, considering the current scroll offset.
+        """
+        # Calculate relative X within the *visible* text area
+        # _display_x accounts for padding and scrolling
+        relative_x = mouse_x - self._display_x
+
+        current_width = 0
+        char_index_in_rendered_text = 0
+
+        # Determine the subset of text that is currently rendered based on _text_offset_char_idx
+        rendered_text_subset = self.text[self._text_offset_char_idx :]
+
+        for i, char in enumerate(rendered_text_subset):
+            char_width = self.object_layer_render.measure_text(char, self.font_size)
+            if current_width + char_width / 2 > relative_x:
+                break
+            current_width += char_width
+            char_index_in_rendered_text = i + 1
+
+        # Convert back to index in the full text
+        return self._text_offset_char_idx + char_index_in_rendered_text
 
     def update(
         self,
@@ -106,77 +161,302 @@ class InputTextCoreComponent:
             self.cursor_visible = not self.cursor_visible
             self.cursor_blink_timer = 0.0
 
+        # Check for Ctrl key (Left or Right Control)
+        is_control_down = is_key_down_map.get(
+            KEY_LEFT_CONTROL, False
+        ) or is_key_down_map.get(KEY_RIGHT_CONTROL, False)
+        # Check for Shift key (Left or Right Shift) for selection extension
+        is_shift_down = is_key_down_map.get(
+            KEY_LEFT_SHIFT, False
+        ) or is_key_down_map.get(KEY_RIGHT_SHIFT, False)
+
         # Handle character input
-        if char_pressed and len(self.text) < self.max_length:
-            # Append valid characters (e.g., alphanumeric, symbols, space)
-            if 32 <= char_pressed <= 125:  # ASCII range for printable characters
+        if char_pressed:
+            # If there's a selection, replace it with the new character
+            if (
+                self.selection_start is not None
+                and self.selection_end is not None
+                and self.selection_start != self.selection_end
+            ):
+                start_idx = min(self.selection_start, self.selection_end)
+                end_idx = max(self.selection_start, self.selection_end)
                 self.text = (
-                    self.text[: self.cursor_position]
-                    + chr(char_pressed)
-                    + self.text[self.cursor_position :]
+                    self.text[:start_idx] + chr(char_pressed) + self.text[end_idx:]
                 )
-                self.cursor_position += 1
+                self.cursor_position = start_idx + 1
+                self.clear_selection()
+            elif len(self.text) < self.max_length:
+                # Append valid characters (e.g., alphanumeric, symbols, space)
+                if 32 <= char_pressed <= 125:  # ASCII range for printable characters
+                    self.text = (
+                        self.text[: self.cursor_position]
+                        + chr(char_pressed)
+                        + self.text[self.cursor_position :]
+                    )
+                    self.cursor_position += 1
 
         # Handle special keys
         if key_pressed:
+            # If a key press occurs and there is a selection, clear it unless it's a special selection-related key (Shift, Ctrl+X/C/V/A)
+            # This ensures typing or simple arrow keys collapse the selection
+            is_selection_modifier_key = is_shift_down or (
+                is_control_down and key_pressed in [KEY_A, KEY_C, KEY_X, KEY_V]
+            )
+            if (
+                self.selection_start is not None
+                and self.selection_end is not None
+                and self.selection_start != self.selection_end
+                and not is_selection_modifier_key
+            ):
+                # Collapse selection to cursor position (start of selection if moving, or end depending on direction)
+                if key_pressed == KEY_LEFT:
+                    self.cursor_position = min(self.selection_start, self.selection_end)
+                elif key_pressed == KEY_RIGHT:
+                    self.cursor_position = max(self.selection_start, self.selection_end)
+                else:
+                    self.cursor_position = min(
+                        self.selection_start, self.selection_end
+                    )  # Default collapse to start of selection
+                self.clear_selection()
+
             if key_pressed == KEY_BACKSPACE:
-                if self.cursor_position > 0:
+                # If there's a selection, delete the selected text
+                if (
+                    self.selection_start is not None
+                    and self.selection_end is not None
+                    and self.selection_start != self.selection_end
+                ):
+                    start_idx = min(self.selection_start, self.selection_end)
+                    end_idx = max(self.selection_start, self.selection_end)
+                    self.text = self.text[:start_idx] + self.text[end_idx:]
+                    self.cursor_position = start_idx
+                    self.clear_selection()
+                elif self.cursor_position > 0:
                     self.text = (
                         self.text[: self.cursor_position - 1]
                         + self.text[self.cursor_position :]
                     )
                     self.cursor_position -= 1
-            elif key_pressed == KEY_DELETE:  # Directly use KEY_DELETE
-                if self.cursor_position < len(self.text):
+                    self.clear_selection()
+            elif key_pressed == KEY_DELETE:
+                # If there's a selection, delete the selected text
+                if (
+                    self.selection_start is not None
+                    and self.selection_end is not None
+                    and self.selection_start != self.selection_end
+                ):
+                    start_idx = min(self.selection_start, self.selection_end)
+                    end_idx = max(self.selection_start, self.selection_end)
+                    self.text = self.text[:start_idx] + self.text[end_idx:]
+                    self.cursor_position = start_idx
+                    self.clear_selection()
+                elif self.cursor_position < len(self.text):
                     self.text = (
                         self.text[: self.cursor_position]
                         + self.text[self.cursor_position + 1 :]
                     )
-            elif key_pressed == KEY_LEFT:  # Directly use KEY_LEFT
-                self.cursor_position = max(0, self.cursor_position - 1)
-            elif key_pressed == KEY_RIGHT:  # Directly use KEY_RIGHT
-                self.cursor_position = min(len(self.text), self.cursor_position + 1)
-            elif key_pressed == KEY_HOME:  # Directly use KEY_HOME
-                self.cursor_position = 0
-            elif key_pressed == KEY_END:  # Directly use KEY_END
-                self.cursor_position = len(self.text)
-            elif key_pressed == KEY_A and (
-                is_key_down_map.get(KEY_LEFT_SHIFT)
-                or is_key_down_map.get(KEY_RIGHT_SHIFT)
-            ):
-                # Ctrl+A (Select All) is not directly supported by raylibpy, usually requires custom logic.
-                # For now, we'll skip implementing full select-all functionality.
-                pass
-            elif key_pressed == KEY_C and (
-                is_key_down_map.get(KEY_LEFT_SHIFT)
-                or is_key_down_map.get(KEY_RIGHT_SHIFT)
-            ):
-                # Ctrl+C (Copy)
-                if self.text:
+                    self.clear_selection()
+            elif key_pressed == KEY_LEFT:
+                new_cursor_pos = max(0, self.cursor_position - 1)
+                if is_shift_down:
+                    if (
+                        self.selection_start is None
+                    ):  # If starting a new selection with Shift
+                        self.selection_start = self.cursor_position
+                    self.selection_end = new_cursor_pos
+                else:  # No shift, clear selection and move cursor
+                    self.clear_selection()
+                self.cursor_position = new_cursor_pos
+            elif key_pressed == KEY_RIGHT:
+                new_cursor_pos = min(len(self.text), self.cursor_position + 1)
+                if is_shift_down:
+                    if (
+                        self.selection_start is None
+                    ):  # If starting a new selection with Shift
+                        self.selection_start = self.cursor_position
+                    self.selection_end = new_cursor_pos
+                else:  # No shift, clear selection and move cursor
+                    self.clear_selection()
+                self.cursor_position = new_cursor_pos
+            elif key_pressed == KEY_HOME:
+                new_cursor_pos = 0
+                if is_shift_down:
+                    if (
+                        self.selection_start is None
+                    ):  # If starting a new selection with Shift
+                        self.selection_start = self.cursor_position
+                    self.selection_end = new_cursor_pos
+                else:  # No shift, clear selection and move cursor
+                    self.clear_selection()
+                self.cursor_position = new_cursor_pos
+            elif key_pressed == KEY_END:
+                new_cursor_pos = len(self.text)
+                if is_shift_down:
+                    if (
+                        self.selection_start is None
+                    ):  # If starting a new selection with Shift
+                        self.selection_start = self.cursor_position
+                    self.selection_end = new_cursor_pos
+                else:  # No shift, clear selection and move cursor
+                    self.clear_selection()
+                self.cursor_position = new_cursor_pos
+            elif key_pressed == KEY_A and is_control_down:  # Ctrl+A (Select All)
+                self.selection_start = 0
+                self.selection_end = len(self.text)
+                self.cursor_position = len(
+                    self.text
+                )  # Move cursor to end of selected text
+                logging.info("Select All triggered.")
+            elif key_pressed == KEY_C and is_control_down:  # Ctrl+C (Copy)
+                if (
+                    self.selection_start is not None
+                    and self.selection_end is not None
+                    and self.selection_start != self.selection_end
+                ):
+                    start_idx = min(self.selection_start, self.selection_end)
+                    end_idx = max(self.selection_start, self.selection_end)
+                    selected_text = self.text[start_idx:end_idx]
+                    set_clipboard_text(selected_text)
+                    logging.info(
+                        f"Selected text copied to clipboard: '{selected_text}'"
+                    )
+                elif self.text:  # If no selection, copy all text
                     set_clipboard_text(self.text)
-                    logging.info("Text copied to clipboard.")
-            elif key_pressed == KEY_V and (
-                is_key_down_map.get(KEY_LEFT_SHIFT)
-                or is_key_down_map.get(KEY_RIGHT_SHIFT)
-            ):
-                # Ctrl+V (Paste)
+                    logging.info("All text copied to clipboard.")
+            elif key_pressed == KEY_X and is_control_down:  # Ctrl+X (Cut)
+                if (
+                    self.selection_start is not None
+                    and self.selection_end is not None
+                    and self.selection_start != self.selection_end
+                ):
+                    start_idx = min(self.selection_start, self.selection_end)
+                    end_idx = max(self.selection_start, self.selection_end)
+                    selected_text = self.text[start_idx:end_idx]
+                    set_clipboard_text(selected_text)
+
+                    # Delete the selected text
+                    self.text = self.text[:start_idx] + self.text[end_idx:]
+                    self.cursor_position = start_idx
+                    self.clear_selection()
+                    logging.info(f"Selected text cut to clipboard: '{selected_text}'")
+                elif self.text:  # If no selection, cut all text
+                    set_clipboard_text(self.text)
+                    self.text = ""  # Clear the entire text
+                    self.cursor_position = 0
+                    self.clear_selection()
+                    logging.info("All text cut to clipboard.")
+            elif key_pressed == KEY_V and is_control_down:  # Ctrl+V (Paste)
                 clipboard_text = get_clipboard_text()
                 if clipboard_text:
-                    new_text = (
-                        self.text[: self.cursor_position]
-                        + clipboard_text
-                        + self.text[self.cursor_position :]
-                    )
+                    if (
+                        self.selection_start is not None
+                        and self.selection_end is not None
+                        and self.selection_start != self.selection_end
+                    ):
+                        # Replace selected text with clipboard content
+                        start_idx = min(self.selection_start, self.selection_end)
+                        end_idx = max(self.selection_start, self.selection_end)
+                        new_text = (
+                            self.text[:start_idx] + clipboard_text + self.text[end_idx:]
+                        )
+                        self.cursor_position = start_idx + len(clipboard_text)
+                        self.clear_selection()
+                    else:
+                        # Insert clipboard content at cursor position
+                        new_text = (
+                            self.text[: self.cursor_position]
+                            + clipboard_text
+                            + self.text[self.cursor_position :]
+                        )
+                        self.cursor_position += len(clipboard_text)
+
                     if len(new_text) <= self.max_length:
                         self.text = new_text
-                        self.cursor_position += len(clipboard_text)
                     else:
-                        logging.warning(
-                            "Pasted text exceeds max length and was truncated or ignored."
+                        self.text = new_text[: self.max_length]
+                        self.cursor_position = min(
+                            self.cursor_position, self.max_length
                         )
+                        logging.warning(
+                            "Pasted text exceeds max length and was truncated."
+                        )
+                    logging.info("Text pasted from clipboard.")
+
+    def handle_mouse_input(
+        self, mouse_x: int, mouse_y: int, is_mouse_button_down: bool
+    ):
+        """
+        Handles mouse input for click-to-activate and drag-to-select functionality.
+        This should be called continuously while the modal is active.
+        """
+        is_hovered = (
+            mouse_x >= self.x
+            and mouse_x <= (self.x + self.width)
+            and mouse_y >= self.y
+            and mouse_y <= (self.y + self.height)
+        )
+
+        if is_mouse_button_down:
+            if (
+                is_hovered
+            ):  # If mouse button is down and hovered, we are either starting or continuing a drag
+                if not self.is_active:  # If not active, activate it and start selection
+                    self.set_active(True)
+                    self.cursor_position = self.get_char_index_from_x(mouse_x)
+                    self.selection_start = self.cursor_position
+                    self.selection_end = self.cursor_position
+                    self.is_dragging_selection = True
+                elif self.is_active and self.is_dragging_selection:
+                    # Continue dragging selection
+                    self.selection_end = self.get_char_index_from_x(mouse_x)
+                    self.cursor_position = self.selection_end  # Cursor follows drag end
+                elif self.is_active and not self.is_dragging_selection:
+                    # Clicked inside active field without dragging, this might be a new click
+                    self.cursor_position = self.get_char_index_from_x(mouse_x)
+                    self.selection_start = self.cursor_position
+                    self.selection_end = self.cursor_position
+                    self.is_dragging_selection = True  # Start new drag possibility
+            else:  # Mouse button is down but not hovered over input field, so if dragging was active, stop it
+                if self.is_dragging_selection:
+                    self.is_dragging_selection = False
+                    # If selection start and end are the same, clear selection (it was just a click)
+                    if self.selection_start == self.selection_end:
+                        self.clear_selection()
+                    else:
+                        # Normalize selection after drag
+                        if (
+                            self.selection_start is not None
+                            and self.selection_end is not None
+                        ):
+                            if self.selection_start > self.selection_end:
+                                self.selection_start, self.selection_end = (
+                                    self.selection_end,
+                                    self.selection_start,
+                                )
+        else:  # Mouse button is up
+            if self.is_dragging_selection:
+                # End of drag, normalize selection
+                self.is_dragging_selection = False
+                # If selection start and end are the same, clear selection (it was just a click)
+                if self.selection_start == self.selection_end:
+                    self.clear_selection()
+                else:
+                    # Ensure selection_start <= selection_end for consistent handling
+                    if (
+                        self.selection_start is not None
+                        and self.selection_end is not None
+                    ):
+                        if self.selection_start > self.selection_end:
+                            self.selection_start, self.selection_end = (
+                                self.selection_end,
+                                self.selection_start,
+                            )
+            elif self.is_active and not is_hovered:
+                # Clicked outside and not dragging, deactivate and clear selection
+                self.set_active(False)
 
     def render(self):
-        """Renders the input text box and cursor."""
+        """Renders the input text box, selection highlight, and cursor."""
         # Draw background
         self.object_layer_render.draw_rectangle(
             self.x, self.y, self.width, self.height, self.background_color
@@ -189,84 +469,146 @@ class InputTextCoreComponent:
         # Calculate text position (with padding)
         text_padding_x = 5
         text_padding_y = (self.height - self.font_size) // 2
-        display_x = self.x + text_padding_x
-        display_y = self.y + text_padding_y
 
-        # Determine visible text based on cursor position and width
+        max_text_width_for_display = self.width - 2 * text_padding_x
+
+        # Determine the subset of text to render and its starting X position due to scrolling
         rendered_text = self.text
         text_width_px = self.object_layer_render.measure_text(
             rendered_text, self.font_size
         )
 
-        # Simple scrolling: if text is too long, show from the end
-        max_text_width = self.width - 2 * text_padding_x
-        if text_width_px > max_text_width:
-            # Calculate how many characters fit
-            temp_text = ""
-            for i in range(len(self.text) - 1, -1, -1):
-                test_char = self.text[i] + temp_text
-                if (
-                    self.object_layer_render.measure_text(test_char, self.font_size)
-                    <= max_text_width
-                ):
-                    temp_text = test_char
+        self._text_offset_char_idx = 0  # Character index of the first visible character
+
+        # Calculate the display_x based on scrolling logic
+        # If text is longer than the input field, we need to adjust the starting X of the rendered text
+        # such that the cursor position is always visible if possible.
+
+        cursor_pixel_pos_in_full_text = self.object_layer_render.measure_text(
+            self.text[: self.cursor_position], self.font_size
+        )
+
+        if text_width_px > max_text_width_for_display:
+            # Calculate required offset to keep cursor in view
+            # This logic centers the cursor if possible, or keeps it at the edge
+            if cursor_pixel_pos_in_full_text > max_text_width_for_display:
+                # If cursor is past the visible area, scroll to keep it in view
+                # The _display_x will be negative, pushing text to the left
+                # We want the cursor_pixel_pos_in_full_text to appear at the right edge
+                # or within the field, e.g., max_text_width_for_display - cursor_pixel_pos_in_full_text
+
+                # A more robust scroll: keep the cursor roughly in the center third,
+                # but for simplicity, let's keep the end of the text visible or the cursor visible.
+
+                # Calculate the start pixel for the portion of text that ends at the cursor
+                text_up_to_cursor_width = self.object_layer_render.measure_text(
+                    self.text[: self.cursor_position], self.font_size
+                )
+
+                if text_up_to_cursor_width > max_text_width_for_display:
+                    # If text before cursor is longer than display area, calculate offset
+                    self._display_x = (
+                        self.x
+                        + text_padding_x
+                        - (text_up_to_cursor_width - max_text_width_for_display)
+                    )
                 else:
-                    break
-            rendered_text = temp_text
-            # Adjust display_x to right-align the visible part
-            display_x = (
-                self.x
-                + self.width
-                - text_padding_x
-                - self.object_layer_render.measure_text(rendered_text, self.font_size)
-            )
+                    self._display_x = self.x + text_padding_x
+            else:
+                self._display_x = self.x + text_padding_x
+
+            # This is a simplified way to determine rendered_text for visual scrolling.
+            # A more precise way involves determining _text_offset_char_idx first, then slicing.
+            # For now, this `_display_x` directly controls the drawing offset.
+
         else:
-            display_x = self.x + text_padding_x
+            self._display_x = self.x + text_padding_x
+
+        display_y = (
+            self.y + text_padding_y
+        )  # Y position of text, accounts for vertical padding
+
+        # Draw selection highlight
+        if (
+            self.selection_start is not None
+            and self.selection_end is not None
+            and self.selection_start != self.selection_end
+        ):
+            actual_start_idx = min(self.selection_start, self.selection_end)
+            actual_end_idx = max(self.selection_start, self.selection_end)
+
+            # Calculate pixel positions for the selection within the full text
+            selection_start_pixel_full_text = self.object_layer_render.measure_text(
+                self.text[:actual_start_idx], self.font_size
+            )
+            selection_end_pixel_full_text = self.object_layer_render.measure_text(
+                self.text[:actual_end_idx], self.font_size
+            )
+
+            # Adjust selection pixels by the current _display_x offset
+            draw_sel_x_start = self._display_x + selection_start_pixel_full_text
+            draw_sel_x_end = self._display_x + selection_end_pixel_full_text
+
+            # Clamp the drawing coordinates to the visible area of the input field
+            clamped_draw_sel_x = max(self.x + text_padding_x, draw_sel_x_start)
+            clamped_draw_sel_width = (
+                min(draw_sel_x_end, self.x + self.width - text_padding_x)
+                - clamped_draw_sel_x
+            )
+
+            if clamped_draw_sel_width > 0:
+                self.object_layer_render.draw_rectangle(
+                    int(clamped_draw_sel_x),
+                    int(display_y),
+                    int(
+                        clamped_draw_sel_width
+                    ),  # Changed this to clamped_draw_sel_width
+                    int(self.font_size),
+                    self.selection_color,
+                )
 
         # Draw text (with shading)
         self.object_layer_render.draw_text(
             rendered_text,
-            display_x + 1,
+            self._display_x + 1,
             display_y + 1,
             self.font_size,
             self.shading_color,
         )
         self.object_layer_render.draw_text(
-            rendered_text, display_x, display_y, self.font_size, self.text_color
+            rendered_text, self._display_x, display_y, self.font_size, self.text_color
         )
 
-        # Draw cursor if active and visible
-        if self.is_active and self.cursor_visible:
+        # Draw cursor if active and visible (and no active selection unless dragging)
+        if (
+            self.is_active
+            and self.cursor_visible
+            and (
+                self.selection_start == self.selection_end or self.is_dragging_selection
+            )
+        ):
             # Calculate cursor X position based on text before cursor
-            text_before_cursor = self.text[: self.cursor_position]
-            cursor_x_offset = self.object_layer_render.measure_text(
-                text_before_cursor, self.font_size
+            cursor_x_offset_in_full_text = self.object_layer_render.measure_text(
+                self.text[: self.cursor_position], self.font_size
             )
 
-            # Adjust cursor_x_offset if text is scrolled
-            if text_width_px > max_text_width:
-                # If the text is scrolled, the cursor position relative to the start of the *rendered* text changes.
-                # This is a simplification; a full implementation would track scroll offset.
-                # For now, if scrolled, assume cursor is at the far right of the visible text if it's past the beginning,
-                # or at its normal position if it's within the visible portion.
-                if self.cursor_position > len(self.text) - len(rendered_text):
-                    # Cursor is in the visible (scrolled) part
-                    cursor_x_offset = self.object_layer_render.measure_text(
-                        self.text[
-                            len(self.text) - len(rendered_text) : self.cursor_position
-                        ],
-                        self.font_size,
-                    )
-                else:
-                    # Cursor is outside the visible left boundary, so don't draw it or clamp to left edge
-                    cursor_x_offset = 0  # This hides it if it's off-screen left, or puts it at the start if it should be
+            cursor_x = self._display_x + cursor_x_offset_in_full_text
 
-            cursor_x = display_x + cursor_x_offset
+            # Clamp cursor drawing to the input field's visual bounds
+            cursor_x = max(
+                self.x + text_padding_x,
+                min(cursor_x, self.x + self.width - text_padding_x),
+            )
+
             cursor_y = display_y
             cursor_height = self.font_size
             cursor_width = 2
             self.object_layer_render.draw_rectangle(
-                cursor_x, cursor_y, cursor_width, cursor_height, self.text_color
+                int(cursor_x),
+                int(cursor_y),
+                cursor_width,
+                cursor_height,
+                self.text_color,
             )
 
     def check_click(
@@ -274,6 +616,7 @@ class InputTextCoreComponent:
     ) -> bool:
         """
         Checks if the input field was clicked.
+        This method primarily handles the initial click to activate the field and start a potential drag.
         Returns True if clicked, False otherwise.
         """
         is_hovered = (
@@ -282,30 +625,26 @@ class InputTextCoreComponent:
             and mouse_y >= self.y
             and mouse_y <= (self.y + self.height)
         )
+
         if is_hovered and is_mouse_button_pressed:
-            self.set_active(True)
-            # When clicked, set cursor position based on click location
-            # This is a rough estimation; precise positioning needs character width calculations
-            relative_x = mouse_x - (self.x + 5)  # 5 for left padding
-            temp_text = ""
-            self.cursor_position = 0
-            for i, char in enumerate(self.text):
-                test_width = self.object_layer_render.measure_text(
-                    temp_text + char, self.font_size
-                )
-                if test_width < relative_x:
-                    temp_text += char
-                    self.cursor_position = i + 1
-                else:
-                    break
+            if not self.is_active:  # If not active, activate it
+                self.set_active(True)
+
+            # Always set cursor position and start selection on a new click within the field
+            self.cursor_position = self.get_char_index_from_x(mouse_x)
+            self.selection_start = self.cursor_position
+            self.selection_end = self.cursor_position
+            self.is_dragging_selection = True  # Assume drag might start
+
             logging.debug(
-                f"Input field clicked. Active: {self.is_active}, Cursor pos: {self.cursor_position}"
+                f"Input field clicked. Active: {self.is_active}, Cursor pos: {self.cursor_position}, Sel: ({self.selection_start},{self.selection_end})"
             )
             return True
         elif is_mouse_button_pressed and self.is_active and not is_hovered:
+            # Clicked outside while active, deactivate and clear selection
             self.set_active(False)
             logging.debug(f"Input field deactivated. Active: {self.is_active}")
-            return False  # Clicked outside, so deactivate and don't count as handled by this component
+            return False
 
         return False
 
@@ -317,6 +656,7 @@ class InputTextCoreComponent:
         """Sets the text of the input field, clamping to max_length."""
         self.text = new_text[: self.max_length]
         self.cursor_position = len(self.text)  # Move cursor to end of new text
+        self.clear_selection()
 
     def is_currently_active(self) -> bool:
         """Returns true if the input field is currently active."""

@@ -157,7 +157,11 @@ class ModalCoreComponent:
         return self.is_clicked
 
     def render(
-        self, object_layer_render_instance, mouse_x: int = -1, mouse_y: int = -1
+        self,
+        object_layer_render_instance,
+        mouse_x: int = -1,
+        mouse_y: int = -1,
+        is_mouse_button_down: bool = False,
     ):
         """
         Renders the modal's background and then calls the content rendering callback.
@@ -168,6 +172,7 @@ class ModalCoreComponent:
                                           used for drawing operations.
             mouse_x: Current X coordinate of the mouse.
             mouse_y: Current Y coordinate of the mouse.
+            is_mouse_button_down: True if the mouse button is currently held down.
         """
         # Update hover state (redundant if check_click is called first, but kept for standalone render calls)
         self.is_hovered = (
@@ -187,6 +192,9 @@ class ModalCoreComponent:
 
         # Pass maximized state to content rendering callback
         self.data_to_pass["is_maximized"] = self.is_maximized
+
+        # Pass mouse button down state
+        self.data_to_pass["is_mouse_button_down"] = is_mouse_button_down
 
         # Call the external callback to render content within the modal's bounds
         self.render_content_callback(

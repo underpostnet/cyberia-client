@@ -197,10 +197,11 @@ class ChatCyberiaView:
         mouse_x: int,
         mouse_y: int,
         is_mouse_button_pressed: bool,
-        char_pressed: int | None,  # New: character pressed
-        key_pressed: int | None,  # New: key pressed
-        is_key_down_map: dict,  # New: map of keys currently down
-        dt: float,  # New: delta time
+        is_mouse_button_down: bool,  # New: is_mouse_button_down
+        char_pressed: int | None,
+        key_pressed: int | None,
+        is_key_down_map: dict,
+        dt: float,
     ):
         """
         Renders the detailed view of a single selected chat room.
@@ -289,6 +290,8 @@ class ChatCyberiaView:
         self.message_input.y = input_box_y
         self.message_input.width = input_box_width
 
+        # Handle mouse input for the message input component (including drag selection)
+        self.message_input.handle_mouse_input(mouse_x, mouse_y, is_mouse_button_down)
         # Update input text component with keyboard events and delta time
         self.message_input.update(dt, char_pressed, key_pressed, is_key_down_map)
         self.message_input.render()
@@ -325,15 +328,18 @@ class ChatCyberiaView:
         Args:
             x, y, width, height: Dimensions of the modal container.
             mouse_x, mouse_y: Current mouse coordinates.
-            is_mouse_button_pressed: True if the mouse button is pressed.
+            is_mouse_button_pressed: True if the primary mouse button is pressed in the current frame.
             modal_component: The modal component instance (contains data_to_pass including keyboard data)
         """
-        # Extract keyboard data and delta time from data_to_pass
+        # Extract keyboard data, mouse button down state, and delta time from data_to_pass
         data_to_pass = modal_component.data_to_pass
         char_pressed = data_to_pass.get("char_pressed")
         key_pressed = data_to_pass.get("key_pressed")
         is_key_down_map = data_to_pass.get("is_key_down_map")
         dt = data_to_pass.get("dt")
+        is_mouse_button_down = data_to_pass.get(
+            "is_mouse_button_down", False
+        )  # Get mouse button down state
 
         if self.selected_chat_index is None:
             # Render the chat room list
@@ -398,6 +404,7 @@ class ChatCyberiaView:
                 mouse_x,
                 mouse_y,
                 is_mouse_button_pressed,
+                is_mouse_button_down,  # Pass new parameter
                 char_pressed,
                 key_pressed,
                 is_key_down_map,
@@ -417,25 +424,24 @@ class ChatCyberiaView:
         """
         Handles clicks within the chat modal. Returns True if a click was handled.
         """
-        # Handle message input field clicks first if in detail view
-        if self.selected_chat_index is not None:
-            # The input field's coordinates are relative to the modal content area
-            input_box_x = offset_x + 20
-            input_box_y = (
-                offset_y + container_height - self.message_input.height - 10
-            )  # 10 pixels from bottom
+        # The input field's coordinates are relative to the modal content area
+        input_box_x = offset_x + 20
+        input_box_y = (
+            offset_y + container_height - self.message_input.height - 10
+        )  # 10 pixels from bottom
 
-            # Temporarily update input field's position for click check
-            self.message_input.x = input_box_x
-            self.message_input.y = input_box_y
-            self.message_input.width = (
-                container_width - 40
-            )  # width - 40 for input_box_width
+        # Temporarily update input field's position for click check
+        self.message_input.x = input_box_x
+        self.message_input.y = input_box_y
+        self.message_input.width = (
+            container_width - 40
+        )  # width - 40 for input_box_width
 
-            if self.message_input.check_click(
-                mouse_x, mouse_y, is_mouse_button_pressed
-            ):
-                return True  # Input field handled the click
+        # Check if the input field was clicked. handle_mouse_input will manage activation and selection.
+        # This function should only trigger on `is_mouse_button_pressed` (down on this frame)
+        # Continuous dragging is handled by handle_mouse_input called in render_content.
+        if self.message_input.check_click(mouse_x, mouse_y, is_mouse_button_pressed):
+            return True  # Input field handled the click (activation/start drag)
 
         if not is_mouse_button_pressed:
             return False

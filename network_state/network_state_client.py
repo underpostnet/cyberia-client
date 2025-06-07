@@ -12,7 +12,8 @@ from raylibpy import (
     get_screen_width,
     get_screen_height,
     get_mouse_position,
-    get_mouse_wheel_move,  # Import get_mouse_wheel_move
+    get_mouse_wheel_move,
+    is_mouse_button_down,  # Import is_mouse_button_down
 )
 
 from config import (
@@ -27,8 +28,8 @@ from config import (
     NETWORK_OBJECT_SIZE,
     UI_MODAL_BACKGROUND_COLOR,
     UI_ROUTES,
-    KEYBOARD_BACKSPACE_INITIAL_DELAY,  # New import
-    KEYBOARD_BACKSPACE_REPEAT_RATE,  # New import
+    KEYBOARD_BACKSPACE_INITIAL_DELAY,
+    KEYBOARD_BACKSPACE_REPEAT_RATE,
 )
 from object_layer.object_layer_render import ObjectLayerRender
 from network_state.network_object import NetworkObject
@@ -47,7 +48,7 @@ from ui.views.cyberia.map_cyberia_view import MapCyberiaView
 
 # Import rendering utilities (these are passed as callbacks, not directly managed here)
 from ui.components.cyberia.modal_render_cyberia import (
-    render_modal_action_area_discovery_content,  # Renamed from render_modal_quest_discovery_content
+    render_modal_action_area_discovery_content,
     render_modal_bag_view_content,
     render_modal_close_btn_content,
     render_modal_btn_icon_content,
@@ -61,9 +62,7 @@ from ui.components.cyberia.modal_render_cyberia import (
 from ui.components.core.router_core_component import RouterCoreComponent
 from ui.components.core.texture_manager import TextureManager
 from ui.components.core.keyboard_core_component import KeyboardCoreComponent
-from network_state.network_state_proxy import (
-    NetworkStateProxy,
-)  # Added import for NetworkStateProxy
+from network_state.network_state_proxy import NetworkStateProxy
 
 
 logging.basicConfig(
@@ -420,6 +419,9 @@ class NetworkStateClient:
             is_mouse_left_button_pressed = (
                 self.object_layer_render.is_mouse_button_pressed(MOUSE_BUTTON_LEFT)
             )
+            is_mouse_left_button_down = is_mouse_button_down(
+                MOUSE_BUTTON_LEFT
+            )  # Get mouse button down state
 
             # Handle window resize
             if is_window_resized():
@@ -495,74 +497,81 @@ class NetworkStateClient:
                             "Mouse wheel scroll detected over active map view."
                         )
 
-            if is_mouse_left_button_pressed:  # Only proceed if mouse button is pressed
-                if self.router.handle_control_button_clicks(
+            # Pass is_mouse_left_button_down to handle_control_button_clicks and handle_navigation_button_clicks
+            # This ensures they can correctly identify a "down" state for interactions
+            if self.router.handle_control_button_clicks(
+                mouse_x, mouse_y, is_mouse_left_button_pressed
+            ):
+                modal_was_clicked_this_frame = True
+            elif self.router.handle_navigation_button_clicks(
+                mouse_x, mouse_y, is_mouse_left_button_pressed
+            ):
+                modal_was_clicked_this_frame = True
+
+            # If a right panel modal is active, allow it to handle its internal clicks
+            # This also sets modal_was_clicked_this_frame if an internal element was clicked
+            if self.router.active_view_modal:
+                # This should be called *regardless* of `is_mouse_left_button_pressed`
+                # because `handle_mouse_input` needs the `is_mouse_button_down` state for dragging.
+                # However, `handle_view_clicks` typically checks `is_mouse_button_pressed` itself
+                # for discrete clicks.
+                if self.router.handle_view_clicks(
                     mouse_x, mouse_y, is_mouse_left_button_pressed
                 ):
                     modal_was_clicked_this_frame = True
-                elif self.router.handle_navigation_button_clicks(
+                # If a view modal is active and a click occurred within its bounds,
+                # even if no specific internal interactive element was clicked, consider it handled
+                # by the UI to prevent world interaction.
+                elif (
+                    is_mouse_left_button_pressed  # Only if button was pressed this frame
+                    and mouse_x >= self.router.active_view_modal.x
+                    and mouse_x
+                    <= (
+                        self.router.active_view_modal.x
+                        + self.router.active_view_modal.width
+                    )
+                    and mouse_y >= self.router.active_view_modal.y
+                    and mouse_y
+                    <= (
+                        self.router.active_view_modal.y
+                        + self.router.active_view_modal.height
+                    )
+                ):
+                    logging.debug(
+                        "Click on active view modal background, preventing world interaction."
+                    )
+                    modal_was_clicked_this_frame = True
+
+            # Check action area discovery modal
+            if self.show_modal_action_area_discovery:
+                if self.modal_action_area_discovery.check_click(
                     mouse_x, mouse_y, is_mouse_left_button_pressed
                 ):
                     modal_was_clicked_this_frame = True
+                # If action area discovery modal is active and a click occurred within its bounds,
+                # even if no specific internal interactive element was clicked, consider it handled
+                # by the UI to prevent world interaction.
+                elif (
+                    is_mouse_left_button_pressed  # Only if button was pressed this frame
+                    and mouse_x >= self.modal_action_area_discovery.x
+                    and mouse_x
+                    <= (
+                        self.modal_action_area_discovery.x
+                        + self.modal_action_area_discovery.width
+                    )
+                    and mouse_y >= self.modal_action_area_discovery.y
+                    and mouse_y
+                    <= (
+                        self.modal_action_area_discovery.y
+                        + self.modal_action_area_discovery.height
+                    )
+                ):
+                    logging.debug(
+                        "Click on action area discovery modal background, preventing world interaction."
+                    )
+                    modal_was_clicked_this_frame = True
 
-                # If a right panel modal is active, allow it to handle its internal clicks
-                # This also sets modal_was_clicked_this_frame if an internal element was clicked
-                if self.router.active_view_modal:
-                    if self.router.handle_view_clicks(
-                        mouse_x, mouse_y, is_mouse_left_button_pressed
-                    ):
-                        modal_was_clicked_this_frame = True
-                    # If a view modal is active and a click occurred within its bounds,
-                    # even if no specific internal interactive element was clicked, consider it handled
-                    # by the UI to prevent world interaction.
-                    elif (
-                        mouse_x >= self.router.active_view_modal.x
-                        and mouse_x
-                        <= (
-                            self.router.active_view_modal.x
-                            + self.router.active_view_modal.width
-                        )
-                        and mouse_y >= self.router.active_view_modal.y
-                        and mouse_y
-                        <= (
-                            self.router.active_view_modal.y
-                            + self.router.active_view_modal.height
-                        )
-                    ):
-                        logging.debug(
-                            "Click on active view modal background, preventing world interaction."
-                        )
-                        modal_was_clicked_this_frame = True
-
-                # Check action area discovery modal
-                if self.show_modal_action_area_discovery:
-                    if self.modal_action_area_discovery.check_click(
-                        mouse_x, mouse_y, is_mouse_left_button_pressed
-                    ):
-                        modal_was_clicked_this_frame = True
-                    # If action area discovery modal is active and a click occurred within its bounds,
-                    # even if no specific internal interactive element was clicked, consider it handled
-                    # by the UI to prevent world interaction.
-                    elif (
-                        mouse_x >= self.modal_action_area_discovery.x
-                        and mouse_x
-                        <= (
-                            self.modal_action_area_discovery.x
-                            + self.modal_action_area_discovery.width
-                        )
-                        and mouse_y >= self.modal_action_area_discovery.y
-                        and mouse_y
-                        <= (
-                            self.modal_action_area_discovery.y
-                            + self.modal_action_area_discovery.height
-                        )
-                    ):
-                        logging.debug(
-                            "Click on action area discovery modal background, preventing world interaction."
-                        )
-                        modal_was_clicked_this_frame = True
-
-            # Only process world clicks if no modal was clicked in this frame
+            # Only process world clicks if no modal was clicked in this frame and mouse button was just pressed
             if not modal_was_clicked_this_frame and is_mouse_left_button_pressed:
                 # Pass camera from camera_manager to get_world_mouse_position
                 world_mouse_pos = self.object_layer_render.get_world_mouse_position(
@@ -733,7 +742,10 @@ class NetworkStateClient:
             if self.show_modal_action_area_discovery:
                 # Pass mouse_x, mouse_y to enable hover effect logic in ModalCoreComponent
                 self.modal_action_area_discovery.render(
-                    self.object_layer_render, mouse_x, mouse_y
+                    self.object_layer_render,
+                    mouse_x,
+                    mouse_y,
+                    is_mouse_left_button_down,  # Pass is_mouse_left_button_down
                 )
 
             # Render UI through the router
@@ -759,6 +771,7 @@ class NetworkStateClient:
                             "player_object_layer_ids": player_obj_layer_ids,
                             "network_state": self.network_state,  # Pass network_state
                             "my_network_object": self.my_network_object,  # Pass my_network_object
+                            "is_mouse_button_down": is_mouse_left_button_down,  # Ensure this is passed
                         }
                     )
 
