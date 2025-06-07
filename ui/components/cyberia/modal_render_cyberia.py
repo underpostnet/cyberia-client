@@ -18,7 +18,7 @@ logging.basicConfig(
 )
 
 
-def render_modal_quest_discovery_content(
+def render_modal_action_area_discovery_content(
     modal_component,
     object_layer_render_instance: ObjectLayerRender,
     x: int,
@@ -28,9 +28,9 @@ def render_modal_quest_discovery_content(
     data_to_pass: dict = None,
 ):
     """
-    Renders content specific to the quest discovery modal.
+    Renders content specific to the action area discovery modal.
     """
-    modal_text = "Quest Available!"
+    modal_text = "Action Area Discovered!"
     text_width = object_layer_render_instance.measure_text(modal_text, UI_FONT_SIZE)
 
     # Center the text within the modal

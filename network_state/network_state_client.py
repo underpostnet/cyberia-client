@@ -45,7 +45,7 @@ from ui.views.cyberia.map_cyberia_view import MapCyberiaView
 
 # Import rendering utilities (these are passed as callbacks, not directly managed here)
 from ui.components.cyberia.modal_render_cyberia import (
-    render_modal_quest_discovery_content,
+    render_modal_action_area_discovery_content,  # Renamed from render_modal_quest_discovery_content
     render_modal_bag_view_content,
     render_modal_close_btn_content,
     render_modal_btn_icon_content,
@@ -195,19 +195,23 @@ class NetworkStateClient:
             client_player_id_setter=self._set_my_player_id,
         )
 
-        # Initialize the single large modal for quest interaction (top-right)
-        self.modal_quest_discovery = ModalCoreComponent(
-            screen_width=SCREEN_WIDTH,
-            screen_height=SCREEN_HEIGHT,
-            render_content_callback=partial(render_modal_quest_discovery_content),
-            width=280,
-            height=80,
-            padding_bottom=SCREEN_HEIGHT - 5 - 80,
-            padding_right=5,
-            horizontal_offset=0,
-            background_color=Color(*UI_MODAL_BACKGROUND_COLOR),
+        # Initialize the single large modal for action area interaction (top-right)
+        self.modal_action_area_discovery = (
+            ModalCoreComponent(  # Renamed from modal_quest_discovery
+                screen_width=SCREEN_WIDTH,
+                screen_height=SCREEN_HEIGHT,
+                render_content_callback=partial(
+                    render_modal_action_area_discovery_content
+                ),  # Updated callback
+                width=280,
+                height=80,
+                padding_bottom=SCREEN_HEIGHT - 5 - 80,
+                padding_right=5,
+                horizontal_offset=0,
+                background_color=Color(*UI_MODAL_BACKGROUND_COLOR),
+            )
         )
-        self.show_modal_quest_discovery = False
+        self.show_modal_action_area_discovery = False  # Renamed flag
 
         # Initialize UI Views (these will be passed to the router)
         self.bag_cyberia_view = BagCyberiaView(
@@ -403,14 +407,20 @@ class NetworkStateClient:
                 self.camera_manager.handle_window_resize()
                 new_screen_width = get_screen_width()
                 new_screen_height = get_screen_height()
-                # Update router and quest discovery modal dimensions and position
+                # Update router and action area discovery modal dimensions and position
                 self.router.update_screen_dimensions(
                     new_screen_width, new_screen_height
                 )
-                self.modal_quest_discovery.screen_width = new_screen_width
-                self.modal_quest_discovery.screen_height = new_screen_height
-                self.modal_quest_discovery.x = new_screen_width - 280 - 5
-                self.modal_quest_discovery.y = (
+                self.modal_action_area_discovery.screen_width = (
+                    new_screen_width  # Updated name
+                )
+                self.modal_action_area_discovery.screen_height = (
+                    new_screen_height  # Updated name
+                )
+                self.modal_action_area_discovery.x = (
+                    new_screen_width - 280 - 5
+                )  # Updated name
+                self.modal_action_area_discovery.y = (  # Updated name
                     new_screen_height - (new_screen_height - 5 - 80) - 80
                 )
 
@@ -437,17 +447,17 @@ class NetworkStateClient:
                         obj.path = []
                         obj.path_index = 0
 
-            # Check for BOT-QUEST-PROVIDER interaction and control quest discovery modal visibility
-            # modal_quest_discovery should not be activated if any right panel is active
+            # Check for BOT-QUEST-PROVIDER interaction and control action area discovery modal visibility
+            # modal_action_area_discovery should not be activated if any right panel is active
             right_panel_active = self.router.active_route_path is not None
             if not right_panel_active:
-                self.show_modal_quest_discovery = (
+                self.show_modal_action_area_discovery = (  # Updated flag
                     self.interaction_manager.check_for_bot_interaction(
                         self.network_state, self.my_player_id
                     )
                 )
             else:
-                self.show_modal_quest_discovery = False
+                self.show_modal_action_area_discovery = False  # Updated flag
 
             # Handle clicks for UI buttons (delegated to router)
             modal_was_clicked_this_frame = False
@@ -490,31 +500,32 @@ class NetworkStateClient:
                         )
                         modal_was_clicked_this_frame = True
 
-                # Check quest discovery modal
-                if self.show_modal_quest_discovery:
-                    if self.modal_quest_discovery.check_click(
+                # Check action area discovery modal
+                if self.show_modal_action_area_discovery:  # Updated flag
+                    if self.modal_action_area_discovery.check_click(  # Updated name
                         mouse_x, mouse_y, is_mouse_left_button_pressed
                     ):
                         modal_was_clicked_this_frame = True
-                    # If quest discovery modal is active and a click occurred within its bounds,
+                    # If action area discovery modal is active and a click occurred within its bounds,
                     # even if no specific internal interactive element was clicked, consider it handled
                     # by the UI to prevent world interaction.
                     elif (
-                        mouse_x >= self.modal_quest_discovery.x
+                        mouse_x >= self.modal_action_area_discovery.x  # Updated name
                         and mouse_x
                         <= (
-                            self.modal_quest_discovery.x
-                            + self.modal_quest_discovery.width
+                            self.modal_action_area_discovery.x  # Updated name
+                            + self.modal_action_area_discovery.width  # Updated name
                         )
-                        and mouse_y >= self.modal_quest_discovery.y
+                        and mouse_y
+                        >= self.modal_action_area_discovery.y  # Updated name
                         and mouse_y
                         <= (
-                            self.modal_quest_discovery.y
-                            + self.modal_quest_discovery.height
+                            self.modal_action_area_discovery.y  # Updated name
+                            + self.modal_action_area_discovery.height  # Updated name
                         )
                     ):
                         logging.debug(
-                            "Click on quest discovery modal background, preventing world interaction."
+                            "Click on action area discovery modal background, preventing world interaction."
                         )
                         modal_was_clicked_this_frame = True
 
@@ -686,9 +697,9 @@ class NetworkStateClient:
                     )
 
             # Render modals AFTER world rendering to ensure they are on top
-            if self.show_modal_quest_discovery:
+            if self.show_modal_action_area_discovery:  # Updated flag
                 # Pass mouse_x, mouse_y to enable hover effect logic in ModalCoreComponent
-                self.modal_quest_discovery.render(
+                self.modal_action_area_discovery.render(  # Updated name
                     self.object_layer_render, mouse_x, mouse_y
                 )
 
