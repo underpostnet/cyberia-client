@@ -58,6 +58,11 @@ class ModalCoreComponent:
         self.data_to_pass = {}  # New attribute to pass additional data to the callback
         self.title_text = title_text  # Store the title text
 
+        # New attributes for maximization
+        self.is_maximized: bool = False
+        self.original_width: int = width
+        self.original_padding_right: int = padding_right
+
         # Position the modal at the bottom-right with specified padding and offset
         self.x = (
             self.screen_width - self.width - self.padding_right - self.horizontal_offset
@@ -67,6 +72,49 @@ class ModalCoreComponent:
     def set_title(self, new_title: str):
         """Sets the title text for the modal."""
         self.title_text = new_title
+
+    def set_maximized_state(
+        self, is_maximized: bool, new_width: int = None, new_padding_right: int = None
+    ):
+        """
+        Sets the maximized state of the modal and adjusts its dimensions and position.
+        When maximizing, it stores current dimensions. When restoring, it uses stored dimensions.
+        """
+        if is_maximized:
+            # Store original dimensions only if not already maximized
+            if not self.is_maximized:
+                self.original_width = self.width
+                self.original_padding_right = self.padding_right
+
+            self.is_maximized = True
+            # Maximize to full available width/height, potentially adjusting padding_right
+            self.width = new_width if new_width is not None else self.screen_width
+            self.height = self.screen_height  # Always maximize height
+            self.padding_right = (
+                new_padding_right if new_padding_right is not None else 0
+            )
+            self.x = 0  # Maximize to left edge
+            self.y = 0  # Maximize to top edge
+        else:
+            self.is_maximized = False
+            # Restore original dimensions
+            self.width = self.original_width
+            self.height = (
+                self.screen_height
+            )  # Height is always screen_height based on Router
+            self.padding_right = self.original_padding_right
+            # Reposition based on original settings
+            self.x = (
+                self.screen_width
+                - self.width
+                - self.padding_right
+                - self.horizontal_offset
+            )
+            self.y = self.screen_height - self.height - self.padding_bottom
+
+        logging.info(
+            f"Modal maximized state set to {self.is_maximized}. New dimensions: {self.width}x{self.height} at ({self.x},{self.y})"
+        )
 
     def check_click(
         self, mouse_x: int, mouse_y: int, is_mouse_button_pressed: bool
@@ -123,6 +171,9 @@ class ModalCoreComponent:
 
         # Pass the current title text to the render_content_callback
         self.data_to_pass["title_text"] = self.title_text
+
+        # Pass maximized state to content rendering callback
+        self.data_to_pass["is_maximized"] = self.is_maximized
 
         # Call the external callback to render content within the modal's bounds
         self.render_content_callback(

@@ -42,11 +42,17 @@ class RouterCoreComponent:
         btn_modal_padding_right: int = 5,
         close_btn_width: int = 30,
         close_btn_height: int = 30,
-        close_btn_padding_bottom: int = 0,  # Top of screen
+        close_btn_padding_bottom: int = 5,  # Top of screen
         close_btn_padding_right: int = 5,
         back_btn_offset_from_close: int = 5,  # Distance from close button
+        # New offsets for maximize button positioning
+        maximize_btn_normal_x_offset_from_modal_left: int = 5,  # Offset from left edge of modal in normal mode
+        maximize_btn_normal_top_padding_from_modal: int = 5,
+        maximize_btn_maximized_x_offset_from_screen_left: int = 5,  # Offset from left edge of screen in maximized mode
+        maximize_btn_maximized_top_padding_from_screen: int = 5,
         close_btn_texture_path: str = "ui/assets/icons/close.png",
         back_btn_texture_path: str = "ui/assets/icons/arrow-left.png",
+        maximize_btn_texture_path: str = "ui/assets/icons/maximize.png",  # New texture path
         render_modal_btn_icon_content_callback: Callable = None,
         render_modal_close_btn_content_callback: Callable = None,
     ):
@@ -82,6 +88,20 @@ class RouterCoreComponent:
         # Configuration for back button
         self.back_btn_offset_from_close = back_btn_offset_from_close
 
+        # Configuration for maximize button offsets
+        self.maximize_btn_normal_x_offset_from_modal_left = (
+            maximize_btn_normal_x_offset_from_modal_left
+        )
+        self.maximize_btn_normal_top_padding_from_modal = (
+            maximize_btn_normal_top_padding_from_modal
+        )
+        self.maximize_btn_maximized_x_offset_from_screen_left = (
+            maximize_btn_maximized_x_offset_from_screen_left
+        )
+        self.maximize_btn_maximized_top_padding_from_screen = (
+            maximize_btn_maximized_top_padding_from_screen
+        )
+
         self.render_modal_btn_icon_content_callback = (
             render_modal_btn_icon_content_callback
         )
@@ -95,6 +115,11 @@ class RouterCoreComponent:
         )
         self.arrow_left_icon_texture = self.texture_manager.load_texture(
             back_btn_texture_path
+        )
+        self.maximize_icon_texture = (
+            self.texture_manager.load_texture(  # Load maximize texture
+                maximize_btn_texture_path
+            )
         )
 
         self._initialize_view_modals()
@@ -200,6 +225,25 @@ class RouterCoreComponent:
         )
         self.show_back_button = False
 
+        # Maximize button. Its position will be dynamically set in the render loop.
+        # Initialize with minimal padding to ensure ModalCoreComponent's internal x,y don't interfere.
+        self.maximize_button = ModalCoreComponent(
+            screen_width=self.screen_width,
+            screen_height=self.screen_height,
+            render_content_callback=partial(
+                self.render_modal_close_btn_content_callback  # Using same render callback for icon
+            ),
+            width=self.close_btn_width,  # Same size as close button
+            height=self.close_btn_height,
+            padding_bottom=0,  # Will be set dynamically
+            padding_right=0,  # Will be set dynamically
+            horizontal_offset=0,
+            background_color=Color(10, 10, 10, 100),
+            icon_texture=self.maximize_icon_texture,
+            title_text="Maximize",
+        )
+        self.show_maximize_button = False  # Controls visibility of maximize button
+
     def navigate_to(self, path: str):
         """
         Navigates to the specified route path, activating its associated view modal.
@@ -223,11 +267,17 @@ class RouterCoreComponent:
             self.show_back_button = (
                 False  # Hide back button when no main modal is active
             )
+            self.show_maximize_button = (
+                False  # Hide maximize button when no main modal is active
+            )
             logging.info(f"Deactivated route: {path}")
         else:
             # Activate the new route
             self.active_route_path = path
             self.active_view_modal = self.view_modals.get(path)
+            self.show_maximize_button = (
+                True  # Show maximize button when a modal is active
+            )
             logging.info(f"Activated route: {path}")
 
         # Ensure back button state is updated after navigation
@@ -284,13 +334,16 @@ class RouterCoreComponent:
         self, mouse_x: int, mouse_y: int, is_mouse_button_pressed: bool
     ) -> bool:
         """
-        Handles clicks on the close and back buttons.
+        Handles clicks on the close, back, and maximize buttons.
         Returns True if a button was clicked.
         """
         if self.active_view_modal and self.close_button.check_click(
             mouse_x, mouse_y, is_mouse_button_pressed
         ):
             logging.info("Close button clicked via Router. Deactivating active view.")
+            # If closing from a maximized state, reset modal to original size first
+            if self.active_view_modal.is_maximized:
+                self._toggle_maximize_active_modal()
             self.navigate_to(self.active_route_path)  # Toggles off the current view
             return True
 
@@ -311,7 +364,38 @@ class RouterCoreComponent:
                     break
             self._update_back_button_visibility()  # Update back button visibility after reset
             return True
+
+        # Handle maximize button click
+        if self.show_maximize_button and self.maximize_button.check_click(
+            mouse_x, mouse_y, is_mouse_button_pressed
+        ):
+            self._toggle_maximize_active_modal()
+            return True
+
         return False
+
+    def _toggle_maximize_active_modal(self):
+        """Toggles the maximized state of the active view modal."""
+        if self.active_view_modal:
+            if self.active_view_modal.is_maximized:
+                # Restore original size
+                self.active_view_modal.set_maximized_state(
+                    False,
+                    self.active_view_modal.original_width,
+                    self.active_view_modal.original_padding_right,
+                )
+                logging.info(f"Restored modal size for {self.active_route_path}")
+            else:
+                # Maximize to full screen (entire width)
+                available_width = self.screen_width
+                new_padding_right = (
+                    0  # No padding from right when maximized to full screen
+                )
+
+                self.active_view_modal.set_maximized_state(
+                    True, available_width, new_padding_right
+                )
+                logging.info(f"Maximized modal size for {self.active_route_path}")
 
     def render(self, mouse_x: int, mouse_y: int, is_mouse_button_pressed: bool):
         """
@@ -347,6 +431,28 @@ class RouterCoreComponent:
             self.close_button.render(self.object_layer_render, mouse_x, mouse_y)
             if self.show_back_button:
                 self.back_button.render(self.object_layer_render, mouse_x, mouse_y)
+
+            # Position and render maximize button based on modal state
+            if self.show_maximize_button:
+                if self.active_view_modal.is_maximized:
+                    # Position relative to screen's top-left when maximized
+                    self.maximize_button.x = (
+                        self.maximize_btn_maximized_x_offset_from_screen_left
+                    )
+                    self.maximize_button.y = (
+                        self.maximize_btn_maximized_top_padding_from_screen
+                    )
+                else:
+                    # Position relative to modal's top-left in normal mode
+                    self.maximize_button.x = (
+                        self.active_view_modal.x
+                        + self.maximize_btn_normal_x_offset_from_modal_left
+                    )
+                    self.maximize_button.y = (
+                        self.active_view_modal.y
+                        + self.maximize_btn_normal_top_padding_from_modal
+                    )
+                self.maximize_button.render(self.object_layer_render, mouse_x, mouse_y)
 
         # Render all navigation buttons
         for button in self.navigation_buttons:
@@ -407,8 +513,13 @@ class RouterCoreComponent:
         for modal in self.view_modals.values():
             modal.screen_width = new_screen_width
             modal.screen_height = new_screen_height
-            modal.x = new_screen_width - modal.width - modal.padding_right
-            modal.y = new_screen_height - modal.height - modal.padding_bottom
+            # If modal is maximized, recalculate its maximized position
+            if modal.is_maximized:
+                # When maximized, modal takes full screen, so no padding from right
+                modal.set_maximized_state(True, new_screen_width, 0)
+            else:
+                modal.x = new_screen_width - modal.width - modal.padding_right
+                modal.y = new_screen_height - modal.height - modal.padding_bottom
 
         # Update close button
         self.close_button.screen_width = new_screen_width
@@ -428,6 +539,10 @@ class RouterCoreComponent:
         )
         self.back_button.y = self.close_btn_y_offset  # Stays at top of screen
 
+        # Update maximize button. Its position is handled dynamically in render.
+        self.maximize_button.screen_width = new_screen_width
+        self.maximize_button.screen_height = new_screen_height
+
         # Update navigation buttons
         for i, modal in enumerate(self.navigation_buttons):
             modal.screen_width = new_screen_width
@@ -441,4 +556,4 @@ class RouterCoreComponent:
                 - modal.padding_right
                 - horizontal_offset
             )
-            modal.y = self.screen_height - modal.height - modal.padding_bottom
+            modal.y = self.screen_height - modal.height - self.padding_bottom

@@ -124,6 +124,19 @@ class MapCyberiaView:
         content_area_y_start = y + title_font_size + 30
         content_area_height = height - (content_area_y_start - y)
 
+        # Adjust map viewport width and height based on the modal's current dimensions
+        # This will allow the map to expand when the modal is maximized
+        self.map_viewport_width = width - 40  # Some padding from the modal edges
+        self.map_viewport_height = (
+            content_area_height - 40
+        )  # Some padding from the top/bottom
+
+        # Ensure minimum dimensions
+        if self.map_viewport_width < 100:
+            self.map_viewport_width = 100
+        if self.map_viewport_height < 100:
+            self.map_viewport_height = 100
+
         # Calculate map viewport position to center it within the available content area
         self.map_viewport_x = x + (width - self.map_viewport_width) // 2
         self.map_viewport_y = (
