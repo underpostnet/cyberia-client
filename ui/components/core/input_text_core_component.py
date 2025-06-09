@@ -22,6 +22,8 @@ from raylibpy import (
     KEY_DELETE,
     KEY_A,
     MOUSE_BUTTON_LEFT,
+    begin_scissor_mode,  # Import for clipping
+    end_scissor_mode,  # Import for clipping
 )
 
 logging.basicConfig(level=logging.INFO, format="%s - %(levelname)s - %(message)s")
@@ -165,24 +167,13 @@ class InputTextCoreComponent:
         """
         Adjusts _text_offset_char_idx to ensure the cursor is always visible within the input field.
         The goal is to scroll the text horizontally so that the cursor remains within the
-        visible bounds of the input field, prioritizing the end of the text for visibility
-        when typing.
+        visible bounds of the input field.
         """
         if not self.text:
             self._text_offset_char_idx = 0
             return
 
-        total_text_pixel_width = self.object_layer_render.measure_text(
-            self.text, self.font_size
-        )
-
-        # Case 1: Text is shorter than or fits exactly the display width.
-        if total_text_pixel_width <= max_text_width_for_display:
-            self._text_offset_char_idx = 0
-            return  # No further scrolling adjustments needed if the whole text fits
-
-        # Case 2: Text is longer than the display width.
-        # Calculate pixel width of the text from the current offset to the cursor.
+        # Calculate the pixel width of the text from the current offset up to the cursor position.
         cursor_pixel_from_current_offset = self.object_layer_render.measure_text(
             self.text[self._text_offset_char_idx : self.cursor_position], self.font_size
         )
@@ -209,6 +200,46 @@ class InputTextCoreComponent:
             # Shift _text_offset_char_idx to the cursor position.
             # This ensures the cursor becomes the first visible character on the left.
             self._text_offset_char_idx = self.cursor_position
+
+        # Ensure the text is always left-aligned if it fits entirely.
+        total_text_pixel_width = self.object_layer_render.measure_text(
+            self.text, self.font_size
+        )
+        if total_text_pixel_width <= max_text_width_for_display:
+            self._text_offset_char_idx = 0
+        else:
+            # If the text is longer than the display, ensure that the offset is such
+            # that the end of the text is shown if the cursor is at the end,
+            # or if the text is pulled right.
+            # This is critical to prevent unwanted blank space at the right when scrolling text from the left.
+
+            # Calculate the ideal offset if the text were right-aligned.
+            ideal_end_offset_idx = len(self.text)
+            temp_width_from_end = 0
+            while ideal_end_offset_idx > 0:
+                char_width = self.object_layer_render.measure_text(
+                    self.text[ideal_end_offset_idx - 1], self.font_size
+                )
+                if temp_width_from_end + char_width > max_text_width_for_display:
+                    break
+                temp_width_from_end += char_width
+                ideal_end_offset_idx -= 1
+
+            # If the cursor is at the very end, force the scroll to show the end.
+            if self.cursor_position == len(self.text):
+                self._text_offset_char_idx = ideal_end_offset_idx
+            else:
+                # If the current offset is too far left (causing blank space on right)
+                # and the cursor is already in view, try to shift it right to fill the space.
+                current_visible_segment_width = self.object_layer_render.measure_text(
+                    self.text[self._text_offset_char_idx :], self.font_size
+                )
+                if current_visible_segment_width < max_text_width_for_display:
+                    # More precisely, ensure the current offset is not less than the ideal end offset
+                    # if the current segment from offset is too short.
+                    self._text_offset_char_idx = max(
+                        self._text_offset_char_idx, ideal_end_offset_idx
+                    )
 
         # Final clamping to ensure _text_offset_char_idx is within valid bounds
         self._text_offset_char_idx = max(
@@ -589,6 +620,20 @@ class InputTextCoreComponent:
         # Calculate vertical position for text, centered
         display_y = self.y + (self.height - self.font_size) // 2
 
+        # Define the clipping rectangle for text and cursor
+        # It's important to use integers for the clipping rectangle coordinates.
+        clipping_rect_x = int(self.x + self.text_padding_left)
+        clipping_rect_y = int(self.y)
+        clipping_rect_width = int(
+            self.width - self.text_padding_left - self.text_padding_right
+        )
+        clipping_rect_height = int(self.height)
+
+        # Begin clipping mode
+        begin_scissor_mode(
+            clipping_rect_x, clipping_rect_y, clipping_rect_width, clipping_rect_height
+        )
+
         # Get the visible portion of the text based on the calculated offset and clip it
         full_text_from_offset = self.text[self._text_offset_char_idx :]
 
@@ -596,7 +641,9 @@ class InputTextCoreComponent:
         current_pixel_width = 0
         for char in full_text_from_offset:
             char_width = self.object_layer_render.measure_text(char, self.font_size)
-            if current_pixel_width + char_width <= max_text_width_for_display:
+            # Add a small buffer (e.g., 1 pixel) to account for potential drawing discrepancies
+            # This helps prevent characters from being clipped prematurely.
+            if current_pixel_width + char_width <= max_text_width_for_display + 1:
                 text_to_draw += char
                 current_pixel_width += char_width
             else:
@@ -641,7 +688,7 @@ class InputTextCoreComponent:
                     self._display_x + selection_end_pixel_relative_to_offset
                 )
 
-                # Clamp selection drawing to the input field's visual bounds (self._display_x to self._display_x + max_text_width_for_display)
+                # Clamp selection drawing to the input field's visual bounds
                 clamped_draw_sel_x = max(self._display_x, int(draw_sel_x_start))
                 clamped_draw_sel_width = (
                     min(
@@ -661,7 +708,6 @@ class InputTextCoreComponent:
                     )
 
         # Draw text (with shading)
-        # We only draw the text that *should* be visible based on _text_offset_char_idx and clipping
         self.object_layer_render.draw_text(
             text_to_draw,
             self._display_x + 1,
@@ -707,6 +753,9 @@ class InputTextCoreComponent:
                 cursor_height,
                 self.text_color,
             )
+
+        # End clipping mode
+        end_scissor_mode()
 
     def check_click(
         self, mouse_x: int, mouse_y: int, is_mouse_button_pressed: bool
