@@ -24,9 +24,7 @@ from raylibpy import (
     MOUSE_BUTTON_LEFT,
 )
 
-logging.basicConfig(
-    level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s"
-)
+logging.basicConfig(level=logging.INFO, format="%s - %(levelname)s - %(message)s")
 
 
 class InputTextCoreComponent:
@@ -95,7 +93,7 @@ class InputTextCoreComponent:
         # Internal rendering properties for text scrolling
         # Define separate padding for left and right as requested
         self.text_padding_left = 10
-        self.text_padding_right = 30
+        self.text_padding_right = 10
 
         # Index of the first character visible in the input field.
         # This will be updated by _update_text_offset_for_scroll and used for drawing
@@ -211,21 +209,6 @@ class InputTextCoreComponent:
             # Shift _text_offset_char_idx to the cursor position.
             # This ensures the cursor becomes the first visible character on the left.
             self._text_offset_char_idx = self.cursor_position
-
-        # Apply the "show last text" rule if the cursor is at the very end.
-        # This takes precedence to ensure the end of the text is always visible when typing.
-        if self.cursor_position == len(self.text):
-            temp_offset = len(self.text)
-            temp_width = 0
-            while temp_offset > 0:
-                char_width = self.object_layer_render.measure_text(
-                    self.text[temp_offset - 1], self.font_size
-                )
-                if temp_width + char_width > max_text_width_for_display:
-                    break
-                temp_width += char_width
-                temp_offset -= 1
-            self._text_offset_char_idx = temp_offset
 
         # Final clamping to ensure _text_offset_char_idx is within valid bounds
         self._text_offset_char_idx = max(
@@ -394,7 +377,7 @@ class InputTextCoreComponent:
                 self.cursor_position = new_cursor_pos
                 # Update scroll after cursor move
                 self._update_text_offset_for_scroll(
-                    self.width - (2 * self.text_padding_x)
+                    self.width - (self.text_padding_left + self.text_padding_right)
                 )
 
             elif key_pressed == KEY_END:
@@ -751,7 +734,11 @@ class InputTextCoreComponent:
             self.is_dragging_selection = True  # Assume drag might start
 
             logging.debug(
-                f"Input field clicked. Active: {self.is_active}, Cursor pos: {self.cursor_position}, Sel: ({self.selection_start},{self.selection_end})"
+                f"Input field clicked. Active: %s, Cursor pos: %s, Sel: (%s,%s)",
+                self.is_active,
+                self.cursor_position,
+                self.selection_start,
+                self.selection_end,
             )
             self._update_text_offset_for_scroll(
                 self.width - (self.text_padding_left + self.text_padding_right)
@@ -760,7 +747,7 @@ class InputTextCoreComponent:
         elif is_mouse_button_pressed and self.is_active and not is_hovered:
             # Clicked outside while active, deactivate and clear selection
             self.set_active(False)
-            logging.debug(f"Input field deactivated. Active: {self.is_active}")
+            logging.debug("Input field deactivated. Active: %s", self.is_active)
             return False
 
         return False
