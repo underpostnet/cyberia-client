@@ -92,10 +92,16 @@ class InputTextCoreComponent:
             50, 150, 200, 100
         )  # Light blue with transparency
 
-        # Internal rendering properties, updated during render()
-        # Initial values; these will be properly set in render() based on scrolling
-        self._display_x = self.x + 5
-        self._text_offset_char_idx = 0
+        # Internal rendering properties for text scrolling
+        # Define separate padding for left and right as requested
+        self.text_padding_left = 10
+        self.text_padding_right = 30
+
+        # Index of the first character visible in the input field.
+        # This will be updated by _update_text_offset_for_scroll and used for drawing
+        self._text_offset_char_idx: int = 0
+        # Actual X position where text drawing starts, accounting for left padding
+        self._display_x: int = self.x + self.text_padding_left
 
     def set_active(self, active: bool):
         """Sets the active state of the input field."""
@@ -104,6 +110,11 @@ class InputTextCoreComponent:
         self.cursor_visible = True  # Ensure cursor is visible when activated
         if not active:
             self.clear_selection()
+        # Adjust scroll when activation changes, ensuring the cursor is in view
+        # Use adjusted width for text display
+        self._update_text_offset_for_scroll(
+            self.width - (self.text_padding_left + self.text_padding_right)
+        )
 
     def clear_selection(self):
         """Clears any active text selection."""
@@ -113,28 +124,113 @@ class InputTextCoreComponent:
 
     def get_char_index_from_x(self, mouse_x: int) -> int:
         """
-        Calculates the character index closest to a given mouse X coordinate
+        Calculates the character index in the full text string closest to a given mouse X coordinate
         within the input field's text area, considering the current scroll offset.
         """
-        # Calculate relative X within the *visible* text area
-        # _display_x accounts for padding and scrolling
-        relative_x = mouse_x - self._display_x
+        # The x-coordinate relative to the start of the visible text drawing area (self._display_x).
+        relative_x_to_display_start = mouse_x - self._display_x
 
-        current_width = 0
-        char_index_in_rendered_text = 0
+        # If click is before the visible text (left padding area or scrolled off)
+        if relative_x_to_display_start < 0:
+            return self._text_offset_char_idx
 
-        # Determine the subset of text that is currently rendered based on _text_offset_char_idx
-        rendered_text_subset = self.text[self._text_offset_char_idx :]
+        # Calculate the pixel width of the text segment *before* the current offset.
+        # This helps in mapping the `relative_x_to_display_start` to an absolute pixel position
+        # within the full text string.
+        pixel_width_before_offset = self.object_layer_render.measure_text(
+            self.text[: self._text_offset_char_idx], self.font_size
+        )
+        # Effective mouse X position relative to the absolute beginning of the full text string.
+        effective_mouse_x_relative_to_full_text_start = (
+            relative_x_to_display_start + pixel_width_before_offset
+        )
 
-        for i, char in enumerate(rendered_text_subset):
-            char_width = self.object_layer_render.measure_text(char, self.font_size)
-            if current_width + char_width / 2 > relative_x:
-                break
-            current_width += char_width
-            char_index_in_rendered_text = i + 1
+        cumulative_pixel_width = 0
+        # Iterate through the *entire* string from index 0 to find the character.
+        for i in range(len(self.text)):
+            char_width = self.object_layer_render.measure_text(
+                self.text[i], self.font_size
+            )
 
-        # Convert back to index in the full text
-        return self._text_offset_char_idx + char_index_in_rendered_text
+            # If the effective mouse X is within this character's bounds (midpoint logic)
+            if (
+                effective_mouse_x_relative_to_full_text_start
+                <= cumulative_pixel_width + (char_width / 2)
+            ):
+                return i
+            cumulative_pixel_width += char_width
+
+        # If the loop finishes, it means the mouse click was past the end of the text.
+        return len(self.text)
+
+    def _update_text_offset_for_scroll(self, max_text_width_for_display: int):
+        """
+        Adjusts _text_offset_char_idx to ensure the cursor is always visible within the input field.
+        The goal is to scroll the text horizontally so that the cursor remains within the
+        visible bounds of the input field, prioritizing the end of the text for visibility
+        when typing.
+        """
+        if not self.text:
+            self._text_offset_char_idx = 0
+            return
+
+        total_text_pixel_width = self.object_layer_render.measure_text(
+            self.text, self.font_size
+        )
+
+        # Case 1: Text is shorter than or fits exactly the display width.
+        if total_text_pixel_width <= max_text_width_for_display:
+            self._text_offset_char_idx = 0
+            return  # No further scrolling adjustments needed if the whole text fits
+
+        # Case 2: Text is longer than the display width.
+        # Calculate pixel width of the text from the current offset to the cursor.
+        cursor_pixel_from_current_offset = self.object_layer_render.measure_text(
+            self.text[self._text_offset_char_idx : self.cursor_position], self.font_size
+        )
+
+        # If cursor is past the right edge of the visible window (from current offset)
+        if cursor_pixel_from_current_offset > max_text_width_for_display:
+            # Shift _text_offset_char_idx right until cursor is visible at the right edge.
+            # We want to find the furthest left character (new_offset_idx) such that the
+            # text from new_offset_idx to cursor_position fits within max_text_width_for_display.
+            new_offset_idx = self.cursor_position
+            temp_width = 0
+            while new_offset_idx > 0:
+                char_width = self.object_layer_render.measure_text(
+                    self.text[new_offset_idx - 1], self.font_size
+                )
+                if temp_width + char_width > max_text_width_for_display:
+                    break  # This character would make the segment too wide
+                temp_width += char_width
+                new_offset_idx -= 1
+            self._text_offset_char_idx = new_offset_idx
+
+        # If cursor is past the left edge of the visible window (its absolute index is smaller than the offset)
+        elif self.cursor_position < self._text_offset_char_idx:
+            # Shift _text_offset_char_idx to the cursor position.
+            # This ensures the cursor becomes the first visible character on the left.
+            self._text_offset_char_idx = self.cursor_position
+
+        # Apply the "show last text" rule if the cursor is at the very end.
+        # This takes precedence to ensure the end of the text is always visible when typing.
+        if self.cursor_position == len(self.text):
+            temp_offset = len(self.text)
+            temp_width = 0
+            while temp_offset > 0:
+                char_width = self.object_layer_render.measure_text(
+                    self.text[temp_offset - 1], self.font_size
+                )
+                if temp_width + char_width > max_text_width_for_display:
+                    break
+                temp_width += char_width
+                temp_offset -= 1
+            self._text_offset_char_idx = temp_offset
+
+        # Final clamping to ensure _text_offset_char_idx is within valid bounds
+        self._text_offset_char_idx = max(
+            0, min(self._text_offset_char_idx, len(self.text))
+        )
 
     def update(
         self,
@@ -194,9 +290,15 @@ class InputTextCoreComponent:
                         + self.text[self.cursor_position :]
                     )
                     self.cursor_position += 1
+            # Update scroll after text change
+            self._update_text_offset_for_scroll(
+                self.width - (self.text_padding_left + self.text_padding_right)
+            )
 
         # Handle special keys
-        if key_pressed:
+        if (
+            key_pressed
+        ):  # key_pressed will now contain repeating keys from KeyboardCoreComponent
             # Determine if a selection is active and valid (non-empty)
             has_active_selection = (
                 self.selection_start is not None
@@ -225,6 +327,11 @@ class InputTextCoreComponent:
                         + self.text[self.cursor_position :]
                     )
                     self.cursor_position -= 1
+                # Update scroll after text change
+                self._update_text_offset_for_scroll(
+                    self.width - (self.text_padding_left + self.text_padding_right)
+                )
+
             elif key_pressed == KEY_DELETE:
                 # If there's a selection, delete the selected text
                 if has_active_selection:
@@ -237,6 +344,11 @@ class InputTextCoreComponent:
                         self.text[: self.cursor_position]
                         + self.text[self.cursor_position + 1 :]
                     )
+                # Update scroll after text change
+                self._update_text_offset_for_scroll(
+                    self.width - (self.text_padding_left + self.text_padding_right)
+                )
+
             elif key_pressed == KEY_LEFT:
                 new_cursor_pos = max(0, self.cursor_position - 1)
                 if is_shift_down:
@@ -248,6 +360,11 @@ class InputTextCoreComponent:
                 else:  # No shift, clear selection and move cursor
                     self.clear_selection()
                 self.cursor_position = new_cursor_pos
+                # Update scroll after cursor move
+                self._update_text_offset_for_scroll(
+                    self.width - (self.text_padding_left + self.text_padding_right)
+                )
+
             elif key_pressed == KEY_RIGHT:
                 new_cursor_pos = min(len(self.text), self.cursor_position + 1)
                 if is_shift_down:
@@ -259,6 +376,11 @@ class InputTextCoreComponent:
                 else:  # No shift, clear selection and move cursor
                     self.clear_selection()
                 self.cursor_position = new_cursor_pos
+                # Update scroll after cursor move
+                self._update_text_offset_for_scroll(
+                    self.width - (self.text_padding_left + self.text_padding_right)
+                )
+
             elif key_pressed == KEY_HOME:
                 new_cursor_pos = 0
                 if is_shift_down:
@@ -270,6 +392,11 @@ class InputTextCoreComponent:
                 else:  # No shift, clear selection and move cursor
                     self.clear_selection()
                 self.cursor_position = new_cursor_pos
+                # Update scroll after cursor move
+                self._update_text_offset_for_scroll(
+                    self.width - (2 * self.text_padding_x)
+                )
+
             elif key_pressed == KEY_END:
                 new_cursor_pos = len(self.text)
                 if is_shift_down:
@@ -281,6 +408,11 @@ class InputTextCoreComponent:
                 else:  # No shift, clear selection and move cursor
                     self.clear_selection()
                 self.cursor_position = new_cursor_pos
+                # Update scroll after cursor move
+                self._update_text_offset_for_scroll(
+                    self.width - (self.text_padding_left + self.text_padding_right)
+                )
+
             elif key_pressed == KEY_A and is_control_down:  # Ctrl+A (Select All)
                 self.selection_start = 0
                 self.selection_end = len(self.text)
@@ -288,6 +420,11 @@ class InputTextCoreComponent:
                     self.text
                 )  # Move cursor to end of selected text
                 logging.info("Select All triggered.")
+                # Update scroll after selection change
+                self._update_text_offset_for_scroll(
+                    self.width - (self.text_padding_left + self.text_padding_right)
+                )
+
             elif key_pressed == KEY_C and is_control_down:  # Ctrl+C (Copy)
                 if has_active_selection:
                     start_idx, end_idx = get_normalized_selection()
@@ -299,6 +436,8 @@ class InputTextCoreComponent:
                 elif self.text:  # If no selection, copy all text
                     set_clipboard_text(self.text)
                     logging.info("All text copied to clipboard.")
+                # No scroll update needed for copy
+
             elif key_pressed == KEY_X and is_control_down:  # Ctrl+X (Cut)
                 if has_active_selection:
                     start_idx, end_idx = get_normalized_selection()
@@ -316,6 +455,11 @@ class InputTextCoreComponent:
                     self.cursor_position = 0
                     self.clear_selection()
                     logging.info("All text cut to clipboard.")
+                # Update scroll after text change
+                self._update_text_offset_for_scroll(
+                    self.width - (self.text_padding_left + self.text_padding_right)
+                )
+
             elif key_pressed == KEY_V and is_control_down:  # Ctrl+V (Paste)
                 clipboard_text = get_clipboard_text()
                 if clipboard_text:
@@ -347,6 +491,10 @@ class InputTextCoreComponent:
                             "Pasted text exceeds max length and was truncated."
                         )
                     logging.info("Text pasted from clipboard.")
+                # Update scroll after text change
+                self._update_text_offset_for_scroll(
+                    self.width - (self.text_padding_left + self.text_padding_right)
+                )
 
     def handle_mouse_input(
         self, mouse_x: int, mouse_y: int, is_mouse_button_down: bool
@@ -368,19 +516,32 @@ class InputTextCoreComponent:
             ):  # If mouse button is down and hovered, we are either starting or continuing a drag
                 if not self.is_active:  # If not active, activate it and start selection
                     self.set_active(True)
+                    # Cursor and selection start will be set in check_click
                     self.cursor_position = self.get_char_index_from_x(mouse_x)
                     self.selection_start = self.cursor_position
                     self.selection_end = self.cursor_position
                     self.is_dragging_selection = True
+                    # Update scroll after click
+                    self._update_text_offset_for_scroll(
+                        self.width - (self.text_padding_left + self.text_padding_right)
+                    )
                 elif self.is_active and self.is_dragging_selection:
                     # Continue dragging selection
                     self.selection_end = self.get_char_index_from_x(mouse_x)
                     self.cursor_position = self.selection_end  # Cursor follows drag end
+                    # Update scroll during drag
+                    self._update_text_offset_for_scroll(
+                        self.width - (self.text_padding_left + self.text_padding_right)
+                    )
                 elif self.is_active and not self.is_dragging_selection:
                     # Clicked inside active field without dragging, this might be a new click to reposition cursor
                     self.cursor_position = self.get_char_index_from_x(mouse_x)
                     self.clear_selection()  # Clear any existing selection
                     self.is_dragging_selection = True  # Start new drag possibility
+                    # Update scroll after click
+                    self._update_text_offset_for_scroll(
+                        self.width - (self.text_padding_left + self.text_padding_right)
+                    )
             else:  # Mouse button is down but not hovered over input field, so if dragging was active, stop it
                 if self.is_dragging_selection:
                     self.is_dragging_selection = False
@@ -398,6 +559,8 @@ class InputTextCoreComponent:
                                     self.selection_end,
                                     self.selection_start,
                                 )
+                    # No scroll update needed at end of drag unless text changes
+
         else:  # Mouse button is up
             if self.is_dragging_selection:
                 # End of drag, normalize selection
@@ -416,6 +579,7 @@ class InputTextCoreComponent:
                                 self.selection_end,
                                 self.selection_start,
                             )
+                # No scroll update needed at end of drag unless text changes
 
     def render(self):
         """Renders the input text box, selection highlight, and cursor."""
@@ -428,67 +592,32 @@ class InputTextCoreComponent:
             self.x, self.y, self.width, self.height, self.border_color
         )
 
-        # Calculate text position (with padding)
-        text_padding_x = 5
-        text_padding_y = (self.height - self.font_size) // 2
-
-        max_text_width_for_display = self.width - 2 * text_padding_x
-
-        # Determine the subset of text to render and its starting X position due to scrolling
-        rendered_text = self.text
-        text_width_px = self.object_layer_render.measure_text(
-            rendered_text, self.font_size
+        # The maximum pixel width the text can occupy, considering both left and right padding
+        max_text_width_for_display = self.width - (
+            self.text_padding_left + self.text_padding_right
         )
 
-        self._text_offset_char_idx = 0  # Character index of the first visible character
+        # Update scroll offset before rendering
+        self._update_text_offset_for_scroll(max_text_width_for_display)
 
-        # Calculate the display_x based on scrolling logic
-        # If text is longer than the input field, we need to adjust the starting X of the rendered text
-        # such that the cursor position is always visible if possible.
+        # The actual X position where the *first character of the visible text* will be drawn, accounting for left padding
+        self._display_x = self.x + self.text_padding_left
 
-        cursor_pixel_pos_in_full_text = self.object_layer_render.measure_text(
-            self.text[: self.cursor_position], self.font_size
-        )
+        # Calculate vertical position for text, centered
+        display_y = self.y + (self.height - self.font_size) // 2
 
-        if text_width_px > max_text_width_for_display:
-            # Calculate required offset to keep cursor in view
-            # This logic centers the cursor if possible, or keeps it at the edge
-            if cursor_pixel_pos_in_full_text > max_text_width_for_display:
-                # If cursor is past the visible area, scroll to keep it in view
-                # The _display_x will be negative, pushing text to the left
-                # We want the cursor_pixel_pos_in_full_text to appear at the right edge
-                # or within the field, e.g., max_text_width_for_display - cursor_pixel_pos_in_full_text
+        # Get the visible portion of the text based on the calculated offset and clip it
+        full_text_from_offset = self.text[self._text_offset_char_idx :]
 
-                # A more robust scroll: keep the cursor roughly in the center third,
-                # but for simplicity, let's keep the end of the text visible or the cursor visible.
-
-                # Calculate the start pixel for the portion of text that ends at the cursor
-                text_up_to_cursor_width = self.object_layer_render.measure_text(
-                    self.text[: self.cursor_position], self.font_size
-                )
-
-                if text_up_to_cursor_width > max_text_width_for_display:
-                    # If text before cursor is longer than display area, calculate offset
-                    self._display_x = (
-                        self.x
-                        + text_padding_x
-                        - (text_up_to_cursor_width - max_text_width_for_display)
-                    )
-                else:
-                    self._display_x = self.x + text_padding_x
+        text_to_draw = ""
+        current_pixel_width = 0
+        for char in full_text_from_offset:
+            char_width = self.object_layer_render.measure_text(char, self.font_size)
+            if current_pixel_width + char_width <= max_text_width_for_display:
+                text_to_draw += char
+                current_pixel_width += char_width
             else:
-                self._display_x = self.x + text_padding_x
-
-            # This is a simplified way to determine rendered_text for visual scrolling.
-            # A more precise way involves determining _text_offset_char_idx first, then slicing.
-            # For now, this `_display_x` directly controls the drawing offset.
-
-        else:
-            self._display_x = self.x + text_padding_x
-
-        display_y = (
-            self.y + text_padding_y
-        )  # Y position of text, accounts for vertical padding
+                break  # Stop adding characters if they exceed the visible width
 
         # Draw selection highlight
         if (
@@ -499,44 +628,66 @@ class InputTextCoreComponent:
             actual_start_idx = min(self.selection_start, self.selection_end)
             actual_end_idx = max(self.selection_start, self.selection_end)
 
-            # Calculate pixel positions for the selection within the full text
-            selection_start_pixel_full_text = self.object_layer_render.measure_text(
-                self.text[:actual_start_idx], self.font_size
-            )
-            selection_end_pixel_full_text = self.object_layer_render.measure_text(
-                self.text[:actual_end_idx], self.font_size
-            )
+            # Clamp the selection indices to the currently visible text range
+            visible_sel_start = max(actual_start_idx, self._text_offset_char_idx)
+            visible_sel_end = min(
+                actual_end_idx, len(self.text)
+            )  # Ensure end is not past actual text length
 
-            # Adjust selection pixels by the current _display_x offset
-            draw_sel_x_start = self._display_x + selection_start_pixel_full_text
-            draw_sel_x_end = self._display_x + selection_end_pixel_full_text
-
-            # Clamp the drawing coordinates to the visible area of the input field
-            clamped_draw_sel_x = max(self.x + text_padding_x, draw_sel_x_start)
-            clamped_draw_sel_width = (
-                min(draw_sel_x_end, self.x + self.width - text_padding_x)
-                - clamped_draw_sel_x
-            )
-
-            if clamped_draw_sel_width > 0:
-                self.object_layer_render.draw_rectangle(
-                    int(clamped_draw_sel_x),
-                    int(display_y),
-                    int(clamped_draw_sel_width),
-                    int(self.font_size),
-                    self.selection_color,
+            if (
+                visible_sel_start < visible_sel_end
+            ):  # Only draw if there's a visible selection segment
+                # Calculate pixel positions for the selection within the *visible* text segment
+                selection_start_pixel_relative_to_offset = (
+                    self.object_layer_render.measure_text(
+                        self.text[self._text_offset_char_idx : visible_sel_start],
+                        self.font_size,
+                    )
+                )
+                selection_end_pixel_relative_to_offset = (
+                    self.object_layer_render.measure_text(
+                        self.text[self._text_offset_char_idx : visible_sel_end],
+                        self.font_size,
+                    )
                 )
 
+                draw_sel_x_start = (
+                    self._display_x + selection_start_pixel_relative_to_offset
+                )
+                draw_sel_x_end = (
+                    self._display_x + selection_end_pixel_relative_to_offset
+                )
+
+                # Clamp selection drawing to the input field's visual bounds (self._display_x to self._display_x + max_text_width_for_display)
+                clamped_draw_sel_x = max(self._display_x, int(draw_sel_x_start))
+                clamped_draw_sel_width = (
+                    min(
+                        int(draw_sel_x_end),
+                        self._display_x + max_text_width_for_display,
+                    )
+                    - clamped_draw_sel_x
+                )
+
+                if clamped_draw_sel_width > 0:
+                    self.object_layer_render.draw_rectangle(
+                        clamped_draw_sel_x,
+                        int(display_y),
+                        clamped_draw_sel_width,
+                        int(self.font_size),
+                        self.selection_color,
+                    )
+
         # Draw text (with shading)
+        # We only draw the text that *should* be visible based on _text_offset_char_idx and clipping
         self.object_layer_render.draw_text(
-            rendered_text,
+            text_to_draw,
             self._display_x + 1,
             display_y + 1,
             self.font_size,
             self.shading_color,
         )
         self.object_layer_render.draw_text(
-            rendered_text, self._display_x, display_y, self.font_size, self.text_color
+            text_to_draw, self._display_x, display_y, self.font_size, self.text_color
         )
 
         # Draw cursor if active and visible (and no active selection unless dragging)
@@ -547,17 +698,20 @@ class InputTextCoreComponent:
                 self.selection_start == self.selection_end or self.is_dragging_selection
             )
         ):
-            # Calculate cursor X position based on text before cursor
-            cursor_x_offset_in_full_text = self.object_layer_render.measure_text(
-                self.text[: self.cursor_position], self.font_size
+            # Calculate cursor X position relative to the *start of the drawn text*
+            cursor_x_offset_relative_to_drawn_text = (
+                self.object_layer_render.measure_text(
+                    self.text[self._text_offset_char_idx : self.cursor_position],
+                    self.font_size,
+                )
             )
 
-            cursor_x = self._display_x + cursor_x_offset_in_full_text
+            cursor_x = self._display_x + cursor_x_offset_relative_to_drawn_text
 
-            # Clamp cursor drawing to the input field's visual bounds
+            # Clamp cursor drawing to the input field's visual bounds (self._display_x to self._display_x + max_text_width_for_display)
             cursor_x = max(
-                self.x + text_padding_x,
-                min(cursor_x, self.x + self.width - text_padding_x),
+                self._display_x,
+                min(cursor_x, self._display_x + max_text_width_for_display),
             )
 
             cursor_y = display_y
@@ -599,6 +753,9 @@ class InputTextCoreComponent:
             logging.debug(
                 f"Input field clicked. Active: {self.is_active}, Cursor pos: {self.cursor_position}, Sel: ({self.selection_start},{self.selection_end})"
             )
+            self._update_text_offset_for_scroll(
+                self.width - (self.text_padding_left + self.text_padding_right)
+            )
             return True
         elif is_mouse_button_pressed and self.is_active and not is_hovered:
             # Clicked outside while active, deactivate and clear selection
@@ -617,6 +774,10 @@ class InputTextCoreComponent:
         self.text = new_text[: self.max_length]
         self.cursor_position = len(self.text)  # Move cursor to end of new text
         self.clear_selection()
+        # Update scroll after setting text
+        self._update_text_offset_for_scroll(
+            self.width - (self.text_padding_left + self.text_padding_right)
+        )
 
     def is_currently_active(self) -> bool:
         """Returns true if the input field is currently active."""
