@@ -48,7 +48,7 @@ class InputTextCoreComponent:
         border_color: Color,
         shading_color: Color,
         initial_text: str = "",
-        max_length: int = 256,
+        max_length: int = 4096,  # Increased max_length as requested
         is_active: bool = False,
     ):
         """
@@ -139,9 +139,15 @@ class InputTextCoreComponent:
         # Calculate the absolute pixel position within the *entire* text string.
         # This is the pixel width of the text that's scrolled off (from 0 to _text_offset_char_idx)
         # plus the mouse's position within the currently visible section.
-        scrolled_off_pixel_width = self.object_layer_render.measure_text(
-            self.text[: self._text_offset_char_idx], self.font_size
-        )
+        scrolled_off_pixel_width = 0
+        for i in range(self._text_offset_char_idx):
+            char_width = self.object_layer_render.measure_text(
+                self.text[i], self.font_size
+            )
+            scrolled_off_pixel_width += (
+                char_width + 1
+            )  # Apply +1 here for consistency with rendering
+
         effective_mouse_x_absolute_in_text = (
             scrolled_off_pixel_width + mouse_x_in_visible_area
         )
@@ -151,14 +157,29 @@ class InputTextCoreComponent:
             char_width = self.object_layer_render.measure_text(
                 self.text[i], self.font_size
             )
+            adjusted_char_width = char_width + 1  # Apply +1 here for consistency
+
             # Use midpoint for accurate character selection.
             if effective_mouse_x_absolute_in_text <= cumulative_pixel_width + (
-                char_width / 2.0
+                adjusted_char_width / 2.0
             ):
                 return i
-            cumulative_pixel_width += char_width
+            cumulative_pixel_width += adjusted_char_width
 
         return len(self.text)
+
+    def _get_char_idx_from_pixel_offset(self, target_pixel_offset: float) -> int:
+        """Converts a target pixel offset (from text start) to the corresponding character index."""
+        current_pixel_sum = 0.0
+        for i in range(len(self.text)):
+            char_width = self.object_layer_render.measure_text(
+                self.text[i], self.font_size
+            )
+            adjusted_char_width = char_width + 1  # Consistent +1
+            if current_pixel_sum + adjusted_char_width > target_pixel_offset:
+                return i
+            current_pixel_sum += adjusted_char_width
+        return len(self.text)  # If target is beyond end of text, return len
 
     def _update_text_offset_for_scroll(self, max_text_width_for_display: int):
         """
@@ -169,101 +190,71 @@ class InputTextCoreComponent:
             self._text_offset_char_idx = 0
             return
 
-        # Calculate pixel position of the cursor from the start of the entire text string.
-        cursor_pixel_abs = self.object_layer_render.measure_text(
-            self.text[: self.cursor_position], self.font_size
-        )
-
-        # Calculate pixel position of the current offset (start of visible text).
-        current_offset_pixel_abs = self.object_layer_render.measure_text(
-            self.text[: self._text_offset_char_idx], self.font_size
-        )
-
-        # Desired left edge of the visible window (pixel value).
-        target_offset_pixel_abs = (
-            current_offset_pixel_abs  # Initialize with current offset
-        )
-
-        # 1. Handle Cursor moving left beyond visible area.
-        if cursor_pixel_abs < current_offset_pixel_abs:
-            target_offset_pixel_abs = (
-                cursor_pixel_abs  # New offset should be at the cursor position
+        # 1. Calculate absolute pixel positions based on current state and consistent width
+        cursor_pixel_absolute = 0
+        for i in range(self.cursor_position):
+            char_width = self.object_layer_render.measure_text(
+                self.text[i], self.font_size
             )
+            cursor_pixel_absolute += char_width + 1
 
-        # 2. Handle Cursor moving right beyond visible area.
-        # If the cursor's current position (relative to the offset) is beyond the display width.
-        elif cursor_pixel_abs > current_offset_pixel_abs + max_text_width_for_display:
-            # The new offset should be such that the cursor is exactly at the right edge of the display.
-            target_offset_pixel_abs = cursor_pixel_abs - max_text_width_for_display
+        current_offset_pixel_absolute = 0
+        for i in range(self._text_offset_char_idx):
+            char_width = self.object_layer_render.measure_text(
+                self.text[i], self.font_size
+            )
+            current_offset_pixel_absolute += char_width + 1
 
-        # 3. Handle 'snapping' to the end if there's blank space and text is long.
-        total_text_pixel_width = self.object_layer_render.measure_text(
-            self.text, self.font_size
-        )
+        # Initialize the target pixel offset for the start of the visible window
+        new_offset_pixel_absolute = current_offset_pixel_absolute
 
-        if total_text_pixel_width > max_text_width_for_display:
-            # Calculate the pixel offset if the text were right-aligned to fill the display.
-            right_aligned_offset_pixel = (
+        # 2. Adjust offset to keep cursor visible
+        # If cursor is beyond the right edge of the current view
+        if (
+            cursor_pixel_absolute
+            > current_offset_pixel_absolute + max_text_width_for_display
+        ):
+            new_offset_pixel_absolute = (
+                cursor_pixel_absolute - max_text_width_for_display
+            )
+        # If cursor is beyond the left edge of the current view
+        elif cursor_pixel_absolute < current_offset_pixel_absolute:
+            new_offset_pixel_absolute = cursor_pixel_absolute
+
+        # 3. Handle overall text fitting and right-alignment for longer texts
+        total_text_pixel_width = 0
+        for i in range(len(self.text)):
+            char_width = self.object_layer_render.measure_text(
+                self.text[i], self.font_size
+            )
+            total_text_pixel_width += char_width + 1
+
+        if total_text_pixel_width <= max_text_width_for_display:
+            # If the entire text fits, always show from the beginning.
+            self._text_offset_char_idx = 0
+        else:
+            # If text is longer than the display:
+            # Calculate the maximum pixel offset that would still show the end of the text.
+            max_allowed_offset_pixel = (
                 total_text_pixel_width - max_text_width_for_display
             )
 
-            # If the cursor is at the very end, force the view to be right-aligned.
-            if self.cursor_position == len(self.text):
-                target_offset_pixel_abs = right_aligned_offset_pixel
-            else:
-                # If the current target offset is further right than the ideal right-aligned offset
-                # (meaning there's blank space on the right that could be filled),
-                # shift the target offset left to fill that space, but not past the cursor.
-                if target_offset_pixel_abs > right_aligned_offset_pixel:
-                    # Take the minimum (further left) between current target and right-aligned ideal,
-                    # but ensure it doesn't push the cursor out of view on the left.
-                    # This min() ensures it moves left only if it doesn't cross the cursor position.
-                    target_offset_pixel_abs = min(
-                        target_offset_pixel_abs, right_aligned_offset_pixel
-                    )
-
-                    # One final check: After potentially shifting left to fill blank space,
-                    # ensure the cursor is still visible. If the shift pushed it left, revert.
-                    cursor_pos_after_shift_check = (
-                        cursor_pixel_abs - target_offset_pixel_abs
-                    )
-                    if cursor_pos_after_shift_check < 0:
-                        target_offset_pixel_abs = (
-                            cursor_pixel_abs  # Revert to cursor-centric
-                        )
-
-        else:
-            # If text fits entirely, always set target offset to 0.
-            target_offset_pixel_abs = 0
-
-        # Convert the final target pixel offset back to a character index.
-        new_offset_char_idx = 0
-        current_pixel_sum_for_idx = 0
-        while new_offset_char_idx < len(self.text):
-            char_width = self.object_layer_render.measure_text(
-                self.text[new_offset_char_idx], self.font_size
+            # Ensure the new_offset_pixel_absolute does not exceed the max_allowed_offset_pixel.
+            # This 'pulls' the text left if there's blank space on the right, but only if it doesn't
+            # push the cursor off-screen to the left (which is handled by min() with cursor_pixel_absolute in the next step).
+            new_offset_pixel_absolute = min(
+                new_offset_pixel_absolute, max_allowed_offset_pixel
             )
-            if (
-                current_pixel_sum_for_idx + char_width > target_offset_pixel_abs
-                and new_offset_char_idx > 0
-            ):
-                # If adding this character would exceed the target, and we're not at the very beginning,
-                # then the target offset is within the *previous* character. So, the current char index is correct.
-                # Break to keep the current `new_offset_char_idx`.
-                break
-            current_pixel_sum_for_idx += char_width
-            new_offset_char_idx += 1
 
-        # Adjust for edge case where target is exactly the width of all characters.
-        # The loop condition might over-increment new_offset_char_idx.
-        # If `current_pixel_sum_for_idx` is exactly `target_offset_pixel_abs` and we have not iterated through all characters,
-        # it means `new_offset_char_idx` points to the start of the next character, which is correct.
-        # If `current_pixel_sum_for_idx` is less than `target_offset_pixel_abs` at the end of the loop,
-        # it means `target_offset_pixel_abs` is beyond the entire text, so we clamp.
+            # Ensure new_offset_pixel_absolute is not negative
+            new_offset_pixel_absolute = max(0.0, new_offset_pixel_absolute)
 
-        self._text_offset_char_idx = new_offset_char_idx
+            # Convert the final calculated pixel offset to a character index
+            self._text_offset_char_idx = self._get_char_idx_from_pixel_offset(
+                new_offset_pixel_absolute
+            )
 
-        # Final clamping to ensure _text_offset_char_idx is within valid bounds.
+        # Final clamping for safety, ensuring the index is within text bounds.
         self._text_offset_char_idx = max(
             0, min(self._text_offset_char_idx, len(self.text))
         )
