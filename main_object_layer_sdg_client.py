@@ -226,7 +226,7 @@ def render_factory(
             )
         tool_api.apply_default_skin_template_fill(DISPLAY_COLOR_PALETTE)
 
-    elif mode == "skin-default-1":
+    elif mode == "skin-default-08" or mode == "skin-default-06":
         render_color_hair = random.choice([14, 17, 20])
 
         for coord in data_generator.get_coordinates_in_region(7, 21, 10, 20):
@@ -402,7 +402,7 @@ if __name__ == "__main__":
         "--mode",
         type=str,
         default="skin-default",
-        help='Special mode for rendering. Current options: "skin-default", "skin-default-0", "skin-default-1", "gfx-shadow-ball", "skin-fluff".',
+        help='Special mode for rendering. Current options: "skin-default", "skin-default-0", "skin-default-08", "gfx-shadow-ball", "skin-fluff".',
     )
 
     args = parser.parse_args()
