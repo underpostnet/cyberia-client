@@ -1,5 +1,5 @@
 import logging
-from raylibpy import Color, Vector2
+from raylibpy import Color, Vector2, Rectangle, check_collision_point_rec
 from config import (
     UI_FONT_SIZE,
     UI_TEXT_COLOR_PRIMARY,
@@ -131,11 +131,10 @@ class MapCyberiaView:
             content_area_height - 40
         )  # Some padding from the top/bottom
 
-        # Ensure minimum dimensions
-        if self.map_viewport_width < 100:
-            self.map_viewport_width = 100
-        if self.map_viewport_height < 100:
-            self.map_viewport_height = 100
+        # Ensure map viewport dimensions are not negative.
+        # If the modal is too small, the viewport can be zero or very small.
+        self.map_viewport_width = max(0, self.map_viewport_width)
+        self.map_viewport_height = max(0, self.map_viewport_height)
 
         # Calculate map viewport position to center it within the available content area
         self.map_viewport_x = x + (width - self.map_viewport_width) // 2
@@ -143,7 +142,17 @@ class MapCyberiaView:
             content_area_y_start + (content_area_height - self.map_viewport_height) // 2
         )
 
-        # Draw the map viewport background
+        # If the viewport is too small, skip rendering map details and zoom handling.
+        # Title is already drawn. Modal background is handled by ModalCoreComponent.
+        MIN_PRACTICAL_VIEWPORT_DIM = 10  # pixels
+        if (
+            self.map_viewport_width < MIN_PRACTICAL_VIEWPORT_DIM
+            or self.map_viewport_height < MIN_PRACTICAL_VIEWPORT_DIM
+        ):
+            return
+
+        # Draw the map viewport background and border if dimensions are positive
+        # (guaranteed if we passed the MIN_PRACTICAL_VIEWPORT_DIM check)
         self.object_layer_render.draw_rectangle(
             self.map_viewport_x,
             self.map_viewport_y,
@@ -151,8 +160,6 @@ class MapCyberiaView:
             self.map_viewport_height,
             Color(20, 20, 20, 255),  # Dark background for the map
         )
-
-        # Draw a border for the map viewport
         self.object_layer_render.draw_rectangle_lines(
             self.map_viewport_x,
             self.map_viewport_y,
@@ -322,19 +329,184 @@ class MapCyberiaView:
                     Color(60, 60, 60, 255),  # Darker gray border
                 )
 
-        # Draw zoom level indicator
-        zoom_text = f"Zoom: {int(self.current_zoom_factor * 100)}%"
-        zoom_text_width = self.object_layer_render.measure_text(
-            zoom_text, UI_FONT_SIZE - 4
+        # --- Zoom Controls (Text and Buttons) ---
+        button_size = 40  # Set button size to 40x40px
+        button_padding = 5
+        controls_font_size = UI_FONT_SIZE  # Adjusted font size for controls text
+
+        # Define colors for button states
+        enabled_button_text_color = Color(*UI_TEXT_COLOR_PRIMARY)
+        enabled_button_bg_color = Color(70, 70, 70, 220)  # Semi-transparent dark gray
+        hover_button_bg_color = Color(
+            100, 100, 100, 220
+        )  # Background color for hover state
+        button_border_color = Color(180, 180, 180, 255)
+        disabled_button_text_color = Color(120, 120, 120, 255)  # Grayed out text
+        disabled_button_bg_color = Color(50, 50, 50, 150)  # Darker, more transparent bg
+
+        # Calculate positions (from right to left for layout)
+        # Zoom Out Button (-)
+        zoom_out_btn_x = (
+            self.map_viewport_x + self.map_viewport_width - button_padding - button_size
         )
-        self.object_layer_render.draw_text(
-            zoom_text,
-            self.map_viewport_x + self.map_viewport_width - zoom_text_width - 5,
-            self.map_viewport_y + self.map_viewport_height + 5,
-            UI_FONT_SIZE - 4,
-            Color(*UI_TEXT_COLOR_PRIMARY),
+        zoom_out_btn_y = (
+            self.map_viewport_y
+            + self.map_viewport_height
+            - button_size
+            - button_padding
+        )
+        zoom_out_button_rect = Rectangle(
+            zoom_out_btn_x, zoom_out_btn_y, button_size, button_size
         )
 
+        # Zoom In Button (+)
+        zoom_in_btn_x = zoom_out_btn_x - button_padding - button_size
+        zoom_in_btn_y = zoom_out_btn_y
+        zoom_in_button_rect = Rectangle(
+            zoom_in_btn_x, zoom_in_btn_y, button_size, button_size
+        )
+
+        # Zoom Level Text
+        zoom_level_text_content = f"Zoom: {int(self.current_zoom_factor * 100)}%"
+        zoom_level_text_width = self.object_layer_render.measure_text(
+            zoom_level_text_content, controls_font_size
+        )
+        zoom_level_text_x = zoom_in_btn_x - button_padding - zoom_level_text_width
+        zoom_level_text_y = (
+            zoom_in_btn_y + (button_size - controls_font_size) // 2
+        )  # Vertically center text with buttons
+
+        # Check if there's enough space to draw controls
+        min_controls_width_needed = (
+            zoom_level_text_width + (button_padding + button_size) * 2 + button_padding
+        )
+        min_controls_height_needed = button_size + button_padding * 2
+
+        if (
+            self.map_viewport_width >= min_controls_width_needed
+            and self.map_viewport_height >= min_controls_height_needed
+            and zoom_level_text_x >= self.map_viewport_x + button_padding
+        ):  # Ensure text doesn't overflow left
+
+            can_zoom_out = self.current_zoom_index > 0
+            can_zoom_in = self.current_zoom_index < len(self.zoom_levels) - 1
+
+            # Create mouse position vector for hover and click checks
+            mouse_pos_vec = Vector2(mouse_x, mouse_y)
+
+            # Draw Zoom Out Button
+            actual_zoom_out_bg_color = disabled_button_bg_color
+            actual_zoom_out_text_color = disabled_button_text_color
+            if can_zoom_out:
+                actual_zoom_out_text_color = enabled_button_text_color
+                if check_collision_point_rec(mouse_pos_vec, zoom_out_button_rect):
+                    actual_zoom_out_bg_color = hover_button_bg_color
+                else:
+                    actual_zoom_out_bg_color = enabled_button_bg_color
+
+            self.object_layer_render.draw_rectangle(
+                int(zoom_out_button_rect.x),
+                int(zoom_out_button_rect.y),
+                int(zoom_out_button_rect.width),
+                int(zoom_out_button_rect.height),
+                actual_zoom_out_bg_color,
+            )
+            self.object_layer_render.draw_rectangle_lines(
+                int(zoom_out_button_rect.x),
+                int(zoom_out_button_rect.y),
+                int(zoom_out_button_rect.width),
+                int(zoom_out_button_rect.height),
+                button_border_color,
+            )
+            minus_text = "-"
+            minus_text_width = self.object_layer_render.measure_text(
+                minus_text, controls_font_size
+            )
+            self.object_layer_render.draw_text(
+                minus_text,
+                int(zoom_out_btn_x + (button_size - minus_text_width) // 2),
+                int(zoom_out_btn_y + (button_size - controls_font_size) // 2),
+                controls_font_size,
+                actual_zoom_out_text_color,
+            )
+
+            # Draw Zoom In Button
+            actual_zoom_in_bg_color = disabled_button_bg_color
+            actual_zoom_in_text_color = disabled_button_text_color
+            if can_zoom_in:
+                actual_zoom_in_text_color = enabled_button_text_color
+                if check_collision_point_rec(mouse_pos_vec, zoom_in_button_rect):
+                    actual_zoom_in_bg_color = hover_button_bg_color
+                else:
+                    actual_zoom_in_bg_color = enabled_button_bg_color
+
+            self.object_layer_render.draw_rectangle(
+                int(zoom_in_button_rect.x),
+                int(zoom_in_button_rect.y),
+                int(zoom_in_button_rect.width),
+                int(zoom_in_button_rect.height),
+                actual_zoom_in_bg_color,
+            )
+            self.object_layer_render.draw_rectangle_lines(
+                int(zoom_in_button_rect.x),
+                int(zoom_in_button_rect.y),
+                int(zoom_in_button_rect.width),
+                int(zoom_in_button_rect.height),
+                button_border_color,
+            )
+            plus_text = "+"
+            plus_text_width = self.object_layer_render.measure_text(
+                plus_text, controls_font_size
+            )
+            self.object_layer_render.draw_text(
+                plus_text,
+                int(zoom_in_btn_x + (button_size - plus_text_width) // 2),
+                int(zoom_in_btn_y + (button_size - controls_font_size) // 2),
+                controls_font_size,
+                actual_zoom_in_text_color,
+            )
+
+            # Draw Zoom Level Text
+            self.object_layer_render.draw_text(
+                zoom_level_text_content,
+                int(zoom_level_text_x),
+                int(zoom_level_text_y),
+                controls_font_size,
+                Color(*UI_TEXT_COLOR_PRIMARY),
+            )
+
+            # Handle button clicks
+            if is_mouse_button_pressed:
+                # Check mouse is within map viewport before processing button clicks
+                if check_collision_point_rec(
+                    mouse_pos_vec,
+                    Rectangle(
+                        self.map_viewport_x,
+                        self.map_viewport_y,
+                        self.map_viewport_width,
+                        self.map_viewport_height,
+                    ),
+                ):
+                    if can_zoom_in and check_collision_point_rec(
+                        mouse_pos_vec, zoom_in_button_rect
+                    ):
+                        new_zoom_index = min(
+                            self.current_zoom_index + 1, len(self.zoom_levels) - 1
+                        )
+                        if new_zoom_index != self.current_zoom_index:
+                            self.current_zoom_index = new_zoom_index
+                            logging.info(
+                                f"Map zoom level changed to {self.current_zoom_factor} via [+] button"
+                            )
+                    elif can_zoom_out and check_collision_point_rec(
+                        mouse_pos_vec, zoom_out_button_rect
+                    ):
+                        new_zoom_index = max(self.current_zoom_index - 1, 0)
+                        if new_zoom_index != self.current_zoom_index:
+                            self.current_zoom_index = new_zoom_index
+                            logging.info(
+                                f"Map zoom level changed to {self.current_zoom_factor} via [-] button"
+                            )
         # Handle zoom input
         self._handle_zoom_input(mouse_x, mouse_y)
 
