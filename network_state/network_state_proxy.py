@@ -68,12 +68,18 @@ class NetworkStateProxy:
         try:
             data = json.loads(message)
             self._send_to_client(data)  # Forward all server messages to client
-            if data.get("type") == "player_assigned":
+            msg_type = data.get("type")
+            if msg_type == "player_assigned":
                 self.my_player_id = data["player_id"]
                 self.client_player_id_setter(self.my_player_id)
                 logging.info(
                     f"Proxy received player ID: {self.my_player_id} from real server."
                 )
+            # Potentially handle other specific real server messages if needed,
+            # though generic forwarding covers server_chat_message.
+            # Example: if msg_type == "server_chat_message":
+            # logging.debug(f"Proxy received server_chat_message: {data}")
+            # No special handling needed here as it's already sent to client.
         except json.JSONDecodeError:
             logging.error(f"Proxy failed to decode JSON message from server: {message}")
         except Exception as e:
@@ -164,7 +170,28 @@ class NetworkStateProxy:
             if target_x is not None and target_y is not None:
                 # This only handles the *actual* player movement path for offline mode
                 self._handle_offline_move_request(target_x, target_y, current_time)
-        # Other client messages can be handled here for offline mode if needed
+        elif msg_type == "client_chat_message":
+            room_id = payload.get("room_id")
+            text = payload.get("text")
+            if room_id and text:
+                sender_name = self.my_player_id if self.my_player_id else "OfflineUser"
+                chat_message_response = {
+                    "type": "server_chat_message",
+                    "data": {
+                        "room_id": room_id,
+                        "sender": sender_name,
+                        "text": text,
+                        "time": time.strftime("%H:%M", time.localtime(current_time)),
+                    },
+                }
+                self._send_to_client(chat_message_response)
+                logging.info(
+                    f"Proxy offline: processed client_chat_message for room {room_id}"
+                )
+            else:
+                logging.warning(
+                    "Proxy offline: client_chat_message missing room_id or text."
+                )
 
     def _send_offline_initial_state(self):
         """Generates and sends an initial state for offline mode."""

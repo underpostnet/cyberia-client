@@ -1,5 +1,5 @@
 import logging
-from raylibpy import Color
+from raylibpy import Color, KEY_ENTER  # Assuming KEY_ENTER is available
 from config import (
     UI_FONT_SIZE,
     UI_TEXT_COLOR_PRIMARY,
@@ -12,6 +12,7 @@ from ui.components.core.input_text_core_component import (
     InputTextCoreComponent,
 )  # New import
 from object_layer.object_layer_render import ObjectLayerRender
+from network_state.network_state_proxy import NetworkStateProxy  # For sending messages
 
 logging.basicConfig(
     level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s"
@@ -83,10 +84,16 @@ class ChatCyberiaView:
     Uses GridCoreComponent to render chat rooms in a list bar format.
     """
 
-    def __init__(self, object_layer_render_instance: ObjectLayerRender):
+    def __init__(
+        self,
+        object_layer_render_instance: ObjectLayerRender,
+        network_proxy: NetworkStateProxy,
+    ):
         self.object_layer_render = object_layer_render_instance
+        self.network_proxy = network_proxy
         self.title_text = "Chat Rooms"
         self.chat_rooms = CHAT_ROOM_DATA
+        self.message_input_placeholder = "Type your message..."  # Store placeholder
         self.selected_chat_index: int | None = None  # To track selected chat room
 
         # Configure GridCoreComponent for a list bar form (1 column, multiple rows)
@@ -124,7 +131,7 @@ class ChatCyberiaView:
             background_color=Color(50, 50, 50, 200),
             border_color=Color(100, 100, 100, 255),
             shading_color=Color(*UI_TEXT_COLOR_SHADING),
-            initial_text="Type your message...",
+            initial_text=self.message_input_placeholder,  # Use stored placeholder
         )
 
     def _render_chat_room_item(
@@ -245,41 +252,136 @@ class ChatCyberiaView:
             current_y += (UI_FONT_SIZE - 2) + 5
 
         # Draw Chat Messages
-        current_y += 20  # Add some space after description
         self.object_layer_render.draw_text(
             "Messages:", x + 20 + 1, current_y + 1, UI_FONT_SIZE, shading_color
         )
         self.object_layer_render.draw_text(
             "Messages:", x + 20, current_y, UI_FONT_SIZE, text_color
         )
-        current_y += UI_FONT_SIZE + 5
+        current_y += UI_FONT_SIZE + 10  # Space after "Messages:" label
 
-        message_display_limit = 5  # Display last 5 messages for brevity
-        # Calculate available height for messages to avoid overlap with input box
-        available_message_height = (
-            height - (current_y - y) - 60
-        )  # 60 for input box and padding
-        message_line_height = (UI_FONT_SIZE - 4) + 2
-        max_messages_to_display = int(available_message_height / message_line_height)
+        message_area_start_y = (
+            current_y  # Where the first message content will start drawing
+        )
+        message_font_size = UI_FONT_SIZE - 4
+        line_render_height = (
+            message_font_size + 2
+        )  # Height for one line of text, including small internal spacing
+        message_content_max_width = (
+            width - 40
+        )  # Max width for message text content (x + 20 to x + width - 20)
 
-        # Display messages, ensuring they fit and are bottom-aligned if many
-        start_message_index = max(0, len(messages) - max_messages_to_display)
+        # Calculate available height for the entire message block
+        input_box_region_start_y = (
+            y + height - self.message_input.height - 10
+        )  # Top of input box
+        message_area_end_y = (
+            input_box_region_start_y - 10
+        )  # 10px padding above input box
 
-        # Adjust current_y to draw messages from the bottom up, or fill from top down
-        # For simplicity, we'll draw from top down, and if it exceeds space, the last ones will be visible.
-        # A more complex solution would involve a scrollable message area.
+        actual_available_height_for_all_messages = (
+            message_area_end_y - message_area_start_y
+        )
 
-        for msg in messages[start_message_index:]:
-            msg_text = f"[{msg.get('time')}] {msg.get('sender')}: {msg.get('text')}"
+        displayable_messages_info = []
+        accumulated_render_height = (
+            0  # Tracks the total height of messages that will be rendered
+        )
+
+        # Iterate messages from most recent to oldest to determine which ones fit
+        for msg_idx in range(len(messages) - 1, -1, -1):
+            msg = messages[msg_idx]
+
+            sender_line_text = f"[{msg.get('time')}] {msg.get('sender')}:"  # Space after colon removed previously
+
+            wrapped_text_lines = self._wrap_text(
+                msg.get("text", ""), message_content_max_width, message_font_size
+            )
+            if not wrapped_text_lines:  # Handle empty message text
+                wrapped_text_lines = [
+                    ""
+                ]  # Render as one empty line to maintain structure
+
+            num_text_lines = len(wrapped_text_lines)
+
+            current_message_render_height = (
+                1 + num_text_lines
+            ) * line_render_height  # 1 for sender line
+
+            padding_between_messages = (
+                5 if displayable_messages_info else 0
+            )  # Padding only if not the first from bottom
+
+            if (
+                accumulated_render_height
+                + current_message_render_height
+                + padding_between_messages
+                <= actual_available_height_for_all_messages
+            ):
+                accumulated_render_height += (
+                    current_message_render_height + padding_between_messages
+                )
+                displayable_messages_info.append(
+                    {
+                        "sender_line": sender_line_text,
+                        "wrapped_text": wrapped_text_lines,
+                    }
+                )
+            else:
+                break  # No more space
+
+        displayable_messages_info.reverse()  # Show oldest of the fit messages first
+
+        # Now render the messages that fit, starting from message_area_start_y
+        render_current_y = message_area_start_y
+        for i, msg_info in enumerate(displayable_messages_info):
+            # Draw sender line
             self.object_layer_render.draw_text(
-                msg_text, x + 20 + 1, current_y + 1, UI_FONT_SIZE - 4, shading_color
+                msg_info["sender_line"],
+                x + 20 + 1,
+                render_current_y + 1,
+                message_font_size,
+                shading_color,
             )
             self.object_layer_render.draw_text(
-                msg_text, x + 20, current_y, UI_FONT_SIZE - 4, text_color
+                msg_info["sender_line"],
+                x + 20,
+                render_current_y,
+                message_font_size,
+                text_color,
             )
-            current_y += message_line_height
+            render_current_y += line_render_height
+
+            # Draw wrapped message text lines
+            message_body_start_x = x + 20  # Aligned with sender line
+            for line_text in msg_info["wrapped_text"]:
+                self.object_layer_render.draw_text(
+                    line_text,
+                    message_body_start_x + 1,
+                    render_current_y + 1,
+                    message_font_size,
+                    shading_color,
+                )
+                self.object_layer_render.draw_text(
+                    line_text,
+                    message_body_start_x,
+                    render_current_y,
+                    message_font_size,
+                    text_color,
+                )
+                render_current_y += line_render_height
+
+            if (
+                i < len(displayable_messages_info) - 1
+            ):  # Add padding if not the last message rendered
+                render_current_y += 5
+
+        # Ensure current_y is updated if no messages were rendered, for input box positioning.
+        # However, input box is positioned relative to modal bottom, so this current_y is mostly for message rendering.
+        # The input box positioning below is independent of message rendering height.
 
         # Position and render message input field
+        # (This part remains largely the same as it's positioned from the bottom of the modal)
         input_box_y = (
             y + height - self.message_input.height - 10
         )  # 10 pixels from bottom
@@ -292,9 +394,34 @@ class ChatCyberiaView:
 
         # Handle mouse input for the message input component (including drag selection)
         self.message_input.handle_mouse_input(mouse_x, mouse_y, is_mouse_button_down)
+
         # Update input text component with keyboard events and delta time
         self.message_input.update(dt, char_pressed, key_pressed, is_key_down_map)
         self.message_input.render()
+
+        # Handle sending message on Enter key press
+        if (
+            key_pressed == KEY_ENTER
+            and self.message_input.is_active
+            and self.message_input.text.strip() != ""
+            and self.message_input.text
+            != self.message_input_placeholder  # Compare with stored placeholder
+        ):
+            message_text = self.message_input.text
+            current_room_id = chat_data.get("id")
+            if current_room_id and self.network_proxy:
+                logging.info(
+                    f"Sending chat message: '{message_text}' to room: {current_room_id}"
+                )
+                self.network_proxy.send_client_message(
+                    "client_chat_message",
+                    {"room_id": current_room_id, "text": message_text},
+                )
+                self.message_input.set_text("")  # Clear input after sending
+            else:
+                logging.warning(
+                    "Cannot send chat message: No room selected or network proxy unavailable."
+                )
 
     def _wrap_text(self, text: str, max_width: int, font_size: int) -> list[str]:
         """Wraps text to fit within a maximum width."""
@@ -302,14 +429,31 @@ class ChatCyberiaView:
         lines = []
         current_line = []
         for word in words:
-            test_line = " ".join(current_line + [word])
-            if self.object_layer_render.measure_text(test_line, font_size) <= max_width:
+            # Check if current_line is empty to avoid leading space on new lines
+            test_line_text = " ".join(current_line + [word]) if current_line else word
+            if (
+                self.object_layer_render.measure_text(test_line_text, font_size)
+                <= max_width
+            ):
                 current_line.append(word)
             else:
-                lines.append(" ".join(current_line))
-                current_line = [word]
+                # If current_line is not empty, add it to lines
+                if current_line:
+                    lines.append(" ".join(current_line))
+                # Start new line with the current word, but only if it fits by itself
+                # If a single word is too long, it will overflow.
+                # A more robust solution would break long words.
+                if self.object_layer_render.measure_text(word, font_size) <= max_width:
+                    current_line = [word]
+                else:  # Word itself is too long, add it and let it overflow (or implement word breaking)
+                    lines.append(word)
+                    current_line = []
         if current_line:
             lines.append(" ".join(current_line))
+
+        # If the original text was empty or only spaces and resulted in no lines, return a list with one empty string.
+        if not lines and not text.strip():
+            return [""]
         return lines
 
     def render_content(
@@ -471,7 +615,9 @@ class ChatCyberiaView:
                 self.message_input.set_active(
                     False
                 )  # Deactivate input on chat room selection
-                self.message_input.set_text("")  # Clear text on chat room change
+                self.message_input.set_text(
+                    self.message_input_placeholder
+                )  # Clear text on chat room change
                 return True
             return False
         else:
@@ -483,4 +629,39 @@ class ChatCyberiaView:
         self.selected_chat_index = None
         self.title_text = "Chat Rooms"
         self.message_input.set_active(False)
-        self.message_input.set_text("Type your message...")
+        self.message_input.set_text(
+            self.message_input_placeholder
+        )  # Use stored placeholder
+
+    def handle_server_chat_message(self, message_data: dict):
+        """
+        Processes an incoming chat message from the server (via proxy)
+        and updates the local chat room data.
+        """
+        try:
+            room_id = message_data["data"]["room_id"]
+            sender = message_data["data"]["sender"]
+            text = message_data["data"]["text"]
+            timestamp = message_data["data"]["time"]
+
+            for room in self.chat_rooms:
+                if room["id"] == room_id:
+                    room["messages"].append(
+                        {"sender": sender, "text": text, "time": timestamp}
+                    )
+                    room["last_message"] = text  # Update last message preview
+                    logging.info(
+                        f"ChatCyberiaView: Received message for room {room_id}: '{text}' from {sender}"
+                    )
+                    return
+            logging.warning(
+                f"ChatCyberiaView: Received message for unknown room_id: {room_id}"
+            )
+        except KeyError as e:
+            logging.error(
+                f"ChatCyberiaView: Error processing server_chat_message - missing key: {e} in {message_data}"
+            )
+        except Exception as e:
+            logging.exception(
+                f"ChatCyberiaView: Unexpected error processing server_chat_message: {e}"
+            )

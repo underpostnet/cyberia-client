@@ -74,6 +74,7 @@ class InputTextCoreComponent:
         self.border_color = border_color
         self.shading_color = shading_color
         self.text = initial_text
+        self.placeholder_text = initial_text  # Store the placeholder
         self.max_length = max_length
         self.is_active = is_active
         self.cursor_blink_timer = 0.0
@@ -110,6 +111,9 @@ class InputTextCoreComponent:
         self.cursor_visible = True  # Ensure cursor is visible when activated
         if not active:
             self.clear_selection()
+            if not self.text.strip():  # If text is empty or only whitespace
+                self.text = self.placeholder_text
+                self.cursor_position = 0  # Or len(self.placeholder_text) if preferred
         # Adjust scroll when activation changes, ensuring the cursor is in view
         # Use adjusted width for text display
         self._update_text_offset_for_scroll(
@@ -536,11 +540,15 @@ class InputTextCoreComponent:
             and mouse_y >= self.y
             and mouse_y <= (self.y + self.height)
         )
-
         if is_mouse_button_down:
             if (
                 is_hovered_over_self
             ):  # If mouse button is down and hovered, we are either starting or continuing a drag
+                # Check if it's becoming active and text is placeholder
+                should_clear_placeholder = (not self.is_active) and (
+                    self.text == self.placeholder_text
+                )
+
                 if not self.is_active:  # If not active, activate it and start selection
                     self.set_active(True)
                     # Cursor and selection start will be set in check_click
@@ -548,6 +556,11 @@ class InputTextCoreComponent:
                     self.selection_start = self.cursor_position
                     self.selection_end = self.cursor_position
                     self.is_dragging_selection = True
+                    if should_clear_placeholder:
+                        self.set_text("")  # This will also set cursor_position to 0
+                        self.selection_start = self.selection_end = (
+                            0  # Ensure selection reflects cleared text
+                        )
                     # Update scroll after click
                     self._update_text_offset_for_scroll(
                         self.width - (self.text_padding_left + self.text_padding_right)
@@ -784,13 +797,19 @@ class InputTextCoreComponent:
         )
 
         if is_hovered and is_mouse_button_pressed:
+            was_placeholder_before_click = self.text == self.placeholder_text
+
             if not self.is_active:  # If not active, activate it
                 self.set_active(True)
 
             # Always set cursor position and start selection on a new click within the field
-            self.cursor_position = self.get_char_index_from_x(mouse_x)
-            self.selection_start = self.cursor_position
-            self.selection_end = self.cursor_position
+            if was_placeholder_before_click and self.is_active:
+                self.set_text("")  # Clears text, sets cursor to 0
+                self.cursor_position = self.selection_start = self.selection_end = 0
+            else:
+                self.cursor_position = self.get_char_index_from_x(mouse_x)
+                self.selection_start = self.cursor_position
+                self.selection_end = self.cursor_position
             self.is_dragging_selection = True  # Assume drag might start
 
             logging.debug(
@@ -805,7 +824,8 @@ class InputTextCoreComponent:
             )
             return True
         elif is_mouse_button_pressed and self.is_active and not is_hovered:
-            # Clicked outside while active, deactivate and clear selection
+            # Clicked outside while active, deactivate.
+            # set_active(False) will handle restoring placeholder if text is empty.
             self.set_active(False)
             logging.debug("Input field deactivated. Active: %s", self.is_active)
             return False
@@ -818,8 +838,12 @@ class InputTextCoreComponent:
 
     def set_text(self, new_text: str):
         """Sets the text of the input field, clamping to max_length."""
-        self.text = new_text[: self.max_length]
-        self.cursor_position = len(self.text)  # Move cursor to end of new text
+        if not self.is_active and not new_text.strip() and self.placeholder_text:
+            self.text = self.placeholder_text
+            self.cursor_position = 0  # Or len(self.placeholder_text)
+        else:
+            self.text = new_text[: self.max_length]
+            self.cursor_position = len(self.text)  # Move cursor to end of new text
         self.clear_selection()
         # Update scroll after setting text
         self._update_text_offset_for_scroll(

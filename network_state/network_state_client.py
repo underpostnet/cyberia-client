@@ -235,7 +235,8 @@ class NetworkStateClient:
             object_layer_render_instance=self.object_layer_render
         )
         self.chat_cyberia_view = ChatCyberiaView(
-            object_layer_render_instance=self.object_layer_render
+            object_layer_render_instance=self.object_layer_render,
+            network_proxy=self.proxy,  # Pass the proxy instance
         )
         self.map_cyberia_view = MapCyberiaView(
             object_layer_render_instance=self.object_layer_render
@@ -353,6 +354,15 @@ class NetworkStateClient:
                 logging.warning(
                     f"Invalid object_removed_from_rendering message: {data}"
                 )
+        elif msg_type == "server_chat_message":
+            # Ensure chat_cyberia_view is initialized and the message is valid
+            if self.chat_cyberia_view and data.get("data"):
+                self.chat_cyberia_view.handle_server_chat_message(data)
+            else:
+                logging.warning(
+                    f"Could not handle server_chat_message: view not ready or message malformed: {data}"
+                )
+
         else:
             logging.warning(
                 f"Unknown message type received from proxy: {msg_type} - {data}"
