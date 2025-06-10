@@ -15,7 +15,10 @@ from object_layer.object_layer_data_sdg import (
 import argparse
 
 # Import the default synthetic data template. This is the authoritative matrix.
-from object_layer.object_layer_data import DEFAULT_PLAYER_SKIN_FRAME_DOWN_IDLE
+from object_layer.object_layer_data import (
+    DEFAULT_PLAYER_SKIN_FRAME_DOWN_IDLE,
+    DEFAULT_PLAYER_SKIN_FRAME_RIGHT_IDLE,
+)
 
 # Convert the imported list to a NumPy array
 DEFAULT_PLAYER_SKIN_FRAME_DOWN_IDLE = np.array(DEFAULT_PLAYER_SKIN_FRAME_DOWN_IDLE)
@@ -421,6 +424,11 @@ if __name__ == "__main__":
             data_generator = SyntheticDataGenerator(
                 np.zeros((1, 1), dtype=int), DISPLAY_COLOR_PALETTE
             )  # Dummy initial matrix, will be replaced
+
+        elif args.mode in ["skin-default-06"]:
+            data_generator = SyntheticDataGenerator(
+                DEFAULT_PLAYER_SKIN_FRAME_RIGHT_IDLE.copy(), DISPLAY_COLOR_PALETTE
+            )
         else:
             data_generator = SyntheticDataGenerator(
                 DEFAULT_PLAYER_SKIN_FRAME_DOWN_IDLE.copy(), DISPLAY_COLOR_PALETTE
