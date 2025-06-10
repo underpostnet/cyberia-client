@@ -140,7 +140,16 @@ class SyntheticDataToolAPI:
         skin_color_id = random.choice(list(range(9, 14)))
         self.data_generator.contiguous_region_fill(12, 12, fill_value_id=skin_color_id)
         self.data_generator.contiguous_region_fill(7, 4, fill_value_id=skin_color_id)
-        if mode == "skin-default-08":
+        if mode in [
+            "skin-default-08-0",
+            "skin-default-08-1",
+            "skin-default-18-0",
+            "skin-default-18-1",
+            "skin-default-02-0",
+            "skin-default-02-1",
+            "skin-default-12-0",
+            "skin-default-12-1",
+        ]:
             self.data_generator.contiguous_region_fill(
                 18, 4, fill_value_id=skin_color_id
             )

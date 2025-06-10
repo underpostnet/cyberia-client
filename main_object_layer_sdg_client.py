@@ -226,7 +226,24 @@ def render_factory(
             )
         tool_api.apply_default_skin_template_fill(DISPLAY_COLOR_PALETTE)
 
-    elif mode == "skin-default-08" or mode == "skin-default-06":
+    elif mode in [
+        "skin-default-08-0",
+        "skin-default-08-1",
+        "skin-default-18-0",
+        "skin-default-18-1",
+        "skin-default-06-0",
+        "skin-default-06-1",
+        "skin-default-16-0",
+        "skin-default-16-1",
+        "skin-default-04-0",
+        "skin-default-04-1",
+        "skin-default-14-0",
+        "skin-default-14-1",
+        "skin-default-02-0",
+        "skin-default-02-1",
+        "skin-default-12-0",
+        "skin-default-12-1",
+    ]:
         render_color_hair = random.choice([14, 17, 20])
 
         for coord in data_generator.get_coordinates_in_region(7, 21, 10, 20):
@@ -288,6 +305,9 @@ def render_factory(
             )
 
         tool_api.apply_default_skin_template_fill(mode, DISPLAY_COLOR_PALETTE)
+
+        # if mode skin-default-04-0 skin-default-04-1
+        # apply flip horizontally
 
     elif mode == "gfx-shadow-ball":
         canvas_size = 15
@@ -425,7 +445,16 @@ if __name__ == "__main__":
                 np.zeros((1, 1), dtype=int), DISPLAY_COLOR_PALETTE
             )  # Dummy initial matrix, will be replaced
 
-        elif args.mode in ["skin-default-06"]:
+        elif args.mode in [
+            "skin-default-06-0",
+            "skin-default-06-1",
+            "skin-default-16-0",
+            "skin-default-16-1",
+            "skin-default-04-0",
+            "skin-default-04-1",
+            "skin-default-14-0",
+            "skin-default-14-1",
+        ]:
             data_generator = SyntheticDataGenerator(
                 DEFAULT_PLAYER_SKIN_FRAME_RIGHT_IDLE.copy(), DISPLAY_COLOR_PALETTE
             )
