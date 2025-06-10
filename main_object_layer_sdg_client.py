@@ -287,7 +287,7 @@ def render_factory(
                 tool_api.create_coordinate_pattern("hair-lock"),
             )
 
-        tool_api.apply_default_skin_template_fill(DISPLAY_COLOR_PALETTE)
+        tool_api.apply_default_skin_template_fill(mode, DISPLAY_COLOR_PALETTE)
 
     elif mode == "gfx-shadow-ball":
         canvas_size = 15

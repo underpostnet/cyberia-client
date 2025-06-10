@@ -123,7 +123,7 @@ class SyntheticDataToolAPI:
         # Add more pattern types here as needed
         return coordinates
 
-    def apply_default_skin_template_fill(self, display_color_palette: dict):
+    def apply_default_skin_template_fill(self, mode: str, display_color_palette: dict):
         """
         Applies a default 'skin' template fill based on common data points.
         This is a specific generation logic for a particular data structure.
@@ -140,7 +140,10 @@ class SyntheticDataToolAPI:
         skin_color_id = random.choice(list(range(9, 14)))
         self.data_generator.contiguous_region_fill(12, 12, fill_value_id=skin_color_id)
         self.data_generator.contiguous_region_fill(7, 4, fill_value_id=skin_color_id)
-        self.data_generator.contiguous_region_fill(18, 4, fill_value_id=skin_color_id)
+        if mode == "skin-default-08":
+            self.data_generator.contiguous_region_fill(
+                18, 4, fill_value_id=skin_color_id
+            )
 
         # Fill specific internal regions with random colors
         self.data_generator.contiguous_region_fill(
