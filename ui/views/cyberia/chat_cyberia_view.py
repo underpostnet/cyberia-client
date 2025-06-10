@@ -1,11 +1,33 @@
 import logging
-from raylibpy import Color, KEY_ENTER  # Assuming KEY_ENTER is available
+from raylibpy import (
+    Color,
+    KEY_ENTER,
+    Vector2,
+    Rectangle,
+    get_mouse_wheel_move,
+    check_collision_point_rec,
+    begin_scissor_mode,
+    end_scissor_mode,
+    is_mouse_button_down,
+    is_mouse_button_pressed,
+    MOUSE_LEFT_BUTTON,
+)
 from config import (
     UI_FONT_SIZE,
     UI_TEXT_COLOR_PRIMARY,
     UI_TEXT_COLOR_SHADING,
     KEYBOARD_BACKSPACE_INITIAL_DELAY,
     KEYBOARD_BACKSPACE_REPEAT_RATE,
+    CHAT_HISTORY_PADDING_X,
+    CHAT_HISTORY_PADDING_Y_TOP,
+    CHAT_HISTORY_PADDING_Y_BOTTOM,
+    CHAT_MESSAGE_LINE_SPACING,
+    CHAT_MESSAGE_PADDING_Y,
+    SCROLLBAR_WIDTH,
+    SCROLLBAR_PADDING,
+    SCROLLBAR_TRACK_COLOR_TUPLE,
+    SCROLLBAR_THUMB_COLOR_TUPLE,
+    CHAT_WHEEL_SCROLL_SENSITIVITY,
 )
 from ui.components.core.grid_core_component import GridCoreComponent
 from ui.components.core.input_text_core_component import (
@@ -13,6 +35,7 @@ from ui.components.core.input_text_core_component import (
 )  # New import
 from object_layer.object_layer_render import ObjectLayerRender
 from network_state.network_state_proxy import NetworkStateProxy  # For sending messages
+from ui.components.core.scrollbar_core_component import ScrollbarCoreComponent
 
 logging.basicConfig(
     level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s"
@@ -134,6 +157,26 @@ class ChatCyberiaView:
             initial_text=self.message_input_placeholder,  # Use stored placeholder
         )
 
+        # Scrollbar and history display area (initialized with dummy values, set in _render_single_chat_detail)
+        self.history_display_rect = Rectangle(0, 0, 0, 0)
+        self.scrollbar = ScrollbarCoreComponent(
+            x=0,
+            y=0,
+            width=SCROLLBAR_WIDTH,
+            height=0,  # Positioned dynamically
+            track_color=Color(*SCROLLBAR_TRACK_COLOR_TUPLE),
+            thumb_color=Color(*SCROLLBAR_THUMB_COLOR_TUPLE),
+        )
+        self._history_content_height = 0.0
+        self._scroll_offset_y = 0.0
+        self._last_rendered_messages_count = 0  # To detect changes in messages
+
+        # Store message font size and calculated line height for messages
+        self.message_font_size = UI_FONT_SIZE - 4
+        self.message_line_render_height = (
+            self.message_font_size + CHAT_MESSAGE_LINE_SPACING
+        )
+
     def _render_chat_room_item(
         self,
         object_layer_render_instance: ObjectLayerRender,
@@ -193,6 +236,48 @@ class ChatCyberiaView:
                 Color(255, 255, 0, 255),  # Small yellow square
             )
 
+    def _update_history_dimensions_and_scrollbar(self, messages: list):
+        """
+        Calculates the total height of chat messages and updates the scrollbar.
+        This should be called when messages change or the view/history_display_rect resizes.
+        """
+        if not messages:
+            self._history_content_height = 0.0
+        else:
+            total_height = 0.0
+            for i, msg in enumerate(messages):
+                sender_line_height = (
+                    self.message_line_render_height
+                )  # Height for sender + time
+
+                wrapped_text_lines = self._wrap_text(
+                    msg.get("text", ""),
+                    self.history_display_rect.width,  # Use actual display width for wrapping
+                    self.message_font_size,
+                )
+                if not wrapped_text_lines:
+                    wrapped_text_lines = [""]  # Ensure at least one line for structure
+
+                text_block_height = (
+                    len(wrapped_text_lines) * self.message_line_render_height
+                )
+                total_height += sender_line_height + text_block_height
+
+                if i < len(messages) - 1:
+                    total_height += CHAT_MESSAGE_PADDING_Y  # Padding between messages
+
+            self._history_content_height = total_height
+
+        self.scrollbar.set_content_dimensions(
+            self._history_content_height, self.history_display_rect.height
+        )
+
+        # If content height changed, current scroll_offset_y might be invalid, re-fetch
+        self._scroll_offset_y = self.scrollbar.get_scroll_offset()
+
+        # If new messages were added, and we were at the bottom, stay at the bottom
+        # This logic might need refinement based on desired auto-scroll behavior
+
     def _render_single_chat_detail(
         self,
         modal_component,
@@ -203,7 +288,7 @@ class ChatCyberiaView:
         chat_data: dict,
         mouse_x: int,
         mouse_y: int,
-        is_mouse_button_pressed: bool,
+        is_mouse_button_pressed_left: bool,  # Specifically for left button
         is_mouse_button_down: bool,  # New: is_mouse_button_down
         char_pressed: int | None,
         key_pressed: int | None,
@@ -214,6 +299,13 @@ class ChatCyberiaView:
         Renders the detailed view of a single selected chat room.
         """
         text_color = Color(*UI_TEXT_COLOR_PRIMARY)
+        # Ensure UI_TEXT_COLOR_SHADING is a tuple of 4 (RGBA)
+        shading_color_tuple = (
+            UI_TEXT_COLOR_SHADING
+            if len(UI_TEXT_COLOR_SHADING) == 4
+            else (*UI_TEXT_COLOR_SHADING, 255)
+        )
+        shading_color = Color(*shading_color_tuple)
         shading_color = Color(*UI_TEXT_COLOR_SHADING)
 
         name = chat_data.get("name", "No Name")
@@ -237,7 +329,7 @@ class ChatCyberiaView:
         )
 
         # Draw Description
-        desc_start_y = y + 70
+        desc_start_y = y + 60  # Adjusted for tighter layout
         max_desc_width = width - 40
         desc_lines = self._wrap_text(description, max_desc_width, UI_FONT_SIZE - 2)
 
@@ -250,141 +342,156 @@ class ChatCyberiaView:
                 line, x + 20, current_y, UI_FONT_SIZE - 2, text_color
             )
             current_y += (UI_FONT_SIZE - 2) + 5
+        current_y += CHAT_HISTORY_PADDING_Y_TOP  # Padding before messages start
 
-        # Draw Chat Messages
-        self.object_layer_render.draw_text(
-            "Messages:", x + 20 + 1, current_y + 1, UI_FONT_SIZE, shading_color
-        )
-        self.object_layer_render.draw_text(
-            "Messages:", x + 20, current_y, UI_FONT_SIZE, text_color
-        )
-        current_y += UI_FONT_SIZE + 10  # Space after "Messages:" label
-
-        message_area_start_y = (
-            current_y  # Where the first message content will start drawing
-        )
-        message_font_size = UI_FONT_SIZE - 4
-        line_render_height = (
-            message_font_size + 2
-        )  # Height for one line of text, including small internal spacing
-        message_content_max_width = (
-            width - 40
-        )  # Max width for message text content (x + 20 to x + width - 20)
-
-        # Calculate available height for the entire message block
-        input_box_region_start_y = (
-            y + height - self.message_input.height - 10
-        )  # Top of input box
-        message_area_end_y = (
-            input_box_region_start_y - 10
-        )  # 10px padding above input box
-
-        actual_available_height_for_all_messages = (
-            message_area_end_y - message_area_start_y
+        # Define history display rectangle for messages
+        self.history_display_rect.x = x + CHAT_HISTORY_PADDING_X
+        self.history_display_rect.y = current_y
+        self.history_display_rect.width = (
+            width - (2 * CHAT_HISTORY_PADDING_X) - SCROLLBAR_WIDTH - SCROLLBAR_PADDING
         )
 
-        displayable_messages_info = []
-        accumulated_render_height = (
-            0  # Tracks the total height of messages that will be rendered
+        input_box_total_height = (
+            self.message_input.height + CHAT_HISTORY_PADDING_Y_BOTTOM
+        )
+        self.history_display_rect.height = (
+            y + height - input_box_total_height
+        ) - self.history_display_rect.y
+
+        # Update scrollbar geometry
+        self.scrollbar.rect.x = (
+            self.history_display_rect.x
+            + self.history_display_rect.width
+            + SCROLLBAR_PADDING
+        )
+        self.scrollbar.rect.y = self.history_display_rect.y
+        self.scrollbar.rect.height = self.history_display_rect.height
+
+        # Update scrollbar content dimensions if messages changed
+        if (
+            len(messages) != self._last_rendered_messages_count
+            or self.scrollbar.visible_height != self.history_display_rect.height
+        ):
+            self._update_history_dimensions_and_scrollbar(messages)
+            self._last_rendered_messages_count = len(messages)
+
+        # Handle scrollbar events
+        mouse_pos = Vector2(float(mouse_x), float(mouse_y))
+        mouse_wheel = get_mouse_wheel_move()
+
+        # Pass is_mouse_button_down for the *specific* button the scrollbar cares about (left)
+        # is_mouse_button_down is a general param, might be for any button if not specified
+        # For this component, we'll assume it's for the left button if true.
+        # More robustly, pass rl.is_mouse_button_down(rl.MOUSE_LEFT_BUTTON) and rl.is_mouse_button_pressed(rl.MOUSE_LEFT_BUTTON)
+        # The current `is_mouse_button_down` param from modal is likely general.
+        # Let's assume `is_mouse_button_down` means left button is down for simplicity here.
+        # `is_mouse_button_pressed` is fine as it's a per-frame press.
+
+        scrollbar_consumed_event = self.scrollbar.handle_event(
+            mouse_pos,
+            is_mouse_button_down,  # Assuming this implies left button for dragging
+            is_mouse_button_pressed_left,  # This is specific to left button press
+            mouse_wheel,
+            CHAT_WHEEL_SCROLL_SENSITIVITY,
+        )
+        if scrollbar_consumed_event:
+            self._scroll_offset_y = self.scrollbar.get_scroll_offset()
+        # If scrollbar didn't consume wheel, but mouse is over history_display_rect, handle it
+        elif (
+            check_collision_point_rec(mouse_pos, self.history_display_rect)
+            and mouse_wheel != 0.0
+        ):
+            if self.scrollbar.content_height > self.scrollbar.visible_height:
+                self.scrollbar.set_scroll_position(
+                    self.scrollbar.scroll_position
+                    - (mouse_wheel * CHAT_WHEEL_SCROLL_SENSITIVITY)
+                )
+                self._scroll_offset_y = self.scrollbar.get_scroll_offset()
+
+        # Render Messages within Scissor Rectangle
+        begin_scissor_mode(
+            int(self.history_display_rect.x),
+            int(self.history_display_rect.y),
+            int(self.history_display_rect.width),
+            int(self.history_display_rect.height),
         )
 
-        # Iterate messages from most recent to oldest to determine which ones fit
-        for msg_idx in range(len(messages) - 1, -1, -1):
-            msg = messages[msg_idx]
-
+        current_render_y = self.history_display_rect.y - self._scroll_offset_y
+        for msg in messages:
             sender_line_text = f"[{msg.get('time')}] {msg.get('sender')}:"  # Space after colon removed previously
-
             wrapped_text_lines = self._wrap_text(
-                msg.get("text", ""), message_content_max_width, message_font_size
+                msg.get("text", ""),
+                self.history_display_rect.width,
+                self.message_font_size,
             )
-            if not wrapped_text_lines:  # Handle empty message text
-                wrapped_text_lines = [
-                    ""
-                ]  # Render as one empty line to maintain structure
+            if not wrapped_text_lines:
+                wrapped_text_lines = [""]
 
-            num_text_lines = len(wrapped_text_lines)
+            # Calculate message block height for visibility check
+            msg_block_height = (
+                1 + len(wrapped_text_lines)
+            ) * self.message_line_render_height + CHAT_MESSAGE_PADDING_Y
 
-            current_message_render_height = (
-                1 + num_text_lines
-            ) * line_render_height  # 1 for sender line
-
-            padding_between_messages = (
-                5 if displayable_messages_info else 0
-            )  # Padding only if not the first from bottom
-
+            # Basic culling: only draw if part of the message block is visible
             if (
-                accumulated_render_height
-                + current_message_render_height
-                + padding_between_messages
-                <= actual_available_height_for_all_messages
+                current_render_y + msg_block_height > self.history_display_rect.y
+                and current_render_y
+                < self.history_display_rect.y + self.history_display_rect.height
             ):
-                accumulated_render_height += (
-                    current_message_render_height + padding_between_messages
-                )
-                displayable_messages_info.append(
-                    {
-                        "sender_line": sender_line_text,
-                        "wrapped_text": wrapped_text_lines,
-                    }
-                )
-            else:
-                break  # No more space
 
-        displayable_messages_info.reverse()  # Show oldest of the fit messages first
-
-        # Now render the messages that fit, starting from message_area_start_y
-        render_current_y = message_area_start_y
-        for i, msg_info in enumerate(displayable_messages_info):
-            # Draw sender line
-            self.object_layer_render.draw_text(
-                msg_info["sender_line"],
-                x + 20 + 1,
-                render_current_y + 1,
-                message_font_size,
-                shading_color,
-            )
-            self.object_layer_render.draw_text(
-                msg_info["sender_line"],
-                x + 20,
-                render_current_y,
-                message_font_size,
-                text_color,
-            )
-            render_current_y += line_render_height
-
-            # Draw wrapped message text lines
-            message_body_start_x = x + 20  # Aligned with sender line
-            for line_text in msg_info["wrapped_text"]:
+                # Draw sender line
                 self.object_layer_render.draw_text(
-                    line_text,
-                    message_body_start_x + 1,
-                    render_current_y + 1,
-                    message_font_size,
+                    sender_line_text,
+                    x + 20 + 1,
+                    int(current_render_y + 1),
+                    self.message_font_size,
                     shading_color,
                 )
                 self.object_layer_render.draw_text(
-                    line_text,
-                    message_body_start_x,
-                    render_current_y,
-                    message_font_size,
+                    sender_line_text,
+                    x + 20,
+                    int(current_render_y),
+                    self.message_font_size,
                     text_color,
                 )
-                render_current_y += line_render_height
+                current_render_y += self.message_line_render_height
 
-            if (
-                i < len(displayable_messages_info) - 1
-            ):  # Add padding if not the last message rendered
-                render_current_y += 5
+                # Draw wrapped message text lines
+                message_body_start_x = x + 20  # Aligned with sender line
+                for line_text in wrapped_text_lines:
+                    self.object_layer_render.draw_text(
+                        line_text,
+                        message_body_start_x + 1,
+                        int(current_render_y + 1),
+                        self.message_font_size,
+                        shading_color,
+                    )
+                    self.object_layer_render.draw_text(
+                        line_text,
+                        message_body_start_x,
+                        int(current_render_y),
+                        self.message_font_size,
+                        text_color,
+                    )
+                    current_render_y += self.message_line_render_height
 
-        # Ensure current_y is updated if no messages were rendered, for input box positioning.
-        # However, input box is positioned relative to modal bottom, so this current_y is mostly for message rendering.
-        # The input box positioning below is independent of message rendering height.
+                current_render_y += (
+                    CHAT_MESSAGE_PADDING_Y  # Padding after each message block
+                )
+            else:
+                # If message block is not visible, just advance the render position
+                current_render_y += msg_block_height  # Skip rendering this block
+
+        end_scissor_mode()
+        self.scrollbar.render()  # Render scrollbar on top of messages, but within modal
 
         # Position and render message input field
-        # (This part remains largely the same as it's positioned from the bottom of the modal)
         input_box_y = (
-            y + height - self.message_input.height - 10
-        )  # 10 pixels from bottom
+            y
+            + height
+            - self.message_input.height
+            - (CHAT_HISTORY_PADDING_Y_BOTTOM // 2)  # Centered in bottom padding
+        )
         input_box_x = x + 20
         input_box_width = width - 40
 
@@ -392,8 +499,13 @@ class ChatCyberiaView:
         self.message_input.y = input_box_y
         self.message_input.width = input_box_width
 
-        # Handle mouse input for the message input component (including drag selection)
-        self.message_input.handle_mouse_input(mouse_x, mouse_y, is_mouse_button_down)
+        # Only pass mouse to input if not consumed by scrollbar for the same press
+        # This simple check might not be enough if scrollbar consumes hover without press
+        # A more robust system would involve an event consumption flag.
+        if not (scrollbar_consumed_event and is_mouse_button_pressed_left):
+            self.message_input.handle_mouse_input(
+                mouse_x, mouse_y, is_mouse_button_down
+            )
 
         # Update input text component with keyboard events and delta time
         self.message_input.update(dt, char_pressed, key_pressed, is_key_down_map)
@@ -483,7 +595,7 @@ class ChatCyberiaView:
         dt = data_to_pass.get("dt")
         is_mouse_button_down = data_to_pass.get(
             "is_mouse_button_down", False
-        )  # Get mouse button down state
+        )  # General mouse button down state
 
         if self.selected_chat_index is None:
             # Render the chat room list
@@ -547,7 +659,7 @@ class ChatCyberiaView:
                 selected_chat_data,
                 mouse_x,
                 mouse_y,
-                is_mouse_button_pressed,
+                is_mouse_button_pressed,  # This is the general is_mouse_button_pressed
                 is_mouse_button_down,  # Pass new parameter
                 char_pressed,
                 key_pressed,
@@ -568,6 +680,13 @@ class ChatCyberiaView:
         """
         Handles clicks within the chat modal. Returns True if a click was handled.
         """
+        # If in detail view, scrollbar might handle the click first.
+        # The scrollbar's handle_event is called within _render_single_chat_detail.
+        # Here, we primarily handle clicks for list view items or the input box.
+        # For detail view, if scrollbar consumed it, this function might not need to do much more for that click.
+        # However, the input box click check is still relevant.
+        mouse_pos = Vector2(float(mouse_x), float(mouse_y))
+
         # The input field's coordinates are relative to the modal content area
         input_box_x = offset_x + 20
         input_box_y = (
@@ -581,10 +700,22 @@ class ChatCyberiaView:
             container_width - 40
         )  # width - 40 for input_box_width
 
-        # Check if the input field was clicked. handle_mouse_input will manage activation and selection.
-        # This function should only trigger on `is_mouse_button_pressed` (down on this frame)
-        # Continuous dragging is handled by handle_mouse_input called in render_content.
-        if self.message_input.check_click(mouse_x, mouse_y, is_mouse_button_pressed):
+        # Check if the input field was clicked, but only if the click wasn't on an active scrollbar.
+        # A more robust solution would be if scrollbar.handle_event returned if it consumed the *press* specifically.
+        # For now, we assume if the scrollbar is active and mouse is over it, it might have taken the click.
+        clicked_on_active_scrollbar = False
+        if (
+            self.selected_chat_index is not None
+        ):  # Only check scrollbar if in detail view
+            if (
+                check_collision_point_rec(mouse_pos, self.scrollbar.rect)
+                and self.scrollbar.content_height > self.scrollbar.visible_height
+            ):
+                clicked_on_active_scrollbar = True  # Approximate
+
+        if not clicked_on_active_scrollbar and self.message_input.check_click(
+            mouse_x, mouse_y, is_mouse_button_pressed
+        ):
             return True  # Input field handled the click (activation/start drag)
 
         if not is_mouse_button_pressed:
@@ -618,6 +749,10 @@ class ChatCyberiaView:
                 self.message_input.set_text(
                     self.message_input_placeholder
                 )  # Clear text on chat room change
+                self._update_history_dimensions_and_scrollbar(
+                    self.chat_rooms[clicked_index].get("messages", [])
+                )
+                self.scrollbar.set_scroll_position(1.0)  # Scroll to bottom of new chat
                 return True
             return False
         else:
@@ -644,15 +779,65 @@ class ChatCyberiaView:
             text = message_data["data"]["text"]
             timestamp = message_data["data"]["time"]
 
+            # Assume network_proxy has a way to get the current client's ID/sender name
+            # This needs to match the format of the 'sender' field in message_data
+            my_identifier = getattr(
+                self.network_proxy, "client_id", None
+            )  # Example: self.network_proxy.client_id
+            if my_identifier is None:
+                # Fallback or log if client_id is not available, affects auto-scroll for self
+                logging.warning(
+                    "ChatCyberiaView: Client identifier not available on network_proxy for auto-scroll logic."
+                )
+
+            is_message_from_self = my_identifier is not None and sender == my_identifier
+
             for room in self.chat_rooms:
                 if room["id"] == room_id:
                     room["messages"].append(
                         {"sender": sender, "text": text, "time": timestamp}
                     )
                     room["last_message"] = text  # Update last message preview
-                    logging.info(
-                        f"ChatCyberiaView: Received message for room {room_id}: '{text}' from {sender}"
-                    )
+                    # logging.info(
+                    #     f"ChatCyberiaView: Received message for room {room_id}: '{text}' from {sender}"
+                    # )
+
+                    # If this is the currently viewed room, update scrollbar and auto-scroll if at bottom
+                    if (
+                        self.selected_chat_index is not None
+                        and self.chat_rooms[self.selected_chat_index]["id"] == room_id
+                    ):
+                        should_scroll_to_bottom = False
+                        if is_message_from_self:
+                            should_scroll_to_bottom = True
+                        else:
+                            # For messages from others, scroll only if already at/near the bottom
+                            old_content_height = self.scrollbar.content_height
+                            old_visible_height = self.scrollbar.visible_height
+                            old_scroll_pos = self.scrollbar.scroll_position
+
+                            is_explicitly_at_bottom = (
+                                old_scroll_pos >= 0.995
+                            )  # Using a slightly tighter epsilon
+                            is_content_fitting_or_nearly_fitting = (
+                                old_content_height
+                                <= old_visible_height
+                                + (self.message_line_render_height * 1.5)
+                            )  # Content fits or very close to fitting
+
+                            if (
+                                is_explicitly_at_bottom
+                                or is_content_fitting_or_nearly_fitting
+                            ):
+                                should_scroll_to_bottom = True
+
+                        self._update_history_dimensions_and_scrollbar(room["messages"])
+
+                        if should_scroll_to_bottom:
+                            self.scrollbar.set_scroll_position(1.0)
+                            self._scroll_offset_y = (
+                                self.scrollbar.get_scroll_offset()
+                            )  # Crucial: update offset after changing scroll position
                     return
             logging.warning(
                 f"ChatCyberiaView: Received message for unknown room_id: {room_id}"

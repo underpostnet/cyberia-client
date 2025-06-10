@@ -94,3 +94,17 @@ UI_ROUTES = [
         "render_callback": None,  # Will be set in NetworkStateClient
     },
 ]
+
+# Chat View Specifics
+CHAT_HISTORY_PADDING_X = 20  # Horizontal padding for message text area
+CHAT_HISTORY_PADDING_Y_TOP = 10  # Padding above the message list
+CHAT_HISTORY_PADDING_Y_BOTTOM = 10  # Padding below message list, above input
+CHAT_MESSAGE_LINE_SPACING = 4  # Vertical spacing between lines within a single message
+CHAT_MESSAGE_PADDING_Y = (
+    8  # Vertical padding between distinct messages (sender block to sender block)
+)
+SCROLLBAR_WIDTH = 15
+SCROLLBAR_PADDING = 5  # Padding between scrollbar and message content
+SCROLLBAR_TRACK_COLOR_TUPLE = (40, 40, 40, 220)
+SCROLLBAR_THUMB_COLOR_TUPLE = (100, 100, 100, 255)
+CHAT_WHEEL_SCROLL_SENSITIVITY = 0.07  # Percentage of content to scroll per wheel tick
