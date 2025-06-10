@@ -357,6 +357,8 @@ class NetworkStateClient:
         elif msg_type == "server_chat_message":
             # Ensure chat_cyberia_view is initialized and the message is valid
             if self.chat_cyberia_view and data.get("data"):
+                # Pass player ID from client.go to chat_cyberia_view
+                data["data"]["player_id"] = self.my_player_id
                 self.chat_cyberia_view.handle_server_chat_message(data)
             else:
                 logging.warning(
@@ -521,12 +523,15 @@ class NetworkStateClient:
             # If a right panel modal is active, allow it to handle its internal clicks
             # This also sets modal_was_clicked_this_frame if an internal element was clicked
             if self.router.active_view_modal:
-                # This should be called *regardless* of `is_mouse_left_button_pressed`
+                # This should be called *regardless* of `is_mouse_button_down`
                 # because `handle_mouse_input` needs the `is_mouse_button_down` state for dragging.
                 # However, `handle_view_clicks` typically checks `is_mouse_button_pressed` itself
                 # for discrete clicks.
                 if self.router.handle_view_clicks(
-                    mouse_x, mouse_y, is_mouse_left_button_pressed
+                    mouse_x,
+                    mouse_y,
+                    is_mouse_left_button_pressed,  # Pass specific press for clicks
+                    # Removed is_mouse_left_button_down to match expected 4 arguments
                 ):
                     modal_was_clicked_this_frame = True
                 # If a view modal is active and a click occurred within its bounds,

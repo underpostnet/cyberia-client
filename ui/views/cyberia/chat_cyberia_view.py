@@ -778,19 +778,11 @@ class ChatCyberiaView:
             sender = message_data["data"]["sender"]
             text = message_data["data"]["text"]
             timestamp = message_data["data"]["time"]
+            # Get the player ID from the message data if available
+            my_player_id = message_data["data"].get("player_id")
 
-            # Assume network_proxy has a way to get the current client's ID/sender name
-            # This needs to match the format of the 'sender' field in message_data
-            my_identifier = getattr(
-                self.network_proxy, "client_id", None
-            )  # Example: self.network_proxy.client_id
-            if my_identifier is None:
-                # Fallback or log if client_id is not available, affects auto-scroll for self
-                logging.warning(
-                    "ChatCyberiaView: Client identifier not available on network_proxy for auto-scroll logic."
-                )
-
-            is_message_from_self = my_identifier is not None and sender == my_identifier
+            # Determine if the message is from the current client
+            is_message_from_self = my_player_id is not None and sender == my_player_id
 
             for room in self.chat_rooms:
                 if room["id"] == room_id:
