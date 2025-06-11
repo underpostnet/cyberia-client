@@ -114,7 +114,10 @@ class SkinColorProfile:
 
     def get_eye_color(self) -> int:
         if self.colors[self.EYE] is None:
-            self.colors[self.EYE] = random.choice([3, 4, 20])
+            if random.random() < 0.5:  # random.random() gives float in [0.0, 1.0)
+                self.colors[self.EYE] = 14
+            else:
+                self.colors[self.EYE] = random.choice([3, 4, 20])
         return self.colors[self.EYE]
 
     def get_shoes_color(self) -> int:
@@ -415,36 +418,35 @@ def render_factory(
             inner_detail_color_id=skin_color_profile.get_inner_detail_color(),
         )
 
-        if random.choice([0, 1]) == 1:
-            eye_color = skin_color_profile.get_eye_color()
-            # Eye placement logic remains the same, only color source changes
-            if mode in [
-                "skin-default-04-0",
-                "skin-default-04-1",
-                "skin-default-14-0",
-                "skin-default-14-1",
-            ]:
-                data_generator.set_data_point(
-                    abs(tool_api.data_matrix_width - 1 - 9), 13, eye_color
-                )
-            elif mode in [
-                "skin-default-06-0",
-                "skin-default-06-1",
-                "skin-default-16-0",
-                "skin-default-16-1",
-            ]:
-                data_generator.set_data_point(
-                    abs(tool_api.data_matrix_width - 1 - 9), 13, eye_color
-                )
-            elif mode in [
-                "skin-default-08-0",
-                "skin-default-08-1",
-                "skin-default-18-0",
-                "skin-default-18-1",
-            ]:
+        eye_color = skin_color_profile.get_eye_color()
+        # Eye placement logic remains the same, only color source changes
+        if mode in [
+            "skin-default-04-0",
+            "skin-default-04-1",
+            "skin-default-14-0",
+            "skin-default-14-1",
+        ]:
+            data_generator.set_data_point(
+                abs(tool_api.data_matrix_width - 1 - 9), 13, eye_color
+            )
+        elif mode in [
+            "skin-default-06-0",
+            "skin-default-06-1",
+            "skin-default-16-0",
+            "skin-default-16-1",
+        ]:
+            data_generator.set_data_point(
+                abs(tool_api.data_matrix_width - 1 - 9), 13, eye_color
+            )
+        elif mode in [
+            "skin-default-08-0",
+            "skin-default-08-1",
+            "skin-default-18-0",
+            "skin-default-18-1",
+        ]:
 
-                data_generator.set_data_point(10, 13, eye_color)
-                data_generator.set_data_point(15, 13, eye_color)
+            data_generator.set_data_point(10, 13, eye_color)
+            data_generator.set_data_point(15, 13, eye_color)
 
         if mode in [
             "skin-default-04-0",
