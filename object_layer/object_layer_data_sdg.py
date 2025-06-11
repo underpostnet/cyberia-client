@@ -7,7 +7,7 @@ import matplotlib.pyplot as plt  # Import matplotlib for rendering
 # including focus move logic and various generation patterns.
 
 # Forward declaration for type hinting to avoid circular imports
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Union
 
 if TYPE_CHECKING:
     from object_layer.object_layer_sdg import SyntheticDataGenerator
@@ -278,6 +278,33 @@ class SyntheticDataToolAPI:
             self.data_generator.generate_parametric_curve_data(
                 x_func, y_func, t_start, t_end, num_points, value_id
             )
+
+    def cut_region(self, x1: int, y1: int, x2: int, y2: int, clear_value: int = 0):
+        """
+        Instructs the data generator to cut a rectangular region defined by (x1, y1) and (x2, y2)
+        user coordinates (bottom-left origin) and store it.
+        The cut region in the main data matrix is filled with `clear_value`.
+
+        Args:
+            x1 (int): X-coordinate of the first corner.
+            y1 (int): Y-coordinate of the first corner.
+            x2 (int): X-coordinate of the second corner.
+            y2 (int): Y-coordinate of the second corner.
+            clear_value (int, optional): Value to fill the cut region with. Defaults to 0 (white).
+        """
+        self.data_generator.cut_region(x1, y1, x2, y2, clear_value)
+
+    def paste_region(self, paste_x_start_user: int, paste_y_start_user: int):
+        """
+        Instructs the data generator to paste the previously cut region
+        starting at (paste_x_start_user, paste_y_start_user) as the top-left
+        corner of the pasted region.
+
+        Args:
+            paste_x_start_user (int): The x-coordinate for the top-left of the paste.
+            paste_y_start_user (int): The y-coordinate for the top-left of the paste.
+        """
+        self.data_generator.paste_region(paste_x_start_user, paste_y_start_user)
 
     def render_data_matrix_to_subplot(self, ax: plt.Axes, subplot_index: int):
         """

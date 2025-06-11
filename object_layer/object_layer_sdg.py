@@ -37,6 +37,7 @@ class SyntheticDataGenerator:
         self.data_matrix = np.array(initial_data_matrix)
         self.value_map = value_mapping
         self.last_generated_value_id = None
+        self._clipboard_data: Union[np.ndarray, None] = None  # To store the cut data
 
     def _convert_rgba_to_display_format(
         self, r: int, g: int, b: int, a: int
@@ -387,6 +388,87 @@ class SyntheticDataGenerator:
             self._apply_gradient_shadow(
                 filled_coordinates, fill_value_id, intensity_factor, selected_direction
             )
+
+    def cut_region(
+        self, x1: int, y1: int, x2: int, y2: int, clear_value: Union[int, None] = None
+    ):
+        """
+        Cuts a rectangular region defined by (x1, y1) and (x2, y2) user coordinates
+        (where (0,0) is bottom-left for user coordinates) and stores it in the internal clipboard.
+        The clipboard's (0,0) index will correspond to the top-left point (min_x_user, max_y_user)
+        of the cut region.
+        Optionally clears the cut region in the main data matrix.
+
+        Args:
+            x1 (int): X-coordinate of the first corner.
+            y1 (int): Y-coordinate of the first corner.
+            x2 (int): X-coordinate of the second corner.
+            y2 (int): Y-coordinate of the second corner.
+            clear_value (Union[int, None], optional): Value to fill the cut region with.
+                                                     If None, the region is not cleared. Defaults to None.
+        """
+        min_x_user = min(x1, x2)
+        max_x_user = max(x1, x2)
+        min_y_user = min(y1, y2)
+        max_y_user = max(y1, y2)
+
+        region_width = max_x_user - min_x_user + 1
+        region_height = max_y_user - min_y_user + 1
+
+        if region_width <= 0 or region_height <= 0:
+            self._clipboard_data = None
+            # print("Warning: Cut region has zero or negative dimension.")
+            return
+
+        self._clipboard_data = np.zeros((region_height, region_width), dtype=int)
+
+        for r_idx_clip in range(region_height):
+            for c_idx_clip in range(region_width):
+                current_x_user = min_x_user + c_idx_clip
+                # Clipboard row 0 (r_idx_clip=0) corresponds to max_y_user (top row of selection)
+                current_y_user = max_y_user - r_idx_clip
+
+                matrix_r, matrix_c = self._map_coordinates_to_matrix_indices(
+                    current_x_user, current_y_user
+                )
+
+                # Read from data_matrix (clamped by _map_coordinates_to_matrix_indices)
+                self._clipboard_data[r_idx_clip, c_idx_clip] = self.data_matrix[
+                    matrix_r, matrix_c
+                ]
+
+                # Clear original spot if requested
+                if clear_value is not None:
+                    self.set_data_point(current_x_user, current_y_user, clear_value)
+        # print(f"Cut region of shape {self._clipboard_data.shape} to clipboard.")
+
+    def paste_region(self, paste_x_start_user: int, paste_y_start_user: int):
+        """
+        Pastes the data from the internal clipboard to the data matrix,
+        starting at (paste_x_start_user, paste_y_start_user) as the top-left
+        corner of the pasted region.
+
+        Args:
+            paste_x_start_user (int): The x-coordinate for the top-left of the paste.
+            paste_y_start_user (int): The y-coordinate for the top-left of the paste.
+        """
+        if self._clipboard_data is None:
+            # print("Warning: Clipboard is empty. Nothing to paste.")
+            return
+
+        clip_height, clip_width = self._clipboard_data.shape
+
+        for r_clip in range(clip_height):
+            for c_clip in range(clip_width):
+                value_to_paste = self._clipboard_data[r_clip, c_clip]
+
+                # Target user coordinates
+                target_x_user = paste_x_start_user + c_clip
+                # r_clip=0 is the top row of clipboard, should be pasted at paste_y_start_user
+                target_y_user = paste_y_start_user - r_clip
+
+                self.set_data_point(target_x_user, target_y_user, value_to_paste)
+        # print(f"Pasted region at ({paste_x_start_user}, {paste_y_start_user}).")
 
 
 def clarify_and_contrast_rgba(

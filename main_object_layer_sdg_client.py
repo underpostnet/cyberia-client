@@ -409,6 +409,62 @@ def render_factory(
                 spot_x, spot_y, 1, 1, spot_color
             )  # Corrected call
 
+    elif mode == "cut-paste-demo":
+        canvas_size = 20
+        tool_api.create_empty_canvas(
+            canvas_size, fill_value=0
+        )  # Create a 20x20 white canvas
+
+        # 1. Draw something to cut
+        rect_color = 2  # Red
+        # Use data_generator directly for generate_rectangular_region as it's part of SDG core
+        data_generator.generate_rectangular_region(
+            start_x=2, start_y=2, width=5, height=5, value_id=rect_color
+        )
+
+        circle_color = 4  # Blue
+        tool_api.draw_circle(center_x=10, center_y=10, radius=3, value_id=circle_color)
+
+        # 2. Define cut region for the rectangle and cut it
+        # Rectangle is from (2,2) to (6,6). Let's cut a 3x3 part from its center.
+        cut_rect_x1, cut_rect_y1 = 3, 3
+        cut_rect_x2, cut_rect_y2 = 5, 5
+        print(
+            f"Cutting rectangle part from ({cut_rect_x1},{cut_rect_y1}) to ({cut_rect_x2},{cut_rect_y2})"
+        )
+        tool_api.cut_region(
+            cut_rect_x1, cut_rect_y1, cut_rect_x2, cut_rect_y2, clear_value=0
+        )  # Clear with white
+
+        # 3. Define paste location and paste the cut rectangle part
+        # Original bottom-left was (12,3). Cut region is 3x3.
+        # New top-left Y = old_bottom_left_y + height - 1 = 3 + 3 - 1 = 5.
+        # New top-left X = old_bottom_left_x = 12.
+        paste_rect_top_left_x, paste_rect_top_left_y = 12, 5
+        print(
+            f"Pasting rectangle part with top-left at ({paste_rect_top_left_x},{paste_rect_top_left_y})"
+        )
+        tool_api.paste_region(paste_rect_top_left_x, paste_rect_top_left_y)
+
+        # 4. Now, cut the entire circle and paste it
+        # Circle center (10,10), radius 3. Bounding box: (7,7) to (13,13)
+        # This is a 7x7 region.
+        print(f"Cutting circle from (7,7) to (13,13)")
+        tool_api.cut_region(
+            x1=7, y1=7, x2=13, y2=13, clear_value=3
+        )  # Clear with Green (value 3 is Green)
+
+        # Adjust paste location so the 7-pixel high circle fits on the 20x20 canvas (max Y index 19)
+        # e.g., paste_y_start_user = 19 - 7 + 1 = 13 for top edge alignment. Let's use 12.
+        # Original bottom-left was (2,13). Circle region is 7x7.
+        # New top-left Y = old_bottom_left_y + height - 1 = 13 + 7 - 1 = 19.
+        # New top-left X = old_bottom_left_x = 2.
+        paste_circle_top_left_x, paste_circle_top_left_y = 2, 19
+        print(
+            f"Pasting circle with top-left at ({paste_circle_top_left_x},{paste_circle_top_left_y})"
+        )
+        tool_api.paste_region(paste_circle_top_left_x, paste_circle_top_left_y)
+
 
 # --- Main Execution ---
 if __name__ == "__main__":
@@ -422,7 +478,7 @@ if __name__ == "__main__":
         "--mode",
         type=str,
         default="skin-default",
-        help='Special mode for rendering. Current options: "skin-default", "skin-default-0", "skin-default-08", "gfx-shadow-ball", "skin-fluff".',
+        help='Special mode for rendering. Current options: "skin-default", "skin-default-08-1", ..., "gfx-shadow-ball", "skin-fluff", "cut-paste-demo".',
     )
 
     args = parser.parse_args()
@@ -440,7 +496,7 @@ if __name__ == "__main__":
         # Initialize a new SyntheticDataGenerator for each subplot
         # For "gfx-shadow-ball" and "skin-fluff", the canvas will be created inside render_factory
         # For other modes, use the default skin template.
-        if args.mode in ["gfx-shadow-ball", "skin-fluff"]:
+        if args.mode in ["gfx-shadow-ball", "skin-fluff", "cut-paste-demo"]:
             data_generator = SyntheticDataGenerator(
                 np.zeros((1, 1), dtype=int), DISPLAY_COLOR_PALETTE
             )  # Dummy initial matrix, will be replaced
