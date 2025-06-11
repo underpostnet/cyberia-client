@@ -35,6 +35,7 @@ else:
 # Directory where the trained model and color map are saved
 MODEL_LOAD_DIR = "."
 COLOR_MAP_FILE = os.path.join(MODEL_LOAD_DIR, "color_map.json")
+
 # Updated DECODER_MODEL_PATH to include the .keras extension
 DECODER_MODEL_PATH = os.path.join(MODEL_LOAD_DIR, "decoder_model.keras")
 

@@ -1,6 +1,8 @@
 import subprocess
 import os
 import shutil
+import json
+import copy
 
 
 def execute_client_script(mode: str, output_dir: str = "build_output"):
@@ -43,103 +45,183 @@ def execute_client_script(mode: str, output_dir: str = "build_output"):
 
 
 if __name__ == "__main__":
-    output_directory = "build_output_sdg"
+    output_directory = (
+        "build_output_sdg_frames"  # Directory for intermediate frame files
+    )
     if os.path.exists(output_directory):
         shutil.rmtree(output_directory)  # Clean up previous build
     os.makedirs(output_directory, exist_ok=True)
 
-    for mode in [0, 1]:
-        for direction in [2, 4, 6, 8]:
-            for frame in [0, 1]:
-                mode_name = f"skin-default-{mode}{direction}-{frame}"
-                for graph_index in range(0, 8):
+    RENDER_DATA_SCHEME = {
+        "FRAMES": {
+            "UP_IDLE": [],
+            "DOWN_IDLE": [],
+            "RIGHT_IDLE": [],
+            "LEFT_IDLE": [],
+            "UP_RIGHT_IDLE": [],
+            "DOWN_RIGHT_IDLE": [],
+            "UP_LEFT_IDLE": [],
+            "DOWN_LEFT_IDLE": [],
+            "DEFAULT_IDLE": [],
+            "UP_WALKING": [],
+            "DOWN_WALKING": [],
+            "RIGHT_WALKING": [],
+            "LEFT_WALKING": [],
+            "UP_RIGHT_WALKING": [],
+            "DOWN_RIGHT_WALKING": [],
+            "UP_LEFT_WALKING": [],
+            "DOWN_LEFT_WALKING": [],
+            "NONE_IDLE": [],
+        },
+        "COLORS": [],
+        "FRAME_DURATION": 0.3,
+        "IS_STATELESS": False,
+    }
 
-                    print(mode_name, graph_index)
+    # Initialize RENDER_DATA as a list of 8 distinct render data objects
+    RENDER_DATA = [copy.deepcopy(RENDER_DATA_SCHEME) for _ in range(8)]
 
-                    # execute_client_script(mode_name, output_directory)
-                    #         const RENDER_DATA = {
-                    #       FRAMES: {
-                    #         UP_IDLE: [],
-                    #         DOWN_IDLE: [],
-                    #         RIGHT_IDLE: [],
-                    #         LEFT_IDLE: [],
-                    #         UP_RIGHT_IDLE: [],
-                    #         DOWN_RIGHT_IDLE: [],
-                    #         UP_LEFT_IDLE: [],
-                    #         DOWN_LEFT_IDLE: [],
-                    #         DEFAULT_IDLE: [],
-                    #         UP_WALKING: [],
-                    #         DOWN_WALKING: [],
-                    #         RIGHT_WALKING: [],
-                    #         LEFT_WALKING: [],
-                    #         UP_RIGHT_WALKING: [],
-                    #         DOWN_RIGHT_WALKING: [],
-                    #         UP_LEFT_WALKING: [],
-                    #         DOWN_LEFT_WALKING: [],
-                    #         NONE_IDLE: [],
-                    #       },
-                    #       COLORS: [],
-                    #       FRAME_DURATION: 0.3,
-                    #       IS_STATELESS: false,
-                    #     };
-                    # switch (direction) {
-                    #           case '08':
-                    #             RENDER_DATA.FRAMES.DOWN_IDLE.push(FRAMES);
-                    #             RENDER_DATA.FRAMES.NONE_IDLE.push(FRAMES);
-                    #             RENDER_DATA.FRAMES.DEFAULT_IDLE.push(FRAMES);
-                    #             break;
-                    #           case '18':
-                    #             RENDER_DATA.FRAMES.DOWN_WALKING.push(FRAMES);
-                    #             break;
-                    #           case '02':
-                    #             RENDER_DATA.FRAMES.UP_IDLE.push(FRAMES);
-                    #             break;
-                    #           case '12':
-                    #             RENDER_DATA.FRAMES.UP_WALKING.push(FRAMES);
-                    #             break;
-                    #           case '04':
-                    #             RENDER_DATA.FRAMES.LEFT_IDLE.push(FRAMES);
-                    #             RENDER_DATA.FRAMES.UP_LEFT_IDLE.push(FRAMES);
-                    #             RENDER_DATA.FRAMES.DOWN_LEFT_IDLE.push(FRAMES);
-                    #             break;
-                    #           case '14':
-                    #             RENDER_DATA.FRAMES.LEFT_WALKING.push(FRAMES);
-                    #             RENDER_DATA.FRAMES.UP_LEFT_WALKING.push(FRAMES);
-                    #             RENDER_DATA.FRAMES.DOWN_LEFT_WALKING.push(FRAMES);
-                    #             break;
-                    #           case '06':
-                    #             switch (objectLayerId) {
-                    #               case 'people':
-                    #                 RENDER_DATA.FRAMES.RIGHT_IDLE.push(FRAMES.reverse());
-                    #                 RENDER_DATA.FRAMES.UP_RIGHT_IDLE.push(FRAMES.reverse());
-                    #                 RENDER_DATA.FRAMES.DOWN_RIGHT_IDLE.push(FRAMES.reverse());
-                    #                 break;
+    # Iterate through each of the 8 character variations (subplots from client)
+    for graph_index in range(8):
+        print(f"\nProcessing character variation (graph_index): {graph_index}")
+        # Iterate through different animation configurations
+        for mode_val in [0, 1]:  # 0 for IDLE, 1 for WALKING
+            for direction_val in [8, 2, 4, 6]:  # 8:DOWN, 2:UP, 4:LEFT, 6:RIGHT
+                for frame_val in [0, 1]:  # Two frames for each animation state
+                    mode_name = f"skin-default-{mode_val}{direction_val}-{frame_val}"
+                    print(
+                        f"  Generating/Processing mode: {mode_name} for graph_index: {graph_index}"
+                    )
 
-                    #               default:
-                    #                 RENDER_DATA.FRAMES.RIGHT_IDLE.push(FRAMES);
-                    #                 RENDER_DATA.FRAMES.UP_RIGHT_IDLE.push(FRAMES);
-                    #                 RENDER_DATA.FRAMES.DOWN_RIGHT_IDLE.push(FRAMES);
-                    #                 break;
-                    #             }
-                    #             break;
-                    #           case '16':
-                    #             switch (objectLayerId) {
-                    #               case 'people':
-                    #                 RENDER_DATA.FRAMES.RIGHT_WALKING.push(FRAMES.reverse());
-                    #                 RENDER_DATA.FRAMES.UP_RIGHT_WALKING.push(FRAMES.reverse());
-                    #                 RENDER_DATA.FRAMES.DOWN_RIGHT_WALKING.push(FRAMES.reverse());
-                    #                 break;
+                    # Execute the client script. It will generate 8 files, one for each graph_index.
+                    # We are interested in the one specific to the current outer loop's graph_index.
+                    execute_client_script(mode_name, output_directory)
 
-                    #               default:
-                    #                 RENDER_DATA.FRAMES.RIGHT_WALKING.push(FRAMES);
-                    #                 RENDER_DATA.FRAMES.UP_RIGHT_WALKING.push(FRAMES);
-                    #                 RENDER_DATA.FRAMES.DOWN_RIGHT_WALKING.push(FRAMES);
-                    #                 break;
-                    #             }
+                    input_json_filename = f"{mode_name}_{graph_index}.json"
+                    input_json_path = os.path.join(
+                        output_directory, input_json_filename
+                    )
 
-                    #             break;
-                    #         }
+                    if not os.path.exists(input_json_path):
+                        print(
+                            f"    ERROR: Expected file {input_json_path} not found. Skipping this frame."
+                        )
+                        continue
 
-                    # print(
-                    #     f"\nAll specified modes processed. Check the '{output_directory}' directory for saved graph data."
-                    # )
+                    try:
+                        with open(input_json_path, "r") as f:
+                            loaded_data = json.load(f)
+
+                        loaded_frame_data = loaded_data.get("FRAME")
+                        loaded_color_data = loaded_data.get("COLOR")
+
+                        if loaded_frame_data is None or loaded_color_data is None:
+                            print(
+                                f"    ERROR: FRAME or COLOR data missing in {input_json_path}. Skipping."
+                            )
+                            os.remove(input_json_path)  # Clean up processed/failed file
+                            continue
+
+                        # Set colors if not already set for this graph_index (character variation)
+                        # Colors should be consistent for one character variation across its animations
+                        if not RENDER_DATA[graph_index]["COLORS"]:
+                            RENDER_DATA[graph_index]["COLORS"] = loaded_color_data
+
+                        # Determine animation state key
+                        base_direction_str = ""
+                        if direction_val == 8:
+                            base_direction_str = "DOWN"
+                        elif direction_val == 2:
+                            base_direction_str = "UP"
+                        elif direction_val == 4:
+                            base_direction_str = "LEFT"
+                        elif direction_val == 6:
+                            base_direction_str = "RIGHT"
+
+                        anim_type_str = "IDLE" if mode_val == 0 else "WALKING"
+                        primary_anim_key = f"{base_direction_str}_{anim_type_str}"
+
+                        RENDER_DATA[graph_index]["FRAMES"][primary_anim_key].append(
+                            loaded_frame_data
+                        )
+
+                        # Populate derived/fallback states
+                        if primary_anim_key == "DOWN_IDLE":
+                            RENDER_DATA[graph_index]["FRAMES"]["DEFAULT_IDLE"].append(
+                                loaded_frame_data
+                            )
+                            RENDER_DATA[graph_index]["FRAMES"]["NONE_IDLE"].append(
+                                loaded_frame_data
+                            )
+
+                        # Populate diagonal states
+                        if anim_type_str == "IDLE":
+                            if base_direction_str == "LEFT":
+                                RENDER_DATA[graph_index]["FRAMES"][
+                                    "UP_LEFT_IDLE"
+                                ].append(loaded_frame_data)
+                                RENDER_DATA[graph_index]["FRAMES"][
+                                    "DOWN_LEFT_IDLE"
+                                ].append(loaded_frame_data)
+                            elif base_direction_str == "RIGHT":
+                                RENDER_DATA[graph_index]["FRAMES"][
+                                    "UP_RIGHT_IDLE"
+                                ].append(loaded_frame_data)
+                                RENDER_DATA[graph_index]["FRAMES"][
+                                    "DOWN_RIGHT_IDLE"
+                                ].append(loaded_frame_data)
+                        elif anim_type_str == "WALKING":
+                            if base_direction_str == "LEFT":
+                                RENDER_DATA[graph_index]["FRAMES"][
+                                    "UP_LEFT_WALKING"
+                                ].append(loaded_frame_data)
+                                RENDER_DATA[graph_index]["FRAMES"][
+                                    "DOWN_LEFT_WALKING"
+                                ].append(loaded_frame_data)
+                            elif base_direction_str == "RIGHT":
+                                RENDER_DATA[graph_index]["FRAMES"][
+                                    "UP_RIGHT_WALKING"
+                                ].append(loaded_frame_data)
+                                RENDER_DATA[graph_index]["FRAMES"][
+                                    "DOWN_RIGHT_WALKING"
+                                ].append(loaded_frame_data)
+
+                        os.remove(input_json_path)  # Clean up processed file
+
+                    except FileNotFoundError:
+                        print(
+                            f"    ERROR: File {input_json_path} not found after execution. Skipping."
+                        )
+                    except json.JSONDecodeError:
+                        print(
+                            f"    ERROR: Could not decode JSON from {input_json_path}. Skipping."
+                        )
+                        if os.path.exists(input_json_path):
+                            os.remove(input_json_path)
+                    except Exception as e:
+                        print(
+                            f"    ERROR: An unexpected error occurred while processing {input_json_path}: {e}. Skipping."
+                        )
+                        if os.path.exists(input_json_path):
+                            os.remove(input_json_path)
+
+    final_output_filename = "player_skin_variations_render_data.json"
+    final_output_path = os.path.join(
+        ".", final_output_filename
+    )  # Save in current directory, or choose another
+
+    try:
+        with open(final_output_path, "w") as f:
+            json.dump(RENDER_DATA, f, indent=4)
+        print(f"\nSuccessfully consolidated all render data into: {final_output_path}")
+    except Exception as e:
+        print(f"\nError saving final consolidated data to {final_output_path}: {e}")
+
+    # Optional: Clean up the intermediate directory if no longer needed
+    # if os.path.exists(output_directory):
+    #     shutil.rmtree(output_directory)
+    #     print(f"Cleaned up intermediate directory: {output_directory}")
+
+    print(
+        f"\nBuild process finished. Check '{output_directory}' for any remaining intermediate files (if not cleaned up)."
+    )
