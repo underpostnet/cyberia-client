@@ -48,101 +48,98 @@ if __name__ == "__main__":
         shutil.rmtree(output_directory)  # Clean up previous build
     os.makedirs(output_directory, exist_ok=True)
 
-    modes_to_run = [
-        "skin-default-0",
-        "skin-default-02-0",
-        "skin-default-08-1",
-        "skin-default-12-0",
-        "skin-fluff",
-        "gfx-shadow-ball",
-    ]
+    for mode in [0, 1]:
+        for direction in [2, 4, 6, 8]:
+            for frame in [0, 1]:
+                mode_name = f"skin-default-{mode}{direction}-{frame}"
+                for graph_index in range(0, 8):
 
-    for mode_name in modes_to_run:
+                    print(mode_name, graph_index)
 
-        execute_client_script(mode_name, output_directory)
-    #         const RENDER_DATA = {
-    #       FRAMES: {
-    #         UP_IDLE: [],
-    #         DOWN_IDLE: [],
-    #         RIGHT_IDLE: [],
-    #         LEFT_IDLE: [],
-    #         UP_RIGHT_IDLE: [],
-    #         DOWN_RIGHT_IDLE: [],
-    #         UP_LEFT_IDLE: [],
-    #         DOWN_LEFT_IDLE: [],
-    #         DEFAULT_IDLE: [],
-    #         UP_WALKING: [],
-    #         DOWN_WALKING: [],
-    #         RIGHT_WALKING: [],
-    #         LEFT_WALKING: [],
-    #         UP_RIGHT_WALKING: [],
-    #         DOWN_RIGHT_WALKING: [],
-    #         UP_LEFT_WALKING: [],
-    #         DOWN_LEFT_WALKING: [],
-    #         NONE_IDLE: [],
-    #       },
-    #       COLORS: [],
-    #       FRAME_DURATION: 0.3,
-    #       IS_STATELESS: false,
-    #     };
-    # switch (direction) {
-    #           case '08':
-    #             RENDER_DATA.FRAMES.DOWN_IDLE.push(FRAMES);
-    #             RENDER_DATA.FRAMES.NONE_IDLE.push(FRAMES);
-    #             RENDER_DATA.FRAMES.DEFAULT_IDLE.push(FRAMES);
-    #             break;
-    #           case '18':
-    #             RENDER_DATA.FRAMES.DOWN_WALKING.push(FRAMES);
-    #             break;
-    #           case '02':
-    #             RENDER_DATA.FRAMES.UP_IDLE.push(FRAMES);
-    #             break;
-    #           case '12':
-    #             RENDER_DATA.FRAMES.UP_WALKING.push(FRAMES);
-    #             break;
-    #           case '04':
-    #             RENDER_DATA.FRAMES.LEFT_IDLE.push(FRAMES);
-    #             RENDER_DATA.FRAMES.UP_LEFT_IDLE.push(FRAMES);
-    #             RENDER_DATA.FRAMES.DOWN_LEFT_IDLE.push(FRAMES);
-    #             break;
-    #           case '14':
-    #             RENDER_DATA.FRAMES.LEFT_WALKING.push(FRAMES);
-    #             RENDER_DATA.FRAMES.UP_LEFT_WALKING.push(FRAMES);
-    #             RENDER_DATA.FRAMES.DOWN_LEFT_WALKING.push(FRAMES);
-    #             break;
-    #           case '06':
-    #             switch (objectLayerId) {
-    #               case 'people':
-    #                 RENDER_DATA.FRAMES.RIGHT_IDLE.push(FRAMES.reverse());
-    #                 RENDER_DATA.FRAMES.UP_RIGHT_IDLE.push(FRAMES.reverse());
-    #                 RENDER_DATA.FRAMES.DOWN_RIGHT_IDLE.push(FRAMES.reverse());
-    #                 break;
+                    # execute_client_script(mode_name, output_directory)
+                    #         const RENDER_DATA = {
+                    #       FRAMES: {
+                    #         UP_IDLE: [],
+                    #         DOWN_IDLE: [],
+                    #         RIGHT_IDLE: [],
+                    #         LEFT_IDLE: [],
+                    #         UP_RIGHT_IDLE: [],
+                    #         DOWN_RIGHT_IDLE: [],
+                    #         UP_LEFT_IDLE: [],
+                    #         DOWN_LEFT_IDLE: [],
+                    #         DEFAULT_IDLE: [],
+                    #         UP_WALKING: [],
+                    #         DOWN_WALKING: [],
+                    #         RIGHT_WALKING: [],
+                    #         LEFT_WALKING: [],
+                    #         UP_RIGHT_WALKING: [],
+                    #         DOWN_RIGHT_WALKING: [],
+                    #         UP_LEFT_WALKING: [],
+                    #         DOWN_LEFT_WALKING: [],
+                    #         NONE_IDLE: [],
+                    #       },
+                    #       COLORS: [],
+                    #       FRAME_DURATION: 0.3,
+                    #       IS_STATELESS: false,
+                    #     };
+                    # switch (direction) {
+                    #           case '08':
+                    #             RENDER_DATA.FRAMES.DOWN_IDLE.push(FRAMES);
+                    #             RENDER_DATA.FRAMES.NONE_IDLE.push(FRAMES);
+                    #             RENDER_DATA.FRAMES.DEFAULT_IDLE.push(FRAMES);
+                    #             break;
+                    #           case '18':
+                    #             RENDER_DATA.FRAMES.DOWN_WALKING.push(FRAMES);
+                    #             break;
+                    #           case '02':
+                    #             RENDER_DATA.FRAMES.UP_IDLE.push(FRAMES);
+                    #             break;
+                    #           case '12':
+                    #             RENDER_DATA.FRAMES.UP_WALKING.push(FRAMES);
+                    #             break;
+                    #           case '04':
+                    #             RENDER_DATA.FRAMES.LEFT_IDLE.push(FRAMES);
+                    #             RENDER_DATA.FRAMES.UP_LEFT_IDLE.push(FRAMES);
+                    #             RENDER_DATA.FRAMES.DOWN_LEFT_IDLE.push(FRAMES);
+                    #             break;
+                    #           case '14':
+                    #             RENDER_DATA.FRAMES.LEFT_WALKING.push(FRAMES);
+                    #             RENDER_DATA.FRAMES.UP_LEFT_WALKING.push(FRAMES);
+                    #             RENDER_DATA.FRAMES.DOWN_LEFT_WALKING.push(FRAMES);
+                    #             break;
+                    #           case '06':
+                    #             switch (objectLayerId) {
+                    #               case 'people':
+                    #                 RENDER_DATA.FRAMES.RIGHT_IDLE.push(FRAMES.reverse());
+                    #                 RENDER_DATA.FRAMES.UP_RIGHT_IDLE.push(FRAMES.reverse());
+                    #                 RENDER_DATA.FRAMES.DOWN_RIGHT_IDLE.push(FRAMES.reverse());
+                    #                 break;
 
-    #               default:
-    #                 RENDER_DATA.FRAMES.RIGHT_IDLE.push(FRAMES);
-    #                 RENDER_DATA.FRAMES.UP_RIGHT_IDLE.push(FRAMES);
-    #                 RENDER_DATA.FRAMES.DOWN_RIGHT_IDLE.push(FRAMES);
-    #                 break;
-    #             }
-    #             break;
-    #           case '16':
-    #             switch (objectLayerId) {
-    #               case 'people':
-    #                 RENDER_DATA.FRAMES.RIGHT_WALKING.push(FRAMES.reverse());
-    #                 RENDER_DATA.FRAMES.UP_RIGHT_WALKING.push(FRAMES.reverse());
-    #                 RENDER_DATA.FRAMES.DOWN_RIGHT_WALKING.push(FRAMES.reverse());
-    #                 break;
+                    #               default:
+                    #                 RENDER_DATA.FRAMES.RIGHT_IDLE.push(FRAMES);
+                    #                 RENDER_DATA.FRAMES.UP_RIGHT_IDLE.push(FRAMES);
+                    #                 RENDER_DATA.FRAMES.DOWN_RIGHT_IDLE.push(FRAMES);
+                    #                 break;
+                    #             }
+                    #             break;
+                    #           case '16':
+                    #             switch (objectLayerId) {
+                    #               case 'people':
+                    #                 RENDER_DATA.FRAMES.RIGHT_WALKING.push(FRAMES.reverse());
+                    #                 RENDER_DATA.FRAMES.UP_RIGHT_WALKING.push(FRAMES.reverse());
+                    #                 RENDER_DATA.FRAMES.DOWN_RIGHT_WALKING.push(FRAMES.reverse());
+                    #                 break;
 
-    #               default:
-    #                 RENDER_DATA.FRAMES.RIGHT_WALKING.push(FRAMES);
-    #                 RENDER_DATA.FRAMES.UP_RIGHT_WALKING.push(FRAMES);
-    #                 RENDER_DATA.FRAMES.DOWN_RIGHT_WALKING.push(FRAMES);
-    #                 break;
-    #             }
+                    #               default:
+                    #                 RENDER_DATA.FRAMES.RIGHT_WALKING.push(FRAMES);
+                    #                 RENDER_DATA.FRAMES.UP_RIGHT_WALKING.push(FRAMES);
+                    #                 RENDER_DATA.FRAMES.DOWN_RIGHT_WALKING.push(FRAMES);
+                    #                 break;
+                    #             }
 
-    #             break;
-    #         }
+                    #             break;
+                    #         }
 
-    print(
-        f"\nAll specified modes processed. Check the '{output_directory}' directory for saved graph data."
-    )
+                    # print(
+                    #     f"\nAll specified modes processed. Check the '{output_directory}' directory for saved graph data."
+                    # )
