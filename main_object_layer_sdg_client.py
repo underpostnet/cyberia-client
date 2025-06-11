@@ -700,6 +700,11 @@ if __name__ == "__main__":
         default=None,
         help="Filepath to load skin feature colors from a JSON file.",
     )
+    parser.add_argument(
+        "--show",
+        action="store_true",  # Sets args.show to True if present, False otherwise
+        help="Display the generated graphics. If not provided, graphics will be generated but not shown.",
+    )
 
     args = parser.parse_args()
 
@@ -825,5 +830,8 @@ if __name__ == "__main__":
         except Exception as e:
             print(f"Error saving skin color profiles to {args.save_skin_colors}: {e}")
 
-    # Display the plot
-    plt.show()
+    # Display the plot only if --show is specified
+    if args.show:
+        plt.show()
+    else:
+        print("Graphics generated. Use --show to display.")
