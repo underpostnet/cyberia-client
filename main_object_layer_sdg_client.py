@@ -484,7 +484,7 @@ def render_factory(
     elif mode == "gfx-shadow-ball":
         canvas_size = 15
         tool_api.create_empty_canvas(
-            canvas_size, fill_value=0
+            canvas_size, fill_semantic_value_id=0  # semantic ID 0 for white
         )  # Create a 15x15 white canvas
 
         # Define colors for the two circles
@@ -524,7 +524,7 @@ def render_factory(
     elif mode == "skin-fluff":
         canvas_size = 20
         tool_api.create_empty_canvas(
-            canvas_size, fill_value=0
+            canvas_size, fill_semantic_value_id=0  # semantic ID 0 for white
         )  # Create a 20x20 white canvas
 
         # Body
