@@ -86,31 +86,21 @@ class SkinColorProfile:
     def __init__(self):
         self.colors = {key: None for key in self.ALL_FEATURE_KEYS}
 
-    def load_from_file(self, filepath: str):
-        try:
-            with open(filepath, "r") as f:
-                loaded_colors = json.load(f)
-            for key in self.ALL_FEATURE_KEYS:
-                if key in loaded_colors:
-                    self.colors[key] = loaded_colors[key]
-            print(f"Loaded skin colors from {filepath}")
-        except FileNotFoundError:
-            print(f"Warning: Skin color file not found: {filepath}. Using defaults.")
-        except json.JSONDecodeError:
-            print(f"Warning: Error decoding JSON from {filepath}. Using defaults.")
-        except Exception as e:
+    def load_from_dict(self, color_data: dict):
+        """Populates colors from a dictionary."""
+        if not isinstance(color_data, dict):
             print(
-                f"Warning: Could not load skin colors from {filepath}: {e}. Using defaults."
+                f"Warning: Invalid data provided for loading profile. Expected dict, got {type(color_data)}."
             )
+            return
+        for key in self.ALL_FEATURE_KEYS:
+            if key in color_data:
+                self.colors[key] = color_data[key]
 
-    def save_to_file(self, filepath: str):
+    def to_dict(self) -> dict:
+        """Ensures all colors are populated and returns the color dictionary."""
         self.ensure_all_colors_populated()
-        try:
-            with open(filepath, "w") as f:
-                json.dump(self.colors, f, indent=4)
-            print(f"Saved skin colors to {filepath}")
-        except Exception as e:
-            print(f"Error saving skin colors to {filepath}: {e}")
+        return self.colors
 
     def get_skin_color(self) -> int:
         if self.colors[self.SKIN] is None:
@@ -713,15 +703,67 @@ if __name__ == "__main__":
 
     print(f"Running in mode: {args.mode}")
 
-    skin_color_profile = SkinColorProfile()
+    # Determine the number of subplots based on the layout
+    # For a 2x4 grid, it's 8.
+    NUM_SUBPLOTS = 8
+    skin_color_profiles = [SkinColorProfile() for _ in range(NUM_SUBPLOTS)]
+
     if args.load_skin_colors:
-        skin_color_profile.load_from_file(args.load_skin_colors)
+        try:
+            with open(args.load_skin_colors, "r") as f:
+                loaded_profiles_data = json.load(f)
+            if isinstance(loaded_profiles_data, list):
+                for i, profile_data in enumerate(loaded_profiles_data):
+                    if i < NUM_SUBPLOTS:
+                        if isinstance(profile_data, dict):
+                            skin_color_profiles[i].load_from_dict(profile_data)
+                        else:
+                            print(
+                                f"Warning: Item at index {i} in '{args.load_skin_colors}' is not a dictionary. Using default for this profile."
+                            )
+                    else:
+                        break  # Loaded more profiles than subplots
+                print(
+                    f"Loaded up to {min(len(loaded_profiles_data), NUM_SUBPLOTS)} skin color profiles from {args.load_skin_colors}"
+                )
+            else:
+                print(
+                    f"Warning: Skin color file '{args.load_skin_colors}' does not contain a list of profiles. Using defaults."
+                )
+        except FileNotFoundError:
+            print(
+                f"Warning: Skin color file not found: {args.load_skin_colors}. Using defaults."
+            )
+        except json.JSONDecodeError:
+            print(
+                f"Warning: Error decoding JSON from {args.load_skin_colors}. Using defaults."
+            )
+        except Exception as e:
+            print(
+                f"Warning: Could not load skin colors from {args.load_skin_colors}: {e}. Using defaults."
+            )
 
     # Create a figure and a 2x4 grid of subplots
     fig, axes = plt.subplots(2, 4, figsize=(26, 13), dpi=100)
 
     # Flatten the axes array for easy iteration
     axes = axes.flatten()
+
+    if len(axes) != NUM_SUBPLOTS:
+        print(
+            f"Warning: Mismatch between NUM_SUBPLOTS ({NUM_SUBPLOTS}) and actual subplots ({len(axes)}). Adjusting."
+        )
+        NUM_SUBPLOTS = len(axes)
+        # Ensure skin_color_profiles list matches the actual number of subplots
+        if len(skin_color_profiles) < NUM_SUBPLOTS:
+            skin_color_profiles.extend(
+                [
+                    SkinColorProfile()
+                    for _ in range(NUM_SUBPLOTS - len(skin_color_profiles))
+                ]
+            )
+        elif len(skin_color_profiles) > NUM_SUBPLOTS:
+            skin_color_profiles = skin_color_profiles[:NUM_SUBPLOTS]
 
     # Configure each subplot to display the synthetic data
     for i, ax in enumerate(axes):
@@ -759,8 +801,10 @@ if __name__ == "__main__":
         # Initialize the SyntheticDataToolAPI for the current data generator
         tool_api = SyntheticDataToolAPI(data_generator)
 
+        current_skin_profile = skin_color_profiles[i]
+
         # Apply rendering based on the selected mode
-        render_factory(data_generator, tool_api, args.mode, skin_color_profile)
+        render_factory(data_generator, tool_api, args.mode, current_skin_profile)
 
         # Render the data matrix to the current subplot using the tool API
         tool_api.render_data_matrix_to_subplot(ax, i)
@@ -769,8 +813,15 @@ if __name__ == "__main__":
     plt.tight_layout()
 
     if args.save_skin_colors:
-        # Ensures all colors are determined (either loaded or randomly generated) before saving
-        skin_color_profile.save_to_file(args.save_skin_colors)
+        profiles_data_to_save = [profile.to_dict() for profile in skin_color_profiles]
+        try:
+            with open(args.save_skin_colors, "w") as f:
+                json.dump(profiles_data_to_save, f, indent=4)
+            print(
+                f"Saved {len(profiles_data_to_save)} skin color profiles to {args.save_skin_colors}"
+            )
+        except Exception as e:
+            print(f"Error saving skin color profiles to {args.save_skin_colors}: {e}")
 
     # Display the plot
     plt.show()
