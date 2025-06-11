@@ -314,6 +314,22 @@ def render_factory(
         ]:
             tool_api.flip_all_rows_horizontal()
 
+        if mode in [
+            "skin-default-12-0",
+            "skin-default-14-0",
+            "skin-default-16-0",
+            "skin-default-18-0",
+        ]:
+            tool_api.cut_region(8, 3, 11, 1)
+            tool_api.paste_region(8, 4)
+        if mode in [
+            "skin-default-12-1",
+            "skin-default-14-1",
+            "skin-default-16-1",
+            "skin-default-18-1",
+        ]:
+            tool_api.cut_region(14, 3, 17, 1)
+            tool_api.paste_region(14, 4)
     elif mode == "gfx-shadow-ball":
         canvas_size = 15
         tool_api.create_empty_canvas(
