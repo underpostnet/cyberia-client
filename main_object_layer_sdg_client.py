@@ -246,6 +246,16 @@ def render_factory(
     ]:
         render_color_hair = random.choice([14, 17, 20])
 
+        if mode in [
+            "skin-default-02-0",
+            "skin-default-02-1",
+            "skin-default-12-0",
+            "skin-default-12-1",
+        ]:
+            tool_api.data_generator.generate_rectangular_region(
+                7, 9, abs(18 - 7), abs(18 - 9), render_color_hair
+            )
+
         for coord in data_generator.get_coordinates_in_region(7, 21, 10, 20):
             x, y = coord
             tool_api.generate_pattern_from_coordinates(
