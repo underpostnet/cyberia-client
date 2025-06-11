@@ -79,9 +79,9 @@ class SkinColorProfile:
     EYE = "eye_color_id"
     SHOES = "shoes_color_id"
     SHIRT = "shirt_color_id"  # For region (13,7)
-    INNER_DETAIL = "pants_color_id"  # For region (12,4)
+    PANTS = "pants_color_id"  # For region (12,4)
 
-    ALL_FEATURE_KEYS = [SKIN, HAIR_BASE, EYE, SHOES, SHIRT, INNER_DETAIL]
+    ALL_FEATURE_KEYS = [SKIN, HAIR_BASE, EYE, SHOES, SHIRT, PANTS]
 
     def __init__(self):
         self.colors = {key: None for key in self.ALL_FEATURE_KEYS}
@@ -130,10 +130,10 @@ class SkinColorProfile:
             self.colors[self.SHIRT] = random.choice(list(range(2, 9)))
         return self.colors[self.SHIRT]
 
-    def get_inner_detail_color(self) -> int:  # For region (12,4)
-        if self.colors[self.INNER_DETAIL] is None:
-            self.colors[self.INNER_DETAIL] = random.choice(list(range(2, 9)))
-        return self.colors[self.INNER_DETAIL]
+    def get_pants_color(self) -> int:  # For region (12,4)
+        if self.colors[self.PANTS] is None:
+            self.colors[self.PANTS] = random.choice(list(range(2, 9)))
+        return self.colors[self.PANTS]
 
     def ensure_all_colors_populated(self):
         """Ensures all feature colors have a value, generating if necessary."""
@@ -143,7 +143,7 @@ class SkinColorProfile:
             "get_eye_color",
             "get_shoes_color",
             "get_shirt_color",
-            "get_inner_detail_color",
+            "get_pants_color",
         ]:
             getattr(self, key_method_name)()
 
@@ -175,7 +175,7 @@ def render_factory(
             skin_color_semantic_id=skin_color_profile.get_skin_color(),
             shoes_color_semantic_id=skin_color_profile.get_shoes_color(),
             shirt_color_semantic_id=skin_color_profile.get_shirt_color(),
-            pants_color_semantic_id=skin_color_profile.get_inner_detail_color(),
+            pants_color_semantic_id=skin_color_profile.get_pants_color(),
         )
 
     elif mode == "skin-default-0":
@@ -321,7 +321,7 @@ def render_factory(
             skin_color_semantic_id=skin_color_profile.get_skin_color(),
             shoes_color_semantic_id=skin_color_profile.get_shoes_color(),
             shirt_color_semantic_id=skin_color_profile.get_shirt_color(),
-            pants_color_semantic_id=skin_color_profile.get_inner_detail_color(),
+            pants_color_semantic_id=skin_color_profile.get_pants_color(),
         )
 
     elif mode in [
@@ -424,7 +424,7 @@ def render_factory(
             skin_color_semantic_id=skin_color_profile.get_skin_color(),
             shoes_color_semantic_id=skin_color_profile.get_shoes_color(),
             shirt_color_semantic_id=skin_color_profile.get_shirt_color(),
-            pants_color_semantic_id=skin_color_profile.get_inner_detail_color(),
+            pants_color_semantic_id=skin_color_profile.get_pants_color(),
         )
 
         eye_color_semantic = skin_color_profile.get_eye_color()
