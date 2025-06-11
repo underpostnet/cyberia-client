@@ -306,6 +306,33 @@ class SyntheticDataToolAPI:
         """
         self.data_generator.paste_region(paste_x_start_user, paste_y_start_user)
 
+    def flip_specific_row_horizontal(self, row_y_user: int):
+        """
+        Flips a specific row of the data matrix horizontally.
+        The row is identified by its user Y-coordinate (bottom-left origin).
+
+        Args:
+            row_y_user (int): The Y-coordinate of the row to flip.
+        """
+        # Convert user y-coordinate to matrix row index
+        # _map_coordinates_to_matrix_indices returns (row_idx, col_idx), we only need row_idx.
+        # We can pass a dummy x (e.g., 0) as it doesn't affect the row index calculation.
+        matrix_row_idx, _ = self.data_generator._map_coordinates_to_matrix_indices(
+            0, row_y_user
+        )
+
+        if 0 <= matrix_row_idx < self.data_generator.data_matrix.shape[0]:
+            self.data_generator.flip_data_rows_horizontal(
+                matrix_row_index=matrix_row_idx
+            )
+        else:
+            # print(f"Warning: User Y-coordinate {row_y_user} is out of bounds. No row flipped.")
+            pass
+
+    def flip_all_rows_horizontal(self):
+        """Flips all rows of the data matrix horizontally."""
+        self.data_generator.flip_data_rows_horizontal(matrix_row_index=None)
+
     def render_data_matrix_to_subplot(self, ax: plt.Axes, subplot_index: int):
         """
         Renders the synthetic data matrix onto a Matplotlib subplot.

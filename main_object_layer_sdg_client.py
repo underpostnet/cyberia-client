@@ -306,9 +306,6 @@ def render_factory(
 
         tool_api.apply_default_skin_template_fill(mode, DISPLAY_COLOR_PALETTE)
 
-        # if mode skin-default-04-0 skin-default-04-1
-        # apply flip horizontally
-
     elif mode == "gfx-shadow-ball":
         canvas_size = 15
         tool_api.create_empty_canvas(
@@ -465,6 +462,51 @@ def render_factory(
         )
         tool_api.paste_region(paste_circle_top_left_x, paste_circle_top_left_y)
 
+    elif mode == "flip-demo":
+        canvas_width = 10
+        canvas_height = 5
+        tool_api.create_empty_canvas(
+            canvas_height,
+            fill_value=0,  # Note: create_empty_canvas takes size for square, let's fix this or use SDG directly
+        )
+        # For non-square, let's re-initialize data_matrix directly for simplicity in demo
+        data_generator.data_matrix = np.full(
+            (canvas_height, canvas_width), 0, dtype=int
+        )
+        tool_api.data_matrix_height, tool_api.data_matrix_width = (
+            data_generator.data_matrix.shape
+        )
+
+        # Draw distinct patterns on a few rows
+        # Row at user_y = 1: Red (2) on left, Blue (4) on right
+        for x in range(canvas_width // 2):
+            data_generator.set_data_point(x, 1, 2)  # Red
+        for x in range(canvas_width // 2, canvas_width):
+            data_generator.set_data_point(x, 1, 4)  # Blue
+
+        # Row at user_y = 3: Green (3) on left, Yellow (5) on right
+        for x in range(canvas_width // 2):
+            data_generator.set_data_point(x, 3, 3)  # Green
+        for x in range(canvas_width // 2, canvas_width):
+            data_generator.set_data_point(x, 3, 5)  # Yellow
+
+        # Row at user_y = 2: All Magenta (6)
+        for x in range(canvas_width):
+            data_generator.set_data_point(x, 2, 6)  # Magenta
+
+        # --- Step 1: Show initial state (implicitly done by rendering at the end) ---
+        # --- Step 2: Flip a specific row ---
+        row_to_flip_y_user = 1  # The Red/Blue row
+        # To make the demo clear, we'll only do one type of flip per run for some subplots.
+        # This example will flip row 1, then all rows.
+
+        # print(f"Demo: Flipping row at user y={row_to_flip_y_user} horizontally.")
+        # tool_api.flip_specific_row_horizontal(row_y_user=row_to_flip_y_user)
+
+        # --- Step 3: Flip all rows (will also re-flip the already flipped row) ---
+        # print(f"Demo: Flipping all rows horizontally.")
+        tool_api.flip_all_rows_horizontal()  # Uncomment this line to see all rows flipped after the specific row flip
+
 
 # --- Main Execution ---
 if __name__ == "__main__":
@@ -478,7 +520,7 @@ if __name__ == "__main__":
         "--mode",
         type=str,
         default="skin-default",
-        help='Special mode for rendering. Current options: "skin-default", "skin-default-08-1", ..., "gfx-shadow-ball", "skin-fluff", "cut-paste-demo".',
+        help='Special mode for rendering. Current options: "skin-default", ..., "cut-paste-demo", "flip-demo".',
     )
 
     args = parser.parse_args()
@@ -496,7 +538,12 @@ if __name__ == "__main__":
         # Initialize a new SyntheticDataGenerator for each subplot
         # For "gfx-shadow-ball" and "skin-fluff", the canvas will be created inside render_factory
         # For other modes, use the default skin template.
-        if args.mode in ["gfx-shadow-ball", "skin-fluff", "cut-paste-demo"]:
+        if args.mode in [
+            "gfx-shadow-ball",
+            "skin-fluff",
+            "cut-paste-demo",
+            "flip-demo",
+        ]:
             data_generator = SyntheticDataGenerator(
                 np.zeros((1, 1), dtype=int), DISPLAY_COLOR_PALETTE
             )  # Dummy initial matrix, will be replaced

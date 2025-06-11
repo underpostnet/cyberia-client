@@ -470,6 +470,30 @@ class SyntheticDataGenerator:
                 self.set_data_point(target_x_user, target_y_user, value_to_paste)
         # print(f"Pasted region at ({paste_x_start_user}, {paste_y_start_user}).")
 
+    def flip_data_rows_horizontal(self, matrix_row_index: Union[int, None] = None):
+        """
+        Flips one or all rows of the data_matrix horizontally.
+
+        Args:
+            matrix_row_index (Union[int, None], optional):
+                The specific matrix row index to flip.
+                If None, all rows in the data_matrix are flipped horizontally.
+                Defaults to None.
+        """
+        if matrix_row_index is not None:
+            if 0 <= matrix_row_index < self.data_matrix.shape[0]:
+                self.data_matrix[matrix_row_index, :] = np.flip(
+                    self.data_matrix[matrix_row_index, :]
+                )
+            else:
+                # print(
+                #     f"Warning: Row index {matrix_row_index} is out of bounds. No row flipped."
+                # )
+                pass
+        else:
+            # Flip all rows horizontally
+            self.data_matrix = np.fliplr(self.data_matrix)
+
 
 def clarify_and_contrast_rgba(
     rgba_tuple: tuple[float, float, float, float],
