@@ -306,6 +306,14 @@ def render_factory(
 
         tool_api.apply_default_skin_template_fill(mode, DISPLAY_COLOR_PALETTE)
 
+        if mode in [
+            "skin-default-04-0",
+            "skin-default-04-1",
+            "skin-default-14-0",
+            "skin-default-14-1",
+        ]:
+            tool_api.flip_all_rows_horizontal()
+
     elif mode == "gfx-shadow-ball":
         canvas_size = 15
         tool_api.create_empty_canvas(
