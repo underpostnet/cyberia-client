@@ -79,7 +79,7 @@ class SkinColorProfile:
     EYE = "eye_color_id"
     SHOES = "shoes_color_id"
     SHIRT = "shirt_color_id"  # For region (13,7)
-    INNER_DETAIL = "inner_detail_color_id"  # For region (12,4)
+    INNER_DETAIL = "pants_color_id"  # For region (12,4)
 
     ALL_FEATURE_KEYS = [SKIN, HAIR_BASE, EYE, SHOES, SHIRT, INNER_DETAIL]
 
@@ -174,7 +174,7 @@ def render_factory(
             skin_color_id=skin_color_profile.get_skin_color(),
             shoes_color_id=skin_color_profile.get_shoes_color(),
             shirt_color_id=skin_color_profile.get_shirt_color(),
-            inner_detail_color_id=skin_color_profile.get_inner_detail_color(),
+            pants_color_id=skin_color_profile.get_inner_detail_color(),
         )
 
     elif mode == "skin-default-0":
@@ -319,7 +319,7 @@ def render_factory(
             skin_color_id=skin_color_profile.get_skin_color(),
             shoes_color_id=skin_color_profile.get_shoes_color(),
             shirt_color_id=skin_color_profile.get_shirt_color(),
-            inner_detail_color_id=skin_color_profile.get_inner_detail_color(),
+            pants_color_id=skin_color_profile.get_inner_detail_color(),
         )
 
     elif mode in [
@@ -415,7 +415,7 @@ def render_factory(
             skin_color_id=skin_color_profile.get_skin_color(),
             shoes_color_id=skin_color_profile.get_shoes_color(),
             shirt_color_id=skin_color_profile.get_shirt_color(),
-            inner_detail_color_id=skin_color_profile.get_inner_detail_color(),
+            pants_color_id=skin_color_profile.get_inner_detail_color(),
         )
 
         eye_color = skin_color_profile.get_eye_color()

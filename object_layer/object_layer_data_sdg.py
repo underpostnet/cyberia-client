@@ -129,7 +129,7 @@ class SyntheticDataToolAPI:
         skin_color_id: int,
         shoes_color_id: int,
         shirt_color_id: int,
-        inner_detail_color_id: int,
+        pants_color_id: int,
     ):
         """
         Applies a default 'skin' template fill based on common data points.
@@ -140,7 +140,7 @@ class SyntheticDataToolAPI:
             skin_color_id (int): The color ID for the skin.
             shoes_color_id (int): The color ID for the shoes.
             shirt_color_id (int): The color ID for the shirt/main clothing area.
-            inner_detail_color_id (int): The color ID for an inner detail area.
+            pants_color_id (int): The color ID for an pants area.
         """
         if not (
             mode
@@ -179,9 +179,7 @@ class SyntheticDataToolAPI:
             intensity_factor=0.5,
             direction="bottom_to_top",
         )
-        self.data_generator.contiguous_region_fill(
-            12, 4, fill_value_id=inner_detail_color_id
-        )
+        self.data_generator.contiguous_region_fill(12, 4, fill_value_id=pants_color_id)
 
         # Fill shoes area
         self.data_generator.contiguous_region_fill(9, 2, fill_value_id=shoes_color_id)
