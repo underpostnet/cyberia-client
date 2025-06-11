@@ -1,5 +1,6 @@
 # Synthetic data generator client
 
+import json
 import matplotlib.pyplot as plt
 import numpy as np
 import random
@@ -70,10 +71,95 @@ DISPLAY_COLOR_PALETTE[22] = clarify_and_contrast_rgba(
 DATA_MATRIX_HEIGHT, DATA_MATRIX_WIDTH = DEFAULT_PLAYER_SKIN_FRAME_DOWN_IDLE.shape
 
 
+class SkinColorProfile:
+    """Manages loading, saving, and providing skin feature colors."""
+
+    SKIN = "skin_color_id"
+    HAIR_BASE = "hair_base_color_id"
+    EYE = "eye_color_id"
+    SHOES = "shoes_color_id"
+    SHIRT = "shirt_color_id"  # For region (13,7)
+    INNER_DETAIL = "inner_detail_color_id"  # For region (12,4)
+
+    ALL_FEATURE_KEYS = [SKIN, HAIR_BASE, EYE, SHOES, SHIRT, INNER_DETAIL]
+
+    def __init__(self):
+        self.colors = {key: None for key in self.ALL_FEATURE_KEYS}
+
+    def load_from_file(self, filepath: str):
+        try:
+            with open(filepath, "r") as f:
+                loaded_colors = json.load(f)
+            for key in self.ALL_FEATURE_KEYS:
+                if key in loaded_colors:
+                    self.colors[key] = loaded_colors[key]
+            print(f"Loaded skin colors from {filepath}")
+        except FileNotFoundError:
+            print(f"Warning: Skin color file not found: {filepath}. Using defaults.")
+        except json.JSONDecodeError:
+            print(f"Warning: Error decoding JSON from {filepath}. Using defaults.")
+        except Exception as e:
+            print(
+                f"Warning: Could not load skin colors from {filepath}: {e}. Using defaults."
+            )
+
+    def save_to_file(self, filepath: str):
+        self.ensure_all_colors_populated()
+        try:
+            with open(filepath, "w") as f:
+                json.dump(self.colors, f, indent=4)
+            print(f"Saved skin colors to {filepath}")
+        except Exception as e:
+            print(f"Error saving skin colors to {filepath}: {e}")
+
+    def get_skin_color(self) -> int:
+        if self.colors[self.SKIN] is None:
+            self.colors[self.SKIN] = random.choice(list(range(9, 14)))
+        return self.colors[self.SKIN]
+
+    def get_hair_base_color(self) -> int:
+        if self.colors[self.HAIR_BASE] is None:
+            self.colors[self.HAIR_BASE] = random.choice([14, 17, 20])
+        return self.colors[self.HAIR_BASE]
+
+    def get_eye_color(self) -> int:
+        if self.colors[self.EYE] is None:
+            self.colors[self.EYE] = random.choice([3, 4, 20])
+        return self.colors[self.EYE]
+
+    def get_shoes_color(self) -> int:
+        if self.colors[self.SHOES] is None:
+            self.colors[self.SHOES] = random.choice(list(range(2, 9)))
+        return self.colors[self.SHOES]
+
+    def get_shirt_color(self) -> int:  # For region (13,7)
+        if self.colors[self.SHIRT] is None:
+            self.colors[self.SHIRT] = random.choice(list(range(2, 9)))
+        return self.colors[self.SHIRT]
+
+    def get_inner_detail_color(self) -> int:  # For region (12,4)
+        if self.colors[self.INNER_DETAIL] is None:
+            self.colors[self.INNER_DETAIL] = random.choice(list(range(2, 9)))
+        return self.colors[self.INNER_DETAIL]
+
+    def ensure_all_colors_populated(self):
+        """Ensures all feature colors have a value, generating if necessary."""
+        for key_method_name in [
+            "get_skin_color",
+            "get_hair_base_color",
+            "get_eye_color",
+            "get_shoes_color",
+            "get_shirt_color",
+            "get_inner_detail_color",
+        ]:
+            getattr(self, key_method_name)()
+
+
 def render_factory(
     data_generator: SyntheticDataGenerator,
     tool_api: SyntheticDataToolAPI,
     mode: str = "skin-default",
+    skin_color_profile: SkinColorProfile = None,
 ):
     """
     Applies various rendering (data generation) operations based on the specified mode.
@@ -82,10 +168,21 @@ def render_factory(
         data_generator (SyntheticDataGenerator): The data generator instance.
         tool_api (SyntheticDataToolAPI): The tool API instance for complex operations.
         mode (str): The rendering mode.
+        skin_color_profile (SkinColorProfile): Profile for managing skin feature colors.
     """
     DISPLAY_COLOR_PALETTE[1] = (0, 0, 0, 255)
+
+    if skin_color_profile is None:  # Should not happen if called from main
+        skin_color_profile = SkinColorProfile()
+
     if mode == "skin-default":
-        tool_api.apply_default_skin_template_fill(DISPLAY_COLOR_PALETTE)
+        tool_api.apply_default_skin_template_fill(
+            mode=mode,
+            skin_color_id=skin_color_profile.get_skin_color(),
+            shoes_color_id=skin_color_profile.get_shoes_color(),
+            shirt_color_id=skin_color_profile.get_shirt_color(),
+            inner_detail_color_id=skin_color_profile.get_inner_detail_color(),
+        )
 
     elif mode == "skin-default-0":
         # Define a focus region for data generation
@@ -224,7 +321,13 @@ def render_factory(
                 initial_y_pos,
                 curve_config["curve_value_id"],
             )
-        tool_api.apply_default_skin_template_fill(DISPLAY_COLOR_PALETTE)
+        tool_api.apply_default_skin_template_fill(
+            mode=mode,
+            skin_color_id=skin_color_profile.get_skin_color(),
+            shoes_color_id=skin_color_profile.get_shoes_color(),
+            shirt_color_id=skin_color_profile.get_shirt_color(),
+            inner_detail_color_id=skin_color_profile.get_inner_detail_color(),
+        )
 
     elif mode in [
         "skin-default-08-0",
@@ -244,7 +347,7 @@ def render_factory(
         "skin-default-12-0",
         "skin-default-12-1",
     ]:
-        render_color_hair = random.choice([14, 17, 20])
+        render_color_hair = skin_color_profile.get_hair_base_color()
 
         if mode in [
             "skin-default-02-0",
@@ -314,10 +417,17 @@ def render_factory(
                 tool_api.create_coordinate_pattern("hair-lock"),
             )
 
-        tool_api.apply_default_skin_template_fill(mode, DISPLAY_COLOR_PALETTE)
+        tool_api.apply_default_skin_template_fill(
+            mode=mode,
+            skin_color_id=skin_color_profile.get_skin_color(),
+            shoes_color_id=skin_color_profile.get_shoes_color(),
+            shirt_color_id=skin_color_profile.get_shirt_color(),
+            inner_detail_color_id=skin_color_profile.get_inner_detail_color(),
+        )
 
         if random.choice([0, 1]) == 1:
-            eye_color = random.choice([3, 4, 20])
+            eye_color = skin_color_profile.get_eye_color()
+            # Eye placement logic remains the same, only color source changes
             if mode in [
                 "skin-default-04-0",
                 "skin-default-04-1",
@@ -586,10 +696,26 @@ if __name__ == "__main__":
         default="skin-default",
         help='Special mode for rendering. Current options: "skin-default", ..., "cut-paste-demo", "flip-demo".',
     )
+    parser.add_argument(
+        "--save-skin-colors",
+        type=str,
+        default=None,
+        help="Filepath to save the current skin feature colors as a JSON file.",
+    )
+    parser.add_argument(
+        "--load-skin-colors",
+        type=str,
+        default=None,
+        help="Filepath to load skin feature colors from a JSON file.",
+    )
 
     args = parser.parse_args()
 
     print(f"Running in mode: {args.mode}")
+
+    skin_color_profile = SkinColorProfile()
+    if args.load_skin_colors:
+        skin_color_profile.load_from_file(args.load_skin_colors)
 
     # Create a figure and a 2x4 grid of subplots
     fig, axes = plt.subplots(2, 4, figsize=(26, 13), dpi=100)
@@ -634,13 +760,17 @@ if __name__ == "__main__":
         tool_api = SyntheticDataToolAPI(data_generator)
 
         # Apply rendering based on the selected mode
-        render_factory(data_generator, tool_api, args.mode)
+        render_factory(data_generator, tool_api, args.mode, skin_color_profile)
 
         # Render the data matrix to the current subplot using the tool API
         tool_api.render_data_matrix_to_subplot(ax, i)
 
     # Adjust layout to prevent titles/labels from overlapping
     plt.tight_layout()
+
+    if args.save_skin_colors:
+        # Ensures all colors are determined (either loaded or randomly generated) before saving
+        skin_color_profile.save_to_file(args.save_skin_colors)
 
     # Display the plot
     plt.show()

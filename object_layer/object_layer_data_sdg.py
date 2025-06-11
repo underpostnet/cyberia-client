@@ -4,7 +4,7 @@ import random
 import matplotlib.pyplot as plt  # Import matplotlib for rendering
 
 # This file provides an importable tool API to work with synthetic data,
-# including focus move logic and various generation patterns.
+# including focus move logic and various generation patterns.from typing import Optional
 
 # Forward declaration for type hinting to avoid circular imports
 from typing import TYPE_CHECKING, Union
@@ -123,21 +123,25 @@ class SyntheticDataToolAPI:
         # Add more pattern types here as needed
         return coordinates
 
-    def apply_default_skin_template_fill(self, mode: str, display_color_palette: dict):
+    def apply_default_skin_template_fill(
+        self,
+        mode: str,
+        skin_color_id: int,
+        shoes_color_id: int,
+        shirt_color_id: int,
+        inner_detail_color_id: int,
+    ):
         """
         Applies a default 'skin' template fill based on common data points.
         This is a specific generation logic for a particular data structure.
 
         Args:
-            display_color_palette (dict): The color palette used for display,
-                                          to pick random colors for filling.
+            mode (str): The current rendering mode, used for conditional filling.
+            skin_color_id (int): The color ID for the skin.
+            shoes_color_id (int): The color ID for the shoes.
+            shirt_color_id (int): The color ID for the shirt/main clothing area.
+            inner_detail_color_id (int): The color ID for an inner detail area.
         """
-        # Note: This method uses hardcoded coordinates specific to the default template.
-        # For a truly generic SDG, these coordinates would be passed as parameters
-        # or derived from a more abstract template definition.
-
-        # Fill main body area
-        skin_color_id = random.choice(list(range(9, 14)))
         if not (
             mode
             in [
@@ -170,17 +174,16 @@ class SyntheticDataToolAPI:
         self.data_generator.contiguous_region_fill(
             13,
             7,
-            fill_value_id=random.choice(list(range(2, 9))),
+            fill_value_id=shirt_color_id,
             gradient_shadow=True,
             intensity_factor=0.5,
             direction="bottom_to_top",
         )
         self.data_generator.contiguous_region_fill(
-            12, 4, fill_value_id=random.choice(list(range(2, 9)))
+            12, 4, fill_value_id=inner_detail_color_id
         )
 
         # Fill shoes area
-        shoes_color_id = random.choice(list(range(2, 9)))
         self.data_generator.contiguous_region_fill(9, 2, fill_value_id=shoes_color_id)
         self.data_generator.contiguous_region_fill(15, 2, fill_value_id=shoes_color_id)
 
