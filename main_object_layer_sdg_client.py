@@ -27,8 +27,8 @@ DEFAULT_PLAYER_SKIN_FRAME_DOWN_IDLE = np.array(DEFAULT_PLAYER_SKIN_FRAME_DOWN_ID
 
 # Define the value mapping to RGBA (0-255) format for display
 DISPLAY_COLOR_PALETTE = {
-    0: (255, 255, 255, 255),  # White
-    1: (224, 224, 224, 255),  # Gray light
+    0: (0, 0, 0, 0),  # Transparent
+    1: (0, 0, 0, 255),  # Black
     2: (255, 0, 0, 255),  # Red
     3: (0, 255, 0, 255),  # Green
     4: (0, 0, 255, 255),  # Blue
@@ -164,6 +164,7 @@ def render_factory(
         skin_color_profile (SkinColorProfile): Profile for managing skin feature colors.
     """
     DISPLAY_COLOR_PALETTE[1] = (0, 0, 0, 255)
+    # The data_generator will handle making this palette compact and unique internally.
 
     if skin_color_profile is None:  # Should not happen if called from main
         skin_color_profile = SkinColorProfile()
@@ -171,10 +172,10 @@ def render_factory(
     if mode == "skin-default":
         tool_api.apply_default_skin_template_fill(
             mode=mode,
-            skin_color_id=skin_color_profile.get_skin_color(),
-            shoes_color_id=skin_color_profile.get_shoes_color(),
-            shirt_color_id=skin_color_profile.get_shirt_color(),
-            pants_color_id=skin_color_profile.get_inner_detail_color(),
+            skin_color_semantic_id=skin_color_profile.get_skin_color(),
+            shoes_color_semantic_id=skin_color_profile.get_shoes_color(),
+            shirt_color_semantic_id=skin_color_profile.get_shirt_color(),
+            pants_color_semantic_id=skin_color_profile.get_inner_detail_color(),
         )
 
     elif mode == "skin-default-0":
@@ -188,7 +189,8 @@ def render_factory(
         )
 
         generation_curves = []
-        generation_value_id = random.choice(
+        # Use semantic value IDs for generation, ToolAPI will convert
+        generation_semantic_value_id = random.choice(
             list(range(2, 9))
         )  # Random color for curves
 
@@ -252,7 +254,7 @@ def render_factory(
                 initial_y_pos = DATA_MATRIX_HEIGHT / 2
 
             curve_config = {
-                "curve_value_id": generation_value_id,
+                "curve_semantic_value_id": generation_semantic_value_id,
                 "num_points": num_points,
                 "curve_type": curve_type,
                 "initial_x_pos": initial_x_pos,
@@ -312,14 +314,14 @@ def render_factory(
                 curve_config["curve_type"],
                 initial_x_pos,
                 initial_y_pos,
-                curve_config["curve_value_id"],
+                curve_config["curve_semantic_value_id"],  # Pass semantic ID
             )
         tool_api.apply_default_skin_template_fill(
             mode=mode,
-            skin_color_id=skin_color_profile.get_skin_color(),
-            shoes_color_id=skin_color_profile.get_shoes_color(),
-            shirt_color_id=skin_color_profile.get_shirt_color(),
-            pants_color_id=skin_color_profile.get_inner_detail_color(),
+            skin_color_semantic_id=skin_color_profile.get_skin_color(),
+            shoes_color_semantic_id=skin_color_profile.get_shoes_color(),
+            shirt_color_semantic_id=skin_color_profile.get_shirt_color(),
+            pants_color_semantic_id=skin_color_profile.get_inner_detail_color(),
         )
 
     elif mode in [
@@ -340,7 +342,7 @@ def render_factory(
         "skin-default-12-0",
         "skin-default-12-1",
     ]:
-        render_color_hair = skin_color_profile.get_hair_base_color()
+        render_color_hair_semantic = skin_color_profile.get_hair_base_color()
 
         if mode in [
             "skin-default-02-0",
@@ -349,42 +351,49 @@ def render_factory(
             "skin-default-12-1",
         ]:
             tool_api.data_generator.generate_rectangular_region(
-                7, 9, abs(18 - 7), abs(18 - 9), render_color_hair
+                7, 9, abs(18 - 7), abs(18 - 9), render_color_hair_semantic
             )
 
         for coord in data_generator.get_coordinates_in_region(7, 21, 10, 20):
             x, y = coord
             tool_api.generate_pattern_from_coordinates(
-                x, y, render_color_hair, tool_api.create_coordinate_pattern("hair-lock")
+                x,
+                y,
+                render_color_hair_semantic,
+                tool_api.create_coordinate_pattern("hair-lock"),
             )
             tool_api.generate_pattern_from_coordinates(
                 x,
                 y - 1,
-                render_color_hair + 1,
+                render_color_hair_semantic
+                + 1,  # Assuming semantic IDs for shades are contiguous
                 tool_api.create_coordinate_pattern("hair-lock"),
             )
             tool_api.generate_pattern_from_coordinates(
                 x,
                 y - 2,
-                render_color_hair + 2,
+                render_color_hair_semantic + 2,
                 tool_api.create_coordinate_pattern("hair-lock"),
             )
 
         for coord in data_generator.get_coordinates_in_region(8, 23, 14, 22):
             x, y = coord
             tool_api.generate_pattern_from_coordinates(
-                x, y, render_color_hair, tool_api.create_coordinate_pattern("hair-lock")
+                x,
+                y,
+                render_color_hair_semantic,
+                tool_api.create_coordinate_pattern("hair-lock"),
             )
             tool_api.generate_pattern_from_coordinates(
                 x,
                 y - 1,
-                render_color_hair + 1,
+                render_color_hair_semantic + 1,
                 tool_api.create_coordinate_pattern("hair-lock"),
             )
             tool_api.generate_pattern_from_coordinates(
                 x,
                 y - 2,
-                render_color_hair + 2,
+                render_color_hair_semantic + 2,
                 tool_api.create_coordinate_pattern("hair-lock"),
             )
 
@@ -393,32 +402,32 @@ def render_factory(
             tool_api.generate_pattern_from_coordinates(
                 x,
                 y,
-                render_color_hair,
+                render_color_hair_semantic,
                 tool_api.create_coordinate_pattern("hair-lock"),
                 lambda dx, dy: [dx * -1, dy],  # Apply a filter to mirror the pattern
             )
             tool_api.generate_pattern_from_coordinates(
                 x,
                 y - 1,
-                render_color_hair + 1,
+                render_color_hair_semantic + 1,
                 tool_api.create_coordinate_pattern("hair-lock"),
             )
             tool_api.generate_pattern_from_coordinates(
                 x,
                 y - 2,
-                render_color_hair + 2,
+                render_color_hair_semantic + 2,
                 tool_api.create_coordinate_pattern("hair-lock"),
             )
 
         tool_api.apply_default_skin_template_fill(
             mode=mode,
-            skin_color_id=skin_color_profile.get_skin_color(),
-            shoes_color_id=skin_color_profile.get_shoes_color(),
-            shirt_color_id=skin_color_profile.get_shirt_color(),
-            pants_color_id=skin_color_profile.get_inner_detail_color(),
+            skin_color_semantic_id=skin_color_profile.get_skin_color(),
+            shoes_color_semantic_id=skin_color_profile.get_shoes_color(),
+            shirt_color_semantic_id=skin_color_profile.get_shirt_color(),
+            pants_color_semantic_id=skin_color_profile.get_inner_detail_color(),
         )
 
-        eye_color = skin_color_profile.get_eye_color()
+        eye_color_semantic = skin_color_profile.get_eye_color()
         # Eye placement logic remains the same, only color source changes
         if mode in [
             "skin-default-04-0",
@@ -427,7 +436,7 @@ def render_factory(
             "skin-default-14-1",
         ]:
             data_generator.set_data_point(
-                abs(tool_api.data_matrix_width - 1 - 9), 13, eye_color
+                abs(tool_api.data_matrix_width - 1 - 9), 13, eye_color_semantic
             )
         elif mode in [
             "skin-default-06-0",
@@ -436,7 +445,7 @@ def render_factory(
             "skin-default-16-1",
         ]:
             data_generator.set_data_point(
-                abs(tool_api.data_matrix_width - 1 - 9), 13, eye_color
+                abs(tool_api.data_matrix_width - 1 - 9), 13, eye_color_semantic
             )
         elif mode in [
             "skin-default-08-0",
@@ -445,8 +454,8 @@ def render_factory(
             "skin-default-18-1",
         ]:
 
-            data_generator.set_data_point(10, 13, eye_color)
-            data_generator.set_data_point(15, 13, eye_color)
+            data_generator.set_data_point(10, 13, eye_color_semantic)
+            data_generator.set_data_point(15, 13, eye_color_semantic)
 
         if mode in [
             "skin-default-04-0",
@@ -479,17 +488,17 @@ def render_factory(
         )  # Create a 15x15 white canvas
 
         # Define colors for the two circles
-        color_ball_1 = 2  # Red
-        color_ball_2 = 4  # Blue
+        color_ball_1_semantic = 2  # Red (semantic ID)
+        color_ball_2_semantic = 4  # Blue (semantic ID)
 
         # Draw first circle
         center_x_1, center_y_1, radius_1 = 4, 4, 3
-        tool_api.draw_circle(center_x_1, center_y_1, radius_1, color_ball_1)
+        tool_api.draw_circle(center_x_1, center_y_1, radius_1, color_ball_1_semantic)
         # Apply shadow gradient to the first circle
         data_generator.contiguous_region_fill(
             center_x_1,
             center_y_1,
-            fill_value_id=color_ball_1,
+            fill_semantic_value_id=color_ball_1_semantic,
             gradient_shadow=True,
             intensity_factor=0.6,
             direction=random.choice(
@@ -499,12 +508,12 @@ def render_factory(
 
         # Draw second circle
         center_x_2, center_y_2, radius_2 = 10, 10, 4
-        tool_api.draw_circle(center_x_2, center_y_2, radius_2, color_ball_2)
+        tool_api.draw_circle(center_x_2, center_y_2, radius_2, color_ball_2_semantic)
         # Apply shadow gradient to the second circle
         data_generator.contiguous_region_fill(
             center_x_2,
             center_y_2,
-            fill_value_id=color_ball_2,
+            fill_semantic_value_id=color_ball_2_semantic,
             gradient_shadow=True,
             intensity_factor=0.7,
             direction=random.choice(
@@ -519,14 +528,16 @@ def render_factory(
         )  # Create a 20x20 white canvas
 
         # Body
-        body_color = random.choice(list(range(2, 9)))  # Random vibrant color
+        body_color_semantic = random.choice(
+            list(range(2, 9))
+        )  # Random vibrant color (semantic ID)
         data_generator.generate_rectangular_region(
-            5, 5, 10, 10, body_color
+            5, 5, 10, 10, body_color_semantic
         )  # Corrected call
         data_generator.contiguous_region_fill(
             7,
             7,
-            fill_value_id=body_color,
+            fill_semantic_value_id=body_color_semantic,
             gradient_shadow=True,
             intensity_factor=0.4,
             direction=random.choice(["top_to_bottom", "bottom_to_top"]),
@@ -534,59 +545,53 @@ def render_factory(
 
         # Eyes (box eyes)
         eye_color = 14  # Black
-        data_generator.generate_rectangular_region(
-            7, 12, 2, 2, eye_color
-        )  # Corrected call
-        data_generator.generate_rectangular_region(
-            11, 12, 2, 2, eye_color
-        )  # Corrected call
+        data_generator.generate_rectangular_region(7, 12, 2, 2, eye_color)
+        data_generator.generate_rectangular_region(11, 12, 2, 2, eye_color)
 
         # Mouth
         mouth_color = 2  # Red
-        data_generator.generate_rectangular_region(
-            9, 9, 2, 1, mouth_color
-        )  # Corrected call
+        data_generator.generate_rectangular_region(9, 9, 2, 1, mouth_color)
 
         # Feet/Base
-        feet_color = random.choice(list(range(2, 9)))
-        data_generator.generate_rectangular_region(
-            6, 3, 3, 2, feet_color
-        )  # Corrected call
-        data_generator.generate_rectangular_region(
-            11, 3, 3, 2, feet_color
-        )  # Corrected call
+        feet_color_semantic = random.choice(list(range(2, 9)))
+        data_generator.generate_rectangular_region(6, 3, 3, 2, feet_color_semantic)
+        data_generator.generate_rectangular_region(11, 3, 3, 2, feet_color_semantic)
 
         # Antenna
-        antenna_color = random.choice(list(range(2, 9)))
-        data_generator.generate_rectangular_region(
-            9, 15, 2, 3, antenna_color
-        )  # Corrected call
-        tool_api.draw_circle(10, 19, 1, antenna_color)  # Top of antenna
+        antenna_color_semantic = random.choice(list(range(2, 9)))
+        data_generator.generate_rectangular_region(9, 15, 2, 3, antenna_color_semantic)
+        tool_api.draw_circle(10, 19, 1, antenna_color_semantic)  # Top of antenna
 
         # Random spots/details
         for _ in range(random.randint(2, 5)):
             spot_x = random.randint(6, 13)
             spot_y = random.randint(6, 13)
-            spot_color = random.choice(list(range(2, 9)))
+            spot_color_semantic = random.choice(list(range(2, 9)))
             data_generator.generate_rectangular_region(
-                spot_x, spot_y, 1, 1, spot_color
-            )  # Corrected call
+                spot_x, spot_y, 1, 1, spot_color_semantic
+            )
 
     elif mode == "cut-paste-demo":
         canvas_size = 20
         tool_api.create_empty_canvas(
-            canvas_size, fill_value=0
+            canvas_size, fill_semantic_value_id=0  # semantic ID 0 for white
         )  # Create a 20x20 white canvas
 
         # 1. Draw something to cut
-        rect_color = 2  # Red
+        rect_color_semantic = 2  # Red (semantic ID)
         # Use data_generator directly for generate_rectangular_region as it's part of SDG core
         data_generator.generate_rectangular_region(
-            start_x=2, start_y=2, width=5, height=5, value_id=rect_color
+            start_x=2,
+            start_y=2,
+            width=5,
+            height=5,
+            semantic_value_id=rect_color_semantic,
         )
 
-        circle_color = 4  # Blue
-        tool_api.draw_circle(center_x=10, center_y=10, radius=3, value_id=circle_color)
+        circle_color_semantic = 4  # Blue (semantic ID)
+        tool_api.draw_circle(
+            center_x=10, center_y=10, radius=3, semantic_value_id=circle_color_semantic
+        )
 
         # 2. Define cut region for the rectangle and cut it
         # Rectangle is from (2,2) to (6,6). Let's cut a 3x3 part from its center.
@@ -596,7 +601,11 @@ def render_factory(
             f"Cutting rectangle part from ({cut_rect_x1},{cut_rect_y1}) to ({cut_rect_x2},{cut_rect_y2})"
         )
         tool_api.cut_region(
-            cut_rect_x1, cut_rect_y1, cut_rect_x2, cut_rect_y2, clear_value=0
+            cut_rect_x1,
+            cut_rect_y1,
+            cut_rect_x2,
+            cut_rect_y2,
+            clear_semantic_value_id=0,  # semantic ID 0 for white
         )  # Clear with white
 
         # 3. Define paste location and paste the cut rectangle part
@@ -614,7 +623,11 @@ def render_factory(
         # This is a 7x7 region.
         print(f"Cutting circle from (7,7) to (13,13)")
         tool_api.cut_region(
-            x1=7, y1=7, x2=13, y2=13, clear_value=3
+            x1=7,
+            y1=7,
+            x2=13,
+            y2=13,
+            clear_semantic_value_id=3,  # semantic ID 3 for Green
         )  # Clear with Green (value 3 is Green)
 
         # Adjust paste location so the 7-pixel high circle fits on the 20x20 canvas (max Y index 19)
@@ -632,8 +645,8 @@ def render_factory(
         canvas_width = 10
         canvas_height = 5
         tool_api.create_empty_canvas(
-            canvas_height,
-            fill_value=0,  # Note: create_empty_canvas takes size for square, let's fix this or use SDG directly
+            canvas_height,  # This creates a square canvas.
+            fill_semantic_value_id=0,
         )
         # For non-square, let's re-initialize data_matrix directly for simplicity in demo
         data_generator.data_matrix = np.full(
@@ -644,21 +657,22 @@ def render_factory(
         )
 
         # Draw distinct patterns on a few rows
+        # These are semantic IDs
         # Row at user_y = 1: Red (2) on left, Blue (4) on right
         for x in range(canvas_width // 2):
-            data_generator.set_data_point(x, 1, 2)  # Red
+            data_generator.set_data_point(x, 1, 2)  # Red (semantic)
         for x in range(canvas_width // 2, canvas_width):
-            data_generator.set_data_point(x, 1, 4)  # Blue
+            data_generator.set_data_point(x, 1, 4)  # Blue (semantic)
 
         # Row at user_y = 3: Green (3) on left, Yellow (5) on right
         for x in range(canvas_width // 2):
-            data_generator.set_data_point(x, 3, 3)  # Green
+            data_generator.set_data_point(x, 3, 3)  # Green (semantic)
         for x in range(canvas_width // 2, canvas_width):
-            data_generator.set_data_point(x, 3, 5)  # Yellow
+            data_generator.set_data_point(x, 3, 5)  # Yellow (semantic)
 
         # Row at user_y = 2: All Magenta (6)
         for x in range(canvas_width):
-            data_generator.set_data_point(x, 2, 6)  # Magenta
+            data_generator.set_data_point(x, 2, 6)  # Magenta (semantic)
 
         # --- Step 1: Show initial state (implicitly done by rendering at the end) ---
         # --- Step 2: Flip a specific row ---
@@ -704,6 +718,13 @@ if __name__ == "__main__":
         "--show",
         action="store_true",  # Sets args.show to True if present, False otherwise
         help="Display the generated graphics. If not provided, graphics will be generated but not shown.",
+    )
+    parser.add_argument(
+        "--save-graph-data",
+        type=str,
+        default=None,
+        help="Save individual graph data as JSON files using the provided string as a prefix (e.g., <prefix>_0.json). "
+        "Each file contains 'FRAME' (flattened data matrix) and 'COLOR' (compacted RGBA list).",
     )
 
     args = parser.parse_args()
@@ -815,6 +836,36 @@ if __name__ == "__main__":
 
         # Render the data matrix to the current subplot using the tool API
         tool_api.render_data_matrix_to_subplot(ax, i)
+
+        # Save individual graph data if requested
+        if args.save_graph_data is not None:
+            # data_matrix already contains compact IDs
+            graph_frame_indices = data_generator.data_matrix.flatten().tolist()
+
+            # Build the color map based on data_generator.value_map (compact_id -> rgba)
+            # The order in graph_color_map_list must match the compact_ids 0, 1, 2...
+            num_colors = data_generator._next_value_id  # Total number of unique colors
+            graph_color_map_list = [
+                [0, 0, 0, 0]
+            ] * num_colors  # Pre-allocate with a default
+
+            # Ensure list is correctly sized and ordered
+            # If value_map is not dense from 0 to num_colors-1, this needs care
+            # However, _add_color_if_not_exists ensures compact_ids are 0, 1, ... _next_value_id-1
+            for compact_id_key, rgba_tuple in sorted(data_generator.value_map.items()):
+                if 0 <= compact_id_key < num_colors:
+                    graph_color_map_list[compact_id_key] = list(rgba_tuple)
+
+            output_data = {"FRAME": graph_frame_indices, "COLOR": graph_color_map_list}
+
+            filename = f"{args.save_graph_data}_{i}.json"
+
+            try:
+                with open(filename, "w") as f:
+                    json.dump(output_data, f, indent=4)
+                print(f"Saved graph data for subplot {i} to {filename}")
+            except Exception as e:
+                print(f"Error saving graph data for subplot {i} to {filename}: {e}")
 
     # Adjust layout to prevent titles/labels from overlapping
     plt.tight_layout()

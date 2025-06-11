@@ -1,5 +1,6 @@
 import numpy as np
 import math
+import logging
 import random
 import matplotlib.pyplot as plt  # Import matplotlib for rendering
 
@@ -31,22 +32,31 @@ class SyntheticDataToolAPI:
             self.data_generator.data_matrix.shape
         )
 
-    def create_empty_canvas(self, size: int, fill_value: int = 0):
+    def create_empty_canvas(self, size: int, fill_semantic_value_id: int = 0):
         """
         Creates a new empty NxN canvas matrix and sets it as the data_matrix
         for the SyntheticDataGenerator.
 
         Args:
             size (int): The dimension (N) of the square canvas (NxN).
-            fill_value (int): The integer value to fill the canvas with. Defaults to 0 (white).
+            fill_semantic_value_id (int): The semantic integer value ID to fill the canvas with.
+                                          Defaults to 0 (typically white).
         """
         if size <= 0:
             raise ValueError("Canvas size must be a positive integer.")
-        new_matrix = np.full((size, size), fill_value, dtype=int)
+
+        # Convert semantic_value_id to compact_id for filling
+        compact_fill_id = self.data_generator._get_compact_id_for_semantic_id(
+            fill_semantic_value_id
+        )
+        new_matrix = np.full((size, size), compact_fill_id, dtype=int)
+
         self.data_generator.data_matrix = new_matrix
         self.data_matrix_height, self.data_matrix_width = new_matrix.shape
 
-    def draw_circle(self, center_x: int, center_y: int, radius: int, value_id: int):
+    def draw_circle(
+        self, center_x: int, center_y: int, radius: int, semantic_value_id: int
+    ):
         """
         Draws a filled circle on the data matrix.
 
@@ -54,15 +64,15 @@ class SyntheticDataToolAPI:
             center_x (int): The x-coordinate of the circle's center.
             center_y (int): The y-coordinate of the circle's center.
             radius (int): The radius of the circle.
-            value_id (int): The integer ID of the value to fill the circle with.
+            semantic_value_id (int): The semantic integer ID to fill the circle with.
         """
+        # set_data_point in data_generator will handle semantic_value_id to compact_id conversion
         for y_offset in range(-radius, radius + 1):
             for x_offset in range(-radius, radius + 1):
                 if x_offset**2 + y_offset**2 <= radius**2:
                     x = center_x + x_offset
                     y = center_y + y_offset
-                    # set_data_point handles bounds checking internally
-                    self.data_generator.set_data_point(x, y, value_id)
+                    self.data_generator.set_data_point(x, y, semantic_value_id)
 
     def generate_pattern_from_coordinates(
         self,
@@ -70,7 +80,7 @@ class SyntheticDataToolAPI:
         initial_y_pos: int,
         value_id: int,
         coordinates_list: list[list[int]],
-        filter_func=None,
+        filter_func=None,  # value_id here is semantic
     ):
         """
         Generates a pattern on the data matrix by drawing data points based on a list of
@@ -79,7 +89,7 @@ class SyntheticDataToolAPI:
         Args:
             initial_x_pos (int): The starting x-coordinate for the pattern.
             initial_y_pos (int): The starting y-coordinate for the pattern.
-            value_id (int): The value ID to use for the data points.
+            value_id (int): The semantic value ID to use for the data points.
             coordinates_list (list): A list of (dx, dy) tuples representing relative movements.
             filter_func (callable, optional): A function to apply to each coordinate (x, y)
                                               before drawing. Defaults to None.
@@ -126,21 +136,20 @@ class SyntheticDataToolAPI:
     def apply_default_skin_template_fill(
         self,
         mode: str,
-        skin_color_id: int,
-        shoes_color_id: int,
-        shirt_color_id: int,
-        pants_color_id: int,
+        skin_color_semantic_id: int,
+        shoes_color_semantic_id: int,
+        shirt_color_semantic_id: int,
+        pants_color_semantic_id: int,
     ):
         """
         Applies a default 'skin' template fill based on common data points.
         This is a specific generation logic for a particular data structure.
-
-        Args:
+        Args (semantic IDs are used):
             mode (str): The current rendering mode, used for conditional filling.
-            skin_color_id (int): The color ID for the skin.
-            shoes_color_id (int): The color ID for the shoes.
-            shirt_color_id (int): The color ID for the shirt/main clothing area.
-            pants_color_id (int): The color ID for an pants area.
+            skin_color_semantic_id (int): The semantic color ID for the skin.
+            shoes_color_semantic_id (int): The semantic color ID for the shoes.
+            shirt_color_semantic_id (int): The semantic color ID for the shirt/main clothing area.
+            pants_color_semantic_id (int): The semantic color ID for an pants area.
         """
         if not (
             mode
@@ -152,10 +161,12 @@ class SyntheticDataToolAPI:
             ]
         ):
             self.data_generator.contiguous_region_fill(
-                12, 12, fill_value_id=skin_color_id
+                12, 12, fill_semantic_value_id=skin_color_semantic_id
             )
 
-        self.data_generator.contiguous_region_fill(7, 4, fill_value_id=skin_color_id)
+        self.data_generator.contiguous_region_fill(
+            7, 4, fill_semantic_value_id=skin_color_semantic_id
+        )
         if mode in [
             "skin-default-08-0",
             "skin-default-08-1",
@@ -167,30 +178,39 @@ class SyntheticDataToolAPI:
             "skin-default-12-1",
         ]:
             self.data_generator.contiguous_region_fill(
-                18, 4, fill_value_id=skin_color_id
+                18, 4, fill_semantic_value_id=skin_color_semantic_id
             )
 
         # Fill specific internal regions with random colors
         self.data_generator.contiguous_region_fill(
             13,
             7,
-            fill_value_id=shirt_color_id,
+            fill_semantic_value_id=shirt_color_semantic_id,
             gradient_shadow=True,
             intensity_factor=0.5,
             direction="bottom_to_top",
         )
-        self.data_generator.contiguous_region_fill(12, 4, fill_value_id=pants_color_id)
+        self.data_generator.contiguous_region_fill(
+            12, 4, fill_semantic_value_id=pants_color_semantic_id
+        )
 
         # Fill shoes area
-        self.data_generator.contiguous_region_fill(9, 2, fill_value_id=shoes_color_id)
-        self.data_generator.contiguous_region_fill(15, 2, fill_value_id=shoes_color_id)
+        self.data_generator.contiguous_region_fill(
+            9, 2, fill_semantic_value_id=shoes_color_semantic_id
+        )
+        self.data_generator.contiguous_region_fill(
+            15, 2, fill_semantic_value_id=shoes_color_semantic_id
+        )
 
     def generate_complex_parametric_curve(
-        self, curve_type: str, initial_x_pos: float, initial_y_pos: float, value_id: int
+        self,
+        curve_type: str,
+        initial_x_pos: float,
+        initial_y_pos: float,
+        semantic_value_id: int,
     ):
         """
         Generates a parametric curve on the data matrix with random parameters.
-
         Args:
             curve_type (str): The type of parametric curve to generate.
             initial_x_pos (float): The initial x-position for the curve's origin/center.
@@ -289,23 +309,35 @@ class SyntheticDataToolAPI:
 
         if x_func and y_func:
             self.data_generator.generate_parametric_curve_data(
-                x_func, y_func, t_start, t_end, num_points, value_id
+                x_func, y_func, t_start, t_end, num_points, semantic_value_id
             )
 
-    def cut_region(self, x1: int, y1: int, x2: int, y2: int, clear_value: int = 0):
+    def cut_region(
+        self,
+        x1: int,
+        y1: int,
+        x2: int,
+        y2: int,
+        clear_semantic_value_id: Union[int, None] = 0,
+    ):
         """
         Instructs the data generator to cut a rectangular region defined by (x1, y1) and (x2, y2)
         user coordinates (bottom-left origin) and store it.
-        The cut region in the main data matrix is filled with `clear_value`.
+        The cut region in the main data matrix is filled with `clear_semantic_value_id`.
 
         Args:
             x1 (int): X-coordinate of the first corner.
             y1 (int): Y-coordinate of the first corner.
             x2 (int): X-coordinate of the second corner.
             y2 (int): Y-coordinate of the second corner.
-            clear_value (int, optional): Value to fill the cut region with. Defaults to 0 (white).
+            clear_semantic_value_id (Union[int, None], optional): Semantic value ID to fill the
+                                                                  cut region with. Defaults to 0.
+                                                                  If None, region is not cleared.
         """
-        self.data_generator.cut_region(x1, y1, x2, y2, clear_value)
+        # data_generator.cut_region expects a semantic ID for clearing
+        self.data_generator.cut_region(
+            x1, y1, x2, y2, clear_semantic_value_id=clear_semantic_value_id
+        )
 
     def paste_region(self, paste_x_start_user: int, paste_y_start_user: int):
         """

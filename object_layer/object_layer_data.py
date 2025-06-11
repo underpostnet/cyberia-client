@@ -59,7 +59,7 @@ def _load_object_layer_data():
                         filename.replace(".json", "")
                         .replace("object_layer_data_", "")
                         .upper()
-                    )
+                    )  # TODO: This needs to be fixed, object_layer_data_ is not a prefix for all files.
                     print("Load object layer data", object_layer_id)
                     OBJECT_LAYER_DATA[object_layer_id] = data
     return OBJECT_LAYER_DATA
