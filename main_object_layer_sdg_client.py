@@ -316,6 +316,36 @@ def render_factory(
 
         tool_api.apply_default_skin_template_fill(mode, DISPLAY_COLOR_PALETTE)
 
+        if random.choice([0, 1]) == 1:
+            eye_color = random.choice([3, 4, 20])
+            if mode in [
+                "skin-default-04-0",
+                "skin-default-04-1",
+                "skin-default-14-0",
+                "skin-default-14-1",
+            ]:
+                data_generator.set_data_point(
+                    abs(tool_api.data_matrix_width - 1 - 9), 13, eye_color
+                )
+            elif mode in [
+                "skin-default-06-0",
+                "skin-default-06-1",
+                "skin-default-16-0",
+                "skin-default-16-1",
+            ]:
+                data_generator.set_data_point(
+                    abs(tool_api.data_matrix_width - 1 - 9), 13, eye_color
+                )
+            elif mode in [
+                "skin-default-08-0",
+                "skin-default-08-1",
+                "skin-default-18-0",
+                "skin-default-18-1",
+            ]:
+
+                data_generator.set_data_point(10, 13, eye_color)
+                data_generator.set_data_point(15, 13, eye_color)
+
         if mode in [
             "skin-default-04-0",
             "skin-default-04-1",
