@@ -724,7 +724,7 @@ if __name__ == "__main__":
         type=str,
         default=None,
         help="Save individual graph data as JSON files using the provided string as a prefix (e.g., <prefix>_0.json). "
-        "Each file contains 'FRAME' (flattened data matrix) and 'COLOR' (compacted RGBA list).",
+        "Each file contains 'FRAME' (data matrix) and 'COLOR' (compacted RGBA list).",
     )
 
     args = parser.parse_args()
@@ -840,8 +840,8 @@ if __name__ == "__main__":
         # Save individual graph data if requested
         if args.save_graph_data is not None:
             # data_matrix already contains compact IDs
-            graph_frame_indices = data_generator.data_matrix.flatten().tolist()
-
+            # Output the data_matrix as a list of lists (2D array)
+            graph_frame_data = data_generator.data_matrix.tolist()
             # Build the color map based on data_generator.value_map (compact_id -> rgba)
             # The order in graph_color_map_list must match the compact_ids 0, 1, 2...
             num_colors = data_generator._next_value_id  # Total number of unique colors
@@ -856,7 +856,7 @@ if __name__ == "__main__":
                 if 0 <= compact_id_key < num_colors:
                     graph_color_map_list[compact_id_key] = list(rgba_tuple)
 
-            output_data = {"FRAME": graph_frame_indices, "COLOR": graph_color_map_list}
+            output_data = {"FRAME": graph_frame_data, "COLOR": graph_color_map_list}
 
             filename = f"{args.save_graph_data}_{i}.json"
 
