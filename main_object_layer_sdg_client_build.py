@@ -4,12 +4,13 @@ import shutil
 import json
 import copy
 import argparse
+from typing import Union  # For Python < 3.10 compatibility
 
 
 def execute_client_script(
     mode: str,
     output_dir: str = "build_output",
-    skin_colors_file_for_subprocess: str | None = None,
+    skin_colors_file_for_subprocess: Union[str, None] = None,
 ):
     """
     Executes the main_object_layer_sdg_client.py script with the specified mode.
@@ -56,24 +57,32 @@ def execute_client_script(
         )
 
 
+def generate_random_seed_data():
+    """Generates random integer values for SEED_DATA."""
+    # Ensure random is imported if not already at the top level
+    import random
+
+    return {
+        "EFFECT": random.randint(0, 10),
+        "RESISTANCE": random.randint(0, 10),
+        "AGILITY": random.randint(0, 10),
+        "RANGE": random.randint(0, 10),
+        "INTELLIGENCE": random.randint(0, 10),
+        "UTILITY": random.randint(0, 10),
+    }
+
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(
         description="Build script to generate consolidated player skin animation data."
     )
     parser.add_argument(
-        "--load-skin-colors",
+        "--base-profile-source",
         type=str,
-        default=None,
-        help="Filepath to a JSON file containing an array of 8 skin color profiles to use for generation.",
+        required=True,
+        help="Base name of the JSON file in the current directory containing an array of 8 skin color profiles (e.g., RAVE for RAVE.json).",
     )
     args = parser.parse_args()
-
-    output_directory = (
-        "build_output_sdg_frames"  # Directory for intermediate frame files
-    )
-    if os.path.exists(output_directory):
-        shutil.rmtree(output_directory)  # Clean up previous build
-    os.makedirs(output_directory, exist_ok=True)
 
     RENDER_DATA_SCHEME = {
         "FRAMES": {
@@ -101,65 +110,69 @@ if __name__ == "__main__":
         "IS_STATELESS": False,
     }
 
-    # Initialize RENDER_DATA as a list of 8 distinct render data objects
-    RENDER_DATA = [copy.deepcopy(RENDER_DATA_SCHEME) for _ in range(8)]
+    base_profile_source_name = args.base_profile_source
+    base_profile_filepath = f"{base_profile_source_name}.json"
 
-    # Load skin color profiles if a file is provided
-    # This file should contain an array of 8 profile dicts.
-    # The main_object_layer_sdg_client.py script will use these
-    # to ensure consistency for each of its 8 subplots.
-    skin_profiles_for_client = None
-    if args.load_skin_colors:
-        try:
-            with open(args.load_skin_colors, "r") as f:
-                loaded_profiles = json.load(f)
-            if isinstance(loaded_profiles, list) and len(loaded_profiles) == 8:
-                skin_profiles_for_client = args.load_skin_colors
+    all_base_profiles = []
+    try:
+        with open(base_profile_filepath, "r") as f:
+            all_base_profiles = json.load(f)
+        if not (isinstance(all_base_profiles, list) and len(all_base_profiles) == 8):
+            print(
+                f"Error: Base profile file '{base_profile_filepath}' must contain a list of 8 profiles."
+            )
+            exit(1)
+        print(f"Successfully loaded 8 base profiles from '{base_profile_filepath}'.")
+    except FileNotFoundError:
+        print(f"Error: Base profile file not found: '{base_profile_filepath}'.")
+        exit(1)
+    except json.JSONDecodeError:
+        print(f"Error: Could not decode JSON from '{base_profile_filepath}'.")
+        exit(1)
+    except Exception as e:
+        print(f"Error loading base profiles from '{base_profile_filepath}': {e}")
+        exit(1)
+
+    output_skin_dir = "object_layer/skin"
+    os.makedirs(output_skin_dir, exist_ok=True)
+
+    intermediate_frames_dir = "build_output_sdg_frames_temp"
+
+    print(f"\nGenerating 8 skin files for base profile: {base_profile_source_name}")
+
+    # Prepare intermediate directory for client's output frames
+    if os.path.exists(intermediate_frames_dir):
+        shutil.rmtree(intermediate_frames_dir)
+    os.makedirs(intermediate_frames_dir, exist_ok=True)
+
+    # RENDER_DATA will hold the 8 variations for the skin ID
+    RENDER_DATA_for_skin_id = [copy.deepcopy(RENDER_DATA_SCHEME) for _ in range(8)]
+
+    # Iterate through different animation configurations (modes)
+    for mode_val in [0, 1]:  # 0 for IDLE, 1 for WALKING
+        for direction_val in [8, 2, 4, 6]:  # 8:DOWN, 2:UP, 4:LEFT, 6:RIGHT
+            for frame_val in [0, 1]:  # Two animation frames for each state
+                mode_name = f"skin-default-{mode_val}{direction_val}-{frame_val}"
                 print(
-                    f"Using skin color profiles from: {args.load_skin_colors} for client script."
+                    f"    Executing client for mode: {mode_name} (will generate 8 variation files)"
                 )
-            else:
-                print(
-                    f"Warning: --load-skin-colors file '{args.load_skin_colors}' does not contain a list of 8 profiles. Random profiles will be generated by the client."
+
+                # Execute the client script ONCE for the current mode_name.
+                # This will generate 8 files: <mode_name>_0.json to <mode_name>_7.json
+                execute_client_script(
+                    mode_name, intermediate_frames_dir, base_profile_filepath
                 )
-        except FileNotFoundError:
-            print(
-                f"Warning: --load-skin-colors file not found: {args.load_skin_colors}. Random profiles will be generated by the client."
-            )
-        except json.JSONDecodeError:
-            print(
-                f"Warning: Error decoding JSON from {args.load_skin_colors}. Random profiles will be generated by the client."
-            )
-        except Exception as e:
-            print(
-                f"Warning: Could not load skin colors from {args.load_skin_colors}: {e}. Random profiles will be generated by the client."
-            )
 
-    # Iterate through each of the 8 character variations (subplots from client)
-    for graph_index in range(8):
-        print(f"\nProcessing character variation (graph_index): {graph_index}")
-        # Iterate through different animation configurations
-        for mode_val in [0, 1]:  # 0 for IDLE, 1 for WALKING
-            for direction_val in [8, 2, 4, 6]:  # 8:DOWN, 2:UP, 4:LEFT, 6:RIGHT
-                for frame_val in [0, 1]:  # Two animation frames for each state
-                    mode_name = f"skin-default-{mode_val}{direction_val}-{frame_val}"
-                    print(
-                        f"  Generating/Processing mode: {mode_name} for graph_index: {graph_index}"
-                    )
-                    # Execute the client script. It will generate 8 files, one for each graph_index.
-                    # We are interested in the one specific to the current outer loop's graph_index.
-                    execute_client_script(
-                        mode_name, output_directory, skin_profiles_for_client
-                    )
-
+                # Now, process the 8 files generated by the single client execution
+                for graph_index in range(8):
                     input_json_filename = f"{mode_name}_{graph_index}.json"
                     input_json_path = os.path.join(
-                        output_directory, input_json_filename
+                        intermediate_frames_dir, input_json_filename
                     )
 
                     if not os.path.exists(input_json_path):
                         print(
-                            f"    ERROR: Expected file {input_json_path} not found. Skipping this frame."
+                            f"      ERROR: Expected file {input_json_path} not found. Skipping this frame for variation {graph_index}."
                         )
                         continue
 
@@ -172,17 +185,16 @@ if __name__ == "__main__":
 
                         if loaded_frame_data is None or loaded_color_data is None:
                             print(
-                                f"    ERROR: FRAME or COLOR data missing in {input_json_path}. Skipping."
+                                f"      ERROR: FRAME or COLOR data missing in {input_json_path}. Skipping for variation {graph_index}."
                             )
-                            os.remove(input_json_path)  # Clean up processed/failed file
+                            os.remove(input_json_path)
                             continue
 
-                        # Set colors if not already set for this graph_index (character variation)
-                        # Colors should be consistent for one character variation across its animations
-                        if not RENDER_DATA[graph_index]["COLORS"]:
-                            RENDER_DATA[graph_index]["COLORS"] = loaded_color_data
+                        if not RENDER_DATA_for_skin_id[graph_index]["COLORS"]:
+                            RENDER_DATA_for_skin_id[graph_index][
+                                "COLORS"
+                            ] = loaded_color_data
 
-                        # Determine animation state key
                         base_direction_str = ""
                         if direction_val == 8:
                             base_direction_str = "DOWN"
@@ -196,87 +208,104 @@ if __name__ == "__main__":
                         anim_type_str = "IDLE" if mode_val == 0 else "WALKING"
                         primary_anim_key = f"{base_direction_str}_{anim_type_str}"
 
-                        RENDER_DATA[graph_index]["FRAMES"][primary_anim_key].append(
-                            loaded_frame_data
-                        )
+                        RENDER_DATA_for_skin_id[graph_index]["FRAMES"][
+                            primary_anim_key
+                        ].append(loaded_frame_data)
 
-                        # Populate derived/fallback states
                         if primary_anim_key == "DOWN_IDLE":
-                            RENDER_DATA[graph_index]["FRAMES"]["DEFAULT_IDLE"].append(
-                                loaded_frame_data
-                            )
-                            RENDER_DATA[graph_index]["FRAMES"]["NONE_IDLE"].append(
-                                loaded_frame_data
-                            )
+                            RENDER_DATA_for_skin_id[graph_index]["FRAMES"][
+                                "DEFAULT_IDLE"
+                            ].append(loaded_frame_data)
+                            RENDER_DATA_for_skin_id[graph_index]["FRAMES"][
+                                "NONE_IDLE"
+                            ].append(loaded_frame_data)
 
-                        # Populate diagonal states
                         if anim_type_str == "IDLE":
                             if base_direction_str == "LEFT":
-                                RENDER_DATA[graph_index]["FRAMES"][
+                                RENDER_DATA_for_skin_id[graph_index]["FRAMES"][
                                     "UP_LEFT_IDLE"
                                 ].append(loaded_frame_data)
-                                RENDER_DATA[graph_index]["FRAMES"][
+                                RENDER_DATA_for_skin_id[graph_index]["FRAMES"][
                                     "DOWN_LEFT_IDLE"
                                 ].append(loaded_frame_data)
                             elif base_direction_str == "RIGHT":
-                                RENDER_DATA[graph_index]["FRAMES"][
+                                RENDER_DATA_for_skin_id[graph_index]["FRAMES"][
                                     "UP_RIGHT_IDLE"
                                 ].append(loaded_frame_data)
-                                RENDER_DATA[graph_index]["FRAMES"][
+                                RENDER_DATA_for_skin_id[graph_index]["FRAMES"][
                                     "DOWN_RIGHT_IDLE"
                                 ].append(loaded_frame_data)
                         elif anim_type_str == "WALKING":
                             if base_direction_str == "LEFT":
-                                RENDER_DATA[graph_index]["FRAMES"][
+                                RENDER_DATA_for_skin_id[graph_index]["FRAMES"][
                                     "UP_LEFT_WALKING"
                                 ].append(loaded_frame_data)
-                                RENDER_DATA[graph_index]["FRAMES"][
+                                RENDER_DATA_for_skin_id[graph_index]["FRAMES"][
                                     "DOWN_LEFT_WALKING"
                                 ].append(loaded_frame_data)
                             elif base_direction_str == "RIGHT":
-                                RENDER_DATA[graph_index]["FRAMES"][
+                                RENDER_DATA_for_skin_id[graph_index]["FRAMES"][
                                     "UP_RIGHT_WALKING"
                                 ].append(loaded_frame_data)
-                                RENDER_DATA[graph_index]["FRAMES"][
+                                RENDER_DATA_for_skin_id[graph_index]["FRAMES"][
                                     "DOWN_RIGHT_WALKING"
                                 ].append(loaded_frame_data)
 
-                        os.remove(input_json_path)  # Clean up processed file
+                        os.remove(input_json_path)
 
                     except FileNotFoundError:
                         print(
-                            f"    ERROR: File {input_json_path} not found after execution. Skipping."
+                            f"      ERROR: File {input_json_path} not found after execution. Skipping."
                         )
                     except json.JSONDecodeError:
                         print(
-                            f"    ERROR: Could not decode JSON from {input_json_path}. Skipping."
+                            f"      ERROR: Could not decode JSON from {input_json_path}. Skipping."
                         )
                         if os.path.exists(input_json_path):
                             os.remove(input_json_path)
                     except Exception as e:
                         print(
-                            f"    ERROR: An unexpected error occurred while processing {input_json_path}: {e}. Skipping."
+                            f"      ERROR: An unexpected error occurred while processing {input_json_path}: {e}. Skipping."
                         )
                         if os.path.exists(input_json_path):
                             os.remove(input_json_path)
 
-    final_output_filename = "player_skin_variations_render_data.json"
-    final_output_path = os.path.join(
-        ".", final_output_filename
-    )  # Save in current directory, or choose another
+    # Generate 8 individual skin files
+    for i in range(8):
+        current_render_data_for_file = RENDER_DATA_for_skin_id[i]
+        # SEED_DATA is generated uniquely for each of the 8 skin files
+        current_seed_data_for_file = generate_random_seed_data()
 
+        final_output_data_for_this_file = {
+            "TYPE": "SKIN",
+            "RENDER_DATA": current_render_data_for_file,  # Single RENDER_DATA object
+            "SEED_DATA": current_seed_data_for_file,
+        }
+
+        # Filename format: object_layer_data_rave_0.json, object_layer_data_rave_1.json, etc.
+        file_suffix = f"{base_profile_source_name.lower()}_{i}"
+        output_filename = os.path.join(
+            output_skin_dir, f"object_layer_data_{file_suffix}.json"
+        )
+
+        print(f"\n  Generating skin file: {output_filename}")
+        try:
+            with open(output_filename, "w") as f:
+                json.dump(final_output_data_for_this_file, f, indent=4)
+            print(f"    Successfully generated skin definition: {output_filename}")
+        except Exception as e:
+            print(f"    Error saving final data to {output_filename}: {e}")
+
+    # Final cleanup of intermediate frames directory
     try:
-        with open(final_output_path, "w") as f:
-            json.dump(RENDER_DATA, f, indent=4)
-        print(f"\nSuccessfully consolidated all render data into: {final_output_path}")
+        if os.path.exists(intermediate_frames_dir):
+            shutil.rmtree(intermediate_frames_dir)
+            print(f"\nCleaned up intermediate directory: {intermediate_frames_dir}")
     except Exception as e:
-        print(f"\nError saving final consolidated data to {final_output_path}: {e}")
-
-    # Optional: Clean up the intermediate directory if no longer needed
-    # if os.path.exists(output_directory):
-    #     shutil.rmtree(output_directory)
-    #     print(f"Cleaned up intermediate directory: {output_directory}")
+        print(
+            f"\nWarning: Could not clean up intermediate directory {intermediate_frames_dir}: {e}"
+        )
 
     print(
-        f"\nBuild process finished. Check '{output_directory}' for any remaining intermediate files (if not cleaned up)."
+        f"\nBuild process finished. Check '{output_skin_dir}' for generated skin files."
     )
