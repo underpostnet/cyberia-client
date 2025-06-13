@@ -239,7 +239,8 @@ class NetworkStateClient:
             network_proxy=self.proxy,  # Pass the proxy instance
         )
         self.map_cyberia_view = MapCyberiaView(
-            object_layer_render_instance=self.object_layer_render
+            object_layer_render_instance=self.object_layer_render,
+            network_proxy=self.proxy, # Pass the proxy instance
         )
 
         # Populate UI_ROUTES with view instances and render callbacks
@@ -267,6 +268,7 @@ class NetworkStateClient:
             object_layer_render_instance=self.object_layer_render,
             texture_manager=self.texture_manager,
             keyboard_core_component=self.keyboard_core_component,
+            network_proxy=self.proxy,  # Pass the proxy instance
             routes=UI_ROUTES,
             ui_modal_background_color=Color(*UI_MODAL_BACKGROUND_COLOR),
             # Pass rendering callbacks for generic button content

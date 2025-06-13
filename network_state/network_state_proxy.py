@@ -54,6 +54,7 @@ class NetworkStateProxy:
         self.offline_network_state = NetworkState(
             WORLD_WIDTH, WORLD_HEIGHT, NETWORK_OBJECT_SIZE
         )
+        self.current_channel_id: str = "channel_alpha" # Default channel
         self.my_player_id: str | None = None
         self.offline_player_target_pos: Vector2 | None = None
         self.offline_player_path: list[dict[str, float]] = []
@@ -75,6 +76,9 @@ class NetworkStateProxy:
                 logging.info(
                     f"Proxy received player ID: {self.my_player_id} from real server."
                 )
+            elif msg_type == "channel_assigned": # If server assigns channel
+                self.current_channel_id = data.get("channel_id", self.current_channel_id)
+                logging.info(f"Proxy assigned to channel: {self.current_channel_id} by real server.")
             # Potentially handle other specific real server messages if needed,
             # though generic forwarding covers server_chat_message.
             # Example: if msg_type == "server_chat_message":
@@ -188,10 +192,25 @@ class NetworkStateProxy:
                 logging.info(
                     f"Proxy offline: processed client_chat_message for room {room_id}"
                 )
-            else:
-                logging.warning(
-                    "Proxy offline: client_chat_message missing room_id or text."
+        elif msg_type == "client_change_channel_request":
+            new_channel_id = payload.get("channel_id")
+            if new_channel_id and new_channel_id != self.current_channel_id:
+                logging.info(f"Proxy offline: Received request to change channel to {new_channel_id}")
+                self.current_channel_id = new_channel_id
+                # Reset network state for the new channel
+                self.offline_network_state = NetworkState(
+                    WORLD_WIDTH, WORLD_HEIGHT, NETWORK_OBJECT_SIZE
                 )
+                self.my_player_id = None # Player ID will be reassigned
+                self.offline_player_path = []
+                self.offline_player_target_pos = None
+                self._send_offline_initial_state() # Send new initial state for the new channel
+                # Client needs to be aware that the world has changed.
+                # The new network_state_update and player_assigned messages should handle this.
+            elif not new_channel_id:
+                logging.warning("Proxy offline: client_change_channel_request missing channel_id.")
+            else: # new_channel_id == self.current_channel_id
+                logging.info(f"Proxy offline: Already on channel {new_channel_id}. No change.")
 
     def _send_offline_initial_state(self):
         """Generates and sends an initial state for offline mode."""
@@ -199,7 +218,9 @@ class NetworkStateProxy:
 
         # Always extract the player ID from the newly generated initial state
         # and update the proxy's my_player_id and inform the client.
-        player_id_found = False
+        # The factory now generates based on self.current_channel_id
+        initial_state_data = self.network_object_factory.generate_initial_state_dict(self.current_channel_id)
+        player_id_found = False # Reset for this function call
 
         # Update the offline network state with the generated initial objects
         # This also creates the NetworkObject instances in offline_network_state
@@ -231,7 +252,11 @@ class NetworkStateProxy:
         # Send the initial state to the client
         self._send_to_client(initial_state_data)
         self._send_to_client(
-            {"type": "player_assigned", "player_id": self.my_player_id}
+            {
+                "type": "player_assigned",
+                "player_id": self.my_player_id,
+                "channel_id": self.current_channel_id # Also inform client of current channel
+            }
         )
         logging.info("Proxy sent offline initial state to client.")
 

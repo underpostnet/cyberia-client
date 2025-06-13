@@ -14,6 +14,7 @@ from config import (
 from object_layer.object_layer_render import ObjectLayerRender
 from network_state.network_state import NetworkState  # Import for type hinting
 from network_state.network_object import NetworkObject  # Import for type hinting
+from network_state.network_state_proxy import NetworkStateProxy # For sending channel change requests
 from raylibpy import get_mouse_wheel_move  # Import for mouse wheel input
 
 logging.basicConfig(
@@ -28,7 +29,11 @@ class MapCyberiaView:
     with different zoom levels.
     """
 
-    def __init__(self, object_layer_render_instance: ObjectLayerRender):
+    def __init__(
+        self,
+        object_layer_render_instance: ObjectLayerRender,
+        network_proxy: NetworkStateProxy, # Added network_proxy
+    ):
         self.object_layer_render = object_layer_render_instance
         self.title_text = "World Map"
 
@@ -42,6 +47,10 @@ class MapCyberiaView:
 
         self.map_viewport_x = 0
         self.map_viewport_y = 0
+        self.network_proxy = network_proxy # Store the proxy instance
+
+        # Channel switching buttons
+        self.channel_buttons: list[dict] = [] # To store button rects and IDs
 
     @property
     def current_zoom_factor(self) -> float:
@@ -332,6 +341,7 @@ class MapCyberiaView:
         # --- Zoom Controls (Text and Buttons) ---
         button_size = 40  # Set button size to 40x40px
         button_padding = 5
+        control_area_padding_from_bottom_right = 10 # Overall padding for the control group
         controls_font_size = UI_FONT_SIZE  # Adjusted font size for controls text
 
         # Define colors for button states
@@ -347,13 +357,13 @@ class MapCyberiaView:
         # Calculate positions (from right to left for layout)
         # Zoom Out Button (-)
         zoom_out_btn_x = (
-            self.map_viewport_x + self.map_viewport_width - button_padding - button_size
+            self.map_viewport_x + self.map_viewport_width - control_area_padding_from_bottom_right - button_size
         )
         zoom_out_btn_y = (
             self.map_viewport_y
             + self.map_viewport_height
             - button_size
-            - button_padding
+            - control_area_padding_from_bottom_right
         )
         zoom_out_button_rect = Rectangle(
             zoom_out_btn_x, zoom_out_btn_y, button_size, button_size
@@ -376,11 +386,57 @@ class MapCyberiaView:
             zoom_in_btn_y + (button_size - controls_font_size) // 2
         )  # Vertically center text with buttons
 
+        # --- Channel Switch Buttons ---
+        # Position channel buttons to the left of the zoom controls or at the top-left of viewport
+        self.channel_buttons = [] # Clear previous button definitions
+        channel_button_y = self.map_viewport_y + control_area_padding_from_bottom_right
+        channel_button_x_start = self.map_viewport_x + control_area_padding_from_bottom_right
+        
+        # Example channel IDs - these should ideally come from a config or be discoverable
+        available_channels = ["channel_alpha", "channel_beta"]
+        current_channel_id = modal_component.data_to_pass.get("current_channel_id", "channel_alpha")
+
+        for i, chan_id in enumerate(available_channels):
+            btn_text = f"Ch: {chan_id.split('_')[-1].capitalize()}" # e.g., "Ch: Alpha"
+            btn_text_width = self.object_layer_render.measure_text(btn_text, controls_font_size -2)
+            chan_btn_width = btn_text_width + 2 * button_padding # Dynamic width based on text
+            chan_btn_height = button_size - 10 # Slightly smaller height
+
+            chan_btn_x = channel_button_x_start + sum(b['rect'].width + button_padding for b in self.channel_buttons)
+            
+            # Check if this button fits before adding
+            if chan_btn_x + chan_btn_width > self.map_viewport_x + self.map_viewport_width - control_area_padding_from_bottom_right:
+                break # Stop adding channel buttons if they overflow
+
+            channel_button_rect = Rectangle(chan_btn_x, channel_button_y, chan_btn_width, chan_btn_height)
+            self.channel_buttons.append({"id": chan_id, "text": btn_text, "rect": channel_button_rect})
+
+            is_current_channel = chan_id == current_channel_id
+            
+            actual_chan_btn_bg_color = enabled_button_bg_color
+            if is_current_channel:
+                actual_chan_btn_bg_color = Color(0,100,0,220) # Dark green for current channel
+            elif check_collision_point_rec(Vector2(mouse_x, mouse_y), channel_button_rect):
+                actual_chan_btn_bg_color = hover_button_bg_color
+
+            self.object_layer_render.draw_rectangle_rec(channel_button_rect, actual_chan_btn_bg_color)
+            self.object_layer_render.draw_rectangle_lines_ex(channel_button_rect, 1, button_border_color)
+            self.object_layer_render.draw_text(
+                btn_text,
+                int(chan_btn_x + (chan_btn_width - btn_text_width) // 2),
+                int(channel_button_y + (chan_btn_height - (controls_font_size - 2)) // 2),
+                controls_font_size - 2,
+                enabled_button_text_color
+            )
+
+
         # Check if there's enough space to draw controls
         min_controls_width_needed = (
             zoom_level_text_width + (button_padding + button_size) * 2 + button_padding
         )
         min_controls_height_needed = button_size + button_padding * 2
+
+
 
         if (
             self.map_viewport_width >= min_controls_width_needed
@@ -552,7 +608,24 @@ class MapCyberiaView:
         This view has no interactive elements that respond to simple clicks,
         as zoom is controlled by mouse wheel.
         """
-        return False
+        if not is_mouse_button_pressed:
+            return False
+
+        # Check channel button clicks
+        mouse_pos_vec = Vector2(mouse_x, mouse_y)
+        if check_collision_point_rec(mouse_pos_vec, Rectangle(self.map_viewport_x, self.map_viewport_y, self.map_viewport_width, self.map_viewport_height)):
+            for btn_data in self.channel_buttons:
+                if check_collision_point_rec(mouse_pos_vec, btn_data["rect"]):
+                    channel_to_switch = btn_data["id"]
+                    logging.info(f"Map View: Channel button '{channel_to_switch}' clicked.")
+                    # Send message to proxy to change channel
+                    if self.network_proxy:
+                        self.network_proxy.send_client_message(
+                            "client_change_channel_request",
+                            {"channel_id": channel_to_switch}
+                        )
+                    return True # Click was handled
+        return False # No map-specific click handled
 
     def reset_view(self):
         """

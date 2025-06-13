@@ -18,6 +18,8 @@ from raylibpy import (
     draw_rectangle,
     draw_rectangle_lines,
     draw_text,
+    draw_rectangle_rec, # Added for draw_rectangle_rec
+    draw_rectangle_lines_ex, # Added for draw_rectangle_lines_ex
     end_drawing,
     end_mode2d,
     get_frame_time,
@@ -29,6 +31,7 @@ from raylibpy import (
     set_target_fps,
     window_should_close,
     Camera2D,
+    Rectangle, # Ensure Rectangle is imported
     measure_text as raylib_measure_text,
     draw_texture_ex,
     draw_poly,
@@ -337,6 +340,14 @@ class ObjectLayerRender:
     def draw_rectangle(self, x: int, y: int, width: int, height: int, color: Color):
         """Draws a filled rectangle."""
         draw_rectangle(x, y, width, height, color)
+
+    def draw_rectangle_rec(self, rec: Rectangle, color: Color):
+        """Draws a filled rectangle using a Rectangle object."""
+        draw_rectangle_rec(rec, color)
+
+    def draw_rectangle_lines_ex(self, rec: Rectangle, line_thick: float, color: Color):
+        """Draws a rectangle outline with extended parameters using a Rectangle object."""
+        draw_rectangle_lines_ex(rec, line_thick, color)
 
     def draw_rectangle_lines(
         self, x: int, y: int, width: int, height: int, color: Color
@@ -671,9 +682,9 @@ class ObjectLayerRender:
 
                 # Ensure matrix_value is a valid index for color_map
                 if not (0 <= matrix_value < len(color_map)):
-                    logging.warning(
-                        f"Matrix value {matrix_value} is out of bounds for color_map (size {len(color_map)}). Defaulting to black."
-                    )
+                    # logging.warning(
+                    #     f"Matrix value {matrix_value} is out of bounds for color_map (size {len(color_map)}). Defaulting to black."
+                    # )
                     current_color = BLACK  # Fallback to black if index is out of bounds
                 else:
                     current_color = color_map[matrix_value]
