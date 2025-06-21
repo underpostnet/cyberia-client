@@ -1,6 +1,7 @@
 import collections
 import logging
 import math
+import inspect  # Added import for inspect
 import time
 from enum import Enum, auto
 from typing import Union
@@ -163,6 +164,7 @@ class ObjectLayerAnimation:
         """Dynamically updates the animation's frames and color map.
         Ensures self.color_map always contains Color objects, converting from tuples/lists if necessary.
         """
+        # Update frames_map directly
         self.frames_map = new_frames_map
 
         processed_color_map = []
@@ -171,10 +173,15 @@ class ObjectLayerAnimation:
                 isinstance(item, (tuple, list)) and len(item) == 4
             ):  # Handle both tuple and list of 4 ints (r,g,b,a)
                 processed_color_map.append(Color(item[0], item[1], item[2], item[3]))
-            elif isinstance(
-                item, Color
-            ):  # If it's already a Color object, use it directly
-                processed_color_map.append(item)
+            elif (
+                hasattr(item, "r")
+                and hasattr(item, "g")
+                and hasattr(item, "b")
+                and hasattr(item, "a")
+            ):
+                # If it's already a Color-like object, extract its components and create a new Color object.
+                # This handles cases where pyray.Color objects might be wrapped by CFFI.
+                processed_color_map.append(Color(item.r, item.g, item.b, item.a))
             else:
                 logging.warning(f"Unexpected color data type: {type(item)}. Skipping.")
         self.color_map = processed_color_map
@@ -186,7 +193,9 @@ class ObjectLayerAnimation:
     def get_current_frame_matrix_for_editing(self, timestamp: float) -> list[list[int]]:
         """Returns the current frame matrix for direct modification (e.g., painting)."""
         object_layer_key = self._get_current_object_layer_key(timestamp)
-        frames_list = self.frames_map.get(object_layer_key)
+        frames_list = self.frames_map.get(
+            object_layer_key
+        )  # This is a list of lists of ints
 
         if not frames_list:
             return [[0]]  # Return a minimal valid matrix if no frames
@@ -212,15 +221,15 @@ class ObjectLayerAnimation:
         """Returns the current frame matrix, color map, horizontal flip status (always False), and current frame index."""
         object_layer_key = self._get_current_object_layer_key(timestamp)
         frames_list = self.frames_map.get(object_layer_key)
-
-        if not frames_list:
-            # Default if no frames, ensuring the matrix is a list of lists of integers
+        if (
+            not frames_list
+        ):  # If no frames are defined for the current key, return a default empty frame
             return (
-                [[[-1]]],
+                [[0]],
                 self.color_map,
                 False,
                 0,
-            )  # Changed [[0]] to [[[-1]]] to correctly represent an empty pixel
+            )  # Return a single transparent pixel (index 0)
 
         current_frame_index_to_use = self.current_frame_index
         if self.is_paused:
@@ -246,8 +255,8 @@ class ObjectLayerAnimation:
         """Pauses the animation at a specific frame."""
         object_layer_key = self._get_current_object_layer_key(timestamp)
         frames_list = self.frames_map.get(object_layer_key)
-
         if not frames_list:
+            # If no frames, just set to paused and default to frame 0
             logging.warning(
                 f"Cannot pause, no frames found for key: {object_layer_key}"
             )
@@ -255,20 +264,20 @@ class ObjectLayerAnimation:
             self.paused_frame_index = 0
             return
 
-        if 0 <= frame_index < len(frames_list):
-            self.is_paused = True
-            self.paused_frame_index = frame_index
-            self.current_frame_index = frame_index
-            self.frame_timer = 0.0
-            logging.info(f"Animation paused at frame {frame_index}")
-        else:
+        # Ensure frame_index is within valid bounds
+        clamped_frame_index = max(0, min(frame_index, len(frames_list) - 1))
+        if clamped_frame_index != frame_index:
             logging.warning(
-                f"Invalid frame index {frame_index} for pausing. Max frames: {len(frames_list)}"
+                f"Invalid frame index {frame_index} for pausing. Clamping to {clamped_frame_index}. Max frames: {len(frames_list)}"
             )
-            self.is_paused = (
-                True  # Still pause, but at current frame if index is invalid
-            )
-            self.paused_frame_index = self.current_frame_index
+
+        self.is_paused = True
+        self.paused_frame_index = clamped_frame_index
+        self.current_frame_index = (
+            clamped_frame_index  # Set current frame to the paused frame
+        )
+        self.frame_timer = 0.0  # Reset timer to start new frame
+        logging.info(f"Animation paused at frame {clamped_frame_index}")
 
     def resume(self):
         """Resumes the animation from its current frame."""
@@ -683,34 +692,11 @@ class ObjectLayerRender:
 
                 # Ensure matrix_value is a valid index for color_map
                 if not (0 <= matrix_value < len(color_map)):
-                    # logging.warning(
-                    #     f"Matrix value {matrix_value} is out of bounds for color_map (size {len(color_map)}). Defaulting to black."
-                    # )
-                    current_color = BLACK  # Fallback to black if index is out of bounds
+                    current_color = Color(
+                        0, 0, 0, 0
+                    )  # Default to transparent if index is out of bounds
                 else:
                     current_color = color_map[matrix_value]
-
-                # Defensive check: Ensure current_color is a Color object.
-                # If it's a tuple/list, convert it and fix it in the color_map.
-                if isinstance(current_color, (list, tuple)):
-                    if len(current_color) == 4:
-                        new_color = Color(
-                            current_color[0],
-                            current_color[1],
-                            current_color[2],
-                            current_color[3],
-                        )
-                        # Fix the color_map in-place for subsequent renders, but only if index is valid
-                        if 0 <= matrix_value < len(color_map):
-                            color_map[matrix_value] = new_color
-                            current_color = new_color
-                        else:
-                            # This case should ideally be caught by the earlier check,
-                            # but if it happens, use the new color without writing back to an invalid index.
-                            current_color = new_color
-                    else:
-                        # Malformed color data, use a fallback
-                        current_color = BLACK
 
                 if current_color.a == 0:  # Skip fully transparent pixels
                     continue

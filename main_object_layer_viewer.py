@@ -307,13 +307,30 @@ if __name__ == "__main__":
                                 "RENDER_DATA"
                             ]
                         )
+                        # Ensure the COLORS list in the cloned data contains pyray.Color objects.
+                        # This is crucial because deepcopying CFFI objects (pyray.Color) can be problematic,
+                        # and the original data might contain raw tuples/lists.
+                        # ObjectLayerAnimation.set_frames_and_colors expects pyray.Color objects or (r,g,b,a) tuples/lists.
+                        # We'll ensure it gets pyray.Color objects here for consistency in the clone.
+
                         processed_colors = []
                         for item in original_render_data_for_clone["COLORS"]:
                             if isinstance(item, (tuple, list)) and len(item) == 4:
                                 processed_colors.append(
                                     Color(item[0], item[1], item[2], item[3])
                                 )
-                            elif isinstance(item, Color):
+                            # Check if it's already a Color-like object (has r,g,b,a attributes)
+                            # This handles cases where pyray.Color objects might be wrapped by CFFI
+                            # and not directly recognized by isinstance(item, Color) after deepcopy.
+                            elif (
+                                hasattr(item, "r")
+                                and hasattr(item, "g")
+                                and hasattr(item, "b")
+                                and hasattr(item, "a")
+                            ):
+                                processed_colors.append(
+                                    Color(item.r, item.g, item.b, item.a)
+                                )
                                 processed_colors.append(item)
                             else:
                                 logging.warning(
@@ -384,7 +401,16 @@ if __name__ == "__main__":
                         processed_colors_on_reset.append(
                             Color(item[0], item[1], item[2], item[3])
                         )
-                    elif isinstance(item, Color):
+                    # Use the same robust check as above
+                    elif (
+                        hasattr(item, "r")
+                        and hasattr(item, "g")
+                        and hasattr(item, "b")
+                        and hasattr(item, "a")
+                    ):
+                        processed_colors_on_reset.append(
+                            Color(item.r, item.g, item.b, item.a)
+                        )
                         processed_colors_on_reset.append(item)
                     else:
                         logging.warning(
