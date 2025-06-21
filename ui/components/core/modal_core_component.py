@@ -1,5 +1,5 @@
 import logging
-from raylibpy import Color, Rectangle, Vector2
+from pyray import Color, Rectangle, Vector2
 
 logging.basicConfig(
     level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s"
@@ -40,7 +40,7 @@ class ModalCoreComponent:
             padding_right: Padding from the right of the screen.
             horizontal_offset: Horizontal offset for positioning multiple modals.
             background_color: The background color of the modal.
-            icon_texture: The raylibpy Texture object for the icon, if any.
+            icon_texture: The pyray Texture object for the icon, if any.
             title_text: The initial title text for the modal.
         """
         self.screen_width = screen_width

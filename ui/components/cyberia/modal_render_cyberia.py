@@ -1,5 +1,5 @@
 import logging
-from raylibpy import Color, Vector2, RAYWHITE
+from pyray import Color, Vector2, RAYWHITE
 from config import (
     UI_FONT_SIZE,
     UI_TEXT_COLOR_PRIMARY,

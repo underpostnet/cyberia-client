@@ -3,14 +3,15 @@ import logging
 import math
 import time
 from enum import Enum, auto
+from typing import Union
 
-from raylibpy import (
+from pyray import (
     BLACK,
     LIGHTGRAY,
     Color,
     Vector2,
     begin_drawing,
-    begin_mode2d,
+    begin_mode_2d,
     clear_background,
     close_window,
     draw_circle,
@@ -18,20 +19,20 @@ from raylibpy import (
     draw_rectangle,
     draw_rectangle_lines,
     draw_text,
-    draw_rectangle_rec, # Added for draw_rectangle_rec
-    draw_rectangle_lines_ex, # Added for draw_rectangle_lines_ex
+    draw_rectangle_rec,  # Added for draw_rectangle_rec
+    draw_rectangle_lines_ex,  # Added for draw_rectangle_lines_ex
     end_drawing,
-    end_mode2d,
+    end_mode_2d,
     get_frame_time,
     get_mouse_position,
-    get_screen_to_world2d,
+    get_screen_to_world_2d,
     init_window,
     is_key_pressed,
     is_mouse_button_pressed,
     set_target_fps,
     window_should_close,
     Camera2D,
-    Rectangle, # Ensure Rectangle is imported
+    Rectangle,  # Ensure Rectangle is imported
     measure_text as raylib_measure_text,
     draw_texture_ex,
     draw_poly,
@@ -71,7 +72,7 @@ class ObjectLayerAnimation:
         is_stateless: bool = False,
     ):
         self.frames_map = frames_map
-        # Convert raw color tuples to raylibpy.Color objects upon initialization
+        # Convert raw color tuples to pyray.Color objects upon initialization
         self.color_map = [Color(r, g, b, a) for r, g, b, a in raw_color_map]
         self.frame_duration = frame_duration
         self.is_stateless = is_stateless
@@ -331,11 +332,11 @@ class ObjectLayerRender:
         Args:
             camera: The Camera2D instance to use for rendering.
         """
-        begin_mode2d(camera)
+        begin_mode_2d(camera)
 
     def end_camera_mode(self):
         """Ends 2D camera mode."""
-        end_mode2d()
+        end_mode_2d()
 
     def draw_rectangle(self, x: int, y: int, width: int, height: int, color: Color):
         """Draws a filled rectangle."""
@@ -386,25 +387,25 @@ class ObjectLayerRender:
         Args:
             camera: The Camera2D instance to use for coordinate conversion.
         """
-        return get_screen_to_world2d(get_mouse_position(), camera)
+        return get_screen_to_world_2d(get_mouse_position(), camera)
 
     def is_mouse_button_pressed(self, button: int) -> bool:
         """Checks if a mouse button has been pressed in the current frame."""
         return is_mouse_button_pressed(button)
 
-    def is_key_pressed(self, key: int) -> bool:
+    def is_key_pressed(self, key: int) -> bool:  # type: ignore
         """Checks if a keyboard key has been pressed in the current frame."""
         return is_key_pressed(key)
 
-    def get_char_pressed(self) -> int | None:
+    def get_char_pressed(self) -> Union[int, None]:  # type: ignore
         """Returns the character value of the key pressed in the current frame, or None."""
         return get_char_pressed()
 
-    def get_key_pressed(self) -> int | None:
+    def get_key_pressed(self) -> Union[int, None]:  # type: ignore
         """Returns the key code of the key pressed in the current frame, or None."""
         return get_key_pressed()
 
-    def is_key_down(self, key: int) -> bool:
+    def is_key_down(self, key: int) -> bool:  # type: ignore
         """Checks if a keyboard key is currently being held down."""
         return is_key_down(key)
 
@@ -434,12 +435,12 @@ class ObjectLayerRender:
         for y in range(0, self.world_height + 1, self.network_object_size):
             self.draw_line(0, y, self.world_width, y, LIGHTGRAY)
 
-    def get_object_layer_data_for_id(self, object_layer_id: str) -> dict | None:
+    def get_object_layer_data_for_id(self, object_layer_id: str) -> Union[dict, None]:  # type: ignore
         """Retrieves animation data for a specific object layer ID from the loaded data."""
         object_data = self.object_layer_data.get(object_layer_id)
         return object_data.get("RENDER_DATA") if object_data else None
 
-    def get_object_layer_definition(self, object_layer_id: str) -> dict | None:
+    def get_object_layer_definition(self, object_layer_id: str) -> Union[dict, None]:
         """Retrieves the full object layer definition for a specific ID."""
         definition = self.object_layer_data.get(object_layer_id)
         logging.debug(
@@ -689,6 +690,28 @@ class ObjectLayerRender:
                 else:
                     current_color = color_map[matrix_value]
 
+                # Defensive check: Ensure current_color is a Color object.
+                # If it's a tuple/list, convert it and fix it in the color_map.
+                if isinstance(current_color, (list, tuple)):
+                    if len(current_color) == 4:
+                        new_color = Color(
+                            current_color[0],
+                            current_color[1],
+                            current_color[2],
+                            current_color[3],
+                        )
+                        # Fix the color_map in-place for subsequent renders, but only if index is valid
+                        if 0 <= matrix_value < len(color_map):
+                            color_map[matrix_value] = new_color
+                            current_color = new_color
+                        else:
+                            # This case should ideally be caught by the earlier check,
+                            # but if it happens, use the new color without writing back to an invalid index.
+                            current_color = new_color
+                    else:
+                        # Malformed color data, use a fallback
+                        current_color = BLACK
+
                 if current_color.a == 0:  # Skip fully transparent pixels
                     continue
 
@@ -764,7 +787,7 @@ class ObjectLayerRender:
         return self._object_layer_animation_instances[anim_key]
 
     def remove_object_layer_animation(
-        self, obj_id: str, object_layer_id: str | None = None
+        self, obj_id: str, object_layer_id: Union[str, None] = None
     ):
         """Removes an object layer animation instance and its associated direction history."""
         keys_to_remove = []
@@ -894,7 +917,7 @@ class ObjectLayerRender:
 
     def get_object_layer_animation_properties(
         self, obj_id: str, object_layer_id: str
-    ) -> dict | None:
+    ) -> Union[dict, None]:
         """Retrieves properties (including the animation instance) of an active object layer animation."""
         anim_key = f"{obj_id}_{object_layer_id}"
         return self._object_layer_animation_instances.get(anim_key)
@@ -930,6 +953,6 @@ class ObjectLayerRender:
             pixel_size_in_display=target_pixel_size,
         )
 
-    def get_smoothed_object_position(self, obj_id: str) -> Vector2 | None:
+    def get_smoothed_object_position(self, obj_id: str) -> Union[Vector2, None]:  # type: ignore
         """Returns the smoothed rendering position of a network object."""
         return self._rendered_network_object_positions.get(obj_id)

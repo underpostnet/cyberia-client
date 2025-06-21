@@ -1,8 +1,8 @@
 import logging
-from typing import Callable, Dict, Any, List
+from typing import Callable, Dict, Any, List, Union
 from functools import partial
 
-from raylibpy import (
+from pyray import (
     Color,
     is_mouse_button_down,
     MOUSE_BUTTON_LEFT,
@@ -15,7 +15,9 @@ from object_layer.object_layer_render import ObjectLayerRender
 from ui.components.core.modal_main_bar_component import (
     ModalMainBarComponent,
 )  # Updated Import Path
-from network_state.network_state_proxy import NetworkStateProxy # For passing to MapView
+from network_state.network_state_proxy import (
+    NetworkStateProxy,
+)  # For passing to MapView
 
 
 logging.basicConfig(
@@ -40,7 +42,7 @@ class RouterCoreComponent:
         object_layer_render_instance: ObjectLayerRender,
         texture_manager: TextureManager,
         keyboard_core_component: KeyboardCoreComponent,
-        network_proxy: NetworkStateProxy, # Added network_proxy
+        network_proxy: NetworkStateProxy,  # Added network_proxy
         routes: List[Dict[str, Any]],
         ui_modal_background_color: Color,
         modal_width: int = 300,
@@ -72,12 +74,12 @@ class RouterCoreComponent:
         self.object_layer_render = object_layer_render_instance
         self.texture_manager = texture_manager
         self.keyboard_core_component = keyboard_core_component
-        self.network_proxy = network_proxy # Store the proxy
+        self.network_proxy = network_proxy  # Store the proxy
         self.ui_modal_background_color = ui_modal_background_color
 
         self.routes = routes
-        self.active_route_path: str | None = None
-        self.active_view_modal: ModalCoreComponent | None = None
+        self.active_route_path: Union[str, None] = None  # type: ignore
+        self.active_view_modal: Union[ModalCoreComponent, None] = None  # type: ignore
 
         # Configuration for modals
         self.modal_width = modal_width
@@ -438,7 +440,7 @@ class RouterCoreComponent:
                         "key_pressed": self.keyboard_core_component.get_key_pressed(),
                         "is_key_down_map": self.keyboard_core_component.get_is_key_down_map(),
                         "dt": dt,
-                        "current_channel_id": self.network_proxy.current_channel_id, # Pass current channel
+                        "current_channel_id": self.network_proxy.current_channel_id,  # Pass current channel
                     }
                 )
                 # Update modal title dynamically from the view instance

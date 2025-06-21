@@ -1,9 +1,13 @@
 import logging
 import math
 import random
+from typing import (
+    Union,
+    Optional,
+)  # Added Optional for clarity, though Union handles it
 import time
 
-from raylibpy import Color, Vector2
+from pyray import Color, Vector2
 
 from config import (
     NETWORK_OBJECT_TYPE_DEFAULT_OBJECT_LAYER_IDS,
@@ -32,8 +36,8 @@ class NetworkObject:
         is_obstacle: bool = False,
         speed: float = 200.0,
         network_object_type: str = "UNKNOWN",
-        object_layer_ids: list[str] | None = None,
-        decay_time: float | None = None,
+        object_layer_ids: Union[list[str], None] = None,
+        decay_time: Union[float, None] = None,
         is_persistent: bool = True,
     ):
         self.obj_id = obj_id
@@ -61,24 +65,26 @@ class NetworkObject:
         self._prev_x = x  # Previous X position for movement calculation
         self._prev_y = y  # Previous Y position for movement calculation
 
-        self._decay_time = decay_time  # Timestamp when this object should decay
+        self._decay_time: Union[float, None] = (
+            decay_time  # Timestamp when this object should decay
+        )
         self.is_persistent = (
             is_persistent  # If True, object is not automatically removed
         )
 
         # Autonomous movement attributes (specific to BOT-QUEST-PROVIDER)
-        self._initial_pos: Vector2 | None = None
+        self._initial_pos: Union[Vector2, None] = None
         self._wander_radius: float = 0.0
         self._path_cooldown: float = 0.0
         self._last_path_time: float = 0.0
 
-    @property
-    def decay_time(self) -> float | None:
+    @property  # type: ignore
+    def decay_time(self) -> Union[float, None]:
         """Returns the decay time of the object."""
         return self._decay_time
 
-    @decay_time.setter
-    def decay_time(self, value: float | None):
+    @decay_time.setter  # type: ignore
+    def decay_time(self, value: Union[float, None]):
         """Sets the decay time of the object."""
         self._decay_time = value
 
@@ -273,7 +279,7 @@ class NetworkObject:
                 # If no path found, reset cooldown to try again soon
                 self._last_path_time = current_time
 
-    def get_display_label(self) -> str | None:
+    def get_display_label(self) -> Optional[str]:
         """
         Returns a string label to be displayed above the network object,
         or None if no label should be displayed.

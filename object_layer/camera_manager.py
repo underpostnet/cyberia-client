@@ -1,5 +1,5 @@
 import logging
-from raylibpy import Camera2D, Vector2, get_screen_width, get_screen_height
+from pyray import Camera2D, Vector2, get_screen_width, get_screen_height
 
 from config import CAMERA_SMOOTHNESS, NETWORK_OBJECT_SIZE, WORLD_WIDTH, WORLD_HEIGHT
 

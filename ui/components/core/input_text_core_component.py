@@ -1,5 +1,5 @@
 import logging
-from raylibpy import (
+from pyray import (
     Color,
     Rectangle,
     get_clipboard_text,
@@ -25,6 +25,7 @@ from raylibpy import (
     begin_scissor_mode,  # Import for clipping
     end_scissor_mode,  # Import for clipping
 )
+from typing import Union
 
 logging.basicConfig(level=logging.INFO, format="%s - %(levelname)s - %(message)s")
 
@@ -82,10 +83,10 @@ class InputTextCoreComponent:
         self.cursor_position = len(initial_text)  # Cursor at end of initial text
 
         # Selection specific attributes
-        self.selection_start: int | None = (
+        self.selection_start: Union[int, None] = (
             None  # Index of the start of the selection (inclusive)
         )
-        self.selection_end: int | None = (
+        self.selection_end: Union[int, None] = (
             None  # Index of the end of the selection (exclusive)
         )
         self.is_dragging_selection: bool = False
@@ -266,8 +267,8 @@ class InputTextCoreComponent:
     def update(
         self,
         dt: float,
-        char_pressed: int | None,
-        key_pressed: int | None,
+        char_pressed: Union[int, None],
+        key_pressed: Union[int, None],
         is_key_down_map: dict,
     ):
         """

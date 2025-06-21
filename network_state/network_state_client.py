@@ -1,9 +1,10 @@
 import logging
 import threading
 import time
+from typing import Union
 from functools import partial
 
-from raylibpy import (
+from pyray import (
     MOUSE_BUTTON_LEFT,
     RAYWHITE,
     Vector2,
@@ -188,10 +189,10 @@ class NetworkStateClient:
         )
 
         self.network_state = NetworkState(
-            WORLD_WIDTH, WORLD_HEIGHT, NETWORK_OBJECT_SIZE
-        )
-        self.my_player_id: str | None = None
-        self.my_network_object: NetworkObject | None = None
+            WORLD_WIDTH, WORLD_HEIGHT, NETWORK_OBJECT_SIZE  # type: ignore
+        )  # type: ignore
+        self.my_player_id: Union[str, None] = None  # type: ignore
+        self.my_network_object: Union[NetworkObject, None] = None  # type: ignore
 
         self.message_queue: list[dict] = []
         self.message_queue_lock = threading.Lock()
@@ -240,7 +241,7 @@ class NetworkStateClient:
         )
         self.map_cyberia_view = MapCyberiaView(
             object_layer_render_instance=self.object_layer_render,
-            network_proxy=self.proxy, # Pass the proxy instance
+            network_proxy=self.proxy,  # Pass the proxy instance
         )
 
         # Populate UI_ROUTES with view instances and render callbacks
@@ -279,8 +280,8 @@ class NetworkStateClient:
         # Initialize the InteractionManager
         self.interaction_manager = InteractionManager(NETWORK_OBJECT_SIZE)
 
-    def _set_my_player_id(self, player_id: str):
-        """Sets the client's player ID, called by the proxy."""
+    def _set_my_player_id(self, player_id: str):  # type: ignore
+        """Sets the client's player ID, called by the proxy."""  # type: ignore
         self.my_player_id = player_id
 
     def _process_queued_messages(self):
@@ -292,8 +293,8 @@ class NetworkStateClient:
         for data in messages_to_process:
             self._handle_proxy_message(data)
 
-    def _handle_proxy_message(self, data: dict):
-        """Handles messages forwarded by the proxy."""
+    def _handle_proxy_message(self, data: dict):  # type: ignore
+        """Handles messages forwarded by the proxy."""  # type: ignore
         msg_type = data.get("type")
         if msg_type == "network_state_update":
             if "network_objects" in data:
@@ -372,10 +373,11 @@ class NetworkStateClient:
                 f"Unknown message type received from proxy: {msg_type} - {data}"
             )
 
-    def send_message_to_proxy(self, msg_type: str, payload: dict | None = None):
+    def send_message_to_proxy(self, msg_type: str, payload: Union[dict, None] = None):  # type: ignore
         """Sends a message to the NetworkStateProxy."""
         self.proxy.send_client_message(msg_type, payload)
 
+    # type: ignore
     def _generate_client_path_gfx_async(
         self, path_coords: list[dict[str, float]], current_time: float
     ):
@@ -407,6 +409,7 @@ class NetworkStateClient:
             f"Generated {len(path_coords)} client-side path GFX points asynchronously."
         )
 
+    # type: ignore
     def run(self):
         """Runs the main client loop."""
         self.proxy.connect()

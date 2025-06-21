@@ -1,5 +1,5 @@
 import logging
-from raylibpy import (
+from pyray import (
     get_char_pressed,
     get_key_pressed,
     is_key_down,
@@ -18,6 +18,7 @@ from raylibpy import (
     KEY_DELETE,
     KEY_A,
 )
+from typing import Union
 
 logging.basicConfig(
     level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s"
@@ -33,8 +34,8 @@ class KeyboardCoreComponent:
     def __init__(
         self, backspace_initial_delay: float = 0.4, backspace_repeat_rate: float = 0.05
     ):
-        self.char_pressed: int | None = None
-        self.key_pressed: int | None = None
+        self.char_pressed: Union[int, None] = None
+        self.key_pressed: Union[int, None] = None
         self.is_key_down_map: dict[int, bool] = (
             {}
         )  # Tracks which keys are currently held down
@@ -118,11 +119,11 @@ class KeyboardCoreComponent:
                     self._is_key_held[key] = False
                     self._key_timers[key] = 0.0
 
-    def get_char_pressed(self) -> int | None:
+    def get_char_pressed(self) -> Union[int, None]:
         """Returns the character pressed in the current frame, or None."""
         return self.char_pressed
 
-    def get_key_pressed(self) -> int | None:
+    def get_key_pressed(self) -> Union[int, None]:
         """
         Returns the key code pressed in the current frame, or None.
         This includes the initial press and subsequent repeated presses due to holding.

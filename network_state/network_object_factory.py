@@ -1,8 +1,9 @@
 import logging
 import random
 import uuid
+from typing import Union
 
-from raylibpy import Color, Vector2
+from pyray import Color, Vector2
 
 from config import (
     NETWORK_OBJECT_SIZE,
@@ -28,11 +29,17 @@ CHANNEL_ALPHA_PLAYER_SPAWNS = [
 ]
 CHANNEL_BETA_PLAYER_SPAWNS = [
     (WORLD_WIDTH / 4, WORLD_HEIGHT / 4 - NETWORK_OBJECT_SIZE / 2),
-    (WORLD_WIDTH * 3/4 - NETWORK_OBJECT_SIZE, WORLD_HEIGHT / 4 - NETWORK_OBJECT_SIZE / 2), # Adjusted to avoid edge cases
-    (WORLD_WIDTH / 2, WORLD_HEIGHT * 3/4 - NETWORK_OBJECT_SIZE / 2),
+    (
+        WORLD_WIDTH * 3 / 4 - NETWORK_OBJECT_SIZE,
+        WORLD_HEIGHT / 4 - NETWORK_OBJECT_SIZE / 2,
+    ),  # Adjusted to avoid edge cases
+    (WORLD_WIDTH / 2, WORLD_HEIGHT * 3 / 4 - NETWORK_OBJECT_SIZE / 2),
 ]
 
-DEFAULT_PLAYER_SPAWN = (WORLD_WIDTH / 2 - NETWORK_OBJECT_SIZE / 2, WORLD_HEIGHT / 2 - NETWORK_OBJECT_SIZE / 2)
+DEFAULT_PLAYER_SPAWN = (
+    WORLD_WIDTH / 2 - NETWORK_OBJECT_SIZE / 2,
+    WORLD_HEIGHT / 2 - NETWORK_OBJECT_SIZE / 2,
+)
 
 
 class NetworkObjectFactory:
@@ -40,9 +47,13 @@ class NetworkObjectFactory:
 
     def get_object_layer_data(self) -> dict:
         """Imports and returns the object layer data."""
-        return OBJECT_LAYER_DATA.copy() # Return a copy to prevent modification of the original
+        return (
+            OBJECT_LAYER_DATA.copy()
+        )  # Return a copy to prevent modification of the original
 
-    def _get_channel_specific_obstacle_mounds(self, channel_id: str) -> list[tuple[int, int, int, int]]:
+    def _get_channel_specific_obstacle_mounds(
+        self, channel_id: str
+    ) -> list[tuple[int, int, int, int]]:
         """Returns obstacle mound configurations for a specific channel."""
         grid_cells_x = WORLD_WIDTH // NETWORK_OBJECT_SIZE
         grid_cells_y = WORLD_HEIGHT // NETWORK_OBJECT_SIZE
@@ -50,34 +61,41 @@ class NetworkObjectFactory:
         grid_center_y = grid_cells_y // 2
 
         # Define obstacle mounds in grid coordinates (start_x, start_y, width, height)
-        obstacle_mounds_grid_default = [ # Renamed from obstacle_mounds_grid to be explicit
-            (grid_center_x - 15, grid_center_y - 10, 6, 8), # Default/Channel Alpha
-            (grid_center_x + 9, grid_center_y - 10, 6, 8),
-            (grid_center_x - 3, grid_center_y - 18, 6, 8),
-            (grid_center_x - 3, grid_center_y + 10, 6, 8),
-            (grid_center_x - 12, grid_center_y - 2, 4, 4),
-            (grid_center_x + 8, grid_center_y - 2, 4, 4),
-            (grid_center_x - 2, grid_center_y - 12, 4, 4),
-            (grid_center_x - 2, grid_center_y + 8, 4, 4),
-            (grid_center_x - 20, grid_center_y - 20, 3, 3),
-            (grid_center_x + 17, grid_center_y - 20, 3, 3),
-            (grid_center_x - 20, grid_center_y + 17, 3, 3),
-            (grid_center_x + 17, grid_center_y + 17, 3, 3),
-            (grid_center_x - 8, grid_center_y - 8, 2, 2),
-            (grid_center_x + 6, grid_center_y + 6, 2, 2),
-        ]
+        obstacle_mounds_grid_default = (
+            [  # Renamed from obstacle_mounds_grid to be explicit
+                (grid_center_x - 15, grid_center_y - 10, 6, 8),  # Default/Channel Alpha
+                (grid_center_x + 9, grid_center_y - 10, 6, 8),
+                (grid_center_x - 3, grid_center_y - 18, 6, 8),
+                (grid_center_x - 3, grid_center_y + 10, 6, 8),
+                (grid_center_x - 12, grid_center_y - 2, 4, 4),
+                (grid_center_x + 8, grid_center_y - 2, 4, 4),
+                (grid_center_x - 2, grid_center_y - 12, 4, 4),
+                (grid_center_x - 2, grid_center_y + 8, 4, 4),
+                (grid_center_x - 20, grid_center_y - 20, 3, 3),
+                (grid_center_x + 17, grid_center_y - 20, 3, 3),
+                (grid_center_x - 20, grid_center_y + 17, 3, 3),
+                (grid_center_x + 17, grid_center_y + 17, 3, 3),
+                (grid_center_x - 8, grid_center_y - 8, 2, 2),
+                (grid_center_x + 6, grid_center_y + 6, 2, 2),
+            ]
+        )
 
         obstacle_mounds_grid_beta = [
-            (grid_center_x - 10, grid_center_y - 15, 8, 6), # Channel Beta - different layout
+            (
+                grid_center_x - 10,
+                grid_center_y - 15,
+                8,
+                6,
+            ),  # Channel Beta - different layout
             (grid_center_x + 2, grid_center_y - 15, 8, 6),
             (grid_center_x - 18, grid_center_y - 3, 8, 6),
             (grid_center_x + 10, grid_center_y - 3, 8, 6),
-            (grid_center_x - 5, grid_center_y - 5, 10, 10), # Central block
+            (grid_center_x - 5, grid_center_y - 5, 10, 10),  # Central block
         ]
 
         if channel_id == "channel_beta":
             return obstacle_mounds_grid_beta
-        return obstacle_mounds_grid_default # Corrected variable name
+        return obstacle_mounds_grid_default  # Corrected variable name
 
     def _world_to_grid_coords(self, world_x: float, world_y: float) -> tuple[int, int]:
         """Converts world coordinates (top-left of object) to grid cell indices."""
@@ -98,8 +116,8 @@ class NetworkObjectFactory:
         preferred_grid_y: int,
         search_radius_grid_cells: int = 10,
         max_attempts: int = 50,
-    ) -> tuple[int, int] | None:
-        """
+    ) -> Union[tuple[int, int], None]:
+        """# type: ignore
         Finds a valid (non-obstacle, within bounds) grid location for spawning.
         Starts with preferred_grid_x, preferred_grid_y, then searches randomly within a radius.
         Returns (grid_x, grid_y) or None if no valid spot is found.
@@ -108,25 +126,35 @@ class NetworkObjectFactory:
         grid_cells_x = len(grid_maze[0]) if grid_cells_y > 0 else 0
 
         # Check preferred location first
-        if 0 <= preferred_grid_y < grid_cells_y and \
-           0 <= preferred_grid_x < grid_cells_x and \
-           grid_maze[preferred_grid_y][preferred_grid_x] == 0:
+        if (
+            0 <= preferred_grid_y < grid_cells_y
+            and 0 <= preferred_grid_x < grid_cells_x
+            and grid_maze[preferred_grid_y][preferred_grid_x] == 0
+        ):
             return preferred_grid_x, preferred_grid_y
 
         # Search randomly within radius
         for _ in range(max_attempts):
-            offset_x = random.randint(-search_radius_grid_cells, search_radius_grid_cells)
-            offset_y = random.randint(-search_radius_grid_cells, search_radius_grid_cells)
+            offset_x = random.randint(
+                -search_radius_grid_cells, search_radius_grid_cells
+            )
+            offset_y = random.randint(
+                -search_radius_grid_cells, search_radius_grid_cells
+            )
             test_x = preferred_grid_x + offset_x
             test_y = preferred_grid_y + offset_y
 
-            if 0 <= test_y < grid_cells_y and \
-               0 <= test_x < grid_cells_x and \
-               grid_maze[test_y][test_x] == 0:
+            if (
+                0 <= test_y < grid_cells_y
+                and 0 <= test_x < grid_cells_x
+                and grid_maze[test_y][test_x] == 0
+            ):
                 return test_x, test_y
 
-        logging.warning(f"Could not find a valid spawn location near ({preferred_grid_x},{preferred_grid_y}) after {max_attempts} attempts.")
-        return None # Fallback: no valid spot found
+        logging.warning(
+            f"Could not find a valid spawn location near ({preferred_grid_x},{preferred_grid_y}) after {max_attempts} attempts."
+        )
+        return None  # Fallback: no valid spot found
 
     def generate_initial_state_dict(self, channel_id: str = "channel_alpha") -> dict:
         """
@@ -154,16 +182,18 @@ class NetworkObjectFactory:
                         if coord_tuple not in seen_coords:
                             wall_coords.append({"X": world_x, "Y": world_y})
                             seen_coords.add(coord_tuple)
-        
+
         # Build a temporary maze based on the generated walls for bot placement
-        temp_maze_for_bots = [[0 for _ in range(grid_cells_x)] for _ in range(grid_cells_y)]
+        temp_maze_for_bots = [
+            [0 for _ in range(grid_cells_x)] for _ in range(grid_cells_y)
+        ]
         for wall_coord_dict in wall_coords:
             wall_x_coord = wall_coord_dict["X"]
             wall_y_coord = wall_coord_dict["Y"]
             # Convert wall's top-left world coord to grid coord
             gx, gy = self._world_to_grid_coords(wall_x_coord, wall_y_coord)
             if 0 <= gx < grid_cells_x and 0 <= gy < grid_cells_y:
-                temp_maze_for_bots[gy][gx] = 1 # Mark as obstacle
+                temp_maze_for_bots[gy][gx] = 1  # Mark as obstacle
 
         for wall_coord in wall_coords:
             wall_id = str(uuid.uuid4())
@@ -180,21 +210,31 @@ class NetworkObjectFactory:
 
         # Generate player object with channel-specific spawn
         player_id = str(uuid.uuid4())
-        player_spawn_x, player_spawn_y = DEFAULT_PLAYER_SPAWN # Fallback
+        player_spawn_x, player_spawn_y = DEFAULT_PLAYER_SPAWN  # Fallback
 
         if channel_id == "channel_beta":
             if CHANNEL_BETA_PLAYER_SPAWNS:
-                player_spawn_x, player_spawn_y = random.choice(CHANNEL_BETA_PLAYER_SPAWNS)
-        elif channel_id == "channel_alpha": # Default or alpha
+                player_spawn_x, player_spawn_y = random.choice(
+                    CHANNEL_BETA_PLAYER_SPAWNS
+                )
+        elif channel_id == "channel_alpha":  # Default or alpha
             if CHANNEL_ALPHA_PLAYER_SPAWNS:
-                player_spawn_x, player_spawn_y = random.choice(CHANNEL_ALPHA_PLAYER_SPAWNS)
-        
+                player_spawn_x, player_spawn_y = random.choice(
+                    CHANNEL_ALPHA_PLAYER_SPAWNS
+                )
+
         # Validate chosen player spawn point (simple check, assumes pre-vetted points are mostly fine)
-        player_grid_x, player_grid_y = self._world_to_grid_coords(player_spawn_x, player_spawn_y)
-        if not (0 <= player_grid_y < grid_cells_y and \
-                0 <= player_grid_x < grid_cells_x and \
-                temp_maze_for_bots[player_grid_y][player_grid_x] == 0):
-            logging.warning(f"Player spawn ({player_spawn_x},{player_spawn_y}) for channel {channel_id} is on an obstacle or out of bounds. Using default.")
+        player_grid_x, player_grid_y = self._world_to_grid_coords(
+            player_spawn_x, player_spawn_y
+        )
+        if not (
+            0 <= player_grid_y < grid_cells_y
+            and 0 <= player_grid_x < grid_cells_x
+            and temp_maze_for_bots[player_grid_y][player_grid_x] == 0
+        ):
+            logging.warning(
+                f"Player spawn ({player_spawn_x},{player_spawn_y}) for channel {channel_id} is on an obstacle or out of bounds. Using default."
+            )
             player_spawn_x, player_spawn_y = DEFAULT_PLAYER_SPAWN
 
         initial_network_objects[player_id] = NetworkObject(
@@ -213,7 +253,7 @@ class NetworkObjectFactory:
         if channel_id == "channel_beta":
             bot_beta1_obj = self.generate_bot_quest_provider(
                 grid_maze=temp_maze_for_bots,
-                object_layer_ids=["RAVE_2"], # Renamed from CYBER_VENDOR
+                object_layer_ids=["RAVE_2"],  # Renamed from CYBER_VENDOR
                 color=Color(255, 165, 0, 255),  # Orange
                 initial_x_offset=-300,
                 initial_y_offset=100,
@@ -222,13 +262,13 @@ class NetworkObjectFactory:
 
             bot_beta2_obj = self.generate_bot_quest_provider(
                 grid_maze=temp_maze_for_bots,
-                object_layer_ids=["RAVE_3"], # Renamed from INFO_BROKER
+                object_layer_ids=["RAVE_3"],  # Renamed from INFO_BROKER
                 color=Color(128, 0, 128, 255),  # Purple
                 initial_x_offset=150,
                 initial_y_offset=-250,
             )
             initial_network_objects[bot_beta2_obj.obj_id] = bot_beta2_obj.to_dict()
-        else: # Default to channel_alpha bots
+        else:  # Default to channel_alpha bots
             bot_alpha1_obj = self.generate_bot_quest_provider(
                 grid_maze=temp_maze_for_bots,
                 object_layer_ids=NETWORK_OBJECT_TYPE_DEFAULT_OBJECT_LAYER_IDS[
@@ -252,12 +292,12 @@ class NetworkObjectFactory:
         return {
             "type": "network_state_update",
             "network_objects": initial_network_objects,
-            "channel_id": channel_id, # Include channel_id in the state update
+            "channel_id": channel_id,  # Include channel_id in the state update
         }
 
     def generate_bot_quest_provider(
         self,
-        grid_maze: list[list[int]], # Maze for validation
+        grid_maze: list[list[int]],  # Maze for validation
         object_layer_ids: list[str],
         color: Color,
         initial_x_offset: float = 0.0,
@@ -273,7 +313,9 @@ class NetworkObjectFactory:
         preferred_world_y = WORLD_HEIGHT / 2 + initial_y_offset
 
         # Convert preferred world coordinates to grid coordinates
-        preferred_grid_x, preferred_grid_y = self._world_to_grid_coords(preferred_world_x, preferred_world_y)
+        preferred_grid_x, preferred_grid_y = self._world_to_grid_coords(
+            preferred_world_x, preferred_world_y
+        )
 
         # Find a valid spawn location in the grid
         # Search radius in grid cells, e.g., 10 cells around preferred
@@ -286,10 +328,11 @@ class NetworkObjectFactory:
             bot_x, bot_y = self._grid_to_world_coords(bot_grid_x, bot_grid_y)
         else:
             # Fallback: if no valid spot found, spawn at preferred world location (might be on obstacle)
-            logging.warning(f"Bot {bot_id} could not find a clear spawn point. Spawning at preferred offset, which might be an obstacle.")
+            logging.warning(
+                f"Bot {bot_id} could not find a clear spawn point. Spawning at preferred offset, which might be an obstacle."
+            )
             bot_x = max(0, min(preferred_world_x, WORLD_WIDTH - NETWORK_OBJECT_SIZE))
             bot_y = max(0, min(preferred_world_y, WORLD_HEIGHT - NETWORK_OBJECT_SIZE))
-
 
         bot_quest_provider = NetworkObject(
             obj_id=bot_id,

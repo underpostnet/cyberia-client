@@ -1,6 +1,7 @@
 import logging
 import time
 import copy
+from typing import Union
 import json
 import random
 
@@ -11,7 +12,7 @@ from object_layer.object_layer_data import (
     Direction,
 )
 from object_layer.object_layer_render import ObjectLayerRender
-from raylibpy import (
+from pyray import (
     KEY_DOWN,
     KEY_KP_1,
     KEY_KP_2,
@@ -88,7 +89,7 @@ if __name__ == "__main__":
     cloned_object_layer_states: dict[str, dict] = {}
 
     def get_active_object_layer_render_data(obj_id: str, obj_layer_id: str) -> dict:
-        """Determines whether to use original or cloned render data."""
+        """Determines whether to use original or cloned render data."""  # type: ignore
         if is_edit_mode and obj_layer_id in cloned_object_layer_states:
             return cloned_object_layer_states[obj_layer_id]["RENDER_DATA"]
         return original_object_layer_data[obj_layer_id]["RENDER_DATA"]
@@ -125,7 +126,7 @@ if __name__ == "__main__":
     # This function is defined AFTER demo_object_layer_animation_instance is initialized,
     # and uses 'global' for variables in the main script's scope.
     def update_animation_instance_data_source():
-        global demo_object_layer_animation_instance
+        global demo_object_layer_animation_instance  # type: ignore
         global current_object_layer_id
         global original_object_layer_data
         global cloned_object_layer_states
@@ -1063,7 +1064,7 @@ if __name__ == "__main__":
                 Color(255, 255, 255, 255),
             )
             # Calculate position for the color box next to the text
-            text_width = object_layer_render.measure_text(
+            text_width = object_layer_render.measure_text(  # type: ignore
                 selected_color_rgb_text, SUB_LINE_HEIGHT
             )
             color_box_x = UI_START_X + text_width + 10  # 10 pixels padding

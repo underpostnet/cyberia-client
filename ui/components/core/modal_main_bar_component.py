@@ -1,8 +1,8 @@
 import logging
-from typing import Callable, Dict, Any, List
+from typing import Callable, Dict, Any, List, Union
 from functools import partial
 
-from raylibpy import (
+from pyray import (
     Color,
     Rectangle,
     Vector2,
@@ -113,7 +113,7 @@ class ModalMainBarComponent:
 
     def handle_clicks(
         self, mouse_x: int, mouse_y: int, is_mouse_button_pressed: bool
-    ) -> str | None:
+    ) -> Union[str, None]:
         """
         Handles clicks on the navigation buttons.
         Returns the route path if a button was clicked, otherwise None.

@@ -1,6 +1,7 @@
 import logging
 import threading
 import time
+from typing import Union
 
 from config import MAZE_CELL_WORLD_SIZE
 from network_state.network_object import NetworkObject
@@ -26,16 +27,16 @@ class NetworkState:
         # Grid for spatial partitioning and simplified maze
         self.grid_cells_x = world_width // object_size
         self.grid_cells_y = world_height // object_size
-        self.grid: list[list[NetworkObject | None]] = [
-            [None for _ in range(self.grid_cells_x)] for _ in range(self.grid_cells_y)
-        ]
+        self.grid: list[list[Union[NetworkObject, None]]] = [
+            [None for _ in range(self.grid_cells_x)] for _ in range(self.grid_cells_y)  # type: ignore
+        ]  # type: ignore
 
         self.simplified_maze: list[list[int]] = []  # 0 for walkable, 1 for obstacle
         self._build_simplified_maze()  # Initial maze build
 
         self.lock = threading.Lock()  # Lock for thread-safe access to network_objects
 
-    def _world_to_grid_coords(self, world_x: float, world_y: float) -> tuple[int, int]:
+    def _world_to_grid_coords(self, world_x: float, world_y: float) -> tuple[int, int]:  # type: ignore
         """Converts world coordinates to grid coordinates."""
         grid_x = int(world_x // self.object_size)
         grid_y = int(world_y // self.object_size)
@@ -55,11 +56,13 @@ class NetworkState:
             self.grid[grid_y][grid_x] = obj
         self._build_simplified_maze()  # Rebuild maze when objects change
 
-    def get_network_object(self, obj_id: str) -> NetworkObject | None:
+    # type: ignore # This comment is for mypy, not part of the code
+    def get_network_object(self, obj_id: str) -> Union[NetworkObject, None]:
         """Retrieves a network object by its ID."""
         return self.network_objects.get(obj_id)
 
-    def remove_network_object(self, obj_id: str) -> NetworkObject | None:
+    # type: ignore # This comment is for mypy, not part of the code
+    def remove_network_object(self, obj_id: str) -> Union[NetworkObject, None]:
         """Removes a network object from the state and its grid position."""
         obj_to_remove = self.network_objects.pop(obj_id, None)
         if obj_to_remove:

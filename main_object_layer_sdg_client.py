@@ -1,6 +1,7 @@
 # Synthetic data generator client
 
 import json
+from typing import Union
 import matplotlib.pyplot as plt
 import numpy as np
 import random
@@ -152,7 +153,7 @@ def render_factory(
     data_generator: SyntheticDataGenerator,
     tool_api: SyntheticDataToolAPI,
     mode: str = "skin-default",
-    skin_color_profile: SkinColorProfile = None,
+    skin_color_profile: Union[SkinColorProfile, None] = None,
 ):
     """
     Applies various rendering (data generation) operations based on the specified mode.

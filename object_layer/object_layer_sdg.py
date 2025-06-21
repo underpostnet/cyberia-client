@@ -17,8 +17,8 @@ class SyntheticDataGenerator:
         _rgba_to_value_id_map (dict[tuple, int]): Maps RGBA tuples to their compact integer ID.
         _next_value_id (int): The next available compact integer ID for a new color.
         initial_value_mapping (dict): Stores the original mapping provided at initialization.
-        last_generated_value_id (int | None): Stores the value ID of the last data
-                                              generation operation.
+        last_generated_value_id (Union[int, None]): Stores the value ID of the last data # type: ignore
+                                                    generation operation.
     """
 
     # Constants for gradient shadow generation
@@ -99,7 +99,7 @@ class SyntheticDataGenerator:
                     converted_data_matrix[r, c] = fallback_compact_id
 
         self.data_matrix = converted_data_matrix
-        self.last_generated_value_id = None
+        self.last_generated_value_id: Union[int, None] = None
         self._clipboard_data: Union[np.ndarray, None] = None  # To store the cut data
 
     def _convert_rgba_to_display_format(

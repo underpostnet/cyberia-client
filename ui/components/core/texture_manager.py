@@ -1,5 +1,6 @@
 import logging
-from raylibpy import Texture2D, load_texture, unload_texture
+from typing import Union
+from pyray import Texture2D, load_texture, unload_texture
 
 logging.basicConfig(
     level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s"
@@ -26,7 +27,7 @@ class TextureManager:
             logging.info("TextureManager initialized.")
             TextureManager._is_initialized = True
 
-    def load_texture(self, path: str) -> Texture2D | None:
+    def load_texture(self, path: str) -> Union[Texture2D, None]:
         """
         Loads a texture from the given path. If the texture is already loaded,
         returns the cached instance.
@@ -43,7 +44,7 @@ class TextureManager:
             logging.error(f"Failed to load texture from {path}: {e}")
             return None
 
-    def get_texture(self, path: str) -> Texture2D | None:
+    def get_texture(self, path: str) -> Union[Texture2D, None]:
         """
         Retrieves a loaded texture from the cache. Does not attempt to load it
         if it's not already in the cache.

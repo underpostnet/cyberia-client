@@ -1,6 +1,7 @@
 import logging
 import math
-from raylibpy import Color, Vector2, RAYWHITE
+from typing import Union
+from pyray import Color, Vector2, RAYWHITE
 from config import (
     UI_FONT_SIZE,
     UI_TEXT_COLOR_PRIMARY,
@@ -65,8 +66,8 @@ class CharacterCyberiaView:
         self.grid_slots_map = self._create_character_grid_map()
 
         # Track selected item for detail view
-        self.selected_slot_key: str | None = None
-        self.selected_object_layer_id: str | None = None
+        self.selected_slot_key: Union[str, None] = None  # type: ignore
+        self.selected_object_layer_id: Union[str, None] = None  # type: ignore
 
         # Initialize GridCoreComponent for the 3x3 conceptual grid that holds the 7 slots
         self.grid_component = GridCoreComponent(

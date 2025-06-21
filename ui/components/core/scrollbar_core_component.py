@@ -1,4 +1,4 @@
-import raylibpy as rl
+import pyray as rl
 
 
 class ScrollbarCoreComponent:

@@ -1,5 +1,6 @@
 import logging
-from raylibpy import Color
+from pyray import Color
+from typing import Union
 from config import UI_FONT_SIZE, UI_TEXT_COLOR_PRIMARY, UI_TEXT_COLOR_SHADING
 from ui.components.core.grid_core_component import GridCoreComponent
 from object_layer.object_layer_render import ObjectLayerRender
@@ -66,7 +67,7 @@ class QuestCyberiaView:
         self.object_layer_render = object_layer_render_instance
         self.title_text = "Quests"
         self.quests = QUEST_DATA
-        self.selected_quest_index: int | None = None  # To track selected quest
+        self.selected_quest_index: Union[int, None] = None  # type: ignore
 
         # Configure GridCoreComponent for a list bar form (1 column, multiple rows)
         self.grid_component = GridCoreComponent(

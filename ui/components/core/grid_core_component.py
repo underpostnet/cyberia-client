@@ -1,6 +1,7 @@
 import logging
 import math
-from raylibpy import (
+from typing import Union
+from pyray import (
     Color,
     Vector2,
     draw_rectangle,
@@ -187,8 +188,10 @@ class GridCoreComponent:
         items_data: list = None,
         mouse_x: int = -1,
         mouse_y: int = -1,
-        selected_index: int | None = None,
-        selected_key: str | None = None,  # Used for character view to highlight by key
+        selected_index: Union[int, None] = None,  # type: ignore
+        selected_key: Union[  # type: ignore
+            str, None
+        ] = None,  # Used for character view to highlight by key
     ):
         """
         Renders the grid within the given container bounds, with items.
@@ -356,7 +359,7 @@ class GridCoreComponent:
         mouse_x: int,
         mouse_y: int,
         is_mouse_button_pressed: bool,
-    ) -> int | None:
+    ) -> Union[int, None]:  # type: ignore
         """
         Determines if an item in the grid was clicked.
         For hexagons, this checks against the rectangular bounding box for simplicity.

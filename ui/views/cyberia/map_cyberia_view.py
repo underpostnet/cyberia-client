@@ -1,5 +1,5 @@
 import logging
-from raylibpy import Color, Vector2, Rectangle, check_collision_point_rec
+from pyray import Color, Vector2, Rectangle, check_collision_point_rec
 from config import (
     UI_FONT_SIZE,
     UI_TEXT_COLOR_PRIMARY,
@@ -15,7 +15,7 @@ from object_layer.object_layer_render import ObjectLayerRender
 from network_state.network_state import NetworkState  # Import for type hinting
 from network_state.network_object import NetworkObject  # Import for type hinting
 from network_state.network_state_proxy import NetworkStateProxy # For sending channel change requests
-from raylibpy import get_mouse_wheel_move  # Import for mouse wheel input
+from pyray import get_mouse_wheel_move  # Import for mouse wheel input
 
 logging.basicConfig(
     level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s"

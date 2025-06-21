@@ -1,5 +1,6 @@
 import logging
-from raylibpy import Color, Vector2, RAYWHITE
+from pyray import Color, Vector2, RAYWHITE
+from typing import Union
 from config import UI_FONT_SIZE, UI_TEXT_COLOR_PRIMARY, UI_TEXT_COLOR_SHADING
 from ui.components.core.grid_core_component import GridCoreComponent
 from object_layer.object_layer_render import ObjectLayerRender
@@ -26,7 +27,7 @@ class BagCyberiaView:
         self.title_text = "Bag"
         # This will hold the actual items in the player's bag, received dynamically
         self.bag_items: list[str] = []  # List of object_layer_ids in the bag
-        self.selected_object_layer_id: str | None = (
+        self.selected_object_layer_id: Union[str, None] = (  # type: ignore
             None  # Track selected item for detail view
         )
 

@@ -1,6 +1,7 @@
 import logging
-from raylibpy import (
+from pyray import (
     Color,
+    Vector2,
     KEY_ENTER,
     Vector2,
     Rectangle,
@@ -12,6 +13,7 @@ from raylibpy import (
     is_mouse_button_pressed,
     MOUSE_LEFT_BUTTON,
 )
+from typing import Union  # Import Union
 from config import (
     UI_FONT_SIZE,
     UI_TEXT_COLOR_PRIMARY,
@@ -115,9 +117,9 @@ class ChatCyberiaView:
         self.object_layer_render = object_layer_render_instance
         self.network_proxy = network_proxy
         self.title_text = "Chat Rooms"
-        self.chat_rooms = CHAT_ROOM_DATA
+        self.chat_rooms = CHAT_ROOM_DATA  # type: ignore
         self.message_input_placeholder = "Type your message..."  # Store placeholder
-        self.selected_chat_index: int | None = None  # To track selected chat room
+        self.selected_chat_index: Union[int, None] = None  # type: ignore
 
         # Configure GridCoreComponent for a list bar form (1 column, multiple rows)
         self.grid_component = GridCoreComponent(
@@ -290,8 +292,8 @@ class ChatCyberiaView:
         mouse_y: int,
         is_mouse_button_pressed_left: bool,  # Specifically for left button
         is_mouse_button_down: bool,  # New: is_mouse_button_down
-        char_pressed: int | None,
-        key_pressed: int | None,
+        char_pressed: Union[int, None],  # type: ignore
+        key_pressed: Union[int, None],  # type: ignore
         is_key_down_map: dict,
         dt: float,
     ):
