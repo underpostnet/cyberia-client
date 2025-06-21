@@ -642,7 +642,7 @@ vae.compile(
 )  # Slightly reduced learning rate
 
 # --- 3. Train the VAE ---
-EPOCHS = 1000  # Increased epochs for better learning with multi-class output
+EPOCHS = 100  # Increased epochs for better learning with multi-class output
 BATCH_SIZE = 32
 
 if x_train.size > 0:

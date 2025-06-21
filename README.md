@@ -4,8 +4,15 @@ Core application that connects to the **Cyberia online MMO instance**. It uses `
 
 ### Installation
 
+Create env:
+
 ```bash
 conda create --name raylib_env python=3.9
+```
+
+Activate env and install:
+
+```bash
 conda activate raylib_env
 pip install -r requirements.txt
 ```
