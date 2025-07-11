@@ -377,7 +377,7 @@ class ObjectLayerRender:
 
     def draw_text(self, text: str, x: int, y: int, font_size: int, color: Color):
         """Draws text on the screen."""
-        draw_text(text, x, y, font_size, color)
+        draw_text(text, int(x), int(y), int(font_size), color)
 
     def measure_text(self, text: str, font_size: int) -> int:
         """Measures the width of the given text for a specific font size."""
