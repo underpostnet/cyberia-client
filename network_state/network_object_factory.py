@@ -290,8 +290,8 @@ class NetworkObjectFactory:
             initial_network_objects[bot_alpha2_obj.obj_id] = bot_alpha2_obj.to_dict()
 
         clean_background_color = {
-            "channel_alpha": Color(0, 160, 48, 255),
-            "channel_beta": Color(197, 147, 10, 0),
+            "channel_alpha": [0, 160, 48, 255],
+            "channel_beta": [197, 147, 10, 0],
         }
 
         return {

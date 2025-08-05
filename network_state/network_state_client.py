@@ -340,6 +340,11 @@ class NetworkStateClient:
         """Handles messages forwarded by the proxy."""  # type: ignore
         msg_type = data.get("type")
         if msg_type == "network_state_update":
+            if "clean_background_color" in data:
+                self.network_state.clean_background_color = data[
+                    "clean_background_color"
+                ]
+
             if "network_objects" in data:
                 # The proxy now sends all persistent objects, including autonomous agents,
                 # so we don't need to filter by is_persistent here in the client's update
