@@ -1,6 +1,12 @@
 import pyray as rl
 
 
+SCROLLBAR_WIDTH = 15
+SCROLLBAR_PADDING = 5
+SCROLLBAR_TRACK_COLOR_TUPLE = (40, 40, 40, 220)
+SCROLLBAR_THUMB_COLOR_TUPLE = (100, 100, 100, 255)
+
+
 class ScrollbarCoreComponent:
     def __init__(
         self,

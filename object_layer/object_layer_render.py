@@ -46,7 +46,6 @@ from pyray import (
 
 from config import (
     CAMERA_SMOOTHNESS,
-    DIRECTION_HISTORY_LENGTH,
     UI_FONT_SIZE,
     UI_TEXT_COLOR_PRIMARY,
     UI_TEXT_COLOR_SHADING,
@@ -60,6 +59,9 @@ from network_state.network_object import (
 logging.basicConfig(
     level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s"
 )
+
+
+DIRECTION_HISTORY_LENGTH = 15
 
 
 class ObjectLayerAnimation:

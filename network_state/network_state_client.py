@@ -28,9 +28,6 @@ from config import (
     WORLD_WIDTH,
     NETWORK_OBJECT_SIZE,
     UI_MODAL_BACKGROUND_COLOR,
-    UI_ROUTES,
-    KEYBOARD_BACKSPACE_INITIAL_DELAY,
-    KEYBOARD_BACKSPACE_REPEAT_RATE,
 )
 from object_layer.object_layer_render import ObjectLayerRender
 from network_state.network_object import NetworkObject
@@ -69,6 +66,52 @@ from network_state.network_state_proxy import NetworkStateProxy
 logging.basicConfig(
     level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s"
 )
+
+
+# UI Route Definitions (for RouterCoreComponent)
+# Each route defines a UI panel/modal and its associated navigation icon.
+# 'name': Display name for the navigation button.
+# 'path': Unique identifier for the route.
+# 'icon_path': Path to the icon image for the navigation button.
+# 'view_instance': Placeholder for the actual view class instance (e.g., BagCyberiaView).
+# 'render_callback': Reference to the function that renders the view's content.
+UI_ROUTES = [
+    {
+        "name": "Character",
+        "path": "/character",
+        "icon_path": "ui/assets/icons/character.png",
+        "view_instance": None,
+        "render_callback": None,
+    },
+    {
+        "name": "Bag",
+        "path": "/bag",
+        "icon_path": "ui/assets/icons/bag.png",
+        "view_instance": None,
+        "render_callback": None,
+    },
+    {
+        "name": "Chat",
+        "path": "/chat",
+        "icon_path": "ui/assets/icons/chat.png",
+        "view_instance": None,
+        "render_callback": None,
+    },
+    {
+        "name": "Quest",
+        "path": "/quest",
+        "icon_path": "ui/assets/icons/quest.png",
+        "view_instance": None,
+        "render_callback": None,
+    },
+    {
+        "name": "Map",
+        "path": "/map",
+        "icon_path": "ui/assets/icons/map.png",
+        "view_instance": None,
+        "render_callback": None,
+    },
+]
 
 
 class InteractionManager:
@@ -173,8 +216,8 @@ class NetworkStateClient:
 
         # Initialize KeyboardCoreComponent
         self.keyboard_core_component = KeyboardCoreComponent(
-            backspace_initial_delay=KEYBOARD_BACKSPACE_INITIAL_DELAY,
-            backspace_repeat_rate=KEYBOARD_BACKSPACE_REPEAT_RATE,
+            backspace_initial_delay=0.4,
+            backspace_repeat_rate=0.05,
         )
 
         self.object_layer_render = ObjectLayerRender(

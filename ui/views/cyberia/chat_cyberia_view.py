@@ -9,28 +9,22 @@ from pyray import (
     check_collision_point_rec,
     begin_scissor_mode,
     end_scissor_mode,
-    is_mouse_button_down,
-    is_mouse_button_pressed,
-    MOUSE_LEFT_BUTTON,
 )
 from typing import Union  # Import Union
 from config import (
     UI_FONT_SIZE,
     UI_TEXT_COLOR_PRIMARY,
     UI_TEXT_COLOR_SHADING,
-    KEYBOARD_BACKSPACE_INITIAL_DELAY,
-    KEYBOARD_BACKSPACE_REPEAT_RATE,
-    CHAT_HISTORY_PADDING_X,
-    CHAT_HISTORY_PADDING_Y_TOP,
-    CHAT_HISTORY_PADDING_Y_BOTTOM,
-    CHAT_MESSAGE_LINE_SPACING,
-    CHAT_MESSAGE_PADDING_Y,
-    SCROLLBAR_WIDTH,
+)
+
+from ui.components.core.scrollbar_core_component import SCROLLBAR_WIDTH
+
+from ui.components.core.scrollbar_core_component import (
     SCROLLBAR_PADDING,
     SCROLLBAR_TRACK_COLOR_TUPLE,
     SCROLLBAR_THUMB_COLOR_TUPLE,
-    CHAT_WHEEL_SCROLL_SENSITIVITY,
 )
+
 from ui.components.core.grid_core_component import GridCoreComponent
 from ui.components.core.input_text_core_component import (
     InputTextCoreComponent,
@@ -101,6 +95,16 @@ CHAT_ROOM_DATA = [
         ],
     },
 ]
+
+# Chat View Specifics
+CHAT_HISTORY_PADDING_X = 20  # Horizontal padding for message text area
+CHAT_HISTORY_PADDING_Y_TOP = 10  # Padding above the message list
+CHAT_HISTORY_PADDING_Y_BOTTOM = 10  # Padding below message list, above input
+CHAT_MESSAGE_LINE_SPACING = 4  # Vertical spacing between lines within a single message
+CHAT_MESSAGE_PADDING_Y = (
+    8  # Vertical padding between distinct messages (sender block to sender block)
+)
+CHAT_WHEEL_SCROLL_SENSITIVITY = 0.07  # Percentage of content to scroll per wheel tick
 
 
 class ChatCyberiaView:
