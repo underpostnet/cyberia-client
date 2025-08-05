@@ -191,7 +191,7 @@ if __name__ == "__main__":
         "--base-profile-source",
         type=str,
         required=False,
-        help="Base name of the JSON file in the current directory containing an array of 8 instance color profiles (e.g., RAVE for RAVE.json).",
+        help="Base name of the JSON file in the current directory containing an array of 8 instance color profiles",
     )
     parser.add_argument(
         "--mode",
