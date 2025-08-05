@@ -227,14 +227,11 @@ if __name__ == "__main__":
         "IS_STATELESS": False,
     }
 
-    base_profile_source_name = args.base_profile_source
-    base_profile_filepath = f"{base_profile_source_name}.json"
-
     mode_type = "SKIN"
     if args.mode == "floor_grass":
         mode_type = "FLOOR"
 
-    output_instance_data_dir = "object_layer/" + mode_type
+    output_instance_data_dir = "object_layer/" + mode_type.lower()
     os.makedirs(output_instance_data_dir, exist_ok=True)
 
     intermediate_frames_dir = "build_output_sdg_frames_temp"
@@ -266,7 +263,7 @@ if __name__ == "__main__":
                 # Execute the client script ONCE for the current mode_name.
                 # This will generate 8 files: <mode_name>_0.json to <mode_name>_7.json
                 execute_client_script(
-                    mode_name, intermediate_frames_dir, base_profile_filepath
+                    mode_name, intermediate_frames_dir, args.base_profile_source
                 )
 
                 read_json_and_populate_render_data(
@@ -288,6 +285,8 @@ if __name__ == "__main__":
 
         # Filename format: object_layer_data_rave_0.json, object_layer_data_rave_1.json, etc.
         file_suffix = f"{args.mode.lower()}_{i}"
+        if args.base_profile_source and os.path.exists(args.base_profile_source):
+            file_suffix = args.base_profile_source.split(".")[0] + "_" + str(i)
         output_filename = os.path.join(
             output_instance_data_dir, f"object_layer_data_{file_suffix}.json"
         )

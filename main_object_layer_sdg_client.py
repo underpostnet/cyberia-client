@@ -713,16 +713,16 @@ if __name__ == "__main__":
         help='Special mode for rendering. Current options: "skin-default", ..., "cut-paste-demo", "flip-demo".',
     )
     parser.add_argument(
-        "--save-skin-colors",
+        "--save-instance-colors",
         type=str,
         default=None,
-        help="Filepath to save the current skin feature colors as a JSON file.",
+        help="Filepath to save the current instance feature colors as a JSON file.",
     )
     parser.add_argument(
-        "--load-skin-colors",
+        "--load-instance-colors",
         type=str,
         default=None,
-        help="Filepath to load skin feature colors from a JSON file.",
+        help="Filepath to load instance feature colors from a JSON file.",
     )
     parser.add_argument(
         "--show",
@@ -746,9 +746,9 @@ if __name__ == "__main__":
     NUM_SUBPLOTS = 8
     skin_color_profiles = [SkinColorProfile() for _ in range(NUM_SUBPLOTS)]
 
-    if args.load_skin_colors:
+    if args.load_instance_colors:
         try:
-            with open(args.load_skin_colors, "r") as f:
+            with open(args.load_instance_colors, "r") as f:
                 loaded_profiles_data = json.load(f)
             if isinstance(loaded_profiles_data, list):
                 for i, profile_data in enumerate(loaded_profiles_data):
@@ -757,28 +757,28 @@ if __name__ == "__main__":
                             skin_color_profiles[i].load_from_dict(profile_data)
                         else:
                             print(
-                                f"Warning: Item at index {i} in '{args.load_skin_colors}' is not a dictionary. Using default for this profile."
+                                f"Warning: Item at index {i} in '{args.load_instance_colors}' is not a dictionary. Using default for this profile."
                             )
                     else:
                         break  # Loaded more profiles than subplots
                 print(
-                    f"Loaded up to {min(len(loaded_profiles_data), NUM_SUBPLOTS)} skin color profiles from {args.load_skin_colors}"
+                    f"Loaded up to {min(len(loaded_profiles_data), NUM_SUBPLOTS)} instance color profiles from {args.load_instance_colors}"
                 )
             else:
                 print(
-                    f"Warning: Skin color file '{args.load_skin_colors}' does not contain a list of profiles. Using defaults."
+                    f"Warning: Instance color file '{args.load_instance_colors}' does not contain a list of profiles. Using defaults."
                 )
         except FileNotFoundError:
             print(
-                f"Warning: Skin color file not found: {args.load_skin_colors}. Using defaults."
+                f"Warning: Skin color file not found: {args.load_instance_colors}. Using defaults."
             )
         except json.JSONDecodeError:
             print(
-                f"Warning: Error decoding JSON from {args.load_skin_colors}. Using defaults."
+                f"Warning: Error decoding JSON from {args.load_instance_colors}. Using defaults."
             )
         except Exception as e:
             print(
-                f"Warning: Could not load skin colors from {args.load_skin_colors}: {e}. Using defaults."
+                f"Warning: Could not load skin colors from {args.load_instance_colors}: {e}. Using defaults."
             )
 
     # Create a figure and a 2x4 grid of subplots
@@ -887,16 +887,18 @@ if __name__ == "__main__":
     # Adjust layout to prevent titles/labels from overlapping
     plt.tight_layout()
 
-    if args.save_skin_colors:
+    if args.save_instance_colors:
         profiles_data_to_save = [profile.to_dict() for profile in skin_color_profiles]
         try:
-            with open(args.save_skin_colors, "w") as f:
+            with open(args.save_instance_colors, "w") as f:
                 json.dump(profiles_data_to_save, f, indent=4)
             print(
-                f"Saved {len(profiles_data_to_save)} skin color profiles to {args.save_skin_colors}"
+                f"Saved {len(profiles_data_to_save)} skin color profiles to {args.save_instance_colors}"
             )
         except Exception as e:
-            print(f"Error saving skin color profiles to {args.save_skin_colors}: {e}")
+            print(
+                f"Error saving skin color profiles to {args.save_instance_colors}: {e}"
+            )
 
     # Display the plot only if --show is specified
     if args.show:
