@@ -325,7 +325,7 @@ def render_factory(
             pants_color_semantic_id=skin_color_profile.get_pants_color(),
         )
 
-    elif mode == "floor_grass":
+    elif mode in ["floor_grass-08-0"]:
 
         floor_grass_color_id = 23
 
@@ -818,7 +818,7 @@ if __name__ == "__main__":
                 np.zeros((1, 1), dtype=int), DISPLAY_COLOR_PALETTE
             )  # Dummy initial matrix, will be replaced
 
-        elif args.mode == "floor_grass":
+        elif args.mode in ["floor_grass-08-0"]:
 
             # 10x10 empty matrix
             DISPLAY_COLOR_PALETTE[23] = (0, 255, 0, 255)
