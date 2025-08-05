@@ -289,15 +289,21 @@ class NetworkObjectFactory:
             )
             initial_network_objects[bot_alpha2_obj.obj_id] = bot_alpha2_obj.to_dict()
 
+        clean_background_color = {
+            "channel_alpha": Color(0, 160, 48, 255),
+            "channel_beta": Color(197, 147, 10, 0),
+        }
+
         return {
             "type": "network_state_update",
             "network_objects": initial_network_objects,
-            "channel_id": channel_id,  # Include channel_id in the state update
+            "channel_id": channel_id,
+            "clean_background_color": clean_background_color[channel_id],
         }
 
     def generate_bot_quest_provider(
         self,
-        grid_maze: list[list[int]],  # Maze for validation
+        grid_maze: list[list[int]],
         object_layer_ids: list[str],
         color: Color,
         initial_x_offset: float = 0.0,

@@ -719,7 +719,14 @@ class NetworkStateClient:
                         )
 
             self.object_layer_render.begin_drawing()
-            self.object_layer_render.clear_background(RAYWHITE)
+            self.object_layer_render.clear_background(
+                Color(
+                    self.network_state.clean_background_color[0],
+                    self.network_state.clean_background_color[1],
+                    self.network_state.clean_background_color[2],
+                    self.network_state.clean_background_color[3],
+                )
+            )
             # Pass camera from camera_manager to begin_camera_mode
             self.object_layer_render.begin_camera_mode(self.camera_manager.camera)
 

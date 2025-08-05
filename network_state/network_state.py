@@ -23,6 +23,7 @@ class NetworkState:
         self.world_height = world_height
         self.object_size = object_size
         self.network_objects: dict[str, NetworkObject] = {}
+        self.clean_background_color = [255, 255, 255, 255]
 
         # Grid for spatial partitioning and simplified maze
         self.grid_cells_x = world_width // object_size

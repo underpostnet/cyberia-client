@@ -225,7 +225,6 @@ class NetworkStateProxy:
 
     def _send_offline_initial_state(self):
         """Generates and sends an initial state for offline mode."""
-        initial_state_data = self.network_object_factory.generate_initial_state_dict()
 
         # Always extract the player ID from the newly generated initial state
         # and update the proxy's my_player_id and inform the client.
