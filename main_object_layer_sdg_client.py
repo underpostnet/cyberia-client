@@ -326,14 +326,10 @@ def render_factory(
         )
 
     elif mode == "floor_grass":
-        DISPLAY_COLOR_PALETTE[23] = (0, 255, 0, 255)
         tool_api.data_generator.contiguous_region_fill(
             0,
             0,
             fill_semantic_value_id=23,
-            # gradient_shadow=True,
-            # intensity_factor=0.5,
-            # direction="bottom_to_top",
         )
 
     elif mode in [
@@ -823,6 +819,7 @@ if __name__ == "__main__":
         elif args.mode == "floor_grass":
 
             # 10x10 empty matrix
+            DISPLAY_COLOR_PALETTE[23] = (0, 255, 0, 255)
             data_generator = SyntheticDataGenerator(
                 np.zeros((10, 10), dtype=int), DISPLAY_COLOR_PALETTE
             )
