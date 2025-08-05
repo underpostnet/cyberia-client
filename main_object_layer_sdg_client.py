@@ -325,6 +325,17 @@ def render_factory(
             pants_color_semantic_id=skin_color_profile.get_pants_color(),
         )
 
+    elif mode == "floor_grass":
+        DISPLAY_COLOR_PALETTE[23] = (0, 255, 0, 255)
+        tool_api.data_generator.contiguous_region_fill(
+            0,
+            0,
+            fill_semantic_value_id=23,
+            # gradient_shadow=True,
+            # intensity_factor=0.5,
+            # direction="bottom_to_top",
+        )
+
     elif mode in [
         "skin-default-08-0",
         "skin-default-08-1",
@@ -809,6 +820,12 @@ if __name__ == "__main__":
                 np.zeros((1, 1), dtype=int), DISPLAY_COLOR_PALETTE
             )  # Dummy initial matrix, will be replaced
 
+        elif args.mode == "floor_grass":
+
+            # 10x10 empty matrix
+            data_generator = SyntheticDataGenerator(
+                np.zeros((10, 10), dtype=int), DISPLAY_COLOR_PALETTE
+            )
         elif args.mode in [
             "skin-default-06-0",
             "skin-default-06-1",
