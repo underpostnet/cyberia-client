@@ -326,11 +326,13 @@ def render_factory(
         )
 
     elif mode == "floor_grass":
-        tool_api.data_generator.contiguous_region_fill(
-            0,
-            0,
-            fill_semantic_value_id=23,
-        )
+
+        floor_grass_color_id = 23
+
+        for _ in range(5):
+            x = random.randint(0, tool_api.data_matrix_width - 1)
+            y = random.randint(0, tool_api.data_matrix_height - 1)
+            tool_api.data_generator.set_data_point(x, y, floor_grass_color_id)
 
     elif mode in [
         "skin-default-08-0",
