@@ -208,6 +208,34 @@ class NetworkObjectFactory:
                 is_persistent=True,
             ).to_dict()
 
+        available_grid_points = []
+        for gy in range(grid_cells_y):
+            for gx in range(grid_cells_x):
+                if temp_maze_for_bots[gy][gx] == 0:
+                    available_grid_points.append((gx, gy))
+
+        random.shuffle(available_grid_points)
+        num_grass_to_place = int(len(available_grid_points) * 0.1)
+        selected_points = available_grid_points[:num_grass_to_place]
+
+        floor_grass_coords = []
+        for gx, gy in selected_points:
+            world_x, world_y = self._grid_to_world_coords(gx, gy)
+            floor_grass_coords.append({"X": world_x, "Y": world_y})
+
+        for floor_grass_coord in floor_grass_coords:
+            floor_grass_id = str(uuid.uuid4())
+            initial_network_objects[floor_grass_id] = NetworkObject(
+                obj_id=floor_grass_id,
+                x=floor_grass_coord["X"],
+                y=floor_grass_coord["Y"],
+                color=Color(127, 199, 99, 255),
+                network_object_type="FLOOR_GRASS",
+                is_obstacle=False,
+                object_layer_ids=["FLOOR_GRASS_" + str(random.randint(0, 7))],
+                is_persistent=True,
+            ).to_dict()
+
         # Generate player object with channel-specific spawn
         player_id = str(uuid.uuid4())
         player_spawn_x, player_spawn_y = DEFAULT_PLAYER_SPAWN  # Fallback
