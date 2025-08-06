@@ -1,5 +1,8 @@
 import pyray as pr
 import random
+import os
+import psutil
+import sys
 
 # Constants
 TILE_SIZE = 32
@@ -54,6 +57,13 @@ def get_aoi_objects(player_x, player_y):
     }
 
 
+def estimate_object_memory(obj_dict):
+    return sum(
+        sys.getsizeof((x, y)) + sys.getsizeof(obj_type)
+        for (x, y), obj_type in obj_dict.items()
+    )
+
+
 # Main loop
 while not pr.window_should_close():
     # Handle input
@@ -74,6 +84,13 @@ while not pr.window_should_close():
 
     # Get visible objects
     visible_objects = get_aoi_objects(player_pos[0], player_pos[1])
+
+    # Estimate memory for loaded objects
+    mem_kb = estimate_object_memory(visible_objects) / 1024
+
+    # CPU usage
+    process = psutil.Process(os.getpid())
+    cpu_percent = process.cpu_percent(interval=0)
 
     # Drawing
     pr.begin_drawing()
@@ -106,6 +123,9 @@ while not pr.window_should_close():
 
     pr.draw_text(f"Player: {player_pos[0]}, {player_pos[1]}", 10, 10, 20, pr.DARKGRAY)
     pr.draw_text(f"Loaded objects: {len(visible_objects)}", 10, 35, 20, pr.DARKGRAY)
+    pr.draw_text(f"Memory (AOI): {mem_kb:.2f} KB", 10, 60, 20, pr.DARKGRAY)
+    pr.draw_text(f"CPU: {cpu_percent:.1f}%", 10, 85, 20, pr.DARKGRAY)
+
     pr.end_drawing()
 
 pr.close_window()
