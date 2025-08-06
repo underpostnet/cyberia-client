@@ -18,8 +18,8 @@ TILE_SIZE = 32
 TELEPORT_HOLD_TIME = 2.0
 MAP_WIDTH = 1600
 MAP_HEIGHT = 1200
-AOI_RADIUS = 300.0
-OBSTACLE_INFLATION_PADDING = 5
+AOI_RADIUS = 300.0  # This AOI radius should ideally match the server's AOI_RADIUS
+OBSTACLE_INFLATION_PADDING = 1
 DEBUG_DRAW_GRID = False
 SERVER_URL = "ws://localhost:8080/ws"  # WebSocket server URL
 
@@ -34,9 +34,9 @@ class Node:
     def __init__(self, parent: Optional["Node"], position: GridPosition):
         self.parent = parent
         self.position = position
-        self.g = 0
-        self.h = 0
-        self.f = 0
+        self.g = 0.0  # Use float for g cost
+        self.h = 0.0  # Use float for h cost
+        self.f = 0.0  # Use float for f cost
 
     def __eq__(self, other):
         return self.position == other.position
@@ -55,7 +55,13 @@ class AStarPathfinder:
         self.maze = maze
         self.rows = len(maze)
         self.cols = len(maze[0])
-        self.adjacent_squares = [(0, -1), (0, 1), (-1, 0), (1, 0)]  # Cardinal
+        self.cardinal_directions = [
+            (0, -1),
+            (0, 1),
+            (-1, 0),
+            (1, 0),
+        ]  # Up, Down, Left, Right
+        self.diagonal_directions = [(-1, -1), (-1, 1), (1, -1), (1, 1)]  # Diagonals
 
     def _reconstruct_path(self, current_node: Node) -> List[GridPosition]:
         """Reconstructs the path from end node to start node."""
@@ -67,7 +73,10 @@ class AStarPathfinder:
         return path[::-1]
 
     def find_path(
-        self, start: GridPosition, end: GridPosition, allow_diagonal: bool = False
+        self,
+        start: GridPosition,
+        end: GridPosition,
+        allow_diagonal: bool = True,  # Changed default to True
     ) -> Optional[List[GridPosition]]:
         """
         Finds a path from start to end in the maze.
@@ -80,20 +89,31 @@ class AStarPathfinder:
             warn(f"A* end position {end} is out of bounds.")
             return None
 
+        # Check if start or end are obstacles
+        if self.maze[start[0]][start[1]] == 1:
+            warn(f"A* start position {start} is an obstacle.")
+            return None
+        if self.maze[end[0]][end[1]] == 1:
+            warn(f"A* end position {end} is an obstacle.")
+            return None
+
         start_node = Node(None, start)
         end_node = Node(None, end)
 
         open_list: List[Node] = []
-        closed_list: List[Node] = []
+        closed_list_positions = set()  # Use a set for faster lookups in closed list
         heapq.heappush(open_list, start_node)
 
-        max_iterations = self.rows * self.cols * 2
-        outer_iterations = 0
-        closest_node_to_end = start_node
+        # Store nodes in open_list by their position for efficient updates
+        open_list_nodes_by_pos = {start_node.position: start_node}
 
-        directions = list(self.adjacent_squares)
+        max_iterations = self.rows * self.cols * 2  # Safety break
+        outer_iterations = 0
+        closest_node_to_end = start_node  # Keep track of the closest node found
+
+        directions_to_check = list(self.cardinal_directions)
         if allow_diagonal:
-            directions.extend([(-1, -1), (-1, 1), (1, -1), (1, 1)])
+            directions_to_check.extend(self.diagonal_directions)
 
         while open_list:
             outer_iterations += 1
@@ -102,52 +122,66 @@ class AStarPathfinder:
                 return self._reconstruct_path(closest_node_to_end)
 
             current_node = heapq.heappop(open_list)
-            closed_list.append(current_node)
+            del open_list_nodes_by_pos[
+                current_node.position
+            ]  # Remove from tracking set
+            closed_list_positions.add(current_node.position)
 
+            # Update closest node if a better one is found
             if current_node.h < closest_node_to_end.h:
                 closest_node_to_end = current_node
 
             if current_node == end_node:
                 return self._reconstruct_path(current_node)
 
-            for dr, dc in directions:
+            for dr, dc in directions_to_check:
                 node_position = (
                     current_node.position[0] + dr,
                     current_node.position[1] + dc,
                 )
 
+                # Check bounds
                 if not (
                     0 <= node_position[0] < self.rows
                     and 0 <= node_position[1] < self.cols
                 ):
                     continue
-                if self.maze[node_position[0]][node_position[1]] != 0:
+                # Check if obstacle
+                if self.maze[node_position[0]][node_position[1]] == 1:
+                    continue
+                # Check if already in closed list
+                if node_position in closed_list_positions:
                     continue
 
                 new_node = Node(current_node, node_position)
 
-                if new_node in closed_list:
-                    continue
+                # Calculate G cost based on movement type
+                if (dr, dc) in self.diagonal_directions:
+                    new_node.g = current_node.g + math.sqrt(2)  # Diagonal cost
+                else:
+                    new_node.g = current_node.g + 1.0  # Cardinal cost
 
-                new_node.g = current_node.g + 1
-                new_node.h = ((new_node.position[0] - end_node.position[0]) ** 2) + (
-                    (new_node.position[1] - end_node.position[1]) ** 2
+                # Calculate H cost using Euclidean distance (straight line)
+                new_node.h = math.hypot(
+                    new_node.position[0] - end_node.position[0],
+                    new_node.position[1] - end_node.position[1],
                 )
                 new_node.f = new_node.g + new_node.h
 
-                found_in_open = False
-                for open_node in open_list:
-                    if new_node.position == open_node.position:
-                        found_in_open = True
-                        if new_node.g < open_node.g:
-                            open_node.g = new_node.g
-                            open_node.f = new_node.f
-                            open_node.parent = new_node.parent
-                            heapq.heapify(open_list)
-                        break
-
-                if not found_in_open:
+                # Check if new node is already in open list with a higher G cost
+                if new_node.position in open_list_nodes_by_pos:
+                    existing_open_node = open_list_nodes_by_pos[new_node.position]
+                    if new_node.g < existing_open_node.g:
+                        # Update the existing node in the open list
+                        existing_open_node.g = new_node.g
+                        existing_open_node.f = new_node.f
+                        existing_open_node.parent = new_node.parent
+                        # Re-heapify to maintain heap property after update
+                        heapq.heapify(open_list)
+                else:
+                    # Add to open list
                     heapq.heappush(open_list, new_node)
+                    open_list_nodes_by_pos[new_node.position] = new_node
 
         warn(
             "Couldn't get a path to destination. Returning path to closest reachable node."
@@ -758,6 +792,7 @@ class NetworkManager:
                     ):  # Don't update our own player from server
                         new_other_players_data[p_id] = p_data
                 self.other_players_data = new_other_players_data
+                # Pass all received other players data to game state
                 self.game_state_callback(
                     "update_other_players", self.other_players_data
                 )
@@ -926,17 +961,18 @@ class GameState:
             new_other_players = {}
             for player_id, p_data in data.items():
                 if player_id != self.player.player_id:
-                    if player_id in self.other_players:
-                        # Update existing player
-                        other_p = self.other_players[player_id]
-                        other_p.x = p_data["x"]
-                        other_p.y = p_data["y"]
-                        # Only show players on the same map
-                        if p_data["mapId"] == self.current_map_id:
+                    # Only add/update players that are on the current map and within AOI
+                    # The server is now responsible for sending only relevant players.
+                    # The client's AOI drawing logic will further filter if needed.
+                    if p_data["mapId"] == self.current_map_id:
+                        if player_id in self.other_players:
+                            # Update existing player
+                            other_p = self.other_players[player_id]
+                            other_p.x = p_data["x"]
+                            other_p.y = p_data["y"]
                             new_other_players[player_id] = other_p
-                    else:
-                        # Create new player
-                        if p_data["mapId"] == self.current_map_id:
+                        else:
+                            # Create new player
                             new_other_players[player_id] = OtherPlayer(
                                 x=p_data["x"],  # Pass GameObject fields first
                                 y=p_data["y"],
