@@ -2,7 +2,7 @@ import pyray as pr
 import random
 from dataclasses import dataclass, field
 from typing import Tuple, Dict, List
-import math  # Import math for sqrt
+import math
 
 # --- Constants ---
 SCREEN_WIDTH = 800
@@ -11,13 +11,12 @@ TILE_SIZE = 32
 TELEPORT_HOLD_TIME = 2.0
 MAP_WIDTH = 1600
 MAP_HEIGHT = 1200
-AOI_RADIUS = 300.0  # Define the Area of Interest radius
+AOI_RADIUS = 300.0
 
 Position = Tuple[float, float]
 
+
 # --- Game Objects ---
-
-
 @dataclass
 class GameObject:
     x: float
@@ -61,9 +60,7 @@ class Player(GameObject):
         new_rect = pr.Rectangle(new_x, new_y, self.width, self.height)
 
         can_move = True
-        # Only check collisions with objects within a slightly larger AOI
-        # to ensure smooth movement near the edge of the rendering AOI
-        aoi_collision_radius = AOI_RADIUS * 1.2  # Slightly larger for collision
+        aoi_collision_radius = AOI_RADIUS * 1.2
         player_center_x, player_center_y = self.get_center()
 
         for obj in obstacles:
@@ -71,9 +68,7 @@ class Player(GameObject):
             distance_sq = (player_center_x - obj_center_x) ** 2 + (
                 player_center_y - obj_center_y
             ) ** 2
-            if (
-                distance_sq < aoi_collision_radius**2
-            ):  # Check if object is within collision AOI
+            if distance_sq < aoi_collision_radius**2:
                 if not obj.passable and pr.check_collision_recs(
                     new_rect, obj.get_rect()
                 ):
@@ -88,9 +83,6 @@ class Player(GameObject):
             self.x, self.y = new_x, new_y
         else:
             self.stationary_time = 0.0
-
-
-# --- Portal ---
 
 
 @dataclass
@@ -128,28 +120,68 @@ class Bush(GameObject):
 
 
 # --- Camera ---
-
-
-class Camera:
-    def __init__(self, target: GameObject):
+class GameCamera:
+    def __init__(self, target: GameObject, map_width: int, map_height: int):
         self.target = target
+        self.map_width = map_width
+        self.map_height = map_height
         self.cam = pr.Camera2D()
         self.cam.offset = pr.Vector2(SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2)
         self.cam.zoom = 1.0
+        # Initialize camera target to player's initial position
         self.cam.target = pr.Vector2(
-            self.target.x + self.target.width // 2,
-            self.target.y + self.target.height // 2,
+            self.target.x + self.target.width / 2,
+            self.target.y + self.target.height / 2,
+        )
+        self.CAMERA_SMOOTHNESS = 0.05  # Lower value for smoother camera
+        self.camera_shake_intensity = 0.0
+        self.camera_shake_duration = 0.0
+
+    def update(self, delta_time: float):
+        # Desired camera target based on player's center
+        desired_target_x = self.target.x + self.target.width / 2
+        desired_target_y = self.target.y + self.target.height / 2
+
+        # Smooth camera movement using linear interpolation (LERP)
+        self.cam.target.x = pr.lerp(
+            self.cam.target.x, desired_target_x, self.CAMERA_SMOOTHNESS
+        )
+        self.cam.target.y = pr.lerp(
+            self.cam.target.y, desired_target_y, self.CAMERA_SMOOTHNESS
         )
 
-    def update(self):
-        target_pos = pr.Vector2(
-            self.target.x + self.target.width // 2,
-            self.target.y + self.target.height // 2,
-        )
-        self.cam.target = pr.Vector2(
-            self.cam.target.x + (target_pos.x - self.cam.target.x) * 0.05,
-            self.cam.target.y + (target_pos.y - self.cam.target.y) * 0.05,
-        )
+        # Clamp camera to map boundaries
+        # Calculate the camera's effective viewable area in world coordinates
+        half_screen_width = SCREEN_WIDTH / 2 / self.cam.zoom
+        half_screen_height = SCREEN_HEIGHT / 2 / self.cam.zoom
+
+        min_x = half_screen_width
+        max_x = self.map_width - half_screen_width
+        min_y = half_screen_height
+        max_y = self.map_height - half_screen_height
+
+        # Apply clamping
+        self.cam.target.x = max(min_x, min(self.cam.target.x, max_x))
+        self.cam.target.y = max(min_y, min(self.cam.target.y, max_y))
+
+        # Apply camera shake if active
+        if self.camera_shake_duration > 0:
+            shake_offset_x = random.uniform(
+                -self.camera_shake_intensity, self.camera_shake_intensity
+            )
+            shake_offset_y = random.uniform(
+                -self.camera_shake_intensity, self.camera_shake_intensity
+            )
+            self.cam.offset.x += shake_offset_x
+            self.cam.offset.y += shake_offset_y
+            self.camera_shake_duration -= delta_time
+        else:
+            # Reset offset if shake is over to prevent drift
+            self.cam.offset = pr.Vector2(SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2)
+
+    def trigger_shake(self, intensity: float, duration: float):
+        self.camera_shake_intensity = intensity
+        self.camera_shake_duration = duration
 
     def begin_mode(self):
         pr.begin_mode_2d(self.cam)
@@ -159,8 +191,6 @@ class Camera:
 
 
 # --- Map Generation ---
-
-
 def generate_objects(num_objects: int, width: int, height: int) -> List[GameObject]:
     objs = []
     for _ in range(num_objects):
@@ -175,11 +205,6 @@ def generate_objects(num_objects: int, width: int, height: int) -> List[GameObje
 
 
 # --- Game State ---
-
-# In a real large-scale game, 'maps' would not hold ALL objects for ALL maps in memory.
-# Instead, it would be a mechanism to load/unload chunks or cells of objects as the player moves.
-# For this example, we'll keep all map objects in memory for simplicity,
-# but only process/render those within the AOI.
 maps: Dict[int, Dict[str, List[GameObject]]] = {
     1: {
         "portals": [
@@ -234,15 +259,13 @@ maps[2]["obstacles"] = generate_objects(200, MAP_WIDTH, MAP_HEIGHT)
 
 current_map_id = 1
 player = Player(x=50.0, y=50.0, width=TILE_SIZE, height=TILE_SIZE)
-camera = Camera(player)
+camera = GameCamera(player, MAP_WIDTH, MAP_HEIGHT)  # Pass map dimensions to camera
 
 collided_portal_info: str = "None"
 portal_hold_time_display: float = 0.0
 
 
 # --- Main Game Loop ---
-
-
 def main():
     global current_map_id, collided_portal_info, portal_hold_time_display
     pr.init_window(SCREEN_WIDTH, SCREEN_HEIGHT, b"RPG Map Portal System with AOI")
@@ -250,15 +273,10 @@ def main():
 
     while not pr.window_should_close():
         delta_time = pr.get_frame_time()
-        camera.update()
+        camera.update(delta_time)  # Pass delta_time to camera update
 
-        # Get player's center for AOI calculations
         player_center_x, player_center_y = player.get_center()
 
-        # Filter obstacles and portals within AOI for collision and rendering
-        # We use AOI_RADIUS for rendering, and a slightly larger radius for collision
-        # and portal checks to prevent objects popping in/out too abruptly.
-        # For simplicity, we'll use AOI_RADIUS for all filtering here.
         active_obstacles = []
         active_portals = []
         rendered_object_count = 0
@@ -276,16 +294,15 @@ def main():
             distance_sq = (player_center_x - portal_center_x) ** 2 + (
                 player_center_y - portal_center_y
             ) ** 2
-            if distance_sq < AOI_RADIUS**2:  # Use AOI_RADIUS for portal checks too
+            if distance_sq < AOI_RADIUS**2:
                 active_portals.append(portal)
 
-        # Update player with only active obstacles for collision detection
         player.update(delta_time, active_obstacles)
 
         collided_portal_info = "None"
         portal_hold_time_display = 0.0
 
-        for portal in active_portals:  # Only check portals within AOI
+        for portal in active_portals:
             if pr.check_collision_recs(player.get_rect(), portal.get_rect()):
                 collided_portal_info = f"Portal to Map {portal.dest_map} ({int(portal.dest_x)},{int(portal.dest_y)})"
                 portal_hold_time_display = player.stationary_time
@@ -293,13 +310,13 @@ def main():
                     current_map_id = portal.dest_map
                     player.x, player.y = portal.dest_x, portal.dest_y
                     player.stationary_time = 0.0
+                    camera.trigger_shake(5.0, 0.2)  # Trigger shake on teleport
                     break
 
         pr.begin_drawing()
         pr.clear_background(pr.RAYWHITE)
         camera.begin_mode()
 
-        # Draw only objects within the AOI
         for obj in active_obstacles:
             pr.draw_rectangle_rec(obj.get_rect(), obj.color)
             rendered_object_count += 1
@@ -308,40 +325,21 @@ def main():
             rendered_object_count += 1
         pr.draw_rectangle_rec(player.get_rect(), player.color)
 
-        # Draw the AOI circle for visualization
         pr.draw_circle_lines(
             int(player_center_x), int(player_center_y), AOI_RADIUS, pr.BLUE
         )
 
-        # The map boundary drawing should still consider the full map, not just AOI
-        all_x = (
-            [obj.x for obj in maps[current_map_id]["obstacles"]]
-            + [p.x for p in maps[current_map_id]["portals"]]
-            + [player.x]
-        )
-        all_y = (
-            [obj.y for obj in maps[current_map_id]["obstacles"]]
-            + [p.y for p in maps[current_map_id]["portals"]]
-            + [player.y]
-        )
-        # Ensure there are elements before calling min/max
-        if all_x and all_y:
-            min_x, max_x = int(min(all_x)), int(max(all_x) + TILE_SIZE)
-            min_y, max_y = int(min(all_y)), int(max(all_y) + TILE_SIZE)
-            pr.draw_rectangle_lines(min_x, min_y, max_x - min_x, max_y - min_y, pr.RED)
+        # Draw map boundaries
+        pr.draw_rectangle_lines(0, 0, MAP_WIDTH, MAP_HEIGHT, pr.RED)
 
         camera.end_mode()
 
         # --- UI ---
         pr.draw_text(f"Map: {current_map_id}", 10, 10, 20, pr.DARKGRAY)
-        # Display the count of rendered objects, not all loaded objects
         pr.draw_text(
             f"Rendered objects: {rendered_object_count}", 10, 35, 20, pr.DARKGRAY
         )
-        # Memory calculation now reflects only rendered objects for a more accurate representation
-        kb_usage = (
-            rendered_object_count * 16 / 1024
-        )  # Assuming 16 bytes per object for rough estimate
+        kb_usage = rendered_object_count * 16 / 1024
         pr.draw_text(f"Memory (KB, rendered): {kb_usage:.1f}", 10, 60, 20, pr.DARKGRAY)
         if collided_portal_info != "None":
             pr.draw_text(
@@ -360,7 +358,6 @@ def main():
         pr.draw_rectangle(mm_x, mm_y, minimap_size, minimap_size, pr.LIGHTGRAY)
         pr.draw_rectangle_lines(mm_x, mm_y, minimap_size, minimap_size, pr.DARKGRAY)
         scale_x, scale_y = minimap_size / MAP_WIDTH, minimap_size / MAP_HEIGHT
-        # Minimap still shows all objects for context, not just AOI
         for obj in maps[current_map_id]["obstacles"]:
             pr.draw_rectangle(
                 mm_x + int(obj.x * scale_x),
