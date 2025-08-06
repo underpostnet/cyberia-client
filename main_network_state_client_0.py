@@ -1,11 +1,15 @@
 import pyray as pr
 import random
 from dataclasses import dataclass, field
-from typing import Tuple, List, Optional
+from typing import Tuple, List, Optional, Dict, Any
 import math
 from warnings import warn
 import heapq
 from collections import deque
+import websocket  # pip install websocket-client
+import threading
+import json
+import time
 
 # --- Constants ---
 SCREEN_WIDTH = 800
@@ -17,6 +21,7 @@ MAP_HEIGHT = 1200
 AOI_RADIUS = 300.0
 OBSTACLE_INFLATION_PADDING = 5
 DEBUG_DRAW_GRID = False
+SERVER_URL = "ws://localhost:8080/ws"  # WebSocket server URL
 
 Position = Tuple[float, float]
 GridPosition = Tuple[int, int]
@@ -171,7 +176,7 @@ class GameObject:
 
 @dataclass
 class Player(GameObject):
-    color: pr.Color = field(default_factory=lambda: pr.BLUE)
+    player_id: str = ""  # Default value is fine now that GameObject is a dataclass
     stationary_time: float = 0.0
     speed: float = 150.0
     prev_pos: Position = field(default_factory=lambda: (0.0, 0.0))
@@ -180,6 +185,8 @@ class Player(GameObject):
     current_path_index: int = 0
 
     def __post_init__(self):
+        # Call parent's __post_init__ if it existed, or handle own post-init logic
+        super().__post_init__() if hasattr(super(), "__post_init__") else None
         self.prev_pos = (self.x, self.y)
 
     def update(self, delta_time: float, obstacles: List[GameObject]):
@@ -235,6 +242,14 @@ class Player(GameObject):
 
 
 @dataclass
+class OtherPlayer(GameObject):
+    player_id: str = ""  # Default value is fine now that GameObject is a dataclass
+    color: pr.Color = field(
+        default_factory=lambda: pr.RED
+    )  # Different color for other players
+
+
+@dataclass
 class Portal(GameObject):
     dest_map: int
     dest_portal_index: int
@@ -249,6 +264,7 @@ class Rock(GameObject):
     color: pr.Color = field(default_factory=lambda: pr.BROWN)
 
     def __post_init__(self):
+        super().__post_init__() if hasattr(super(), "__post_init__") else None
         self.width = TILE_SIZE
         self.height = TILE_SIZE
 
@@ -259,6 +275,7 @@ class Bush(GameObject):
     color: pr.Color = field(default_factory=lambda: pr.DARKGREEN)
 
     def __post_init__(self):
+        super().__post_init__() if hasattr(super(), "__post_init__") else None
         self.width = TILE_SIZE
         self.height = TILE_SIZE
 
@@ -703,10 +720,109 @@ class Map:
         return self.navigation_grid_manager.get_grid()
 
 
+# --- Network Manager ---
+class NetworkManager:
+    """Manages WebSocket communication with the game server."""
+
+    def __init__(self, server_url: str, game_state_callback: callable):
+        self.server_url = server_url
+        self.ws: Optional[websocket.WebSocketApp] = None
+        self.is_connected = False
+        self.game_state_callback = game_state_callback
+        self.player_id: str = ""
+        self.other_players_data: Dict[str, Dict[str, Any]] = (
+            {}
+        )  # Stores other players' data
+
+    def on_open(self, ws):
+        print("### Connected to WebSocket server ###")
+        self.is_connected = True
+
+    def on_message(self, ws, message):
+        try:
+            data = json.loads(message)
+            message_type = data.get("type")
+
+            if message_type == "init":
+                self.player_id = data.get("playerId", "")
+                print(f"Received player ID: {self.player_id}")
+                self.game_state_callback("init_player_id", self.player_id)
+            elif message_type == "player_update":
+                # Update other players' positions
+                other_players_list = data.get("players", [])
+                new_other_players_data = {}
+                for p_data in other_players_list:
+                    p_id = p_data.get("id")
+                    if (
+                        p_id and p_id != self.player_id
+                    ):  # Don't update our own player from server
+                        new_other_players_data[p_id] = p_data
+                self.other_players_data = new_other_players_data
+                self.game_state_callback(
+                    "update_other_players", self.other_players_data
+                )
+            elif message_type == "player_disconnect":
+                disconnected_id = data.get("playerId")
+                if disconnected_id in self.other_players_data:
+                    del self.other_players_data[disconnected_id]
+                    self.game_state_callback(
+                        "update_other_players", self.other_players_data
+                    )
+
+        except json.JSONDecodeError:
+            print(f"Failed to decode JSON message: {message}")
+        except Exception as e:
+            print(f"Error processing message: {e}")
+
+    def on_error(self, ws, error):
+        print(f"### WebSocket Error: {error} ###")
+        self.is_connected = False
+
+    def on_close(self, ws, close_status_code, close_msg):
+        print(
+            f"### Disconnected from WebSocket server (Code: {close_status_code}, Message: {close_msg}) ###"
+        )
+        self.is_connected = False
+
+    def connect(self):
+        self.ws = websocket.WebSocketApp(
+            self.server_url,
+            on_open=self.on_open,
+            on_message=self.on_message,
+            on_error=self.on_error,
+            on_close=self.on_close,
+        )
+        # Run in a separate thread to not block the main game loop
+        self.ws_thread = threading.Thread(target=self.ws.run_forever, daemon=True)
+        self.ws_thread.start()
+
+    def send_player_update(self, player_x: float, player_y: float, current_map_id: int):
+        if self.is_connected and self.player_id:
+            message = {
+                "type": "player_update",
+                "id": self.player_id,
+                "x": player_x,
+                "y": player_y,
+                "mapId": current_map_id,
+            }
+            try:
+                self.ws.send(json.dumps(message))
+            except websocket._exceptions.WebSocketConnectionClosedException:
+                print("WebSocket connection closed, cannot send message.")
+                self.is_connected = False
+            except Exception as e:
+                print(f"Error sending message: {e}")
+
+    def close(self):
+        if self.ws:
+            self.ws.close()
+
+
 class GameState:
     """Manages the overall game state."""
 
-    def __init__(self):
+    def __init__(self, network_manager: "NetworkManager"):
+        self.network_manager = network_manager
         self.portal_configs_map1 = [
             {"dest_map": 2, "dest_portal_index": 0, "spawn_radius": 150.0},
             {"dest_map": 1, "dest_portal_index": 0, "spawn_radius": 100.0},
@@ -742,6 +858,7 @@ class GameState:
             y=player_initial_y,
             width=self.player_dimensions[0],
             height=self.player_dimensions[1],
+            player_id="",  # Default value for player_id
         )
         self.camera = GameCamera(self.player, MAP_WIDTH, MAP_HEIGHT)
 
@@ -749,6 +866,9 @@ class GameState:
         self.portal_hold_time_display: float = 0.0
         self.active_click_effects: List[ClickEffect] = []
         self.debug_draw_grid = False
+        self.other_players: Dict[str, OtherPlayer] = (
+            {}
+        )  # Stores other players' game objects
 
     def get_current_map(self) -> Map:
         return self.maps[self.current_map_id]
@@ -792,6 +912,39 @@ class GameState:
             self.player.x, self.player.y = spawn_x, spawn_y
             self.player.stationary_time = 0.0
             self.camera.trigger_shake(5.0, 0.2)
+            # Send map change to server
+            self.network_manager.send_player_update(
+                self.player.x, self.player.y, self.current_map_id
+            )
+
+    def handle_network_data(self, event_type: str, data: Any):
+        """Callback for NetworkManager to update game state."""
+        if event_type == "init_player_id":
+            self.player.player_id = data
+        elif event_type == "update_other_players":
+            # Update or create OtherPlayer objects
+            new_other_players = {}
+            for player_id, p_data in data.items():
+                if player_id != self.player.player_id:
+                    if player_id in self.other_players:
+                        # Update existing player
+                        other_p = self.other_players[player_id]
+                        other_p.x = p_data["x"]
+                        other_p.y = p_data["y"]
+                        # Only show players on the same map
+                        if p_data["mapId"] == self.current_map_id:
+                            new_other_players[player_id] = other_p
+                    else:
+                        # Create new player
+                        if p_data["mapId"] == self.current_map_id:
+                            new_other_players[player_id] = OtherPlayer(
+                                x=p_data["x"],  # Pass GameObject fields first
+                                y=p_data["y"],
+                                width=self.player_dimensions[0],
+                                height=self.player_dimensions[1],
+                                player_id=player_id,  # Then OtherPlayer specific fields
+                            )
+            self.other_players = new_other_players
 
 
 class GameRenderer:
@@ -819,9 +972,32 @@ class GameRenderer:
                 pr.RED,
             )
 
+        # Draw local player
         pr.draw_rectangle_rec(
             self.game_state.player.get_rect(), self.game_state.player.color
         )
+        # Draw player ID above local player
+        pr.draw_text(
+            self.game_state.player.player_id[:8],  # Show first 8 chars of ID
+            int(self.game_state.player.x),
+            int(self.game_state.player.y - 15),
+            10,
+            pr.BLACK,
+        )
+        rendered_object_count += 1
+
+        # Draw other players
+        for other_player_id, other_player in self.game_state.other_players.items():
+            pr.draw_rectangle_rec(other_player.get_rect(), other_player.color)
+            pr.draw_text(
+                other_player_id[:8],  # Show first 8 chars of ID
+                int(other_player.x),
+                int(other_player.y - 15),
+                10,
+                pr.BLACK,
+            )
+            rendered_object_count += 1
+
         return rendered_object_count
 
     def draw_path(self):
@@ -927,6 +1103,17 @@ class GameRenderer:
         else:
             pr.draw_text("Target Grid: None", 10, 135, 20, pr.DARKGRAY)
 
+        pr.draw_text(
+            f"Player ID: {self.game_state.player.player_id[:8]}", 10, 160, 20, pr.BLACK
+        )
+        pr.draw_text(
+            f"Other Players: {len(self.game_state.other_players)}",
+            10,
+            185,
+            20,
+            pr.BLACK,
+        )
+
         self._draw_minimap()
 
     def _draw_minimap(self):
@@ -954,25 +1141,48 @@ class GameRenderer:
                 4,
                 portal.color,
             )
+        # Draw local player on minimap
         pr.draw_circle(
             mm_x + int(self.game_state.player.x * scale_x),
             mm_y + int(self.game_state.player.y * scale_y),
             3,
             self.game_state.player.color,
         )
+        # Draw other players on minimap
+        for other_player in self.game_state.other_players.values():
+            if (
+                other_player.player_id != self.game_state.player.player_id
+            ):  # Don't redraw self
+                pr.draw_circle(
+                    mm_x + int(other_player.x * scale_x),
+                    mm_y + int(other_player.y * scale_y),
+                    3,
+                    other_player.color,
+                )
 
 
 class Game:
     """Main game class to encapsulate game loop and logic."""
 
     def __init__(self):
-        pr.init_window(SCREEN_WIDTH, SCREEN_HEIGHT, b"RPG Map Portal System with AOI")
+        pr.init_window(
+            SCREEN_WIDTH, SCREEN_HEIGHT, b"MMORPG Map Portal System with AOI"
+        )
         pr.set_target_fps(60)
-        self.game_state = GameState()
+
+        self.network_manager = NetworkManager(SERVER_URL, self._game_state_callback)
+        self.game_state = GameState(self.network_manager)
         self.game_renderer = GameRenderer(self.game_state)
         self.pathfinder = AStarPathfinder(
             self.game_state.get_current_map().get_navigation_grid()
         )
+        self.network_manager.connect()
+        self.last_network_update_time = time.time()
+        self.network_update_interval = 0.1  # Send updates 10 times per second
+
+    def _game_state_callback(self, event_type: str, data: Any):
+        """Callback to pass network data to game state."""
+        self.game_state.handle_network_data(event_type, data)
 
     def _handle_input(self):
         """Processes user input."""
@@ -1073,6 +1283,15 @@ class Game:
 
         self.game_state.player.update(delta_time, active_obstacles)
 
+        # Send player update to server at a fixed interval
+        if time.time() - self.last_network_update_time >= self.network_update_interval:
+            self.network_manager.send_player_update(
+                self.game_state.player.x,
+                self.game_state.player.y,
+                self.game_state.current_map_id,
+            )
+            self.last_network_update_time = time.time()
+
         self.game_state.collided_portal_info = "None"
         self.game_state.portal_hold_time_display = 0.0
 
@@ -1115,6 +1334,7 @@ class Game:
 
             pr.end_drawing()
 
+        self.network_manager.close()  # Close WebSocket connection on exit
         pr.close_window()
 
 
