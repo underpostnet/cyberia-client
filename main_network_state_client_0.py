@@ -268,7 +268,7 @@ class ClickEffect:
     x: float
     y: float
     timer: float = 0.5
-    radius: float = 10.0
+    radius: float = 10.0  # Default radius
     color: pr.Color = pr.YELLOW
 
     def update(self, delta_time: float) -> bool:
@@ -279,6 +279,7 @@ class ClickEffect:
     def draw(self, camera_zoom: float):
         """Draws the click effect, fading out over time."""
         alpha = int(255 * (self.timer / 0.5))  # Alpha value from 0-255
+        alpha = max(0, min(255, alpha))  # Clamp alpha to 0-255
 
         # Robustly determine color components
         r, g, b = 255, 255, 0  # Default to yellow
@@ -827,6 +828,13 @@ class GameRenderer:
         """Draws the player's path."""
         player = self.game_state.player
         if player.path:
+            # Draw a distinct circle at the final target grid position
+            target_grid_pos = player.path[-1]
+            target_world_x, target_world_y = grid_to_world(target_grid_pos)
+            pr.draw_circle(
+                int(target_world_x), int(target_world_y), 10, pr.BLUE
+            )  # Blue circle for target
+
             for i, grid_pos in enumerate(player.path):
                 world_x, world_y = grid_to_world(grid_pos)
                 if i == 0 and player.current_path_index == 0:
@@ -975,8 +983,16 @@ class Game:
             mouse_world_pos = pr.get_screen_to_world_2d(
                 pr.get_mouse_position(), self.game_state.camera.cam
             )
+
+            # Get the grid position from the raw mouse click
+            clicked_grid_pos = world_to_grid(mouse_world_pos.x, mouse_world_pos.y)
+            # Convert the grid position back to world coordinates (center of tile) for the click effect
+            click_effect_world_x, click_effect_world_y = grid_to_world(clicked_grid_pos)
+
+            # The ClickEffect is a temporary graphical object, independent of pathfinding logic.
+            # Its position is now explicitly set to the center of the clicked grid tile in world coordinates.
             self.game_state.active_click_effects.append(
-                ClickEffect(x=mouse_world_pos.x, y=mouse_world_pos.y)
+                ClickEffect(x=click_effect_world_x, y=click_effect_world_y)
             )
 
             target_grid_pos = world_to_grid(mouse_world_pos.x, mouse_world_pos.y)
@@ -1089,9 +1105,12 @@ class Game:
             self.game_renderer.draw_path()
             self.game_renderer.draw_debug_grid()
             self.game_renderer.draw_aoi_and_map_boundary()
+            self.game_renderer.draw_click_effects(
+                delta_time
+            )  # Moved inside camera mode
+
             self.game_state.camera.end_mode()
 
-            self.game_renderer.draw_click_effects(delta_time)
             self.game_renderer.draw_ui(rendered_object_count)
 
             pr.end_drawing()
