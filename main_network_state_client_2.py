@@ -20,6 +20,11 @@ CELL_SIZE = SCREEN_WIDTH / GRID_SIZE_W
 FPS = 60
 WS_URL = "ws://localhost:8080/ws"
 
+# Dev GUI Flag
+# Set to True to enable debug rendering (grid, AOI)
+DEV_GUI = True
+AOI_RADIUS = 20.0  # Client-side assumption for AOI radius, in grid units
+
 # Colors
 COLOR_BACKGROUND = pr.Color(30, 30, 30, 255)
 COLOR_OBSTACLE = pr.Color(100, 100, 100, 255)
@@ -27,6 +32,7 @@ COLOR_PLAYER = pr.Color(0, 200, 255, 255)
 COLOR_OTHER_PLAYER = pr.Color(255, 100, 0, 255)
 COLOR_PATH = pr.Color(0, 255, 0, 100)
 COLOR_TARGET = pr.Color(255, 255, 0, 255)
+COLOR_AOI = pr.fade(pr.BLUE, 0.2)
 
 
 # --- Object-Oriented Refactoring ---
@@ -297,28 +303,44 @@ class GameClient:
         """
         Draws the background grid lines, scaled with zoom.
         """
-        for i in range(self.grid_w + 1):
-            pr.draw_line(
-                int(i * self.cell_size),
-                int(0),
-                int(i * self.cell_size),
-                int(self.grid_h * self.cell_size),
-                pr.fade(pr.GRAY, 0.5),
-            )
-        for i in range(self.grid_h + 1):
-            pr.draw_line(
-                int(0),
-                int(i * self.cell_size),
-                int(self.grid_w * self.cell_size),
-                int(i * self.cell_size),
-                pr.fade(pr.GRAY, 0.5),
-            )
+        if DEV_GUI:
+            for i in range(self.grid_w + 1):
+                pr.draw_line(
+                    int(i * self.cell_size),
+                    int(0),
+                    int(i * self.cell_size),
+                    int(self.grid_h * self.cell_size),
+                    pr.fade(pr.GRAY, 0.5),
+                )
+            for i in range(self.grid_h + 1):
+                pr.draw_line(
+                    int(0),
+                    int(i * self.cell_size),
+                    int(self.grid_w * self.cell_size),
+                    int(i * self.cell_size),
+                    pr.fade(pr.GRAY, 0.5),
+                )
 
     def draw_game_objects(self):
         """
         Draws all objects based on the game state received from the server.
         """
         with self.mutex:
+            if DEV_GUI and self.game_state.player:
+                # Calculate AOI rectangle in grid coordinates
+                aoi_x = self.game_state.player.smooth_pos.x - AOI_RADIUS
+                aoi_y = self.game_state.player.smooth_pos.y - AOI_RADIUS
+                aoi_size = AOI_RADIUS * 2
+
+                # Draw the AOI rectangle
+                pr.draw_rectangle(
+                    int(aoi_x * self.cell_size),
+                    int(aoi_y * self.cell_size),
+                    int(aoi_size * self.cell_size),
+                    int(aoi_size * self.cell_size),
+                    COLOR_AOI,
+                )
+
             # Draw visible obstacles with a slight border
             for _, obs in self.game_state.visible_obstacles.items():
                 # Obstacles are rendered as full grid cells
