@@ -296,7 +296,6 @@ class GameClient:
             pr.end_mode_2d()
 
             # Draw UI on top of the 2D world
-            pr.draw_fps(10, 10)
             self.draw_debug_info(pr.get_fps(), self.download_kbps, self.upload_kbps)
             pr.end_drawing()
 
