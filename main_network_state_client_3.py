@@ -52,7 +52,7 @@ class GameState:
         self.feedback_message = None
         self.message_timer = 0.0
         self.camera = pr.Camera2D()
-        self.camera.zoom = 1.0
+        self.camera.zoom = 2.0
         # --- Interpolation-related state variables ---
         # Current position used for rendering
         self.player_render_pos = {"X": 0.0, "Y": 0.0}
