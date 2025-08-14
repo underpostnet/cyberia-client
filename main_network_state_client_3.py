@@ -9,6 +9,8 @@ from enum import Enum, auto
 
 # --- Game Constants ---
 # These are client-side defaults and will be updated by the server
+# The window will now be initialized with these values and resized
+# later if the server provides different grid dimensions.
 SCREEN_WIDTH = 1280
 SCREEN_HEIGHT = 800
 GRID_SIZE_W = 100
@@ -112,7 +114,7 @@ class NetworkClient:
         self.upload_kbps = 0.0
         self.player_id = None
 
-        # Initialize camera here
+        # Initialize camera with the defined SCREEN_WIDTH and SCREEN_HEIGHT
         self.game_state.camera = pr.Camera2D(
             pr.Vector2(SCREEN_WIDTH / 2, SCREEN_HEIGHT / 2),  # offset
             pr.Vector2(0, 0),  # target
@@ -129,28 +131,33 @@ class NetworkClient:
 
                 if message_type == "init_data":
                     payload = data.get("payload", {})
-                    self.game_state.grid_w = payload.get(
-                        "gridW", self.game_state.grid_w
-                    )
-                    self.game_state.grid_h = payload.get(
-                        "gridH", self.game_state.grid_h
-                    )
-                    self.game_state.aoi_radius = payload.get(
-                        "aoiRadius", self.game_state.aoi_radius
-                    )
-                    pr.set_window_size(
-                        self.game_state.grid_w * int(CELL_SIZE),
-                        self.game_state.grid_h * int(CELL_SIZE),
-                    )
+                    if payload:
+                        new_grid_w = payload.get("gridW", self.game_state.grid_w)
+                        new_grid_h = payload.get("gridH", self.game_state.grid_h)
+                        self.game_state.aoi_radius = payload.get(
+                            "aoiRadius", self.game_state.aoi_radius
+                        )
 
-                    # Update camera offset for the new window size
-                    self.game_state.camera.offset = pr.Vector2(
-                        pr.get_screen_width() / 2, pr.get_screen_height() / 2
-                    )
+                        # Check if the grid size has changed and resize the window
+                        if (
+                            new_grid_w != self.game_state.grid_w
+                            or new_grid_h != self.game_state.grid_h
+                        ):
+                            self.game_state.grid_w = new_grid_w
+                            self.game_state.grid_h = new_grid_h
+                            pr.set_window_size(
+                                self.game_state.grid_w * int(CELL_SIZE),
+                                self.game_state.grid_h * int(CELL_SIZE),
+                            )
 
-                    # FIX: No obstacles are sent in init_data anymore.
-                    # The client will receive its first obstacle list in the initial AOI update.
-                    self.game_state.obstacles = {}
+                        # Update camera offset for the new window size
+                        self.game_state.camera.offset = pr.Vector2(
+                            pr.get_screen_width() / 2, pr.get_screen_height() / 2
+                        )
+
+                        # FIX: No obstacles are sent in init_data anymore.
+                        # The client will receive its first obstacle list in the initial AOI update.
+                        self.game_state.obstacles = {}
 
                 elif message_type == "aoi_update":
                     payload = data.get("payload", {})
@@ -466,6 +473,7 @@ class NetworkClient:
 
     def run_game_loop(self):
         # --- Pyray Initialization ---
+        # Initialize the window with the client-side constants.
         pr.init_window(SCREEN_WIDTH, SCREEN_HEIGHT, "Network State Client")
         pr.set_target_fps(FPS)
 
