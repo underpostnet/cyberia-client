@@ -18,10 +18,11 @@ DEFAULT_OBJECT_HEIGHT = 1.0
 CELL_SIZE = 12.0  # Slightly larger cells for better visibility
 FPS = 60
 WS_URL = "ws://localhost:8080/ws"
-INTERPOLATION_TIME_MS = 100  # Increased for smoother transitions over network latency
+# NOTE: Adjusted interpolation time for smoother movement
+INTERPOLATION_TIME_MS = 200
 
 DEV_GUI = True
-AOI_RADIUS = 25.0
+AOI_RADIUS = 15.0  # Must match server setting
 
 # --- Colors ---
 COLOR_BACKGROUND = pr.Color(30, 30, 30, 255)
@@ -30,11 +31,13 @@ COLOR_PLAYER = pr.Color(0, 200, 255, 255)
 COLOR_OTHER_PLAYER = pr.Color(255, 100, 0, 255)
 COLOR_PATH = pr.fade(pr.GREEN, 0.5)
 COLOR_TARGET = pr.Color(255, 255, 0, 255)
+# NEW: AOI is now transparent purple as requested
 COLOR_AOI = pr.fade(pr.PURPLE, 0.2)
 COLOR_DEBUG_TEXT = pr.Color(220, 220, 220, 255)
 COLOR_ERROR_TEXT = pr.Color(255, 50, 50, 255)
 COLOR_PORTAL = pr.Color(180, 50, 255, 180)
 COLOR_PORTAL_LABEL = pr.Color(240, 240, 240, 255)
+COLOR_UI_TEXT = pr.Color(255, 255, 255, 255)
 
 
 # --- Enums for Animation State ---
@@ -53,6 +56,8 @@ class Direction(Enum):
 class ObjectLayerMode(Enum):
     IDLE = 0
     WALKING = 1
+    # NEW: Added TELEPORTING mode to handle transitions
+    TELEPORTING = 2
 
 
 # --- Game State Management ---
@@ -150,6 +155,16 @@ class NetworkClient:
                         self.game_state.player_pos_server = pr.Vector2(
                             pos.get("X", 0.0), pos.get("Y", 0.0)
                         )
+
+                        # NEW: Check if the player is teleporting to prevent interpolation jump
+                        if self.game_state.player_mode == ObjectLayerMode.TELEPORTING:
+                            self.game_state.player_pos_interpolated = (
+                                self.game_state.player_pos_server
+                            )
+                            self.game_state.player_pos_prev = (
+                                self.game_state.player_pos_server
+                            )
+
                         self.game_state.last_update_time = time.time()
 
                         dims = player_data.get("Dims", {})
@@ -164,6 +179,14 @@ class NetworkClient:
                             ]
                         else:
                             self.game_state.path = []
+
+                        target_pos_data = player_data.get("targetPos")
+                        if target_pos_data:
+                            self.game_state.target_pos = pr.Vector2(
+                                target_pos_data.get("X"), target_pos_data.get("Y")
+                            )
+                        else:
+                            self.game_state.target_pos = pr.Vector2(-1, -1)
 
                     # --- Other Players Update ---
                     visible_players_data = payload.get("visiblePlayers")
@@ -182,6 +205,7 @@ class NetworkClient:
 
                     # --- Grid Objects (Obstacles/Portals) Update ---
                     visible_objects_data = payload.get("visibleGridObjects")
+                    # Clear and update only the visible objects to improve performance
                     self.game_state.obstacles = {}
                     self.game_state.portals = {}
                     if visible_objects_data:
@@ -189,239 +213,236 @@ class NetworkClient:
                             obj_type = obj_data.get("Type")
                             pos = obj_data.get("Pos", {})
                             dims = obj_data.get("Dims", {})
-                            obj = {
-                                "pos": pr.Vector2(pos.get("X"), pos.get("Y")),
-                                "dims": pr.Vector2(
-                                    dims.get("Width"), dims.get("Height")
-                                ),
-                            }
                             if obj_type == "obstacle":
-                                self.game_state.obstacles[obj_id] = obj
+                                self.game_state.obstacles[obj_id] = {
+                                    "pos": pr.Vector2(pos.get("X"), pos.get("Y")),
+                                    "dims": pr.Vector2(
+                                        dims.get("Width"), dims.get("Height")
+                                    ),
+                                }
                             elif obj_type == "portal":
-                                obj["label"] = obj_data.get("PortalLabel", "")
-                                self.game_state.portals[obj_id] = obj
+                                self.game_state.portals[obj_id] = {
+                                    "pos": pr.Vector2(pos.get("X"), pos.get("Y")),
+                                    "dims": pr.Vector2(
+                                        dims.get("Width"), dims.get("Height")
+                                    ),
+                                    "label": obj_data.get("PortalLabel", ""),
+                                }
 
-            except json.JSONDecodeError as e:
+            except Exception as e:
+                # NEW: Catch and display specific errors to the user
                 self.game_state.last_error_message = f"JSON Error: {e}"
                 self.game_state.error_display_time = time.time()
-            except Exception as e:
-                self.game_state.last_error_message = f"Error: {e}"
-                self.game_state.error_display_time = time.time()
+                print(self.game_state.last_error_message)
 
     def on_error(self, ws, error):
+        print(f"WebSocket error: {error}")
         with self.mutex:
             self.game_state.last_error_message = f"WS Error: {error}"
             self.game_state.error_display_time = time.time()
-            print(f"WS Error: {error}")
 
     def on_close(self, ws, close_status_code, close_msg):
-        print(f"### closed ### Status: {close_status_code}, Message: {close_msg}")
-        self.is_running = False
+        print("WebSocket connection closed")
+        with self.mutex:
+            self.game_state.last_error_message = "WS Connection Closed"
+            self.game_state.error_display_time = time.time()
+            self.is_running = False
 
     def on_open(self, ws):
-        print("Opened connection")
-        self.is_running = True
+        print("WebSocket connection opened")
+        # No need to send anything on open for this protocol
 
-    def connect(self):
-        self.ws = websocket.WebSocketApp(
-            WS_URL,
-            on_open=self.on_open,
-            on_message=self.on_message,
-            on_error=self.on_error,
-            on_close=self.on_close,
-        )
-        self.ws_thread = threading.Thread(
-            target=self.ws.run_forever,
-            kwargs={"dispatcher": None, "reconnect": 5},
-            daemon=True,
-        )
-        self.ws_thread.start()
+    def send_player_action(self, target_x, target_y):
+        if self.ws and self.ws.sock and self.ws.sock.connected:
+            message = {
+                "type": "player_action",
+                "payload": {"targetX": target_x, "targetY": target_y},
+            }
+            try:
+                message_str = json.dumps(message)
+                self.ws.send(message_str)
+                with self.mutex:
+                    self.game_state.upload_size_bytes += len(message_str)
+            except websocket.WebSocketConnectionClosedException:
+                print("Connection closed, could not send message.")
+            except Exception as e:
+                print(f"Error sending message: {e}")
 
-    def disconnect(self):
-        if self.ws:
-            self.ws.close()
-        if self.ws_thread:
-            self.ws_thread.join()
+    def interpolate_player_position(self):
+        with self.mutex:
+            current_time = time.time()
+            time_since_update = current_time - self.game_state.last_update_time
 
-    def send_path_request(self, target_x, target_y):
-        payload = {
-            "type": "path_request",
-            "payload": {"targetX": target_x, "targetY": target_y},
-        }
-        self.ws.send(json.dumps(payload))
-        self.game_state.upload_size_bytes += len(json.dumps(payload))
+            # Reset interpolation if teleporting
+            if self.game_state.player_mode == ObjectLayerMode.TELEPORTING:
+                self.game_state.player_pos_interpolated = (
+                    self.game_state.player_pos_server
+                )
+                self.game_state.player_pos_prev = self.game_state.player_pos_server
+                return
 
-    def update_camera(self):
-        # Update camera position based on the interpolated player position
-        self.game_state.camera.target = pr.Vector2(
-            self.game_state.player_pos_interpolated.x * CELL_SIZE
-            + self.game_state.player_dims.x * CELL_SIZE / 2,
-            self.game_state.player_pos_interpolated.y * CELL_SIZE
-            + self.game_state.player_dims.y * CELL_SIZE / 2,
-        )
+            # Avoid division by zero
+            if INTERPOLATION_TIME_MS <= 0:
+                self.game_state.player_pos_interpolated = (
+                    self.game_state.player_pos_server
+                )
+                return
 
-    def draw_grid(self):
-        # Only draw the visible grid lines to improve performance
-        start_x = max(
-            0,
-            int(
-                self.game_state.camera.target.x / CELL_SIZE
-                - SCREEN_WIDTH / (2 * CELL_SIZE * self.game_state.camera.zoom)
+            t = min(1.0, time_since_update / (INTERPOLATION_TIME_MS / 1000.0))
+
+            # Linear interpolation for smooth movement
+            self.game_state.player_pos_interpolated.x = (
+                self.game_state.player_pos_prev.x * (1 - t)
+                + self.game_state.player_pos_server.x * t
             )
-            - 1,
-        )
-        end_x = min(
-            self.game_state.grid_w,
-            int(
-                self.game_state.camera.target.x / CELL_SIZE
-                + SCREEN_WIDTH / (2 * CELL_SIZE * self.game_state.camera.zoom)
-            )
-            + 1,
-        )
-        start_y = max(
-            0,
-            int(
-                self.game_state.camera.target.y / CELL_SIZE
-                - SCREEN_HEIGHT / (2 * CELL_SIZE * self.game_state.camera.zoom)
-            )
-            - 1,
-        )
-        end_y = min(
-            self.game_state.grid_h,
-            int(
-                self.game_state.camera.target.y / CELL_SIZE
-                + SCREEN_HEIGHT / (2 * CELL_SIZE * self.game_state.camera.zoom)
-            )
-            + 1,
-        )
-
-        for y in range(start_y, end_y):
-            pr.draw_line(
-                int(start_x * CELL_SIZE),
-                int(y * CELL_SIZE),
-                int(end_x * CELL_SIZE),
-                int(y * CELL_SIZE),
-                pr.fade(pr.DARKGRAY, 0.5),
-            )
-        for x in range(start_x, end_x):
-            pr.draw_line(
-                int(x * CELL_SIZE),
-                int(start_y * CELL_SIZE),
-                int(x * CELL_SIZE),
-                int(end_y * CELL_SIZE),
-                pr.fade(pr.DARKGRAY, 0.5),
+            self.game_state.player_pos_interpolated.y = (
+                self.game_state.player_pos_prev.y * (1 - t)
+                + self.game_state.player_pos_server.y * t
             )
 
-    def draw_obstacles(self):
-        for obj_id, obj in self.game_state.obstacles.items():
-            pos_x = obj["pos"].x * CELL_SIZE
-            pos_y = obj["pos"].y * CELL_SIZE
-            width = obj["dims"].x * CELL_SIZE
-            height = obj["dims"].y * CELL_SIZE
-            pr.draw_rectangle(
-                int(pos_x), int(pos_y), int(width), int(height), COLOR_OBSTACLE
+    def draw_game(self):
+        pr.begin_drawing()
+        pr.clear_background(COLOR_BACKGROUND)
+
+        # Update and set camera
+        with self.mutex:
+            self.game_state.camera.target = pr.Vector2(
+                (
+                    self.game_state.player_pos_interpolated.x
+                    + self.game_state.player_dims.x / 2
+                )
+                * CELL_SIZE,
+                (
+                    self.game_state.player_pos_interpolated.y
+                    + self.game_state.player_dims.y / 2
+                )
+                * CELL_SIZE,
             )
 
-    def draw_portals(self):
-        for portal_id, portal in self.game_state.portals.items():
-            pos_x = portal["pos"].x * CELL_SIZE
-            pos_y = portal["pos"].y * CELL_SIZE
-            width = portal["dims"].x * CELL_SIZE
-            height = portal["dims"].y * CELL_SIZE
-            pr.draw_rectangle(
-                int(pos_x), int(pos_y), int(width), int(height), COLOR_PORTAL
+        pr.begin_mode_2d(self.game_state.camera)
+        with self.mutex:
+            # Draw AOI if DEV_GUI is true
+            if DEV_GUI and self.game_state.player_pos_interpolated is not None:
+                pr.draw_circle_sector(
+                    pr.Vector2(
+                        (
+                            self.game_state.player_pos_interpolated.x
+                            + self.game_state.player_dims.x / 2
+                        )
+                        * CELL_SIZE,
+                        (
+                            self.game_state.player_pos_interpolated.y
+                            + self.game_state.player_dims.y / 2
+                        )
+                        * CELL_SIZE,
+                    ),
+                    self.game_state.aoi_radius * CELL_SIZE,
+                    0,
+                    360,
+                    32,
+                    COLOR_AOI,
+                )
+
+            # Draw obstacles from the received AOI update
+            for _, obs in self.game_state.obstacles.items():
+                pr.draw_rectangle_rec(
+                    pr.Rectangle(
+                        obs["pos"].x * CELL_SIZE,
+                        obs["pos"].y * CELL_SIZE,
+                        obs["dims"].x * CELL_SIZE,
+                        obs["dims"].y * CELL_SIZE,
+                    ),
+                    COLOR_OBSTACLE,
+                )
+
+            # Draw portals from the received AOI update
+            for _, portal in self.game_state.portals.items():
+                portal_rect = pr.Rectangle(
+                    portal["pos"].x * CELL_SIZE,
+                    portal["pos"].y * CELL_SIZE,
+                    portal["dims"].x * CELL_SIZE,
+                    portal["dims"].y * CELL_SIZE,
+                )
+                pr.draw_rectangle_rec(portal_rect, COLOR_PORTAL)
+                pr.draw_text_ex(
+                    pr.get_font_default(),
+                    portal["label"],
+                    pr.Vector2(portal_rect.x + 5, portal_rect.y + 5),
+                    12,
+                    1,
+                    COLOR_PORTAL_LABEL,
+                )
+
+            # Draw other players
+            for _, p in self.game_state.other_players.items():
+                pr.draw_rectangle_rec(
+                    pr.Rectangle(
+                        p["pos"].x * CELL_SIZE,
+                        p["pos"].y * CELL_SIZE,
+                        p["dims"].x * CELL_SIZE,
+                        p["dims"].y * CELL_SIZE,
+                    ),
+                    COLOR_OTHER_PLAYER,
+                )
+
+            # Draw the client's player
+            pr.draw_rectangle_rec(
+                pr.Rectangle(
+                    self.game_state.player_pos_interpolated.x * CELL_SIZE,
+                    self.game_state.player_pos_interpolated.y * CELL_SIZE,
+                    self.game_state.player_dims.x * CELL_SIZE,
+                    self.game_state.player_dims.y * CELL_SIZE,
+                ),
+                COLOR_PLAYER,
             )
 
-            label = portal.get("label", "Portal")
-            label_pos_x = int(pos_x + width / 2)
-            label_pos_y = int(pos_y + height / 2)
-            pr.draw_text(
-                label,
-                label_pos_x - pr.measure_text(label, 10) // 2,
-                label_pos_y - 5,
-                10,
-                COLOR_PORTAL_LABEL,
-            )
-
-    def draw_game_objects(self):
-        # Draw player
-        player_x = self.game_state.player_pos_interpolated.x * CELL_SIZE
-        player_y = self.game_state.player_pos_interpolated.y * CELL_SIZE
-        player_w = self.game_state.player_dims.x * CELL_SIZE
-        player_h = self.game_state.player_dims.y * CELL_SIZE
-        pr.draw_rectangle(
-            int(player_x), int(player_y), int(player_w), int(player_h), COLOR_PLAYER
-        )
-
-        # Draw other players
-        for player_id, player_data in self.game_state.other_players.items():
-            other_x = player_data["pos"].x * CELL_SIZE
-            other_y = player_data["pos"].y * CELL_SIZE
-            other_w = player_data["dims"].x * CELL_SIZE
-            other_h = player_data["dims"].y * CELL_SIZE
-            pr.draw_rectangle(
-                int(other_x),
-                int(other_y),
-                int(other_w),
-                int(other_h),
-                COLOR_OTHER_PLAYER,
-            )
-
-        # Draw path
-        if self.game_state.path:
-            for i in range(len(self.game_state.path) - 1):
-                start = self.game_state.path[i]
-                end = self.game_state.path[i + 1]
-                pr.draw_line(
-                    int(start.x * CELL_SIZE + CELL_SIZE / 2),
-                    int(start.y * CELL_SIZE + CELL_SIZE / 2),
-                    int(end.x * CELL_SIZE + CELL_SIZE / 2),
-                    int(end.y * CELL_SIZE + CELL_SIZE / 2),
+            # Draw path and target
+            for i in range(len(self.game_state.path)):
+                pr.draw_rectangle(
+                    int(self.game_state.path[i].x * CELL_SIZE),
+                    int(self.game_state.path[i].y * CELL_SIZE),
+                    int(self.game_state.player_dims.x * CELL_SIZE),
+                    int(self.game_state.player_dims.y * CELL_SIZE),
                     COLOR_PATH,
                 )
-            # Draw target
-            target_x = self.game_state.path[-1].x * CELL_SIZE
-            target_y = self.game_state.path[-1].y * CELL_SIZE
-            pr.draw_rectangle_lines(
-                int(target_x),
-                int(target_y),
-                int(self.game_state.player_dims.x * CELL_SIZE),
-                int(self.game_state.player_dims.y * CELL_SIZE),
-                COLOR_TARGET,
-            )
+            if self.game_state.target_pos.x != -1:
+                pr.draw_rectangle(
+                    int(self.game_state.target_pos.x * CELL_SIZE),
+                    int(self.game_state.target_pos.y * CELL_SIZE),
+                    int(self.game_state.player_dims.x * CELL_SIZE),
+                    int(self.game_state.player_dims.y * CELL_SIZE),
+                    COLOR_TARGET,
+                )
+        pr.end_mode_2d()
 
-    def draw_debug_info(self, fps, download_kbps, upload_kbps):
+        with self.mutex:
+            self.draw_debug_info(pr.get_fps(), self.download_kbps, self.upload_kbps)
+        pr.end_drawing()
+
+    def draw_debug_info(self, fps, dl_kbps, ul_kbps):
+        # UI labels for mode, direction, map, and position
+        current_map_id = self.game_state.player_map_id
+        player_mode = self.game_state.player_mode.name
+        player_dir = self.game_state.player_direction.name
+
+        pos_str = f"({self.game_state.player_pos_interpolated.x:.2f}, {self.game_state.player_pos_interpolated.y:.2f})"
+        dims_str = f"({self.game_state.player_dims.x:.2f}, {self.game_state.player_dims.y:.2f})"
+
+        # New UI layout
         pr.draw_text(f"FPS: {fps}", 10, 10, 20, COLOR_DEBUG_TEXT)
-        pr.draw_text(
-            f"Download: {download_kbps:.2f} KB/s", 10, 30, 20, COLOR_DEBUG_TEXT
-        )
-        pr.draw_text(f"Upload: {upload_kbps:.2f} KB/s", 10, 50, 20, COLOR_DEBUG_TEXT)
-        pr.draw_text(
-            f"Map ID: {self.game_state.player_map_id}", 10, 70, 20, COLOR_DEBUG_TEXT
-        )
-        pr.draw_text(
-            f"Player Mode: {self.game_state.player_mode.name}",
-            10,
-            90,
-            20,
-            COLOR_DEBUG_TEXT,
-        )
-        pr.draw_text(
-            f"Player Direction: {self.game_state.player_direction.name}",
-            10,
-            110,
-            20,
-            COLOR_DEBUG_TEXT,
-        )
-        pr.draw_text(
-            f"Player Dims: {self.game_state.player_dims.x}x{self.game_state.player_dims.y}",
-            10,
-            130,
-            20,
-            COLOR_DEBUG_TEXT,
-        )
+        pr.draw_text(f"DL: {dl_kbps:.2f} kbps", 10, 30, 20, COLOR_DEBUG_TEXT)
+        pr.draw_text(f"UL: {ul_kbps:.2f} kbps", 10, 50, 20, COLOR_DEBUG_TEXT)
 
-        if time.time() - self.game_state.error_display_time < 5.0:
+        pr.draw_text(f"Map: {current_map_id}", 10, 80, 20, COLOR_UI_TEXT)
+        pr.draw_text(f"Mode: {player_mode}", 10, 100, 20, COLOR_UI_TEXT)
+        pr.draw_text(f"Direction: {player_dir}", 10, 120, 20, COLOR_UI_TEXT)
+        pr.draw_text(f"Pos: {pos_str}", 10, 140, 20, COLOR_UI_TEXT)
+        pr.draw_text(f"Dims: {dims_str}", 10, 160, 20, COLOR_UI_TEXT)
+
+        if (
+            self.game_state.last_error_message
+            and (time.time() - self.game_state.error_display_time) < 5
+        ):
             pr.draw_text(
                 self.game_state.last_error_message,
                 10,
@@ -431,98 +452,69 @@ class NetworkClient:
             )
 
     def run(self):
-        pr.set_config_flags(pr.ConfigFlags.FLAG_WINDOW_RESIZABLE)
-        pr.init_window(SCREEN_WIDTH, SCREEN_HEIGHT, "Networked Game Client")
+        pr.init_window(SCREEN_WIDTH, SCREEN_HEIGHT, "Game Client")
         pr.set_target_fps(FPS)
-        self.connect()
 
-        last_download_bytes = 0
-        last_upload_bytes = 0
-        last_calc_time = time.time()
+        websocket.enableTrace(False)
+        self.ws = websocket.WebSocketApp(
+            WS_URL,
+            on_message=self.on_message,
+            on_error=self.on_error,
+            on_close=self.on_close,
+            on_open=self.on_open,
+        )
+
+        self.ws_thread = threading.Thread(target=self.ws.run_forever)
+        self.ws_thread.daemon = True
+        self.ws_thread.start()
+
+        # Main game loop
+        last_download_check_time = time.time()
+
+        # Set initial camera position after a brief moment to receive init data
+        time.sleep(1)
+        with self.mutex:
+            self.game_state.camera.target = pr.Vector2(
+                (
+                    self.game_state.player_pos_interpolated.x
+                    + self.game_state.player_dims.x / 2
+                )
+                * CELL_SIZE,
+                (
+                    self.game_state.player_pos_interpolated.y
+                    + self.game_state.player_dims.y / 2
+                )
+                * CELL_SIZE,
+            )
 
         while not pr.window_should_close() and self.is_running:
-            # Calculate transfer speed
+            # Check for mouse click to move player
+            if pr.is_mouse_button_pressed(pr.MOUSE_LEFT_BUTTON):
+                mouse_pos = pr.get_mouse_position()
+                world_pos = pr.get_screen_to_world_2d(mouse_pos, self.game_state.camera)
+                target_x = world_pos.x / CELL_SIZE
+                target_y = world_pos.y / CELL_SIZE
+
+                # Snap to grid
+                target_x = math.floor(target_x)
+                target_y = math.floor(target_y)
+
+                self.send_player_action(target_x, target_y)
+
+            # Update download/upload rates
             current_time = time.time()
-            delta_time = current_time - last_calc_time
-            if delta_time >= 1.0:
-                self.download_kbps = (
-                    (self.game_state.download_size_bytes - last_download_bytes) / 1024
-                ) / delta_time
-                self.upload_kbps = (
-                    (self.game_state.upload_size_bytes - last_upload_bytes) / 1024
-                ) / delta_time
-                last_download_bytes = self.game_state.download_size_bytes
-                last_upload_bytes = self.game_state.upload_size_bytes
-                last_calc_time = current_time
+            if current_time - last_download_check_time >= 1:
+                with self.mutex:
+                    self.download_kbps = (
+                        self.game_state.download_size_bytes / 1024
+                    ) * 8
+                    self.upload_kbps = (self.game_state.upload_size_bytes / 1024) * 8
+                    self.game_state.download_size_bytes = 0
+                    self.game_state.upload_size_bytes = 0
+                last_download_check_time = current_time
 
-            # --- Interpolation Logic ---
-            with self.mutex:
-                time_since_update = (
-                    time.time() - self.game_state.last_update_time
-                ) * 1000
-                # Use a linear interpolation factor
-                t = min(1.0, time_since_update / INTERPOLATION_TIME_MS)
-
-                self.game_state.player_pos_interpolated.x = pr.lerp(
-                    self.game_state.player_pos_prev.x,
-                    self.game_state.player_pos_server.x,
-                    t,
-                )
-                self.game_state.player_pos_interpolated.y = pr.lerp(
-                    self.game_state.player_pos_prev.y,
-                    self.game_state.player_pos_server.y,
-                    t,
-                )
-
-            # Update camera
-            self.update_camera()
-
-            # Input handling
-            if pr.is_mouse_button_pressed(pr.MOUSE_BUTTON_LEFT):
-                world_pos = pr.get_screen_to_world_2d(
-                    pr.get_mouse_position(), self.game_state.camera
-                )
-                grid_x = math.floor(world_pos.x / CELL_SIZE)
-                grid_y = math.floor(world_pos.y / CELL_SIZE)
-                if (
-                    0 <= grid_x < self.game_state.grid_w
-                    and 0 <= grid_y < self.game_state.grid_h
-                ):
-                    self.send_path_request(grid_x, grid_y)
-
-            pr.begin_drawing()
-            pr.clear_background(COLOR_BACKGROUND)
-            pr.begin_mode_2d(self.game_state.camera)
-            with self.mutex:
-                self.draw_grid()
-                self.draw_obstacles()
-                self.draw_portals()
-                self.draw_game_objects()
-                # Draw AOI if DEV_GUI is true
-                if DEV_GUI:
-                    pr.draw_circle_sector(
-                        pr.Vector2(
-                            (
-                                self.game_state.player_pos_interpolated.x
-                                + self.game_state.player_dims.x / 2
-                            )
-                            * CELL_SIZE,
-                            (
-                                self.game_state.player_pos_interpolated.y
-                                + self.game_state.player_dims.y / 2
-                            )
-                            * CELL_SIZE,
-                        ),
-                        self.game_state.aoi_radius * CELL_SIZE,
-                        0,
-                        360,
-                        32,
-                        COLOR_AOI,
-                    )
-            pr.end_mode_2d()
-            with self.mutex:
-                self.draw_debug_info(pr.get_fps(), self.download_kbps, self.upload_kbps)
-            pr.end_drawing()
+            self.interpolate_player_position()
+            self.draw_game()
 
         print("Closing WebSocket...")
         if self.ws:
@@ -532,4 +524,7 @@ class NetworkClient:
 
 if __name__ == "__main__":
     client = NetworkClient()
-    client.run()
+    try:
+        client.run()
+    except Exception as e:
+        print(f"An unhandled error occurred: {e}")
