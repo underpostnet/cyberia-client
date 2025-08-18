@@ -14,14 +14,11 @@ GRID_SIZE_W = 100
 GRID_SIZE_H = 100
 DEFAULT_OBJECT_WIDTH = 1.0
 DEFAULT_OBJECT_HEIGHT = 1.0
-
-CELL_SIZE = 12.0  # Slightly larger cells for better visibility
+CELL_SIZE = 12.0
 FPS = 60
 WS_URL = "ws://localhost:8080/ws"
-# NOTE: Adjusted interpolation time for smoother movement
 INTERPOLATION_TIME_MS = 200
-
-AOI_RADIUS = 15.0  # Must match server setting
+AOI_RADIUS = 15.0
 
 # --- Colors ---
 COLOR_BACKGROUND = pr.Color(30, 30, 30, 255)
@@ -30,14 +27,12 @@ COLOR_PLAYER = pr.Color(0, 200, 255, 255)
 COLOR_OTHER_PLAYER = pr.Color(255, 100, 0, 255)
 COLOR_PATH = pr.fade(pr.GREEN, 0.5)
 COLOR_TARGET = pr.Color(255, 255, 0, 255)
-# NEW: AOI is now transparent purple as requested
 COLOR_AOI = pr.fade(pr.PURPLE, 0.2)
 COLOR_DEBUG_TEXT = pr.Color(220, 220, 220, 255)
 COLOR_ERROR_TEXT = pr.Color(255, 50, 50, 255)
 COLOR_PORTAL = pr.Color(180, 50, 255, 180)
 COLOR_PORTAL_LABEL = pr.Color(240, 240, 240, 255)
 COLOR_UI_TEXT = pr.Color(255, 255, 255, 255)
-# NEW: Added a new color for the map boundary
 COLOR_MAP_BOUNDARY = pr.Color(255, 255, 255, 255)
 
 
@@ -57,7 +52,6 @@ class Direction(Enum):
 class ObjectLayerMode(Enum):
     IDLE = 0
     WALKING = 1
-    # NEW: Added TELEPORTING mode to handle transitions
     TELEPORTING = 2
 
 
