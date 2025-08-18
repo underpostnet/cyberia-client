@@ -7,33 +7,10 @@ import math
 import sys
 from enum import Enum
 
-# --- Game Constants ---
+# --- Display constants (kept because they are screen/window settings) ---
 SCREEN_WIDTH = 1280
 SCREEN_HEIGHT = 800
-GRID_SIZE_W = 100
-GRID_SIZE_H = 100
-DEFAULT_OBJECT_WIDTH = 1.0
-DEFAULT_OBJECT_HEIGHT = 1.0
-CELL_SIZE = 12.0
-FPS = 60
 WS_URL = "ws://localhost:8080/ws"
-INTERPOLATION_TIME_MS = 200
-AOI_RADIUS = 15.0
-
-# --- Colors ---
-COLOR_BACKGROUND = pr.Color(30, 30, 30, 255)
-COLOR_OBSTACLE = pr.Color(100, 100, 100, 255)
-COLOR_PLAYER = pr.Color(0, 200, 255, 255)
-COLOR_OTHER_PLAYER = pr.Color(255, 100, 0, 255)
-COLOR_PATH = pr.fade(pr.GREEN, 0.5)
-COLOR_TARGET = pr.Color(255, 255, 0, 255)
-COLOR_AOI = pr.fade(pr.PURPLE, 0.2)
-COLOR_DEBUG_TEXT = pr.Color(220, 220, 220, 255)
-COLOR_ERROR_TEXT = pr.Color(255, 50, 50, 255)
-COLOR_PORTAL = pr.Color(180, 50, 255, 180)
-COLOR_PORTAL_LABEL = pr.Color(240, 240, 240, 255)
-COLOR_UI_TEXT = pr.Color(255, 255, 255, 255)
-COLOR_MAP_BOUNDARY = pr.Color(255, 255, 255, 255)
 
 
 # --- Enums for Animation State ---
@@ -63,15 +40,28 @@ class GameState:
         self.player_map_id = 0
         self.player_mode = ObjectLayerMode.IDLE
         self.player_direction = Direction.NONE
-        self.grid_w = GRID_SIZE_W
-        self.grid_h = GRID_SIZE_H
-        self.aoi_radius = AOI_RADIUS
+
+        # These WILL be set by the server via init_data. Start with zero / None.
+        self.grid_w = 0
+        self.grid_h = 0
+        self.cell_size = 0.0
+        self.fps = 0
+        self.interpolation_ms = 0
+        self.aoi_radius = 0.0
+
+        self.default_obj_width = 0.0
+        self.default_obj_height = 0.0
+
+        # Colors will be set as pr.Color instances after receiving init_data
+        self.colors = {}  # name -> pr.Color
+
+        # Runtime state
         self.obstacles = {}
         self.portals = {}
         self.player_pos_interpolated = pr.Vector2(0, 0)
         self.player_pos_server = pr.Vector2(0, 0)
         self.player_pos_prev = pr.Vector2(0, 0)
-        self.player_dims = pr.Vector2(DEFAULT_OBJECT_WIDTH, DEFAULT_OBJECT_HEIGHT)
+        self.player_dims = pr.Vector2(1.0, 1.0)
         self.other_players = {}
         self.path = []
         self.target_pos = pr.Vector2(-1, -1)
@@ -98,6 +88,16 @@ class NetworkClient:
         self.download_kbps = 0.0
         self.upload_kbps = 0.0
 
+    def color_from_payload(self, cdict):
+        try:
+            r = int(cdict.get("r", 255))
+            g = int(cdict.get("g", 255))
+            b = int(cdict.get("b", 255))
+            a = int(cdict.get("a", 255))
+            return pr.Color(r, g, b, a)
+        except Exception:
+            return pr.Color(255, 255, 255, 255)
+
     def on_message(self, ws, message):
         with self.mutex:
             try:
@@ -107,15 +107,33 @@ class NetworkClient:
 
                 if message_type == "init_data":
                     payload = data.get("payload", {})
-                    self.game_state.grid_w = payload.get(
-                        "gridW", self.game_state.grid_w
+
+                    # Grid sizes
+                    self.game_state.grid_w = int(payload.get("gridW", 100))
+                    self.game_state.grid_h = int(payload.get("gridH", 100))
+
+                    # Basic config
+                    self.game_state.default_obj_width = float(
+                        payload.get("defaultObjectWidth", 1.0)
                     )
-                    self.game_state.grid_h = payload.get(
-                        "gridH", self.game_state.grid_h
+                    self.game_state.default_obj_height = float(
+                        payload.get("defaultObjectHeight", 1.0)
                     )
-                    self.game_state.aoi_radius = payload.get(
-                        "aoiRadius", self.game_state.aoi_radius
+                    self.game_state.cell_size = float(payload.get("cellSize", 12.0))
+                    self.game_state.fps = int(payload.get("fps", 60))
+                    self.game_state.interpolation_ms = int(
+                        payload.get("interpolationMs", 200)
                     )
+                    self.game_state.aoi_radius = float(payload.get("aoiRadius", 15.0))
+
+                    # Colors (map of name -> {r,g,b,a})
+                    colors_payload = payload.get("colors", {})
+                    for name, cdict in colors_payload.items():
+                        self.game_state.colors[name] = self.color_from_payload(cdict)
+
+                    # Make sure camera and fps are consistent
+                    # NOTE: pr.set_target_fps will be applied in run_game_loop using server fps when available.
+
                 elif message_type == "aoi_update":
                     payload = data.get("payload")
                     if not payload:
@@ -130,7 +148,7 @@ class NetworkClient:
                         )
 
                         self.game_state.player_id = player_data.get("id")
-                        self.game_state.player_map_id = player_data.get("MapID", 0)
+                        self.game_state.player_map_id = int(player_data.get("MapID", 0))
 
                         # SAFER: Convert mode to int before constructing Enum
                         mode_val = player_data.get("mode", 0)
@@ -144,7 +162,6 @@ class NetworkClient:
                             self.game_state.player_mode = ObjectLayerMode.IDLE
 
                         # SAFER: Convert direction to int before constructing Enum
-
                         direction_val = player_data.get("direction", 8)
                         try:
                             dir_int = int(direction_val)
@@ -160,7 +177,7 @@ class NetworkClient:
                             pos.get("X", 0.0), pos.get("Y", 0.0)
                         )
 
-                        # NEW: Check if the player is teleporting to prevent interpolation jump
+                        # If teleporting, snap immediately
                         if self.game_state.player_mode == ObjectLayerMode.TELEPORTING:
                             self.game_state.player_pos_interpolated = (
                                 self.game_state.player_pos_server
@@ -173,7 +190,8 @@ class NetworkClient:
 
                         dims = player_data.get("Dims", {})
                         self.game_state.player_dims = pr.Vector2(
-                            dims.get("Width", 1.0), dims.get("Height", 1.0)
+                            dims.get("Width", self.game_state.default_obj_width),
+                            dims.get("Height", self.game_state.default_obj_height),
                         )
 
                         path_data = player_data.get("path")
@@ -323,16 +341,18 @@ class NetworkClient:
 
     def interpolate_player_position(self):
         with self.mutex:
+            # Fallbacks if server hasn't sent init_data yet
+            interp_ms = (
+                self.game_state.interpolation_ms
+                if self.game_state.interpolation_ms > 0
+                else 200
+            )
+
             # Calculate the elapsed time since the last server update
             time_since_update = time.time() - self.game_state.last_update_time
             # Calculate the interpolation factor (clamped between 0 and 1)
-            # This determines how far along the interpolation we are
-            interp_factor = min(
-                1.0, time_since_update / (INTERPOLATION_TIME_MS / 1000.0)
-            )
+            interp_factor = min(1.0, time_since_update / (interp_ms / 1000.0))
 
-            # Interpolate the player's position between the previous and server positions
-            # This creates smooth movement instead of "snapping" to the new position
             current_x = pr.lerp(
                 self.game_state.player_pos_prev.x,
                 self.game_state.player_pos_server.x,
@@ -346,52 +366,66 @@ class NetworkClient:
             self.game_state.player_pos_interpolated = pr.Vector2(current_x, current_y)
 
     def draw_grid_lines(self):
-        grid_w, grid_h = self.game_state.grid_w, self.game_state.grid_h
-        cell_size = CELL_SIZE
+        grid_w = self.game_state.grid_w if self.game_state.grid_w > 0 else 100
+        grid_h = self.game_state.grid_h if self.game_state.grid_h > 0 else 100
+        cell_size = self.game_state.cell_size if self.game_state.cell_size > 0 else 12.0
         map_w, map_h = grid_w * cell_size, grid_h * cell_size
-        pr.draw_rectangle_lines_ex(
-            pr.Rectangle(0, 0, map_w, map_h), 1, COLOR_MAP_BOUNDARY
+        color_boundary = self.game_state.colors.get(
+            "MAP_BOUNDARY", pr.Color(255, 255, 255, 255)
         )
+        pr.draw_rectangle_lines_ex(pr.Rectangle(0, 0, map_w, map_h), 1, color_boundary)
+        fade_color = lambda c, a: (
+            pr.Color(c.r, c.g, c.b, int(c.a * a)) if hasattr(c, "r") else c
+        )
+        # Draw grid lines faintly
         for i in range(grid_w):
             start_pos = pr.Vector2(i * cell_size, 0)
             end_pos = pr.Vector2(i * cell_size, map_h)
-            pr.draw_line_ex(start_pos, end_pos, 1, pr.fade(COLOR_MAP_BOUNDARY, 0.2))
+            pr.draw_line_ex(start_pos, end_pos, 1, pr.fade(color_boundary, 0.2))
         for j in range(grid_h):
             start_pos = pr.Vector2(0, j * cell_size)
             end_pos = pr.Vector2(map_w, j * cell_size)
-            pr.draw_line_ex(start_pos, end_pos, 1, pr.fade(COLOR_MAP_BOUNDARY, 0.2))
+            pr.draw_line_ex(start_pos, end_pos, 1, pr.fade(color_boundary, 0.2))
 
     def draw_player(self):
         player_dims = self.game_state.player_dims
         player_pos = self.game_state.player_pos_interpolated
-        scaled_pos_x = player_pos.x * CELL_SIZE
-        scaled_pos_y = player_pos.y * CELL_SIZE
-        scaled_dims_w = player_dims.x * CELL_SIZE
-        scaled_dims_h = player_dims.y * CELL_SIZE
+        cell_size = self.game_state.cell_size if self.game_state.cell_size > 0 else 12.0
+        scaled_pos_x = player_pos.x * cell_size
+        scaled_pos_y = player_pos.y * cell_size
+        scaled_dims_w = player_dims.x * cell_size
+        scaled_dims_h = player_dims.y * cell_size
+        color_player = self.game_state.colors.get("PLAYER", pr.Color(0, 200, 255, 255))
         pr.draw_rectangle_pro(
             pr.Rectangle(scaled_pos_x, scaled_pos_y, scaled_dims_w, scaled_dims_h),
             pr.Vector2(0, 0),
             0,
-            COLOR_PLAYER,
+            color_player,
         )
 
     def draw_other_players(self):
         with self.mutex:
+            cell_size = (
+                self.game_state.cell_size if self.game_state.cell_size > 0 else 12.0
+            )
             for player_id, player_data in self.game_state.other_players.items():
                 pos = player_data["pos"]
                 dims = player_data["dims"]
                 direction = player_data.get("direction", Direction.NONE)
-                scaled_pos_x = pos.x * CELL_SIZE
-                scaled_pos_y = pos.y * CELL_SIZE
-                scaled_dims_w = dims.x * CELL_SIZE
-                scaled_dims_h = dims.y * CELL_SIZE
+                scaled_pos_x = pos.x * cell_size
+                scaled_pos_y = pos.y * cell_size
+                scaled_dims_w = dims.x * cell_size
+                scaled_dims_h = dims.y * cell_size
+                color_other = self.game_state.colors.get(
+                    "OTHER_PLAYER", pr.Color(255, 100, 0, 255)
+                )
                 pr.draw_rectangle_pro(
                     pr.Rectangle(
                         scaled_pos_x, scaled_pos_y, scaled_dims_w, scaled_dims_h
                     ),
                     pr.Vector2(0, 0),
                     0,
-                    COLOR_OTHER_PLAYER,
+                    color_other,
                 )
                 # Draw direction text above the player for debugging/visual check
                 dir_text = (
@@ -405,11 +439,11 @@ class NetworkClient:
                     pr.Vector2(scaled_pos_x, scaled_pos_y - 12),
                     10,
                     1,
-                    COLOR_UI_TEXT,
+                    self.game_state.colors.get("UI_TEXT", pr.Color(255, 255, 255, 255)),
                 )
 
     def draw_grid_objects(self):
-        cell_size = CELL_SIZE
+        cell_size = self.game_state.cell_size if self.game_state.cell_size > 0 else 12.0
         with self.mutex:
             # Draw obstacles
             for obj_id, obj_data in self.game_state.obstacles.items():
@@ -424,14 +458,16 @@ class NetworkClient:
                     ),
                     pr.Vector2(0, 0),
                     0,
-                    COLOR_OBSTACLE,
+                    self.game_state.colors.get(
+                        "OBSTACLE", pr.Color(100, 100, 100, 255)
+                    ),
                 )
 
             # Draw portals with labels
             for portal_id, portal_data in self.game_state.portals.items():
                 pos = portal_data["pos"]
                 dims = portal_data["dims"]
-                label = portal_data["label"]
+                label = portal_data.get("label", "")
                 pr.draw_rectangle_pro(
                     pr.Rectangle(
                         pos.x * cell_size,
@@ -441,7 +477,7 @@ class NetworkClient:
                     ),
                     pr.Vector2(0, 0),
                     0,
-                    COLOR_PORTAL,
+                    self.game_state.colors.get("PORTAL", pr.Color(180, 50, 255, 180)),
                 )
                 label_pos = pr.Vector2(
                     (pos.x + dims.x / 2) * cell_size,
@@ -457,13 +493,17 @@ class NetworkClient:
                     0,
                     10,
                     2,
-                    COLOR_PORTAL_LABEL,
+                    self.game_state.colors.get(
+                        "PORTAL_LABEL", pr.Color(240, 240, 240, 255)
+                    ),
                 )
 
     def draw_path(self):
         with self.mutex:
             if self.game_state.path:
-                cell_size = CELL_SIZE
+                cell_size = (
+                    self.game_state.cell_size if self.game_state.cell_size > 0 else 12.0
+                )
                 # Draw the target position
                 target_x, target_y = (
                     self.game_state.target_pos.x,
@@ -474,35 +514,42 @@ class NetworkClient:
                         pr.Rectangle(
                             target_x * cell_size,
                             target_y * cell_size,
-                            CELL_SIZE,
-                            CELL_SIZE,
+                            cell_size,
+                            cell_size,
                         ),
                         pr.Vector2(0, 0),
                         0,
-                        COLOR_TARGET,
+                        self.game_state.colors.get(
+                            "TARGET", pr.Color(255, 255, 0, 255)
+                        ),
                     )
                 # Draw the path
                 for p in self.game_state.path:
                     pr.draw_rectangle_pro(
                         pr.Rectangle(
-                            p.x * cell_size, p.y * cell_size, CELL_SIZE, CELL_SIZE
+                            p.x * cell_size, p.y * cell_size, cell_size, cell_size
                         ),
                         pr.Vector2(0, 0),
                         0,
-                        COLOR_PATH,
+                        self.game_state.colors.get("PATH", pr.Color(0, 255, 0, 128)),
                     )
 
     def draw_aoi_circle(self):
         with self.mutex:
             player_pos = self.game_state.player_pos_interpolated
+            cell_size = (
+                self.game_state.cell_size if self.game_state.cell_size > 0 else 12.0
+            )
+            aoi_radius = (
+                self.game_state.aoi_radius if self.game_state.aoi_radius > 0 else 15.0
+            )
             pr.draw_circle_v(
-                pr.Vector2(player_pos.x * CELL_SIZE, player_pos.y * CELL_SIZE),
-                self.game_state.aoi_radius * CELL_SIZE,
-                COLOR_AOI,
+                pr.Vector2(player_pos.x * cell_size, player_pos.y * cell_size),
+                aoi_radius * cell_size,
+                self.game_state.colors.get("AOI", pr.Color(255, 0, 255, 51)),
             )
 
     def draw_dev_ui(self):
-
         pr.draw_rectangle(0, 0, SCREEN_WIDTH, 120, pr.fade(pr.BLACK, 0.7))
         pr.draw_text_ex(
             pr.get_font_default(),
@@ -510,7 +557,7 @@ class NetworkClient:
             pr.Vector2(10, 10),
             20,
             1,
-            COLOR_DEBUG_TEXT,
+            self.game_state.colors.get("DEBUG_TEXT", pr.Color(220, 220, 220, 255)),
         )
         with self.mutex:
             player_id = (
@@ -531,7 +578,7 @@ class NetworkClient:
                 f"Player ID: {player_id}",
                 f"Map ID: {player_map_id}",
                 f"Mode: {player_mode} | Direction: {player_dir}",
-                f"Pos: ({player_pos_ui.x:.2f}, {player_pos_ui.y:.2f})",  # Use interpolated position here
+                f"Pos: ({player_pos_ui.x:.2f}, {player_pos_ui.y:.2f})",
                 f"Target: ({target_pos.x:.0f}, {target_pos.y:.0f})",
                 f"Download: {download_kbps:.2f} kbps | Upload: {upload_kbps:.2f} kbps",
             ]
@@ -544,7 +591,7 @@ class NetworkClient:
                     pr.Vector2(10, y_offset),
                     18,
                     1,
-                    COLOR_UI_TEXT,
+                    self.game_state.colors.get("UI_TEXT", pr.Color(255, 255, 255, 255)),
                 )
                 y_offset += 20
 
@@ -555,17 +602,27 @@ class NetworkClient:
                     pr.Vector2(10, SCREEN_HEIGHT - 30),
                     18,
                     1,
-                    COLOR_ERROR_TEXT,
+                    self.game_state.colors.get(
+                        "ERROR_TEXT", pr.Color(255, 50, 50, 255)
+                    ),
                 )
 
     def draw_game(self):
         pr.begin_drawing()
-        pr.clear_background(COLOR_BACKGROUND)
+        # background color from server or fallback
+        bg = self.game_state.colors.get("BACKGROUND", pr.Color(30, 30, 30, 255))
+        pr.clear_background(bg)
 
         with self.mutex:
             self.game_state.camera.target = pr.Vector2(
-                self.game_state.player_pos_interpolated.x * CELL_SIZE,
-                self.game_state.player_pos_interpolated.y * CELL_SIZE,
+                self.game_state.player_pos_interpolated.x
+                * (
+                    self.game_state.cell_size if self.game_state.cell_size > 0 else 12.0
+                ),
+                self.game_state.player_pos_interpolated.y
+                * (
+                    self.game_state.cell_size if self.game_state.cell_size > 0 else 12.0
+                ),
             )
 
         pr.begin_mode_2d(self.game_state.camera)
@@ -586,9 +643,11 @@ class NetworkClient:
         pr.end_drawing()
 
     def run_game_loop(self):
+        # use server fps if available, else fallback 60
+        target_fps = self.game_state.fps if self.game_state.fps > 0 else 60
         pr.set_config_flags(pr.ConfigFlags.FLAG_VSYNC_HINT)
         pr.init_window(SCREEN_WIDTH, SCREEN_HEIGHT, "MMO Client")
-        pr.set_target_fps(FPS)
+        pr.set_target_fps(target_fps)
 
         last_download_check_time = time.time()
         while not pr.window_should_close() and self.is_running:
@@ -596,8 +655,12 @@ class NetworkClient:
             if pr.is_mouse_button_pressed(pr.MOUSE_LEFT_BUTTON):
                 mouse_pos = pr.get_mouse_position()
                 world_pos = pr.get_screen_to_world_2d(mouse_pos, self.game_state.camera)
-                target_x = world_pos.x / CELL_SIZE
-                target_y = world_pos.y / CELL_SIZE
+                target_x = world_pos.x / (
+                    self.game_state.cell_size if self.game_state.cell_size > 0 else 12.0
+                )
+                target_y = world_pos.y / (
+                    self.game_state.cell_size if self.game_state.cell_size > 0 else 12.0
+                )
 
                 # Snap to grid
                 target_x = math.floor(target_x)
