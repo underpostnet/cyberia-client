@@ -21,7 +21,6 @@ WS_URL = "ws://localhost:8080/ws"
 # NOTE: Adjusted interpolation time for smoother movement
 INTERPOLATION_TIME_MS = 200
 
-DEV_GUI = True
 AOI_RADIUS = 15.0  # Must match server setting
 
 # --- Colors ---
@@ -509,8 +508,6 @@ class NetworkClient:
             )
 
     def draw_dev_ui(self):
-        if not DEV_GUI:
-            return
 
         pr.draw_rectangle(0, 0, SCREEN_WIDTH, 120, pr.fade(pr.BLACK, 0.7))
         pr.draw_text_ex(
