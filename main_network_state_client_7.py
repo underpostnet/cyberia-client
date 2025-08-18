@@ -139,17 +139,31 @@ class NetworkClient:
                         self.game_state.player_id = player_data.get("id")
                         self.game_state.player_map_id = player_data.get("MapID", 0)
 
+                        # SAFER: Convert mode to int before constructing Enum
+                        mode_val = player_data.get("mode", 0)
                         try:
-                            self.game_state.player_mode = ObjectLayerMode(
-                                player_data.get("mode", 0)
-                            )
+                            mode_int = int(mode_val)
+                        except (TypeError, ValueError):
+                            mode_int = 0
+                        try:
+                            self.game_state.player_mode = ObjectLayerMode(mode_int)
                         except (ValueError, TypeError):
                             self.game_state.player_mode = ObjectLayerMode.IDLE
 
+                        # SAFER: Convert direction to int before constructing Enum
+                        ## print all player_data attributes
+                        print("player_data attributes:")
+                        for key, value in player_data.items():
+                            print(key, value)
+
+                        direction_val = player_data.get("direction", 8)  # 8 is NONE
+                        print("direction_val", direction_val)
                         try:
-                            self.game_state.player_direction = Direction(
-                                player_data.get("direction", 8)  # 8 is NONE
-                            )
+                            dir_int = int(direction_val)
+                        except (TypeError, ValueError):
+                            dir_int = 8
+                        try:
+                            self.game_state.player_direction = Direction(dir_int)
                         except (ValueError, TypeError):
                             self.game_state.player_direction = Direction.NONE
 
@@ -198,11 +212,35 @@ class NetworkClient:
                             if player_id != self.game_state.player_id:
                                 pos = p_data.get("Pos", {})
                                 dims = p_data.get("Dims", {})
+                                # SAFER: parse direction
+                                direction_val = p_data.get("direction", 8)
+                                try:
+                                    dir_int = int(direction_val)
+                                except (TypeError, ValueError):
+                                    dir_int = 8
+                                try:
+                                    dir_enum = Direction(dir_int)
+                                except Exception:
+                                    dir_enum = Direction.NONE
+
+                                # SAFER: parse mode (not used visually right now but stored)
+                                mode_val = p_data.get("mode", 0)
+                                try:
+                                    mode_int = int(mode_val)
+                                except (TypeError, ValueError):
+                                    mode_int = 0
+                                try:
+                                    mode_enum = ObjectLayerMode(mode_int)
+                                except Exception:
+                                    mode_enum = ObjectLayerMode.IDLE
+
                                 self.game_state.other_players[player_id] = {
                                     "pos": pr.Vector2(pos.get("X"), pos.get("Y")),
                                     "dims": pr.Vector2(
                                         dims.get("Width"), dims.get("Height")
                                     ),
+                                    "direction": dir_enum,
+                                    "mode": mode_enum,
                                 }
 
                     # --- Grid Objects (Obstacles/Portals) Update ---
@@ -354,6 +392,7 @@ class NetworkClient:
             for player_id, player_data in self.game_state.other_players.items():
                 pos = player_data["pos"]
                 dims = player_data["dims"]
+                direction = player_data.get("direction", Direction.NONE)
                 scaled_pos_x = pos.x * CELL_SIZE
                 scaled_pos_y = pos.y * CELL_SIZE
                 scaled_dims_w = dims.x * CELL_SIZE
@@ -365,6 +404,20 @@ class NetworkClient:
                     pr.Vector2(0, 0),
                     0,
                     COLOR_OTHER_PLAYER,
+                )
+                # Draw direction text above the player for debugging/visual check
+                dir_text = (
+                    direction.name
+                    if isinstance(direction, Direction)
+                    else str(direction)
+                )
+                pr.draw_text_ex(
+                    pr.get_font_default(),
+                    dir_text,
+                    pr.Vector2(scaled_pos_x, scaled_pos_y - 12),
+                    10,
+                    1,
+                    COLOR_UI_TEXT,
                 )
 
     def draw_grid_objects(self):
