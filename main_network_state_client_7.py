@@ -151,13 +151,8 @@ class NetworkClient:
                             self.game_state.player_mode = ObjectLayerMode.IDLE
 
                         # SAFER: Convert direction to int before constructing Enum
-                        ## print all player_data attributes
-                        print("player_data attributes:")
-                        for key, value in player_data.items():
-                            print(key, value)
 
-                        direction_val = player_data.get("direction", 8)  # 8 is NONE
-                        print("direction_val", direction_val)
+                        direction_val = player_data.get("direction", 8)
                         try:
                             dir_int = int(direction_val)
                         except (TypeError, ValueError):
