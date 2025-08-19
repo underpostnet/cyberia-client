@@ -6,6 +6,8 @@ import time
 import math
 import sys
 import ctypes
+import random
+import string
 from enum import Enum
 
 WS_URL = "ws://localhost:8080/ws"
@@ -102,6 +104,56 @@ class NetworkClient:
 
         # event to signal main thread to initialize graphics
         self.init_event = threading.Event()
+
+        # HUD bar state
+        self.hud_items = []  # list of dicts with dummy data
+        self.hud_bar_height = 96
+        self.hud_bar_padding = 12
+        self.hud_item_w = 80
+        self.hud_item_h = 72
+        self.hud_item_spacing = 12
+        self.hud_scroll_x = 0.0  # negative values scroll left
+        self.hud_dragging = False
+        self.hud_drag_start_x = 0.0
+        self.hud_scroll_start = 0.0
+        self.hud_drag_moved = False
+        self.hud_click_threshold = 6  # pixels threshold to consider a click vs drag
+
+        # view state (antes "modal")
+        self.hud_view_open = False
+        self.hud_view_selected = None  # index of selected item or None
+        self.hud_close_w = 36
+        self.hud_close_h = 30
+
+        # prepare dummy items now
+        self._generate_dummy_items(10)
+
+    # ---------- dummy items ----------
+    def _generate_dummy_items(self, n):
+        base_stats = {
+            "effect": 4,
+            "resistance": 1,
+            "agility": 1,
+            "range": 0,
+            "intelligence": 6,
+            "utility": 8,
+        }
+        self.hud_items = []
+        for i in range(n):
+            icon = random.choice(string.ascii_uppercase + string.digits)
+            # randomize stats: 0..(base*2) (or small range for zero-base)
+            stats = {
+                k: random.randint(0, v * 2 if v > 0 else 3)
+                for k, v in base_stats.items()
+            }
+            item = {
+                "id": f"item_{i}",
+                "name": f"Item {i+1}",
+                "icon": icon,
+                "stats": stats,
+                "desc": f"This is a dummy item #{i+1}",
+            }
+            self.hud_items.append(item)
 
     # ---------- network handlers ----------
     def color_from_payload(self, cdict):
@@ -873,27 +925,305 @@ class NetworkClient:
                     ),
                 )
 
+    # ---------- HUD bar & view rendering ----------
+    def _hud_bar_rect(self):
+        # returns (x, y, w, h) in screen coords
+        x = 0
+        h = self.hud_bar_height
+        y = self.screen_height - h
+        w = self.screen_width
+        return x, y, w, h
+
+    def draw_hud_item_button(self, x, y, w, h, item, hovered):
+        # simple visual for an item in hud bar
+        bg = pr.Color(36, 36, 36, 220)
+        hover_bg = pr.Color(70, 70, 70, 230)
+        border = pr.Color(255, 255, 255, 18)
+        txt_color = self.game_state.colors.get("UI_TEXT", pr.Color(255, 255, 255, 255))
+
+        pr.draw_rectangle(int(x), int(y), int(w), int(h), hover_bg if hovered else bg)
+        pr.draw_rectangle_lines(int(x), int(y), int(w), int(h), border)
+
+        # icon: big char centered top
+        icon_size = 28
+        icon = item.get("icon", "?")
+        tw = pr.measure_text(icon, icon_size)
+        pr.draw_text_ex(
+            pr.get_font_default(),
+            icon,
+            pr.Vector2(x + (w / 2) - (tw / 2), y + 6),
+            icon_size,
+            1,
+            txt_color,
+        )
+
+        # name small centered below
+        name = item.get("name", "")
+        name_size = 12
+        tw2 = pr.measure_text(name, name_size)
+        pr.draw_text_ex(
+            pr.get_font_default(),
+            name,
+            pr.Vector2(x + (w / 2) - (tw2 / 2), y + h - 20),
+            name_size,
+            1,
+            txt_color,
+        )
+
+    def draw_hud_bar(self, mouse_pos):
+        x, y, w, h = self._hud_bar_rect()
+        # background bar
+        bar_bg = pr.Color(18, 18, 18, 220)
+        pr.draw_rectangle(int(x), int(y), int(w), int(h), bar_bg)
+        pr.draw_rectangle_lines(
+            int(x), int(y), int(w), int(h), pr.Color(255, 255, 255, 12)
+        )
+
+        inner_x = x + self.hud_bar_padding
+        inner_y = y + (h - self.hud_item_h) / 2
+        inner_w = w - (self.hud_bar_padding * 2)
+
+        # total width of items
+        count = len(self.hud_items)
+        total_w = count * self.hud_item_w + (count - 1) * self.hud_item_spacing
+
+        # clamp scroll range
+        max_scroll = max(0, total_w - inner_w)
+        if self.hud_scroll_x > 0:
+            self.hud_scroll_x = 0
+        if self.hud_scroll_x < -max_scroll:
+            self.hud_scroll_x = -max_scroll
+
+        offset = inner_x + self.hud_scroll_x
+
+        hovered_index = None
+        for idx, item in enumerate(self.hud_items):
+            bx = offset + idx * (self.hud_item_w + self.hud_item_spacing)
+            by = inner_y
+            # compute hover in screen coords
+            hovered = (
+                mouse_pos.x >= bx
+                and mouse_pos.x <= bx + self.hud_item_w
+                and mouse_pos.y >= by
+                and mouse_pos.y <= by + self.hud_item_h
+            )
+            if hovered:
+                hovered_index = idx
+            # draw item
+            self.draw_hud_item_button(
+                bx, by, self.hud_item_w, self.hud_item_h, item, hovered
+            )
+
+        return hovered_index, total_w, inner_w
+
+    def draw_hud_view(self):
+        """
+        Draw the 'view' (antes modal) which fills the screen above the hud_bar (so hud_bar remains visible).
+        No padding frame — only semi-transparent background + item info + close button.
+        """
+        if self.hud_view_selected is None:
+            return
+        item = self.hud_items[self.hud_view_selected]
+
+        # compute view area (full width, height minus hud_bar_height)
+        view_x = 0
+        view_y = 0
+        view_w = self.screen_width
+        view_h = self.screen_height - self.hud_bar_height
+
+        # background overlay in the view area (semi-transparent black)
+        overlay = pr.Color(0, 0, 0, 180)
+        pr.draw_rectangle(view_x, view_y, view_w, view_h, overlay)
+
+        # Now draw item info directly (no panel/padding requested)
+        margin = 28
+        start_x = view_x + margin
+        start_y = view_y + margin
+
+        # title (icon + name)
+        title = f"{item['icon']}  {item['name']}"
+        title_size = 32
+        pr.draw_text_ex(
+            pr.get_font_default(),
+            title,
+            pr.Vector2(start_x, start_y),
+            title_size,
+            1,
+            self.game_state.colors.get("UI_TEXT", pr.Color(255, 255, 255, 255)),
+        )
+
+        # stats block below title
+        stats = item.get("stats", {})
+        stat_y = start_y + 24 + 28
+        stat_size = 18
+        for k, v in stats.items():
+            line = f"{k.capitalize()}: {v}"
+            pr.draw_text_ex(
+                pr.get_font_default(),
+                line,
+                pr.Vector2(start_x, stat_y),
+                stat_size,
+                1,
+                self.game_state.colors.get("UI_TEXT", pr.Color(255, 255, 255, 255)),
+            )
+            stat_y += 26
+
+        # description below stats
+        desc = item.get("desc", "")
+        pr.draw_text_ex(
+            pr.get_font_default(),
+            desc,
+            pr.Vector2(start_x, stat_y + 12),
+            16,
+            1,
+            pr.Color(200, 200, 200, 220),
+        )
+
+        # close button top-right inside view
+        close_x = self.screen_width - self.hud_close_w - 12
+        close_y = 12
+        self.draw_hud_small_button(
+            close_x, close_y, self.hud_close_w, self.hud_close_h, "X"
+        )
+
+    def draw_hud_small_button(self, x, y, w, h, label):
+        bg = pr.Color(60, 60, 60, 230)
+        hover_bg = pr.Color(90, 90, 90, 240)
+        border = pr.Color(255, 255, 255, 20)
+        txt_color = self.game_state.colors.get("UI_TEXT", pr.Color(255, 255, 255, 255))
+
+        mx = pr.get_mouse_position().x
+        my = pr.get_mouse_position().y
+        hovered = mx >= x and mx <= x + w and my >= y and my <= y + h
+
+        pr.draw_rectangle(int(x), int(y), int(w), int(h), hover_bg if hovered else bg)
+        pr.draw_rectangle_lines(int(x), int(y), int(w), int(h), border)
+        ts = 16
+        tw = pr.measure_text(label, ts)
+        pr.draw_text_ex(
+            pr.get_font_default(),
+            label,
+            pr.Vector2(x + (w / 2) - (tw / 2), y + (h / 2) - (ts / 2)),
+            ts,
+            1,
+            txt_color,
+        )
+
     def run_game_loop(self):
         # use server fps if available, else fallback 60
         target_fps = self.game_state.fps if self.game_state.fps > 0 else 60
 
         last_download_check_time = time.time()
         while not pr.window_should_close() and self.is_running:
-            # input
-            if pr.is_mouse_button_pressed(pr.MOUSE_LEFT_BUTTON):
-                mouse_pos = pr.get_mouse_position()
-                world_pos = pr.get_screen_to_world_2d(mouse_pos, self.game_state.camera)
-                target_x = world_pos.x / (
-                    self.game_state.cell_size if self.game_state.cell_size > 0 else 12.0
+            # read mouse input early (for UI hit testing)
+            mouse_pos = pr.get_mouse_position()
+            mouse_pressed = pr.is_mouse_button_pressed(
+                pr.MOUSE_LEFT_BUTTON
+            )  # down this frame
+            mouse_down = pr.is_mouse_button_down(pr.MOUSE_LEFT_BUTTON)  # is held
+            mouse_released = pr.is_mouse_button_released(
+                pr.MOUSE_LEFT_BUTTON
+            )  # released this frame
+
+            consumed_click = False
+
+            # HUD BAR DRAG/CLICK handling:
+            hx, hy, hw, hh = self._hud_bar_rect()
+            in_hud_area = (
+                mouse_pos.x >= hx
+                and mouse_pos.x <= hx + hw
+                and mouse_pos.y >= hy
+                and mouse_pos.y <= hy + hh
+            )
+
+            # start drag if pressed inside hud area
+            if mouse_pressed and in_hud_area:
+                self.hud_dragging = True
+                self.hud_drag_start_x = mouse_pos.x
+                self.hud_scroll_start = self.hud_scroll_x
+                self.hud_drag_moved = False
+                consumed_click = (
+                    True  # pressing on hud consumes click so it won't pass to world
                 )
-                target_y = world_pos.y / (
-                    self.game_state.cell_size if self.game_state.cell_size > 0 else 12.0
-                )
-                target_x = math.floor(target_x)
-                target_y = math.floor(target_y)
-                self.send_player_action(target_x, target_y)
-                # client-side click pointer effect
-                self.add_click_pointer(world_pos)
+
+            # if dragging, update scroll while mouse held
+            if self.hud_dragging and mouse_down:
+                delta = mouse_pos.x - self.hud_drag_start_x
+                if abs(delta) > self.hud_click_threshold:
+                    self.hud_drag_moved = True
+                self.hud_scroll_x = self.hud_scroll_start + delta
+                consumed_click = True
+
+            # on release finalize: if it was a short click (no movement) treat as click on item
+            if self.hud_dragging and mouse_released:
+                delta = mouse_pos.x - self.hud_drag_start_x
+                # compute hovered item and layout by calling draw_hud_bar (cheap)
+                hovered_index, total_w, inner_w = self.draw_hud_bar(mouse_pos)
+                max_scroll = max(0, total_w - inner_w)
+                # clamp
+                if self.hud_scroll_x > 0:
+                    self.hud_scroll_x = 0
+                if self.hud_scroll_x < -max_scroll:
+                    self.hud_scroll_x = -max_scroll
+
+                if not self.hud_drag_moved and abs(delta) <= self.hud_click_threshold:
+                    # interpret as click on the item under mouse
+                    hovered_index, _, _ = self.draw_hud_bar(mouse_pos)
+                    if hovered_index is not None:
+                        # open/view item (or switch view if already open)
+                        with self.mutex:
+                            self.hud_view_open = True
+                            self.hud_view_selected = hovered_index
+                        consumed_click = True
+                # finish dragging
+                self.hud_dragging = False
+                self.hud_drag_moved = False
+
+            # If view open, check close button pressed (top-right inside view area)
+            # IMPORTANT: allow hud_bar clicks to work even when view is open (user requested)
+            if self.hud_view_open and mouse_pressed:
+                # only check close if click is inside view area (above the hud_bar)
+                view_y_max = self.screen_height - self.hud_bar_height
+                if mouse_pos.y <= view_y_max:
+                    close_x = self.screen_width - self.hud_close_w - 12
+                    close_y = 12
+                    if (
+                        mouse_pos.x >= close_x
+                        and mouse_pos.x <= close_x + self.hud_close_w
+                        and mouse_pos.y >= close_y
+                        and mouse_pos.y <= close_y + self.hud_close_h
+                    ):
+                        with self.mutex:
+                            self.hud_view_open = False
+                            self.hud_view_selected = None
+                        consumed_click = True
+                    else:
+                        # clicks anywhere inside view area (except hud_bar) should not pass to world
+                        consumed_click = True
+
+            # If not consumed by UI, handle world click for movement
+            if not consumed_click and mouse_pressed:
+                try:
+                    world_pos = pr.get_screen_to_world_2d(
+                        mouse_pos, self.game_state.camera
+                    )
+                    target_x = world_pos.x / (
+                        self.game_state.cell_size
+                        if self.game_state.cell_size > 0
+                        else 12.0
+                    )
+                    target_y = world_pos.y / (
+                        self.game_state.cell_size
+                        if self.game_state.cell_size > 0
+                        else 12.0
+                    )
+                    target_x = math.floor(target_x)
+                    target_y = math.floor(target_y)
+                    self.send_player_action(target_x, target_y)
+                    # client-side click pointer effect
+                    self.add_click_pointer(world_pos)
+                except Exception:
+                    pass
 
             # bandwidth
             current_time = time.time()
@@ -1006,9 +1336,20 @@ class NetworkClient:
         except Exception:
             pass
 
-        # UI
+        # UI layer (screen coordinates)
+        mouse_pos = pr.get_mouse_position()
+
+        # If view open: draw view area (above hud_bar). HUD bar will remain visible below.
+        if self.hud_view_open and self.hud_view_selected is not None:
+            self.draw_hud_view()
+
+        # HUD bar (draw always on top)
+        hovered_index, total_w, inner_w = self.draw_hud_bar(mouse_pos)
+
+        # Developer UI (if enabled by server)
         if self.game_state.dev_ui:
             self.draw_dev_ui()
+
         pr.end_drawing()
 
 
