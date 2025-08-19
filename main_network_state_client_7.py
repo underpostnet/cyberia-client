@@ -778,7 +778,7 @@ class NetworkClient:
 
     def draw_dev_ui(self):
         # top bar background
-        pr.draw_rectangle(0, 0, self.screen_width, 120, pr.fade(pr.BLACK, 0.7))
+        pr.draw_rectangle(0, 0, 450, 160, pr.fade(pr.BLACK, 0.4))
         # Replace "DEV UI" label with current FPS
         fps_text = f"{pr.get_fps()} FPS"
         pr.draw_text_ex(
