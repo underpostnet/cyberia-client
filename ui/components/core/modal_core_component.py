@@ -24,7 +24,7 @@ class ModalCoreComponent:
         horizontal_offset: int = 0,
         background_color: Color = Color(0, 0, 0, 150),
         icon_texture=None,
-        title_text: str = "",  # New: Default title for the modal
+        title_text: str = "",
     ):
         """
         Initializes the ModalCoreComponent.

@@ -295,7 +295,7 @@ class ChatCyberiaView:
         mouse_x: int,
         mouse_y: int,
         is_mouse_button_pressed_left: bool,  # Specifically for left button
-        is_mouse_button_down: bool,  # New: is_mouse_button_down
+        is_mouse_button_down: bool,
         char_pressed: Union[int, None],  # type: ignore
         key_pressed: Union[int, None],  # type: ignore
         is_key_down_map: dict,

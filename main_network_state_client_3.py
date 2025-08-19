@@ -180,7 +180,6 @@ class NetworkClient:
 
                             self.game_state.last_update_time = time.time()
 
-                            # NEW: Player dimensions are now dynamic
                             dims = player_data.get("Dims", {})
                             self.game_state.player_dims.x = dims.get(
                                 "Width", DEFAULT_OBJECT_WIDTH
@@ -208,7 +207,6 @@ class NetworkClient:
                                 "MaxY", 0.0
                             ) - aoi_rect_data.get("MinY", 0.0)
 
-                            # NEW: Update player animation state with error handling
                             try:
                                 self.game_state.player_direction = Direction(
                                     player_data.get("direction", Direction.NONE.value)

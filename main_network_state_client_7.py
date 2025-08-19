@@ -52,6 +52,7 @@ class GameState:
 
         # runtime
         self.obstacles = {}
+        self.foregrounds = {}
         self.portals = {}
         self.player_pos_interpolated = pr.Vector2(0, 0)
         self.player_pos_server = pr.Vector2(0, 0)
@@ -286,6 +287,7 @@ class NetworkClient:
                     visible_objects_data = payload.get("visibleGridObjects")
                     self.game_state.obstacles = {}
                     self.game_state.portals = {}
+                    self.game_state.foregrounds = {}  # reset foregrounds each update
                     if visible_objects_data:
                         for obj_id, obj_data in visible_objects_data.items():
                             obj_type = obj_data.get("Type")
@@ -305,6 +307,13 @@ class NetworkClient:
                                         dims.get("Width"), dims.get("Height")
                                     ),
                                     "label": obj_data.get("PortalLabel"),
+                                }
+                            elif obj_type == "foreground":
+                                self.game_state.foregrounds[obj_id] = {
+                                    "pos": pr.Vector2(pos.get("X"), pos.get("Y")),
+                                    "dims": pr.Vector2(
+                                        dims.get("Width"), dims.get("Height")
+                                    ),
                                 }
 
             except json.JSONDecodeError as e:
@@ -776,6 +785,26 @@ class NetworkClient:
             pr.draw_line(cx - arm, cy, cx + arm, cy, color)
             pr.draw_line(cx, cy - arm, cx, cy + arm, color)
 
+    def draw_foregrounds(self):
+        cell_size = self.game_state.cell_size if self.game_state.cell_size > 0 else 12.0
+        with self.mutex:
+            for obj_id, obj_data in self.game_state.foregrounds.items():
+                pos = obj_data["pos"]
+                dims = obj_data["dims"]
+                pr.draw_rectangle_pro(
+                    pr.Rectangle(
+                        pos.x * cell_size,
+                        pos.y * cell_size,
+                        dims.x * cell_size,
+                        dims.y * cell_size,
+                    ),
+                    pr.Vector2(0, 0),
+                    0,
+                    self.game_state.colors.get(
+                        "FOREGROUND", pr.Color(60, 140, 60, 220)
+                    ),
+                )
+
     def draw_dev_ui(self):
         # top bar background
         pr.draw_rectangle(0, 0, 450, 160, pr.fade(pr.BLACK, 0.4))
@@ -961,6 +990,9 @@ class NetworkClient:
         self.draw_path()
         self.draw_aoi_circle()
         self.draw_click_pointers()  # client-only effect
+
+        # Draw foregrounds last inside the world so they appear above players but below UI
+        self.draw_foregrounds()
 
         try:
             pr.end_mode_2d()
