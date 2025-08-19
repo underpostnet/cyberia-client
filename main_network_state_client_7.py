@@ -75,6 +75,9 @@ class GameState:
         self.default_width_screen_factor = None
         self.default_height_screen_factor = None
 
+        # per-player sum stats limit (from server)
+        self.sum_stats_limit = 9999
+
         self.init_received = False
 
         # created once graphics are initialized
@@ -125,6 +128,13 @@ class NetworkClient:
         self.hud_close_w = 36
         self.hud_close_h = 30
 
+        # HUD alerts
+        self.hud_alert_text = ""
+        self.hud_alert_until = 0.0
+
+        # stored rect for view's activate button (so click can check bounds)
+        self.hud_view_button_rect = None  # (x,y,w,h)
+
         # prepare dummy items now
         self._generate_dummy_items(10)
 
@@ -146,14 +156,94 @@ class NetworkClient:
                 k: random.randint(0, v * 2 if v > 0 else 3)
                 for k, v in base_stats.items()
             }
+            # isActivable randomly true/false (70% activable)
+            is_activable = random.random() < 0.7
             item = {
                 "id": f"item_{i}",
                 "name": f"Item {i+1}",
                 "icon": icon,
                 "stats": stats,
                 "desc": f"This is a dummy item #{i+1}",
+                "isActivable": is_activable,
+                "isActive": False,
             }
             self.hud_items.append(item)
+
+    # ---------- helpers for activation logic ----------
+    def active_items(self):
+        return [it for it in self.hud_items if it.get("isActive")]
+
+    def active_stats_sum(self):
+        total = 0
+        for it in self.active_items():
+            for v in it.get("stats", {}).values():
+                try:
+                    total += int(v)
+                except Exception:
+                    pass
+        return total
+
+    def can_activate_item(self, item):
+        # check activable
+        if not item.get("isActivable"):
+            return False, "Item is not activable."
+        # check max 4 active
+        if len(self.active_items()) >= 4:
+            return False, "No puedes activar más de 4 items."
+        # check stats sum doesn't exceed limit
+        new_sum = self.active_stats_sum()
+        for v in item.get("stats", {}).values():
+            try:
+                new_sum += int(v)
+            except Exception:
+                pass
+        if new_sum > (self.game_state.sum_stats_limit or 0):
+            return (
+                False,
+                f"Activar excede el límite de suma de stats ({self.game_state.sum_stats_limit}).",
+            )
+        return True, ""
+
+    def activate_item(self, idx):
+        if idx < 0 or idx >= len(self.hud_items):
+            return
+        item = self.hud_items[idx]
+        if item.get("isActive"):
+            return  # already active
+        ok, reason = self.can_activate_item(item)
+        if not ok:
+            self.show_hud_alert(reason)
+            return
+        item["isActive"] = True
+        # reorder so active items are first
+        self.reorder_hud_items()
+        self.show_hud_alert("Item activado.", 1.5)
+
+    def deactivate_item(self, idx):
+        if idx < 0 or idx >= len(self.hud_items):
+            return
+        item = self.hud_items[idx]
+        if not item.get("isActive"):
+            return
+        item["isActive"] = False
+        self.reorder_hud_items()
+        self.show_hud_alert("Item desactivado.", 1.0)
+
+    def reorder_hud_items(self):
+        # Move active items to the front (stable)
+        # Keep relative order among active items and among inactive ones
+        active = [it for it in self.hud_items if it.get("isActive")]
+        inactive = [it for it in self.hud_items if not it.get("isActive")]
+        self.hud_items = active + inactive
+        # clamp active count to 4 just in case (deactivate extras)
+        if len(active) > 4:
+            # deactivate extras beyond first 4
+            for it in active[4:]:
+                it["isActive"] = False
+            # recompose
+            active = [it for it in self.hud_items if it.get("isActive")]
+            inactive = [it for it in self.hud_items if not it.get("isActive")]
+            self.hud_items = active + inactive
 
     # ---------- network handlers ----------
     def color_from_payload(self, cdict):
@@ -225,6 +315,14 @@ class NetworkClient:
                     except Exception:
                         self.game_state.default_height_screen_factor = 0.5
 
+                    # sum stats limit per-player (new)
+                    try:
+                        self.game_state.sum_stats_limit = int(
+                            payload.get("sumStatsLimit", 9999)
+                        )
+                    except Exception:
+                        self.game_state.sum_stats_limit = 9999
+
                     # devUi toggle
                     try:
                         self.game_state.dev_ui = bool(payload.get("devUi", False))
@@ -241,6 +339,17 @@ class NetworkClient:
                         return
 
                     player_data = payload.get("player")
+                    # Update sumStatsLimit if server sends it per-player in AOI (keeps client synced)
+                    if player_data and "sumStatsLimit" in player_data:
+                        try:
+                            self.game_state.sum_stats_limit = int(
+                                player_data.get(
+                                    "sumStatsLimit", self.game_state.sum_stats_limit
+                                )
+                            )
+                        except Exception:
+                            pass
+
                     if player_data:
                         self.game_state.player_pos_prev = (
                             self.game_state.player_pos_interpolated
@@ -899,6 +1008,8 @@ class NetworkClient:
                 f"Pos: ({player_pos_ui.x:.2f}, {player_pos_ui.y:.2f})",
                 f"Target: ({target_pos.x:.0f}, {target_pos.y:.0f})",
                 f"Download: {download_kbps:.2f} kbps | Upload: {upload_kbps:.2f} kbps",
+                f"SumStatsLimit: {self.game_state.sum_stats_limit}",
+                f"ActiveStatsSum: {self.active_stats_sum()}",
             ]
 
             y_offset = 30
@@ -943,6 +1054,24 @@ class NetworkClient:
 
         pr.draw_rectangle(int(x), int(y), int(w), int(h), hover_bg if hovered else bg)
         pr.draw_rectangle_lines(int(x), int(y), int(w), int(h), border)
+
+        # if active, draw yellow border overlay (thicker)
+        if item.get("isActive"):
+            try:
+                pr.draw_rectangle_lines_ex(
+                    pr.Rectangle(int(x), int(y), int(w), int(h)),
+                    3,
+                    pr.Color(240, 200, 40, 220),
+                )
+            except Exception:
+                # fallback to simple lines if draw_rectangle_lines_ex not available
+                pr.draw_rectangle_lines(
+                    int(x + 2),
+                    int(y + 2),
+                    int(w - 4),
+                    int(h - 4),
+                    pr.Color(240, 200, 40, 220),
+                )
 
         # icon: big char centered top
         icon_size = 28
@@ -1016,12 +1145,36 @@ class NetworkClient:
 
         return hovered_index, total_w, inner_w
 
+    def draw_hud_small_button(self, x, y, w, h, label):
+        bg = pr.Color(60, 60, 60, 230)
+        hover_bg = pr.Color(90, 90, 90, 240)
+        border = pr.Color(255, 255, 255, 20)
+        txt_color = self.game_state.colors.get("UI_TEXT", pr.Color(255, 255, 255, 255))
+
+        mx = pr.get_mouse_position().x
+        my = pr.get_mouse_position().y
+        hovered = mx >= x and mx <= x + w and my >= y and my <= y + h
+
+        pr.draw_rectangle(int(x), int(y), int(w), int(h), hover_bg if hovered else bg)
+        pr.draw_rectangle_lines(int(x), int(y), int(w), int(h), border)
+        ts = 16
+        tw = pr.measure_text(label, ts)
+        pr.draw_text_ex(
+            pr.get_font_default(),
+            label,
+            pr.Vector2(x + (w / 2) - (tw / 2), y + (h / 2) - (ts / 2)),
+            ts,
+            1,
+            txt_color,
+        )
+
     def draw_hud_view(self):
         """
         Draw the 'view' (antes modal) which fills the screen above the hud_bar (so hud_bar remains visible).
         No padding frame — only semi-transparent background + item info + close button.
         """
         if self.hud_view_selected is None:
+            self.hud_view_button_rect = None
             return
         item = self.hud_items[self.hud_view_selected]
 
@@ -1086,27 +1239,77 @@ class NetworkClient:
             close_x, close_y, self.hud_close_w, self.hud_close_h, "X"
         )
 
-    def draw_hud_small_button(self, x, y, w, h, label):
-        bg = pr.Color(60, 60, 60, 230)
-        hover_bg = pr.Color(90, 90, 90, 240)
-        border = pr.Color(255, 255, 255, 20)
-        txt_color = self.game_state.colors.get("UI_TEXT", pr.Color(255, 255, 255, 255))
+        # Activation toggle (if activable)
+        btn_w = 140
+        btn_h = 40
+        btn_x = self.screen_width - margin - btn_w
+        btn_y = start_y + 10  # below title area
+        if item.get("isActivable"):
+            label = "Desactivar" if item.get("isActive") else "Activar"
+            # draw button background manually (re-using draw_hud_small_button style)
+            bg = pr.Color(60, 60, 60, 230)
+            hover_bg = pr.Color(90, 90, 90, 240)
+            border = pr.Color(255, 255, 255, 20)
+            mx = pr.get_mouse_position().x
+            my = pr.get_mouse_position().y
+            hovered = (
+                mx >= btn_x
+                and mx <= btn_x + btn_w
+                and my >= btn_y
+                and my <= btn_y + btn_h
+            )
+            pr.draw_rectangle(
+                int(btn_x),
+                int(btn_y),
+                int(btn_w),
+                int(btn_h),
+                hover_bg if hovered else bg,
+            )
+            pr.draw_rectangle_lines(
+                int(btn_x), int(btn_y), int(btn_w), int(btn_h), border
+            )
+            ts = 18
+            tw = pr.measure_text(label, ts)
+            pr.draw_text_ex(
+                pr.get_font_default(),
+                label,
+                pr.Vector2(
+                    btn_x + (btn_w / 2) - (tw / 2), btn_y + (btn_h / 2) - (ts / 2)
+                ),
+                ts,
+                1,
+                self.game_state.colors.get("UI_TEXT", pr.Color(255, 255, 255, 255)),
+            )
+            # store button rect for click detection
+            self.hud_view_button_rect = (btn_x, btn_y, btn_w, btn_h)
+        else:
+            self.hud_view_button_rect = None
 
-        mx = pr.get_mouse_position().x
-        my = pr.get_mouse_position().y
-        hovered = mx >= x and mx <= x + w and my >= y and my <= y + h
+    def show_hud_alert(self, text, duration=2.5):
+        self.hud_alert_text = text
+        self.hud_alert_until = time.time() + duration
 
-        pr.draw_rectangle(int(x), int(y), int(w), int(h), hover_bg if hovered else bg)
-        pr.draw_rectangle_lines(int(x), int(y), int(w), int(h), border)
-        ts = 16
-        tw = pr.measure_text(label, ts)
+    def draw_hud_alert(self):
+        if not self.hud_alert_text or time.time() > self.hud_alert_until:
+            return
+        # draw centered top small alert
+        w = min(600, int(self.screen_width * 0.75))
+        h = 44
+        x = (self.screen_width - w) / 2
+        y = 16
+        pr.draw_rectangle(int(x), int(y), int(w), int(h), pr.Color(40, 40, 40, 220))
+        pr.draw_rectangle_lines(
+            int(x), int(y), int(w), int(h), pr.Color(255, 200, 40, 220)
+        )
+        ts = 18
+        tw = pr.measure_text(self.hud_alert_text, ts)
         pr.draw_text_ex(
             pr.get_font_default(),
-            label,
+            self.hud_alert_text,
             pr.Vector2(x + (w / 2) - (tw / 2), y + (h / 2) - (ts / 2)),
             ts,
             1,
-            txt_color,
+            pr.Color(255, 255, 255, 255),
         )
 
     def run_game_loop(self):
@@ -1185,6 +1388,7 @@ class NetworkClient:
                 # only check close if click is inside view area (above the hud_bar)
                 view_y_max = self.screen_height - self.hud_bar_height
                 if mouse_pos.y <= view_y_max:
+                    # check close button
                     close_x = self.screen_width - self.hud_close_w - 12
                     close_y = 12
                     if (
@@ -1198,8 +1402,29 @@ class NetworkClient:
                             self.hud_view_selected = None
                         consumed_click = True
                     else:
+                        # check activate/deactivate button (if present)
+                        if self.hud_view_button_rect:
+                            bx, by, bw, bh = self.hud_view_button_rect
+                            if (
+                                mouse_pos.x >= bx
+                                and mouse_pos.x <= bx + bw
+                                and mouse_pos.y >= by
+                                and mouse_pos.y <= by + bh
+                            ):
+                                # toggle activation
+                                with self.mutex:
+                                    sel = self.hud_view_selected
+                                    if sel is not None and 0 <= sel < len(
+                                        self.hud_items
+                                    ):
+                                        if self.hud_items[sel].get("isActive"):
+                                            self.deactivate_item(sel)
+                                        else:
+                                            self.activate_item(sel)
+                                consumed_click = True
                         # clicks anywhere inside view area (except hud_bar) should not pass to world
-                        consumed_click = True
+                        if not consumed_click:
+                            consumed_click = True
 
             # If not consumed by UI, handle world click for movement
             if not consumed_click and mouse_pressed:
@@ -1349,6 +1574,9 @@ class NetworkClient:
         # Developer UI (if enabled by server)
         if self.game_state.dev_ui and self.hud_view_selected is None:
             self.draw_dev_ui()
+
+        # draw any hud alerts
+        self.draw_hud_alert()
 
         pr.end_drawing()
 
