@@ -1347,7 +1347,7 @@ class NetworkClient:
         hovered_index, total_w, inner_w = self.draw_hud_bar(mouse_pos)
 
         # Developer UI (if enabled by server)
-        if self.game_state.dev_ui:
+        if self.game_state.dev_ui and self.hud_view_selected is None:
             self.draw_dev_ui()
 
         pr.end_drawing()
