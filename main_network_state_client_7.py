@@ -989,10 +989,8 @@ class NetworkClient:
         self.draw_player()
         self.draw_path()
         self.draw_aoi_circle()
-        self.draw_click_pointers()  # client-only effect
-
-        # Draw foregrounds last inside the world so they appear above players but below UI
         self.draw_foregrounds()
+        self.draw_click_pointers()  # client-only effect
 
         try:
             pr.end_mode_2d()
