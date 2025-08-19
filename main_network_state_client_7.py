@@ -78,6 +78,9 @@ class GameState:
         # created once graphics are initialized
         self.camera = None
 
+        # toggle for developer UI (from server)
+        self.dev_ui = False
+
 
 class NetworkClient:
     def __init__(self):
@@ -169,6 +172,12 @@ class NetworkClient:
                         )
                     except Exception:
                         self.game_state.default_height_screen_factor = 0.5
+
+                    # devUi toggle
+                    try:
+                        self.game_state.dev_ui = bool(payload.get("devUi", False))
+                    except Exception:
+                        self.game_state.dev_ui = False
 
                     # mark and notify main thread
                     self.game_state.init_received = True
@@ -998,7 +1007,8 @@ class NetworkClient:
             pass
 
         # UI
-        self.draw_dev_ui()
+        if self.game_state.dev_ui:
+            self.draw_dev_ui()
         pr.end_drawing()
 
 
