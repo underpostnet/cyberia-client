@@ -697,8 +697,6 @@ class NetworkClient:
         pr.set_target_fps(target_fps)
 
         # Camera creation:
-        # Raylib Camera2D has fields: offset, target, rotation, zoom
-        # offset -> screen center; target -> world coordinate to center on screen
         try:
             cam_zoom = (
                 float(self.game_state.camera_zoom)
@@ -796,73 +794,51 @@ class NetworkClient:
         grid_h = self.game_state.grid_h if self.game_state.grid_h > 0 else 100
         cell_size = self.game_state.cell_size if self.game_state.cell_size > 0 else 12.0
         map_w, map_h = grid_w * cell_size, grid_h * cell_size
+
+        # default to a dark gray boundary so map area doesn't look white
         color_boundary = self.game_state.colors.get(
-            "MAP_BOUNDARY", pr.Color(255, 255, 255, 255)
-        )
-        pr.draw_rectangle_lines_ex(pr.Rectangle(0, 0, map_w, map_h), 1, color_boundary)
-        for i in range(grid_w):
-            start_pos = pr.Vector2(i * cell_size, 0)
-            end_pos = pr.Vector2(i * cell_size, map_h)
-            pr.draw_line_ex(start_pos, end_pos, 1, pr.fade(color_boundary, 0.2))
-        for j in range(grid_h):
-            start_pos = pr.Vector2(0, j * cell_size)
-            end_pos = pr.Vector2(map_w, j * cell_size)
-            pr.draw_line_ex(start_pos, end_pos, 1, pr.fade(color_boundary, 0.2))
-
-    def draw_player(self):
-        player_dims = self.game_state.player_dims
-        player_pos = self.game_state.player_pos_interpolated
-        cell_size = self.game_state.cell_size if self.game_state.cell_size > 0 else 12.0
-        scaled_pos_x = player_pos.x * cell_size
-        scaled_pos_y = player_pos.y * cell_size
-        scaled_dims_w = player_dims.x * cell_size
-        scaled_dims_h = player_dims.y * cell_size
-        color_player = self.game_state.colors.get("PLAYER", pr.Color(0, 200, 255, 255))
-        pr.draw_rectangle_pro(
-            pr.Rectangle(scaled_pos_x, scaled_pos_y, scaled_dims_w, scaled_dims_h),
-            pr.Vector2(0, 0),
-            0,
-            color_player,
+            "MAP_BOUNDARY", pr.Color(60, 60, 60, 255)
         )
 
-    def draw_other_players(self):
-        with self.mutex:
-            cell_size = (
-                self.game_state.cell_size if self.game_state.cell_size > 0 else 12.0
+        # draw only the rectangle outline (no fill)
+        # prefer draw_rectangle_lines_ex if available, else use draw_rectangle_lines
+        try:
+            pr.draw_rectangle_lines_ex(
+                pr.Rectangle(0, 0, map_w, map_h), 1, color_boundary
             )
-            for player_id, player_data in self.game_state.other_players.items():
-                pos = player_data["pos"]
-                dims = player_data["dims"]
-                direction = player_data.get("direction", Direction.NONE)
-                scaled_pos_x = pos.x * cell_size
-                scaled_pos_y = pos.y * cell_size
-                scaled_dims_w = dims.x * cell_size
-                scaled_dims_h = dims.y * cell_size
-                color_other = self.game_state.colors.get(
-                    "OTHER_PLAYER", pr.Color(255, 100, 0, 255)
-                )
-                pr.draw_rectangle_pro(
-                    pr.Rectangle(
-                        scaled_pos_x, scaled_pos_y, scaled_dims_w, scaled_dims_h
-                    ),
-                    pr.Vector2(0, 0),
-                    0,
-                    color_other,
-                )
-                dir_text = (
-                    direction.name
-                    if isinstance(direction, Direction)
-                    else str(direction)
-                )
-                pr.draw_text_ex(
-                    pr.get_font_default(),
-                    dir_text,
-                    pr.Vector2(scaled_pos_x, scaled_pos_y - 12),
-                    10,
-                    1,
-                    self.game_state.colors.get("UI_TEXT", pr.Color(255, 255, 255, 255)),
+        except Exception:
+            pr.draw_rectangle_lines(0, 0, int(map_w), int(map_h), color_boundary)
+
+        # fade color for grid lines
+        fade_col = self.game_state.colors.get("MAP_GRID", None)
+        if fade_col is None:
+            # use fade(color_boundary, 0.2) if available, else create a faded color manually
+            if hasattr(pr, "fade"):
+                fade_col = pr.fade(color_boundary, 0.2)
+            else:
+                # manual fade (reduce alpha)
+                fade_col = pr.Color(
+                    color_boundary.r,
+                    color_boundary.g,
+                    color_boundary.b,
+                    int(color_boundary.a * 0.2),
                 )
 
+        for i in range(grid_w + 1):
+            x = i * cell_size
+            try:
+                pr.draw_line_ex(pr.Vector2(x, 0), pr.Vector2(x, map_h), 1, fade_col)
+            except Exception:
+                pr.draw_line(int(x), 0, int(x), int(map_h), fade_col)
+
+        for j in range(grid_h + 1):
+            y = j * cell_size
+            try:
+                pr.draw_line_ex(pr.Vector2(0, y), pr.Vector2(map_w, y), 1, fade_col)
+            except Exception:
+                pr.draw_line(0, int(y), int(map_w), int(y), fade_col)
+
+    # restore draw_grid_objects (was missing) - uses draw_rectangle_pro exclusively
     def draw_grid_objects(self):
         cell_size = self.game_state.cell_size if self.game_state.cell_size > 0 else 12.0
         with self.mutex:
@@ -882,6 +858,7 @@ class NetworkClient:
                         "OBSTACLE", pr.Color(100, 100, 100, 255)
                     ),
                 )
+
             for portal_id, portal_data in self.game_state.portals.items():
                 pos = portal_data["pos"]
                 dims = portal_data["dims"]
@@ -897,103 +874,196 @@ class NetworkClient:
                     0,
                     self.game_state.colors.get("PORTAL", pr.Color(180, 50, 255, 180)),
                 )
+                # draw label centered (draw_text_ex)
                 label_pos = pr.Vector2(
                     (pos.x + dims.x / 2) * cell_size, (pos.y + dims.y / 2) * cell_size
                 )
-                pr.draw_text_pro(
+                pr.draw_text_ex(
                     pr.get_font_default(),
                     label,
-                    label_pos,
-                    pr.Vector2(pr.measure_text(label, 10) / 2, 5),
-                    0,
+                    pr.Vector2(
+                        label_pos.x - pr.measure_text(label, 10) / 2, label_pos.y - 6
+                    ),
                     10,
-                    2,
+                    1,
                     self.game_state.colors.get(
                         "PORTAL_LABEL", pr.Color(240, 240, 240, 255)
                     ),
                 )
 
-    # ---------- draw bots ----------
+    # --- helpers to draw single entities (used by sorted renderer) ---
+    def _draw_player_at(
+        self,
+        pos_vec,
+        dims_vec,
+        is_self=False,
+        direction=Direction.NONE,
+        mode=ObjectLayerMode.IDLE,
+    ):
+        cell_size = self.game_state.cell_size if self.game_state.cell_size > 0 else 12.0
+        scaled_pos_x = pos_vec.x * cell_size
+        scaled_pos_y = pos_vec.y * cell_size
+        scaled_dims_w = dims_vec.x * cell_size
+        scaled_dims_h = dims_vec.y * cell_size
+        color_player = (
+            self.game_state.colors.get("PLAYER", pr.Color(0, 200, 255, 255))
+            if is_self
+            else self.game_state.colors.get("OTHER_PLAYER", pr.Color(255, 100, 0, 255))
+        )
+        pr.draw_rectangle_pro(
+            pr.Rectangle(scaled_pos_x, scaled_pos_y, scaled_dims_w, scaled_dims_h),
+            pr.Vector2(0, 0),
+            0,
+            color_player,
+        )
+
+        # draw small direction text
+        dir_text = (
+            direction.name if isinstance(direction, Direction) else str(direction)
+        )
+        pr.draw_text_ex(
+            pr.get_font_default(),
+            dir_text,
+            pr.Vector2(scaled_pos_x, scaled_pos_y - 12),
+            10,
+            1,
+            self.game_state.colors.get("UI_TEXT", pr.Color(255, 255, 255, 255)),
+        )
+
+    def _draw_bot_at(self, bot):
+        cell_size = self.game_state.cell_size if self.game_state.cell_size > 0 else 12.0
+        pos = bot["pos"]
+        dims = bot["dims"]
+        behavior = bot.get("behavior", "passive")
+        direction = bot.get("direction", Direction.NONE)
+
+        scaled_pos_x = pos.x * cell_size
+        scaled_pos_y = pos.y * cell_size
+        scaled_w = dims.x * cell_size
+        scaled_h = dims.y * cell_size
+
+        # choose color based on behavior
+        if behavior == "hostile":
+            color_bot = self.game_state.colors.get(
+                "ERROR_TEXT", pr.Color(255, 50, 50, 255)
+            )
+        else:
+            color_bot = self.game_state.colors.get(
+                "OTHER_PLAYER", pr.Color(100, 200, 100, 255)
+            )
+
+        pr.draw_rectangle_pro(
+            pr.Rectangle(scaled_pos_x, scaled_pos_y, scaled_w, scaled_h),
+            pr.Vector2(0, 0),
+            0,
+            color_bot,
+        )
+
+        # behavior label above bot
+        label = behavior.upper()
+        pr.draw_text_ex(
+            pr.get_font_default(),
+            label,
+            pr.Vector2(scaled_pos_x, scaled_pos_y - 12),
+            10,
+            1,
+            self.game_state.colors.get("UI_TEXT", pr.Color(255, 255, 255, 255)),
+        )
+
+    # ---------- previous individual draw functions kept for compatibility but not directly used in z-sorted pass ----------
     def draw_bots(self):
         with self.mutex:
             if not self.game_state.bots:
                 return
-            cell_size = (
-                self.game_state.cell_size if self.game_state.cell_size > 0 else 12.0
-            )
-            player_pos = self.game_state.player_pos_interpolated
             for bot_id, bot in self.game_state.bots.items():
-                pos = bot["pos"]
-                dims = bot["dims"]
-                behavior = bot.get("behavior", "passive")
-                direction = bot.get("direction", Direction.NONE)
-                mode = bot.get("mode", ObjectLayerMode.IDLE)
+                self._draw_bot_at(bot)
 
-                scaled_pos_x = pos.x * cell_size
-                scaled_pos_y = pos.y * cell_size
-                scaled_w = dims.x * cell_size
-                scaled_h = dims.y * cell_size
-
-                # choose color based on behavior (fallbacks)
-                if behavior == "hostile":
-                    color_bot = self.game_state.colors.get(
-                        "ERROR_TEXT", pr.Color(255, 50, 50, 255)
-                    )
-                else:
-                    color_bot = self.game_state.colors.get(
-                        "OTHER_PLAYER", pr.Color(100, 200, 100, 255)
-                    )
-
-                # draw bot rect
-                pr.draw_rectangle_pro(
-                    pr.Rectangle(scaled_pos_x, scaled_pos_y, scaled_w, scaled_h),
-                    pr.Vector2(0, 0),
-                    0,
-                    color_bot,
+    def draw_other_players(self):
+        with self.mutex:
+            for player_id, player_data in self.game_state.other_players.items():
+                self._draw_player_at(
+                    player_data["pos"],
+                    player_data["dims"],
+                    False,
+                    player_data.get("direction", Direction.NONE),
+                    player_data.get("mode", ObjectLayerMode.IDLE),
                 )
 
-                # behavior label above bot
-                try:
-                    label = behavior.upper()
-                    pr.draw_text_ex(
-                        pr.get_font_default(),
-                        label,
-                        pr.Vector2(scaled_pos_x, scaled_pos_y - 12),
-                        10,
-                        1,
-                        self.game_state.colors.get(
-                            "UI_TEXT", pr.Color(255, 255, 255, 255)
-                        ),
-                    )
-                except Exception:
-                    pass
+    def draw_player(self):
+        self._draw_player_at(
+            self.game_state.player_pos_interpolated,
+            self.game_state.player_dims,
+            True,
+            self.game_state.player_direction,
+            self.game_state.player_mode,
+        )
 
-                # optional highlight when hostile is near the player (visual hint)
-                try:
-                    dx = pos.x - player_pos.x
-                    dy = pos.y - player_pos.y
-                    dist = math.sqrt(dx * dx + dy * dy)
-                    # distance measured in grid cells; highlight when within ~8 cells
-                    if behavior == "hostile" and dist <= 8.0:
-                        # try draw_rectangle_lines_ex, fallback to draw_rectangle_lines
-                        try:
-                            pr.draw_rectangle_lines_ex(
-                                pr.Rectangle(
-                                    scaled_pos_x, scaled_pos_y, scaled_w, scaled_h
-                                ),
-                                2,
-                                pr.Color(255, 200, 0, 200),
-                            )
-                        except Exception:
-                            pr.draw_rectangle_lines(
-                                int(scaled_pos_x),
-                                int(scaled_pos_y),
-                                int(scaled_w),
-                                int(scaled_h),
-                                pr.Color(255, 200, 0, 200),
-                            )
-                except Exception:
-                    pass
+    # ---------- draw entities sorted by world Y (y + height) ----------
+    def draw_entities_sorted(self):
+        """
+        This function draws bots, other players and the local player in a single sorted pass
+        by their bottom Y (pos.y + dims.y) so objects lower on screen render on top.
+        """
+        entries = []
+        with self.mutex:
+            # other players
+            for player_id, p in self.game_state.other_players.items():
+                pos = p["pos"]
+                dims = p["dims"]
+                bottom_y = pos.y + dims.y  # measured in grid cells
+                entries.append(("other", bottom_y, player_id, p))
+            # bots
+            for bot_id, b in self.game_state.bots.items():
+                pos = b["pos"]
+                dims = b["dims"]
+                bottom_y = pos.y + dims.y
+                entries.append(("bot", bottom_y, bot_id, b))
+            # self player (drawn as an entity too)
+            self_pos = self.game_state.player_pos_interpolated
+            self_dims = self.game_state.player_dims
+            bottom_y_self = self_pos.y + self_dims.y
+            entries.append(
+                (
+                    "self",
+                    bottom_y_self,
+                    self.game_state.player_id,
+                    {
+                        "pos": self_pos,
+                        "dims": self_dims,
+                        "direction": self.game_state.player_direction,
+                        "mode": self.game_state.player_mode,
+                    },
+                )
+            )
+
+        # sort ascending by bottom_y; smaller Y (higher on map) drawn first
+        entries.sort(key=lambda e: e[1])
+
+        # draw in sorted order
+        for typ, _, _id, data in entries:
+            try:
+                if typ == "other":
+                    # data contains pos, dims, direction, mode
+                    self._draw_player_at(
+                        data["pos"],
+                        data["dims"],
+                        False,
+                        data.get("direction", Direction.NONE),
+                        data.get("mode", ObjectLayerMode.IDLE),
+                    )
+                elif typ == "bot":
+                    self._draw_bot_at(data)
+                elif typ == "self":
+                    self._draw_player_at(
+                        data["pos"],
+                        data["dims"],
+                        True,
+                        data.get("direction", Direction.NONE),
+                        data.get("mode", ObjectLayerMode.IDLE),
+                    )
+            except Exception:
+                # draw failures shouldn't crash rendering loop
+                pass
 
     def draw_path(self):
         with self.mutex:
@@ -1104,7 +1174,12 @@ class NetworkClient:
 
     def draw_dev_ui(self):
         # top bar background
-        pr.draw_rectangle(0, 0, 450, 160, pr.fade(pr.BLACK, 0.4))
+        pr.draw_rectangle_pro(
+            pr.Rectangle(0, 0, 450, self.screen_height - 90),
+            pr.Vector2(0, 0),
+            0,
+            pr.fade(pr.BLACK, 0.4) if hasattr(pr, "fade") else pr.Color(0, 0, 0, 100),
+        )
         # Replace "DEV UI" label with current FPS
         fps_text = f"{pr.get_fps()} FPS"
         pr.draw_text_ex(
@@ -1173,14 +1248,20 @@ class NetworkClient:
         return x, y, w, h
 
     def draw_hud_item_button(self, x, y, w, h, item, hovered):
-        # simple visual for an item in hud bar
+        # simple visual for an item in hud bar using draw_rectangle_pro exclusively
         bg = pr.Color(36, 36, 36, 220)
         hover_bg = pr.Color(70, 70, 70, 230)
         border = pr.Color(255, 255, 255, 18)
         txt_color = self.game_state.colors.get("UI_TEXT", pr.Color(255, 255, 255, 255))
 
-        pr.draw_rectangle(int(x), int(y), int(w), int(h), hover_bg if hovered else bg)
-        pr.draw_rectangle_lines(int(x), int(y), int(w), int(h), border)
+        pr.draw_rectangle_pro(
+            pr.Rectangle(x, y, w, h), pr.Vector2(0, 0), 0, hover_bg if hovered else bg
+        )
+        try:
+            pr.draw_rectangle_lines(int(x), int(y), int(w), int(h), border)
+        except Exception:
+            # draw_rectangle_lines may not exist in some bindings; ignore in that case
+            pass
 
         # if active, draw yellow border overlay (thicker)
         if item.get("isActive"):
@@ -1191,14 +1272,16 @@ class NetworkClient:
                     pr.Color(240, 200, 40, 220),
                 )
             except Exception:
-                # fallback to simple lines if draw_rectangle_lines_ex not available
-                pr.draw_rectangle_lines(
-                    int(x + 2),
-                    int(y + 2),
-                    int(w - 4),
-                    int(h - 4),
-                    pr.Color(240, 200, 40, 220),
-                )
+                try:
+                    pr.draw_rectangle_lines(
+                        int(x + 2),
+                        int(y + 2),
+                        int(w - 4),
+                        int(h - 4),
+                        pr.Color(240, 200, 40, 220),
+                    )
+                except Exception:
+                    pass
 
         # icon: big char centered top
         icon_size = 28
@@ -1228,12 +1311,19 @@ class NetworkClient:
 
     def draw_hud_bar(self, mouse_pos):
         x, y, w, h = self._hud_bar_rect()
-        # background bar
-        bar_bg = pr.Color(18, 18, 18, 220)
-        pr.draw_rectangle(int(x), int(y), int(w), int(h), bar_bg)
-        pr.draw_rectangle_lines(
-            int(x), int(y), int(w), int(h), pr.Color(255, 255, 255, 12)
+        # background bar using draw_rectangle_pro
+        pr.draw_rectangle_pro(
+            pr.Rectangle(int(x), int(y), int(w), int(h)),
+            pr.Vector2(0, 0),
+            0,
+            pr.Color(18, 18, 18, 220),
         )
+        try:
+            pr.draw_rectangle_lines(
+                int(x), int(y), int(w), int(h), pr.Color(255, 255, 255, 12)
+            )
+        except Exception:
+            pass
 
         inner_x = x + self.hud_bar_padding
         inner_y = y + (h - self.hud_item_h) / 2
@@ -1282,8 +1372,16 @@ class NetworkClient:
         my = pr.get_mouse_position().y
         hovered = mx >= x and mx <= x + w and my >= y and my <= y + h
 
-        pr.draw_rectangle(int(x), int(y), int(w), int(h), hover_bg if hovered else bg)
-        pr.draw_rectangle_lines(int(x), int(y), int(w), int(h), border)
+        pr.draw_rectangle_pro(
+            pr.Rectangle(int(x), int(y), int(w), int(h)),
+            pr.Vector2(0, 0),
+            0,
+            hover_bg if hovered else bg,
+        )
+        try:
+            pr.draw_rectangle_lines(int(x), int(y), int(w), int(h), border)
+        except Exception:
+            pass
         ts = 16
         tw = pr.measure_text(label, ts)
         pr.draw_text_ex(
@@ -1311,9 +1409,13 @@ class NetworkClient:
         view_w = self.screen_width
         view_h = self.screen_height - self.hud_bar_height
 
-        # background overlay in the view area (semi-transparent black)
-        overlay = pr.Color(0, 0, 0, 180)
-        pr.draw_rectangle(view_x, view_y, view_w, view_h, overlay)
+        # background overlay in the view area (semi-transparent black) using draw_rectangle_pro
+        pr.draw_rectangle_pro(
+            pr.Rectangle(view_x, view_y, view_w, view_h),
+            pr.Vector2(0, 0),
+            0,
+            pr.Color(0, 0, 0, 180),
+        )
 
         # Now draw item info directly (no panel/padding requested)
         margin = 28
@@ -1374,27 +1476,22 @@ class NetworkClient:
         if item.get("isActivable"):
             label = "Desactivar" if item.get("isActive") else "Activar"
             # draw button background manually (re-using draw_hud_small_button style)
-            bg = pr.Color(60, 60, 60, 230)
-            hover_bg = pr.Color(90, 90, 90, 240)
-            border = pr.Color(255, 255, 255, 20)
-            mx = pr.get_mouse_position().x
-            my = pr.get_mouse_position().y
-            hovered = (
-                mx >= btn_x
-                and mx <= btn_x + btn_w
-                and my >= btn_y
-                and my <= btn_y + btn_h
+            pr.draw_rectangle_pro(
+                pr.Rectangle(int(btn_x), int(btn_y), int(btn_w), int(btn_h)),
+                pr.Vector2(0, 0),
+                0,
+                pr.Color(60, 60, 60, 230),
             )
-            pr.draw_rectangle(
-                int(btn_x),
-                int(btn_y),
-                int(btn_w),
-                int(btn_h),
-                hover_bg if hovered else bg,
-            )
-            pr.draw_rectangle_lines(
-                int(btn_x), int(btn_y), int(btn_w), int(btn_h), border
-            )
+            try:
+                pr.draw_rectangle_lines(
+                    int(btn_x),
+                    int(btn_y),
+                    int(btn_w),
+                    int(btn_h),
+                    pr.Color(255, 255, 255, 20),
+                )
+            except Exception:
+                pass
             ts = 18
             tw = pr.measure_text(label, ts)
             pr.draw_text_ex(
@@ -1419,15 +1516,23 @@ class NetworkClient:
     def draw_hud_alert(self):
         if not self.hud_alert_text or time.time() > self.hud_alert_until:
             return
-        # draw centered top small alert
+        # draw centered top small alert using draw_rectangle_pro
         w = min(600, int(self.screen_width * 0.75))
         h = 44
         x = (self.screen_width - w) / 2
         y = 16
-        pr.draw_rectangle(int(x), int(y), int(w), int(h), pr.Color(40, 40, 40, 220))
-        pr.draw_rectangle_lines(
-            int(x), int(y), int(w), int(h), pr.Color(255, 200, 40, 220)
+        pr.draw_rectangle_pro(
+            pr.Rectangle(int(x), int(y), int(w), int(h)),
+            pr.Vector2(0, 0),
+            0,
+            pr.Color(40, 40, 40, 220),
         )
+        try:
+            pr.draw_rectangle_lines(
+                int(x), int(y), int(w), int(h), pr.Color(255, 200, 40, 220)
+            )
+        except Exception:
+            pass
         ts = 18
         tw = pr.measure_text(self.hud_alert_text, ts)
         pr.draw_text_ex(
@@ -1662,8 +1767,8 @@ class NetworkClient:
 
     # ---------- utilities ----------
     def draw_game(self):
-        pr.begin_drawing()
         bg = self.game_state.colors.get("BACKGROUND", pr.Color(30, 30, 30, 255))
+        pr.begin_drawing()
         pr.clear_background(bg)
 
         # begin mode 2d with our camera (Camera2D.offset must be screen center)
@@ -1676,10 +1781,7 @@ class NetworkClient:
         # world drawing
         self.draw_grid_lines()
         self.draw_grid_objects()
-        # draw bots (under players so players render on top)
-        self.draw_bots()
-        self.draw_other_players()
-        self.draw_player()
+        self.draw_entities_sorted()
         self.draw_path()
         self.draw_aoi_circle()
         self.draw_foregrounds()
