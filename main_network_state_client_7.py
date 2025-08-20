@@ -69,6 +69,10 @@ class GameState:
         self.download_size_bytes = 0
         self.upload_size_bytes = 0
 
+        # bots storage (server sends visible bots inside visibleGridObjects)
+        # each entry: { "pos": Vector2, "dims": Vector2, "behavior": "hostile"/"passive", "direction": Direction, "mode": ObjectLayerMode }
+        self.bots = {}
+
         # graphics hints (from server)
         self.camera_smoothing = None
         self.camera_zoom = None
@@ -458,6 +462,10 @@ class NetworkClient:
                     self.game_state.obstacles = {}
                     self.game_state.portals = {}
                     self.game_state.foregrounds = {}  # reset foregrounds each update
+
+                    # reset bots container each AOI update (server only sends visible bots)
+                    self.game_state.bots = {}
+
                     if visible_objects_data:
                         for obj_id, obj_data in visible_objects_data.items():
                             obj_type = obj_data.get("Type")
@@ -484,6 +492,43 @@ class NetworkClient:
                                     "dims": pr.Vector2(
                                         dims.get("Width"), dims.get("Height")
                                     ),
+                                }
+                            elif obj_type == "bot":
+                                # PARSE bot fields (new)
+                                behavior = obj_data.get("behavior", "passive")
+                                direction_val = obj_data.get("direction", 8)
+                                try:
+                                    dir_int = int(direction_val)
+                                except (TypeError, ValueError):
+                                    dir_int = 8
+                                try:
+                                    dir_enum = Direction(dir_int)
+                                except Exception:
+                                    dir_enum = Direction.NONE
+
+                                mode_val = obj_data.get("mode", 0)
+                                try:
+                                    mode_int = int(mode_val)
+                                except (TypeError, ValueError):
+                                    mode_int = 0
+                                try:
+                                    mode_enum = ObjectLayerMode(mode_int)
+                                except Exception:
+                                    mode_enum = ObjectLayerMode.IDLE
+
+                                # safe defaults for dims
+                                w = dims.get("Width", self.game_state.default_obj_width)
+                                h = dims.get(
+                                    "Height", self.game_state.default_obj_height
+                                )
+                                self.game_state.bots[obj_id] = {
+                                    "pos": pr.Vector2(
+                                        pos.get("X", 0.0), pos.get("Y", 0.0)
+                                    ),
+                                    "dims": pr.Vector2(w, h),
+                                    "behavior": behavior,
+                                    "direction": dir_enum,
+                                    "mode": mode_enum,
                                 }
 
             except json.JSONDecodeError as e:
@@ -867,6 +912,88 @@ class NetworkClient:
                         "PORTAL_LABEL", pr.Color(240, 240, 240, 255)
                     ),
                 )
+
+    # ---------- draw bots ----------
+    def draw_bots(self):
+        with self.mutex:
+            if not self.game_state.bots:
+                return
+            cell_size = (
+                self.game_state.cell_size if self.game_state.cell_size > 0 else 12.0
+            )
+            player_pos = self.game_state.player_pos_interpolated
+            for bot_id, bot in self.game_state.bots.items():
+                pos = bot["pos"]
+                dims = bot["dims"]
+                behavior = bot.get("behavior", "passive")
+                direction = bot.get("direction", Direction.NONE)
+                mode = bot.get("mode", ObjectLayerMode.IDLE)
+
+                scaled_pos_x = pos.x * cell_size
+                scaled_pos_y = pos.y * cell_size
+                scaled_w = dims.x * cell_size
+                scaled_h = dims.y * cell_size
+
+                # choose color based on behavior (fallbacks)
+                if behavior == "hostile":
+                    color_bot = self.game_state.colors.get(
+                        "ERROR_TEXT", pr.Color(255, 50, 50, 255)
+                    )
+                else:
+                    color_bot = self.game_state.colors.get(
+                        "OTHER_PLAYER", pr.Color(100, 200, 100, 255)
+                    )
+
+                # draw bot rect
+                pr.draw_rectangle_pro(
+                    pr.Rectangle(scaled_pos_x, scaled_pos_y, scaled_w, scaled_h),
+                    pr.Vector2(0, 0),
+                    0,
+                    color_bot,
+                )
+
+                # behavior label above bot
+                try:
+                    label = behavior.upper()
+                    pr.draw_text_ex(
+                        pr.get_font_default(),
+                        label,
+                        pr.Vector2(scaled_pos_x, scaled_pos_y - 12),
+                        10,
+                        1,
+                        self.game_state.colors.get(
+                            "UI_TEXT", pr.Color(255, 255, 255, 255)
+                        ),
+                    )
+                except Exception:
+                    pass
+
+                # optional highlight when hostile is near the player (visual hint)
+                try:
+                    dx = pos.x - player_pos.x
+                    dy = pos.y - player_pos.y
+                    dist = math.sqrt(dx * dx + dy * dy)
+                    # distance measured in grid cells; highlight when within ~8 cells
+                    if behavior == "hostile" and dist <= 8.0:
+                        # try draw_rectangle_lines_ex, fallback to draw_rectangle_lines
+                        try:
+                            pr.draw_rectangle_lines_ex(
+                                pr.Rectangle(
+                                    scaled_pos_x, scaled_pos_y, scaled_w, scaled_h
+                                ),
+                                2,
+                                pr.Color(255, 200, 0, 200),
+                            )
+                        except Exception:
+                            pr.draw_rectangle_lines(
+                                int(scaled_pos_x),
+                                int(scaled_pos_y),
+                                int(scaled_w),
+                                int(scaled_h),
+                                pr.Color(255, 200, 0, 200),
+                            )
+                except Exception:
+                    pass
 
     def draw_path(self):
         with self.mutex:
@@ -1549,6 +1676,8 @@ class NetworkClient:
         # world drawing
         self.draw_grid_lines()
         self.draw_grid_objects()
+        # draw bots (under players so players render on top)
+        self.draw_bots()
         self.draw_other_players()
         self.draw_player()
         self.draw_path()
