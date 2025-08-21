@@ -725,18 +725,17 @@ class NetworkClient:
         except Exception:
             cam_zoom = 1.0
 
-        # initial target = player position * cell_size (may be zero)
+        # initial target = player center position * cell_size (may be zero)
         try:
-            initial_target = pr.Vector2(
+            player_center_x = (
                 self.game_state.player_pos_interpolated.x
-                * (
-                    self.game_state.cell_size if self.game_state.cell_size > 0 else 12.0
-                ),
+                + self.game_state.player_dims.x / 2.0
+            ) * (self.game_state.cell_size if self.game_state.cell_size > 0 else 12.0)
+            player_center_y = (
                 self.game_state.player_pos_interpolated.y
-                * (
-                    self.game_state.cell_size if self.game_state.cell_size > 0 else 12.0
-                ),
-            )
+                + self.game_state.player_dims.y / 2.0
+            ) * (self.game_state.cell_size if self.game_state.cell_size > 0 else 12.0)
+            initial_target = pr.Vector2(player_center_x, player_center_y)
         except Exception:
             initial_target = pr.Vector2(0, 0)
 
@@ -911,6 +910,24 @@ class NetworkClient:
                 )
 
     # --- helpers to draw single entities (used by sorted renderer) ---
+    def _draw_entity_label(self, px, py, text_lines, font_size=12):
+        """
+        Helper to draw stacked label lines centered horizontally at px..py (py is top of first line).
+        text_lines: list of strings, drawn top->down
+        """
+        y = py
+        for line in text_lines:
+            tw = pr.measure_text(line, font_size)
+            pr.draw_text_ex(
+                pr.get_font_default(),
+                line,
+                pr.Vector2(px - tw / 2, y),
+                font_size,
+                1,
+                self.game_state.colors.get("UI_TEXT", pr.Color(255, 255, 255, 255)),
+            )
+            y += font_size + 2
+
     def _draw_player_at(
         self,
         pos_vec,
@@ -918,6 +935,7 @@ class NetworkClient:
         is_self=False,
         direction=Direction.NONE,
         mode=ObjectLayerMode.IDLE,
+        entity_id=None,
     ):
         cell_size = self.game_state.cell_size if self.game_state.cell_size > 0 else 12.0
         scaled_pos_x = pos_vec.x * cell_size
@@ -929,6 +947,29 @@ class NetworkClient:
             if is_self
             else self.game_state.colors.get("OTHER_PLAYER", pr.Color(255, 100, 0, 255))
         )
+
+        # Draw label stacked above the entity: ID, Direction, Type ("Player")
+        # compute center X of entity in pixels
+        center_x = scaled_pos_x + scaled_dims_w / 2.0
+        # compute top Y for labels (leave some padding)
+        label_top_y = scaled_pos_y - 44  # three small lines above entity
+        id_text = (
+            entity_id if entity_id is not None else ("you" if is_self else "player")
+        )
+        dir_text = (
+            direction.name if isinstance(direction, Direction) else str(direction)
+        )
+        type_text = "Player"
+
+        # draw 3 stacked lines
+        self._draw_entity_label(
+            center_x,
+            label_top_y,
+            [str(id_text), str(dir_text), str(type_text)],
+            font_size=12,
+        )
+
+        # draw the player rectangle (entity)
         pr.draw_rectangle_pro(
             pr.Rectangle(scaled_pos_x, scaled_pos_y, scaled_dims_w, scaled_dims_h),
             pr.Vector2(0, 0),
@@ -936,20 +977,7 @@ class NetworkClient:
             color_player,
         )
 
-        # draw small direction text
-        dir_text = (
-            direction.name if isinstance(direction, Direction) else str(direction)
-        )
-        pr.draw_text_ex(
-            pr.get_font_default(),
-            dir_text,
-            pr.Vector2(scaled_pos_x, scaled_pos_y - 12),
-            10,
-            1,
-            self.game_state.colors.get("UI_TEXT", pr.Color(255, 255, 255, 255)),
-        )
-
-    def _draw_bot_at(self, bot):
+    def _draw_bot_at(self, bot, bot_id=None):
         cell_size = self.game_state.cell_size if self.game_state.cell_size > 0 else 12.0
         pos = bot["pos"]
         dims = bot["dims"]
@@ -971,6 +999,23 @@ class NetworkClient:
                 "OTHER_PLAYER", pr.Color(100, 200, 100, 255)
             )
 
+        # Draw label stacked above the bot: ID, Direction, Behavior
+        center_x = scaled_pos_x + scaled_w / 2.0
+        label_top_y = scaled_pos_y - 44
+        id_text = bot_id if bot_id is not None else "bot"
+        dir_text = (
+            direction.name if isinstance(direction, Direction) else str(direction)
+        )
+        # behavior as type
+        type_text = behavior
+
+        self._draw_entity_label(
+            center_x,
+            label_top_y,
+            [str(id_text), str(dir_text), str(type_text)],
+            font_size=12,
+        )
+
         pr.draw_rectangle_pro(
             pr.Rectangle(scaled_pos_x, scaled_pos_y, scaled_w, scaled_h),
             pr.Vector2(0, 0),
@@ -978,16 +1023,7 @@ class NetworkClient:
             color_bot,
         )
 
-        # behavior label above bot
-        label = behavior.upper()
-        pr.draw_text_ex(
-            pr.get_font_default(),
-            label,
-            pr.Vector2(scaled_pos_x, scaled_pos_y - 12),
-            10,
-            1,
-            self.game_state.colors.get("UI_TEXT", pr.Color(255, 255, 255, 255)),
-        )
+        # small behavior label below top (already drawn), keep behavior uppercase as extra label above already done
 
     # ---------- previous individual draw functions kept for compatibility but not directly used in z-sorted pass ----------
     def draw_bots(self):
@@ -995,7 +1031,7 @@ class NetworkClient:
             if not self.game_state.bots:
                 return
             for bot_id, bot in self.game_state.bots.items():
-                self._draw_bot_at(bot)
+                self._draw_bot_at(bot, bot_id=bot_id)
 
     def draw_other_players(self):
         with self.mutex:
@@ -1006,6 +1042,7 @@ class NetworkClient:
                     False,
                     player_data.get("direction", Direction.NONE),
                     player_data.get("mode", ObjectLayerMode.IDLE),
+                    entity_id=player_id,
                 )
 
     def draw_player(self):
@@ -1015,6 +1052,7 @@ class NetworkClient:
             True,
             self.game_state.player_direction,
             self.game_state.player_mode,
+            entity_id=self.game_state.player_id or "you",
         )
 
     # ---------- draw entities sorted by world Y (y + height) ----------
@@ -1022,6 +1060,7 @@ class NetworkClient:
         """
         This function draws bots, other players and the local player in a single sorted pass
         by their bottom Y (pos.y + dims.y) so objects lower on screen render on top.
+        Labels are drawn with each entity to avoid z-fighting.
         """
         entries = []
         with self.mutex:
@@ -1069,9 +1108,10 @@ class NetworkClient:
                         False,
                         data.get("direction", Direction.NONE),
                         data.get("mode", ObjectLayerMode.IDLE),
+                        entity_id=_id,
                     )
                 elif typ == "bot":
-                    self._draw_bot_at(data)
+                    self._draw_bot_at(data, bot_id=_id)
                 elif typ == "self":
                     self._draw_player_at(
                         data["pos"],
@@ -1079,6 +1119,7 @@ class NetworkClient:
                         True,
                         data.get("direction", Direction.NONE),
                         data.get("mode", ObjectLayerMode.IDLE),
+                        entity_id=_id or "you",
                     )
             except Exception:
                 # draw failures shouldn't crash rendering loop
@@ -1120,15 +1161,20 @@ class NetworkClient:
 
     def draw_aoi_circle(self):
         with self.mutex:
+            # Use player's center as AOI center so AOI is centered correctly regardless of player dims
             player_pos = self.game_state.player_pos_interpolated
+            player_dims = self.game_state.player_dims
             cell_size = (
                 self.game_state.cell_size if self.game_state.cell_size > 0 else 12.0
             )
+            # compute center in pixels
+            center_x = (player_pos.x + player_dims.x / 2.0) * cell_size
+            center_y = (player_pos.y + player_dims.y / 2.0) * cell_size
             aoi_radius = (
                 self.game_state.aoi_radius if self.game_state.aoi_radius > 0 else 15.0
             )
             pr.draw_circle_v(
-                pr.Vector2(player_pos.x * cell_size, player_pos.y * cell_size),
+                pr.Vector2(center_x, center_y),
                 aoi_radius * cell_size,
                 self.game_state.colors.get("AOI", pr.Color(255, 0, 255, 51)),
             )
@@ -1946,16 +1992,25 @@ class NetworkClient:
                 cell_size = (
                     self.game_state.cell_size if self.game_state.cell_size > 0 else 12.0
                 )
-                desired = pr.Vector2(
-                    self.game_state.player_pos_interpolated.x * cell_size,
-                    self.game_state.player_pos_interpolated.y * cell_size,
+                # Use player's center so camera keeps player centered regardless of its dimensions
+                desired_center = pr.Vector2(
+                    (
+                        self.game_state.player_pos_interpolated.x
+                        + self.game_state.player_dims.x / 2.0
+                    )
+                    * cell_size,
+                    (
+                        self.game_state.player_pos_interpolated.y
+                        + self.game_state.player_dims.y / 2.0
+                    )
+                    * cell_size,
                 )
                 if self.game_state.camera is None:
                     # safety: create default camera if missing
                     offset = pr.Vector2(self.screen_width / 2, self.screen_height / 2)
                     self.game_state.camera = pr.Camera2D(
                         offset,
-                        desired,
+                        desired_center,
                         0.0,
                         float(
                             self.game_state.camera_zoom
@@ -1974,12 +2029,12 @@ class NetworkClient:
                     smooth = 0
                 if smooth > 1:
                     smooth = 1
-                new_tx = pr.lerp(current_target.x, desired.x, smooth)
-                new_ty = pr.lerp(current_target.y, desired.y, smooth)
+                new_tx = pr.lerp(current_target.x, desired_center.x, smooth)
+                new_ty = pr.lerp(current_target.y, desired_center.y, smooth)
                 # apply
                 try:
                     self.game_state.camera.target = pr.Vector2(new_tx, new_ty)
-                    # ensure offset remains centered
+                    # ensure offset remains centered each frame (good practice)
                     try:
                         self.game_state.camera.offset = pr.Vector2(
                             self.screen_width / 2, self.screen_height / 2
@@ -1992,6 +2047,16 @@ class NetworkClient:
                         setattr(
                             self.game_state.camera, "target", pr.Vector2(new_tx, new_ty)
                         )
+                        try:
+                            setattr(
+                                self.game_state.camera,
+                                "offset",
+                                pr.Vector2(
+                                    self.screen_width / 2, self.screen_height / 2
+                                ),
+                            )
+                        except Exception:
+                            pass
                     except Exception:
                         pass
             except Exception:
@@ -2015,8 +2080,15 @@ class NetworkClient:
         pr.begin_drawing()
         pr.clear_background(bg)
 
-        # begin mode 2d with our camera (Camera2D.offset must be screen center)
+        # ensure camera offset centered as a good practice before BeginMode2D
         try:
+            if self.game_state.camera:
+                try:
+                    self.game_state.camera.offset = pr.Vector2(
+                        self.screen_width / 2, self.screen_height / 2
+                    )
+                except Exception:
+                    pass
             pr.begin_mode_2d(self.game_state.camera)
         except Exception:
             # If begin_mode_2d fails, skip world transforms to avoid crash
