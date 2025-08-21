@@ -70,7 +70,7 @@ class GameState:
         self.upload_size_bytes = 0
 
         # bots storage (server sends visible bots inside visibleGridObjects)
-        # each entry: { "pos": Vector2, "dims": Vector2, "behavior": "hostile"/"passive", "direction": Direction, "mode": ObjectLayerMode }
+        # each entry: { "pos": Vector2 (world coords, pixels), "t": created_time, "dur": seconds}
         self.bots = {}
 
         # graphics hints (from server)
@@ -139,8 +139,28 @@ class NetworkClient:
         # stored rect for view's activate button (so click can check bounds)
         self.hud_view_button_rect = None  # (x,y,w,h)
 
+        # HUD slide/collapse state and animation
+        self.hud_collapsed = False
+        # 0.0 = fully visible, 1.0 = fully hidden (off-screen)
+        self.hud_slide_progress = 0.0
+        self.hud_slide_target = 0.0
+        self.hud_slide_speed = 6.0  # progress units per second
+
+        # position/rect of the small toggle button (updated in draw)
+        self.hud_toggle_rect = None
+
+        # flag to avoid interpreting the toggle click as a HUD item click immediately after toggle
+        self._ignore_next_hud_click = False
+        self._last_toggle_time = 0.0
+        self._toggle_ignore_timeout = (
+            0.18  # seconds to ignore hud clicks after pressing toggle
+        )
+
         # prepare dummy items now
         self._generate_dummy_items(10)
+
+        # timing
+        self._last_frame_time = time.time()
 
     # ---------- dummy items ----------
     def _generate_dummy_items(self, n):
@@ -190,10 +210,10 @@ class NetworkClient:
     def can_activate_item(self, item):
         # check activable
         if not item.get("isActivable"):
-            return False, "Item is not activable."
+            return False, "Item cannot be activated."
         # check max 4 active
         if len(self.active_items()) >= 4:
-            return False, "No puedes activar más de 4 items."
+            return False, "You cannot activate more than 4 items."
         # check stats sum doesn't exceed limit
         new_sum = self.active_stats_sum()
         for v in item.get("stats", {}).values():
@@ -204,7 +224,7 @@ class NetworkClient:
         if new_sum > (self.game_state.sum_stats_limit or 0):
             return (
                 False,
-                f"Activar excede el límite de suma de stats ({self.game_state.sum_stats_limit}).",
+                f"Activation would exceed stats limit ({self.game_state.sum_stats_limit}).",
             )
         return True, ""
 
@@ -221,7 +241,7 @@ class NetworkClient:
         item["isActive"] = True
         # reorder so active items are first
         self.reorder_hud_items()
-        self.show_hud_alert("Item activado.", 1.5)
+        self.show_hud_alert("Item activated.", 1.5)
 
     def deactivate_item(self, idx):
         if idx < 0 or idx >= len(self.hud_items):
@@ -231,11 +251,10 @@ class NetworkClient:
             return
         item["isActive"] = False
         self.reorder_hud_items()
-        self.show_hud_alert("Item desactivado.", 1.0)
+        self.show_hud_alert("Item deactivated.", 1.0)
 
     def reorder_hud_items(self):
         # Move active items to the front (stable)
-        # Keep relative order among active items and among inactive ones
         active = [it for it in self.hud_items if it.get("isActive")]
         inactive = [it for it in self.hud_items if not it.get("isActive")]
         self.hud_items = active + inactive
@@ -1173,9 +1192,13 @@ class NetworkClient:
                 )
 
     def draw_dev_ui(self):
-        # top bar background
+        # compute how much vertical HUD currently occupies (approx)
+        hud_occupied = (1.0 - self.hud_slide_progress) * self.hud_bar_height
+        dev_ui_h = max(80, int(self.screen_height - hud_occupied))
+
+        # top-left dev UI background (height adjusted)
         pr.draw_rectangle_pro(
-            pr.Rectangle(0, 0, 450, self.screen_height - 90),
+            pr.Rectangle(0, 0, 450, dev_ui_h),
             pr.Vector2(0, 0),
             0,
             pr.fade(pr.BLACK, 0.4) if hasattr(pr, "fade") else pr.Color(0, 0, 0, 100),
@@ -1212,6 +1235,7 @@ class NetworkClient:
                 f"Download: {download_kbps:.2f} kbps | Upload: {upload_kbps:.2f} kbps",
                 f"SumStatsLimit: {self.game_state.sum_stats_limit}",
                 f"ActiveStatsSum: {self.active_stats_sum()}",
+                f"ActiveItems: {len(self.active_items())}",
             ]
 
             y_offset = 30
@@ -1230,7 +1254,7 @@ class NetworkClient:
                 pr.draw_text_ex(
                     pr.get_font_default(),
                     f"Error: {error_msg}",
-                    pr.Vector2(10, self.screen_height - 30),
+                    pr.Vector2(10, dev_ui_h - 30),
                     18,
                     1,
                     self.game_state.colors.get(
@@ -1238,12 +1262,17 @@ class NetworkClient:
                     ),
                 )
 
-    # ---------- HUD bar & view rendering ----------
+    # ---------- HUD utilities (with slide/collapse) ----------
     def _hud_bar_rect(self):
-        # returns (x, y, w, h) in screen coords
+        # returns (x, y, w, h) in screen coords using slide progress
         x = 0
         h = self.hud_bar_height
-        y = self.screen_height - h
+        # base Y if fully visible
+        base_y = self.screen_height - h
+        # when fully hidden (progress=1), top of HUD will be screen_height (i.e., out of view)
+        hidden_y = self.screen_height
+        # linear interpolate between base_y and hidden_y based on progress
+        y = pr.lerp(base_y, hidden_y, self.hud_slide_progress)
         w = self.screen_width
         return x, y, w, h
 
@@ -1310,20 +1339,9 @@ class NetworkClient:
         )
 
     def draw_hud_bar(self, mouse_pos):
+        # If HUD is fully hidden (progress near 1.0), do NOT draw the bar.
+        # Still compute total widths so scroll clamping logic can use them.
         x, y, w, h = self._hud_bar_rect()
-        # background bar using draw_rectangle_pro
-        pr.draw_rectangle_pro(
-            pr.Rectangle(int(x), int(y), int(w), int(h)),
-            pr.Vector2(0, 0),
-            0,
-            pr.Color(18, 18, 18, 220),
-        )
-        try:
-            pr.draw_rectangle_lines(
-                int(x), int(y), int(w), int(h), pr.Color(255, 255, 255, 12)
-            )
-        except Exception:
-            pass
 
         inner_x = x + self.hud_bar_padding
         inner_y = y + (h - self.hud_item_h) / 2
@@ -1339,6 +1357,24 @@ class NetworkClient:
             self.hud_scroll_x = 0
         if self.hud_scroll_x < -max_scroll:
             self.hud_scroll_x = -max_scroll
+
+        # If fully hidden, skip drawing the bar entirely (only toggle remains visible)
+        if self.hud_slide_progress >= 0.999:
+            return None, total_w, inner_w
+
+        # draw background bar using draw_rectangle_pro
+        pr.draw_rectangle_pro(
+            pr.Rectangle(int(x), int(y), int(w), int(h)),
+            pr.Vector2(0, 0),
+            0,
+            pr.Color(18, 18, 18, 220),
+        )
+        try:
+            pr.draw_rectangle_lines(
+                int(x), int(y), int(w), int(h), pr.Color(255, 255, 255, 12)
+            )
+        except Exception:
+            pass
 
         offset = inner_x + self.hud_scroll_x
 
@@ -1360,6 +1396,7 @@ class NetworkClient:
                 bx, by, self.hud_item_w, self.hud_item_h, item, hovered
             )
 
+        # Note: toggle button is NOT drawn here anymore (drawn on top via draw_hud_toggle)
         return hovered_index, total_w, inner_w
 
     def draw_hud_small_button(self, x, y, w, h, label):
@@ -1395,19 +1432,20 @@ class NetworkClient:
 
     def draw_hud_view(self):
         """
-        Draw the 'view' (antes modal) which fills the screen above the hud_bar (so hud_bar remains visible).
-        No padding frame — only semi-transparent background + item info + close button.
+        Draw the item view (English text). The view area adapts to the HUD slide state
+        so it never overlaps with the HUD bar while the HUD is visible.
         """
         if self.hud_view_selected is None:
             self.hud_view_button_rect = None
             return
         item = self.hud_items[self.hud_view_selected]
 
-        # compute view area (full width, height minus hud_bar_height)
+        # compute view area (full width, height minus hud_bar_height occupied portion)
+        hud_occupied = (1.0 - self.hud_slide_progress) * self.hud_bar_height
         view_x = 0
         view_y = 0
         view_w = self.screen_width
-        view_h = self.screen_height - self.hud_bar_height
+        view_h = int(self.screen_height - hud_occupied)
 
         # background overlay in the view area (semi-transparent black) using draw_rectangle_pro
         pr.draw_rectangle_pro(
@@ -1417,7 +1455,7 @@ class NetworkClient:
             pr.Color(0, 0, 0, 180),
         )
 
-        # Now draw item info directly (no panel/padding requested)
+        # Now draw item info
         margin = 28
         start_x = view_x + margin
         start_y = view_y + margin
@@ -1434,10 +1472,25 @@ class NetworkClient:
             self.game_state.colors.get("UI_TEXT", pr.Color(255, 255, 255, 255)),
         )
 
-        # stats block below title
+        # stats block below title with dynamic totals and warnings
         stats = item.get("stats", {})
         stat_y = start_y + 24 + 28
         stat_size = 18
+
+        # compute sums
+        current_active_sum = self.active_stats_sum()
+        item_sum = 0
+        for v in stats.values():
+            try:
+                item_sum += int(v)
+            except Exception:
+                pass
+        sum_if_activated = current_active_sum + item_sum
+        limit = self.game_state.sum_stats_limit or 0
+        remaining_after_if = limit - sum_if_activated
+        remaining_now = limit - current_active_sum
+
+        # show each stat line
         for k, v in stats.items():
             line = f"{k.capitalize()}: {v}"
             pr.draw_text_ex(
@@ -1448,7 +1501,78 @@ class NetworkClient:
                 1,
                 self.game_state.colors.get("UI_TEXT", pr.Color(255, 255, 255, 255)),
             )
-            stat_y += 26
+            stat_y += 22
+
+        stat_y += 6
+        # summary lines
+        summary1 = f"Active stats sum: {current_active_sum}"
+        summary2 = f"Item adds: {item_sum} -> If activated: {sum_if_activated} / Limit: {limit}"
+        pr.draw_text_ex(
+            pr.get_font_default(),
+            summary1,
+            pr.Vector2(start_x, stat_y),
+            16,
+            1,
+            pr.Color(200, 200, 200, 220),
+        )
+        stat_y += 20
+        # color warning if it would exceed
+        warn_color = (
+            self.game_state.colors.get("ERROR_TEXT", pr.Color(255, 80, 80, 255))
+            if sum_if_activated > limit
+            else self.game_state.colors.get("UI_TEXT", pr.Color(200, 200, 200, 220))
+        )
+        pr.draw_text_ex(
+            pr.get_font_default(),
+            summary2,
+            pr.Vector2(start_x, stat_y),
+            16,
+            1,
+            warn_color,
+        )
+        stat_y += 22
+
+        # extra warnings / info
+        if not item.get("isActivable"):
+            pr.draw_text_ex(
+                pr.get_font_default(),
+                "This item cannot be activated.",
+                pr.Vector2(start_x, stat_y),
+                16,
+                1,
+                self.game_state.colors.get("ERROR_TEXT", pr.Color(255, 80, 80, 255)),
+            )
+            stat_y += 20
+        elif len(self.active_items()) >= 4 and not item.get("isActive"):
+            pr.draw_text_ex(
+                pr.get_font_default(),
+                "Maximum active items reached (4).",
+                pr.Vector2(start_x, stat_y),
+                16,
+                1,
+                self.game_state.colors.get("ERROR_TEXT", pr.Color(255, 80, 80, 255)),
+            )
+            stat_y += 20
+        elif sum_if_activated > limit and not item.get("isActive"):
+            pr.draw_text_ex(
+                pr.get_font_default(),
+                f"Activation would exceed the limit by {sum_if_activated - limit} points.",
+                pr.Vector2(start_x, stat_y),
+                16,
+                1,
+                self.game_state.colors.get("ERROR_TEXT", pr.Color(255, 80, 80, 255)),
+            )
+            stat_y += 20
+        else:
+            pr.draw_text_ex(
+                pr.get_font_default(),
+                f"Points available now: {remaining_now}",
+                pr.Vector2(start_x, stat_y),
+                16,
+                1,
+                self.game_state.colors.get("UI_TEXT", pr.Color(200, 200, 200, 220)),
+            )
+            stat_y += 20
 
         # description below stats
         desc = item.get("desc", "")
@@ -1461,26 +1585,30 @@ class NetworkClient:
             pr.Color(200, 200, 200, 220),
         )
 
-        # close button top-right inside view
+        # close button top-right inside view (use ✕)
         close_x = self.screen_width - self.hud_close_w - 12
         close_y = 12
         self.draw_hud_small_button(
-            close_x, close_y, self.hud_close_w, self.hud_close_h, "X"
+            close_x, close_y, self.hud_close_w, self.hud_close_h, "✕"
         )
 
-        # Activation toggle (if activable)
+        # Activation toggle (if activable) - reflect if activation would be allowed
         btn_w = 140
         btn_h = 40
         btn_x = self.screen_width - margin - btn_w
         btn_y = start_y + 10  # below title area
         if item.get("isActivable"):
-            label = "Desactivar" if item.get("isActive") else "Activar"
-            # draw button background manually (re-using draw_hud_small_button style)
+            label = "Deactivate" if item.get("isActive") else "Activate"
+            # check activation viability and show disabled visual if not allowed
+            ok, reason = (
+                self.can_activate_item(item) if not item.get("isActive") else (True, "")
+            )
+            btn_bg = pr.Color(60, 60, 60, 230) if ok else pr.Color(40, 40, 40, 160)
             pr.draw_rectangle_pro(
                 pr.Rectangle(int(btn_x), int(btn_y), int(btn_w), int(btn_h)),
                 pr.Vector2(0, 0),
                 0,
-                pr.Color(60, 60, 60, 230),
+                btn_bg,
             )
             try:
                 pr.draw_rectangle_lines(
@@ -1544,12 +1672,75 @@ class NetworkClient:
             pr.Color(255, 255, 255, 255),
         )
 
+    def draw_hud_toggle(self, mouse_pos):
+        """
+        Draw the toggle button on top of everything (so it overlaps the dev UI if needed).
+        Use ▲ (open) / ▼ (close) symbols for clarity.
+        The toggle y-position interpolates with hud_slide_progress so it has the same transition.
+        """
+        btn_w = 72
+        btn_h = 22
+        btn_x = (self.screen_width / 2) - (btn_w / 2)
+
+        # compute toggle Y so it follows HUD transition:
+        # when HUD visible (progress=0): place the toggle just above the HUD.
+        # when HUD hidden (progress=1): place the toggle at bottom edge.
+        hud_x, hud_y, hud_w, hud_h = self._hud_bar_rect()
+        btn_y_when_visible = hud_y - btn_h - 8
+        btn_y_when_hidden = self.screen_height - btn_h - 8
+        # interpolate based on same progress so toggle moves with HUD
+        btn_y = pr.lerp(btn_y_when_visible, btn_y_when_hidden, self.hud_slide_progress)
+
+        # store rect for click detection
+        self.hud_toggle_rect = (btn_x, btn_y, btn_w, btn_h)
+
+        # background for toggle
+        bg = pr.Color(50, 50, 50, 230)
+        pr.draw_rectangle_pro(
+            pr.Rectangle(int(btn_x), int(btn_y), int(btn_w), int(btn_h)),
+            pr.Vector2(0, 0),
+            0,
+            bg,
+        )
+        try:
+            pr.draw_rectangle_lines(
+                int(btn_x),
+                int(btn_y),
+                int(btn_w),
+                int(btn_h),
+                pr.Color(255, 255, 255, 18),
+            )
+        except Exception:
+            pass
+
+        # choose arrow: if hud is collapsed (hidden), show ▲ to indicate open; else ▼ to indicate hide
+        arrow = "▲" if self.hud_collapsed else "▼"
+        ts = 16
+        tw = pr.measure_text(arrow, ts)
+        pr.draw_text_ex(
+            pr.get_font_default(),
+            arrow,
+            pr.Vector2(btn_x + (btn_w / 2) - (tw / 2), btn_y + (btn_h / 2) - (ts / 2)),
+            ts,
+            1,
+            self.game_state.colors.get("UI_TEXT", pr.Color(255, 255, 255, 255)),
+        )
+
+    # ---------- game loop ----------
     def run_game_loop(self):
         # use server fps if available, else fallback 60
         target_fps = self.game_state.fps if self.game_state.fps > 0 else 60
 
         last_download_check_time = time.time()
         while not pr.window_should_close() and self.is_running:
+            now = time.time()
+            dt = (
+                now - self._last_frame_time
+                if self._last_frame_time
+                else (1.0 / target_fps)
+            )
+            self._last_frame_time = now
+
             # read mouse input early (for UI hit testing)
             mouse_pos = pr.get_mouse_position()
             mouse_pressed = pr.is_mouse_button_pressed(
@@ -1562,6 +1753,27 @@ class NetworkClient:
 
             consumed_click = False
 
+            # clear temporary ignore if timeout passed
+            if (
+                self._ignore_next_hud_click
+                and (now - self._last_toggle_time) > self._toggle_ignore_timeout
+            ):
+                self._ignore_next_hud_click = False
+
+            # animate HUD slide progress toward target
+            if abs(self.hud_slide_progress - self.hud_slide_target) > 0.0001:
+                direction = (
+                    1.0 if self.hud_slide_target > self.hud_slide_progress else -1.0
+                )
+                self.hud_slide_progress += direction * self.hud_slide_speed * dt
+                # clamp
+                if self.hud_slide_progress < 0.0:
+                    self.hud_slide_progress = 0.0
+                if self.hud_slide_progress > 1.0:
+                    self.hud_slide_progress = 1.0
+                # update collapsed state when animation reaches ends
+                self.hud_collapsed = True if self.hud_slide_progress >= 0.999 else False
+
             # HUD BAR DRAG/CLICK handling:
             hx, hy, hw, hh = self._hud_bar_rect()
             in_hud_area = (
@@ -1571,8 +1783,13 @@ class NetworkClient:
                 and mouse_pos.y <= hy + hh
             )
 
-            # start drag if pressed inside hud area
-            if mouse_pressed and in_hud_area:
+            # start drag if pressed inside hud area (only when hud visible) and not ignoring due to toggle
+            if (
+                mouse_pressed
+                and in_hud_area
+                and self.hud_slide_progress < 0.999
+                and not self._ignore_next_hud_click
+            ):
                 self.hud_dragging = True
                 self.hud_drag_start_x = mouse_pos.x
                 self.hud_scroll_start = self.hud_scroll_x
@@ -1591,7 +1808,6 @@ class NetworkClient:
 
             # on release finalize: if it was a short click (no movement) treat as click on item
             if self.hud_dragging and mouse_released:
-                delta = mouse_pos.x - self.hud_drag_start_x
                 # compute hovered item and layout by calling draw_hud_bar (cheap)
                 hovered_index, total_w, inner_w = self.draw_hud_bar(mouse_pos)
                 max_scroll = max(0, total_w - inner_w)
@@ -1601,8 +1817,13 @@ class NetworkClient:
                 if self.hud_scroll_x < -max_scroll:
                     self.hud_scroll_x = -max_scroll
 
-                if not self.hud_drag_moved and abs(delta) <= self.hud_click_threshold:
-                    # interpret as click on the item under mouse
+                delta = mouse_pos.x - self.hud_drag_start_x
+                # Only open view if we are NOT ignoring due to a toggle press that just happened
+                if (
+                    (not self.hud_drag_moved)
+                    and (abs(delta) <= self.hud_click_threshold)
+                    and (not self._ignore_next_hud_click)
+                ):
                     hovered_index, _, _ = self.draw_hud_bar(mouse_pos)
                     if hovered_index is not None:
                         # open/view item (or switch view if already open)
@@ -1613,12 +1834,35 @@ class NetworkClient:
                 # finish dragging
                 self.hud_dragging = False
                 self.hud_drag_moved = False
+                # after release, clear the temporary ignore (if set) to allow normal clicks next frames
+                if self._ignore_next_hud_click:
+                    self._ignore_next_hud_click = False
+
+            # HUD toggle button click (handle is separate from hud area)
+            if mouse_pressed and self.hud_toggle_rect:
+                bx, by, bw, bh = self.hud_toggle_rect
+                if (
+                    mouse_pos.x >= bx
+                    and mouse_pos.x <= bx + bw
+                    and mouse_pos.y >= by
+                    and mouse_pos.y <= by + bh
+                ):
+                    # toggle collapsed state: set animation target
+                    self.hud_collapsed = not self.hud_collapsed
+                    self.hud_slide_target = 1.0 if self.hud_collapsed else 0.0
+                    # set ignore flag for a brief window so the same mouse press/release doesn't open an item
+                    self._ignore_next_hud_click = True
+                    self._last_toggle_time = time.time()
+                    consumed_click = True
+                    # ensure we don't accidentally start a drag in same frame
+                    self.hud_dragging = False
+                    self.hud_drag_moved = False
 
             # If view open, check close button pressed (top-right inside view area)
-            # IMPORTANT: allow hud_bar clicks to work even when view is open (user requested)
             if self.hud_view_open and mouse_pressed:
                 # only check close if click is inside view area (above the hud_bar)
-                view_y_max = self.screen_height - self.hud_bar_height
+                hud_occupied = (1.0 - self.hud_slide_progress) * self.hud_bar_height
+                view_y_max = self.screen_height - hud_occupied
                 if mouse_pos.y <= view_y_max:
                     # check close button
                     close_x = self.screen_width - self.hud_close_w - 12
@@ -1799,12 +2043,15 @@ class NetworkClient:
         if self.hud_view_open and self.hud_view_selected is not None:
             self.draw_hud_view()
 
-        # HUD bar (draw always on top)
+        # HUD bar (draw only if not fully hidden)
         hovered_index, total_w, inner_w = self.draw_hud_bar(mouse_pos)
 
-        # Developer UI (if enabled by server)
+        # Developer UI (if enabled by server) - now adjusted so it doesn't overlap HUD
         if self.game_state.dev_ui and self.hud_view_selected is None:
             self.draw_dev_ui()
+
+        # Draw toggle *after* dev UI to ensure it is on top and clickable
+        self.draw_hud_toggle(mouse_pos)
 
         # draw any hud alerts
         self.draw_hud_alert()
