@@ -53,14 +53,24 @@ class GameState:
         self.colors = {}
 
         # runtime
+        # obstacles/portals/foregrounds keep previous format
         self.obstacles = {}
         self.foregrounds = {}
         self.portals = {}
+
+        # player positions (player uses interpolation already)
         self.player_pos_interpolated = pr.Vector2(0, 0)
         self.player_pos_server = pr.Vector2(0, 0)
         self.player_pos_prev = pr.Vector2(0, 0)
         self.player_dims = pr.Vector2(1.0, 1.0)
+
+        # other players: keyed by id -> dict with keys:
+        # { pos_server:Vector2, pos_prev:Vector2, interp_pos:Vector2, dims:Vector2, direction:Direction, mode:ObjectLayerMode, last_update:float }
         self.other_players = {}
+
+        # bots: similar structure keyed by bot_id
+        self.bots = {}
+
         self.path = []
         self.target_pos = pr.Vector2(-1, -1)
         self.last_update_time = time.time()
@@ -68,10 +78,6 @@ class GameState:
         self.error_display_time = 0.0
         self.download_size_bytes = 0
         self.upload_size_bytes = 0
-
-        # bots storage (server sends visible bots inside visibleGridObjects)
-        # each entry: { "pos": Vector2 (world coords, pixels), "t": created_time, "dur": seconds}
-        self.bots = {}
 
         # graphics hints (from server)
         self.camera_smoothing = None
@@ -373,6 +379,7 @@ class NetworkClient:
                         except Exception:
                             pass
 
+                    # ---------- Player ----------
                     if player_data:
                         self.game_state.player_pos_prev = (
                             self.game_state.player_pos_interpolated
@@ -439,51 +446,81 @@ class NetworkClient:
                         else:
                             self.game_state.target_pos = pr.Vector2(-1, -1)
 
-                    # other players
+                    # ---------- Other players ----------
                     visible_players_data = payload.get("visiblePlayers")
-                    self.game_state.other_players = {}
+                    # We'll rebuild the other_players dict to match server's visible set,
+                    # but interpolate by preserving prev/server when possible.
+                    new_other_players = {}
                     if visible_players_data:
                         for player_id, p_data in visible_players_data.items():
-                            if player_id != self.game_state.player_id:
-                                pos = p_data.get("Pos", {})
-                                dims = p_data.get("Dims", {})
-                                direction_val = p_data.get("direction", 8)
-                                try:
-                                    dir_int = int(direction_val)
-                                except (TypeError, ValueError):
-                                    dir_int = 8
-                                try:
-                                    dir_enum = Direction(dir_int)
-                                except Exception:
-                                    dir_enum = Direction.NONE
+                            if player_id == self.game_state.player_id:
+                                continue
+                            pos = p_data.get("Pos", {})
+                            dims = p_data.get("Dims", {})
+                            direction_val = p_data.get("direction", 8)
+                            try:
+                                dir_int = int(direction_val)
+                            except (TypeError, ValueError):
+                                dir_int = 8
+                            try:
+                                dir_enum = Direction(dir_int)
+                            except Exception:
+                                dir_enum = Direction.NONE
 
-                                mode_val = p_data.get("mode", 0)
-                                try:
-                                    mode_int = int(mode_val)
-                                except (TypeError, ValueError):
-                                    mode_int = 0
-                                try:
-                                    mode_enum = ObjectLayerMode(mode_int)
-                                except Exception:
-                                    mode_enum = ObjectLayerMode.IDLE
+                            mode_val = p_data.get("mode", 0)
+                            try:
+                                mode_int = int(mode_val)
+                            except (TypeError, ValueError):
+                                mode_int = 0
+                            try:
+                                mode_enum = ObjectLayerMode(mode_int)
+                            except Exception:
+                                mode_enum = ObjectLayerMode.IDLE
 
-                                self.game_state.other_players[player_id] = {
-                                    "pos": pr.Vector2(pos.get("X"), pos.get("Y")),
-                                    "dims": pr.Vector2(
-                                        dims.get("Width"), dims.get("Height")
+                            # compute server pos vector
+                            server_pos = pr.Vector2(pos.get("X"), pos.get("Y"))
+                            dims_vec = pr.Vector2(
+                                dims.get("Width", self.game_state.default_obj_width),
+                                dims.get("Height", self.game_state.default_obj_height),
+                            )
+
+                            # if we had the player before, carry forward prev/server; else initialize both to server
+                            prev_entry = self.game_state.other_players.get(player_id)
+                            if prev_entry:
+                                pos_prev = prev_entry.get("pos_server", server_pos)
+                                # set new entry preserving previous pos_server as pos_prev for interpolation
+                                new_other_players[player_id] = {
+                                    "pos_prev": pos_prev,
+                                    "pos_server": server_pos,
+                                    "interp_pos": prev_entry.get(
+                                        "interp_pos", server_pos
                                     ),
+                                    "dims": dims_vec,
                                     "direction": dir_enum,
                                     "mode": mode_enum,
+                                    "last_update": time.time(),
                                 }
+                            else:
+                                new_other_players[player_id] = {
+                                    "pos_prev": server_pos,
+                                    "pos_server": server_pos,
+                                    "interp_pos": server_pos,
+                                    "dims": dims_vec,
+                                    "direction": dir_enum,
+                                    "mode": mode_enum,
+                                    "last_update": time.time(),
+                                }
+                    # replace other_players atomically
+                    self.game_state.other_players = new_other_players
 
-                    # visible objects
+                    # ---------- Visible objects (obstacles, portals, foregrounds, bots) ----------
                     visible_objects_data = payload.get("visibleGridObjects")
                     self.game_state.obstacles = {}
                     self.game_state.portals = {}
                     self.game_state.foregrounds = {}  # reset foregrounds each update
 
-                    # reset bots container each AOI update (server only sends visible bots)
-                    self.game_state.bots = {}
+                    # reset bots container; we'll rebuild keeping prev positions when possible for interpolation
+                    new_bots = {}
 
                     if visible_objects_data:
                         for obj_id, obj_data in visible_objects_data.items():
@@ -540,15 +577,40 @@ class NetworkClient:
                                 h = dims.get(
                                     "Height", self.game_state.default_obj_height
                                 )
-                                self.game_state.bots[obj_id] = {
-                                    "pos": pr.Vector2(
-                                        pos.get("X", 0.0), pos.get("Y", 0.0)
-                                    ),
-                                    "dims": pr.Vector2(w, h),
-                                    "behavior": behavior,
-                                    "direction": dir_enum,
-                                    "mode": mode_enum,
-                                }
+                                server_pos = pr.Vector2(
+                                    pos.get("X", 0.0), pos.get("Y", 0.0)
+                                )
+                                dims_vec = pr.Vector2(w, h)
+
+                                prev_bot = self.game_state.bots.get(obj_id)
+                                if prev_bot:
+                                    pos_prev = prev_bot.get("pos_server", server_pos)
+                                    new_bots[obj_id] = {
+                                        "pos_prev": pos_prev,
+                                        "pos_server": server_pos,
+                                        "interp_pos": prev_bot.get(
+                                            "interp_pos", server_pos
+                                        ),
+                                        "dims": dims_vec,
+                                        "behavior": behavior,
+                                        "direction": dir_enum,
+                                        "mode": mode_enum,
+                                        "last_update": time.time(),
+                                    }
+                                else:
+                                    new_bots[obj_id] = {
+                                        "pos_prev": server_pos,
+                                        "pos_server": server_pos,
+                                        "interp_pos": server_pos,
+                                        "dims": dims_vec,
+                                        "behavior": behavior,
+                                        "direction": dir_enum,
+                                        "mode": mode_enum,
+                                        "last_update": time.time(),
+                                    }
+
+                    # atomically replace bots
+                    self.game_state.bots = new_bots
 
             except json.JSONDecodeError as e:
                 with self.mutex:
@@ -807,6 +869,49 @@ class NetworkClient:
             )
             self.game_state.player_pos_interpolated = pr.Vector2(current_x, current_y)
 
+    def interpolate_entities_positions(self):
+        """
+        Smoothly interpolate positions for other_players and bots using pos_prev -> pos_server
+        and the same interpolation time window used for player (interpolation_ms).
+        """
+        with self.mutex:
+            interp_ms = (
+                self.game_state.interpolation_ms
+                if self.game_state.interpolation_ms > 0
+                else 200
+            )
+            max_dt = interp_ms / 1000.0
+            now = time.time()
+
+            # other players
+            for pid, entry in list(self.game_state.other_players.items()):
+                last_update = entry.get("last_update", now)
+                # compute factor relative to when server pos was set
+                dt = now - last_update
+                factor = 1.0 if max_dt <= 0 else min(1.0, dt / max_dt)
+                a = entry.get("pos_prev", entry.get("pos_server"))
+                b = entry.get("pos_server", a)
+                try:
+                    nx = pr.lerp(a.x, b.x, factor)
+                    ny = pr.lerp(a.y, b.y, factor)
+                except Exception:
+                    nx, ny = b.x, b.y
+                entry["interp_pos"] = pr.Vector2(nx, ny)
+
+            # bots
+            for bid, entry in list(self.game_state.bots.items()):
+                last_update = entry.get("last_update", now)
+                dt = now - last_update
+                factor = 1.0 if max_dt <= 0 else min(1.0, dt / max_dt)
+                a = entry.get("pos_prev", entry.get("pos_server"))
+                b = entry.get("pos_server", a)
+                try:
+                    nx = pr.lerp(a.x, b.x, factor)
+                    ny = pr.lerp(a.y, b.y, factor)
+                except Exception:
+                    nx, ny = b.x, b.y
+                entry["interp_pos"] = pr.Vector2(nx, ny)
+
     def draw_grid_lines(self):
         grid_w = self.game_state.grid_w if self.game_state.grid_w > 0 else 100
         grid_h = self.game_state.grid_h if self.game_state.grid_h > 0 else 100
@@ -856,7 +961,6 @@ class NetworkClient:
             except Exception:
                 pr.draw_line(0, int(y), int(map_w), int(y), fade_col)
 
-    # restore draw_grid_objects (was missing) - uses draw_rectangle_pro exclusively
     def draw_grid_objects(self):
         cell_size = self.game_state.cell_size if self.game_state.cell_size > 0 else 12.0
         with self.mutex:
@@ -977,12 +1081,15 @@ class NetworkClient:
             color_player,
         )
 
-    def _draw_bot_at(self, bot, bot_id=None):
+    def _draw_bot_at(self, bot_entry, bot_id=None):
+        """
+        bot_entry is the dict with fields 'interp_pos','dims','behavior','direction'
+        """
         cell_size = self.game_state.cell_size if self.game_state.cell_size > 0 else 12.0
-        pos = bot["pos"]
-        dims = bot["dims"]
-        behavior = bot.get("behavior", "passive")
-        direction = bot.get("direction", Direction.NONE)
+        pos = bot_entry.get("interp_pos", bot_entry.get("pos_server", pr.Vector2(0, 0)))
+        dims = bot_entry.get("dims", pr.Vector2(1, 1))
+        behavior = bot_entry.get("behavior", "passive")
+        direction = bot_entry.get("direction", Direction.NONE)
 
         scaled_pos_x = pos.x * cell_size
         scaled_pos_y = pos.y * cell_size
@@ -1006,7 +1113,6 @@ class NetworkClient:
         dir_text = (
             direction.name if isinstance(direction, Direction) else str(direction)
         )
-        # behavior as type
         type_text = behavior
 
         self._draw_entity_label(
@@ -1023,8 +1129,6 @@ class NetworkClient:
             color_bot,
         )
 
-        # small behavior label below top (already drawn), keep behavior uppercase as extra label above already done
-
     # ---------- previous individual draw functions kept for compatibility but not directly used in z-sorted pass ----------
     def draw_bots(self):
         with self.mutex:
@@ -1036,9 +1140,13 @@ class NetworkClient:
     def draw_other_players(self):
         with self.mutex:
             for player_id, player_data in self.game_state.other_players.items():
+                interp_pos = player_data.get(
+                    "interp_pos", player_data.get("pos_server", pr.Vector2(0, 0))
+                )
+                dims = player_data.get("dims", pr.Vector2(1, 1))
                 self._draw_player_at(
-                    player_data["pos"],
-                    player_data["dims"],
+                    interp_pos,
+                    dims,
                     False,
                     player_data.get("direction", Direction.NONE),
                     player_data.get("mode", ObjectLayerMode.IDLE),
@@ -1059,24 +1167,24 @@ class NetworkClient:
     def draw_entities_sorted(self):
         """
         This function draws bots, other players and the local player in a single sorted pass
-        by their bottom Y (pos.y + dims.y) so objects lower on screen render on top.
+        by their bottom Y (pos.y + dims.y) using interpolated positions so objects lower on screen render on top.
         Labels are drawn with each entity to avoid z-fighting.
         """
         entries = []
         with self.mutex:
             # other players
             for player_id, p in self.game_state.other_players.items():
-                pos = p["pos"]
-                dims = p["dims"]
+                pos = p.get("interp_pos", p.get("pos_server"))
+                dims = p.get("dims", pr.Vector2(1, 1))
                 bottom_y = pos.y + dims.y  # measured in grid cells
                 entries.append(("other", bottom_y, player_id, p))
             # bots
             for bot_id, b in self.game_state.bots.items():
-                pos = b["pos"]
-                dims = b["dims"]
+                pos = b.get("interp_pos", b.get("pos_server"))
+                dims = b.get("dims", pr.Vector2(1, 1))
                 bottom_y = pos.y + dims.y
                 entries.append(("bot", bottom_y, bot_id, b))
-            # self player (drawn as an entity too)
+            # self player (drawn as an entity too) use interpolated player pos
             self_pos = self.game_state.player_pos_interpolated
             self_dims = self.game_state.player_dims
             bottom_y_self = self_pos.y + self_dims.y
@@ -1101,10 +1209,14 @@ class NetworkClient:
         for typ, _, _id, data in entries:
             try:
                 if typ == "other":
-                    # data contains pos, dims, direction, mode
+                    # data contains interp_pos, dims, direction, mode
+                    interp_pos = data.get(
+                        "interp_pos", data.get("pos_server", pr.Vector2(0, 0))
+                    )
+                    dims = data.get("dims", pr.Vector2(1, 1))
                     self._draw_player_at(
-                        data["pos"],
-                        data["dims"],
+                        interp_pos,
+                        dims,
                         False,
                         data.get("direction", Direction.NONE),
                         data.get("mode", ObjectLayerMode.IDLE),
@@ -1984,8 +2096,9 @@ class NetworkClient:
                     self.game_state.upload_size_bytes = 0
                 last_download_check_time = current_time
 
-            # interpolation
+            # interpolation (player + entities)
             self.interpolate_player_position()
+            self.interpolate_entities_positions()
 
             # camera smoothing: compute desired world target and smooth camera.target to it
             try:
