@@ -13,6 +13,7 @@ from src.object_layer import Direction, ObjectLayerMode
 from src.game_state import GameState
 from src.ws_client import WSClient
 from src.dev_ui import DevUI
+from src.click_effect import ClickEffect
 
 from config import WS_URL
 
@@ -28,7 +29,7 @@ class NetworkClient:
 
         # client-only click effects (gfx_click_pointer)
         # Each item: {"pos": Vector2 (world coords, pixels), "t": created_time, "dur": seconds}
-        self.click_effects = []
+        self.click_effect = ClickEffect()
 
         # event to signal main thread to initialize graphics
         self.init_event = threading.Event()
@@ -1206,43 +1207,6 @@ class NetworkClient:
                 self.game_state.colors.get("AOI", pr.Color(255, 0, 255, 51)),
             )
 
-    # ----- client-only click pointers -----
-    def add_click_pointer(self, world_pos):
-        # world_pos is in world pixels (already converted by get_screen_to_world_2d)
-        self.click_effects.append(
-            {
-                "pos": pr.Vector2(world_pos.x, world_pos.y),
-                "t": time.time(),
-                "dur": 0.75,
-            }
-        )
-
-    def update_click_pointers(self):
-        now = time.time()
-        self.click_effects = [
-            e for e in self.click_effects if (now - e["t"]) < e["dur"]
-        ]
-
-    def draw_click_pointers(self):
-        now = time.time()
-        base_color = self.game_state.colors.get("CLICK", pr.Color(255, 255, 255, 220))
-        for e in self.click_effects:
-            age = now - e["t"]
-            dur = e["dur"] if e["dur"] > 0 else 0.0001
-            t = max(0.0, min(1.0, age / dur))  # 0..1
-            # ease-out for radius
-            radius = 6 + 18 * (1 - (1 - t) * (1 - t))
-            alpha = int(220 * (1 - t))
-            color = pr.Color(base_color.r, base_color.g, base_color.b, alpha)
-            cx, cy = int(e["pos"].x), int(e["pos"].y)
-            # ring
-            pr.draw_circle_lines(cx, cy, int(radius), color)
-            # center dot
-            pr.draw_circle(cx, cy, 2, color)
-            # small crosshair
-            arm = int(6 * (1 - t))
-            pr.draw_line(cx - arm, cy, cx + arm, cy, color)
-            pr.draw_line(cx, cy - arm, cx, cy + arm, color)
 
     def draw_foregrounds(self):
         cell_size = self.game_state.cell_size if self.game_state.cell_size > 0 else 12.0
@@ -1995,7 +1959,7 @@ class NetworkClient:
                     target_y = math.floor(target_y)
                     self.send_player_action(target_x, target_y)
                     # client-side click pointer effect
-                    self.add_click_pointer(world_pos)
+                    self.click_effect.add_click_pointer(world_pos)
                 except Exception:
                     pass
 
@@ -2091,7 +2055,7 @@ class NetworkClient:
                 pass
 
             # update client-side click effects
-            self.update_click_pointers()
+            self.click_effect.update_click_pointers()
 
             # draw
             self.draw_game()
@@ -2129,7 +2093,7 @@ class NetworkClient:
         self.draw_path()
         self.draw_aoi_circle()
         self.draw_foregrounds()
-        self.draw_click_pointers()  # client-only effect
+        self.click_effect.draw_click_pointers(self.game_state)  # client-only effect
 
         try:
             pr.end_mode_2d()
