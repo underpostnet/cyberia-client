@@ -11,16 +11,15 @@ import string
 
 from src.object_layer import Direction, ObjectLayerMode
 from src.game_state import GameState
-
+from src.ws_client import WSClient
 from config import WS_URL
 
 class NetworkClient:
     def __init__(self):
         self.game_state = GameState()
-        self.ws = None
-        self.ws_thread = None
-        self.is_running = True
-        self.mutex = self.game_state.mutex
+        self.ws_client = WSClient()
+
+        
         self.download_kbps = 0.0
         self.upload_kbps = 0.0
 
@@ -203,7 +202,7 @@ class NetworkClient:
             return pr.Color(255, 255, 255, 255)
 
     def on_message(self, ws, message):
-        with self.mutex:
+        with self.game_state.mutex:
             try:
                 data = json.loads(message)
                 message_type = data.get("type")
@@ -530,54 +529,54 @@ class NetworkClient:
                     self.game_state.bots = new_bots
 
             except json.JSONDecodeError as e:
-                with self.mutex:
+                with self.game_state.mutex:
                     self.game_state.last_error_message = f"JSON Decode Error: {e}"
                     self.game_state.error_display_time = time.time()
                 print(f"JSON Decode Error: {e}")
             except Exception as e:
-                with self.mutex:
+                with self.game_state.mutex:
                     self.game_state.last_error_message = f"Error: {e}"
                     self.game_state.error_display_time = time.time()
                 print(f"Error: {e}")
 
     def on_error(self, ws, error):
-        with self.mutex:
+        with self.game_state.mutex:
             self.game_state.last_error_message = f"WebSocket Error: {error}"
             self.game_state.error_display_time = time.time()
         print(f"### WebSocket Error ###: {error}")
 
     def on_close(self, ws, close_status_code, close_msg):
-        with self.mutex:
+        with self.game_state.mutex:
             self.game_state.last_error_message = (
                 f"WebSocket Closed: {close_status_code}, {close_msg}"
             )
             self.game_state.error_display_time = time.time()
         print("### WebSocket Closed ###")
-        self.ws = None
+        self.ws_client.ws = None
 
     def on_open(self, ws):
         print("WebSocket Opened. Sending join request...")
         try:
             join_message = {"type": "join_request", "payload": {}}
-            self.ws.send(json.dumps(join_message))
+            self.ws_client.ws.send(json.dumps(join_message))
         except Exception as e:
             print(f"Error sending join request: {e}")
 
     def run_websocket_thread(self):
-        self.ws = websocket.WebSocketApp(
+        self.ws_client.ws = websocket.WebSocketApp(
             WS_URL,
             on_open=self.on_open,
             on_message=self.on_message,
             on_error=self.on_error,
             on_close=self.on_close,
         )
-        self.ws.run_forever(reconnect=5)
+        self.ws_client.ws.run_forever(reconnect=5)
 
     # ---------- start / initialization ----------
     def start(self):
         print("Starting WebSocket client thread...")
-        self.ws_thread = threading.Thread(target=self.run_websocket_thread, daemon=True)
-        self.ws_thread.start()
+        self.ws_client.ws_thread = threading.Thread(target=self.run_websocket_thread, daemon=True)
+        self.ws_client.ws_thread.start()
 
         # Wait until init_data arrives
         print("Waiting for init_data from server before initializing graphics...")
@@ -750,13 +749,13 @@ class NetworkClient:
 
     # ---------- input / send ----------
     def send_player_action(self, target_x, target_y):
-        if self.ws and self.ws.sock and self.ws.sock.connected:
+        if self.ws_client.ws and self.ws_client.ws.sock and self.ws_client.ws.sock.connected:
             try:
                 action_message = {
                     "type": "player_action",
                     "payload": {"targetX": target_x, "targetY": target_y},
                 }
-                self.ws.send(json.dumps(action_message))
+                self.ws_client.ws.send(json.dumps(action_message))
                 self.game_state.upload_size_bytes += len(json.dumps(action_message))
             except websocket.WebSocketConnectionClosedException:
                 print("Cannot send message, connection is closed.")
@@ -765,7 +764,7 @@ class NetworkClient:
 
     # ---------- interpolation & drawing ----------
     def interpolate_player_position(self):
-        with self.mutex:
+        with self.game_state.mutex:
             interp_ms = (
                 self.game_state.interpolation_ms
                 if self.game_state.interpolation_ms > 0
@@ -791,7 +790,7 @@ class NetworkClient:
         Smoothly interpolate positions for other_players and bots using pos_prev -> pos_server
         and the same interpolation time window used for player (interpolation_ms).
         """
-        with self.mutex:
+        with self.game_state.mutex:
             interp_ms = (
                 self.game_state.interpolation_ms
                 if self.game_state.interpolation_ms > 0
@@ -880,7 +879,7 @@ class NetworkClient:
 
     def draw_grid_objects(self):
         cell_size = self.game_state.cell_size if self.game_state.cell_size > 0 else 12.0
-        with self.mutex:
+        with self.game_state.mutex:
             for obj_id, obj_data in self.game_state.obstacles.items():
                 pos = obj_data["pos"]
                 dims = obj_data["dims"]
@@ -1048,14 +1047,14 @@ class NetworkClient:
 
     # ---------- previous individual draw functions kept for compatibility but not directly used in z-sorted pass ----------
     def draw_bots(self):
-        with self.mutex:
+        with self.game_state.mutex:
             if not self.game_state.bots:
                 return
             for bot_id, bot in self.game_state.bots.items():
                 self._draw_bot_at(bot, bot_id=bot_id)
 
     def draw_other_players(self):
-        with self.mutex:
+        with self.game_state.mutex:
             for player_id, player_data in self.game_state.other_players.items():
                 interp_pos = player_data.get(
                     "interp_pos", player_data.get("pos_server", pr.Vector2(0, 0))
@@ -1088,7 +1087,7 @@ class NetworkClient:
         Labels are drawn with each entity to avoid z-fighting.
         """
         entries = []
-        with self.mutex:
+        with self.game_state.mutex:
             # other players
             for player_id, p in self.game_state.other_players.items():
                 pos = p.get("interp_pos", p.get("pos_server"))
@@ -1155,7 +1154,7 @@ class NetworkClient:
                 pass
 
     def draw_path(self):
-        with self.mutex:
+        with self.game_state.mutex:
             if self.game_state.path:
                 cell_size = (
                     self.game_state.cell_size if self.game_state.cell_size > 0 else 12.0
@@ -1189,7 +1188,7 @@ class NetworkClient:
                     )
 
     def draw_aoi_circle(self):
-        with self.mutex:
+        with self.game_state.mutex:
             # Use player's center as AOI center so AOI is centered correctly regardless of player dims
             player_pos = self.game_state.player_pos_interpolated
             player_dims = self.game_state.player_dims
@@ -1248,7 +1247,7 @@ class NetworkClient:
 
     def draw_foregrounds(self):
         cell_size = self.game_state.cell_size if self.game_state.cell_size > 0 else 12.0
-        with self.mutex:
+        with self.game_state.mutex:
             for obj_id, obj_data in self.game_state.foregrounds.items():
                 pos = obj_data["pos"]
                 dims = obj_data["dims"]
@@ -1288,7 +1287,7 @@ class NetworkClient:
             1,
             self.game_state.colors.get("DEBUG_TEXT", pr.Color(220, 220, 220, 255)),
         )
-        with self.mutex:
+        with self.game_state.mutex:
             player_id = (
                 self.game_state.player_id if self.game_state.player_id else "N/A"
             )
@@ -1807,7 +1806,7 @@ class NetworkClient:
         target_fps = self.game_state.fps if self.game_state.fps > 0 else 60
 
         last_download_check_time = time.time()
-        while not pr.window_should_close() and self.is_running:
+        while not pr.window_should_close() and self.ws_client.is_running:
             now = time.time()
             dt = (
                 now - self._last_frame_time
@@ -1902,7 +1901,7 @@ class NetworkClient:
                     hovered_index, _, _ = self.draw_hud_bar(mouse_pos)
                     if hovered_index is not None:
                         # open/view item (or switch view if already open)
-                        with self.mutex:
+                        with self.game_state.mutex:
                             self.hud_view_open = True
                             self.hud_view_selected = hovered_index
                         consumed_click = True
@@ -1948,7 +1947,7 @@ class NetworkClient:
                         and mouse_pos.y >= close_y
                         and mouse_pos.y <= close_y + self.hud_close_h
                     ):
-                        with self.mutex:
+                        with self.game_state.mutex:
                             self.hud_view_open = False
                             self.hud_view_selected = None
                         consumed_click = True
@@ -1963,7 +1962,7 @@ class NetworkClient:
                                 and mouse_pos.y <= by + bh
                             ):
                                 # toggle activation
-                                with self.mutex:
+                                with self.game_state.mutex:
                                     sel = self.hud_view_selected
                                     if sel is not None and 0 <= sel < len(
                                         self.hud_items
@@ -2004,7 +2003,7 @@ class NetworkClient:
             # bandwidth
             current_time = time.time()
             if current_time - last_download_check_time >= 1:
-                with self.mutex:
+                with self.game_state.mutex:
                     self.download_kbps = (
                         self.game_state.download_size_bytes / 1024
                     ) * 8
@@ -2099,9 +2098,9 @@ class NetworkClient:
             self.draw_game()
 
         print("Closing WebSocket...")
-        if self.ws:
-            self.ws.close()
-        self.is_running = False
+        if self.ws_client.ws:
+            self.ws_client.ws.close()
+        self.ws_client.is_running = False
         pr.close_window()
 
     # ---------- utilities ----------
