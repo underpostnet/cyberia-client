@@ -12,16 +12,15 @@ import string
 from src.object_layer import Direction, ObjectLayerMode
 from src.game_state import GameState
 from src.ws_client import WSClient
+from src.dev_ui import DevUI
+
 from config import WS_URL
 
 class NetworkClient:
     def __init__(self):
         self.game_state = GameState()
         self.ws_client = WSClient()
-
-        
-        self.download_kbps = 0.0
-        self.upload_kbps = 0.0
+        self.dev_ui = DevUI()
 
         # runtime window (computed after init_data)
         self.screen_width = 1280
@@ -1295,8 +1294,8 @@ class NetworkClient:
             player_mode = self.game_state.player_mode.name
             player_dir = self.game_state.player_direction.name
             target_pos = self.game_state.target_pos
-            download_kbps = self.download_kbps
-            upload_kbps = self.upload_kbps
+            download_kbps = self.dev_ui.download_kbps
+            upload_kbps = self.dev_ui.upload_kbps
             error_msg = self.game_state.last_error_message
             player_pos_ui = self.game_state.player_pos_interpolated
 
@@ -2004,10 +2003,10 @@ class NetworkClient:
             current_time = time.time()
             if current_time - last_download_check_time >= 1:
                 with self.game_state.mutex:
-                    self.download_kbps = (
+                    self.dev_ui.download_kbps = (
                         self.game_state.download_size_bytes / 1024
                     ) * 8
-                    self.upload_kbps = (self.game_state.upload_size_bytes / 1024) * 8
+                    self.dev_ui.upload_kbps = (self.game_state.upload_size_bytes / 1024) * 8
                     self.game_state.download_size_bytes = 0
                     self.game_state.upload_size_bytes = 0
                 last_download_check_time = current_time
