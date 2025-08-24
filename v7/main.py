@@ -1756,10 +1756,10 @@ class NetworkClient:
 
             # clear temporary ignore if timeout passed
             if (
-                self._ignore_next_hud_click
-                and (now - self._last_toggle_time) > self._toggle_ignore_timeout
+                self.hud._ignore_next_hud_click
+                and (now - self.hud._last_toggle_time) > self.hud._toggle_ignore_timeout
             ):
-                self._ignore_next_hud_click = False
+                self.hud._ignore_next_hud_click = False
 
             # animate HUD slide progress toward target
             if abs(self.hud.slide_progress - self.hud.slide_target) > 0.0001:
@@ -1789,7 +1789,7 @@ class NetworkClient:
                 mouse_pressed
                 and in_hud_area
                 and self.hud.slide_progress < 0.999
-                and not self._ignore_next_hud_click
+                and not self.hud._ignore_next_hud_click
             ):
                 self.hud.dragging = True
                 self.hud.drag_start_x = mouse_pos.x
@@ -1823,7 +1823,7 @@ class NetworkClient:
                 if (
                     (not self.hud.drag_moved)
                     and (abs(delta) <= self.hud.click_threshold)
-                    and (not self._ignore_next_hud_click)
+                    and (not self.hud._ignore_next_hud_click)
                 ):
                     hovered_index, _, _ = self.draw_hud_bar(mouse_pos)
                     if hovered_index is not None:
@@ -1836,8 +1836,8 @@ class NetworkClient:
                 self.hud.dragging = False
                 self.hud.drag_moved = False
                 # after release, clear the temporary ignore (if set) to allow normal clicks next frames
-                if self._ignore_next_hud_click:
-                    self._ignore_next_hud_click = False
+                if self.hud._ignore_next_hud_click:
+                    self.hud._ignore_next_hud_click = False
 
             # HUD toggle button click (handle is separate from hud area)
             if mouse_pressed and self.hud.toggle_rect:
@@ -1852,8 +1852,8 @@ class NetworkClient:
                     self.hud.collapsed = not self.hud.collapsed
                     self.hud.slide_target = 1.0 if self.hud.collapsed else 0.0
                     # set ignore flag for a brief window so the same mouse press/release doesn't open an item
-                    self._ignore_next_hud_click = True
-                    self._last_toggle_time = time.time()
+                    self.hud._ignore_next_hud_click = True
+                    self.hud._last_toggle_time = time.time()
                     consumed_click = True
                     # ensure we don't accidentally start a drag in same frame
                     self.hud.dragging = False
