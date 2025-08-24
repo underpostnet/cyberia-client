@@ -14,8 +14,10 @@ from src.game_state import GameState
 from src.ws_client import WSClient
 from src.dev_ui import DevUI
 from src.click_effect import ClickEffect
+from src.hud import Hud
 
 from config import WS_URL
+
 
 class NetworkClient:
     def __init__(self):
@@ -34,50 +36,7 @@ class NetworkClient:
         # event to signal main thread to initialize graphics
         self.init_event = threading.Event()
 
-        # HUD bar state
-        self.hud_items = []  # list of dicts with dummy data
-        self.hud_bar_height = 96
-        self.hud_bar_padding = 12
-        self.hud_item_w = 80
-        self.hud_item_h = 72
-        self.hud_item_spacing = 12
-        self.hud_scroll_x = 0.0  # negative values scroll left
-        self.hud_dragging = False
-        self.hud_drag_start_x = 0.0
-        self.hud_scroll_start = 0.0
-        self.hud_drag_moved = False
-        self.hud_click_threshold = 6  # pixels threshold to consider a click vs drag
-
-        # view state (antes "modal")
-        self.hud_view_open = False
-        self.hud_view_selected = None  # index of selected item or None
-        self.hud_close_w = 36
-        self.hud_close_h = 30
-
-        # HUD alerts
-        self.hud_alert_text = ""
-        self.hud_alert_until = 0.0
-
-        # stored rect for view's activate button (so click can check bounds)
-        self.hud_view_button_rect = None  # (x,y,w,h)
-
-        # HUD slide/collapse state and animation
-        self.hud_collapsed = False
-        # 0.0 = fully visible, 1.0 = fully hidden (off-screen)
-        self.hud_slide_progress = 0.0
-        self.hud_slide_target = 0.0
-        self.hud_slide_speed = 6.0  # progress units per second
-
-        # position/rect of the small toggle button (updated in draw)
-        self.hud_toggle_rect = None
-
-        # flag to avoid interpreting the toggle click as a HUD item click immediately after toggle
-        self._ignore_next_hud_click = False
-        self._last_toggle_time = 0.0
-        self._toggle_ignore_timeout = (
-            0.18  # seconds to ignore hud clicks after pressing toggle
-        )
-
+        self.hud = Hud()
         # prepare dummy items now
         self._generate_dummy_items(10)
 
@@ -575,7 +534,9 @@ class NetworkClient:
     # ---------- start / initialization ----------
     def start(self):
         print("Starting WebSocket client thread...")
-        self.ws_client.ws_thread = threading.Thread(target=self.run_websocket_thread, daemon=True)
+        self.ws_client.ws_thread = threading.Thread(
+            target=self.run_websocket_thread, daemon=True
+        )
         self.ws_client.ws_thread.start()
 
         # Wait until init_data arrives
@@ -749,7 +710,11 @@ class NetworkClient:
 
     # ---------- input / send ----------
     def send_player_action(self, target_x, target_y):
-        if self.ws_client.ws and self.ws_client.ws.sock and self.ws_client.ws.sock.connected:
+        if (
+            self.ws_client.ws
+            and self.ws_client.ws.sock
+            and self.ws_client.ws.sock.connected
+        ):
             try:
                 action_message = {
                     "type": "player_action",
@@ -1206,7 +1171,6 @@ class NetworkClient:
                 aoi_radius * cell_size,
                 self.game_state.colors.get("AOI", pr.Color(255, 0, 255, 51)),
             )
-
 
     def draw_foregrounds(self):
         cell_size = self.game_state.cell_size if self.game_state.cell_size > 0 else 12.0
@@ -1970,7 +1934,9 @@ class NetworkClient:
                     self.dev_ui.download_kbps = (
                         self.game_state.download_size_bytes / 1024
                     ) * 8
-                    self.dev_ui.upload_kbps = (self.game_state.upload_size_bytes / 1024) * 8
+                    self.dev_ui.upload_kbps = (
+                        self.game_state.upload_size_bytes / 1024
+                    ) * 8
                     self.game_state.download_size_bytes = 0
                     self.game_state.upload_size_bytes = 0
                 last_download_check_time = current_time
