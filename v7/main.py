@@ -53,7 +53,7 @@ class NetworkClient:
             "intelligence": 6,
             "utility": 8,
         }
-        self.hud_items = []
+        self.hud.items = []
         for i in range(n):
             icon = random.choice(string.ascii_uppercase + string.digits)
             # randomize stats: 0..(base*2) (or small range for zero-base)
@@ -72,11 +72,11 @@ class NetworkClient:
                 "isActivable": is_activable,
                 "isActive": False,
             }
-            self.hud_items.append(item)
+            self.hud.items.append(item)
 
     # ---------- helpers for activation logic ----------
     def active_items(self):
-        return [it for it in self.hud_items if it.get("isActive")]
+        return [it for it in self.hud.items if it.get("isActive")]
 
     def active_stats_sum(self):
         total = 0
@@ -110,9 +110,9 @@ class NetworkClient:
         return True, ""
 
     def activate_item(self, idx):
-        if idx < 0 or idx >= len(self.hud_items):
+        if idx < 0 or idx >= len(self.hud.items):
             return
-        item = self.hud_items[idx]
+        item = self.hud.items[idx]
         if item.get("isActive"):
             return  # already active
         ok, reason = self.can_activate_item(item)
@@ -125,9 +125,9 @@ class NetworkClient:
         self.show_hud_alert("Item activated.", 1.5)
 
     def deactivate_item(self, idx):
-        if idx < 0 or idx >= len(self.hud_items):
+        if idx < 0 or idx >= len(self.hud.items):
             return
-        item = self.hud_items[idx]
+        item = self.hud.items[idx]
         if not item.get("isActive"):
             return
         item["isActive"] = False
@@ -136,18 +136,18 @@ class NetworkClient:
 
     def reorder_hud_items(self):
         # Move active items to the front (stable)
-        active = [it for it in self.hud_items if it.get("isActive")]
-        inactive = [it for it in self.hud_items if not it.get("isActive")]
-        self.hud_items = active + inactive
+        active = [it for it in self.hud.items if it.get("isActive")]
+        inactive = [it for it in self.hud.items if not it.get("isActive")]
+        self.hud.items = active + inactive
         # clamp active count to 4 just in case (deactivate extras)
         if len(active) > 4:
             # deactivate extras beyond first 4
             for it in active[4:]:
                 it["isActive"] = False
             # recompose
-            active = [it for it in self.hud_items if it.get("isActive")]
-            inactive = [it for it in self.hud_items if not it.get("isActive")]
-            self.hud_items = active + inactive
+            active = [it for it in self.hud.items if it.get("isActive")]
+            inactive = [it for it in self.hud.items if not it.get("isActive")]
+            self.hud.items = active + inactive
 
     # ---------- network handlers ----------
     def color_from_payload(self, cdict):
@@ -1194,7 +1194,7 @@ class NetworkClient:
 
     def draw_dev_ui(self):
         # compute how much vertical HUD currently occupies (approx)
-        hud_occupied = (1.0 - self.hud_slide_progress) * self.hud_bar_height
+        hud_occupied = (1.0 - self.hud.slide_progress) * self.hud.bar_height
         dev_ui_h = max(80, int(self.screen_height - hud_occupied))
 
         # top-left dev UI background (height adjusted)
@@ -1267,13 +1267,13 @@ class NetworkClient:
     def _hud_bar_rect(self):
         # returns (x, y, w, h) in screen coords using slide progress
         x = 0
-        h = self.hud_bar_height
+        h = self.hud.bar_height
         # base Y if fully visible
         base_y = self.screen_height - h
         # when fully hidden (progress=1), top of HUD will be screen_height (i.e., out of view)
         hidden_y = self.screen_height
         # linear interpolate between base_y and hidden_y based on progress
-        y = pr.lerp(base_y, hidden_y, self.hud_slide_progress)
+        y = pr.lerp(base_y, hidden_y, self.hud.slide_progress)
         w = self.screen_width
         return x, y, w, h
 
@@ -1344,23 +1344,23 @@ class NetworkClient:
         # Still compute total widths so scroll clamping logic can use them.
         x, y, w, h = self._hud_bar_rect()
 
-        inner_x = x + self.hud_bar_padding
-        inner_y = y + (h - self.hud_item_h) / 2
-        inner_w = w - (self.hud_bar_padding * 2)
+        inner_x = x + self.hud.bar_padding
+        inner_y = y + (h - self.hud.item_h) / 2
+        inner_w = w - (self.hud.bar_padding * 2)
 
         # total width of items
-        count = len(self.hud_items)
-        total_w = count * self.hud_item_w + (count - 1) * self.hud_item_spacing
+        count = len(self.hud.items)
+        total_w = count * self.hud.item_w + (count - 1) * self.hud.item_spacing
 
         # clamp scroll range
         max_scroll = max(0, total_w - inner_w)
-        if self.hud_scroll_x > 0:
-            self.hud_scroll_x = 0
-        if self.hud_scroll_x < -max_scroll:
-            self.hud_scroll_x = -max_scroll
+        if self.hud.scroll_x > 0:
+            self.hud.scroll_x = 0
+        if self.hud.scroll_x < -max_scroll:
+            self.hud.scroll_x = -max_scroll
 
         # If fully hidden, skip drawing the bar entirely (only toggle remains visible)
-        if self.hud_slide_progress >= 0.999:
+        if self.hud.slide_progress >= 0.999:
             return None, total_w, inner_w
 
         # draw background bar using draw_rectangle_pro
@@ -1377,24 +1377,24 @@ class NetworkClient:
         except Exception:
             pass
 
-        offset = inner_x + self.hud_scroll_x
+        offset = inner_x + self.hud.scroll_x
 
         hovered_index = None
-        for idx, item in enumerate(self.hud_items):
-            bx = offset + idx * (self.hud_item_w + self.hud_item_spacing)
+        for idx, item in enumerate(self.hud.items):
+            bx = offset + idx * (self.hud.item_w + self.hud.item_spacing)
             by = inner_y
             # compute hover in screen coords
             hovered = (
                 mouse_pos.x >= bx
-                and mouse_pos.x <= bx + self.hud_item_w
+                and mouse_pos.x <= bx + self.hud.item_w
                 and mouse_pos.y >= by
-                and mouse_pos.y <= by + self.hud_item_h
+                and mouse_pos.y <= by + self.hud.item_h
             )
             if hovered:
                 hovered_index = idx
             # draw item
             self.draw_hud_item_button(
-                bx, by, self.hud_item_w, self.hud_item_h, item, hovered
+                bx, by, self.hud.item_w, self.hud.item_h, item, hovered
             )
 
         # Note: toggle button is NOT drawn here anymore (drawn on top via draw_hud_toggle)
@@ -1436,13 +1436,13 @@ class NetworkClient:
         Draw the item view (English text). The view area adapts to the HUD slide state
         so it never overlaps with the HUD bar while the HUD is visible.
         """
-        if self.hud_view_selected is None:
-            self.hud_view_button_rect = None
+        if self.hud.view_selected is None:
+            self.hud.view_button_rect = None
             return
-        item = self.hud_items[self.hud_view_selected]
+        item = self.hud.items[self.hud.view_selected]
 
         # compute view area (full width, height minus hud_bar_height occupied portion)
-        hud_occupied = (1.0 - self.hud_slide_progress) * self.hud_bar_height
+        hud_occupied = (1.0 - self.hud.slide_progress) * self.hud.bar_height
         view_x = 0
         view_y = 0
         view_w = self.screen_width
@@ -1587,10 +1587,10 @@ class NetworkClient:
         )
 
         # close button top-right inside view (use ✕)
-        close_x = self.screen_width - self.hud_close_w - 12
+        close_x = self.screen_width - self.hud.close_w - 12
         close_y = 12
         self.draw_hud_small_button(
-            close_x, close_y, self.hud_close_w, self.hud_close_h, "✕"
+            close_x, close_y, self.hud.close_w, self.hud.close_h, "✕"
         )
 
         # Activation toggle (if activable) - reflect if activation would be allowed
@@ -1634,16 +1634,16 @@ class NetworkClient:
                 self.game_state.colors.get("UI_TEXT", pr.Color(255, 255, 255, 255)),
             )
             # store button rect for click detection
-            self.hud_view_button_rect = (btn_x, btn_y, btn_w, btn_h)
+            self.hud.view_button_rect = (btn_x, btn_y, btn_w, btn_h)
         else:
-            self.hud_view_button_rect = None
+            self.hud.view_button_rect = None
 
     def show_hud_alert(self, text, duration=2.5):
-        self.hud_alert_text = text
-        self.hud_alert_until = time.time() + duration
+        self.hud.alert_text = text
+        self.hud.alert_until = time.time() + duration
 
     def draw_hud_alert(self):
-        if not self.hud_alert_text or time.time() > self.hud_alert_until:
+        if not self.hud.alert_text or time.time() > self.hud.alert_until:
             return
         # draw centered top small alert using draw_rectangle_pro
         w = min(600, int(self.screen_width * 0.75))
@@ -1663,10 +1663,10 @@ class NetworkClient:
         except Exception:
             pass
         ts = 18
-        tw = pr.measure_text(self.hud_alert_text, ts)
+        tw = pr.measure_text(self.hud.alert_text, ts)
         pr.draw_text_ex(
             pr.get_font_default(),
-            self.hud_alert_text,
+            self.hud.alert_text,
             pr.Vector2(x + (w / 2) - (tw / 2), y + (h / 2) - (ts / 2)),
             ts,
             1,
@@ -1690,10 +1690,10 @@ class NetworkClient:
         btn_y_when_visible = hud_y - btn_h - 8
         btn_y_when_hidden = self.screen_height - btn_h - 8
         # interpolate based on same progress so toggle moves with HUD
-        btn_y = pr.lerp(btn_y_when_visible, btn_y_when_hidden, self.hud_slide_progress)
+        btn_y = pr.lerp(btn_y_when_visible, btn_y_when_hidden, self.hud.slide_progress)
 
         # store rect for click detection
-        self.hud_toggle_rect = (btn_x, btn_y, btn_w, btn_h)
+        self.hud.toggle_rect = (btn_x, btn_y, btn_w, btn_h)
 
         # background for toggle
         bg = pr.Color(50, 50, 50, 230)
@@ -1715,7 +1715,7 @@ class NetworkClient:
             pass
 
         # choose arrow: if hud is collapsed (hidden), show ▲ to indicate open; else ▼ to indicate hide
-        arrow = "▲" if self.hud_collapsed else "▼"
+        arrow = "▲" if self.hud.collapsed else "▼"
         ts = 16
         tw = pr.measure_text(arrow, ts)
         pr.draw_text_ex(
@@ -1762,18 +1762,18 @@ class NetworkClient:
                 self._ignore_next_hud_click = False
 
             # animate HUD slide progress toward target
-            if abs(self.hud_slide_progress - self.hud_slide_target) > 0.0001:
+            if abs(self.hud.slide_progress - self.hud.slide_target) > 0.0001:
                 direction = (
-                    1.0 if self.hud_slide_target > self.hud_slide_progress else -1.0
+                    1.0 if self.hud.slide_target > self.hud.slide_progress else -1.0
                 )
-                self.hud_slide_progress += direction * self.hud_slide_speed * dt
+                self.hud.slide_progress += direction * self.hud.slide_speed * dt
                 # clamp
-                if self.hud_slide_progress < 0.0:
-                    self.hud_slide_progress = 0.0
-                if self.hud_slide_progress > 1.0:
-                    self.hud_slide_progress = 1.0
+                if self.hud.slide_progress < 0.0:
+                    self.hud.slide_progress = 0.0
+                if self.hud.slide_progress > 1.0:
+                    self.hud.slide_progress = 1.0
                 # update collapsed state when animation reaches ends
-                self.hud_collapsed = True if self.hud_slide_progress >= 0.999 else False
+                self.hud.collapsed = True if self.hud.slide_progress >= 0.999 else False
 
             # HUD BAR DRAG/CLICK handling:
             hx, hy, hw, hh = self._hud_bar_rect()
@@ -1788,60 +1788,60 @@ class NetworkClient:
             if (
                 mouse_pressed
                 and in_hud_area
-                and self.hud_slide_progress < 0.999
+                and self.hud.slide_progress < 0.999
                 and not self._ignore_next_hud_click
             ):
-                self.hud_dragging = True
-                self.hud_drag_start_x = mouse_pos.x
-                self.hud_scroll_start = self.hud_scroll_x
-                self.hud_drag_moved = False
+                self.hud.dragging = True
+                self.hud.drag_start_x = mouse_pos.x
+                self.hud.scroll_start = self.hud.scroll_x
+                self.hud.drag_moved = False
                 consumed_click = (
                     True  # pressing on hud consumes click so it won't pass to world
                 )
 
             # if dragging, update scroll while mouse held
-            if self.hud_dragging and mouse_down:
-                delta = mouse_pos.x - self.hud_drag_start_x
-                if abs(delta) > self.hud_click_threshold:
-                    self.hud_drag_moved = True
-                self.hud_scroll_x = self.hud_scroll_start + delta
+            if self.hud.dragging and mouse_down:
+                delta = mouse_pos.x - self.hud.drag_start_x
+                if abs(delta) > self.hud.click_threshold:
+                    self.hud.drag_moved = True
+                self.hud.scroll_x = self.hud.scroll_start + delta
                 consumed_click = True
 
             # on release finalize: if it was a short click (no movement) treat as click on item
-            if self.hud_dragging and mouse_released:
+            if self.hud.dragging and mouse_released:
                 # compute hovered item and layout by calling draw_hud_bar (cheap)
                 hovered_index, total_w, inner_w = self.draw_hud_bar(mouse_pos)
                 max_scroll = max(0, total_w - inner_w)
                 # clamp
-                if self.hud_scroll_x > 0:
-                    self.hud_scroll_x = 0
-                if self.hud_scroll_x < -max_scroll:
-                    self.hud_scroll_x = -max_scroll
+                if self.hud.scroll_x > 0:
+                    self.hud.scroll_x = 0
+                if self.hud.scroll_x < -max_scroll:
+                    self.hud.scroll_x = -max_scroll
 
-                delta = mouse_pos.x - self.hud_drag_start_x
+                delta = mouse_pos.x - self.hud.drag_start_x
                 # Only open view if we are NOT ignoring due to a toggle press that just happened
                 if (
-                    (not self.hud_drag_moved)
-                    and (abs(delta) <= self.hud_click_threshold)
+                    (not self.hud.drag_moved)
+                    and (abs(delta) <= self.hud.click_threshold)
                     and (not self._ignore_next_hud_click)
                 ):
                     hovered_index, _, _ = self.draw_hud_bar(mouse_pos)
                     if hovered_index is not None:
                         # open/view item (or switch view if already open)
                         with self.game_state.mutex:
-                            self.hud_view_open = True
-                            self.hud_view_selected = hovered_index
+                            self.hud.view_open = True
+                            self.hud.view_selected = hovered_index
                         consumed_click = True
                 # finish dragging
-                self.hud_dragging = False
-                self.hud_drag_moved = False
+                self.hud.dragging = False
+                self.hud.drag_moved = False
                 # after release, clear the temporary ignore (if set) to allow normal clicks next frames
                 if self._ignore_next_hud_click:
                     self._ignore_next_hud_click = False
 
             # HUD toggle button click (handle is separate from hud area)
-            if mouse_pressed and self.hud_toggle_rect:
-                bx, by, bw, bh = self.hud_toggle_rect
+            if mouse_pressed and self.hud.toggle_rect:
+                bx, by, bw, bh = self.hud.toggle_rect
                 if (
                     mouse_pos.x >= bx
                     and mouse_pos.x <= bx + bw
@@ -1849,39 +1849,39 @@ class NetworkClient:
                     and mouse_pos.y <= by + bh
                 ):
                     # toggle collapsed state: set animation target
-                    self.hud_collapsed = not self.hud_collapsed
-                    self.hud_slide_target = 1.0 if self.hud_collapsed else 0.0
+                    self.hud.collapsed = not self.hud.collapsed
+                    self.hud.slide_target = 1.0 if self.hud.collapsed else 0.0
                     # set ignore flag for a brief window so the same mouse press/release doesn't open an item
                     self._ignore_next_hud_click = True
                     self._last_toggle_time = time.time()
                     consumed_click = True
                     # ensure we don't accidentally start a drag in same frame
-                    self.hud_dragging = False
-                    self.hud_drag_moved = False
+                    self.hud.dragging = False
+                    self.hud.drag_moved = False
 
             # If view open, check close button pressed (top-right inside view area)
-            if self.hud_view_open and mouse_pressed:
+            if self.hud.view_open and mouse_pressed:
                 # only check close if click is inside view area (above the hud_bar)
-                hud_occupied = (1.0 - self.hud_slide_progress) * self.hud_bar_height
+                hud_occupied = (1.0 - self.hud.slide_progress) * self.hud.bar_height
                 view_y_max = self.screen_height - hud_occupied
                 if mouse_pos.y <= view_y_max:
                     # check close button
-                    close_x = self.screen_width - self.hud_close_w - 12
+                    close_x = self.screen_width - self.hud.close_w - 12
                     close_y = 12
                     if (
                         mouse_pos.x >= close_x
-                        and mouse_pos.x <= close_x + self.hud_close_w
+                        and mouse_pos.x <= close_x + self.hud.close_w
                         and mouse_pos.y >= close_y
-                        and mouse_pos.y <= close_y + self.hud_close_h
+                        and mouse_pos.y <= close_y + self.hud.close_h
                     ):
                         with self.game_state.mutex:
-                            self.hud_view_open = False
-                            self.hud_view_selected = None
+                            self.hud.view_open = False
+                            self.hud.view_selected = None
                         consumed_click = True
                     else:
                         # check activate/deactivate button (if present)
-                        if self.hud_view_button_rect:
-                            bx, by, bw, bh = self.hud_view_button_rect
+                        if self.hud.view_button_rect:
+                            bx, by, bw, bh = self.hud.view_button_rect
                             if (
                                 mouse_pos.x >= bx
                                 and mouse_pos.x <= bx + bw
@@ -1890,11 +1890,11 @@ class NetworkClient:
                             ):
                                 # toggle activation
                                 with self.game_state.mutex:
-                                    sel = self.hud_view_selected
+                                    sel = self.hud.view_selected
                                     if sel is not None and 0 <= sel < len(
-                                        self.hud_items
+                                        self.hud.items
                                     ):
-                                        if self.hud_items[sel].get("isActive"):
+                                        if self.hud.items[sel].get("isActive"):
                                             self.deactivate_item(sel)
                                         else:
                                             self.activate_item(sel)
@@ -2070,14 +2070,14 @@ class NetworkClient:
         mouse_pos = pr.get_mouse_position()
 
         # If view open: draw view area (above hud_bar). HUD bar will remain visible below.
-        if self.hud_view_open and self.hud_view_selected is not None:
+        if self.hud.view_open and self.hud.view_selected is not None:
             self.draw_hud_view()
 
         # HUD bar (draw only if not fully hidden)
         hovered_index, total_w, inner_w = self.draw_hud_bar(mouse_pos)
 
         # Developer UI (if enabled by server) - now adjusted so it doesn't overlap HUD
-        if self.game_state.dev_ui and self.hud_view_selected is None:
+        if self.game_state.dev_ui and self.hud.view_selected is None:
             self.draw_dev_ui()
 
         # Draw toggle *after* dev UI to ensure it is on top and clickable
