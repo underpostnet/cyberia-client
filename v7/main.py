@@ -14,6 +14,7 @@ from src.hud import Hud
 from config import WS_URL
 from src.util import Util
 from src.render_core import RenderCore
+from src.entity_player_input import EntityPlayerInput
 
 
 class NetworkClient:
@@ -43,6 +44,8 @@ class NetworkClient:
         self._last_frame_time = time.time()
         self.util = Util()
         self.render_core = RenderCore(self)
+
+        self.entity_player_input = EntityPlayerInput(self.game_state)
 
     def on_message(self, ws, message):
         with self.game_state.mutex:
@@ -416,21 +419,6 @@ class NetworkClient:
             on_close=self.on_close,
         )
         self.ws.run_forever(reconnect=5)
-
-    # ---------- input / send ----------
-    def send_player_action(self, target_x, target_y):
-        if self.ws and self.ws.sock and self.ws.sock.connected:
-            try:
-                action_message = {
-                    "type": "player_action",
-                    "payload": {"targetX": target_x, "targetY": target_y},
-                }
-                self.ws.send(json.dumps(action_message))
-                self.game_state.upload_size_bytes += len(json.dumps(action_message))
-            except websocket.WebSocketConnectionClosedException:
-                print("Cannot send message, connection is closed.")
-            except Exception as e:
-                print(f"Error sending message: {e}")
 
     # ---------- interpolation & drawing ----------
     def interpolate_player_position(self):
@@ -1626,7 +1614,9 @@ class NetworkClient:
                     )
                     target_x = math.floor(target_x)
                     target_y = math.floor(target_y)
-                    self.send_player_action(target_x, target_y)
+                    self.entity_player_input.send_player_action(
+                        self.ws, target_x, target_y
+                    )
                     # client-side click pointer effect
                     self.click_effect.add_click_pointer(world_pos)
                 except Exception:
