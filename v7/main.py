@@ -15,6 +15,8 @@ from config import WS_URL
 from src.util import Util
 from src.render_core import RenderCore
 from src.entity_player_input import EntityPlayerInput
+from src.entity_render import EntityRender
+from src.entity_player_render import EntityPlayerRender
 
 
 class NetworkClient:
@@ -46,6 +48,8 @@ class NetworkClient:
         self.render_core = RenderCore(self)
 
         self.entity_player_input = EntityPlayerInput(self.game_state)
+        self.entity_player_render = EntityPlayerRender(self.game_state)
+        self.entity_render = EntityRender(self.game_state)
 
     def on_message(self, ws, message):
         with self.game_state.mutex:
@@ -419,72 +423,6 @@ class NetworkClient:
             on_close=self.on_close,
         )
         self.ws.run_forever(reconnect=5)
-
-    # ---------- interpolation & drawing ----------
-    def interpolate_player_position(self):
-        with self.game_state.mutex:
-            interp_ms = (
-                self.game_state.interpolation_ms
-                if self.game_state.interpolation_ms > 0
-                else 200
-            )
-            time_since_update = time.time() - self.game_state.last_update_time
-            interp_factor = min(1.0, time_since_update / (interp_ms / 1000.0))
-
-            current_x = pr.lerp(
-                self.game_state.player_pos_prev.x,
-                self.game_state.player_pos_server.x,
-                interp_factor,
-            )
-            current_y = pr.lerp(
-                self.game_state.player_pos_prev.y,
-                self.game_state.player_pos_server.y,
-                interp_factor,
-            )
-            self.game_state.player_pos_interpolated = pr.Vector2(current_x, current_y)
-
-    def interpolate_entities_positions(self):
-        """
-        Smoothly interpolate positions for other_players and bots using pos_prev -> pos_server
-        and the same interpolation time window used for player (interpolation_ms).
-        """
-        with self.game_state.mutex:
-            interp_ms = (
-                self.game_state.interpolation_ms
-                if self.game_state.interpolation_ms > 0
-                else 200
-            )
-            max_dt = interp_ms / 1000.0
-            now = time.time()
-
-            # other players
-            for pid, entry in list(self.game_state.other_players.items()):
-                last_update = entry.get("last_update", now)
-                # compute factor relative to when server pos was set
-                dt = now - last_update
-                factor = 1.0 if max_dt <= 0 else min(1.0, dt / max_dt)
-                a = entry.get("pos_prev", entry.get("pos_server"))
-                b = entry.get("pos_server", a)
-                try:
-                    nx = pr.lerp(a.x, b.x, factor)
-                    ny = pr.lerp(a.y, b.y, factor)
-                except Exception:
-                    nx, ny = b.x, b.y
-                entry["interp_pos"] = pr.Vector2(nx, ny)
-
-            # bots
-            for bid, entry in list(self.game_state.bots.items()):
-                last_update = entry.get("last_update", now)
-                dt = now - last_update
-                factor = 1.0 if max_dt <= 0 else min(1.0, dt / max_dt)
-                a = entry.get("pos_prev", entry.get("pos_server"))
-                b = entry.get("pos_server", a)
-                try:
-                    nx = pr.lerp(a.x, b.x, factor)
-                    ny = pr.lerp(a.y, b.y, factor)
-                except Exception:
-                    nx, ny = b.x, b.y
-                entry["interp_pos"] = pr.Vector2(nx, ny)
 
     def draw_grid_lines(self):
         grid_w = self.game_state.grid_w if self.game_state.grid_w > 0 else 100
@@ -1637,8 +1575,8 @@ class NetworkClient:
                 last_download_check_time = current_time
 
             # interpolation (player + entities)
-            self.interpolate_player_position()
-            self.interpolate_entities_positions()
+            self.entity_player_render.interpolate_player_position()
+            self.entity_render.interpolate_entities_positions()
 
             # camera smoothing: compute desired world target and smooth camera.target to it
             try:
