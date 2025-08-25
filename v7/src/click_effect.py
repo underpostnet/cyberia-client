@@ -3,9 +3,9 @@ import time
 
 
 class ClickEffect:
-    def __init__(self):
+    def __init__(self, colors):
         self.list = []
-    
+        self.colors = colors
 
     def add_click_pointer(self, world_pos):
         # world_pos is in world pixels (already converted by get_screen_to_world_2d)
@@ -19,13 +19,11 @@ class ClickEffect:
 
     def update_click_pointers(self):
         now = time.time()
-        self.list = [
-            e for e in self.list if (now - e["t"]) < e["dur"]
-        ]
+        self.list = [e for e in self.list if (now - e["t"]) < e["dur"]]
 
-    def draw_click_pointers(self, game_state):
+    def draw_click_pointers(self):
         now = time.time()
-        base_color = game_state.colors.get("CLICK", pr.Color(255, 255, 255, 220))
+        base_color = self.colors.get("CLICK", pr.Color(255, 255, 255, 220))
         for e in self.list:
             age = now - e["t"]
             dur = e["dur"] if e["dur"] > 0 else 0.0001

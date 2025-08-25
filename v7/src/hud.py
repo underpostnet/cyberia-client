@@ -1,5 +1,6 @@
 import random
 import string
+import time
 
 
 class Hud:
@@ -93,7 +94,7 @@ class Hud:
                     pass
         return total
 
-    def can_activate_item(self, item):
+    def can_activate_item(self, item, sum_stats_limit):
         # check activable
         if not item.get("isActivable"):
             return False, "Item cannot be activated."
@@ -107,20 +108,20 @@ class Hud:
                 new_sum += int(v)
             except Exception:
                 pass
-        if new_sum > (self.game_state.sum_stats_limit or 0):
+        if new_sum > (sum_stats_limit or 0):
             return (
                 False,
-                f"Activation would exceed stats limit ({self.game_state.sum_stats_limit}).",
+                f"Activation would exceed stats limit ({sum_stats_limit}).",
             )
         return True, ""
 
-    def activate_item(self, idx):
+    def activate_item(self, idx, sum_stats_limit):
         if idx < 0 or idx >= len(self.items):
             return
         item = self.items[idx]
         if item.get("isActive"):
             return  # already active
-        ok, reason = self.can_activate_item(item)
+        ok, reason = self.can_activate_item(item, sum_stats_limit)
         if not ok:
             self.show_hud_alert(reason)
             return
@@ -153,3 +154,7 @@ class Hud:
             active = [it for it in self.items if it.get("isActive")]
             inactive = [it for it in self.items if not it.get("isActive")]
             self.items = active + inactive
+
+    def show_hud_alert(self, text, duration=2.5):
+        self.alert_text = text
+        self.alert_until = time.time() + duration

@@ -4,7 +4,6 @@ import threading
 import json
 import time
 import math
-
 import ctypes
 
 
@@ -14,7 +13,6 @@ from src.ws_client import WSClient
 from src.dev_ui import DevUI
 from src.click_effect import ClickEffect
 from src.hud import Hud
-
 from config import WS_URL
 
 
@@ -30,7 +28,7 @@ class NetworkClient:
 
         # client-only click effects (gfx_click_pointer)
         # Each item: {"pos": Vector2 (world coords, pixels), "t": created_time, "dur": seconds}
-        self.click_effect = ClickEffect()
+        self.click_effect = ClickEffect(self.game_state.colors)
 
         # event to signal main thread to initialize graphics
         self.init_event = threading.Event()
@@ -1495,7 +1493,7 @@ class NetworkClient:
             label = "Deactivate" if item.get("isActive") else "Activate"
             # check activation viability and show disabled visual if not allowed
             ok, reason = (
-                self.hud.can_activate_item(item)
+                self.hud.can_activate_item(item, self.game_state.sum_stats_limit)
                 if not item.get("isActive")
                 else (True, "")
             )
@@ -1532,10 +1530,6 @@ class NetworkClient:
             self.hud.view_button_rect = (btn_x, btn_y, btn_w, btn_h)
         else:
             self.hud.view_button_rect = None
-
-    def show_hud_alert(self, text, duration=2.5):
-        self.hud.alert_text = text
-        self.hud.alert_until = time.time() + duration
 
     def draw_hud_alert(self):
         if not self.hud.alert_text or time.time() > self.hud.alert_until:
@@ -1792,7 +1786,9 @@ class NetworkClient:
                                         if self.hud.items[sel].get("isActive"):
                                             self.hud.desactivate_item(sel)
                                         else:
-                                            self.hud.activate_item(sel)
+                                            self.hud.activate_item(
+                                                sel, self.game_state.sum_stats_limit
+                                            )
                                 consumed_click = True
                         # clicks anywhere inside view area (except hud_bar) should not pass to world
                         if not consumed_click:
@@ -1954,7 +1950,7 @@ class NetworkClient:
         self.draw_path()
         self.draw_aoi_circle()
         self.draw_foregrounds()
-        self.click_effect.draw_click_pointers(self.game_state)  # client-only effect
+        self.click_effect.draw_click_pointers()  # client-only effect
 
         try:
             pr.end_mode_2d()
