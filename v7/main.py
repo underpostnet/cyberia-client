@@ -416,24 +416,6 @@ class NetworkClient:
         )
         self.ws.run_forever(reconnect=5)
 
-    # ---------- start / initialization ----------
-    def start(self):
-        print("Starting WebSocket client thread...")
-        self.ws_thread = threading.Thread(target=self.run_websocket_thread, daemon=True)
-        self.ws_thread.start()
-
-        # Wait until init_data arrives
-        print("Waiting for init_data from server before initializing graphics...")
-        self.init_event.wait()
-        if not self.game_state.init_received:
-            print("init_event triggered but init_received false — aborting.")
-            return
-        print("init_data received — initializing graphics on main thread.")
-        self.initialize_graphics()
-
-        # Start the render/game loop (blocks)
-        self.run_game_loop()
-
     # ---------- monitor detection helpers ----------
     def detect_monitor_size(self):
         # Try several strategies in order; return (w, h)
@@ -1970,4 +1952,18 @@ class NetworkClient:
 
 if __name__ == "__main__":
     client = NetworkClient()
-    client.start()
+    print("Starting WebSocket client thread...")
+    client.ws_thread = threading.Thread(target=client.run_websocket_thread, daemon=True)
+    client.ws_thread.start()
+
+    # Wait until init_data arrives
+    print("Waiting for init_data from server before initializing graphics...")
+    client.init_event.wait()
+    if not client.game_state.init_received:
+        print("init_event triggered but init_received false — aborting.")
+    else:
+        print("init_data received — initializing graphics on main thread.")
+        client.initialize_graphics()
+
+        # Start the render/game loop (blocks)
+        client.run_game_loop()
