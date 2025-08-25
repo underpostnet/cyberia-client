@@ -524,14 +524,6 @@ class NetworkClient:
             color_bot,
         )
 
-    # ---------- previous individual draw functions kept for compatibility but not directly used in z-sorted pass ----------
-    def draw_bots(self):
-        with self.game_state.mutex:
-            if not self.game_state.bots:
-                return
-            for bot_id, bot in self.game_state.bots.items():
-                self._draw_bot_at(bot, bot_id=bot_id)
-
     def draw_other_players(self):
         with self.game_state.mutex:
             for player_id, player_data in self.game_state.other_players.items():
