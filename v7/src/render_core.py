@@ -73,7 +73,7 @@ class RenderCore:
 
     def initialize_graphics(self):
         # Called on main thread after init_data arrived
-        monitor_w, monitor_h = self.client.detect_monitor_size()
+        monitor_w, monitor_h = self.detect_monitor_size()
 
         w_factor = (
             self.client.game_state.default_width_screen_factor

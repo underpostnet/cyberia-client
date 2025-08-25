@@ -4,7 +4,6 @@ import threading
 import json
 import time
 import math
-import ctypes
 
 
 from src.object_layer import Direction, ObjectLayerMode
@@ -14,6 +13,7 @@ from src.click_effect import ClickEffect
 from src.hud import Hud
 from config import WS_URL
 from src.util import Util
+from src.render_core import RenderCore
 
 
 class NetworkClient:
@@ -42,6 +42,7 @@ class NetworkClient:
         # timing
         self._last_frame_time = time.time()
         self.util = Util()
+        self.render_core = RenderCore(self)
 
     def on_message(self, ws, message):
         with self.game_state.mutex:
@@ -415,163 +416,6 @@ class NetworkClient:
             on_close=self.on_close,
         )
         self.ws.run_forever(reconnect=5)
-
-    # ---------- monitor detection helpers ----------
-    def detect_monitor_size(self):
-        # Try several strategies in order; return (w, h)
-        # 1) pyray monitor functions
-        try:
-            if (
-                hasattr(pr, "get_monitor_count")
-                and hasattr(pr, "get_monitor_width")
-                and hasattr(pr, "get_monitor_height")
-            ):
-                # try primary monitor 0
-                try:
-                    cnt = pr.get_monitor_count()
-                except Exception:
-                    cnt = 1
-                try:
-                    mw = pr.get_monitor_width(0)
-                    mh = pr.get_monitor_height(0)
-                    if mw and mh:
-                        return int(mw), int(mh)
-                except Exception:
-                    pass
-            # older bindings: get_screen_width / get_screen_height
-            if hasattr(pr, "get_screen_width") and hasattr(pr, "get_screen_height"):
-                try:
-                    mw = pr.get_screen_width()
-                    mh = pr.get_screen_height()
-                    if mw and mh:
-                        return int(mw), int(mh)
-                except Exception:
-                    pass
-        except Exception:
-            pass
-
-        # 2) tkinter fallback (works on many platforms)
-        try:
-            import tkinter as tk
-
-            root = tk.Tk()
-            root.withdraw()
-            mw = root.winfo_screenwidth()
-            mh = root.winfo_screenheight()
-            root.destroy()
-            if mw and mh:
-                return int(mw), int(mh)
-        except Exception:
-            pass
-
-        # 3) Windows ctypes fallback
-        try:
-            user32 = ctypes.windll.user32
-            # Try to set DPI aware (best-effort)
-            try:
-                user32.SetProcessDPIAware()
-            except Exception:
-                pass
-            mw = user32.GetSystemMetrics(0)
-            mh = user32.GetSystemMetrics(1)
-            if mw and mh:
-                return int(mw), int(mh)
-        except Exception:
-            pass
-
-        # 4) final fallback to defaults
-        return 1280, 800
-
-    def initialize_graphics(self):
-        # Called on main thread after init_data arrived
-        monitor_w, monitor_h = self.detect_monitor_size()
-
-        w_factor = (
-            self.game_state.default_width_screen_factor
-            if self.game_state.default_width_screen_factor is not None
-            else 0.5
-        )
-        h_factor = (
-            self.game_state.default_height_screen_factor
-            if self.game_state.default_height_screen_factor is not None
-            else 0.5
-        )
-
-        # Compute window size
-        sw = max(640, int(monitor_w * float(w_factor)))
-        sh = max(480, int(monitor_h * float(h_factor)))
-
-        # ensure we don't exceed monitor
-        sw = min(sw, monitor_w)
-        sh = min(sh, monitor_h)
-
-        self.screen_width = sw
-        self.screen_height = sh
-
-        print(
-            f"Monitor detected: {monitor_w}x{monitor_h} -> Window: {self.screen_width}x{self.screen_height}"
-        )
-
-        # Initialize pyray window and fps
-        pr.set_config_flags(pr.ConfigFlags.FLAG_VSYNC_HINT)
-        pr.init_window(self.screen_width, self.screen_height, "MMO Client")
-
-        target_fps = self.game_state.fps if self.game_state.fps > 0 else 60
-        pr.set_target_fps(target_fps)
-
-        # Camera creation:
-        try:
-            cam_zoom = (
-                float(self.game_state.camera_zoom)
-                if self.game_state.camera_zoom is not None
-                else 1.0
-            )
-        except Exception:
-            cam_zoom = 1.0
-
-        # initial target = player center position * cell_size (may be zero)
-        try:
-            player_center_x = (
-                self.game_state.player_pos_interpolated.x
-                + self.game_state.player_dims.x / 2.0
-            ) * (self.game_state.cell_size if self.game_state.cell_size > 0 else 12.0)
-            player_center_y = (
-                self.game_state.player_pos_interpolated.y
-                + self.game_state.player_dims.y / 2.0
-            ) * (self.game_state.cell_size if self.game_state.cell_size > 0 else 12.0)
-            initial_target = pr.Vector2(player_center_x, player_center_y)
-        except Exception:
-            initial_target = pr.Vector2(0, 0)
-
-        offset = pr.Vector2(self.screen_width / 2, self.screen_height / 2)
-        # create camera with offset first (many python bindings expect (offset, target, rot, zoom))
-        try:
-            self.game_state.camera = pr.Camera2D(offset, initial_target, 0.0, cam_zoom)
-        except Exception:
-            # fallback in case signature differs; try swapping args
-            try:
-                self.game_state.camera = pr.Camera2D(
-                    initial_target, offset, 0.0, cam_zoom
-                )
-            except Exception:
-                # final fallback: construct with zeros then assign attributes if possible
-                self.game_state.camera = pr.Camera2D(
-                    pr.Vector2(0, 0), pr.Vector2(0, 0), 0.0, cam_zoom
-                )
-                try:
-                    self.game_state.camera.offset = offset
-                    self.game_state.camera.target = initial_target
-                except Exception:
-                    pass
-
-        # store camera offset for our use (we will keep camera.offset centered)
-        try:
-            # ensure offset is set correctly
-            self.game_state.camera.offset = pr.Vector2(
-                self.screen_width / 2, self.screen_height / 2
-            )
-        except Exception:
-            pass
 
     # ---------- input / send ----------
     def send_player_action(self, target_x, target_y):
@@ -1963,7 +1807,7 @@ if __name__ == "__main__":
         print("init_event triggered but init_received false — aborting.")
     else:
         print("init_data received — initializing graphics on main thread.")
-        client.initialize_graphics()
+        client.render_core.initialize_graphics()
 
         # Start the render/game loop (blocks)
         client.run_game_loop()
