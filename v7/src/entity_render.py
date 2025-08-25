@@ -48,3 +48,21 @@ class EntityRender:
                 except Exception:
                     nx, ny = b.x, b.y
                 entry["interp_pos"] = pr.Vector2(nx, ny)
+
+    def _draw_entity_label(self, px, py, text_lines, font_size=12):
+        """
+        Helper to draw stacked label lines centered horizontally at px..py (py is top of first line).
+        text_lines: list of strings, drawn top->down
+        """
+        y = py
+        for line in text_lines:
+            tw = pr.measure_text(line, font_size)
+            pr.draw_text_ex(
+                pr.get_font_default(),
+                line,
+                pr.Vector2(px - tw / 2, y),
+                font_size,
+                1,
+                self.game_state.colors.get("UI_TEXT", pr.Color(255, 255, 255, 255)),
+            )
+            y += font_size + 2
