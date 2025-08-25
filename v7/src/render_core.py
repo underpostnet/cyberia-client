@@ -261,3 +261,70 @@ class RenderCore:
                         "FOREGROUND", pr.Color(60, 140, 60, 220)
                     ),
                 )
+
+    def draw_game(self):
+        bg = self.client.game_state.colors.get("BACKGROUND", pr.Color(30, 30, 30, 255))
+        pr.begin_drawing()
+        pr.clear_background(bg)
+
+        # ensure camera offset centered as a good practice before BeginMode2D
+        try:
+            if self.client.game_state.camera:
+                try:
+                    self.client.game_state.camera.offset = pr.Vector2(
+                        self.client.screen_width / 2, self.client.screen_height / 2
+                    )
+                except Exception:
+                    pass
+            pr.begin_mode_2d(self.client.game_state.camera)
+        except Exception:
+            # If begin_mode_2d fails, skip world transforms to avoid crash
+            pass
+
+        # world drawing
+        self.client.grid_render.draw_grid_lines()
+        self.client.grid_render.draw_grid_objects()
+        self.client.entity_render.draw_entities_sorted(
+            self.client.entity_player_render, self.client.entity_bot_render
+        )
+        self.draw_path()
+        self.draw_aoi_circle()
+        self.draw_foregrounds()
+        self.client.click_effect.draw_click_pointers()  # client-only effect
+
+        try:
+            pr.end_mode_2d()
+        except Exception:
+            pass
+
+        # UI layer (screen coordinates)
+        mouse_pos = pr.get_mouse_position()
+
+        # If view open: draw view area (above hud_bar). HUD bar will remain visible below.
+        if self.client.hud.view_open and self.client.hud.view_selected is not None:
+            self.client.hud.draw_hud_view(
+                self.client.screen_width, self.client.screen_height
+            )
+
+        # HUD bar (draw only if not fully hidden)
+        hovered_index, total_w, inner_w = self.client.hud.draw_hud_bar(
+            mouse_pos, self.client.screen_width, self.client.screen_height
+        )
+
+        # Developer UI (if enabled by server) - now adjusted so it doesn't overlap HUD
+        if self.client.game_state.dev_ui and self.client.hud.view_selected is None:
+            self.client.dev_ui.draw_dev_ui(
+                self.client.screen_width, self.client.screen_height
+            )
+
+        # Draw toggle *after* dev UI to ensure it is on top and clickable
+        self.client.hud.draw_hud_toggle(
+            mouse_pos, self.client.screen_width, self.client.screen_height
+        )
+
+        # draw any hud alerts
+        self.client.hud.draw_hud_alert(
+            self.client.screen_width, self.client.screen_height
+        )
+
+        pr.end_drawing()

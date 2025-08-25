@@ -738,73 +738,13 @@ class NetworkClient:
             self.click_effect.update_click_pointers()
 
             # draw
-            self.draw_game()
+            self.render_core.draw_game()
 
         print("Closing WebSocket...")
         if self.ws:
             self.ws.close()
         self.is_running = False
         pr.close_window()
-
-    # ---------- utilities ----------
-    def draw_game(self):
-        bg = self.game_state.colors.get("BACKGROUND", pr.Color(30, 30, 30, 255))
-        pr.begin_drawing()
-        pr.clear_background(bg)
-
-        # ensure camera offset centered as a good practice before BeginMode2D
-        try:
-            if self.game_state.camera:
-                try:
-                    self.game_state.camera.offset = pr.Vector2(
-                        self.screen_width / 2, self.screen_height / 2
-                    )
-                except Exception:
-                    pass
-            pr.begin_mode_2d(self.game_state.camera)
-        except Exception:
-            # If begin_mode_2d fails, skip world transforms to avoid crash
-            pass
-
-        # world drawing
-        self.grid_render.draw_grid_lines()
-        self.grid_render.draw_grid_objects()
-        self.entity_render.draw_entities_sorted(
-            self.entity_player_render, self.entity_bot_render
-        )
-        self.render_core.draw_path()
-        self.render_core.draw_aoi_circle()
-        self.render_core.draw_foregrounds()
-        self.click_effect.draw_click_pointers()  # client-only effect
-
-        try:
-            pr.end_mode_2d()
-        except Exception:
-            pass
-
-        # UI layer (screen coordinates)
-        mouse_pos = pr.get_mouse_position()
-
-        # If view open: draw view area (above hud_bar). HUD bar will remain visible below.
-        if self.hud.view_open and self.hud.view_selected is not None:
-            self.hud.draw_hud_view(self.screen_width, self.screen_height)
-
-        # HUD bar (draw only if not fully hidden)
-        hovered_index, total_w, inner_w = self.hud.draw_hud_bar(
-            mouse_pos, self.screen_width, self.screen_height
-        )
-
-        # Developer UI (if enabled by server) - now adjusted so it doesn't overlap HUD
-        if self.game_state.dev_ui and self.hud.view_selected is None:
-            self.dev_ui.draw_dev_ui(self.screen_width, self.screen_height)
-
-        # Draw toggle *after* dev UI to ensure it is on top and clickable
-        self.hud.draw_hud_toggle(mouse_pos, self.screen_width, self.screen_height)
-
-        # draw any hud alerts
-        self.hud.draw_hud_alert(self.screen_width, self.screen_height)
-
-        pr.end_drawing()
 
 
 if __name__ == "__main__":
