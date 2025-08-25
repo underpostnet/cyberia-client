@@ -432,80 +432,6 @@ class NetworkClient:
         )
         self.ws.run_forever(reconnect=5)
 
-    def draw_path(self):
-        with self.game_state.mutex:
-            if self.game_state.path:
-                cell_size = (
-                    self.game_state.cell_size if self.game_state.cell_size > 0 else 12.0
-                )
-                target_x, target_y = (
-                    self.game_state.target_pos.x,
-                    self.game_state.target_pos.y,
-                )
-                if target_x >= 0 and target_y >= 0:
-                    pr.draw_rectangle_pro(
-                        pr.Rectangle(
-                            target_x * cell_size,
-                            target_y * cell_size,
-                            cell_size,
-                            cell_size,
-                        ),
-                        pr.Vector2(0, 0),
-                        0,
-                        self.game_state.colors.get(
-                            "TARGET", pr.Color(255, 255, 0, 255)
-                        ),
-                    )
-                for p in self.game_state.path:
-                    pr.draw_rectangle_pro(
-                        pr.Rectangle(
-                            p.x * cell_size, p.y * cell_size, cell_size, cell_size
-                        ),
-                        pr.Vector2(0, 0),
-                        0,
-                        self.game_state.colors.get("PATH", pr.Color(0, 255, 0, 128)),
-                    )
-
-    def draw_aoi_circle(self):
-        with self.game_state.mutex:
-            # Use player's center as AOI center so AOI is centered correctly regardless of player dims
-            player_pos = self.game_state.player_pos_interpolated
-            player_dims = self.game_state.player_dims
-            cell_size = (
-                self.game_state.cell_size if self.game_state.cell_size > 0 else 12.0
-            )
-            # compute center in pixels
-            center_x = (player_pos.x + player_dims.x / 2.0) * cell_size
-            center_y = (player_pos.y + player_dims.y / 2.0) * cell_size
-            aoi_radius = (
-                self.game_state.aoi_radius if self.game_state.aoi_radius > 0 else 15.0
-            )
-            pr.draw_circle_v(
-                pr.Vector2(center_x, center_y),
-                aoi_radius * cell_size,
-                self.game_state.colors.get("AOI", pr.Color(255, 0, 255, 51)),
-            )
-
-    def draw_foregrounds(self):
-        cell_size = self.game_state.cell_size if self.game_state.cell_size > 0 else 12.0
-        with self.game_state.mutex:
-            for obj_id, obj_data in self.game_state.foregrounds.items():
-                pos = obj_data["pos"]
-                dims = obj_data["dims"]
-                pr.draw_rectangle_pro(
-                    pr.Rectangle(
-                        pos.x * cell_size,
-                        pos.y * cell_size,
-                        dims.x * cell_size,
-                        dims.y * cell_size,
-                    ),
-                    pr.Vector2(0, 0),
-                    0,
-                    self.game_state.colors.get(
-                        "FOREGROUND", pr.Color(60, 140, 60, 220)
-                    ),
-                )
-
     def draw_dev_ui(self):
         # compute how much vertical HUD currently occupies (approx)
         hud_occupied = (1.0 - self.hud.slide_progress) * self.hud.bar_height
@@ -1374,9 +1300,9 @@ class NetworkClient:
         self.entity_render.draw_entities_sorted(
             self.entity_player_render, self.entity_bot_render
         )
-        self.draw_path()
-        self.draw_aoi_circle()
-        self.draw_foregrounds()
+        self.render_core.draw_path()
+        self.render_core.draw_aoi_circle()
+        self.render_core.draw_foregrounds()
         self.click_effect.draw_click_pointers()  # client-only effect
 
         try:
