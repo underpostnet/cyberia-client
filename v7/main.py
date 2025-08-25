@@ -432,79 +432,6 @@ class NetworkClient:
         )
         self.ws.run_forever(reconnect=5)
 
-    def draw_entities_sorted(self):
-        """
-        This function draws bots, other players and the local player in a single sorted pass
-        by their bottom Y (pos.y + dims.y) using interpolated positions so objects lower on screen render on top.
-        Labels are drawn with each entity to avoid z-fighting.
-        """
-        entries = []
-        with self.game_state.mutex:
-            # other players
-            for player_id, p in self.game_state.other_players.items():
-                pos = p.get("interp_pos", p.get("pos_server"))
-                dims = p.get("dims", pr.Vector2(1, 1))
-                bottom_y = pos.y + dims.y  # measured in grid cells
-                entries.append(("other", bottom_y, player_id, p))
-            # bots
-            for bot_id, b in self.game_state.bots.items():
-                pos = b.get("interp_pos", b.get("pos_server"))
-                dims = b.get("dims", pr.Vector2(1, 1))
-                bottom_y = pos.y + dims.y
-                entries.append(("bot", bottom_y, bot_id, b))
-            # self player (drawn as an entity too) use interpolated player pos
-            self_pos = self.game_state.player_pos_interpolated
-            self_dims = self.game_state.player_dims
-            bottom_y_self = self_pos.y + self_dims.y
-            entries.append(
-                (
-                    "self",
-                    bottom_y_self,
-                    self.game_state.player_id,
-                    {
-                        "pos": self_pos,
-                        "dims": self_dims,
-                        "direction": self.game_state.player_direction,
-                        "mode": self.game_state.player_mode,
-                    },
-                )
-            )
-
-        # sort ascending by bottom_y; smaller Y (higher on map) drawn first
-        entries.sort(key=lambda e: e[1])
-
-        # draw in sorted order
-        for typ, _, _id, data in entries:
-            try:
-                if typ == "other":
-                    # data contains interp_pos, dims, direction, mode
-                    interp_pos = data.get(
-                        "interp_pos", data.get("pos_server", pr.Vector2(0, 0))
-                    )
-                    dims = data.get("dims", pr.Vector2(1, 1))
-                    self.entity_player_render._draw_player_at(
-                        interp_pos,
-                        dims,
-                        False,
-                        data.get("direction", Direction.NONE),
-                        data.get("mode", ObjectLayerMode.IDLE),
-                        entity_id=_id,
-                    )
-                elif typ == "bot":
-                    self.entity_bot_render._draw_bot_at(data, bot_id=_id)
-                elif typ == "self":
-                    self.entity_player_render._draw_player_at(
-                        data["pos"],
-                        data["dims"],
-                        True,
-                        data.get("direction", Direction.NONE),
-                        data.get("mode", ObjectLayerMode.IDLE),
-                        entity_id=_id or "you",
-                    )
-            except Exception:
-                # draw failures shouldn't crash rendering loop
-                pass
-
     def draw_path(self):
         with self.game_state.mutex:
             if self.game_state.path:
@@ -1444,7 +1371,9 @@ class NetworkClient:
         # world drawing
         self.grid_render.draw_grid_lines()
         self.grid_render.draw_grid_objects()
-        self.draw_entities_sorted()
+        self.entity_render.draw_entities_sorted(
+            self.entity_player_render, self.entity_bot_render
+        )
         self.draw_path()
         self.draw_aoi_circle()
         self.draw_foregrounds()
