@@ -4,10 +4,9 @@ import threading
 import json
 import time
 import math
-import sys
+
 import ctypes
-import random
-import string
+
 
 from src.object_layer import Direction, ObjectLayerMode
 from src.game_state import GameState
@@ -38,116 +37,10 @@ class NetworkClient:
 
         self.hud = Hud()
         # prepare dummy items now
-        self._generate_dummy_items(10)
+        self.hud._generate_dummy_items(10)
 
         # timing
         self._last_frame_time = time.time()
-
-    # ---------- dummy items ----------
-    def _generate_dummy_items(self, n):
-        base_stats = {
-            "effect": 4,
-            "resistance": 1,
-            "agility": 1,
-            "range": 0,
-            "intelligence": 6,
-            "utility": 8,
-        }
-        self.hud.items = []
-        for i in range(n):
-            icon = random.choice(string.ascii_uppercase + string.digits)
-            # randomize stats: 0..(base*2) (or small range for zero-base)
-            stats = {
-                k: random.randint(0, v * 2 if v > 0 else 3)
-                for k, v in base_stats.items()
-            }
-            # isActivable randomly true/false (70% activable)
-            is_activable = random.random() < 0.7
-            item = {
-                "id": f"item_{i}",
-                "name": f"Item {i+1}",
-                "icon": icon,
-                "stats": stats,
-                "desc": f"This is a dummy item #{i+1}",
-                "isActivable": is_activable,
-                "isActive": False,
-            }
-            self.hud.items.append(item)
-
-    # ---------- helpers for activation logic ----------
-    def active_items(self):
-        return [it for it in self.hud.items if it.get("isActive")]
-
-    def active_stats_sum(self):
-        total = 0
-        for it in self.active_items():
-            for v in it.get("stats", {}).values():
-                try:
-                    total += int(v)
-                except Exception:
-                    pass
-        return total
-
-    def can_activate_item(self, item):
-        # check activable
-        if not item.get("isActivable"):
-            return False, "Item cannot be activated."
-        # check max 4 active
-        if len(self.active_items()) >= 4:
-            return False, "You cannot activate more than 4 items."
-        # check stats sum doesn't exceed limit
-        new_sum = self.active_stats_sum()
-        for v in item.get("stats", {}).values():
-            try:
-                new_sum += int(v)
-            except Exception:
-                pass
-        if new_sum > (self.game_state.sum_stats_limit or 0):
-            return (
-                False,
-                f"Activation would exceed stats limit ({self.game_state.sum_stats_limit}).",
-            )
-        return True, ""
-
-    def activate_item(self, idx):
-        if idx < 0 or idx >= len(self.hud.items):
-            return
-        item = self.hud.items[idx]
-        if item.get("isActive"):
-            return  # already active
-        ok, reason = self.can_activate_item(item)
-        if not ok:
-            self.show_hud_alert(reason)
-            return
-        item["isActive"] = True
-        # reorder so active items are first
-        self.reorder_hud_items()
-        self.show_hud_alert("Item activated.", 1.5)
-
-    def deactivate_item(self, idx):
-        if idx < 0 or idx >= len(self.hud.items):
-            return
-        item = self.hud.items[idx]
-        if not item.get("isActive"):
-            return
-        item["isActive"] = False
-        self.reorder_hud_items()
-        self.show_hud_alert("Item deactivated.", 1.0)
-
-    def reorder_hud_items(self):
-        # Move active items to the front (stable)
-        active = [it for it in self.hud.items if it.get("isActive")]
-        inactive = [it for it in self.hud.items if not it.get("isActive")]
-        self.hud.items = active + inactive
-        # clamp active count to 4 just in case (deactivate extras)
-        if len(active) > 4:
-            # deactivate extras beyond first 4
-            for it in active[4:]:
-                it["isActive"] = False
-            # recompose
-            active = [it for it in self.hud.items if it.get("isActive")]
-            inactive = [it for it in self.hud.items if not it.get("isActive")]
-            self.hud.items = active + inactive
 
     # ---------- network handlers ----------
     def color_from_payload(self, cdict):
@@ -1235,8 +1128,8 @@ class NetworkClient:
                 f"Target: ({target_pos.x:.0f}, {target_pos.y:.0f})",
                 f"Download: {download_kbps:.2f} kbps | Upload: {upload_kbps:.2f} kbps",
                 f"SumStatsLimit: {self.game_state.sum_stats_limit}",
-                f"ActiveStatsSum: {self.active_stats_sum()}",
-                f"ActiveItems: {len(self.active_items())}",
+                f"ActiveStatsSum: {self.hud.active_stats_sum()}",
+                f"ActiveItems: {len(self.hud.active_items())}",
             ]
 
             y_offset = 30
@@ -1479,7 +1372,7 @@ class NetworkClient:
         stat_size = 18
 
         # compute sums
-        current_active_sum = self.active_stats_sum()
+        current_active_sum = self.hud.active_stats_sum()
         item_sum = 0
         for v in stats.values():
             try:
@@ -1544,7 +1437,7 @@ class NetworkClient:
                 self.game_state.colors.get("ERROR_TEXT", pr.Color(255, 80, 80, 255)),
             )
             stat_y += 20
-        elif len(self.active_items()) >= 4 and not item.get("isActive"):
+        elif len(self.hud.active_items()) >= 4 and not item.get("isActive"):
             pr.draw_text_ex(
                 pr.get_font_default(),
                 "Maximum active items reached (4).",
@@ -1602,7 +1495,9 @@ class NetworkClient:
             label = "Deactivate" if item.get("isActive") else "Activate"
             # check activation viability and show disabled visual if not allowed
             ok, reason = (
-                self.can_activate_item(item) if not item.get("isActive") else (True, "")
+                self.hud.can_activate_item(item)
+                if not item.get("isActive")
+                else (True, "")
             )
             btn_bg = pr.Color(60, 60, 60, 230) if ok else pr.Color(40, 40, 40, 160)
             pr.draw_rectangle_pro(
@@ -1895,9 +1790,9 @@ class NetworkClient:
                                         self.hud.items
                                     ):
                                         if self.hud.items[sel].get("isActive"):
-                                            self.deactivate_item(sel)
+                                            self.hud.desactivate_item(sel)
                                         else:
-                                            self.activate_item(sel)
+                                            self.hud.activate_item(sel)
                                 consumed_click = True
                         # clicks anywhere inside view area (except hud_bar) should not pass to world
                         if not consumed_click:
