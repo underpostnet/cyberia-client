@@ -14,6 +14,7 @@ from src.dev_ui import DevUI
 from src.click_effect import ClickEffect
 from src.hud import Hud
 from config import WS_URL
+from src.util import Util
 
 
 class NetworkClient:
@@ -39,17 +40,7 @@ class NetworkClient:
 
         # timing
         self._last_frame_time = time.time()
-
-    # ---------- network handlers ----------
-    def color_from_payload(self, cdict):
-        try:
-            r = int(cdict.get("r", 255))
-            g = int(cdict.get("g", 255))
-            b = int(cdict.get("b", 255))
-            a = int(cdict.get("a", 255))
-            return pr.Color(r, g, b, a)
-        except Exception:
-            return pr.Color(255, 255, 255, 255)
+        self.util = Util()
 
     def on_message(self, ws, message):
         with self.game_state.mutex:
@@ -82,7 +73,9 @@ class NetworkClient:
                     # colors
                     colors_payload = payload.get("colors", {})
                     for name, cdict in colors_payload.items():
-                        self.game_state.colors[name] = self.color_from_payload(cdict)
+                        self.game_state.colors[name] = self.util.color_from_payload(
+                            cdict
+                        )
 
                     # graphics hints (do NOT call pyray here)
                     try:
