@@ -432,22 +432,6 @@ class NetworkClient:
         )
         self.ws.run_forever(reconnect=5)
 
-    def draw_other_players(self):
-        with self.game_state.mutex:
-            for player_id, player_data in self.game_state.other_players.items():
-                interp_pos = player_data.get(
-                    "interp_pos", player_data.get("pos_server", pr.Vector2(0, 0))
-                )
-                dims = player_data.get("dims", pr.Vector2(1, 1))
-                self.entity_player_render._draw_player_at(
-                    interp_pos,
-                    dims,
-                    False,
-                    player_data.get("direction", Direction.NONE),
-                    player_data.get("mode", ObjectLayerMode.IDLE),
-                    entity_id=player_id,
-                )
-
     def draw_player(self):
         self.entity_player_render._draw_player_at(
             self.game_state.player_pos_interpolated,
