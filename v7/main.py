@@ -9,7 +9,6 @@ import ctypes
 
 from src.object_layer import Direction, ObjectLayerMode
 from src.game_state import GameState
-from src.ws_client import WSClient
 from src.dev_ui import DevUI
 from src.click_effect import ClickEffect
 from src.hud import Hud
@@ -20,7 +19,9 @@ from src.util import Util
 class NetworkClient:
     def __init__(self):
         self.game_state = GameState()
-        self.ws_client = WSClient()
+        self.ws = None
+        self.ws_thread = None
+        self.is_running = True
         self.dev_ui = DevUI()
 
         # runtime window (computed after init_data)
@@ -395,33 +396,31 @@ class NetworkClient:
             )
             self.game_state.error_display_time = time.time()
         print("### WebSocket Closed ###")
-        self.ws_client.ws = None
+        self.ws = None
 
     def on_open(self, ws):
         print("WebSocket Opened. Sending join request...")
         try:
             join_message = {"type": "join_request", "payload": {}}
-            self.ws_client.ws.send(json.dumps(join_message))
+            self.ws.send(json.dumps(join_message))
         except Exception as e:
             print(f"Error sending join request: {e}")
 
     def run_websocket_thread(self):
-        self.ws_client.ws = websocket.WebSocketApp(
+        self.ws = websocket.WebSocketApp(
             WS_URL,
             on_open=self.on_open,
             on_message=self.on_message,
             on_error=self.on_error,
             on_close=self.on_close,
         )
-        self.ws_client.ws.run_forever(reconnect=5)
+        self.ws.run_forever(reconnect=5)
 
     # ---------- start / initialization ----------
     def start(self):
         print("Starting WebSocket client thread...")
-        self.ws_client.ws_thread = threading.Thread(
-            target=self.run_websocket_thread, daemon=True
-        )
-        self.ws_client.ws_thread.start()
+        self.ws_thread = threading.Thread(target=self.run_websocket_thread, daemon=True)
+        self.ws_thread.start()
 
         # Wait until init_data arrives
         print("Waiting for init_data from server before initializing graphics...")
@@ -594,17 +593,13 @@ class NetworkClient:
 
     # ---------- input / send ----------
     def send_player_action(self, target_x, target_y):
-        if (
-            self.ws_client.ws
-            and self.ws_client.ws.sock
-            and self.ws_client.ws.sock.connected
-        ):
+        if self.ws and self.ws.sock and self.ws.sock.connected:
             try:
                 action_message = {
                     "type": "player_action",
                     "payload": {"targetX": target_x, "targetY": target_y},
                 }
-                self.ws_client.ws.send(json.dumps(action_message))
+                self.ws.send(json.dumps(action_message))
                 self.game_state.upload_size_bytes += len(json.dumps(action_message))
             except websocket.WebSocketConnectionClosedException:
                 print("Cannot send message, connection is closed.")
@@ -1615,7 +1610,7 @@ class NetworkClient:
         target_fps = self.game_state.fps if self.game_state.fps > 0 else 60
 
         last_download_check_time = time.time()
-        while not pr.window_should_close() and self.ws_client.is_running:
+        while not pr.window_should_close() and self.is_running:
             now = time.time()
             dt = (
                 now - self._last_frame_time
@@ -1911,9 +1906,9 @@ class NetworkClient:
             self.draw_game()
 
         print("Closing WebSocket...")
-        if self.ws_client.ws:
-            self.ws_client.ws.close()
-        self.ws_client.is_running = False
+        if self.ws:
+            self.ws.close()
+        self.is_running = False
         pr.close_window()
 
     # ---------- utilities ----------
