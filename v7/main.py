@@ -432,17 +432,6 @@ class NetworkClient:
         )
         self.ws.run_forever(reconnect=5)
 
-    def draw_player(self):
-        self.entity_player_render._draw_player_at(
-            self.game_state.player_pos_interpolated,
-            self.game_state.player_dims,
-            True,
-            self.game_state.player_direction,
-            self.game_state.player_mode,
-            entity_id=self.game_state.player_id or "you",
-        )
-
-    # ---------- draw entities sorted by world Y (y + height) ----------
     def draw_entities_sorted(self):
         """
         This function draws bots, other players and the local player in a single sorted pass
