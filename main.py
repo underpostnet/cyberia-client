@@ -12,6 +12,7 @@ from src.game_state import GameState
 from src.dev_ui import DevUI
 from src.click_effect import ClickEffect
 from src.hud import Hud
+from src.object_layers_management import ObjectLayersManager
 from src.util import Util
 from src.render_core import RenderCore
 from src.entity_player_input import EntityPlayerInput
@@ -40,8 +41,8 @@ class NetworkClient:
         self.init_event = threading.Event()
 
         self.hud = Hud(self.game_state)
-        # prepare dummy items now
-        self.hud._generate_dummy_items(10)
+        # object layers/cache manager for HUD items
+        self.obj_layers_mgr = ObjectLayersManager()
 
         # timing
         self._last_frame_time = time.time()
@@ -221,6 +222,18 @@ class NetworkClient:
                             )
                         else:
                             self.game_state.target_pos = pr.Vector2(-1, -1)
+
+                        # HUD items from player's equipped/owned item IDs
+                        try:
+                            item_ids = player_data.get("items")
+                            if item_ids is None:
+                                item_ids = player_data.get("Items")  # fallback if server sends capitalized
+                            if isinstance(item_ids, list):
+                                self.hud.items = self.obj_layers_mgr.build_hud_items(item_ids)
+                                # maintain stable ordering: active first if any were active previously
+                                self.hud.reorder_hud_items()
+                        except Exception:
+                            pass
 
                     # ---------- Other players ----------
                     visible_players_data = payload.get("visiblePlayers")

@@ -1,7 +1,6 @@
-import random
-import string
 import time
 import pyray as pr
+from dataclasses import is_dataclass, asdict
 
 
 class Hud:
@@ -51,35 +50,42 @@ class Hud:
             0.18  # seconds to ignore hud clicks after pressing toggle
         )
 
-    def _generate_dummy_items(self, n):
-        base_stats = {
-            "effect": 4,
-            "resistance": 1,
-            "agility": 1,
-            "range": 0,
-            "intelligence": 6,
-            "utility": 8,
-        }
-        self.items = []
-        for i in range(n):
-            icon = random.choice(string.ascii_uppercase + string.digits)
-            # randomize stats: 0..(base*2) (or small range for zero-base)
-            stats = {
-                k: random.randint(0, v * 2 if v > 0 else 3)
-                for k, v in base_stats.items()
-            }
-            # isActivable randomly true/false (70% activable)
-            is_activable = random.random() < 0.7
-            item = {
-                "id": f"item_{i}",
-                "name": f"Item {i+1}",
-                "icon": icon,
-                "stats": stats,
-                "desc": f"This is a dummy item #{i+1}",
-                "isActivable": is_activable,
-                "isActive": False,
-            }
-            self.items.append(item)
+    def _stats_to_dict(self, stats):
+        # Accept Stats dataclass or plain dict, return dict[str,int]
+        if stats is None:
+            return {}
+        try:
+            if is_dataclass(stats):
+                d = asdict(stats)
+            elif isinstance(stats, dict):
+                d = stats
+            else:
+                # fallback: try to read attributes
+                d = {
+                    k: getattr(stats, k)
+                    for k in [
+                        "effect",
+                        "resistance",
+                        "agility",
+                        "range",
+                        "intelligence",
+                        "utility",
+                    ]
+                    if hasattr(stats, k)
+                }
+        except Exception:
+            d = {}
+        # ensure ints
+        out = {}
+        for k, v in d.items():
+            try:
+                out[k] = int(v)
+            except Exception:
+                try:
+                    out[k] = int(float(v))
+                except Exception:
+                    out[k] = 0
+        return out
 
     def active_items(self):
         return [it for it in self.items if it.get("isActive")]
@@ -87,7 +93,8 @@ class Hud:
     def active_stats_sum(self):
         total = 0
         for it in self.active_items():
-            for v in it.get("stats", {}).values():
+            stats_map = self._stats_to_dict(it.get("stats"))
+            for v in stats_map.values():
                 try:
                     total += int(v)
                 except Exception:
@@ -103,7 +110,8 @@ class Hud:
             return False, "You cannot activate more than 4 items."
         # check stats sum doesn't exceed limit
         new_sum = self.active_stats_sum()
-        for v in item.get("stats", {}).values():
+        stats_map = self._stats_to_dict(item.get("stats"))
+        for v in stats_map.values():
             try:
                 new_sum += int(v)
             except Exception:
@@ -367,7 +375,7 @@ class Hud:
         )
 
         # stats block below title with dynamic totals and warnings
-        stats = item.get("stats", {})
+        stats = self._stats_to_dict(item.get("stats"))
         stat_y = start_y + 24 + 28
         stat_size = 18
 
