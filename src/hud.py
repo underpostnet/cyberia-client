@@ -134,6 +134,9 @@ class Hud:
             self.show_hud_alert(reason)
             return
         item["isActive"] = True
+        # Notify the server about the activation
+        if hasattr(self.game_state, "send_item_activation"):
+            self.game_state.send_item_activation(item["id"], True)
         # reorder so active items are first
         self.reorder_hud_items()
         self.show_hud_alert("Item activated.", 1.5)
@@ -145,6 +148,9 @@ class Hud:
         if not item.get("isActive"):
             return
         item["isActive"] = False
+        # Notify the server about the deactivation
+        if hasattr(self.game_state, "send_item_activation"):
+            self.game_state.send_item_activation(item["id"], False)
         self.reorder_hud_items()
         self.show_hud_alert("Item deactivated.", 1.0)
 

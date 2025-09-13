@@ -22,6 +22,7 @@ class ObjectLayersManager:
     def __init__(self, service: Optional[ObjectLayersService] = None):
         self.service = service or ObjectLayersService()
         self.cache: Dict[str, ObjectLayer] = {}
+        self.hud: List[Dict[str, Any]] = []
 
     def get_or_fetch(self, item_id: str) -> Optional[ObjectLayer]:
         if not item_id:
@@ -40,6 +41,9 @@ class ObjectLayersManager:
 
     def build_hud_items(self, item_ids: List[str]) -> List[Dict[str, Any]]:
         hud_items: List[Dict[str, Any]] = []
+        # Create a mapping of existing items by ID to preserve their state
+        existing_items = {item["id"]: item for item in self.hud if "id" in item}
+
         for iid in item_ids or []:
             ol = self.get_or_fetch(iid)
             if not ol:
@@ -52,12 +56,21 @@ class ObjectLayersManager:
                         "stats": Stats(),
                         "desc": "",
                         "isActivable": False,
-                        "isActive": False,
+                        "isActive": (
+                            existing_items.get(iid, {}).get("isActive", False)
+                            if iid in existing_items
+                            else False
+                        ),
                     }
                 )
                 continue
-            # map to HUD-friendly dict while keeping Stats dataclass
 
+            # Check if this item was previously active
+            was_active = existing_items.get(ol.data.item.id or "unknown", {}).get(
+                "isActive", False
+            )
+
+            # map to HUD-friendly dict while keeping Stats dataclass
             hud_items.append(
                 {
                     "id": ol.data.item.id or "unknown",
@@ -66,9 +79,10 @@ class ObjectLayersManager:
                     "stats": ol.data.stats or Stats(),
                     "desc": ol.data.item.description or "unknown",
                     "isActivable": bool(ol.data.item.activable),
-                    "isActive": False,
+                    "isActive": was_active,
                 }
             )
+        self.hud = hud_items
         return hud_items
 
     def _parse_object_layer(self, data: Dict[str, Any]) -> Optional[ObjectLayer]:

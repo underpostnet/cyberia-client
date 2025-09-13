@@ -227,9 +227,13 @@ class NetworkClient:
                         try:
                             item_ids = player_data.get("items")
                             if item_ids is None:
-                                item_ids = player_data.get("Items")  # fallback if server sends capitalized
+                                item_ids = player_data.get(
+                                    "Items"
+                                )  # fallback if server sends capitalized
                             if isinstance(item_ids, list):
-                                self.hud.items = self.obj_layers_mgr.build_hud_items(item_ids)
+                                self.hud.items = self.obj_layers_mgr.build_hud_items(
+                                    item_ids
+                                )
                                 # maintain stable ordering: active first if any were active previously
                                 self.hud.reorder_hud_items()
                         except Exception:
@@ -411,6 +415,21 @@ class NetworkClient:
                     self.game_state.last_error_message = f"Error: {e}"
                     self.game_state.error_display_time = time.time()
                 print(f"Error: {e}")
+
+    def send_item_activation(self, item_id: str, is_active: bool):
+        """Send item activation state to the server"""
+        if not self.ws:
+            return
+
+        message = {
+            "type": "item_activation",
+            "payload": {"itemId": item_id, "active": is_active},
+        }
+        try:
+            self.ws.send(json.dumps(message))
+            self.game_state.upload_size_bytes += len(json.dumps(message))
+        except Exception as e:
+            print(f"Error sending item activation: {e}")
 
     def on_error(self, ws, error):
         with self.game_state.mutex:
