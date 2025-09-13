@@ -57,19 +57,14 @@ class ObjectLayersManager:
                 )
                 continue
             # map to HUD-friendly dict while keeping Stats dataclass
-            name = ol.data.item.type or ol.data.item.id or iid
-            icon = (
-                ol.data.item.type[:1]
-                if ol.data.item.type
-                else (iid[:1] if iid else "?")
-            )
+
             hud_items.append(
                 {
-                    "id": ol.data.item.id or iid,
-                    "name": name,
-                    "icon": icon.upper(),
+                    "id": ol.data.item.id or "unknown",
+                    "name": ol.data.item.id,
+                    "icon": ol.data.item.id[:1].upper(),
                     "stats": ol.data.stats or Stats(),
-                    "desc": ol.data.item.description or "",
+                    "desc": ol.data.item.description or "unknown",
                     "isActivable": bool(ol.data.item.activable),
                     "isActive": False,
                 }
