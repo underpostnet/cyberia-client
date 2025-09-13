@@ -13,32 +13,33 @@ class ObjectLayersService:
         self.timeout = timeout
 
     def get_object_layer_by_item_id(self, item_id: str) -> Optional[Dict[str, Any]]:
+        """Fetch object layer data by item_id from the REST API.
+
+        Args:
+            item_id: The ID of the item to fetch object layer data for
+
+        Returns:
+            Optional[Dict[str, Any]]: The object layer data if found, None otherwise
+        """
         try:
             url = f"{self.base_url}/object-layers"
-            params = {"item_id": item_id, "page": 1, "page_size": 10}
+            params = {"item_id": item_id, "page": 1, "page_size": 1}
             resp = requests.get(url, params=params, timeout=self.timeout)
-            if resp.status_code != 200:
-                return None
+            resp.raise_for_status()
+
             data = resp.json()
-            # Accept both list or paginated dict forms
-            if isinstance(data, list):
-                first = data[0] if data else None
-                if isinstance(first, dict) and "doc" in first:
-                    return first.get("doc") or None
+
+            # Handle both list and paginated dict responses
+            if isinstance(data, list) and data:
+                return data[0].get("data")
 
             if isinstance(data, dict):
-                # common pagination shape: {"items": [...]} or {"data": [...]}
-                items = (
-                    data.get("items")
-                    if isinstance(data.get("items"), list)
-                    else data.get("data")
-                )
-                if isinstance(items, list) and items:
-                    first = items[0]
-                    if isinstance(first, dict) and "doc" in first:
-                        return first.get("doc") or None
+                items = data.get("items", []) or data.get("data", [])
+                if items and isinstance(items, list):
+                    return items[0].get("data")
 
             return None
-        except Exception:
-            # Network or parsing error -> None (manager will fallback)
+
+        except (requests.RequestException, ValueError, AttributeError):
+            # Handle network, JSON decode, or structure errors
             return None

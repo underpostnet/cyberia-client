@@ -34,6 +34,8 @@ class ObjectLayersManager:
         ol = self._parse_object_layer(data)
         if ol:
             self.cache[item_id] = ol
+            # print id and type
+            print(f"Fetched object layer for {item_id}: {ol.data.item.type}")
         return ol
 
     def build_hud_items(self, item_ids: List[str]) -> List[Dict[str, Any]]:
