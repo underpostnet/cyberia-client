@@ -1,7 +1,7 @@
-
 from enum import Enum
 from dataclasses import dataclass, field
 from typing import List
+
 
 class Direction(Enum):
     UP = 0
@@ -73,10 +73,16 @@ class Item:
     activable: bool = False
 
 
-# ObjectLayer encapsulates stats, render, item and a content hash.
+# ObjectLayerData encapsulates stats, render, and item.
 @dataclass
-class ObjectLayer:
+class ObjectLayerData:
     stats: Stats = field(default_factory=Stats)
     render: Render = field(default_factory=Render)
     item: Item = field(default_factory=Item)
+
+
+# ObjectLayer encapsulates object layer data and a content hash.
+@dataclass
+class ObjectLayer:
+    data: ObjectLayerData = field(default_factory=ObjectLayerData)
     sha256: str = ""

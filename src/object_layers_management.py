@@ -1,7 +1,14 @@
 from typing import Dict, Optional, Any, List
 from dataclasses import asdict
 
-from src.object_layer import ObjectLayer, Stats, Item, Render, RenderFrames
+from src.object_layer import (
+    ObjectLayer,
+    ObjectLayerData,
+    Stats,
+    Item,
+    Render,
+    RenderFrames,
+)
 from src.services.object_layers import ObjectLayersService
 
 
@@ -48,16 +55,20 @@ class ObjectLayersManager:
                 )
                 continue
             # map to HUD-friendly dict while keeping Stats dataclass
-            name = ol.item.type or ol.item.id or iid
-            icon = (ol.item.type[:1] if ol.item.type else (iid[:1] if iid else "?"))
+            name = ol.data.item.type or ol.data.item.id or iid
+            icon = (
+                ol.data.item.type[:1]
+                if ol.data.item.type
+                else (iid[:1] if iid else "?")
+            )
             hud_items.append(
                 {
-                    "id": ol.item.id or iid,
+                    "id": ol.data.item.id or iid,
                     "name": name,
                     "icon": icon.upper(),
-                    "stats": ol.stats or Stats(),
-                    "desc": ol.item.description or "",
-                    "isActivable": bool(ol.item.activable),
+                    "stats": ol.data.stats or Stats(),
+                    "desc": ol.data.item.description or "",
+                    "isActivable": bool(ol.data.item.activable),
                     "isActive": False,
                 }
             )
@@ -81,13 +92,19 @@ class ObjectLayersManager:
             item = Item(
                 id=str(item_src.get("id") or data.get("id") or ""),
                 type=str(item_src.get("type") or data.get("type") or ""),
-                description=str(item_src.get("description") or data.get("description") or ""),
+                description=str(
+                    item_src.get("description") or data.get("description") or ""
+                ),
                 activable=bool(item_src.get("activable", data.get("activable", False))),
             )
 
             # Render optional; keep defaults if not present
             render = Render()
 
-            return ObjectLayer(stats=stats, render=render, item=item, sha256=str(data.get("sha256", "")))
+            # Create ObjectLayer with the new structure
+            return ObjectLayer(
+                data=ObjectLayerData(stats=stats, render=render, item=item),
+                sha256=str(data.get("sha256", "")),
+            )
         except Exception:
             return None
