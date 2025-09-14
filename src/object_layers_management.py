@@ -108,8 +108,13 @@ class ObjectLayersManager:
         return hud_items
 
     def _parse_object_layer(self, data: Dict[str, Any]) -> Optional[ObjectLayer]:
+        """
+        Parses a raw dictionary of object layer data into a structured ObjectLayer object.
+        This includes robust handling for all nested dataclasses (Stats, Render, Item)
+        with default values for missing or malformed data to prevent crashes.
+        """
         try:
-            # Stats can be under data["stats"] with keys matching our dataclass
+            # Stats parsing with robust type casting and defaults
             stats_dict = data.get("stats") or {}
             stats = Stats(
                 effect=int(stats_dict.get("effect", 0) or 0),
@@ -120,7 +125,7 @@ class ObjectLayersManager:
                 utility=int(stats_dict.get("utility", 0) or 0),
             )
 
-            # Item may be under data["item"] or inline
+            # Item parsing with robust type casting and defaults
             item_src = data.get("item") or {}
             item = Item(
                 id=str(item_src.get("id") or data.get("id") or ""),
@@ -131,13 +136,48 @@ class ObjectLayersManager:
                 activable=bool(item_src.get("activable", data.get("activable", False))),
             )
 
-            # Render optional; keep defaults if not present
+            # Render parsing including all frames, colors, and duration
             render = Render()
+            render_data = data.get("render") or {}
+            render.colors = render_data.get("colors", [])
+            render.frame_duration = int(render_data.get("frame_duration", 0) or 0)
+            render.is_stateless = bool(render_data.get("is_stateless", False))
+
+            # RenderFrames parsing - iterate through all defined directions and modes
+            frames_data = render_data.get("frames") or {}
+
+            # Helper function to get frame list from dict
+            def get_frames(key, default_val=[]):
+                return frames_data.get(key, default_val)
+
+            # Assign all idle frames
+            render.frames.up_idle = get_frames("up_idle")
+            render.frames.down_idle = get_frames("down_idle")
+            render.frames.right_idle = get_frames("right_idle")
+            render.frames.left_idle = get_frames("left_idle")
+            render.frames.up_right_idle = get_frames("up_right_idle")
+            render.frames.down_right_idle = get_frames("down_right_idle")
+            render.frames.up_left_idle = get_frames("up_left_idle")
+            render.frames.down_left_idle = get_frames("down_left_idle")
+            render.frames.default_idle = get_frames("default_idle")
+            render.frames.none_idle = get_frames("none_idle")
+
+            # Assign all walking frames
+            render.frames.up_walking = get_frames("up_walking")
+            render.frames.down_walking = get_frames("down_walking")
+            render.frames.right_walking = get_frames("right_walking")
+            render.frames.left_walking = get_frames("left_walking")
+            render.frames.up_right_walking = get_frames("up_right_walking")
+            render.frames.down_right_walking = get_frames("down_right_walking")
+            render.frames.up_left_walking = get_frames("up_left_walking")
+            render.frames.down_left_walking = get_frames("down_left_walking")
 
             # Create ObjectLayer with the new structure
             return ObjectLayer(
                 data=ObjectLayerData(stats=stats, render=render, item=item),
                 sha256=str(data.get("sha256", "")),
             )
-        except Exception:
+        except Exception as e:
+            # Log the error for debugging purposes
+            print(f"Error parsing object layer data: {e}")
             return None
