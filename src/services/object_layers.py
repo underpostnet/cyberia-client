@@ -27,18 +27,7 @@ class ObjectLayersService:
             resp = requests.get(url, params=params, timeout=self.timeout)
             resp.raise_for_status()
 
-            data = resp.json()
-
-            # Handle both list and paginated dict responses
-            if isinstance(data, list) and data:
-                return data[0].get("data")
-
-            if isinstance(data, dict):
-                items = data.get("items", []) or data.get("data", [])
-                if items and isinstance(items, list):
-                    return items[0].get("data")
-
-            return None
+            return resp.json().get("items", [{}])[0].get("data")
 
         except (requests.RequestException, ValueError, AttributeError):
             # Handle network, JSON decode, or structure errors

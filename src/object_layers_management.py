@@ -35,8 +35,30 @@ class ObjectLayersManager:
         ol = self._parse_object_layer(data)
         if ol:
             self.cache[item_id] = ol
-            # print id and type
+            # Print object layer info with frame counts
+            frames = ol.data.render.frames
             print(f"Fetched object layer for {item_id}: {ol.data.item.type}")
+            print("Idle frame counts:")
+            print(f"  Up: {len(frames.up_idle)}")
+            print(f"  Down: {len(frames.down_idle)}")
+            print(f"  Right: {len(frames.right_idle)}")
+            print(f"  Left: {len(frames.left_idle)}")
+            print(f"  Up-Right: {len(frames.up_right_idle)}")
+            print(f"  Down-Right: {len(frames.down_right_idle)}")
+            print(f"  Up-Left: {len(frames.up_left_idle)}")
+            print(f"  Down-Left: {len(frames.down_left_idle)}")
+            print(f"  Default: {len(frames.default_idle)}")
+            print(f"  None: {len(frames.none_idle)}")
+            print("Walking frame counts:")
+            print(f"  Up: {len(frames.up_walking)}")
+            print(f"  Down: {len(frames.down_walking)}")
+            print(f"  Right: {len(frames.right_walking)}")
+            print(f"  Left: {len(frames.left_walking)}")
+            print(f"  Up-Right: {len(frames.up_right_walking)}")
+            print(f"  Down-Right: {len(frames.down_right_walking)}")
+            print(f"  Up-Left: {len(frames.up_left_walking)}")
+            print(f"  Down-Left: {len(frames.down_left_walking)}")
+
         return ol
 
     def build_hud_items(self, item_ids: List[str]) -> List[Dict[str, Any]]:
