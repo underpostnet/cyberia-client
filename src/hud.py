@@ -105,17 +105,37 @@ class Hud:
         # check activable
         if not item.get("isActivable"):
             return False, "Item cannot be activated."
+
+        item_type_to_activate = item.get("type")
+        item_to_be_deactivated = None
+        if item_type_to_activate and item_type_to_activate != "unknown":
+            for other_item in self.active_items():
+                if other_item.get("type") == item_type_to_activate:
+                    item_to_be_deactivated = other_item
+                    break
+
         # check max 4 active
-        if len(self.active_items()) >= 4:
+        if not item_to_be_deactivated and len(self.active_items()) >= 4:
             return False, "You cannot activate more than 4 items."
+
         # check stats sum doesn't exceed limit
-        new_sum = self.active_stats_sum()
+        current_sum = self.active_stats_sum()
+        if item_to_be_deactivated:
+            stats_to_remove = self._stats_to_dict(item_to_be_deactivated.get("stats"))
+            for v in stats_to_remove.values():
+                try:
+                    current_sum -= int(v)
+                except Exception:
+                    pass
+
+        new_sum = current_sum
         stats_map = self._stats_to_dict(item.get("stats"))
         for v in stats_map.values():
             try:
                 new_sum += int(v)
             except Exception:
                 pass
+
         if new_sum > (sum_stats_limit or 0):
             return (
                 False,
@@ -126,17 +146,33 @@ class Hud:
     def activate_item(self, idx, sum_stats_limit):
         if idx < 0 or idx >= len(self.items):
             return
-        item = self.items[idx]
-        if item.get("isActive"):
+        item_to_activate = self.items[idx]
+        if item_to_activate.get("isActive"):
             return  # already active
-        ok, reason = self.can_activate_item(item, sum_stats_limit)
+        ok, reason = self.can_activate_item(item_to_activate, sum_stats_limit)
         if not ok:
             self.show_hud_alert(reason)
             return
-        item["isActive"] = True
+
+        # Deactivate other items of the same type
+        item_type_to_activate = item_to_activate.get("type")
+        if item_type_to_activate and item_type_to_activate != "unknown":
+            for i, other_item in enumerate(self.items):
+                if (
+                    other_item.get("isActive")
+                    and other_item.get("type") == item_type_to_activate
+                    and i != idx
+                ):
+                    other_item["isActive"] = False
+                    if hasattr(self.game_state, "send_item_activation"):
+                        self.game_state.send_item_activation(other_item["id"], False)
+                    # Assuming only one item of a given type can be active, so we can break.
+                    break
+
+        item_to_activate["isActive"] = True
         # Notify the server about the activation
         if hasattr(self.game_state, "send_item_activation"):
-            self.game_state.send_item_activation(item["id"], True)
+            self.game_state.send_item_activation(item_to_activate["id"], True)
         # reorder so active items are first
         self.reorder_hud_items()
         self.show_hud_alert("Item activated.", 1.5)
@@ -386,17 +422,27 @@ class Hud:
         stat_size = 18
 
         # compute sums
+        # Correctly calculate what the stat sum would be if the item is activated,
+        # accounting for deactivating another item of the same type.
         current_active_sum = self.active_stats_sum()
-        item_sum = 0
-        for v in stats.values():
-            try:
-                item_sum += int(v)
-            except Exception:
-                pass
-        sum_if_activated = current_active_sum + item_sum
+
+        item_type_to_activate = item.get("type")
+        item_to_be_deactivated = None
+        if item_type_to_activate and item_type_to_activate != "unknown":
+            for other_item in self.active_items():
+                if other_item.get("type") == item_type_to_activate:
+                    item_to_be_deactivated = other_item
+                    break
+
+        sum_if_activated = current_active_sum
+        if item_to_be_deactivated:
+            stats_to_remove = self._stats_to_dict(item_to_be_deactivated.get("stats"))
+            sum_if_activated -= sum(stats_to_remove.values())
+
+        item_sum = sum(stats.values())
+        sum_if_activated += item_sum
+
         limit = self.game_state.sum_stats_limit or 0
-        remaining_after_if = limit - sum_if_activated
-        remaining_now = limit - current_active_sum
 
         # show each stat line
         for k, v in stats.items():
@@ -414,7 +460,15 @@ class Hud:
         stat_y += 6
         # summary lines
         summary1 = f"Active stats sum: {current_active_sum}"
-        summary2 = f"Item adds: {item_sum} -> If activated: {sum_if_activated} / Limit: {limit}"
+
+        # If an item of the same type is active, the "Item adds" is the difference.
+        if item_to_be_deactivated:
+            stats_to_remove = self._stats_to_dict(item_to_be_deactivated.get("stats"))
+            item_sum_display = item_sum - sum(stats_to_remove.values())
+            summary2 = f"Item change: {item_sum_display:+} -> If activated: {sum_if_activated} / Limit: {limit}"
+        else:
+            summary2 = f"Item adds: {item_sum} -> If activated: {sum_if_activated} / Limit: {limit}"
+
         pr.draw_text_ex(
             pr.get_font_default(),
             summary1,
@@ -472,6 +526,7 @@ class Hud:
             )
             stat_y += 20
         else:
+            remaining_now = limit - current_active_sum
             pr.draw_text_ex(
                 pr.get_font_default(),
                 f"Points available now: {remaining_now}",

@@ -83,6 +83,7 @@ class ObjectLayersManager:
                             if iid in existing_items
                             else False
                         ),
+                        "type": "unknown",
                     }
                 )
                 continue
@@ -102,6 +103,7 @@ class ObjectLayersManager:
                     "desc": ol.data.item.description or "unknown",
                     "isActivable": bool(ol.data.item.activable),
                     "isActive": was_active,
+                    "type": ol.data.item.type or "unknown",
                 }
             )
         self.hud = hud_items
