@@ -103,7 +103,15 @@ class EntityRender:
         return [], None
 
     def _draw_entity_layers(
-        self, entity_id, pos_vec, dims_vec, direction, mode, object_layers_state
+        self,
+        entity_id,
+        pos_vec,
+        dims_vec,
+        direction,
+        mode,
+        object_layers_state,
+        entity_type=None,
+        entity_data=None,
     ):
         cell_size = self.game_state.cell_size if self.game_state.cell_size > 0 else 12.0
         scaled_pos_x = pos_vec.x * cell_size
@@ -114,6 +122,26 @@ class EntityRender:
         dest_rec = pr.Rectangle(
             scaled_pos_x, scaled_pos_y, scaled_dims_w, scaled_dims_h
         )
+
+        if self.game_state.dev_ui and entity_type and entity_data:
+            color = pr.BLACK  # fallback
+            if entity_type == "self":
+                color = self.game_state.colors.get("PLAYER", pr.Color(0, 200, 255, 255))
+            elif entity_type == "other":
+                color = self.game_state.colors.get(
+                    "OTHER_PLAYER", pr.Color(255, 100, 0, 255)
+                )
+            elif entity_type == "bot":
+                behavior = entity_data.get("behavior", "passive")
+                if behavior == "hostile":
+                    color = self.game_state.colors.get(
+                        "ERROR_TEXT", pr.Color(255, 50, 50, 255)
+                    )
+                else:
+                    color = self.game_state.colors.get(
+                        "OTHER_PLAYER", pr.Color(100, 200, 100, 255)
+                    )
+            pr.draw_rectangle_pro(dest_rec, pr.Vector2(0, 0), 0, color)
 
         if not object_layers_state:
             return
@@ -250,7 +278,7 @@ class EntityRender:
 
             # Render the entity's animated layers
             self._draw_entity_layers(
-                entity_id, pos, dims, direction, mode, object_layers
+                entity_id, pos, dims, direction, mode, object_layers, typ, data
             )
 
             # Draw the entity's label on top
