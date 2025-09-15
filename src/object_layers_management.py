@@ -10,6 +10,7 @@ from src.object_layer import (
     RenderFrames,
 )
 from src.services.object_layers import ObjectLayersService
+from config import ASSETS_BASE_URL
 
 
 class ObjectLayersManager:
@@ -108,6 +109,16 @@ class ObjectLayersManager:
             )
         self.hud = hud_items
         return hud_items
+
+    def _build_uri(
+        self,
+        item_type: str = "skin",
+        item_id: str = "anon",
+        direction_code: str = "08",
+        frame: int = 0,
+        extension: str = "png",
+    ) -> str:
+        return f"{ASSETS_BASE_URL}/{item_type}/{item_id}/{direction_code}/{frame}.{extension}"
 
     def _parse_object_layer(self, data: Dict[str, Any]) -> Optional[ObjectLayer]:
         """
