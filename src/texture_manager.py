@@ -1,8 +1,15 @@
+import argparse
 import ctypes
+import os
+import sys
 from typing import Dict, Optional
 
 import pyray as pr
 import requests
+
+# Add project root to path to import config
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
+from config import ASSETS_BASE_URL
 
 
 class TextureManager:
@@ -117,16 +124,14 @@ class TextureManager:
         print("All textures unloaded.")
 
 
-def main_test():
+def main_test(object_layer_uri: str):
     """
     A simple test function to demonstrate TextureManager usage.
     Loads an image from a URL and displays it in a window.
     """
     screen_width = 500
     screen_height = 500
-    ASSETS_BASE_URL = "http://localhost:8080/assets"
-    OBJECT_LAYER_URI = "/skin/anon/08/0.png"
-    image_url = f"{ASSETS_BASE_URL}{OBJECT_LAYER_URI}"
+    image_url = f"{ASSETS_BASE_URL}{object_layer_uri}"
 
     pr.init_window(screen_width, screen_height, "Texture Manager Test")
     pr.set_target_fps(60)
@@ -148,7 +153,7 @@ def main_test():
             y = screen_height // 2 - texture.height // 2
             pr.draw_texture(texture, x, y, pr.WHITE)
             pr.draw_text(
-                OBJECT_LAYER_URI,
+                object_layer_uri,
                 10,
                 10,
                 20,
@@ -172,4 +177,12 @@ def main_test():
 if __name__ == "__main__":
     # Note: This test requires the 'requests' library (pip install requests)
     # and a local web server serving the image at the specified URL.
-    main_test()
+    parser = argparse.ArgumentParser(description="Texture Manager Test")
+    parser.add_argument(
+        "--uri",
+        type=str,
+        default="/skin/anon/08/0.png",
+        help="The object layer URI to load from the assets server.",
+    )
+    args = parser.parse_args()
+    main_test(args.uri)
