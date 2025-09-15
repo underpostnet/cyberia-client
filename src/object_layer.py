@@ -86,3 +86,10 @@ class ObjectLayerData:
 class ObjectLayer:
     data: ObjectLayerData = field(default_factory=ObjectLayerData)
     sha256: str = ""
+
+
+# ObjectLayerState describes an object layer's state for an entity.
+@dataclass
+class ObjectLayerState:
+    item_id: str = ""
+    active: bool = False

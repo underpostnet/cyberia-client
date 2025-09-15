@@ -75,12 +75,18 @@ class ObjectLayersManager:
 
         return ol
 
-    def build_hud_items(self, item_ids: List[str]) -> List[Dict[str, Any]]:
+    def build_hud_items(
+        self, object_layers_state: List[Dict[str, Any]]
+    ) -> List[Dict[str, Any]]:
         hud_items: List[Dict[str, Any]] = []
-        # Create a mapping of existing items by ID to preserve their state
-        existing_items = {item["id"]: item for item in self.hud if "id" in item}
 
-        for iid in item_ids or []:
+        for ol_state in object_layers_state or []:
+            iid = ol_state.get("itemId")
+            is_active = ol_state.get("active", False)
+
+            if not iid:
+                continue
+
             ol = self.get_or_fetch(iid)
             if not ol:
                 # fallback minimal placeholder to keep HUD stable
@@ -92,20 +98,11 @@ class ObjectLayersManager:
                         "stats": Stats(),
                         "desc": "",
                         "isActivable": False,
-                        "isActive": (
-                            existing_items.get(iid, {}).get("isActive", False)
-                            if iid in existing_items
-                            else False
-                        ),
+                        "isActive": is_active,
                         "type": "unknown",
                     }
                 )
                 continue
-
-            # Check if this item was previously active
-            was_active = existing_items.get(ol.data.item.id or "unknown", {}).get(
-                "isActive", False
-            )
 
             # map to HUD-friendly dict while keeping Stats dataclass
             hud_items.append(
@@ -116,7 +113,7 @@ class ObjectLayersManager:
                     "stats": ol.data.stats or Stats(),
                     "desc": ol.data.item.description or "unknown",
                     "isActivable": bool(ol.data.item.activable),
-                    "isActive": was_active,
+                    "isActive": is_active,
                     "type": ol.data.item.type or "unknown",
                 }
             )

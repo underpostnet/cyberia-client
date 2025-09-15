@@ -230,16 +230,12 @@ class NetworkClient:
                         else:
                             self.game_state.target_pos = pr.Vector2(-1, -1)
 
-                        # HUD items from player's equipped/owned item IDs
+                        # HUD items from player's object layers state
                         try:
-                            item_ids = player_data.get("items")
-                            if item_ids is None:
-                                item_ids = player_data.get(
-                                    "Items"
-                                )  # fallback if server sends capitalized
-                            if isinstance(item_ids, list):
+                            object_layers_state = player_data.get("objectLayers")
+                            if isinstance(object_layers_state, list):
                                 self.hud.items = self.obj_layers_mgr.build_hud_items(
-                                    item_ids
+                                    object_layers_state
                                 )
                                 # maintain stable ordering: active first if any were active previously
                                 self.hud.reorder_hud_items()
@@ -277,6 +273,8 @@ class NetworkClient:
                             except Exception:
                                 mode_enum = ObjectLayerMode.IDLE
 
+                            object_layers_state = p_data.get("objectLayers", [])
+
                             # compute server pos vector
                             server_pos = pr.Vector2(pos.get("X"), pos.get("Y"))
                             dims_vec = pr.Vector2(
@@ -299,6 +297,7 @@ class NetworkClient:
                                     "direction": dir_enum,
                                     "mode": mode_enum,
                                     "last_update": time.time(),
+                                    "object_layers": object_layers_state,
                                 }
                             else:
                                 new_other_players[player_id] = {
@@ -309,6 +308,7 @@ class NetworkClient:
                                     "direction": dir_enum,
                                     "mode": mode_enum,
                                     "last_update": time.time(),
+                                    "object_layers": object_layers_state,
                                 }
                     # replace other_players atomically
                     self.game_state.other_players = new_other_players
@@ -352,6 +352,7 @@ class NetworkClient:
                             elif obj_type == "bot":
                                 # PARSE bot fields (new)
                                 behavior = obj_data.get("behavior", "passive")
+                                object_layers_state = obj_data.get("objectLayers", [])
                                 direction_val = obj_data.get("direction", 8)
                                 try:
                                     dir_int = int(direction_val)
@@ -396,6 +397,7 @@ class NetworkClient:
                                         "direction": dir_enum,
                                         "mode": mode_enum,
                                         "last_update": time.time(),
+                                        "object_layers": object_layers_state,
                                     }
                                 else:
                                     new_bots[obj_id] = {
@@ -407,6 +409,7 @@ class NetworkClient:
                                         "direction": dir_enum,
                                         "mode": mode_enum,
                                         "last_update": time.time(),
+                                        "object_layers": object_layers_state,
                                     }
 
                     # atomically replace bots
