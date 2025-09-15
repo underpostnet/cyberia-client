@@ -13,6 +13,8 @@ from src.dev_ui import DevUI
 from src.click_effect import ClickEffect
 from src.hud import Hud
 from src.object_layers_management import ObjectLayersManager
+from src.texture_manager import TextureManager
+from src.direction_converter import DirectionConverter
 from src.util import Util
 from src.render_core import RenderCore
 from src.entity_player_input import EntityPlayerInput
@@ -41,8 +43,13 @@ class NetworkClient:
         self.init_event = threading.Event()
 
         self.hud = Hud(self.game_state)
+        self.texture_manager = TextureManager()
+        self.direction_converter = DirectionConverter()
         # object layers/cache manager for HUD items
-        self.obj_layers_mgr = ObjectLayersManager()
+        self.obj_layers_mgr = ObjectLayersManager(
+            texture_manager=self.texture_manager,
+            direction_converter=self.direction_converter,
+        )
 
         # timing
         self._last_frame_time = time.time()
@@ -477,6 +484,9 @@ class NetworkClient:
                 else (1.0 / target_fps)
             )
             self._last_frame_time = now
+
+            # Process any pending texture caching requests from the network thread
+            self.obj_layers_mgr.process_texture_caching_queue()
 
             # read mouse input early (for UI hit testing)
             mouse_pos = pr.get_mouse_position()
