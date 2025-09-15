@@ -9,7 +9,7 @@ class EntityRender:
         self.obj_layers_mgr = obj_layers_mgr
         self.texture_manager = texture_manager
         # Cache for animation state:
-        # (entity_id, item_id) -> {frame_index, last_update_time, last_direction, last_mode}
+        # (entity_id, item_id) -> {frame_index, last_update_time, last_state_string, last_facing_direction}
         self.animation_state_cache = {}
 
     def interpolate_entities_positions(self):
@@ -159,15 +159,6 @@ class EntityRender:
             if not object_layer:
                 continue
 
-            frame_list, state_string = self._get_frames_for_state(
-                object_layer, direction, mode
-            )
-            if not frame_list:
-                continue
-
-            num_frames = len(frame_list)
-            frame_duration_ms = object_layer.data.render.frame_duration or 100
-
             # Manage animation state
             anim_key = (entity_id, item_id)
             now = time.time()
@@ -176,21 +167,44 @@ class EntityRender:
                 self.animation_state_cache[anim_key] = {
                     "frame_index": 0,
                     "last_update_time": now,
-                    "last_direction": direction,
-                    "last_mode": mode,
+                    "last_state_string": None,
+                    "last_facing_direction": (
+                        direction if direction != Direction.NONE else Direction.DOWN
+                    ),
                 }
             anim_state = self.animation_state_cache[anim_key]
 
-            # Reset animation if direction or mode has changed
-            if (
-                anim_state["last_direction"] != direction
-                or anim_state["last_mode"] != mode
-            ):
+            # Update last_facing_direction if we have a new direction that is not NONE
+            if direction != Direction.NONE:
+                anim_state["last_facing_direction"] = direction
+
+            render_direction = direction
+            render_mode = mode
+
+            # If the entity is idle and has no direction, use the last facing direction
+            # unless that direction was DOWN.
+            if direction == Direction.NONE and mode == ObjectLayerMode.IDLE:
+                last_facing_direction = anim_state.get(
+                    "last_facing_direction", Direction.DOWN
+                )
+                if last_facing_direction != Direction.DOWN:
+                    render_direction = last_facing_direction
+                    # render_mode is already IDLE, no change needed.
+
+            frame_list, state_string = self._get_frames_for_state(
+                object_layer, render_direction, render_mode
+            )
+            if not frame_list:
+                continue
+
+            # Reset animation if the rendered state string has changed.
+            if anim_state.get("last_state_string") != state_string:
                 anim_state["frame_index"] = 0
                 anim_state["last_update_time"] = now
-                anim_state["last_direction"] = direction
-                anim_state["last_mode"] = mode
+                anim_state["last_state_string"] = state_string
 
+            num_frames = len(frame_list)
+            frame_duration_ms = object_layer.data.render.frame_duration or 100
             # Update frame based on duration
             if (now - anim_state["last_update_time"]) * 1000 >= frame_duration_ms:
                 anim_state["frame_index"] = (anim_state["frame_index"] + 1) % num_frames
