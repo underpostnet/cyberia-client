@@ -4,8 +4,13 @@ from src.object_layer import Direction, ObjectLayerMode
 
 
 class EntityRender:
-    def __init__(self, game_state):
+    def __init__(self, game_state, obj_layers_mgr, texture_manager):
         self.game_state = game_state
+        self.obj_layers_mgr = obj_layers_mgr
+        self.texture_manager = texture_manager
+        # Cache for animation state:
+        # (entity_id, item_id) -> {frame_index, last_update_time, last_direction, last_mode}
+        self.animation_state_cache = {}
 
     def interpolate_entities_positions(self):
         """
@@ -68,6 +73,128 @@ class EntityRender:
             )
             y += font_size + 2
 
+    def _get_frames_for_state(self, object_layer, direction, mode):
+        """
+        Selects the appropriate frame list and its corresponding state string from an
+        object layer based on direction and mode, with fallbacks.
+        """
+        frames = object_layer.data.render.frames
+        mode_str = mode.name.lower()
+        direction_str = direction.name.lower()
+
+        # 1. Try specific direction and mode (e.g., 'up_walking')
+        attr_name = f"{direction_str}_{mode_str}"
+        if hasattr(frames, attr_name) and getattr(frames, attr_name):
+            return getattr(frames, attr_name), attr_name
+
+        # 2. Fallback to idle for the same direction (e.g., 'up_idle')
+        idle_attr_name = f"{direction_str}_idle"
+        if hasattr(frames, idle_attr_name) and getattr(frames, idle_attr_name):
+            return getattr(frames, idle_attr_name), idle_attr_name
+
+        # 3. Fallback to default idle
+        if frames.default_idle:
+            return frames.default_idle, "default_idle"
+
+        # 4. Final fallback to 'none' idle
+        if frames.none_idle:
+            return frames.none_idle, "none_idle"
+
+        return [], None
+
+    def _draw_entity_layers(
+        self, entity_id, pos_vec, dims_vec, direction, mode, object_layers_state
+    ):
+        cell_size = self.game_state.cell_size if self.game_state.cell_size > 0 else 12.0
+        scaled_pos_x = pos_vec.x * cell_size
+        scaled_pos_y = pos_vec.y * cell_size
+        scaled_dims_w = dims_vec.x * cell_size
+        scaled_dims_h = dims_vec.y * cell_size
+
+        dest_rec = pr.Rectangle(
+            scaled_pos_x, scaled_pos_y, scaled_dims_w, scaled_dims_h
+        )
+
+        if not object_layers_state:
+            return
+
+        # Render each active layer, with the loop index acting as a z-index
+        for z_index, layer_state in enumerate(object_layers_state):
+            if not layer_state.get("active"):
+                continue
+
+            item_id = layer_state.get("itemId")
+            if not item_id:
+                continue
+
+            object_layer = self.obj_layers_mgr.get_or_fetch(item_id)
+            if not object_layer:
+                continue
+
+            frame_list, state_string = self._get_frames_for_state(
+                object_layer, direction, mode
+            )
+            if not frame_list:
+                continue
+
+            num_frames = len(frame_list)
+            frame_duration_ms = object_layer.data.render.frame_duration or 100
+
+            # Manage animation state
+            anim_key = (entity_id, item_id)
+            now = time.time()
+
+            if anim_key not in self.animation_state_cache:
+                self.animation_state_cache[anim_key] = {
+                    "frame_index": 0,
+                    "last_update_time": now,
+                    "last_direction": direction,
+                    "last_mode": mode,
+                }
+            anim_state = self.animation_state_cache[anim_key]
+
+            # Reset animation if direction or mode has changed
+            if (
+                anim_state["last_direction"] != direction
+                or anim_state["last_mode"] != mode
+            ):
+                anim_state["frame_index"] = 0
+                anim_state["last_update_time"] = now
+                anim_state["last_direction"] = direction
+                anim_state["last_mode"] = mode
+
+            # Update frame based on duration
+            if (now - anim_state["last_update_time"]) * 1000 >= frame_duration_ms:
+                anim_state["frame_index"] = (anim_state["frame_index"] + 1) % num_frames
+                anim_state["last_update_time"] = now
+
+            current_frame_number = anim_state["frame_index"]
+
+            # Build texture URI and render
+            item = object_layer.data.item
+            direction_code = (
+                self.obj_layers_mgr.direction_converter.get_code_from_directions(
+                    [state_string]
+                )
+            )
+            if not direction_code:
+                continue
+
+            uri = self.obj_layers_mgr._build_uri(
+                item_type=item.type,
+                item_id=item.id,
+                direction_code=direction_code,
+                frame=current_frame_number,
+            )
+            texture = self.texture_manager.load_texture_from_url(uri)
+            if texture and texture.id > 0:
+                source_rec = pr.Rectangle(
+                    0, 0, float(texture.width), float(texture.height)
+                )
+                pr.draw_texture_pro(
+                    texture, source_rec, dest_rec, pr.Vector2(0, 0), 0.0, pr.WHITE
+                )
+
     def draw_entities_sorted(self, entity_player_render, entity_bot_render):
         """
         This function draws bots, other players and the local player in a single sorted pass
@@ -79,13 +206,13 @@ class EntityRender:
             # other players
             for player_id, p in self.game_state.other_players.items():
                 pos = p.get("interp_pos", p.get("pos_server"))
-                dims = p.get("dims", pr.Vector2(1, 1))
+                dims = p.get("dims", pr.Vector2(1.0, 1.0))
                 bottom_y = pos.y + dims.y  # measured in grid cells
                 entries.append(("other", bottom_y, player_id, p))
             # bots
             for bot_id, b in self.game_state.bots.items():
                 pos = b.get("interp_pos", b.get("pos_server"))
-                dims = b.get("dims", pr.Vector2(1, 1))
+                dims = b.get("dims", pr.Vector2(1.0, 1.0))
                 bottom_y = pos.y + dims.y
                 entries.append(("bot", bottom_y, bot_id, b))
             # self player (drawn as an entity too) use interpolated player pos
@@ -102,6 +229,7 @@ class EntityRender:
                         "dims": self_dims,
                         "direction": self.game_state.player_direction,
                         "mode": self.game_state.player_mode,
+                        "object_layers": self.game_state.player_object_layers,
                     },
                 )
             )
@@ -110,30 +238,42 @@ class EntityRender:
         entries.sort(key=lambda e: e[1])
 
         # draw in sorted order
-        for typ, _, _id, data in entries:
+        for typ, _, entity_id, data in entries:
+            # Extract common entity data
+            pos = data.get(
+                "interp_pos", data.get("pos", self.game_state.player_pos_interpolated)
+            )
+            dims = data.get("dims", pr.Vector2(1.0, 1.0))
+            direction = data.get("direction", Direction.NONE)
+            mode = data.get("mode", ObjectLayerMode.IDLE)
+            object_layers = data.get("object_layers", [])
 
-            if typ == "other":
-                # data contains interp_pos, dims, direction, mode
-                interp_pos = data.get(
-                    "interp_pos", data.get("pos_server", pr.Vector2(0, 0))
-                )
-                dims = data.get("dims", pr.Vector2(1, 1))
-                entity_player_render._draw_player_at(
-                    interp_pos,
-                    dims,
-                    False,
-                    data.get("direction", Direction.NONE),
-                    data.get("mode", ObjectLayerMode.IDLE),
-                    entity_id=_id,
-                )
-            elif typ == "bot":
-                entity_bot_render._draw_bot_at(data, bot_id=_id)
-            elif typ == "self":
-                entity_player_render._draw_player_at(
-                    data["pos"],
-                    data["dims"],
-                    True,
-                    data.get("direction", Direction.NONE),
-                    data.get("mode", ObjectLayerMode.IDLE),
-                    entity_id=_id or "you",
-                )
+            # Render the entity's animated layers
+            self._draw_entity_layers(
+                entity_id, pos, dims, direction, mode, object_layers
+            )
+
+            # Draw the entity's label on top
+            cell_size = (
+                self.game_state.cell_size if self.game_state.cell_size > 0 else 12.0
+            )
+            scaled_pos_x = pos.x * cell_size
+            scaled_pos_y = pos.y * cell_size
+            scaled_dims_w = dims.x * cell_size
+            center_x = scaled_pos_x + scaled_dims_w / 2.0
+            label_top_y = scaled_pos_y - 44
+
+            id_text = entity_id or "you"
+            dir_text = (
+                direction.name if isinstance(direction, Direction) else str(direction)
+            )
+            type_text = (
+                "Player" if typ in ["self", "other"] else data.get("behavior", "bot")
+            )
+
+            self._draw_entity_label(
+                center_x,
+                label_top_y,
+                [str(id_text), str(dir_text), str(type_text)],
+                font_size=12,
+            )

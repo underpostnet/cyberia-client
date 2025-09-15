@@ -31,26 +31,3 @@ class EntityBotRender:
             color_bot = self.game_state.colors.get(
                 "OTHER_PLAYER", pr.Color(100, 200, 100, 255)
             )
-
-        # Draw label stacked above the bot: ID, Direction, Behavior
-        center_x = scaled_pos_x + scaled_w / 2.0
-        label_top_y = scaled_pos_y - 44
-        id_text = bot_id if bot_id is not None else "bot"
-        dir_text = (
-            direction.name if isinstance(direction, Direction) else str(direction)
-        )
-        type_text = behavior
-
-        self.entity_render._draw_entity_label(
-            center_x,
-            label_top_y,
-            [str(id_text), str(dir_text), str(type_text)],
-            font_size=12,
-        )
-
-        pr.draw_rectangle_pro(
-            pr.Rectangle(scaled_pos_x, scaled_pos_y, scaled_w, scaled_h),
-            pr.Vector2(0, 0),
-            0,
-            color_bot,
-        )

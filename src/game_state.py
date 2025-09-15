@@ -3,6 +3,7 @@ import pyray as pr
 from src.object_layer import Direction, ObjectLayerMode
 import time
 
+
 class GameState:
     def __init__(self):
         self.mutex = threading.Lock()
@@ -35,6 +36,7 @@ class GameState:
         self.player_pos_server = pr.Vector2(0, 0)
         self.player_pos_prev = pr.Vector2(0, 0)
         self.player_dims = pr.Vector2(1.0, 1.0)
+        self.player_object_layers = []
 
         # other players: keyed by id -> dict with keys:
         # { pos_server:Vector2, pos_prev:Vector2, interp_pos:Vector2, dims:Vector2, direction:Direction, mode:ObjectLayerMode, last_update:float }

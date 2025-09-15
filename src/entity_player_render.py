@@ -49,32 +49,3 @@ class EntityPlayerRender:
             if is_self
             else self.game_state.colors.get("OTHER_PLAYER", pr.Color(255, 100, 0, 255))
         )
-
-        # Draw label stacked above the entity: ID, Direction, Type ("Player")
-        # compute center X of entity in pixels
-        center_x = scaled_pos_x + scaled_dims_w / 2.0
-        # compute top Y for labels (leave some padding)
-        label_top_y = scaled_pos_y - 44  # three small lines above entity
-        id_text = (
-            entity_id if entity_id is not None else ("you" if is_self else "player")
-        )
-        dir_text = (
-            direction.name if isinstance(direction, Direction) else str(direction)
-        )
-        type_text = "Player"
-
-        # draw 3 stacked lines
-        self.entity_render._draw_entity_label(
-            center_x,
-            label_top_y,
-            [str(id_text), str(dir_text), str(type_text)],
-            font_size=12,
-        )
-
-        # draw the player rectangle (entity)
-        pr.draw_rectangle_pro(
-            pr.Rectangle(scaled_pos_x, scaled_pos_y, scaled_dims_w, scaled_dims_h),
-            pr.Vector2(0, 0),
-            0,
-            color_player,
-        )

@@ -55,7 +55,9 @@ class NetworkClient:
         self._last_frame_time = time.time()
         self.util = Util()
         self.render_core = RenderCore(self)
-        self.entity_render = EntityRender(self.game_state)
+        self.entity_render = EntityRender(
+            self.game_state, self.obj_layers_mgr, self.texture_manager
+        )
 
         self.entity_player_input = EntityPlayerInput(self.game_state)
         self.entity_player_render = EntityPlayerRender(
@@ -234,6 +236,9 @@ class NetworkClient:
                         try:
                             object_layers_state = player_data.get("objectLayers")
                             if isinstance(object_layers_state, list):
+                                self.game_state.player_object_layers = (
+                                    object_layers_state
+                                )
                                 self.hud.items = self.obj_layers_mgr.build_hud_items(
                                     object_layers_state
                                 )
