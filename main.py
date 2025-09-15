@@ -42,7 +42,7 @@ class NetworkClient:
         # event to signal main thread to initialize graphics
         self.init_event = threading.Event()
 
-        self.hud = Hud(self.game_state)
+        self.hud = Hud(self)
         self.texture_manager = TextureManager()
         self.direction_converter = DirectionConverter()
         # object layers/cache manager for HUD items

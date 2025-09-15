@@ -4,8 +4,9 @@ from dataclasses import is_dataclass, asdict
 
 
 class Hud:
-    def __init__(self, game_state):
-        self.game_state = game_state
+    def __init__(self, client):
+        self.client = client
+        self.game_state = client.game_state
         # HUD bar state
         self.items = []  # list of dicts with dummy data
         self.bar_height = 96
@@ -164,15 +165,15 @@ class Hud:
                     and i != idx
                 ):
                     other_item["isActive"] = False
-                    if hasattr(self.game_state, "send_item_activation"):
-                        self.game_state.send_item_activation(other_item["id"], False)
+                    if hasattr(self.client, "send_item_activation"):
+                        self.client.send_item_activation(other_item["id"], False)
                     # Assuming only one item of a given type can be active, so we can break.
                     break
 
         item_to_activate["isActive"] = True
         # Notify the server about the activation
-        if hasattr(self.game_state, "send_item_activation"):
-            self.game_state.send_item_activation(item_to_activate["id"], True)
+        if hasattr(self.client, "send_item_activation"):
+            self.client.send_item_activation(item_to_activate["id"], True)
         # reorder so active items are first
         self.reorder_hud_items()
         self.show_hud_alert("Item activated.", 1.5)
@@ -185,8 +186,8 @@ class Hud:
             return
         item["isActive"] = False
         # Notify the server about the deactivation
-        if hasattr(self.game_state, "send_item_activation"):
-            self.game_state.send_item_activation(item["id"], False)
+        if hasattr(self.client, "send_item_activation"):
+            self.client.send_item_activation(item["id"], False)
         self.reorder_hud_items()
         self.show_hud_alert("Item deactivated.", 1.0)
 
