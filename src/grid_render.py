@@ -5,7 +5,21 @@ class GridRender:
     def __init__(self, game_state):
         self.game_state = game_state
 
+    def draw_grid_background(self):
+        grid_bg_color = self.game_state.colors.get("GRID_BACKGROUND", None)
+        if grid_bg_color:
+            grid_w = self.game_state.grid_w if self.game_state.grid_w > 0 else 100
+            grid_h = self.game_state.grid_h if self.game_state.grid_h > 0 else 100
+            cell_size = (
+                self.game_state.cell_size if self.game_state.cell_size > 0 else 12.0
+            )
+            map_w, map_h = grid_w * cell_size, grid_h * cell_size
+            pr.draw_rectangle(0, 0, int(map_w), int(map_h), grid_bg_color)
+
     def draw_grid_lines(self):
+        if not self.game_state.dev_ui:
+            return
+
         grid_w = self.game_state.grid_w if self.game_state.grid_w > 0 else 100
         grid_h = self.game_state.grid_h if self.game_state.grid_h > 0 else 100
         cell_size = self.game_state.cell_size if self.game_state.cell_size > 0 else 12.0
