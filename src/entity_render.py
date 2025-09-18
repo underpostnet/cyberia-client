@@ -141,6 +141,10 @@ class EntityRender:
                     color = self.game_state.colors.get(
                         "OTHER_PLAYER", pr.Color(100, 200, 100, 255)
                     )
+            elif entity_type == "floor":
+                color = self.game_state.colors.get(
+                    "FLOOR_BACKGROUND", pr.Color(50, 55, 50, 100)
+                )
             pr.draw_rectangle_pro(dest_rec, pr.Vector2(0, 0), 0, color)
 
         if not object_layers_state:

@@ -283,6 +283,7 @@ class RenderCore:
 
         # world drawing
         self.client.grid_render.draw_grid_background()
+        self.client.grid_render.draw_grid_floors()
         self.client.grid_render.draw_grid_lines()
         self.client.grid_render.draw_grid_objects()
         self.client.entity_render.draw_entities_sorted(

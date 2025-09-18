@@ -64,7 +64,7 @@ class NetworkClient:
             self.game_state, self.entity_render
         )
 
-        self.grid_render = GridRender(self.game_state)
+        self.grid_render = GridRender(self.game_state, self.entity_render)
 
         self.entity_bot_render = EntityBotRender(self.game_state, self.entity_render)
         self.dev_ui = DevUI(self.game_state, self.hud)
@@ -323,6 +323,7 @@ class NetworkClient:
                     self.game_state.obstacles = {}
                     self.game_state.portals = {}
                     self.game_state.foregrounds = {}  # reset foregrounds each update
+                    self.game_state.floors = {}
 
                     # reset bots container; we'll rebuild keeping prev positions when possible for interpolation
                     new_bots = {}
@@ -353,6 +354,14 @@ class NetworkClient:
                                     "dims": pr.Vector2(
                                         dims.get("Width"), dims.get("Height")
                                     ),
+                                }
+                            elif obj_type == "floor":
+                                self.game_state.floors[obj_id] = {
+                                    "pos": pr.Vector2(pos.get("X"), pos.get("Y")),
+                                    "dims": pr.Vector2(
+                                        dims.get("Width"), dims.get("Height")
+                                    ),
+                                    "object_layers": obj_data.get("objectLayers", []),
                                 }
                             elif obj_type == "bot":
                                 # PARSE bot fields (new)

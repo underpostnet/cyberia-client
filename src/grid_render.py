@@ -1,9 +1,11 @@
 import pyray as pr
+from src.object_layer import Direction, ObjectLayerMode
 
 
 class GridRender:
-    def __init__(self, game_state):
+    def __init__(self, game_state, entity_render):
         self.game_state = game_state
+        self.entity_render = entity_render
 
     def draw_grid_background(self):
         grid_bg_color = self.game_state.colors.get("GRID_BACKGROUND", None)
@@ -67,6 +69,41 @@ class GridRender:
                 pr.draw_line_ex(pr.Vector2(0, y), pr.Vector2(map_w, y), 1, fade_col)
             except Exception:
                 pr.draw_line(0, int(y), int(map_w), int(y), fade_col)
+
+    def draw_grid_floors(self):
+        cell_size = self.game_state.cell_size if self.game_state.cell_size > 0 else 12.0
+        with self.game_state.mutex:
+            for obj_id, obj_data in self.game_state.floors.items():
+                pos = obj_data["pos"]
+                dims = obj_data["dims"]
+                object_layers = obj_data.get("object_layers", [])
+
+                if object_layers:
+                    self.entity_render._draw_entity_layers(
+                        entity_id=obj_id,
+                        pos_vec=pos,
+                        dims_vec=dims,
+                        direction=Direction.NONE,
+                        mode=ObjectLayerMode.IDLE,
+                        object_layers_state=object_layers,
+                        entity_type="floor",
+                        entity_data=obj_data,
+                    )
+                else:
+                    # Fallback to drawing a simple rectangle
+                    pr.draw_rectangle_pro(
+                        pr.Rectangle(
+                            pos.x * cell_size,
+                            pos.y * cell_size,
+                            dims.x * cell_size,
+                            dims.y * cell_size,
+                        ),
+                        pr.Vector2(0, 0),
+                        0,
+                        self.game_state.colors.get(
+                            "FLOOR_BACKGROUND", pr.Color(50, 55, 50, 255)
+                        ),
+                    )
 
     def draw_grid_objects(self):
         cell_size = self.game_state.cell_size if self.game_state.cell_size > 0 else 12.0

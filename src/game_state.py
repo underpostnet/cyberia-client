@@ -30,6 +30,7 @@ class GameState:
         self.obstacles = {}
         self.foregrounds = {}
         self.portals = {}
+        self.floors = {}
 
         # player positions (player uses interpolation already)
         self.player_pos_interpolated = pr.Vector2(0, 0)
