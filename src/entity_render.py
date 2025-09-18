@@ -75,13 +75,13 @@ class EntityRender:
 
     def _draw_entity_life_bar(self, px, py, width, life, max_life):
         """
-        Helper to draw a life bar centered horizontally at px.
+        Helper to draw a life bar centered horizontally at px, with text.
         py is the top of the bar.
         """
         if max_life <= 0:
             return
 
-        bar_height = 5
+        bar_height = 12  # Increased height to fit text
         life_percentage = max(0.0, min(1.0, life / max_life))
         life_width = width * life_percentage
 
@@ -91,6 +91,32 @@ class EntityRender:
         pr.draw_rectangle(int(bar_x), int(py), int(width), bar_height, pr.BLACK)
         # Foreground (green)
         pr.draw_rectangle(int(bar_x), int(py), int(life_width), bar_height, pr.GREEN)
+
+        # Draw life text
+        life_text = f"{int(life)} / {int(max_life)}"
+        font_size = 10
+        text_width = pr.measure_text(life_text, font_size)
+        text_x = px - text_width / 2
+        text_y = py + (bar_height - font_size) / 2
+
+        # Draw text shadow for readability
+        pr.draw_text_ex(
+            pr.get_font_default(),
+            life_text,
+            pr.Vector2(text_x + 1, text_y + 1),
+            font_size,
+            1,
+            pr.BLACK,
+        )
+        # Draw main text
+        pr.draw_text_ex(
+            pr.get_font_default(),
+            life_text,
+            pr.Vector2(text_x, text_y),
+            font_size,
+            1,
+            pr.WHITE,
+        )
 
     def _get_frames_for_state(self, object_layer, direction, mode):
         """
@@ -343,10 +369,10 @@ class EntityRender:
             center_x = scaled_pos_x + scaled_dims_w / 2.0
 
             # Position label higher to make space for life bar
-            label_top_y = scaled_pos_y - 56
+            label_top_y = scaled_pos_y - 64
 
             # Position life bar between label and entity
-            life_bar_top_y = scaled_pos_y - 10
+            life_bar_top_y = scaled_pos_y - 22
 
             self._draw_entity_life_bar(
                 center_x, life_bar_top_y, scaled_dims_w, life, max_life
