@@ -79,6 +79,17 @@ class EntityRender:
         object layer based on direction and mode, with fallbacks.
         """
         frames = object_layer.data.render.frames
+
+        # Handle stateless objects first. They ignore direction and mode.
+        if object_layer.data.render.is_stateless:
+            # For stateless objects, always use 'none_idle' or 'default_idle' frames,
+            # which correspond to the "08" direction code.
+            if frames.none_idle:
+                return frames.none_idle, "none_idle"
+            if frames.default_idle:
+                return frames.default_idle, "default_idle"
+            return [], None  # Fallback for stateless if no default frames exist
+
         mode_str = mode.name.lower()
         direction_str = direction.name.lower()
 
