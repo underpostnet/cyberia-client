@@ -61,15 +61,31 @@ class EntityRender:
         text_lines: list of strings, drawn top->down
         """
         y = py
+        main_color = self.game_state.colors.get("UI_TEXT", pr.Color(255, 255, 255, 255))
+        shadow_color = pr.BLACK
+
         for line in text_lines:
             tw = pr.measure_text(line, font_size)
+            x = px - tw / 2
+
+            # Draw shadow
             pr.draw_text_ex(
                 pr.get_font_default(),
                 line,
-                pr.Vector2(px - tw / 2, y),
+                pr.Vector2(x + 1, y + 1),
                 font_size,
                 1,
-                self.game_state.colors.get("UI_TEXT", pr.Color(255, 255, 255, 255)),
+                shadow_color,
+            )
+
+            # Draw main text
+            pr.draw_text_ex(
+                pr.get_font_default(),
+                line,
+                pr.Vector2(x, y),
+                font_size,
+                1,
+                main_color,
             )
             y += font_size + 2
 
