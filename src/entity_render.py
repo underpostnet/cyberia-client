@@ -73,6 +73,25 @@ class EntityRender:
             )
             y += font_size + 2
 
+    def _draw_entity_life_bar(self, px, py, width, life, max_life):
+        """
+        Helper to draw a life bar centered horizontally at px.
+        py is the top of the bar.
+        """
+        if max_life <= 0:
+            return
+
+        bar_height = 5
+        life_percentage = max(0.0, min(1.0, life / max_life))
+        life_width = width * life_percentage
+
+        bar_x = px - width / 2
+
+        # Background (black)
+        pr.draw_rectangle(int(bar_x), int(py), int(width), bar_height, pr.BLACK)
+        # Foreground (green)
+        pr.draw_rectangle(int(bar_x), int(py), int(life_width), bar_height, pr.GREEN)
+
     def _get_frames_for_state(self, object_layer, direction, mode):
         """
         Selects the appropriate frame list and its corresponding state string from an
@@ -287,6 +306,8 @@ class EntityRender:
                         "direction": self.game_state.player_direction,
                         "mode": self.game_state.player_mode,
                         "object_layers": self.game_state.player_object_layers,
+                        "life": self.game_state.player_life,
+                        "max_life": self.game_state.player_max_life,
                     },
                 )
             )
@@ -304,6 +325,8 @@ class EntityRender:
             direction = data.get("direction", Direction.NONE)
             mode = data.get("mode", ObjectLayerMode.IDLE)
             object_layers = data.get("object_layers", [])
+            life = data.get("life", 100.0)
+            max_life = data.get("max_life", 100.0)
 
             # Render the entity's animated layers
             self._draw_entity_layers(
@@ -318,8 +341,16 @@ class EntityRender:
             scaled_pos_y = pos.y * cell_size
             scaled_dims_w = dims.x * cell_size
             center_x = scaled_pos_x + scaled_dims_w / 2.0
-            label_top_y = scaled_pos_y - 44
 
+            # Position label higher to make space for life bar
+            label_top_y = scaled_pos_y - 56
+
+            # Position life bar between label and entity
+            life_bar_top_y = scaled_pos_y - 10
+
+            self._draw_entity_life_bar(
+                center_x, life_bar_top_y, scaled_dims_w, life, max_life
+            )
             id_text = entity_id or "you"
             dir_text = (
                 direction.name if isinstance(direction, Direction) else str(direction)
