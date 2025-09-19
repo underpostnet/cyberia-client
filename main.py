@@ -434,7 +434,7 @@ class NetworkClient:
                                     old_life = prev_bot.get("life", 100.0)
                                     new_life = float(obj_data.get("life", 100.0))
                                     life_diff = new_life - old_life
-                                    if life_diff != 0:
+                                    if life_diff != 0 and behavior != "bullet":
                                         self.floating_text_manager.accumulate_life_change(
                                             obj_id,
                                             life_diff,
