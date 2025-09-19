@@ -14,6 +14,7 @@ from src.click_effect import ClickEffect
 from src.hud import Hud
 from src.object_layers_management import ObjectLayersManager
 from src.texture_manager import TextureManager
+from src.floating_text import FloatingTextManager
 from src.direction_converter import DirectionConverter
 from src.util import Util
 from src.render_core import RenderCore
@@ -50,6 +51,7 @@ class NetworkClient:
             texture_manager=self.texture_manager,
             direction_converter=self.direction_converter,
         )
+        self.floating_text_manager = FloatingTextManager(self.game_state)
 
         # timing
         self._last_frame_time = time.time()
@@ -170,11 +172,20 @@ class NetworkClient:
                         self.game_state.player_pos_prev = (
                             self.game_state.player_pos_interpolated
                         )
+                        old_life = self.game_state.player_life
+                        new_life = float(player_data.get("life", 100.0))
+                        life_diff = new_life - old_life
+                        if life_diff != 0:
+                            self.floating_text_manager.add_life_change_text(
+                                life_diff,
+                                self.game_state.player_pos_interpolated,
+                                self.game_state.player_dims,
+                            )
+
                         self.game_state.player_id = player_data.get("id")
                         self.game_state.player_map_id = int(player_data.get("MapID", 0))
-                        self.game_state.player_life = float(
-                            player_data.get("life", 100.0)
-                        )
+                        self.game_state.player_life = new_life
+
                         self.game_state.player_max_life = float(
                             player_data.get("maxLife", 100.0)
                         )
@@ -295,6 +306,16 @@ class NetworkClient:
                             # if we had the player before, carry forward prev/server; else initialize both to server
                             prev_entry = self.game_state.other_players.get(player_id)
                             if prev_entry:
+                                old_life = prev_entry.get("life", 100.0)
+                                new_life = float(p_data.get("life", 100.0))
+                                life_diff = new_life - old_life
+                                if life_diff != 0:
+                                    self.floating_text_manager.add_life_change_text(
+                                        life_diff,
+                                        prev_entry.get("interp_pos", server_pos),
+                                        dims_vec,
+                                    )
+
                                 pos_prev = prev_entry.get("pos_server", server_pos)
                                 # set new entry preserving previous pos_server as pos_prev for interpolation
                                 new_other_players[player_id] = {
@@ -308,7 +329,7 @@ class NetworkClient:
                                     "mode": mode_enum,
                                     "last_update": time.time(),
                                     "object_layers": object_layers_state,
-                                    "life": float(p_data.get("life", 100.0)),
+                                    "life": new_life,
                                     "max_life": float(p_data.get("maxLife", 100.0)),
                                 }
                             else:
@@ -408,6 +429,16 @@ class NetworkClient:
 
                                 prev_bot = self.game_state.bots.get(obj_id)
                                 if prev_bot:
+                                    old_life = prev_bot.get("life", 100.0)
+                                    new_life = float(obj_data.get("life", 100.0))
+                                    life_diff = new_life - old_life
+                                    if life_diff != 0:
+                                        self.floating_text_manager.add_life_change_text(
+                                            life_diff,
+                                            prev_bot.get("interp_pos", server_pos),
+                                            dims_vec,
+                                        )
+
                                     pos_prev = prev_bot.get("pos_server", server_pos)
                                     new_bots[obj_id] = {
                                         "pos_prev": pos_prev,
@@ -421,7 +452,7 @@ class NetworkClient:
                                         "mode": mode_enum,
                                         "last_update": time.time(),
                                         "object_layers": object_layers_state,
-                                        "life": float(obj_data.get("life", 100.0)),
+                                        "life": new_life,
                                         "max_life": float(
                                             obj_data.get("maxLife", 100.0)
                                         ),
@@ -810,8 +841,9 @@ class NetworkClient:
             except Exception:
                 pass
 
-            # update client-side click effects
+            # update client-side effects
             self.click_effect.update_click_pointers()
+            self.floating_text_manager.update(dt)
 
             # draw
             self.render_core.draw_game()

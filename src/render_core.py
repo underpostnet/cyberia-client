@@ -293,6 +293,7 @@ class RenderCore:
         self.draw_aoi_circle()
         self.draw_foregrounds()
         self.client.click_effect.draw_click_pointers()  # client-only effect
+        self.client.floating_text_manager.draw()
 
         try:
             pr.end_mode_2d()
