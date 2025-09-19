@@ -122,6 +122,12 @@ class Hud:
         if not item.get("isActivable"):
             return False, "Item cannot be activated."
 
+        # You must have at least one skin active.
+        item_type_to_activate = item.get("type")
+        has_active_skin = any(it.get("type") == "skin" for it in self.active_items())
+        if not has_active_skin and item_type_to_activate != "skin":
+            return False, "You must have at least one skin active."
+
         item_type_to_activate = item.get("type")
         item_to_be_deactivated = None
         if item_type_to_activate and item_type_to_activate != "unknown":
@@ -204,6 +210,16 @@ class Hud:
         item = self.items[idx]
         if not item.get("isActive"):
             return
+
+        # Prevent deactivating the last active skin
+        if item.get("type") == "skin":
+            active_skins = [
+                it for it in self.active_items() if it.get("type") == "skin"
+            ]
+            if len(active_skins) <= 1:
+                self.show_hud_alert("Cannot deactivate the last active skin.")
+                return
+
         item["isActive"] = False
         if hasattr(self.client, "send_item_activation"):
             self.client.send_item_activation(item["id"], False)
