@@ -222,8 +222,15 @@ class EntityRender:
         if not object_layers_state:
             return
 
-        # Render each active layer, with the loop index acting as a z-index
-        for z_index, layer_state in enumerate(object_layers_state):
+        # Define the sorting order for item types.
+        # Lower numbers are rendered first (at the bottom).
+        item_type_priority = {"floor": 0, "skin": 1, "weapon": 2, "skill": 3}
+
+        # Create a temporary list of layers to be rendered, enriched with sorting priority.
+        # This is a good practice to avoid modifying the original list and to gather all
+        # necessary data for sorting before the rendering loop.
+        layers_to_render = []
+        for layer_state in object_layers_state:
             if not layer_state.get("active"):
                 continue
 
@@ -234,6 +241,18 @@ class EntityRender:
             object_layer = self.obj_layers_mgr.get_or_fetch(item_id)
             if not object_layer:
                 continue
+
+            item_type = object_layer.data.item.type
+            # Get priority, with a high default for unknown types to render them on top.
+            priority = item_type_priority.get(item_type, 99)
+            layers_to_render.append((layer_state, priority, object_layer))
+
+        # Sort the layers based on priority. This ensures a consistent render order.
+        layers_to_render.sort(key=lambda x: x[1])
+
+        # Render each active layer, with the loop index acting as a z-index
+        for z_index, (layer_state, _, object_layer) in enumerate(layers_to_render):
+            item_id = layer_state.get("itemId")
 
             # Manage animation state
             anim_key = (entity_id, item_id)
