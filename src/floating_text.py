@@ -40,6 +40,9 @@ class FloatingTextManager:
         self.shadow_offset = 2
         self.shadow_color = pr.Color(0, 0, 0, 150)
         self.duration = 1.5  # seconds
+        # Accumulate damage/healing over an interval to reduce text spam
+        self.life_diff_accumulators = {}
+        self.accumulation_interval = 0.4  # seconds
 
     def add_life_change_text(
         self, diff: float, entity_pos: pr.Vector2, entity_dims: pr.Vector2
@@ -64,15 +67,57 @@ class FloatingTextManager:
 
         self.add_text(text, start_pos_world, color)
 
+    def accumulate_life_change(
+        self,
+        entity_id: str,
+        diff: float,
+        entity_pos: pr.Vector2,
+        entity_dims: pr.Vector2,
+    ):
+        """Accumulates life changes for an entity over a short interval."""
+        if diff == 0 or not entity_id:
+            return
+
+        if entity_id not in self.life_diff_accumulators:
+            self.life_diff_accumulators[entity_id] = {
+                "accumulated_diff": diff,
+                "first_update_time": time.time(),
+                "pos": entity_pos,
+                "dims": entity_dims,
+            }
+        else:
+            accumulator = self.life_diff_accumulators[entity_id]
+            accumulator["accumulated_diff"] += diff
+            # Always update pos/dims to the latest known values
+            accumulator["pos"] = entity_pos
+            accumulator["dims"] = entity_dims
+
     def add_text(self, text: str, pos: pr.Vector2, color: pr.Color):
         """Adds a new floating text to be managed."""
         ft = FloatingText(text, pos, color, self.duration, self.font_size)
         self.texts.append(ft)
 
     def update(self, dt: float):
-        """Updates all active floating texts."""
+        """Updates all active floating texts and flushes accumulators."""
         current_time = time.time()
-        # Filter out old texts and update remaining ones
+
+        # --- Flush accumulators that have expired ---
+        flushed_ids = []
+        for entity_id, accumulator in self.life_diff_accumulators.items():
+            if (
+                current_time - accumulator["first_update_time"]
+            ) >= self.accumulation_interval:
+                self.add_life_change_text(
+                    accumulator["accumulated_diff"],
+                    accumulator["pos"],
+                    accumulator["dims"],
+                )
+                flushed_ids.append(entity_id)
+
+        for entity_id in flushed_ids:
+            del self.life_diff_accumulators[entity_id]
+
+        # --- Update existing floating texts (animation and lifetime) ---
         active_texts = []
         for ft in self.texts:
             elapsed = current_time - ft.start_time

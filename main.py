@@ -176,7 +176,8 @@ class NetworkClient:
                         new_life = float(player_data.get("life", 100.0))
                         life_diff = new_life - old_life
                         if life_diff != 0:
-                            self.floating_text_manager.add_life_change_text(
+                            self.floating_text_manager.accumulate_life_change(
+                                player_data.get("id"),
                                 life_diff,
                                 self.game_state.player_pos_interpolated,
                                 self.game_state.player_dims,
@@ -310,7 +311,8 @@ class NetworkClient:
                                 new_life = float(p_data.get("life", 100.0))
                                 life_diff = new_life - old_life
                                 if life_diff != 0:
-                                    self.floating_text_manager.add_life_change_text(
+                                    self.floating_text_manager.accumulate_life_change(
+                                        player_id,
                                         life_diff,
                                         prev_entry.get("interp_pos", server_pos),
                                         dims_vec,
@@ -433,7 +435,8 @@ class NetworkClient:
                                     new_life = float(obj_data.get("life", 100.0))
                                     life_diff = new_life - old_life
                                     if life_diff != 0:
-                                        self.floating_text_manager.add_life_change_text(
+                                        self.floating_text_manager.accumulate_life_change(
+                                            obj_id,
                                             life_diff,
                                             prev_bot.get("interp_pos", server_pos),
                                             dims_vec,
