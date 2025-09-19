@@ -248,8 +248,7 @@ class NetworkClient:
                                 self.hud.items = self.obj_layers_mgr.build_hud_items(
                                     object_layers_state
                                 )
-                                # maintain stable ordering: active first if any were active previously
-                                self.hud.reorder_hud_items()
+
                         except Exception:
                             pass
 

@@ -1,58 +1,72 @@
 import time
 import pyray as pr
 from dataclasses import is_dataclass, asdict
+from typing import Any, Dict, List, Optional, Tuple
 
 
 class Hud:
-    def __init__(self, client):
+    """HUD manager for the game UI.
+
+    Notes:
+        - Reordering of HUD items was removed to keep indices stable so the
+          currently opened view never changes automatically when items are
+          toggled on/off.
+        - The public API keeps previous method names for compatibility but
+          avoids side-effects that change the visible view.
+    """
+
+    def __init__(self, client: Any) -> None:
         self.client = client
         self.game_state = client.game_state
-        # HUD bar state
-        self.items = []  # list of dicts with dummy data
-        self.bar_height = 96
-        self.bar_padding = 12
-        self.item_w = 80
-        self.item_h = 72
-        self.item_spacing = 12
-        self.scroll_x = 0.0  # negative values scroll left
-        self.dragging = False
-        self.drag_start_x = 0.0
-        self.scroll_start = 0.0
-        self.drag_moved = False
-        self.click_threshold = 6  # pixels threshold to consider a click vs drag
 
-        # view state (antes "modal")
-        self.view_open = False
-        self.view_selected = None  # index of selected item or None
-        self.close_w = 36
-        self.close_h = 30
+        # HUD bar state
+        self.items: List[Dict[str, Any]] = []  # list of dicts with item data
+        self.bar_height: int = 96
+        self.bar_padding: int = 12
+        self.item_w: int = 80
+        self.item_h: int = 72
+        self.item_spacing: int = 12
+        self.scroll_x: float = 0.0  # negative values scroll left
+
+        # drag state for scroll
+        self.dragging: bool = False
+        self.drag_start_x: float = 0.0
+        self.scroll_start: float = 0.0
+        self.drag_moved: bool = False
+        self.click_threshold: int = 6  # pixels threshold to consider click vs drag
+
+        # view state (store index of selected item or None). Since we removed
+        # reorder logic, using an index is stable in the current design.
+        self.view_open: bool = False
+        self.view_selected: Optional[int] = None  # index of selected item or None
+        self.close_w: int = 36
+        self.close_h: int = 30
 
         # HUD alerts
-        self.alert_text = ""
-        self.alert_until = 0.0
+        self.alert_text: str = ""
+        self.alert_until: float = 0.0
 
-        # stored rect for view's activate button (so click can check bounds)
-        self.view_button_rect = None  # (x,y,w,h)
+        # stored rect for view's activate button (so clicks can check bounds)
+        self.view_button_rect: Optional[Tuple[float, float, float, float]] = None
 
         # HUD slide/collapse state and animation
-        self.collapsed = False
+        self.collapsed: bool = False
         # 0.0 = fully visible, 1.0 = fully hidden (off-screen)
-        self.slide_progress = 0.0
-        self.slide_target = 0.0
-        self.slide_speed = 6.0  # progress units per second
+        self.slide_progress: float = 0.0
+        self.slide_target: float = 0.0
+        self.slide_speed: float = 6.0  # progress units per second
 
-        # position/rect of the small toggle button (updated in draw)
-        self.toggle_rect = None
+        # toggle button rect
+        self.toggle_rect: Optional[Tuple[float, float, float, float]] = None
 
-        # flag to avoid interpreting the toggle click as a HUD item click immediately after toggle
-        self._ignore_next_hud_click = False
-        self._last_toggle_time = 0.0
-        self._toggle_ignore_timeout = (
-            0.18  # seconds to ignore hud clicks after pressing toggle
-        )
+        # flag to avoid interpreting the toggle click as a HUD item click
+        self._ignore_next_hud_click: bool = False
+        self._last_toggle_time: float = 0.0
+        self._toggle_ignore_timeout: float = 0.18
 
-    def _stats_to_dict(self, stats):
-        # Accept Stats dataclass or plain dict, return dict[str,int]
+    # -------------------------- utility helpers --------------------------
+    def _stats_to_dict(self, stats: Any) -> Dict[str, int]:
+        """Accept Stats dataclass or plain dict, return dict[str,int]."""
         if stats is None:
             return {}
         try:
@@ -61,7 +75,6 @@ class Hud:
             elif isinstance(stats, dict):
                 d = stats
             else:
-                # fallback: try to read attributes
                 d = {
                     k: getattr(stats, k)
                     for k in [
@@ -76,8 +89,8 @@ class Hud:
                 }
         except Exception:
             d = {}
-        # ensure ints
-        out = {}
+
+        out: Dict[str, int] = {}
         for k, v in d.items():
             try:
                 out[k] = int(v)
@@ -88,10 +101,10 @@ class Hud:
                     out[k] = 0
         return out
 
-    def active_items(self):
+    def active_items(self) -> List[Dict[str, Any]]:
         return [it for it in self.items if it.get("isActive")]
 
-    def active_stats_sum(self):
+    def active_stats_sum(self) -> int:
         total = 0
         for it in self.active_items():
             stats_map = self._stats_to_dict(it.get("stats"))
@@ -102,7 +115,9 @@ class Hud:
                     pass
         return total
 
-    def can_activate_item(self, item, sum_stats_limit):
+    def can_activate_item(
+        self, item: Dict[str, Any], sum_stats_limit: Optional[int]
+    ) -> Tuple[bool, str]:
         # check activable
         if not item.get("isActivable"):
             return False, "Item cannot be activated."
@@ -138,13 +153,16 @@ class Hud:
                 pass
 
         if new_sum > (sum_stats_limit or 0):
-            return (
-                False,
-                f"Activation would exceed stats limit ({sum_stats_limit}).",
-            )
+            return False, f"Activation would exceed stats limit ({sum_stats_limit})."
         return True, ""
 
-    def activate_item(self, idx, sum_stats_limit):
+    # -------------------------- activation API --------------------------
+    def activate_item(self, idx: int, sum_stats_limit: Optional[int]) -> None:
+        """Activate item at `idx` if allowed.
+
+        Important: activation no longer reorders the HUD items so the currently
+        opened view (by index) does not change automatically.
+        """
         if idx < 0 or idx >= len(self.items):
             return
         item_to_activate = self.items[idx]
@@ -155,7 +173,7 @@ class Hud:
             self.show_hud_alert(reason)
             return
 
-        # Deactivate other items of the same type
+        # Deactivate other items of the same type (keep original indices)
         item_type_to_activate = item_to_activate.get("type")
         if item_type_to_activate and item_type_to_activate != "unknown":
             for i, other_item in enumerate(self.items):
@@ -167,64 +185,56 @@ class Hud:
                     other_item["isActive"] = False
                     if hasattr(self.client, "send_item_activation"):
                         self.client.send_item_activation(other_item["id"], False)
-                    # Assuming only one item of a given type can be active, so we can break.
-                    break
+                    # keep scanning in case multiple exist, but do not reorder
 
         item_to_activate["isActive"] = True
-        # Notify the server about the activation
         if hasattr(self.client, "send_item_activation"):
             self.client.send_item_activation(item_to_activate["id"], True)
-        # reorder so active items are first
-        self.reorder_hud_items()
+
         self.show_hud_alert("Item activated.", 1.5)
 
-    def desactivate_item(self, idx):
+    def desactivate_item(self, idx: int) -> None:
+        """Deprecated spelling kept for compatibility."""
+        # alias to the correctly spelled method
+        self.deactivate_item(idx)
+
+    def deactivate_item(self, idx: int) -> None:
         if idx < 0 or idx >= len(self.items):
             return
         item = self.items[idx]
         if not item.get("isActive"):
             return
         item["isActive"] = False
-        # Notify the server about the deactivation
         if hasattr(self.client, "send_item_activation"):
             self.client.send_item_activation(item["id"], False)
-        self.reorder_hud_items()
+
         self.show_hud_alert("Item deactivated.", 1.0)
 
-    def reorder_hud_items(self):
-        # Move active items to the front (stable)
-        active = [it for it in self.items if it.get("isActive")]
-        inactive = [it for it in self.items if not it.get("isActive")]
-        self.items = active + inactive
-        # clamp active count to 4 just in case (deactivate extras)
-        if len(active) > 4:
-            # deactivate extras beyond first 4
-            for it in active[4:]:
-                it["isActive"] = False
-            # recompose
-            active = [it for it in self.items if it.get("isActive")]
-            inactive = [it for it in self.items if not it.get("isActive")]
-            self.items = active + inactive
-
-    def show_hud_alert(self, text, duration=2.5):
+    # -------------------------- drawing helpers --------------------------
+    def show_hud_alert(self, text: str, duration: float = 2.5) -> None:
         self.alert_text = text
         self.alert_until = time.time() + duration
 
-    def _hud_bar_rect(self, screen_width, screen_height):
-        # returns (x, y, w, h) in screen coords using slide progress
+    def _hud_bar_rect(
+        self, screen_width: int, screen_height: int
+    ) -> Tuple[int, int, int, int]:
         x = 0
         h = self.bar_height
-        # base Y if fully visible
         base_y = screen_height - h
-        # when fully hidden (progress=1), top of HUD will be screen_height (i.e., out of view)
         hidden_y = screen_height
-        # linear interpolate between base_y and hidden_y based on progress
         y = pr.lerp(base_y, hidden_y, self.slide_progress)
         w = screen_width
         return x, y, w, h
 
-    def draw_hud_item_button(self, x, y, w, h, item, hovered):
-        # simple visual for an item in hud bar using draw_rectangle_pro exclusively
+    def draw_hud_item_button(
+        self,
+        x: float,
+        y: float,
+        w: float,
+        h: float,
+        item: Dict[str, Any],
+        hovered: bool,
+    ) -> None:
         bg = pr.Color(36, 36, 36, 220)
         hover_bg = pr.Color(70, 70, 70, 230)
         border = pr.Color(255, 255, 255, 18)
@@ -236,10 +246,8 @@ class Hud:
         try:
             pr.draw_rectangle_lines(int(x), int(y), int(w), int(h), border)
         except Exception:
-            # draw_rectangle_lines may not exist in some bindings; ignore in that case
             pass
 
-        # if active, draw yellow border overlay (thicker)
         if item.get("isActive"):
             try:
                 pr.draw_rectangle_lines_ex(
@@ -259,7 +267,6 @@ class Hud:
                 except Exception:
                     pass
 
-        # icon: big char centered top
         icon_size = 28
         icon = item.get("icon", "?")
         tw = pr.measure_text(icon, icon_size)
@@ -272,7 +279,6 @@ class Hud:
             txt_color,
         )
 
-        # name small centered below
         name = item.get("name", "")
         name_size = 12
         tw2 = pr.measure_text(name, name_size)
@@ -285,31 +291,25 @@ class Hud:
             txt_color,
         )
 
-    def draw_hud_bar(self, mouse_pos, screen_width, screen_height):
-        # If HUD is fully hidden (progress near 1.0), do NOT draw the bar.
-        # Still compute total widths so scroll clamping logic can use them.
+    def draw_hud_bar(self, mouse_pos: Any, screen_width: int, screen_height: int):
         x, y, w, h = self._hud_bar_rect(screen_width, screen_height)
 
         inner_x = x + self.bar_padding
         inner_y = y + (h - self.item_h) / 2
         inner_w = w - (self.bar_padding * 2)
 
-        # total width of items
         count = len(self.items)
-        total_w = count * self.item_w + (count - 1) * self.item_spacing
+        total_w = count * self.item_w + max(0, (count - 1)) * self.item_spacing
 
-        # clamp scroll range
         max_scroll = max(0, total_w - inner_w)
         if self.scroll_x > 0:
             self.scroll_x = 0
         if self.scroll_x < -max_scroll:
             self.scroll_x = -max_scroll
 
-        # If fully hidden, skip drawing the bar entirely (only toggle remains visible)
         if self.slide_progress >= 0.999:
             return None, total_w, inner_w
 
-        # draw background bar using draw_rectangle_pro
         pr.draw_rectangle_pro(
             pr.Rectangle(int(x), int(y), int(w), int(h)),
             pr.Vector2(0, 0),
@@ -329,7 +329,6 @@ class Hud:
         for idx, item in enumerate(self.items):
             bx = offset + idx * (self.item_w + self.item_spacing)
             by = inner_y
-            # compute hover in screen coords
             hovered = (
                 mouse_pos.x >= bx
                 and mouse_pos.x <= bx + self.item_w
@@ -338,13 +337,13 @@ class Hud:
             )
             if hovered:
                 hovered_index = idx
-            # draw item
             self.draw_hud_item_button(bx, by, self.item_w, self.item_h, item, hovered)
 
-        # Note: toggle button is NOT drawn here anymore (drawn on top via draw_hud_toggle)
         return hovered_index, total_w, inner_w
 
-    def draw_hud_small_button(self, x, y, w, h, label):
+    def draw_hud_small_button(
+        self, x: float, y: float, w: float, h: float, label: str
+    ) -> None:
         bg = pr.Color(60, 60, 60, 230)
         hover_bg = pr.Color(90, 90, 90, 240)
         border = pr.Color(255, 255, 255, 20)
@@ -375,24 +374,24 @@ class Hud:
             txt_color,
         )
 
-    def draw_hud_view(self, screen_width, screen_height):
-        """
-        Draw the item view (English text). The view area adapts to the HUD slide state
-        so it never overlaps with the HUD bar while the HUD is visible.
-        """
+    def draw_hud_view(self, screen_width: int, screen_height: int) -> None:
         if self.view_selected is None:
             self.view_button_rect = None
             return
+        # guard index validity
+        if not (0 <= self.view_selected < len(self.items)):
+            self.view_selected = None
+            self.view_button_rect = None
+            return
+
         item = self.items[self.view_selected]
 
-        # compute view area (full width, height minus hud_bar_height occupied portion)
         hud_occupied = (1.0 - self.slide_progress) * self.bar_height
         view_x = 0
         view_y = 0
         view_w = screen_width
         view_h = int(screen_height - hud_occupied)
 
-        # background overlay in the view area (semi-transparent black) using draw_rectangle_pro
         pr.draw_rectangle_pro(
             pr.Rectangle(view_x, view_y, view_w, view_h),
             pr.Vector2(0, 0),
@@ -400,12 +399,10 @@ class Hud:
             pr.Color(0, 0, 0, 180),
         )
 
-        # Now draw item info
         margin = 28
         start_x = view_x + margin
         start_y = view_y + margin
 
-        # title (icon + name)
         title = f"{item['icon']}  {item['name']}"
         title_size = 32
         pr.draw_text_ex(
@@ -417,14 +414,10 @@ class Hud:
             self.game_state.colors.get("UI_TEXT", pr.Color(255, 255, 255, 255)),
         )
 
-        # stats block below title with dynamic totals and warnings
         stats = self._stats_to_dict(item.get("stats"))
         stat_y = start_y + 24 + 28
         stat_size = 18
 
-        # compute sums
-        # Correctly calculate what the stat sum would be if the item is activated,
-        # accounting for deactivating another item of the same type.
         current_active_sum = self.active_stats_sum()
 
         item_type_to_activate = item.get("type")
@@ -445,7 +438,6 @@ class Hud:
 
         limit = self.game_state.sum_stats_limit or 0
 
-        # show each stat line
         for k, v in stats.items():
             line = f"{k.capitalize()}: {v}"
             pr.draw_text_ex(
@@ -459,10 +451,8 @@ class Hud:
             stat_y += 22
 
         stat_y += 6
-        # summary lines
         summary1 = f"Active stats sum: {current_active_sum}"
 
-        # If an item of the same type is active, the "Item adds" is the difference.
         if item_to_be_deactivated:
             stats_to_remove = self._stats_to_dict(item_to_be_deactivated.get("stats"))
             item_sum_display = item_sum - sum(stats_to_remove.values())
@@ -479,7 +469,7 @@ class Hud:
             pr.Color(200, 200, 200, 220),
         )
         stat_y += 20
-        # color warning if it would exceed
+
         warn_color = (
             self.game_state.colors.get("ERROR_TEXT", pr.Color(255, 80, 80, 255))
             if sum_if_activated > limit
@@ -495,7 +485,6 @@ class Hud:
         )
         stat_y += 22
 
-        # extra warnings / info
         if not item.get("isActivable"):
             pr.draw_text_ex(
                 pr.get_font_default(),
@@ -538,7 +527,6 @@ class Hud:
             )
             stat_y += 20
 
-        # description below stats
         desc = item.get("desc", "")
         pr.draw_text_ex(
             pr.get_font_default(),
@@ -549,19 +537,16 @@ class Hud:
             pr.Color(200, 200, 200, 220),
         )
 
-        # close button top-right inside view (use ✕)
         close_x = screen_width - self.close_w - 12
         close_y = 12
         self.draw_hud_small_button(close_x, close_y, self.close_w, self.close_h, "✕")
 
-        # Activation toggle (if activable) - reflect if activation would be allowed
         btn_w = 140
         btn_h = 40
         btn_x = screen_width - margin - btn_w
-        btn_y = start_y + 10  # below title area
+        btn_y = start_y + 10
         if item.get("isActivable"):
             label = "Deactivate" if item.get("isActive") else "Activate"
-            # check activation viability and show disabled visual if not allowed
             ok, reason = (
                 self.can_activate_item(item, self.game_state.sum_stats_limit)
                 if not item.get("isActive")
@@ -596,15 +581,13 @@ class Hud:
                 1,
                 self.game_state.colors.get("UI_TEXT", pr.Color(255, 255, 255, 255)),
             )
-            # store button rect for click detection
             self.view_button_rect = (btn_x, btn_y, btn_w, btn_h)
         else:
             self.view_button_rect = None
 
-    def draw_hud_alert(self, screen_width, screen_height):
+    def draw_hud_alert(self, screen_width: int, screen_height: int) -> None:
         if not self.alert_text or time.time() > self.alert_until:
             return
-        # draw centered top small alert using draw_rectangle_pro
         w = min(600, int(screen_width * 0.75))
         h = 44
         x = (screen_width - w) / 2
@@ -632,29 +615,20 @@ class Hud:
             pr.Color(255, 255, 255, 255),
         )
 
-    def draw_hud_toggle(self, mouse_pos, screen_width, screen_height):
-        """
-        Draw the toggle button on top of everything (so it overlaps the dev UI if needed).
-        Use ▲ (open) / ▼ (close) symbols for clarity.
-        The toggle y-position interpolates with hud_slide_progress so it has the same transition.
-        """
+    def draw_hud_toggle(
+        self, mouse_pos: Any, screen_width: int, screen_height: int
+    ) -> None:
         btn_w = 72
         btn_h = 22
         btn_x = (screen_width / 2) - (btn_w / 2)
 
-        # compute toggle Y so it follows HUD transition:
-        # when HUD visible (progress=0): place the toggle just above the HUD.
-        # when HUD hidden (progress=1): place the toggle at bottom edge.
         hud_x, hud_y, hud_w, hud_h = self._hud_bar_rect(screen_width, screen_height)
         btn_y_when_visible = hud_y - btn_h - 8
         btn_y_when_hidden = screen_height - btn_h - 8
-        # interpolate based on same progress so toggle moves with HUD
         btn_y = pr.lerp(btn_y_when_visible, btn_y_when_hidden, self.slide_progress)
 
-        # store rect for click detection
         self.toggle_rect = (btn_x, btn_y, btn_w, btn_h)
 
-        # background for toggle
         bg = pr.Color(50, 50, 50, 230)
         pr.draw_rectangle_pro(
             pr.Rectangle(int(btn_x), int(btn_y), int(btn_w), int(btn_h)),
@@ -673,7 +647,6 @@ class Hud:
         except Exception:
             pass
 
-        # choose arrow: if hud is collapsed (hidden), show ▲ to indicate open; else ▼ to indicate hide
         arrow = "▲" if self.collapsed else "▼"
         ts = 16
         tw = pr.measure_text(arrow, ts)
