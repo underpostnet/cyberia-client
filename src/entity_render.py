@@ -394,7 +394,7 @@ class EntityRender:
                 entity_id, pos, dims, direction, mode, object_layers, typ, data
             )
 
-            # Draw the entity's label on top
+            # --- UI Elements (Label & Life Bar) ---
             cell_size = (
                 self.game_state.cell_size if self.game_state.cell_size > 0 else 12.0
             )
@@ -403,15 +403,6 @@ class EntityRender:
             scaled_dims_w = dims.x * cell_size
             center_x = scaled_pos_x + scaled_dims_w / 2.0
 
-            # Position label higher to make space for life bar
-            label_top_y = scaled_pos_y - 64
-
-            # Position life bar between label and entity
-            life_bar_top_y = scaled_pos_y - 22
-
-            self._draw_entity_life_bar(
-                center_x, life_bar_top_y, scaled_dims_w, life, max_life
-            )
             id_text = entity_id or "you"
             dir_text = (
                 direction.name if isinstance(direction, Direction) else str(direction)
@@ -426,4 +417,29 @@ class EntityRender:
             else:
                 label_lines = [str(id_text).split("-")[0], str(type_text)]
 
+            # --- Dynamic UI positioning ---
+            font_size = 12
+            line_spacing = 2
+            line_height = font_size + line_spacing
+            life_bar_height = 12
+            gap_entity_to_bar = 6
+            gap_bar_to_label = 4
+
+            # Calculate total height of the label block.
+            total_label_height = (len(label_lines) * line_height) - (
+                line_spacing if label_lines else 0
+            )
+
+            # Position life bar relative to the entity's top edge
+            life_bar_top_y = scaled_pos_y - gap_entity_to_bar - life_bar_height
+
+            # Position label relative to the life bar
+            label_top_y = life_bar_top_y - gap_bar_to_label - total_label_height
+
+            # Draw life bar
+            self._draw_entity_life_bar(
+                center_x, life_bar_top_y, scaled_dims_w, life, max_life
+            )
+
+            # Draw label
             self._draw_entity_label(center_x, label_top_y, label_lines, font_size=12)
