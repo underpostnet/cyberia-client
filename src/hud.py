@@ -3,6 +3,14 @@ import pyray as pr
 from dataclasses import is_dataclass, asdict
 from typing import Any, Dict, List, Optional, Tuple
 
+# Add project root to path to import config
+import os
+import sys
+
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
+from config import ASSETS_BASE_URL
+from src.texture_manager import TextureManager
+
 
 class Hud:
     """HUD manager for the game UI.
@@ -18,6 +26,7 @@ class Hud:
     def __init__(self, client: Any) -> None:
         self.client = client
         self.game_state = client.game_state
+        self.texture_manager: TextureManager = client.texture_manager
 
         # HUD bar state
         self.items: List[Dict[str, Any]] = []  # list of dicts with item data
@@ -283,18 +292,54 @@ class Hud:
                 except Exception:
                     pass
 
-        icon_size = 28
-        icon = item.get("icon", "?")
-        tw = pr.measure_text(icon, icon_size)
-        pr.draw_text_ex(
-            pr.get_font_default(),
-            icon,
-            pr.Vector2(x + (w / 2) - (tw / 2), y + 6),
-            icon_size,
-            1,
-            txt_color,
-        )
+        # --- Draw Icon (Texture or Fallback Text) ---
+        texture = None
+        if item.get("id"):
+            # Use item type to build the correct asset path
+            item_type = item.get("type", "skin")
+            object_layer_uri = f"/{item_type}/{item['id']}/08/0.png"
+            image_url = f"{ASSETS_BASE_URL}{object_layer_uri}"
+            texture = self.texture_manager.load_texture_from_url(image_url)
 
+        if texture and texture.id > 0:
+            tex_w = texture.width
+            tex_h = texture.height
+            icon_area_h = h - 26  # Available height for the icon
+            icon_area_w = w - 12  # Available width for the icon
+            scale = 1.0
+            if tex_h > icon_area_h:
+                scale = icon_area_h / tex_h
+            if tex_w * scale > icon_area_w:
+                scale = icon_area_w / tex_w
+
+            dest_w = tex_w * scale
+            dest_h = tex_h * scale
+            tex_x = x + (w - dest_w) / 2
+            tex_y = y + 6 + (icon_area_h - dest_h) / 2
+
+            pr.draw_texture_pro(
+                texture,
+                pr.Rectangle(0, 0, tex_w, tex_h),
+                pr.Rectangle(tex_x, tex_y, dest_w, dest_h),
+                pr.Vector2(0, 0),
+                0.0,
+                pr.WHITE,
+            )
+        else:
+            # Fallback to text icon if texture fails to load
+            icon_size = 28
+            icon = item.get("icon", "?")
+            tw = pr.measure_text(icon, icon_size)
+            pr.draw_text_ex(
+                pr.get_font_default(),
+                icon,
+                pr.Vector2(x + (w / 2) - (tw / 2), y + 12),
+                icon_size,
+                1,
+                txt_color,
+            )
+
+        # --- Draw Name ---
         name = item.get("name", "")
         name_size = 12
         tw2 = pr.measure_text(name, name_size)
@@ -306,6 +351,36 @@ class Hud:
             1,
             txt_color,
         )
+
+        # --- Draw Quantity (on top of everything else) ---
+        quantity = item.get("quantity")
+        if quantity is not None and quantity > 1:
+            quantity_text = f"x{quantity}"
+            quantity_size = 18  # Increased size
+            padding = 5
+            tw_q = pr.measure_text(quantity_text, quantity_size)
+
+            # Position in top-right corner
+            q_x = x + w - tw_q - padding
+            q_y = y + padding
+
+            # Draw shadow text
+            pr.draw_text(
+                quantity_text,
+                int(q_x + 1),
+                int(q_y + 1),
+                quantity_size,
+                pr.BLACK,
+            )
+
+            # Draw main text in yellow
+            pr.draw_text(
+                quantity_text,
+                int(q_x),
+                int(q_y),
+                quantity_size,
+                pr.Color(255, 230, 0, 255),
+            )
 
     def draw_hud_bar(self, mouse_pos: Any, screen_width: int, screen_height: int):
         x, y, w, h = self._hud_bar_rect(screen_width, screen_height)
