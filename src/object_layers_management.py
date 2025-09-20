@@ -83,6 +83,7 @@ class ObjectLayersManager:
         for ol_state in object_layers_state or []:
             iid = ol_state.get("itemId")
             is_active = ol_state.get("active", False)
+            quantity = ol_state.get("quantity", 1)
 
             if not iid:
                 continue
@@ -100,6 +101,7 @@ class ObjectLayersManager:
                         "isActivable": False,
                         "isActive": is_active,
                         "type": "unknown",
+                        "quantity": quantity,
                     }
                 )
                 continue
@@ -115,6 +117,7 @@ class ObjectLayersManager:
                     "isActivable": bool(ol.data.item.activable),
                     "isActive": is_active,
                     "type": ol.data.item.type or "unknown",
+                    "quantity": quantity,
                 }
             )
         self.hud = hud_items

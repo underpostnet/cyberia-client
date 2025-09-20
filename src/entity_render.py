@@ -224,7 +224,7 @@ class EntityRender:
 
         # Define the sorting order for item types.
         # Lower numbers are rendered first (at the bottom).
-        item_type_priority = {"floor": 0, "skin": 1, "weapon": 2, "skill": 3}
+        item_type_priority = {"floor": 0, "skin": 1, "weapon": 2, "skill": 3, "coin": 4}
 
         # Create a temporary list of layers to be rendered, enriched with sorting priority.
         # This is a good practice to avoid modifying the original list and to gather all
