@@ -7,7 +7,7 @@ import math
 
 from config import WS_URL
 
-from src.object_layer import Direction, ObjectLayerMode
+from src.object_layer.object_layer import Direction, ObjectLayerMode
 from src.game_state import GameState
 from src.dev_ui import DevUI
 from src.click_effect import ClickEffect

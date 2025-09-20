@@ -2,7 +2,7 @@ import time
 import pyray as pr
 from dataclasses import is_dataclass, asdict
 from typing import Any, Dict
-from src.object_layer import Direction, ObjectLayerMode
+from src.object_layer.object_layer import Direction, ObjectLayerMode
 
 
 class EntityRender:

@@ -1,5 +1,5 @@
 import pyray as pr
-from src.object_layer import Direction, ObjectLayerMode
+from src.object_layer.object_layer import Direction, ObjectLayerMode
 
 
 class GridRender:

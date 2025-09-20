@@ -2,12 +2,6 @@ import time
 import pyray as pr
 from dataclasses import is_dataclass, asdict
 from typing import Any, Dict, List, Optional, Tuple
-
-# Add project root to path to import config
-import os
-import sys
-
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 from config import ASSETS_BASE_URL
 from src.texture_manager import TextureManager
 

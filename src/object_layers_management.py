@@ -2,7 +2,7 @@ from typing import Dict, Optional, Any, List
 from dataclasses import asdict
 from queue import Queue, Empty
 
-from src.object_layer import (
+from src.object_layer.object_layer import (
     ObjectLayer,
     ObjectLayerData,
     Stats,
