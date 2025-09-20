@@ -369,6 +369,7 @@ class EntityRender:
                         "object_layers": self.game_state.player_object_layers,
                         "life": self.game_state.player_life,
                         "max_life": self.game_state.player_max_life,
+                        "respawnIn": self.game_state.player_respawn_in,
                     },
                 )
             )
@@ -388,6 +389,7 @@ class EntityRender:
             object_layers = data.get("object_layers", [])
             life = data.get("life", 100.0)
             max_life = data.get("max_life", 100.0)
+            respawn_in = data.get("respawnIn", 0.0)
 
             # Render the entity's animated layers
             self._draw_entity_layers(
@@ -416,6 +418,9 @@ class EntityRender:
                 label_lines = [str(id_text), str(dir_text), str(type_text)]
             else:
                 label_lines = [str(id_text).split("-")[0], str(type_text)]
+
+            if respawn_in > 0:
+                label_lines.append(f"Respawn in: {int(respawn_in)}s")
 
             # --- Dynamic UI positioning ---
             font_size = 12

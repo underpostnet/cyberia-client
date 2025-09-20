@@ -185,6 +185,9 @@ class NetworkClient:
 
                         self.game_state.player_id = player_data.get("id")
                         self.game_state.player_map_id = int(player_data.get("MapID", 0))
+                        self.game_state.player_respawn_in = float(
+                            player_data.get("respawnIn", 0.0)
+                        )
                         self.game_state.player_life = new_life
 
                         self.game_state.player_max_life = float(
@@ -333,6 +336,7 @@ class NetworkClient:
                                     "object_layers": object_layers_state,
                                     "life": new_life,
                                     "max_life": float(p_data.get("maxLife", 100.0)),
+                                    "respawnIn": float(p_data.get("respawnIn", 0.0)),
                                 }
                             else:
                                 new_other_players[player_id] = {
@@ -346,6 +350,7 @@ class NetworkClient:
                                     "object_layers": object_layers_state,
                                     "life": float(p_data.get("life", 100.0)),
                                     "max_life": float(p_data.get("maxLife", 100.0)),
+                                    "respawnIn": float(p_data.get("respawnIn", 0.0)),
                                 }
                     # replace other_players atomically
                     self.game_state.other_players = new_other_players
@@ -459,6 +464,9 @@ class NetworkClient:
                                         "max_life": float(
                                             obj_data.get("maxLife", 100.0)
                                         ),
+                                        "respawnIn": float(
+                                            obj_data.get("respawnIn", 0.0)
+                                        ),
                                     }
                                 else:
                                     new_bots[obj_id] = {
@@ -474,6 +482,9 @@ class NetworkClient:
                                         "life": float(obj_data.get("life", 100.0)),
                                         "max_life": float(
                                             obj_data.get("maxLife", 100.0)
+                                        ),
+                                        "respawnIn": float(
+                                            obj_data.get("respawnIn", 0.0)
                                         ),
                                     }
 
