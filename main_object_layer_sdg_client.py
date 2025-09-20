@@ -6,18 +6,18 @@ import matplotlib.pyplot as plt
 import numpy as np
 import random
 import math  # Import math for trigonometric functions
-from object_layer.object_layer_sdg import (
+from src.object_layer.object_layer_sdg import (
     SyntheticDataGenerator,
     clarify_and_contrast_rgba,
 )
-from object_layer.object_layer_data_sdg import (
+from src.object_layer.object_layer_data_sdg import (
     SyntheticDataToolAPI,
 )  # Import the new tool API
 
 import argparse
 
 # Import the default synthetic data template. This is the authoritative matrix.
-from object_layer.object_layer_data import (
+from src.object_layer.object_layer_data import (
     DEFAULT_PLAYER_SKIN_FRAME_DOWN_IDLE,
     DEFAULT_PLAYER_SKIN_FRAME_RIGHT_IDLE,
 )

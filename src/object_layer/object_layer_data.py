@@ -49,7 +49,7 @@ OBJECT_LAYER_DATA = {}
 
 def _load_object_layer_data():
     global OBJECT_LAYER_DATA
-    for dirpath, dirnames, filenames in os.walk("./object_layer"):
+    for dirpath, dirnames, filenames in os.walk("./src/object_layer"):
         for filename in filenames:
             if filename.startswith("object_layer_") and ".json" in filename:
                 with open(dirpath + "/" + filename) as json_file:

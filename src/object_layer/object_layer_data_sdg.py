@@ -10,8 +10,7 @@ import matplotlib.pyplot as plt  # Import matplotlib for rendering
 # Forward declaration for type hinting to avoid circular imports
 from typing import TYPE_CHECKING, Union
 
-if TYPE_CHECKING:
-    from object_layer.object_layer_sdg import SyntheticDataGenerator
+from src.object_layer.object_layer_sdg import SyntheticDataGenerator
 
 
 class SyntheticDataToolAPI:

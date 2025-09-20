@@ -231,7 +231,7 @@ if __name__ == "__main__":
     if args.mode == "floor_grass":
         mode_type = "FLOOR"
 
-    output_instance_data_dir = "object_layer/" + mode_type.lower()
+    output_instance_data_dir = "src/object_layer/" + mode_type.lower()
     os.makedirs(output_instance_data_dir, exist_ok=True)
 
     intermediate_frames_dir = "build_output_sdg_frames_temp"

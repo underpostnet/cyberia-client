@@ -44,16 +44,7 @@ from pyray import (
     is_key_down,
 )
 
-from config import (
-    CAMERA_SMOOTHNESS,
-    UI_FONT_SIZE,
-    UI_TEXT_COLOR_PRIMARY,
-    UI_TEXT_COLOR_SHADING,
-)
-from object_layer.object_layer_data import ObjectLayerMode, Direction
-from network_state.network_object import (
-    NetworkObject,
-)
+from src.object_layer.object_layer_data import ObjectLayerMode, Direction
 
 
 logging.basicConfig(
@@ -62,6 +53,10 @@ logging.basicConfig(
 
 
 DIRECTION_HISTORY_LENGTH = 15
+CAMERA_SMOOTHNESS = 0.1
+UI_FONT_SIZE = 20
+UI_TEXT_COLOR_PRIMARY = Color(255, 255, 255, 255)
+UI_TEXT_COLOR_SHADING = Color(128, 128, 128, 255)
 
 
 class ObjectLayerAnimation:
@@ -490,7 +485,7 @@ class ObjectLayerRender:
 
     def draw_network_object(
         self,
-        network_object: NetworkObject,
+        network_object,
         current_timestamp: float,
         current_dx: float,
         current_dy: float,

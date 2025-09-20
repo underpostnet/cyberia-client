@@ -5,13 +5,12 @@ from typing import Union
 import json
 import random
 
-from config import NETWORK_OBJECT_SIZE
-from object_layer.object_layer_data import (
+from src.object_layer.object_layer_data import (
     _load_object_layer_data,
     ObjectLayerMode,
     Direction,
 )
-from object_layer.object_layer_render import ObjectLayerRender
+from src.object_layer.object_layer_render import ObjectLayerRender
 from pyray import (
     KEY_DOWN,
     KEY_KP_1,
@@ -44,6 +43,7 @@ logging.basicConfig(
 )
 
 OBJECT_LAYER_DATA = _load_object_layer_data()
+NETWORK_OBJECT_SIZE = 50
 
 
 class MockObjectLayerDataProvider:
