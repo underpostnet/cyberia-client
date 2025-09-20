@@ -411,22 +411,47 @@ class Hud:
                     pass
 
         # --- Draw Icon (Animated) ---
-        icon_area_h = h - 26  # Available height for the icon
+        icon_area_h = h - 34  # Make more space for text below
         icon_area_w = w - 12  # Available width for the icon
         icon_dest_rec = pr.Rectangle(x + 6, y + 6, icon_area_w, icon_area_h)
         self._draw_item_animation(item, icon_dest_rec, is_view=False)
 
-        # --- Draw Name ---
+        # --- Draw Name (ID) ---
         name = item.get("name", "")
         name_size = 12
-        tw2 = pr.measure_text(name, name_size)
+        tw_name = pr.measure_text(name, name_size)
+        name_y = y + h - 28
         pr.draw_text_ex(
             pr.get_font_default(),
             name,
-            pr.Vector2(x + (w / 2) - (tw2 / 2), y + h - 20),
+            pr.Vector2(x + (w / 2) - (tw_name / 2), name_y),
             name_size,
             1,
             txt_color,
+        )
+
+        # --- Draw Type ---
+        item_type = item.get("type", "unknown").capitalize()
+        type_size = 10
+        tw_type = pr.measure_text(item_type, type_size)
+        type_x = x + (w / 2) - (tw_type / 2)
+        type_y = name_y + name_size + 1  # Position below name
+
+        # Shadow
+        pr.draw_text(
+            item_type,
+            int(type_x + 1),
+            int(type_y + 1),
+            type_size,
+            pr.BLACK,
+        )
+        # Text
+        pr.draw_text(
+            item_type,
+            int(type_x),
+            int(type_y),
+            type_size,
+            pr.Color(255, 230, 0, 255),
         )
 
         # --- Draw Quantity (on top of everything else) ---
