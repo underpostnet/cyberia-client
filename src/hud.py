@@ -608,22 +608,8 @@ class Hud:
         preview_bg_w = right_pane_w - (preview_margin * 2)
         preview_bg_h = preview_bg_w  # Square preview area
 
-        pr.draw_rectangle_pro(
-            pr.Rectangle(preview_bg_x, preview_bg_y, preview_bg_w, preview_bg_h),
-            pr.Vector2(0, 0),
-            0,
-            pr.Color(10, 10, 10, 220),
-        )
-        pr.draw_rectangle_lines(
-            int(preview_bg_x),
-            int(preview_bg_y),
-            int(preview_bg_w),
-            int(preview_bg_h),
-            pr.Color(255, 255, 255, 18),
-        )
-
         preview_rect = pr.Rectangle(
-            preview_bg_x + 15, preview_bg_y + 15, preview_bg_w - 30, preview_bg_h - 30
+            preview_bg_x, preview_bg_y, preview_bg_w, preview_bg_h
         )
         self._draw_item_animation(item, preview_rect, is_view=True)
 
