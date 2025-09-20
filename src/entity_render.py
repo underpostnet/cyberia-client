@@ -420,9 +420,10 @@ class EntityRender:
                 "Player" if typ in ["self", "other"] else data.get("behavior", "bot")
             )
 
-            self._draw_entity_label(
-                center_x,
-                label_top_y,
-                [str(id_text), str(dir_text), str(type_text)],
-                font_size=12,
-            )
+            label_lines = []
+            if self.game_state.dev_ui:
+                label_lines = [str(id_text), str(dir_text), str(type_text)]
+            else:
+                label_lines = [str(id_text).split("-")[0], str(type_text)]
+
+            self._draw_entity_label(center_x, label_top_y, label_lines, font_size=12)
