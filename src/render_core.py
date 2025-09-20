@@ -6,6 +6,29 @@ class RenderCore:
     def __init__(self, client):
         self.client = client
 
+    def draw_player_location_info(self):
+        """If dev_ui is inactive, only the current map and its current coordinates should be displayed."""
+        font_size = 18
+        padding = 10
+        main_color = pr.YELLOW
+        shadow_color = pr.BLACK
+
+        with self.client.game_state.mutex:
+            map_id = self.client.game_state.player_map_id
+            pos = self.client.game_state.player_pos_interpolated
+
+        map_text = f"Map: {map_id}"
+        pos_text = f"({pos.x:.1f}, {pos.y:.1f})"
+
+        # Draw shadow text
+        pr.draw_text(map_text, padding + 1, padding + 1, font_size, shadow_color)
+        # Draw main text
+        pr.draw_text(map_text, padding, padding, font_size, main_color)
+
+        y_offset = padding + font_size + 5
+        pr.draw_text(pos_text, padding + 1, y_offset + 1, font_size, shadow_color)
+        pr.draw_text(pos_text, padding, y_offset, font_size, main_color)
+
     def detect_monitor_size(self):
         # Try several strategies in order; return (w, h)
         # 1) pyray monitor functions
@@ -320,6 +343,10 @@ class RenderCore:
             self.client.dev_ui.draw_dev_ui(
                 self.client.screen_width, self.client.screen_height
             )
+        elif (
+            not self.client.game_state.dev_ui and self.client.hud.view_selected is None
+        ):
+            self.draw_player_location_info()
 
         # Draw toggle *after* dev UI to ensure it is on top and clickable
         self.client.hud.draw_hud_toggle(
