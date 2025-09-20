@@ -1,4 +1,12 @@
-# cyberia-client
+<p align="center">
+  <img src="https://www.cyberiaonline.com/assets/splash/apple-touch-icon-precomposed.png" alt="CYBERIA online"/>
+</p>
+
+<div align="center">
+
+<h1>cyberia client</h1>
+
+</div>
 
 Core application that connects to the **Cyberia online MMO instance**. It uses `websockets` for real-time communication and `raylib` for rendering dynamic game grid instances.
 
@@ -20,5 +28,5 @@ pip install -r requirements.txt
 ### Running the Client
 
 ```bash
-python main_network_state_client.py
+python main.py
 ```
