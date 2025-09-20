@@ -43,24 +43,23 @@ class NetworkClient:
         # event to signal main thread to initialize graphics
         self.init_event = threading.Event()
 
+        self.util = Util()
         self.texture_manager = TextureManager()
-        self.hud = Hud(self)
         self.direction_converter = DirectionConverter()
-        # object layers/cache manager for HUD items
         self.obj_layers_mgr = ObjectLayersManager(
             texture_manager=self.texture_manager,
             direction_converter=self.direction_converter,
         )
+        self.entity_render = EntityRender(
+            self.game_state, self.obj_layers_mgr, self.texture_manager
+        )
+        self.hud = Hud(self)
         self.floating_text_manager = FloatingTextManager(self.game_state)
 
         # timing
         self._last_frame_time = time.time()
-        self.util = Util()
-        self.render_core = RenderCore(self)
-        self.entity_render = EntityRender(
-            self.game_state, self.obj_layers_mgr, self.texture_manager
-        )
 
+        self.render_core = RenderCore(self)
         self.entity_player_input = EntityPlayerInput(self.game_state)
         self.entity_player_render = EntityPlayerRender(
             self.game_state, self.entity_render

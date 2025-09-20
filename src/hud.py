@@ -114,17 +114,6 @@ class Hud:
     def active_items(self) -> List[Dict[str, Any]]:
         return [it for it in self.items if it.get("isActive")]
 
-    def active_stats_sum(self) -> int:
-        total = 0
-        for it in self.active_items():
-            stats_map = self._stats_to_dict(it.get("stats"))
-            for v in stats_map.values():
-                try:
-                    total += int(v)
-                except Exception:
-                    pass
-        return total
-
     def can_activate_item(
         self, item: Dict[str, Any], sum_stats_limit: Optional[int]
     ) -> Tuple[bool, str]:
@@ -151,7 +140,9 @@ class Hud:
             return False, "You cannot activate more than 4 items."
 
         # check stats sum doesn't exceed limit
-        current_sum = self.active_stats_sum()
+        current_sum = self.client.entity_render.get_entity_active_stats_sum(
+            self.game_state.player_id
+        )
         if item_to_be_deactivated:
             stats_to_remove = self._stats_to_dict(item_to_be_deactivated.get("stats"))
             for v in stats_to_remove.values():
@@ -672,7 +663,9 @@ class Hud:
             stat_idx += 1
 
         info_y = stats_y + ((stat_idx + 1) // 2) * 24 + 20
-        current_active_sum = self.active_stats_sum()
+        current_active_sum = self.client.entity_render.get_entity_active_stats_sum(
+            self.game_state.player_id
+        )
         item_type_to_activate = item.get("type")
         item_to_be_deactivated = None
         if item_type_to_activate and item_type_to_activate != "unknown":

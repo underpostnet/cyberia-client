@@ -42,7 +42,11 @@ class DevUI:
             upload_kbps = self.upload_kbps
             error_msg = self.game_state.last_error_message
             player_pos_ui = self.game_state.player_pos_interpolated
-
+            active_stats_sum = (
+                self.hud.client.entity_render.get_entity_active_stats_sum(
+                    self.game_state.player_id
+                )
+            )
             text_lines = [
                 f"Player ID: {player_id}",
                 f"Map ID: {player_map_id}",
@@ -51,7 +55,7 @@ class DevUI:
                 f"Target: ({target_pos.x:.0f}, {target_pos.y:.0f})",
                 f"Download: {download_kbps:.2f} kbps | Upload: {upload_kbps:.2f} kbps",
                 f"SumStatsLimit: {self.game_state.sum_stats_limit}",
-                f"ActiveStatsSum: {self.hud.active_stats_sum()}",
+                f"ActiveStatsSum: {active_stats_sum}",
                 f"ActiveItems: {len(self.hud.active_items())}",
             ]
 

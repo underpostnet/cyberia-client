@@ -1,5 +1,7 @@
 import time
 import pyray as pr
+from dataclasses import is_dataclass, asdict
+from typing import Any, Dict
 from src.object_layer import Direction, ObjectLayerMode
 
 
@@ -11,6 +13,42 @@ class EntityRender:
         # Cache for animation state:
         # (entity_id, item_id) -> {frame_index, last_update_time, last_state_string, last_facing_direction}
         self.animation_state_cache = {}
+
+    def _stats_to_dict(self, stats: Any) -> Dict[str, int]:
+        """Accept Stats dataclass or plain dict, return dict[str,int]."""
+        if stats is None:
+            return {}
+        try:
+            if is_dataclass(stats):
+                d = asdict(stats)
+            elif isinstance(stats, dict):
+                d = stats
+            else:
+                d = {
+                    k: getattr(stats, k)
+                    for k in [
+                        "effect",
+                        "resistance",
+                        "agility",
+                        "range",
+                        "intelligence",
+                        "utility",
+                    ]
+                    if hasattr(stats, k)
+                }
+        except Exception:
+            d = {}
+
+        out: Dict[str, int] = {}
+        for k, v in d.items():
+            try:
+                out[k] = int(v)
+            except Exception:
+                try:
+                    out[k] = int(float(v))
+                except Exception:
+                    out[k] = 0
+        return out
 
     def interpolate_entities_positions(self):
         """
@@ -55,6 +93,44 @@ class EntityRender:
                     nx, ny = b.x, b.y
                 entry["interp_pos"] = pr.Vector2(nx, ny)
 
+    def get_entity_active_stats_sum(self, entity_id: str) -> int:
+        if not entity_id:
+            return 0
+
+        object_layers_state = []
+        if entity_id == self.game_state.player_id:
+            object_layers_state = self.game_state.player_object_layers
+        elif entity_id in self.game_state.other_players:
+            object_layers_state = self.game_state.other_players[entity_id].get(
+                "object_layers", []
+            )
+        elif entity_id in self.game_state.bots:
+            object_layers_state = self.game_state.bots[entity_id].get(
+                "object_layers", []
+            )
+
+        if not object_layers_state:
+            return 0
+
+        total = 0
+        for layer_state in object_layers_state:
+            if layer_state.get("active"):
+                item_id = layer_state.get("itemId")
+                if not item_id:
+                    continue
+
+                object_layer = self.obj_layers_mgr.get_or_fetch(item_id)
+                if not object_layer:
+                    continue
+
+                stats_map = self._stats_to_dict(object_layer.data.stats)
+                for v in stats_map.values():
+                    try:
+                        total += int(v)
+                    except Exception:
+                        pass
+        return total
+
     def _draw_entity_label(self, px, py, text_lines, font_size=12):
         """
         Helper to draw stacked label lines centered horizontally at px..py (py is top of first line).
@@ -96,7 +172,7 @@ class EntityRender:
             )
             y += font_size + 2
 
-    def _draw_entity_life_bar(self, px, py, width, life, max_life):
+    def _draw_entity_life_bar(self, px, py, width, life, max_life, stats_sum: int):
         """
         Helper to draw a life bar centered horizontally at px, with text.
         py is the top of the bar.
@@ -116,26 +192,49 @@ class EntityRender:
         pr.draw_rectangle(int(bar_x), int(py), int(life_width), bar_height, pr.GREEN)
 
         # Draw life text
-        life_text = f"{int(life)} / {int(max_life)}"
+        stats_text = f"[{stats_sum}]"
+        life_text = f" {int(life)}/{int(max_life)}"
         font_size = 10
-        text_width = pr.measure_text(life_text, font_size)
-        text_x = px - text_width / 2
+
+        stats_text_width = pr.measure_text(stats_text, font_size)
+        total_text_width = pr.measure_text(stats_text + life_text, font_size)
+
+        text_x = px - total_text_width / 2
         text_y = py + (bar_height - font_size) / 2
 
-        # Draw text shadow for readability
+        # Draw stats text (yellow with shadow)
         pr.draw_text_ex(
             pr.get_font_default(),
-            life_text,
+            stats_text,
             pr.Vector2(text_x + 1, text_y + 1),
             font_size,
             1,
             pr.BLACK,
         )
+        pr.draw_text_ex(
+            pr.get_font_default(),
+            stats_text,
+            pr.Vector2(text_x, text_y),
+            font_size,
+            1,
+            pr.YELLOW,
+        )
+
+        # Draw life text (white with shadow)
+        life_text_x = text_x + stats_text_width
         # Draw main text
         pr.draw_text_ex(
             pr.get_font_default(),
             life_text,
-            pr.Vector2(text_x, text_y),
+            pr.Vector2(life_text_x + 1, text_y + 1),
+            font_size,
+            1,
+            pr.BLACK,
+        )
+        pr.draw_text_ex(
+            pr.get_font_default(),
+            life_text,
+            pr.Vector2(life_text_x, text_y),
             font_size,
             1,
             pr.WHITE,
@@ -398,6 +497,8 @@ class EntityRender:
             max_life = data.get("max_life", 100.0)
             respawn_in = data.get("respawnIn", 0.0)
 
+            stats_sum = self.get_entity_active_stats_sum(entity_id)
+
             # Render the entity's animated layers
             self._draw_entity_layers(
                 entity_id, pos, dims, direction, mode, object_layers, typ, data
@@ -450,7 +551,7 @@ class EntityRender:
 
             # Draw life bar
             self._draw_entity_life_bar(
-                center_x, life_bar_top_y, scaled_dims_w, life, max_life
+                center_x, life_bar_top_y, scaled_dims_w, life, max_life, stats_sum
             )
 
             # Draw label
