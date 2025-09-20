@@ -65,6 +65,7 @@ class Hud:
         self.slide_target: float = 0.0
         self.slide_speed: float = 6.0  # progress units per second
 
+        self.animation_cache: Dict[str, Any] = {}
         # toggle button rect
         self.toggle_rect: Optional[Tuple[float, float, float, float]] = None
 
@@ -240,6 +241,123 @@ class Hud:
         self.alert_text = text
         self.alert_until = time.time() + duration
 
+    def _draw_item_animation(
+        self, item: Dict[str, Any], dest_rec: pr.Rectangle, is_view: bool = False
+    ):
+        item_id = item.get("id")
+        if not item_id:
+            return
+
+        now = time.time()
+        anim_key = item_id
+        if anim_key not in self.animation_cache:
+            self.animation_cache[anim_key] = {
+                "frame_index": 0,
+                "last_update_time": now,
+                "state_string": None,
+            }
+        anim_state = self.animation_cache[anim_key]
+
+        object_layer = self.client.obj_layers_mgr.get_or_fetch(item_id)
+        txt_color = self.game_state.colors.get("UI_TEXT", pr.WHITE)
+
+        if not object_layer:
+            pr.draw_rectangle_rec(dest_rec, pr.Color(50, 50, 50, 200))
+            pr.draw_text(
+                "?",
+                int(dest_rec.x + dest_rec.width / 2 - 5),
+                int(dest_rec.y + dest_rec.height / 2 - 10),
+                20,
+                txt_color,
+            )
+            return
+
+        frames = object_layer.data.render.frames
+        frame_list, state_string = [], ""
+        if frames.default_idle:
+            frame_list, state_string = frames.default_idle, "default_idle"
+        elif frames.none_idle:
+            frame_list, state_string = frames.none_idle, "none_idle"
+
+        if not frame_list:
+            icon_size = 28 if not is_view else 64
+            icon = item.get("icon", "?")
+            tw = pr.measure_text(icon, icon_size)
+            pr.draw_text_ex(
+                pr.get_font_default(),
+                icon,
+                pr.Vector2(
+                    dest_rec.x + (dest_rec.width / 2) - (tw / 2),
+                    dest_rec.y + (dest_rec.height / 2) - (icon_size / 2),
+                ),
+                icon_size,
+                1,
+                txt_color,
+            )
+            return
+
+        if anim_state.get("state_string") != state_string:
+            anim_state["frame_index"] = 0
+            anim_state["last_update_time"] = now
+            anim_state["state_string"] = state_string
+
+        num_frames = len(frame_list)
+        frame_duration_ms = object_layer.data.render.frame_duration or 100
+        if (now - anim_state["last_update_time"]) * 1000 >= frame_duration_ms:
+            anim_state["frame_index"] = (anim_state["frame_index"] + 1) % num_frames
+            anim_state["last_update_time"] = now
+
+        current_frame_number = anim_state["frame_index"]
+        item_data = object_layer.data.item
+        direction_code = (
+            self.client.obj_layers_mgr.direction_converter.get_code_from_directions(
+                [state_string]
+            )
+            or "08"
+        )
+
+        uri = self.client.obj_layers_mgr._build_uri(
+            item_type=item_data.type,
+            item_id=item_data.id,
+            direction_code=direction_code,
+            frame=current_frame_number,
+        )
+        texture = self.texture_manager.load_texture_from_url(uri)
+
+        if texture and texture.id > 0:
+            tex_w, tex_h = float(texture.width), float(texture.height)
+            scale = 1.0
+            if tex_h > dest_rec.height:
+                scale = dest_rec.height / tex_h
+            if tex_w * scale > dest_rec.width:
+                scale = dest_rec.width / tex_w
+
+            final_w, final_h = tex_w * scale, tex_h * scale
+            final_x = dest_rec.x + (dest_rec.width - final_w) / 2
+            final_y = dest_rec.y + (dest_rec.height - final_h) / 2
+
+            final_dest_rec = pr.Rectangle(final_x, final_y, final_w, final_h)
+            source_rec = pr.Rectangle(0, 0, tex_w, tex_h)
+            pr.draw_texture_pro(
+                texture, source_rec, final_dest_rec, pr.Vector2(0, 0), 0.0, pr.WHITE
+            )
+        else:
+            # Fallback if texture fails to load
+            icon_size = 28 if not is_view else 64
+            icon = item.get("icon", "?")
+            tw = pr.measure_text(icon, icon_size)
+            pr.draw_text_ex(
+                pr.get_font_default(),
+                icon,
+                pr.Vector2(
+                    dest_rec.x + (dest_rec.width / 2) - (tw / 2),
+                    dest_rec.y + (dest_rec.height / 2) - (icon_size / 2),
+                ),
+                icon_size,
+                1,
+                txt_color,
+            )
+
     def _hud_bar_rect(
         self, screen_width: int, screen_height: int
     ) -> Tuple[int, int, int, int]:
@@ -292,52 +410,11 @@ class Hud:
                 except Exception:
                     pass
 
-        # --- Draw Icon (Texture or Fallback Text) ---
-        texture = None
-        if item.get("id"):
-            # Use item type to build the correct asset path
-            item_type = item.get("type", "skin")
-            object_layer_uri = f"/{item_type}/{item['id']}/08/0.png"
-            image_url = f"{ASSETS_BASE_URL}{object_layer_uri}"
-            texture = self.texture_manager.load_texture_from_url(image_url)
-
-        if texture and texture.id > 0:
-            tex_w = texture.width
-            tex_h = texture.height
-            icon_area_h = h - 26  # Available height for the icon
-            icon_area_w = w - 12  # Available width for the icon
-            scale = 1.0
-            if tex_h > icon_area_h:
-                scale = icon_area_h / tex_h
-            if tex_w * scale > icon_area_w:
-                scale = icon_area_w / tex_w
-
-            dest_w = tex_w * scale
-            dest_h = tex_h * scale
-            tex_x = x + (w - dest_w) / 2
-            tex_y = y + 6 + (icon_area_h - dest_h) / 2
-
-            pr.draw_texture_pro(
-                texture,
-                pr.Rectangle(0, 0, tex_w, tex_h),
-                pr.Rectangle(tex_x, tex_y, dest_w, dest_h),
-                pr.Vector2(0, 0),
-                0.0,
-                pr.WHITE,
-            )
-        else:
-            # Fallback to text icon if texture fails to load
-            icon_size = 28
-            icon = item.get("icon", "?")
-            tw = pr.measure_text(icon, icon_size)
-            pr.draw_text_ex(
-                pr.get_font_default(),
-                icon,
-                pr.Vector2(x + (w / 2) - (tw / 2), y + 12),
-                icon_size,
-                1,
-                txt_color,
-            )
+        # --- Draw Icon (Animated) ---
+        icon_area_h = h - 26  # Available height for the icon
+        icon_area_w = w - 12  # Available width for the icon
+        icon_dest_rec = pr.Rectangle(x + 6, y + 6, icon_area_w, icon_area_h)
+        self._draw_item_animation(item, icon_dest_rec, is_view=False)
 
         # --- Draw Name ---
         name = item.get("name", "")
@@ -478,39 +555,112 @@ class Hud:
         item = self.items[self.view_selected]
 
         hud_occupied = (1.0 - self.slide_progress) * self.bar_height
-        view_x = 0
-        view_y = 0
-        view_w = screen_width
-        view_h = int(screen_height - hud_occupied)
+        view_x, view_y, view_w, view_h = (
+            0,
+            0,
+            screen_width,
+            int(screen_height - hud_occupied),
+        )
 
         pr.draw_rectangle_pro(
             pr.Rectangle(view_x, view_y, view_w, view_h),
             pr.Vector2(0, 0),
             0,
-            pr.Color(0, 0, 0, 180),
+            pr.Color(0, 0, 0, 200),
         )
 
-        margin = 28
+        # --- Layout Panes ---
+        margin = 32
+        right_pane_w = int(view_w * 0.4)
+        left_pane_w = view_w - right_pane_w
+        right_pane_x = view_x + left_pane_w
+
+        # --- Right Pane: Animated Preview & Action Button ---
+        preview_margin = 20
+        preview_bg_x = right_pane_x + preview_margin
+        preview_bg_y = view_y + margin
+        preview_bg_w = right_pane_w - (preview_margin * 2)
+        preview_bg_h = preview_bg_w  # Square preview area
+
+        pr.draw_rectangle_pro(
+            pr.Rectangle(preview_bg_x, preview_bg_y, preview_bg_w, preview_bg_h),
+            pr.Vector2(0, 0),
+            0,
+            pr.Color(10, 10, 10, 220),
+        )
+        pr.draw_rectangle_lines(
+            int(preview_bg_x),
+            int(preview_bg_y),
+            int(preview_bg_w),
+            int(preview_bg_h),
+            pr.Color(255, 255, 255, 18),
+        )
+
+        preview_rect = pr.Rectangle(
+            preview_bg_x + 15, preview_bg_y + 15, preview_bg_w - 30, preview_bg_h - 30
+        )
+        self._draw_item_animation(item, preview_rect, is_view=True)
+
+        # --- Left Pane: Item Details ---
         start_x = view_x + margin
         start_y = view_y + margin
+        content_w = left_pane_w - (margin * 2)
 
-        title = f"{item['icon']}  {item['name']}"
-        title_size = 32
+        title = item.get("name", "Unknown Item")
+        title_size = 36
         pr.draw_text_ex(
             pr.get_font_default(),
             title,
             pr.Vector2(start_x, start_y),
             title_size,
             1,
-            self.game_state.colors.get("UI_TEXT", pr.Color(255, 255, 255, 255)),
+            pr.WHITE,
         )
 
+        item_type = item.get("type", "unknown").capitalize()
+        type_y = start_y + title_size + 12
+        pr.draw_text_ex(
+            pr.get_font_default(),
+            f"Type: {item_type}",
+            pr.Vector2(start_x, type_y),
+            18,
+            1,
+            pr.Color(200, 200, 200, 220),
+        )
+
+        desc_y = type_y + 32
+        desc = item.get("desc", "")
+        pr.draw_text_ex(
+            pr.get_font_default(),
+            desc,
+            pr.Vector2(start_x, desc_y),
+            16,
+            1,
+            pr.Color(200, 200, 200, 220),
+        )
+
+        stats_y = desc_y + 60
         stats = self._stats_to_dict(item.get("stats"))
-        stat_y = start_y + 24 + 28
         stat_size = 18
+        col1_x = start_x
+        col2_x = start_x + content_w / 2
+        stat_idx = 0
+        for k, v in stats.items():
+            line = f"{k.capitalize()}: {v}"
+            current_x = col1_x if stat_idx % 2 == 0 else col2_x
+            current_y = stats_y + (stat_idx // 2) * 24
+            pr.draw_text_ex(
+                pr.get_font_default(),
+                line,
+                pr.Vector2(current_x, current_y),
+                stat_size,
+                1,
+                pr.WHITE,
+            )
+            stat_idx += 1
 
+        info_y = stats_y + ((stat_idx + 1) // 2) * 24 + 20
         current_active_sum = self.active_stats_sum()
-
         item_type_to_activate = item.get("type")
         item_to_be_deactivated = None
         if item_type_to_activate and item_type_to_activate != "unknown":
@@ -518,49 +668,33 @@ class Hud:
                 if other_item.get("type") == item_type_to_activate:
                     item_to_be_deactivated = other_item
                     break
-
         sum_if_activated = current_active_sum
         if item_to_be_deactivated:
             stats_to_remove = self._stats_to_dict(item_to_be_deactivated.get("stats"))
             sum_if_activated -= sum(stats_to_remove.values())
-
         item_sum = sum(stats.values())
         sum_if_activated += item_sum
-
         limit = self.game_state.sum_stats_limit or 0
 
-        for k, v in stats.items():
-            line = f"{k.capitalize()}: {v}"
-            pr.draw_text_ex(
-                pr.get_font_default(),
-                line,
-                pr.Vector2(start_x, stat_y),
-                stat_size,
-                1,
-                self.game_state.colors.get("UI_TEXT", pr.Color(255, 255, 255, 255)),
-            )
-            stat_y += 22
-
-        stat_y += 6
-        summary1 = f"Active stats sum: {current_active_sum}"
-
+        summary1 = f"Current Active Sum: {current_active_sum}"
         if item_to_be_deactivated:
             stats_to_remove = self._stats_to_dict(item_to_be_deactivated.get("stats"))
             item_sum_display = item_sum - sum(stats_to_remove.values())
-            summary2 = f"Item change: {item_sum_display:+} -> If activated: {sum_if_activated} / Limit: {limit}"
+            summary2 = (
+                f"Change: {item_sum_display:+} | New Sum: {sum_if_activated} / {limit}"
+            )
         else:
-            summary2 = f"Item adds: {item_sum} -> If activated: {sum_if_activated} / Limit: {limit}"
+            summary2 = f"Adds: {item_sum} | New Sum: {sum_if_activated} / {limit}"
 
         pr.draw_text_ex(
             pr.get_font_default(),
             summary1,
-            pr.Vector2(start_x, stat_y),
+            pr.Vector2(start_x, info_y),
             16,
             1,
             pr.Color(200, 200, 200, 220),
         )
-        stat_y += 20
-
+        info_y += 20
         warn_color = (
             self.game_state.colors.get("ERROR_TEXT", pr.Color(255, 80, 80, 255))
             if sum_if_activated > limit
@@ -569,98 +703,101 @@ class Hud:
         pr.draw_text_ex(
             pr.get_font_default(),
             summary2,
-            pr.Vector2(start_x, stat_y),
+            pr.Vector2(start_x, info_y),
             16,
             1,
             warn_color,
         )
-        stat_y += 22
+        info_y += 22
 
         if not item.get("isActivable"):
             pr.draw_text_ex(
                 pr.get_font_default(),
                 "This item cannot be activated.",
-                pr.Vector2(start_x, stat_y),
+                pr.Vector2(start_x, info_y),
                 16,
                 1,
                 self.game_state.colors.get("ERROR_TEXT", pr.Color(255, 80, 80, 255)),
             )
-            stat_y += 20
+            info_y += 20
         elif len(self.active_items()) >= 4 and not item.get("isActive"):
             pr.draw_text_ex(
                 pr.get_font_default(),
                 "Maximum active items reached (4).",
-                pr.Vector2(start_x, stat_y),
+                pr.Vector2(start_x, info_y),
                 16,
                 1,
                 self.game_state.colors.get("ERROR_TEXT", pr.Color(255, 80, 80, 255)),
             )
-            stat_y += 20
+            info_y += 20
         elif sum_if_activated > limit and not item.get("isActive"):
             pr.draw_text_ex(
                 pr.get_font_default(),
                 f"Activation would exceed the limit by {sum_if_activated - limit} points.",
-                pr.Vector2(start_x, stat_y),
+                pr.Vector2(start_x, info_y),
                 16,
                 1,
                 self.game_state.colors.get("ERROR_TEXT", pr.Color(255, 80, 80, 255)),
             )
-            stat_y += 20
+            info_y += 20
         else:
             remaining_now = limit - current_active_sum
             pr.draw_text_ex(
                 pr.get_font_default(),
                 f"Points available now: {remaining_now}",
-                pr.Vector2(start_x, stat_y),
+                pr.Vector2(start_x, info_y),
                 16,
                 1,
                 self.game_state.colors.get("UI_TEXT", pr.Color(200, 200, 200, 220)),
             )
-            stat_y += 20
-
-        desc = item.get("desc", "")
-        pr.draw_text_ex(
-            pr.get_font_default(),
-            desc,
-            pr.Vector2(start_x, stat_y + 12),
-            16,
-            1,
-            pr.Color(200, 200, 200, 220),
-        )
+            info_y += 20
 
         close_x = screen_width - self.close_w - 12
         close_y = 12
         self.draw_hud_small_button(close_x, close_y, self.close_w, self.close_h, "✕")
 
-        btn_w = 140
-        btn_h = 40
-        btn_x = screen_width - margin - btn_w
-        btn_y = start_y + 10
+        btn_w = preview_bg_w - 20
+        btn_h = 45
+        btn_x = preview_bg_x + 10
+        btn_y = preview_bg_y + preview_bg_h + 20
         if item.get("isActivable"):
             label = "Deactivate" if item.get("isActive") else "Activate"
-            ok, reason = (
+            ok, _ = (
                 self.can_activate_item(item, self.game_state.sum_stats_limit)
                 if not item.get("isActive")
                 else (True, "")
             )
-            btn_bg = pr.Color(60, 60, 60, 230) if ok else pr.Color(40, 40, 40, 160)
+
+            btn_bg = pr.Color(60, 60, 60, 230)
+            hover_bg = pr.Color(90, 90, 90, 240)
+            disabled_bg = pr.Color(40, 40, 40, 160)
+
+            mx, my = pr.get_mouse_position().x, pr.get_mouse_position().y
+            hovered = (
+                ok
+                and mx >= btn_x
+                and mx <= btn_x + btn_w
+                and my >= btn_y
+                and my <= btn_y + btn_h
+            )
+
+            final_bg = disabled_bg if not ok else (hover_bg if hovered else btn_bg)
+
             pr.draw_rectangle_pro(
                 pr.Rectangle(int(btn_x), int(btn_y), int(btn_w), int(btn_h)),
                 pr.Vector2(0, 0),
                 0,
-                btn_bg,
+                final_bg,
             )
-            try:
-                pr.draw_rectangle_lines(
-                    int(btn_x),
-                    int(btn_y),
-                    int(btn_w),
-                    int(btn_h),
-                    pr.Color(255, 255, 255, 20),
-                )
-            except Exception:
-                pass
-            ts = 18
+            pr.draw_rectangle_lines(
+                int(btn_x),
+                int(btn_y),
+                int(btn_w),
+                int(btn_h),
+                pr.Color(255, 255, 255, 20),
+            )
+
+            ts = 20
             tw = pr.measure_text(label, ts)
             pr.draw_text_ex(
                 pr.get_font_default(),
@@ -670,8 +807,9 @@ class Hud:
                 ),
                 ts,
                 1,
-                self.game_state.colors.get("UI_TEXT", pr.Color(255, 255, 255, 255)),
+                pr.WHITE if ok else pr.GRAY,
             )
+
             self.view_button_rect = (btn_x, btn_y, btn_w, btn_h)
         else:
             self.view_button_rect = None
