@@ -172,37 +172,34 @@ class EntityRender:
             )
             y += font_size + 2
 
-    def _draw_entity_life_bar(self, px, py, width, life, max_life, stats_sum: int):
+    def _draw_entity_stats_bar(self, px, py, width, stats_sum: int, stats_limit: int):
         """
-        Helper to draw a life bar centered horizontally at px, with text.
+        Helper to draw a stats bar centered horizontally at px.
         py is the top of the bar.
         """
-        if max_life <= 0:
+        if stats_limit <= 0:
             return
 
-        bar_height = 12  # Increased height to fit text
-        life_percentage = max(0.0, min(1.0, life / max_life))
-        life_width = width * life_percentage
+        bar_height = 12
+        stats_percentage = max(0.0, min(1.0, stats_sum / stats_limit))
+        stats_width = width * stats_percentage
 
         bar_x = px - width / 2
 
         # Background (black)
         pr.draw_rectangle(int(bar_x), int(py), int(width), bar_height, pr.BLACK)
-        # Foreground (green)
-        pr.draw_rectangle(int(bar_x), int(py), int(life_width), bar_height, pr.GREEN)
+        # Foreground (yellow)
+        pr.draw_rectangle(int(bar_x), int(py), int(stats_width), bar_height, pr.YELLOW)
 
-        # Draw life text
-        stats_text = f"[{stats_sum}]"
-        life_text = f" {int(life)}/{int(max_life)}"
+        # Draw stats text
+        stats_text = f"{stats_sum}/{stats_limit}"
         font_size = 10
+        text_width = pr.measure_text(stats_text, font_size)
 
-        stats_text_width = pr.measure_text(stats_text, font_size)
-        total_text_width = pr.measure_text(stats_text + life_text, font_size)
-
-        text_x = px - total_text_width / 2
+        text_x = px - text_width / 2
         text_y = py + (bar_height - font_size) / 2
 
-        # Draw stats text (yellow with shadow)
+        # Draw stats text (white with shadow)
         pr.draw_text_ex(
             pr.get_font_default(),
             stats_text,
@@ -217,16 +214,41 @@ class EntityRender:
             pr.Vector2(text_x, text_y),
             font_size,
             1,
-            pr.YELLOW,
+            pr.WHITE,
         )
 
+    def _draw_entity_life_bar(self, px, py, width, life, max_life):
+        """
+        Helper to draw a life bar centered horizontally at px, with text.
+        py is the top of the bar.
+        """
+        if max_life <= 0:
+            return
+
+        bar_height = 12
+        life_percentage = max(0.0, min(1.0, life / max_life))
+        life_width = width * life_percentage
+
+        bar_x = px - width / 2
+
+        # Background (black)
+        pr.draw_rectangle(int(bar_x), int(py), int(width), bar_height, pr.BLACK)
+        # Foreground (green)
+        pr.draw_rectangle(int(bar_x), int(py), int(life_width), bar_height, pr.GREEN)
+
+        # Draw life text
+        life_text = f"{int(life)}/{int(max_life)}"
+        font_size = 10
+        text_width = pr.measure_text(life_text, font_size)
+
+        text_x = px - text_width / 2
+        text_y = py + (bar_height - font_size) / 2
+
         # Draw life text (white with shadow)
-        life_text_x = text_x + stats_text_width
-        # Draw main text
         pr.draw_text_ex(
             pr.get_font_default(),
             life_text,
-            pr.Vector2(life_text_x + 1, text_y + 1),
+            pr.Vector2(text_x + 1, text_y + 1),
             font_size,
             1,
             pr.BLACK,
@@ -234,7 +256,7 @@ class EntityRender:
         pr.draw_text_ex(
             pr.get_font_default(),
             life_text,
-            pr.Vector2(life_text_x, text_y),
+            pr.Vector2(text_x, text_y),
             font_size,
             1,
             pr.WHITE,
@@ -534,8 +556,9 @@ class EntityRender:
             font_size = 12
             line_spacing = 2
             line_height = font_size + line_spacing
-            life_bar_height = 12
+            bar_height = 12
             gap_entity_to_bar = 6
+            gap_between_bars = 2
             gap_bar_to_label = 4
 
             # Calculate total height of the label block.
@@ -544,14 +567,25 @@ class EntityRender:
             )
 
             # Position life bar relative to the entity's top edge
-            life_bar_top_y = scaled_pos_y - gap_entity_to_bar - life_bar_height
+            life_bar_top_y = scaled_pos_y - gap_entity_to_bar - bar_height
 
-            # Position label relative to the life bar
-            label_top_y = life_bar_top_y - gap_bar_to_label - total_label_height
+            # Position stats bar relative to the life bar
+            stats_bar_top_y = life_bar_top_y - gap_between_bars - bar_height
+
+            # Position label relative to the stats bar
+            label_top_y = stats_bar_top_y - gap_bar_to_label - total_label_height
+
+            # Get stats limit
+            stats_limit = self.game_state.sum_stats_limit
+
+            # Draw stats bar
+            self._draw_entity_stats_bar(
+                center_x, stats_bar_top_y, scaled_dims_w, stats_sum, stats_limit
+            )
 
             # Draw life bar
             self._draw_entity_life_bar(
-                center_x, life_bar_top_y, scaled_dims_w, life, max_life, stats_sum
+                center_x, life_bar_top_y, scaled_dims_w, life, max_life
             )
 
             # Draw label
