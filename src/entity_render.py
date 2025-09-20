@@ -61,12 +61,19 @@ class EntityRender:
         text_lines: list of strings, drawn top->down
         """
         y = py
-        main_color = self.game_state.colors.get("UI_TEXT", pr.Color(255, 255, 255, 255))
+        default_main_color = self.game_state.colors.get(
+            "UI_TEXT", pr.Color(255, 255, 255, 255)
+        )
         shadow_color = pr.BLACK
 
         for line in text_lines:
             tw = pr.measure_text(line, font_size)
             x = px - tw / 2
+
+            # Use red for respawn text, otherwise use the default color.
+            main_color = default_main_color
+            if line.startswith("Respawn in:"):
+                main_color = self.game_state.colors.get("ERROR_TEXT", pr.RED)
 
             # Draw shadow
             pr.draw_text_ex(
