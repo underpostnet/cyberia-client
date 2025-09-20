@@ -680,7 +680,11 @@ class NetworkClient:
                     self.hud.drag_moved = False
 
             # If view open, check close button pressed (top-right inside view area)
-            if self.hud.view_open and mouse_pressed:
+            if (
+                self.hud.view_open
+                and self.hud.view_selected is not None
+                and mouse_pressed
+            ):
                 # only check close if click is inside view area (above the hud_bar)
                 hud_occupied = (1.0 - self.hud.slide_progress) * self.hud.bar_height
                 view_y_max = self.screen_height - hud_occupied

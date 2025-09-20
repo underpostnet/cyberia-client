@@ -549,6 +549,7 @@ class Hud:
         # guard index validity
         if not (0 <= self.view_selected < len(self.items)):
             self.view_selected = None
+            self.view_open = False
             self.view_button_rect = None
             return
 
