@@ -91,6 +91,14 @@ class TextureManager:
             print(f"An error occurred while loading texture from URL {url}: {e}")
             return None
 
+    def load_ui_icon(self, icon_name: str) -> Optional[pr.Texture]:
+        """
+        Loads a UI icon texture from the assets server's /ui-icons/ directory.
+        Example: load_ui_icon("close-yellow.png") -> loads from ASSETS_BASE_URL/ui-icons/close-yellow.png
+        """
+        url = f"{ASSETS_BASE_URL}/ui-icons/{icon_name}"
+        return self.load_texture_from_url(url)
+
     def get_texture(self, identifier: str) -> Optional[pr.Texture]:
         """
         Retrieves a texture from the cache.

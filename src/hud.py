@@ -42,8 +42,8 @@ class Hud:
         # reorder logic, using an index is stable in the current design.
         self.view_open: bool = False
         self.view_selected: Optional[int] = None  # index of selected item or None
-        self.close_w: int = 36
-        self.close_h: int = 30
+        self.close_w: int = 50
+        self.close_h: int = 50
 
         # HUD alerts
         self.alert_text: str = ""
@@ -751,9 +751,37 @@ class Hud:
             )
             info_y += 20
 
-        close_x = screen_width - self.close_w - 12
-        close_y = 12
-        self.draw_hud_small_button(close_x, close_y, self.close_w, self.close_h, "✕")
+        # --- Close Button with Hover Effect ---
+        close_w, close_h = self.close_w, self.close_h
+        close_x, close_y = screen_width - close_w - 12, 12
+
+        mx, my = pr.get_mouse_position().x, pr.get_mouse_position().y
+        hovered = (
+            mx >= close_x
+            and mx <= close_x + close_w
+            and my >= close_y
+            and my <= close_y + close_h
+        )
+
+        hover_scale = 1.15
+        final_w = close_w * hover_scale if hovered else close_w
+        final_h = close_h * hover_scale if hovered else close_h
+        final_x = close_x - (final_w - close_w) / 2
+        final_y = close_y - (final_h - close_h) / 2
+
+        close_icon = self.texture_manager.load_ui_icon("close-yellow.png")
+        if close_icon and close_icon.id > 0:
+            pr.draw_texture_pro(
+                close_icon,
+                pr.Rectangle(0, 0, close_icon.width, close_icon.height),
+                pr.Rectangle(final_x, final_y, final_w, final_h),
+                pr.Vector2(0, 0),
+                0.0,
+                pr.WHITE,
+            )
+        else:
+            # Fallback button has its own hover effect
+            self.draw_hud_small_button(close_x, close_y, close_w, close_h, "✕")
 
         btn_w = preview_bg_w - 20
         btn_h = 45
@@ -798,16 +826,36 @@ class Hud:
 
             ts = 20
             tw = pr.measure_text(label, ts)
+            icon_name = "unequip.png" if item.get("isActive") else "equip.png"
+            icon_texture = self.texture_manager.load_ui_icon(icon_name)
+
+            icon_size = 24
+            icon_padding = 8
+            total_content_width = tw + icon_padding + icon_size
+            start_content_x = btn_x + (btn_w - total_content_width) / 2
+
+            # Draw text
             pr.draw_text_ex(
                 pr.get_font_default(),
                 label,
-                pr.Vector2(
-                    btn_x + (btn_w / 2) - (tw / 2), btn_y + (btn_h / 2) - (ts / 2)
-                ),
+                pr.Vector2(start_content_x, btn_y + (btn_h / 2) - (ts / 2)),
                 ts,
                 1,
                 pr.WHITE if ok else pr.GRAY,
             )
+
+            # Draw icon
+            if icon_texture and icon_texture.id > 0:
+                icon_x = start_content_x + tw + icon_padding
+                icon_y = btn_y + (btn_h - icon_size) / 2
+                pr.draw_texture_pro(
+                    icon_texture,
+                    pr.Rectangle(0, 0, icon_texture.width, icon_texture.height),
+                    pr.Rectangle(icon_x, icon_y, icon_size, icon_size),
+                    pr.Vector2(0, 0),
+                    0.0,
+                    pr.WHITE if ok else pr.GRAY,
+                )
 
             self.view_button_rect = (btn_x, btn_y, btn_w, btn_h)
         else:
@@ -846,43 +894,61 @@ class Hud:
     def draw_hud_toggle(
         self, mouse_pos: Any, screen_width: int, screen_height: int
     ) -> None:
-        btn_w = 72
-        btn_h = 22
+        btn_w = 50
+        btn_h = 50
         btn_x = (screen_width / 2) - (btn_w / 2)
 
         hud_x, hud_y, hud_w, hud_h = self._hud_bar_rect(screen_width, screen_height)
-        btn_y_when_visible = hud_y - btn_h - 8
-        btn_y_when_hidden = screen_height - btn_h - 8
+        btn_y_when_visible = hud_y - btn_h - 12
+        btn_y_when_hidden = screen_height - btn_h - 12
         btn_y = pr.lerp(btn_y_when_visible, btn_y_when_hidden, self.slide_progress)
 
         self.toggle_rect = (btn_x, btn_y, btn_w, btn_h)
 
-        bg = pr.Color(50, 50, 50, 230)
         pr.draw_rectangle_pro(
             pr.Rectangle(int(btn_x), int(btn_y), int(btn_w), int(btn_h)),
             pr.Vector2(0, 0),
             0,
-            bg,
+            pr.Color(0, 0, 0, 0),  # Transparent background
         )
-        try:
-            pr.draw_rectangle_lines(
-                int(btn_x),
-                int(btn_y),
-                int(btn_w),
-                int(btn_h),
-                pr.Color(255, 255, 255, 18),
-            )
-        except Exception:
-            pass
 
-        arrow = "▲" if self.collapsed else "▼"
-        ts = 16
-        tw = pr.measure_text(arrow, ts)
-        pr.draw_text_ex(
-            pr.get_font_default(),
-            arrow,
-            pr.Vector2(btn_x + (btn_w / 2) - (tw / 2), btn_y + (btn_h / 2) - (ts / 2)),
-            ts,
-            1,
-            self.game_state.colors.get("UI_TEXT", pr.Color(255, 255, 255, 255)),
+        bx, by, bw, bh = self.toggle_rect
+        hovered = (
+            mouse_pos.x >= bx
+            and mouse_pos.x <= bx + bw
+            and mouse_pos.y >= by
+            and mouse_pos.y <= by + bh
         )
+
+        icon = self.texture_manager.load_ui_icon("cyberia-white.png")
+        if icon and icon.id > 0:
+            base_icon_size = btn_w
+            hover_scale = 1.15
+            icon_size = base_icon_size * hover_scale if hovered else base_icon_size
+
+            icon_x = btn_x + (btn_w - icon_size) / 2
+            icon_y = btn_y + (btn_h - icon_size) / 2
+
+            pr.draw_texture_pro(
+                icon,
+                pr.Rectangle(0, 0, icon.width, icon.height),
+                pr.Rectangle(icon_x, icon_y, icon_size, icon_size),
+                pr.Vector2(0, 0),
+                0.0,
+                pr.WHITE,
+            )
+        else:
+            # Fallback to arrows
+            arrow = "▲" if self.collapsed else "▼"
+            ts = 16
+            tw = pr.measure_text(arrow, ts)
+            pr.draw_text_ex(
+                pr.get_font_default(),
+                arrow,
+                pr.Vector2(
+                    btn_x + (btn_w / 2) - (tw / 2), btn_y + (btn_h / 2) - (ts / 2)
+                ),
+                ts,
+                1,
+                self.game_state.colors.get("UI_TEXT", pr.Color(255, 255, 255, 255)),
+            )
