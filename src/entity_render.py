@@ -237,9 +237,14 @@ class EntityRender:
         # so we add the offset.
         indicator_y = py + jump_offset
 
+        # Determine which icon to use. If the player is dead (life <= 0 or respawning),
+        # show a skull. Otherwise, show the default arrow.
+        icon_name = "arrow-down.png"
+        if self.game_state.player_life <= 0 or self.game_state.player_respawn_in > 0:
+            icon_name = "skull.png"
+
         # Load texture using the texture manager. It handles caching.
-        # The icon name corresponds to /assets/ui-icons/arrow-down.png on the asset server.
-        texture = self.texture_manager.load_ui_icon("arrow-down.png")
+        texture = self.texture_manager.load_ui_icon(icon_name)
 
         if texture and texture.id > 0:
             indicator_size = 20
