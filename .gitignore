@@ -4,3 +4,4 @@ __pycache__
 .env
 color_map.json
 decoder_model.keras
+env
