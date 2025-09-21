@@ -42,7 +42,31 @@ class FloatingTextManager:
         self.duration = 1.5  # seconds
         # Accumulate damage/healing over an interval to reduce text spam
         self.life_diff_accumulators = {}
+        self.coin_diff_accumulators = {}
         self.accumulation_interval = 0.4  # seconds
+
+    def add_coin_change_text(
+        self, diff: float, entity_pos: pr.Vector2, entity_dims: pr.Vector2
+    ):
+        """Convenience method to create text for coin changes."""
+        if diff == 0:
+            return
+
+        is_positive = diff > 0
+        text = f"+{int(diff)}" if is_positive else f"{int(diff)}"
+        color = (
+            self.game_state.colors.get("COIN_PLUS", pr.YELLOW)
+            if is_positive
+            else self.game_state.colors.get("COIN_MINUS", pr.Color(180, 180, 0, 255))
+        )
+
+        # Start text above the center of the entity
+        start_pos_world = pr.Vector2(
+            (entity_pos.x + entity_dims.x / 2) * self.game_state.cell_size,
+            entity_pos.y * self.game_state.cell_size,
+        )
+
+        self.add_text(text, start_pos_world, color)
 
     def add_life_change_text(
         self, diff: float, entity_pos: pr.Vector2, entity_dims: pr.Vector2
@@ -66,6 +90,31 @@ class FloatingTextManager:
         )
 
         self.add_text(text, start_pos_world, color)
+
+    def accumulate_coin_change(
+        self,
+        entity_id: str,
+        diff: float,
+        entity_pos: pr.Vector2,
+        entity_dims: pr.Vector2,
+    ):
+        """Accumulates coin changes for an entity over a short interval."""
+        if diff == 0 or not entity_id:
+            return
+
+        if entity_id not in self.coin_diff_accumulators:
+            self.coin_diff_accumulators[entity_id] = {
+                "accumulated_diff": diff,
+                "first_update_time": time.time(),
+                "pos": entity_pos,
+                "dims": entity_dims,
+            }
+        else:
+            accumulator = self.coin_diff_accumulators[entity_id]
+            accumulator["accumulated_diff"] += diff
+            # Always update pos/dims to the latest known values
+            accumulator["pos"] = entity_pos
+            accumulator["dims"] = entity_dims
 
     def accumulate_life_change(
         self,
@@ -101,8 +150,8 @@ class FloatingTextManager:
         """Updates all active floating texts and flushes accumulators."""
         current_time = time.time()
 
-        # --- Flush accumulators that have expired ---
-        flushed_ids = []
+        # --- Flush life accumulators that have expired ---
+        flushed_life_ids = []
         for entity_id, accumulator in self.life_diff_accumulators.items():
             if (
                 current_time - accumulator["first_update_time"]
@@ -112,10 +161,26 @@ class FloatingTextManager:
                     accumulator["pos"],
                     accumulator["dims"],
                 )
-                flushed_ids.append(entity_id)
+                flushed_life_ids.append(entity_id)
 
-        for entity_id in flushed_ids:
+        for entity_id in flushed_life_ids:
             del self.life_diff_accumulators[entity_id]
+
+        # --- Flush coin accumulators that have expired ---
+        flushed_coin_ids = []
+        for entity_id, accumulator in self.coin_diff_accumulators.items():
+            if (
+                current_time - accumulator["first_update_time"]
+            ) >= self.accumulation_interval:
+                self.add_coin_change_text(
+                    accumulator["accumulated_diff"],
+                    accumulator["pos"],
+                    accumulator["dims"],
+                )
+                flushed_coin_ids.append(entity_id)
+
+        for entity_id in flushed_coin_ids:
+            del self.coin_diff_accumulators[entity_id]
 
         # --- Update existing floating texts (animation and lifetime) ---
         active_texts = []

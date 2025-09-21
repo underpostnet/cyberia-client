@@ -70,6 +70,21 @@ class NetworkClient:
         self.entity_bot_render = EntityBotRender(self.game_state, self.entity_render)
         self.dev_ui = DevUI(self.game_state, self.hud)
 
+    def _calculate_total_coin_quantity(self, object_layers_state: list) -> int:
+        total_quantity = 0
+        if not object_layers_state:
+            return 0
+        for layer_state in object_layers_state:
+            item_id = layer_state.get("itemId")
+            if not item_id:
+                continue
+            # This might block, but it's what the user asked for.
+            # It will be cached after the first time.
+            object_layer = self.obj_layers_mgr.get_or_fetch(item_id)
+            if object_layer and object_layer.data.item.type == "coin":
+                total_quantity += layer_state.get("quantity", 0)
+        return total_quantity
+
     def on_message(self, ws, message):
         with self.game_state.mutex:
             try:
@@ -181,6 +196,27 @@ class NetworkClient:
                                 self.game_state.player_pos_interpolated,
                                 self.game_state.player_dims,
                             )
+
+                        # Coin change
+                        new_player_object_layers = player_data.get("objectLayers")
+                        if isinstance(new_player_object_layers, list):
+                            old_player_object_layers = (
+                                self.game_state.player_object_layers
+                            )
+                            old_coin_qty = self._calculate_total_coin_quantity(
+                                old_player_object_layers
+                            )
+                            new_coin_qty = self._calculate_total_coin_quantity(
+                                new_player_object_layers
+                            )
+                            coin_diff = new_coin_qty - old_coin_qty
+                            if coin_diff != 0:
+                                self.floating_text_manager.accumulate_coin_change(
+                                    player_data.get("id"),
+                                    coin_diff,
+                                    self.game_state.player_pos_interpolated,
+                                    self.game_state.player_dims,
+                                )
 
                         self.game_state.player_id = player_data.get("id")
                         self.game_state.player_map_id = int(player_data.get("MapID", 0))
@@ -320,6 +356,23 @@ class NetworkClient:
                                         dims_vec,
                                     )
 
+                                # Coin change
+                                old_object_layers = prev_entry.get("object_layers", [])
+                                old_coin_qty = self._calculate_total_coin_quantity(
+                                    old_object_layers
+                                )
+                                new_coin_qty = self._calculate_total_coin_quantity(
+                                    object_layers_state
+                                )
+                                coin_diff = new_coin_qty - old_coin_qty
+                                if coin_diff != 0:
+                                    self.floating_text_manager.accumulate_coin_change(
+                                        player_id,
+                                        coin_diff,
+                                        prev_entry.get("interp_pos", server_pos),
+                                        dims_vec,
+                                    )
+
                                 pos_prev = prev_entry.get("pos_server", server_pos)
                                 # set new entry preserving previous pos_server as pos_prev for interpolation
                                 new_other_players[player_id] = {
@@ -442,6 +495,25 @@ class NetworkClient:
                                         self.floating_text_manager.accumulate_life_change(
                                             obj_id,
                                             life_diff,
+                                            prev_bot.get("interp_pos", server_pos),
+                                            dims_vec,
+                                        )
+
+                                    # Coin change
+                                    old_object_layers = prev_bot.get(
+                                        "object_layers", []
+                                    )
+                                    old_coin_qty = self._calculate_total_coin_quantity(
+                                        old_object_layers
+                                    )
+                                    new_coin_qty = self._calculate_total_coin_quantity(
+                                        object_layers_state
+                                    )
+                                    coin_diff = new_coin_qty - old_coin_qty
+                                    if coin_diff != 0:
+                                        self.floating_text_manager.accumulate_coin_change(
+                                            obj_id,
+                                            coin_diff,
                                             prev_bot.get("interp_pos", server_pos),
                                             dims_vec,
                                         )
