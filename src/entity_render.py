@@ -214,49 +214,48 @@ class EntityRender:
             pr.WHITE,
         )
 
-    def _draw_player_indicator(self, px: float, py: float):
-        """Draws a jumping downward arrow icon above the player."""
+    def _draw_entity_indicator(
+        self, px: float, py: float, entity_type: str, entity_data: Any
+    ):
+        """Draws a jumping indicator icon above an entity (player or bot)."""
         now = time.time()
 
         # Animation parameters
         jump_height = 5.0  # How far it jumps down in pixels.
         jump_speed = 6.0  # Controls the speed of the jump cycle (increased from 3.0).
 
-        # "Jump down" animation.
-        # `pow(abs(sin), high_number)` creates a function that is 0 most of the time
-        # with sharp peaks to 1. This creates a "jump" effect.
-        # Reduced exponent from 16 to 8 to make the animation less "peaky" and faster.
+        # "Jump down" animation using a sine wave.
         jump_factor = pow(abs(math.sin(now * jump_speed)), 8)
         jump_offset = jump_factor * jump_height
-
-        # `py` is the highest point of the indicator. It jumps "down" from there,
-        # so we add the offset.
         indicator_y = py + jump_offset
 
-        # Determine which icon to use. If the player is dead (life <= 0 or respawning),
-        # show a skull. Otherwise, show the default arrow.
-        icon_name = "arrow-down.png"
-        if self.game_state.player.life <= 0 or self.game_state.player.respawn_in > 0:
+        # Determine which icon to use based on entity state.
+        icon_name = None
+        if entity_data.life <= 0 or entity_data.respawn_in > 0:
             icon_name = "skull.png"
+        elif entity_type == "self":
+            icon_name = "arrow-down.png"
+        elif entity_type == "other":
+            icon_name = "arrow-down-gray.png"
+        elif entity_type == "bot":
+            if entity_data.behavior == "hostile":
+                icon_name = "arrow-down-red.png"
+            else:  # passive, etc.
+                icon_name = "arrow-down-gray.png"
 
-        # Load texture using the texture manager. It handles caching.
+        if not icon_name:
+            return
+
         texture = self.texture_manager.load_ui_icon(icon_name)
-
         if texture and texture.id > 0:
             indicator_size = 20
-
-            # The destination rectangle for drawing the texture.
-            # We center it horizontally on `px` and vertically on `indicator_y`.
             dest_rec = pr.Rectangle(
                 px - indicator_size / 2,
                 indicator_y - indicator_size / 2,
                 indicator_size,
                 indicator_size,
             )
-
             source_rec = pr.Rectangle(0, 0, float(texture.width), float(texture.height))
-
-            # Draw the texture. No rotation, white tint.
             pr.draw_texture_pro(
                 texture, source_rec, dest_rec, pr.Vector2(0, 0), 0.0, pr.WHITE
             )
@@ -625,8 +624,7 @@ class EntityRender:
             # Draw label
             self._draw_entity_label(center_x, label_top_y, label_lines, font_size=12)
 
-            # Draw player indicator for the main player
-            if typ == "self":
-                # Position indicator above the label block
-                indicator_y = label_top_y - 15  # 15 pixels above the labels
-                self._draw_player_indicator(center_x, indicator_y)
+            # Draw entity indicator (player, bot, etc.)
+            # Position indicator above the label block
+            indicator_y = label_top_y - 15  # 15 pixels above the labels
+            self._draw_entity_indicator(center_x, indicator_y, typ, data)
