@@ -1,6 +1,7 @@
 import threading
 import pyray as pr
 from src.object_layer.object_layer import Direction, ObjectLayerMode
+from src.entity_state import PlayerState, BotState, EntityState
 import time
 
 
@@ -8,9 +9,6 @@ class GameState:
     def __init__(self):
         self.mutex = threading.Lock()
         self.player_id = None
-        self.player_map_id = 0
-        self.player_mode = ObjectLayerMode.IDLE
-        self.player_direction = Direction.NONE
 
         # Will be set by init_data
         self.grid_w = 0
@@ -32,27 +30,22 @@ class GameState:
         self.portals = {}
         self.floors = {}
 
-        # player positions (player uses interpolation already)
-        self.player_pos_interpolated = pr.Vector2(0, 0)
-        self.player_pos_server = pr.Vector2(0, 0)
-        self.player_pos_prev = pr.Vector2(0, 0)
-        self.player_dims = pr.Vector2(1.0, 1.0)
-        self.player_life = 100.0
-        self.player_max_life = 100.0
-        self.player_object_layers = []
-        self.player_respawn_in = 0.0
+        # Main player state using the new dataclass
+        self.player: PlayerState = PlayerState(
+            id="",
+            pos_server=pr.Vector2(0, 0),
+            pos_prev=pr.Vector2(0, 0),
+            interp_pos=pr.Vector2(0, 0),
+            dims=pr.Vector2(1.0, 1.0),
+            direction=Direction.NONE,
+            mode=ObjectLayerMode.IDLE,
+        )
 
-        # other players: keyed by id -> dict with keys:
-        # { pos_server:Vector2, pos_prev:Vector2, interp_pos:Vector2, dims:Vector2,
-        #   direction:Direction, mode:ObjectLayerMode, last_update:float, life:float, max_life:float,
-        #   respawnIn: float }
+        # other players: keyed by id -> EntityState
         self.other_players = {}
 
-        # bots: similar structure keyed by bot_id
-        self.bots = {}
-
-        self.path = []
-        self.target_pos = pr.Vector2(-1, -1)
+        # bots: keyed by bot_id -> BotState
+        self.bots: dict[str, BotState] = {}
         self.last_update_time = time.time()
         self.last_error_message = ""
         self.error_display_time = 0.0

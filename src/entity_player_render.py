@@ -19,16 +19,16 @@ class EntityPlayerRender:
             interp_factor = min(1.0, time_since_update / (interp_ms / 1000.0))
 
             current_x = pr.lerp(
-                self.game_state.player_pos_prev.x,
-                self.game_state.player_pos_server.x,
+                self.game_state.player.pos_prev.x,
+                self.game_state.player.pos_server.x,
                 interp_factor,
             )
             current_y = pr.lerp(
-                self.game_state.player_pos_prev.y,
-                self.game_state.player_pos_server.y,
+                self.game_state.player.pos_prev.y,
+                self.game_state.player.pos_server.y,
                 interp_factor,
             )
-            self.game_state.player_pos_interpolated = pr.Vector2(current_x, current_y)
+            self.game_state.player.interp_pos = pr.Vector2(current_x, current_y)
 
     def _draw_player_at(
         self,

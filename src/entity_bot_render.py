@@ -12,10 +12,10 @@ class EntityBotRender:
         bot_entry is the dict with fields 'interp_pos','dims','behavior','direction'
         """
         cell_size = self.game_state.cell_size if self.game_state.cell_size > 0 else 12.0
-        pos = bot_entry.get("interp_pos", bot_entry.get("pos_server", pr.Vector2(0, 0)))
-        dims = bot_entry.get("dims", pr.Vector2(1, 1))
-        behavior = bot_entry.get("behavior", "passive")
-        direction = bot_entry.get("direction", Direction.NONE)
+        pos = bot_entry.interp_pos
+        dims = bot_entry.dims
+        behavior = bot_entry.behavior
+        direction = bot_entry.direction
 
         scaled_pos_x = pos.x * cell_size
         scaled_pos_y = pos.y * cell_size

@@ -1,5 +1,6 @@
 import pyray as pr
 import websocket
+from src.entity_state import PlayerState, BotState, EntityState
 import threading
 import json
 import time
@@ -22,6 +23,7 @@ from src.entity_render import EntityRender
 from src.entity_player_render import EntityPlayerRender
 from src.grid_render import GridRender
 from src.entity_bot_render import EntityBotRender
+from src.serial import from_dict_generic
 
 
 class NetworkClient:
@@ -183,25 +185,25 @@ class NetworkClient:
 
                     # ---------- Player ----------
                     if player_data:
-                        self.game_state.player_pos_prev = (
-                            self.game_state.player_pos_interpolated
+                        self.game_state.player.pos_prev = (
+                            self.game_state.player.interp_pos
                         )
-                        old_life = self.game_state.player_life
+                        old_life = self.game_state.player.life
                         new_life = float(player_data.get("life", 100.0))
                         life_diff = new_life - old_life
                         if life_diff != 0:
                             self.floating_text_manager.accumulate_life_change(
                                 player_data.get("id"),
                                 life_diff,
-                                self.game_state.player_pos_interpolated,
-                                self.game_state.player_dims,
+                                self.game_state.player.interp_pos,
+                                self.game_state.player.dims,
                             )
 
                         # Coin change
                         new_player_object_layers = player_data.get("objectLayers")
                         if isinstance(new_player_object_layers, list):
                             old_player_object_layers = (
-                                self.game_state.player_object_layers
+                                self.game_state.player.object_layers
                             )
                             old_coin_qty = self._calculate_total_coin_quantity(
                                 old_player_object_layers
@@ -214,85 +216,85 @@ class NetworkClient:
                                 self.floating_text_manager.accumulate_coin_change(
                                     player_data.get("id"),
                                     coin_diff,
-                                    self.game_state.player_pos_interpolated,
-                                    self.game_state.player_dims,
+                                    self.game_state.player.interp_pos,
+                                    self.game_state.player.dims,
                                 )
 
                         self.game_state.player_id = player_data.get("id")
-                        self.game_state.player_map_id = int(player_data.get("MapID", 0))
-                        self.game_state.player_respawn_in = float(
+                        self.game_state.player.map_id = int(player_data.get("MapID", 0))
+                        self.game_state.player.respawn_in = float(
                             player_data.get("respawnIn", 0.0)
                         )
-                        self.game_state.player_life = new_life
+                        self.game_state.player.life = new_life
 
-                        self.game_state.player_max_life = float(
+                        self.game_state.player.max_life = float(
                             player_data.get("maxLife", 100.0)
                         )
 
                         # mode
-                        mode_val = player_data.get("mode", 0)
+                        mode_val = player_data.get("mode", ObjectLayerMode.IDLE.value)
                         try:
                             mode_int = int(mode_val)
                         except (TypeError, ValueError):
                             mode_int = 0
                         try:
-                            self.game_state.player_mode = ObjectLayerMode(mode_int)
+                            self.game_state.player.mode = ObjectLayerMode(mode_int)
                         except Exception:
-                            self.game_state.player_mode = ObjectLayerMode.IDLE
+                            self.game_state.player.mode = ObjectLayerMode.IDLE
 
-                        # direction
+                        # direction for player
                         direction_val = player_data.get("direction", 8)
                         try:
                             dir_int = int(direction_val)
                         except (TypeError, ValueError):
                             dir_int = 8
                         try:
-                            self.game_state.player_direction = Direction(dir_int)
+                            self.game_state.player.direction = Direction(dir_int)
                         except Exception:
-                            self.game_state.player_direction = Direction.NONE
+                            self.game_state.player.direction = Direction.NONE
 
                         pos = player_data.get("Pos", {})
-                        self.game_state.player_pos_server = pr.Vector2(
+                        self.game_state.player.pos_server = pr.Vector2(
                             pos.get("X", 0.0), pos.get("Y", 0.0)
                         )
 
-                        if self.game_state.player_mode == ObjectLayerMode.TELEPORTING:
-                            self.game_state.player_pos_interpolated = (
-                                self.game_state.player_pos_server
+                        if self.game_state.player.mode == ObjectLayerMode.TELEPORTING:
+                            self.game_state.player.interp_pos = (
+                                self.game_state.player.pos_server
                             )
-                            self.game_state.player_pos_prev = (
-                                self.game_state.player_pos_server
+                            self.game_state.player.pos_prev = (
+                                self.game_state.player.pos_server
                             )
 
                         self.game_state.last_update_time = time.time()
 
                         dims = player_data.get("Dims", {})
-                        self.game_state.player_dims = pr.Vector2(
+                        self.game_state.player.dims = pr.Vector2(
                             dims.get("Width", self.game_state.default_obj_width),
                             dims.get("Height", self.game_state.default_obj_height),
                         )
 
                         path_data = player_data.get("path")
                         if path_data is not None:
-                            self.game_state.path = [
+                            self.game_state.player.path = [
                                 pr.Vector2(p.get("X"), p.get("Y")) for p in path_data
                             ]
                         else:
-                            self.game_state.path = []
+                            self.game_state.player.path = []
 
                         target_pos_data = player_data.get("targetPos")
                         if target_pos_data:
-                            self.game_state.target_pos = pr.Vector2(
+                            self.game_state.player.target_pos = pr.Vector2(
                                 target_pos_data.get("X"), target_pos_data.get("Y")
                             )
                         else:
-                            self.game_state.target_pos = pr.Vector2(-1, -1)
+                            self.game_state.player.target_pos = pr.Vector2(-1, -1)
 
                         # HUD items from player's object layers state
                         try:
                             object_layers_state = player_data.get("objectLayers")
                             if isinstance(object_layers_state, list):
-                                self.game_state.player_object_layers = (
+                                self.game_state.player.object_layers = (
                                     object_layers_state
                                 )
                                 self.hud.items = self.obj_layers_mgr.build_hud_items(
@@ -306,7 +308,7 @@ class NetworkClient:
                     visible_players_data = payload.get("visiblePlayers")
                     # We'll rebuild the other_players dict to match server's visible set,
                     # but interpolate by preserving prev/server when possible.
-                    new_other_players = {}
+                    new_other_players: dict[str, EntityState] = {}
                     if visible_players_data:
                         for player_id, p_data in visible_players_data.items():
                             if player_id == self.game_state.player_id:
@@ -345,19 +347,19 @@ class NetworkClient:
                             # if we had the player before, carry forward prev/server; else initialize both to server
                             prev_entry = self.game_state.other_players.get(player_id)
                             if prev_entry:
-                                old_life = prev_entry.get("life", 100.0)
+                                old_life = prev_entry.life
                                 new_life = float(p_data.get("life", 100.0))
                                 life_diff = new_life - old_life
                                 if life_diff != 0:
                                     self.floating_text_manager.accumulate_life_change(
                                         player_id,
                                         life_diff,
-                                        prev_entry.get("interp_pos", server_pos),
+                                        prev_entry.interp_pos,
                                         dims_vec,
                                     )
 
                                 # Coin change
-                                old_object_layers = prev_entry.get("object_layers", [])
+                                old_object_layers = prev_entry.object_layers
                                 old_coin_qty = self._calculate_total_coin_quantity(
                                     old_object_layers
                                 )
@@ -369,41 +371,39 @@ class NetworkClient:
                                     self.floating_text_manager.accumulate_coin_change(
                                         player_id,
                                         coin_diff,
-                                        prev_entry.get("interp_pos", server_pos),
+                                        prev_entry.interp_pos,
                                         dims_vec,
                                     )
 
-                                pos_prev = prev_entry.get("pos_server", server_pos)
+                                pos_prev = prev_entry.pos_server
                                 # set new entry preserving previous pos_server as pos_prev for interpolation
-                                new_other_players[player_id] = {
-                                    "pos_prev": pos_prev,
-                                    "pos_server": server_pos,
-                                    "interp_pos": prev_entry.get(
-                                        "interp_pos", server_pos
-                                    ),
-                                    "dims": dims_vec,
-                                    "direction": dir_enum,
-                                    "mode": mode_enum,
-                                    "last_update": time.time(),
-                                    "object_layers": object_layers_state,
-                                    "life": new_life,
-                                    "max_life": float(p_data.get("maxLife", 100.0)),
-                                    "respawnIn": float(p_data.get("respawnIn", 0.0)),
-                                }
+                                new_other_players[player_id] = EntityState(
+                                    id=player_id,
+                                    pos_prev=pos_prev,
+                                    pos_server=server_pos,
+                                    interp_pos=prev_entry.interp_pos,
+                                    dims=dims_vec,
+                                    direction=dir_enum,
+                                    mode=mode_enum,
+                                    object_layers=object_layers_state,
+                                    life=new_life,
+                                    max_life=float(p_data.get("maxLife", 100.0)),
+                                    respawn_in=float(p_data.get("respawnIn", 0.0)),
+                                )
                             else:
-                                new_other_players[player_id] = {
-                                    "pos_prev": server_pos,
-                                    "pos_server": server_pos,
-                                    "interp_pos": server_pos,
-                                    "dims": dims_vec,
-                                    "direction": dir_enum,
-                                    "mode": mode_enum,
-                                    "last_update": time.time(),
-                                    "object_layers": object_layers_state,
-                                    "life": float(p_data.get("life", 100.0)),
-                                    "max_life": float(p_data.get("maxLife", 100.0)),
-                                    "respawnIn": float(p_data.get("respawnIn", 0.0)),
-                                }
+                                new_other_players[player_id] = EntityState(
+                                    id=player_id,
+                                    pos_prev=server_pos,
+                                    pos_server=server_pos,
+                                    interp_pos=server_pos,
+                                    dims=dims_vec,
+                                    direction=dir_enum,
+                                    mode=mode_enum,
+                                    object_layers=object_layers_state,
+                                    life=float(p_data.get("life", 100.0)),
+                                    max_life=float(p_data.get("maxLife", 100.0)),
+                                    respawn_in=float(p_data.get("respawnIn", 0.0)),
+                                )
                     # replace other_players atomically
                     self.game_state.other_players = new_other_players
 
@@ -415,7 +415,7 @@ class NetworkClient:
                     self.game_state.floors = {}
 
                     # reset bots container; we'll rebuild keeping prev positions when possible for interpolation
-                    new_bots = {}
+                    new_bots: dict[str, BotState] = {}
 
                     if visible_objects_data:
                         for obj_id, obj_data in visible_objects_data.items():
@@ -488,21 +488,19 @@ class NetworkClient:
 
                                 prev_bot = self.game_state.bots.get(obj_id)
                                 if prev_bot:
-                                    old_life = prev_bot.get("life", 100.0)
+                                    old_life = prev_bot.life
                                     new_life = float(obj_data.get("life", 100.0))
                                     life_diff = new_life - old_life
                                     if life_diff != 0 and behavior != "bullet":
                                         self.floating_text_manager.accumulate_life_change(
                                             obj_id,
                                             life_diff,
-                                            prev_bot.get("interp_pos", server_pos),
+                                            prev_bot.interp_pos,
                                             dims_vec,
                                         )
 
                                     # Coin change
-                                    old_object_layers = prev_bot.get(
-                                        "object_layers", []
-                                    )
+                                    old_object_layers = prev_bot.object_layers
                                     old_coin_qty = self._calculate_total_coin_quantity(
                                         old_object_layers
                                     )
@@ -514,50 +512,44 @@ class NetworkClient:
                                         self.floating_text_manager.accumulate_coin_change(
                                             obj_id,
                                             coin_diff,
-                                            prev_bot.get("interp_pos", server_pos),
+                                            prev_bot.interp_pos,
                                             dims_vec,
                                         )
 
-                                    pos_prev = prev_bot.get("pos_server", server_pos)
-                                    new_bots[obj_id] = {
-                                        "pos_prev": pos_prev,
-                                        "pos_server": server_pos,
-                                        "interp_pos": prev_bot.get(
-                                            "interp_pos", server_pos
-                                        ),
-                                        "dims": dims_vec,
-                                        "behavior": behavior,
-                                        "direction": dir_enum,
-                                        "mode": mode_enum,
-                                        "last_update": time.time(),
-                                        "object_layers": object_layers_state,
-                                        "life": new_life,
-                                        "max_life": float(
-                                            obj_data.get("maxLife", 100.0)
-                                        ),
-                                        "respawnIn": float(
+                                    pos_prev = prev_bot.pos_server
+                                    new_bots[obj_id] = BotState(
+                                        id=obj_id,
+                                        pos_prev=pos_prev,
+                                        pos_server=server_pos,
+                                        interp_pos=prev_bot.interp_pos,
+                                        dims=dims_vec,
+                                        behavior=behavior,
+                                        direction=dir_enum,
+                                        mode=mode_enum,
+                                        object_layers=object_layers_state,
+                                        life=new_life,
+                                        max_life=float(obj_data.get("maxLife", 100.0)),
+                                        respawn_in=float(
                                             obj_data.get("respawnIn", 0.0)
                                         ),
-                                    }
+                                    )
                                 else:
-                                    new_bots[obj_id] = {
-                                        "pos_prev": server_pos,
-                                        "pos_server": server_pos,
-                                        "interp_pos": server_pos,
-                                        "dims": dims_vec,
-                                        "behavior": behavior,
-                                        "direction": dir_enum,
-                                        "mode": mode_enum,
-                                        "last_update": time.time(),
-                                        "object_layers": object_layers_state,
-                                        "life": float(obj_data.get("life", 100.0)),
-                                        "max_life": float(
-                                            obj_data.get("maxLife", 100.0)
-                                        ),
-                                        "respawnIn": float(
+                                    new_bots[obj_id] = BotState(
+                                        id=obj_id,
+                                        pos_prev=server_pos,
+                                        pos_server=server_pos,
+                                        interp_pos=server_pos,
+                                        dims=dims_vec,
+                                        behavior=behavior,
+                                        direction=dir_enum,
+                                        mode=mode_enum,
+                                        object_layers=object_layers_state,
+                                        life=float(obj_data.get("life", 100.0)),
+                                        max_life=float(obj_data.get("maxLife", 100.0)),
+                                        respawn_in=float(
                                             obj_data.get("respawnIn", 0.0)
                                         ),
-                                    }
+                                    )
 
                     # atomically replace bots
                     self.game_state.bots = new_bots
@@ -863,13 +855,13 @@ class NetworkClient:
                 # Use player's center so camera keeps player centered regardless of its dimensions
                 desired_center = pr.Vector2(
                     (
-                        self.game_state.player_pos_interpolated.x
-                        + self.game_state.player_dims.x / 2.0
+                        self.game_state.player.interp_pos.x
+                        + self.game_state.player.dims.x / 2.0
                     )
                     * cell_size,
                     (
-                        self.game_state.player_pos_interpolated.y
-                        + self.game_state.player_dims.y / 2.0
+                        self.game_state.player.interp_pos.y
+                        + self.game_state.player.dims.y / 2.0
                     )
                     * cell_size,
                 )

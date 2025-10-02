@@ -67,32 +67,32 @@ class EntityRender:
 
             # other players
             for pid, entry in list(self.game_state.other_players.items()):
-                last_update = entry.get("last_update", now)
+                last_update = entry.last_update
                 # compute factor relative to when server pos was set
                 dt = now - last_update
                 factor = 1.0 if max_dt <= 0 else min(1.0, dt / max_dt)
-                a = entry.get("pos_prev", entry.get("pos_server"))
-                b = entry.get("pos_server", a)
+                a = entry.pos_prev
+                b = entry.pos_server
                 try:
                     nx = pr.lerp(a.x, b.x, factor)
                     ny = pr.lerp(a.y, b.y, factor)
                 except Exception:
                     nx, ny = b.x, b.y
-                entry["interp_pos"] = pr.Vector2(nx, ny)
+                entry.interp_pos = pr.Vector2(nx, ny)
 
             # bots
             for bid, entry in list(self.game_state.bots.items()):
-                last_update = entry.get("last_update", now)
+                last_update = entry.last_update
                 dt = now - last_update
                 factor = 1.0 if max_dt <= 0 else min(1.0, dt / max_dt)
-                a = entry.get("pos_prev", entry.get("pos_server"))
-                b = entry.get("pos_server", a)
+                a = entry.pos_prev
+                b = entry.pos_server
                 try:
                     nx = pr.lerp(a.x, b.x, factor)
                     ny = pr.lerp(a.y, b.y, factor)
                 except Exception:
                     nx, ny = b.x, b.y
-                entry["interp_pos"] = pr.Vector2(nx, ny)
+                entry.interp_pos = pr.Vector2(nx, ny)
 
     def get_entity_active_stats_sum(self, entity_id: str) -> int:
         if not entity_id:
@@ -100,15 +100,11 @@ class EntityRender:
 
         object_layers_state = []
         if entity_id == self.game_state.player_id:
-            object_layers_state = self.game_state.player_object_layers
+            object_layers_state = self.game_state.player.object_layers
         elif entity_id in self.game_state.other_players:
-            object_layers_state = self.game_state.other_players[entity_id].get(
-                "object_layers", []
-            )
+            object_layers_state = self.game_state.other_players[entity_id].object_layers
         elif entity_id in self.game_state.bots:
-            object_layers_state = self.game_state.bots[entity_id].get(
-                "object_layers", []
-            )
+            object_layers_state = self.game_state.bots[entity_id].object_layers
 
         if not object_layers_state:
             return 0
@@ -240,7 +236,7 @@ class EntityRender:
         # Determine which icon to use. If the player is dead (life <= 0 or respawning),
         # show a skull. Otherwise, show the default arrow.
         icon_name = "arrow-down.png"
-        if self.game_state.player_life <= 0 or self.game_state.player_respawn_in > 0:
+        if self.game_state.player.life <= 0 or self.game_state.player.respawn_in > 0:
             icon_name = "skull.png"
 
         # Load texture using the texture manager. It handles caching.
@@ -380,7 +376,7 @@ class EntityRender:
                     "OTHER_PLAYER", pr.Color(255, 100, 0, 255)
                 )
             elif entity_type == "bot":
-                behavior = entity_data.get("behavior", "passive")
+                behavior = entity_data.behavior
                 if behavior == "hostile":
                     color = self.game_state.colors.get(
                         "ERROR_TEXT", pr.Color(255, 50, 50, 255)
@@ -518,35 +514,26 @@ class EntityRender:
         with self.game_state.mutex:
             # other players
             for player_id, p in self.game_state.other_players.items():
-                pos = p.get("interp_pos", p.get("pos_server"))
-                dims = p.get("dims", pr.Vector2(1.0, 1.0))
+                pos = p.interp_pos
+                dims = p.dims
                 bottom_y = pos.y + dims.y  # measured in grid cells
                 entries.append(("other", bottom_y, player_id, p))
             # bots
             for bot_id, b in self.game_state.bots.items():
-                pos = b.get("interp_pos", b.get("pos_server"))
-                dims = b.get("dims", pr.Vector2(1.0, 1.0))
+                pos = b.interp_pos
+                dims = b.dims
                 bottom_y = pos.y + dims.y
                 entries.append(("bot", bottom_y, bot_id, b))
             # self player (drawn as an entity too) use interpolated player pos
-            self_pos = self.game_state.player_pos_interpolated
-            self_dims = self.game_state.player_dims
+            self_pos = self.game_state.player.interp_pos
+            self_dims = self.game_state.player.dims
             bottom_y_self = self_pos.y + self_dims.y
             entries.append(
                 (
                     "self",
                     bottom_y_self,
                     self.game_state.player_id,
-                    {
-                        "pos": self_pos,
-                        "dims": self_dims,
-                        "direction": self.game_state.player_direction,
-                        "mode": self.game_state.player_mode,
-                        "object_layers": self.game_state.player_object_layers,
-                        "life": self.game_state.player_life,
-                        "max_life": self.game_state.player_max_life,
-                        "respawnIn": self.game_state.player_respawn_in,
-                    },
+                    self.game_state.player,
                 )
             )
 
@@ -556,16 +543,14 @@ class EntityRender:
         # draw in sorted order
         for typ, _, entity_id, data in entries:
             # Extract common entity data
-            pos = data.get(
-                "interp_pos", data.get("pos", self.game_state.player_pos_interpolated)
-            )
-            dims = data.get("dims", pr.Vector2(1.0, 1.0))
-            direction = data.get("direction", Direction.NONE)
-            mode = data.get("mode", ObjectLayerMode.IDLE)
-            object_layers = data.get("object_layers", [])
-            life = data.get("life", 100.0)
-            max_life = data.get("max_life", 100.0)
-            respawn_in = data.get("respawnIn", 0.0)
+            pos = data.interp_pos
+            dims = data.dims
+            direction = data.direction
+            mode = data.mode
+            object_layers = data.object_layers
+            life = data.life
+            max_life = data.max_life
+            respawn_in = data.respawn_in
 
             stats_sum = self.get_entity_active_stats_sum(entity_id)
 
@@ -587,16 +572,17 @@ class EntityRender:
             dir_text = (
                 direction.name if isinstance(direction, Direction) else str(direction)
             )
-            type_text = (
-                "Player" if typ in ["self", "other"] else data.get("behavior", "bot")
-            )
+
+            if typ in ["self", "other"]:
+                type_text = "Player"
+            else:  # bot
+                type_text = data.behavior
 
             label_lines = []
             if self.game_state.dev_ui:
                 label_lines = [str(id_text), str(dir_text), str(type_text)]
             else:
                 label_lines = [str(id_text).split("-")[0], str(type_text)]
-
             if respawn_in > 0:
                 label_lines.append(f"Respawn in: {int(respawn_in)}s")
 

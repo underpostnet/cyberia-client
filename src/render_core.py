@@ -14,8 +14,8 @@ class RenderCore:
         shadow_color = pr.BLACK
 
         with self.client.game_state.mutex:
-            map_id = self.client.game_state.player_map_id
-            pos = self.client.game_state.player_pos_interpolated
+            map_id = self.client.game_state.player.map_id
+            pos = self.client.game_state.player.interp_pos
 
         map_text = f"Map: {map_id}"
         pos_text = f"({pos.x:.1f}, {pos.y:.1f})"
@@ -148,16 +148,16 @@ class RenderCore:
         # initial target = player center position * cell_size (may be zero)
         try:
             player_center_x = (
-                self.client.game_state.player_pos_interpolated.x
-                + self.client.game_state.player_dims.x / 2.0
+                self.client.game_state.player.interp_pos.x
+                + self.client.game_state.player.dims.x / 2.0
             ) * (
                 self.client.game_state.cell_size
                 if self.client.game_state.cell_size > 0
                 else 12.0
             )
             player_center_y = (
-                self.client.game_state.player_pos_interpolated.y
-                + self.client.game_state.player_dims.y / 2.0
+                self.client.game_state.player.interp_pos.y
+                + self.client.game_state.player.dims.y / 2.0
             ) * (
                 self.client.game_state.cell_size
                 if self.client.game_state.cell_size > 0
@@ -201,15 +201,15 @@ class RenderCore:
 
     def draw_path(self):
         with self.client.game_state.mutex:
-            if self.client.game_state.path:
+            if self.client.game_state.player.path:
                 cell_size = (
                     self.client.game_state.cell_size
                     if self.client.game_state.cell_size > 0
                     else 12.0
                 )
                 target_x, target_y = (
-                    self.client.game_state.target_pos.x,
-                    self.client.game_state.target_pos.y,
+                    self.client.game_state.player.target_pos.x,
+                    self.client.game_state.player.target_pos.y,
                 )
                 if target_x >= 0 and target_y >= 0:
                     pr.draw_rectangle_pro(
@@ -225,7 +225,7 @@ class RenderCore:
                             "TARGET", pr.Color(255, 255, 0, 255)
                         ),
                     )
-                for p in self.client.game_state.path:
+                for p in self.client.game_state.player.path:
                     pr.draw_rectangle_pro(
                         pr.Rectangle(
                             p.x * cell_size, p.y * cell_size, cell_size, cell_size
@@ -240,8 +240,8 @@ class RenderCore:
     def draw_aoi_circle(self):
         with self.client.game_state.mutex:
             # Use player's center as AOI center so AOI is centered correctly regardless of player dims
-            player_pos = self.client.game_state.player_pos_interpolated
-            player_dims = self.client.game_state.player_dims
+            player_pos = self.client.game_state.player.interp_pos
+            player_dims = self.client.game_state.player.dims
             cell_size = (
                 self.client.game_state.cell_size
                 if self.client.game_state.cell_size > 0

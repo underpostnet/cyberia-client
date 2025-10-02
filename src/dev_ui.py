@@ -34,14 +34,14 @@ class DevUI:
             player_id = (
                 self.game_state.player_id if self.game_state.player_id else "N/A"
             )
-            player_map_id = self.game_state.player_map_id
-            player_mode = self.game_state.player_mode.name
-            player_dir = self.game_state.player_direction.name
-            target_pos = self.game_state.target_pos
+            player_map_id = self.game_state.player.map_id
+            player_mode = self.game_state.player.mode.name
+            player_dir = self.game_state.player.direction.name
+            target_pos = self.game_state.player.target_pos
             download_kbps = self.download_kbps
             upload_kbps = self.upload_kbps
             error_msg = self.game_state.last_error_message
-            player_pos_ui = self.game_state.player_pos_interpolated
+            player_pos_ui = self.game_state.player.interp_pos
             active_stats_sum = (
                 self.hud.client.entity_render.get_entity_active_stats_sum(
                     self.game_state.player_id
