@@ -4,16 +4,13 @@ from queue import Queue, Empty
 
 from src.object_layer.object_layer import (
     ObjectLayer,
-    ObjectLayerData,
     Stats,
-    Item,
-    Render,
-    RenderFrames,
 )
 from src.services.object_layers import ObjectLayersService
 from src.texture_manager import TextureManager
 from src.direction_converter import DirectionConverter
 from config import ASSETS_BASE_URL
+from src.serial import from_dict_generic
 
 
 class ObjectLayersManager:
@@ -44,7 +41,7 @@ class ObjectLayersManager:
         data = self.service.get_object_layer_by_item_id(item_id)
         if not data:
             return None
-        ol = self._parse_object_layer(data)
+        ol = from_dict_generic(data, ObjectLayer)
         if ol:
             self.cache[item_id] = ol
             # Print object layer info with frame counts
@@ -187,78 +184,3 @@ class ObjectLayersManager:
         extension: str = "png",
     ) -> str:
         return f"{ASSETS_BASE_URL}/{item_type}/{item_id}/{direction_code}/{frame}.{extension}"
-
-    def _parse_object_layer(self, data: Dict[str, Any]) -> Optional[ObjectLayer]:
-        """
-        Parses a raw dictionary of object layer data into a structured ObjectLayer object.
-        This includes robust handling for all nested dataclasses (Stats, Render, Item)
-        with default values for missing or malformed data to prevent crashes.
-        """
-        try:
-            # Stats parsing with robust type casting and defaults
-            stats_dict = data.get("stats") or {}
-            stats = Stats(
-                effect=int(stats_dict.get("effect", 0) or 0),
-                resistance=int(stats_dict.get("resistance", 0) or 0),
-                agility=int(stats_dict.get("agility", 0) or 0),
-                range=int(stats_dict.get("range", 0) or 0),
-                intelligence=int(stats_dict.get("intelligence", 0) or 0),
-                utility=int(stats_dict.get("utility", 0) or 0),
-            )
-
-            # Item parsing with robust type casting and defaults
-            item_src = data.get("item") or {}
-            item = Item(
-                id=str(item_src.get("id") or data.get("id") or ""),
-                type=str(item_src.get("type") or data.get("type") or ""),
-                description=str(
-                    item_src.get("description") or data.get("description") or ""
-                ),
-                activable=bool(item_src.get("activable", data.get("activable", False))),
-            )
-
-            # Render parsing including all frames, colors, and duration
-            render = Render()
-            render_data = data.get("render") or {}
-            render.colors = render_data.get("colors", [])
-            render.frame_duration = int(render_data.get("frame_duration", 0) or 0)
-            render.is_stateless = bool(render_data.get("is_stateless", False))
-
-            # RenderFrames parsing - iterate through all defined directions and modes
-            frames_data = render_data.get("frames") or {}
-
-            # Helper function to get frame list from dict
-            def get_frames(key, default_val=[]):
-                return frames_data.get(key, default_val)
-
-            # Assign all idle frames
-            render.frames.up_idle = get_frames("up_idle")
-            render.frames.down_idle = get_frames("down_idle")
-            render.frames.right_idle = get_frames("right_idle")
-            render.frames.left_idle = get_frames("left_idle")
-            render.frames.up_right_idle = get_frames("up_right_idle")
-            render.frames.down_right_idle = get_frames("down_right_idle")
-            render.frames.up_left_idle = get_frames("up_left_idle")
-            render.frames.down_left_idle = get_frames("down_left_idle")
-            render.frames.default_idle = get_frames("default_idle")
-            render.frames.none_idle = get_frames("none_idle")
-
-            # Assign all walking frames
-            render.frames.up_walking = get_frames("up_walking")
-            render.frames.down_walking = get_frames("down_walking")
-            render.frames.right_walking = get_frames("right_walking")
-            render.frames.left_walking = get_frames("left_walking")
-            render.frames.up_right_walking = get_frames("up_right_walking")
-            render.frames.down_right_walking = get_frames("down_right_walking")
-            render.frames.up_left_walking = get_frames("up_left_walking")
-            render.frames.down_left_walking = get_frames("down_left_walking")
-
-            # Create ObjectLayer with the new structure
-            return ObjectLayer(
-                data=ObjectLayerData(stats=stats, render=render, item=item),
-                sha256=str(data.get("sha256", "")),
-            )
-        except Exception as e:
-            # Log the error for debugging purposes
-            print(f"Error parsing object layer data: {e}")
-            return None

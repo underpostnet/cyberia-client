@@ -27,7 +27,7 @@ class ObjectLayersService:
             resp = requests.get(url, params=params, timeout=self.timeout)
             resp.raise_for_status()
 
-            return resp.json().get("items", [{}])[0].get("data")
+            return resp.json().get("items", [{}])[0]
 
         except (requests.RequestException, ValueError, AttributeError):
             # Handle network, JSON decode, or structure errors
