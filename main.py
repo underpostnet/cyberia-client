@@ -16,7 +16,6 @@ from src.object_layers_management import ObjectLayersManager
 from src.texture_manager import TextureManager
 from src.floating_text import FloatingTextManager
 from src.direction_converter import DirectionConverter
-from src.util import Util
 from src.render_core import RenderCore
 from src.entity_player_input import EntityPlayerInput
 from src.entity_render import EntityRender
@@ -43,7 +42,6 @@ class NetworkClient:
         # event to signal main thread to initialize graphics
         self.init_event = threading.Event()
 
-        self.util = Util()
         self.texture_manager = TextureManager()
         self.direction_converter = DirectionConverter()
         self.obj_layers_mgr = ObjectLayersManager(
@@ -116,9 +114,11 @@ class NetworkClient:
                     # colors
                     colors_payload = payload.get("colors", {})
                     for name, cdict in colors_payload.items():
-                        self.game_state.colors[name] = self.util.color_from_payload(
-                            cdict
-                        )
+                        r = int(cdict.get("r", 255))
+                        g = int(cdict.get("g", 255))
+                        b = int(cdict.get("b", 255))
+                        a = int(cdict.get("a", 255))
+                        self.game_state.colors[name] = pr.Color(r, g, b, a)
 
                     # graphics hints (do NOT call pyray here)
                     try:
