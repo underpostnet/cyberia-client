@@ -1,5 +1,6 @@
 import pyray as pr
 import websocket
+from src.network_models import AOIUpdatePayload, VisibleBot, VisibleFloor, VisibleObject
 from src.entity_state import PlayerState, BotState, EntityState
 import threading
 import json
@@ -75,14 +76,14 @@ class NetworkClient:
         if not object_layers_state:
             return 0
         for layer_state in object_layers_state:
-            item_id = layer_state.get("itemId")
+            item_id = layer_state.itemId
             if not item_id:
                 continue
             # This might block, but it's what the user asked for.
             # It will be cached after the first time.
             object_layer = self.obj_layers_mgr.get_or_fetch(item_id)
             if object_layer and object_layer.data.item.type == "coin":
-                total_quantity += layer_state.get("quantity", 0)
+                total_quantity += layer_state.quantity
         return total_quantity
 
     def on_message(self, ws, message):
@@ -167,95 +168,80 @@ class NetworkClient:
                     self.init_event.set()
 
                 elif message_type == "aoi_update":
-                    payload = data.get("payload")
-                    if not payload:
+                    payload_data = data.get("payload")
+                    if not payload_data:
                         return
 
-                    player_data = payload.get("player")
+                    payload = from_dict_generic(payload_data, AOIUpdatePayload)
+
+                    player_data = payload.player
                     # Update sumStatsLimit if server sends it per-player in AOI (keeps client synced)
-                    if player_data and "sumStatsLimit" in player_data:
-                        try:
-                            self.game_state.sum_stats_limit = int(
-                                player_data.get(
-                                    "sumStatsLimit", self.game_state.sum_stats_limit
-                                )
-                            )
-                        except Exception:
-                            pass
+                    if player_data:
+                        self.game_state.sum_stats_limit = player_data.sumStatsLimit
 
                     # ---------- Player ----------
                     if player_data:
                         self.game_state.player.pos_prev = (
                             self.game_state.player.interp_pos
                         )
+
                         old_life = self.game_state.player.life
-                        new_life = float(player_data.get("life", 100.0))
+                        new_life = player_data.life
                         life_diff = new_life - old_life
                         if life_diff != 0:
                             self.floating_text_manager.accumulate_life_change(
-                                player_data.get("id"),
+                                player_data.id,
                                 life_diff,
                                 self.game_state.player.interp_pos,
                                 self.game_state.player.dims,
                             )
 
                         # Coin change
-                        new_player_object_layers = player_data.get("objectLayers")
-                        if isinstance(new_player_object_layers, list):
-                            old_player_object_layers = (
-                                self.game_state.player.object_layers
+                        old_player_object_layers = self.game_state.player.object_layers
+                        new_player_object_layers = player_data.objectLayers
+                        old_coin_qty = self._calculate_total_coin_quantity(
+                            old_player_object_layers
+                        )
+                        new_coin_qty = self._calculate_total_coin_quantity(
+                            new_player_object_layers
+                        )
+                        coin_diff = new_coin_qty - old_coin_qty
+                        if coin_diff != 0:
+                            self.floating_text_manager.accumulate_coin_change(
+                                player_data.id,
+                                coin_diff,
+                                self.game_state.player.interp_pos,
+                                self.game_state.player.dims,
                             )
-                            old_coin_qty = self._calculate_total_coin_quantity(
-                                old_player_object_layers
-                            )
-                            new_coin_qty = self._calculate_total_coin_quantity(
-                                new_player_object_layers
-                            )
-                            coin_diff = new_coin_qty - old_coin_qty
-                            if coin_diff != 0:
-                                self.floating_text_manager.accumulate_coin_change(
-                                    player_data.get("id"),
-                                    coin_diff,
-                                    self.game_state.player.interp_pos,
-                                    self.game_state.player.dims,
-                                )
 
-                        self.game_state.player_id = player_data.get("id")
-                        self.game_state.player.map_id = int(player_data.get("MapID", 0))
-                        self.game_state.player.respawn_in = float(
-                            player_data.get("respawnIn", 0.0)
+                        self.game_state.player_id = player_data.id
+                        self.game_state.player.map_id = player_data.MapID
+                        self.game_state.player.respawn_in = (
+                            player_data.respawnIn
+                            if player_data.respawnIn is not None
+                            else 0.0
                         )
                         self.game_state.player.life = new_life
-
-                        self.game_state.player.max_life = float(
-                            player_data.get("maxLife", 100.0)
-                        )
+                        self.game_state.player.max_life = player_data.maxLife
 
                         # mode
-                        mode_val = player_data.get("mode", ObjectLayerMode.IDLE.value)
                         try:
-                            mode_int = int(mode_val)
-                        except (TypeError, ValueError):
-                            mode_int = 0
-                        try:
-                            self.game_state.player.mode = ObjectLayerMode(mode_int)
+                            self.game_state.player.mode = ObjectLayerMode(
+                                player_data.mode
+                            )
                         except Exception:
                             self.game_state.player.mode = ObjectLayerMode.IDLE
 
                         # direction for player
-                        direction_val = player_data.get("direction", 8)
                         try:
-                            dir_int = int(direction_val)
-                        except (TypeError, ValueError):
-                            dir_int = 8
-                        try:
-                            self.game_state.player.direction = Direction(dir_int)
+                            self.game_state.player.direction = Direction(
+                                player_data.direction
+                            )
                         except Exception:
                             self.game_state.player.direction = Direction.NONE
 
-                        pos = player_data.get("Pos", {})
                         self.game_state.player.pos_server = pr.Vector2(
-                            pos.get("X", 0.0), pos.get("Y", 0.0)
+                            player_data.Pos.X, player_data.Pos.Y
                         )
 
                         if self.game_state.player.mode == ObjectLayerMode.TELEPORTING:
@@ -268,44 +254,31 @@ class NetworkClient:
 
                         self.game_state.last_update_time = time.time()
 
-                        dims = player_data.get("Dims", {})
                         self.game_state.player.dims = pr.Vector2(
-                            dims.get("Width", self.game_state.default_obj_width),
-                            dims.get("Height", self.game_state.default_obj_height),
+                            player_data.Dims.Width, player_data.Dims.Height
                         )
 
-                        path_data = player_data.get("path")
-                        if path_data is not None:
-                            self.game_state.player.path = [
-                                pr.Vector2(p.get("X"), p.get("Y")) for p in path_data
-                            ]
-                        else:
-                            self.game_state.player.path = []
+                        self.game_state.player.path = [
+                            pr.Vector2(p.X, p.Y) for p in player_data.path
+                        ]
 
-                        target_pos_data = player_data.get("targetPos")
-                        if target_pos_data:
-                            self.game_state.player.target_pos = pr.Vector2(
-                                target_pos_data.get("X"), target_pos_data.get("Y")
-                            )
-                        else:
-                            self.game_state.player.target_pos = pr.Vector2(-1, -1)
+                        self.game_state.player.target_pos = pr.Vector2(
+                            player_data.targetPos.X, player_data.targetPos.Y
+                        )
 
                         # HUD items from player's object layers state
                         try:
-                            object_layers_state = player_data.get("objectLayers")
-                            if isinstance(object_layers_state, list):
-                                self.game_state.player.object_layers = (
-                                    object_layers_state
-                                )
-                                self.hud.items = self.obj_layers_mgr.build_hud_items(
-                                    object_layers_state
-                                )
-
+                            self.game_state.player.object_layers = (
+                                player_data.objectLayers
+                            )
+                            self.hud.items = self.obj_layers_mgr.build_hud_items(
+                                player_data.objectLayers
+                            )
                         except Exception:
                             pass
 
                     # ---------- Other players ----------
-                    visible_players_data = payload.get("visiblePlayers")
+                    visible_players_data = payload.visiblePlayers
                     # We'll rebuild the other_players dict to match server's visible set,
                     # but interpolate by preserving prev/server when possible.
                     new_other_players: dict[str, EntityState] = {}
@@ -313,42 +286,27 @@ class NetworkClient:
                         for player_id, p_data in visible_players_data.items():
                             if player_id == self.game_state.player_id:
                                 continue
-                            pos = p_data.get("Pos", {})
-                            dims = p_data.get("Dims", {})
-                            direction_val = p_data.get("direction", 8)
                             try:
-                                dir_int = int(direction_val)
-                            except (TypeError, ValueError):
-                                dir_int = 8
-                            try:
-                                dir_enum = Direction(dir_int)
+                                dir_enum = Direction(p_data.direction)
                             except Exception:
                                 dir_enum = Direction.NONE
 
-                            mode_val = p_data.get("mode", 0)
                             try:
-                                mode_int = int(mode_val)
-                            except (TypeError, ValueError):
-                                mode_int = 0
-                            try:
-                                mode_enum = ObjectLayerMode(mode_int)
+                                mode_enum = ObjectLayerMode(p_data.mode)
                             except Exception:
                                 mode_enum = ObjectLayerMode.IDLE
 
-                            object_layers_state = p_data.get("objectLayers", [])
+                            object_layers_state = p_data.objectLayers
 
                             # compute server pos vector
-                            server_pos = pr.Vector2(pos.get("X"), pos.get("Y"))
-                            dims_vec = pr.Vector2(
-                                dims.get("Width", self.game_state.default_obj_width),
-                                dims.get("Height", self.game_state.default_obj_height),
-                            )
+                            server_pos = pr.Vector2(p_data.Pos.X, p_data.Pos.Y)
+                            dims_vec = pr.Vector2(p_data.Dims.Width, p_data.Dims.Height)
 
                             # if we had the player before, carry forward prev/server; else initialize both to server
                             prev_entry = self.game_state.other_players.get(player_id)
                             if prev_entry:
                                 old_life = prev_entry.life
-                                new_life = float(p_data.get("life", 100.0))
+                                new_life = p_data.life
                                 life_diff = new_life - old_life
                                 if life_diff != 0:
                                     self.floating_text_manager.accumulate_life_change(
@@ -387,8 +345,12 @@ class NetworkClient:
                                     mode=mode_enum,
                                     object_layers=object_layers_state,
                                     life=new_life,
-                                    max_life=float(p_data.get("maxLife", 100.0)),
-                                    respawn_in=float(p_data.get("respawnIn", 0.0)),
+                                    max_life=p_data.maxLife,
+                                    respawn_in=(
+                                        p_data.respawnIn
+                                        if p_data.respawnIn is not None
+                                        else 0.0
+                                    ),
                                 )
                             else:
                                 new_other_players[player_id] = EntityState(
@@ -400,15 +362,19 @@ class NetworkClient:
                                     direction=dir_enum,
                                     mode=mode_enum,
                                     object_layers=object_layers_state,
-                                    life=float(p_data.get("life", 100.0)),
-                                    max_life=float(p_data.get("maxLife", 100.0)),
-                                    respawn_in=float(p_data.get("respawnIn", 0.0)),
+                                    life=p_data.life,
+                                    max_life=p_data.maxLife,
+                                    respawn_in=(
+                                        p_data.respawnIn
+                                        if p_data.respawnIn is not None
+                                        else 0.0
+                                    ),
                                 )
                     # replace other_players atomically
                     self.game_state.other_players = new_other_players
 
                     # ---------- Visible objects (obstacles, portals, foregrounds, bots) ----------
-                    visible_objects_data = payload.get("visibleGridObjects")
+                    visible_objects_data = payload.visibleGridObjects
                     self.game_state.obstacles = {}
                     self.game_state.portals = {}
                     self.game_state.foregrounds = {}  # reset foregrounds each update
@@ -419,79 +385,60 @@ class NetworkClient:
 
                     if visible_objects_data:
                         for obj_id, obj_data in visible_objects_data.items():
-                            obj_type = obj_data.get("Type")
-                            pos = obj_data.get("Pos", {})
-                            dims = obj_data.get("Dims", {})
+                            obj_type = obj_data.get(
+                                "Type"
+                            )  # Still need this to dispatch
+
                             if obj_type == "obstacle":
+                                obj = from_dict_generic(obj_data, VisibleObject)
                                 self.game_state.obstacles[obj_id] = {
-                                    "pos": pr.Vector2(pos.get("X"), pos.get("Y")),
-                                    "dims": pr.Vector2(
-                                        dims.get("Width"), dims.get("Height")
-                                    ),
+                                    "pos": pr.Vector2(obj.Pos.X, obj.Pos.Y),
+                                    "dims": pr.Vector2(obj.Dims.Width, obj.Dims.Height),
                                 }
                             elif obj_type == "portal":
+                                obj = from_dict_generic(obj_data, VisibleObject)
                                 self.game_state.portals[obj_id] = {
-                                    "pos": pr.Vector2(pos.get("X"), pos.get("Y")),
-                                    "dims": pr.Vector2(
-                                        dims.get("Width"), dims.get("Height")
-                                    ),
-                                    "label": obj_data.get("PortalLabel"),
+                                    "pos": pr.Vector2(obj.Pos.X, obj.Pos.Y),
+                                    "dims": pr.Vector2(obj.Dims.Width, obj.Dims.Height),
+                                    "label": obj.PortalLabel,
                                 }
                             elif obj_type == "foreground":
+                                obj = from_dict_generic(obj_data, VisibleObject)
                                 self.game_state.foregrounds[obj_id] = {
-                                    "pos": pr.Vector2(pos.get("X"), pos.get("Y")),
-                                    "dims": pr.Vector2(
-                                        dims.get("Width"), dims.get("Height")
-                                    ),
+                                    "pos": pr.Vector2(obj.Pos.X, obj.Pos.Y),
+                                    "dims": pr.Vector2(obj.Dims.Width, obj.Dims.Height),
                                 }
                             elif obj_type == "floor":
+                                obj = from_dict_generic(obj_data, VisibleFloor)
                                 self.game_state.floors[obj_id] = {
-                                    "pos": pr.Vector2(pos.get("X"), pos.get("Y")),
-                                    "dims": pr.Vector2(
-                                        dims.get("Width"), dims.get("Height")
-                                    ),
-                                    "object_layers": obj_data.get("objectLayers", []),
+                                    "pos": pr.Vector2(obj.Pos.X, obj.Pos.Y),
+                                    "dims": pr.Vector2(obj.Dims.Width, obj.Dims.Height),
+                                    "object_layers": obj.objectLayers,
                                 }
                             elif obj_type == "bot":
-                                # PARSE bot fields (new)
-                                behavior = obj_data.get("behavior", "passive")
-                                object_layers_state = obj_data.get("objectLayers", [])
-                                direction_val = obj_data.get("direction", 8)
+                                bot_data = from_dict_generic(obj_data, VisibleBot)
+
                                 try:
-                                    dir_int = int(direction_val)
-                                except (TypeError, ValueError):
-                                    dir_int = 8
-                                try:
-                                    dir_enum = Direction(dir_int)
+                                    dir_enum = Direction(bot_data.direction)
                                 except Exception:
                                     dir_enum = Direction.NONE
 
-                                mode_val = obj_data.get("mode", 0)
                                 try:
-                                    mode_int = int(mode_val)
-                                except (TypeError, ValueError):
-                                    mode_int = 0
-                                try:
-                                    mode_enum = ObjectLayerMode(mode_int)
+                                    mode_enum = ObjectLayerMode(bot_data.mode)
                                 except Exception:
                                     mode_enum = ObjectLayerMode.IDLE
 
-                                # safe defaults for dims
-                                w = dims.get("Width", self.game_state.default_obj_width)
-                                h = dims.get(
-                                    "Height", self.game_state.default_obj_height
+                                server_pos = pr.Vector2(bot_data.Pos.X, bot_data.Pos.Y)
+                                dims_vec = pr.Vector2(
+                                    bot_data.Dims.Width, bot_data.Dims.Height
                                 )
-                                server_pos = pr.Vector2(
-                                    pos.get("X", 0.0), pos.get("Y", 0.0)
-                                )
-                                dims_vec = pr.Vector2(w, h)
 
                                 prev_bot = self.game_state.bots.get(obj_id)
                                 if prev_bot:
                                     old_life = prev_bot.life
-                                    new_life = float(obj_data.get("life", 100.0))
+                                    new_life = bot_data.life
                                     life_diff = new_life - old_life
-                                    if life_diff != 0 and behavior != "bullet":
+                                    if life_diff != 0 and bot_data.behavior != "bullet":
                                         self.floating_text_manager.accumulate_life_change(
                                             obj_id,
                                             life_diff,
@@ -505,7 +452,7 @@ class NetworkClient:
                                         old_object_layers
                                     )
                                     new_coin_qty = self._calculate_total_coin_quantity(
-                                        object_layers_state
+                                        bot_data.objectLayers
                                     )
                                     coin_diff = new_coin_qty - old_coin_qty
                                     if coin_diff != 0:
@@ -523,14 +470,16 @@ class NetworkClient:
                                         pos_server=server_pos,
                                         interp_pos=prev_bot.interp_pos,
                                         dims=dims_vec,
-                                        behavior=behavior,
+                                        behavior=bot_data.behavior,
                                         direction=dir_enum,
                                         mode=mode_enum,
-                                        object_layers=object_layers_state,
+                                        object_layers=bot_data.objectLayers,
                                         life=new_life,
-                                        max_life=float(obj_data.get("maxLife", 100.0)),
-                                        respawn_in=float(
-                                            obj_data.get("respawnIn", 0.0)
+                                        max_life=bot_data.maxLife,
+                                        respawn_in=(
+                                            bot_data.respawnIn
+                                            if bot_data.respawnIn is not None
+                                            else 0.0
                                         ),
                                     )
                                 else:
@@ -540,14 +489,16 @@ class NetworkClient:
                                         pos_server=server_pos,
                                         interp_pos=server_pos,
                                         dims=dims_vec,
-                                        behavior=behavior,
+                                        behavior=bot_data.behavior,
                                         direction=dir_enum,
                                         mode=mode_enum,
-                                        object_layers=object_layers_state,
-                                        life=float(obj_data.get("life", 100.0)),
-                                        max_life=float(obj_data.get("maxLife", 100.0)),
-                                        respawn_in=float(
-                                            obj_data.get("respawnIn", 0.0)
+                                        object_layers=bot_data.objectLayers,
+                                        life=bot_data.life,
+                                        max_life=bot_data.maxLife,
+                                        respawn_in=(
+                                            bot_data.respawnIn
+                                            if bot_data.respawnIn is not None
+                                            else 0.0
                                         ),
                                     )
 

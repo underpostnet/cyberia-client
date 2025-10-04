@@ -111,8 +111,8 @@ class EntityRender:
 
         total = 0
         for layer_state in object_layers_state:
-            if layer_state.get("active"):
-                item_id = layer_state.get("itemId")
+            if layer_state.active:
+                item_id = layer_state.itemId
                 if not item_id:
                     continue
 
@@ -402,10 +402,10 @@ class EntityRender:
         # necessary data for sorting before the rendering loop.
         layers_to_render = []
         for layer_state in object_layers_state:
-            if not layer_state.get("active"):
+            if not layer_state.active:
                 continue
 
-            item_id = layer_state.get("itemId")
+            item_id = layer_state.itemId
             if not item_id:
                 continue
 
@@ -423,7 +423,7 @@ class EntityRender:
 
         # Render each active layer, with the loop index acting as a z-index
         for z_index, (layer_state, _, object_layer) in enumerate(layers_to_render):
-            item_id = layer_state.get("itemId")
+            item_id = layer_state.itemId
 
             # Manage animation state
             anim_key = (entity_id, item_id)

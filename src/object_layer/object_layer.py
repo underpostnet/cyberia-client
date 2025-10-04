@@ -91,5 +91,6 @@ class ObjectLayer:
 # ObjectLayerState describes an object layer's state for an entity.
 @dataclass
 class ObjectLayerState:
-    item_id: str = ""
+    itemId: str = ""
     active: bool = False
+    quantity: int = 1

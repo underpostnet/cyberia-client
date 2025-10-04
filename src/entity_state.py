@@ -1,7 +1,7 @@
 from dataclasses import dataclass, field
-from typing import List, Dict, Any
+from typing import List
 import pyray as pr
-from src.object_layer.object_layer import Direction, ObjectLayerMode
+from src.object_layer.object_layer import Direction, ObjectLayerMode, ObjectLayerState
 import time
 
 
@@ -16,7 +16,7 @@ class EntityState:
     dims: pr.Vector2
     direction: Direction
     mode: ObjectLayerMode
-    object_layers: List[Dict[str, Any]] = field(default_factory=list)
+    object_layers: List[ObjectLayerState] = field(default_factory=list)
     life: float = 100.0
     max_life: float = 100.0
     respawn_in: float = 0.0
