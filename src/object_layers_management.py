@@ -3,6 +3,7 @@ from dataclasses import asdict
 from queue import Queue, Empty
 
 from src.object_layer.object_layer import (
+    ObjectLayerState,
     ObjectLayer,
     Stats,
 )
@@ -73,32 +74,28 @@ class ObjectLayersManager:
         return ol
 
     def build_hud_items(
-        self, object_layers_state: List[Dict[str, Any]]
+        self, object_layers_state: List[ObjectLayerState]
     ) -> List[Dict[str, Any]]:
         hud_items: List[Dict[str, Any]] = []
 
         for ol_state in object_layers_state or []:
-            iid = ol_state.get("itemId")
-            is_active = ol_state.get("active", False)
-            quantity = ol_state.get("quantity", 1)
-
-            if not iid:
+            if not ol_state.itemId:
                 continue
 
-            ol = self.get_or_fetch(iid)
+            ol = self.get_or_fetch(ol_state.itemId)
             if not ol:
                 # fallback minimal placeholder to keep HUD stable
                 hud_items.append(
                     {
-                        "id": iid,
-                        "name": iid,
-                        "icon": iid[:1].upper() if iid else "?",
+                        "id": ol_state.itemId,
+                        "name": ol_state.itemId,
+                        "icon": ol_state.itemId[:1].upper() if ol_state.itemId else "?",
                         "stats": Stats(),
                         "desc": "",
                         "isActivable": False,
-                        "isActive": is_active,
+                        "isActive": ol_state.active,
                         "type": "unknown",
-                        "quantity": quantity,
+                        "quantity": ol_state.quantity,
                     }
                 )
                 continue
@@ -112,9 +109,9 @@ class ObjectLayersManager:
                     "stats": ol.data.stats or Stats(),
                     "desc": ol.data.item.description or "unknown",
                     "isActivable": bool(ol.data.item.activable),
-                    "isActive": is_active,
+                    "isActive": ol_state.active,
                     "type": ol.data.item.type or "unknown",
-                    "quantity": quantity,
+                    "quantity": ol_state.quantity,
                 }
             )
         self.hud = hud_items

@@ -743,7 +743,7 @@ class NetworkClient:
                                     if sel is not None and 0 <= sel < len(
                                         self.hud.items
                                     ):
-                                        if self.hud.items[sel].get("isActive"):
+                                        if self.hud.items[sel]["isActive"]:
                                             self.hud.desactivate_item(sel)
                                         else:
                                             self.hud.activate_item(

@@ -106,7 +106,7 @@ class Hud:
         return out
 
     def active_items(self) -> List[Dict[str, Any]]:
-        return [it for it in self.items if it.get("isActive")]
+        return [it for it in self.items if it["isActive"]]
 
     def can_activate_item(
         self, item: Dict[str, Any], sum_stats_limit: Optional[int]
@@ -117,14 +117,14 @@ class Hud:
 
         # You must have at least one skin active.
         item_type_to_activate = item.get("type")
-        has_active_skin = any(it.get("type") == "skin" for it in self.active_items())
+        has_active_skin = any(it["type"] == "skin" for it in self.active_items())
         if not has_active_skin and item_type_to_activate != "skin":
             return False, "You must have at least one skin active."
 
         item_type_to_activate = item.get("type")
         item_to_be_deactivated = None
         if item_type_to_activate and item_type_to_activate != "unknown":
-            for other_item in self.active_items():
+            for other_item in self.active_items():  # This is a list of dicts
                 if other_item.get("type") == item_type_to_activate:
                     item_to_be_deactivated = other_item
                     break
@@ -179,8 +179,8 @@ class Hud:
         if item_type_to_activate and item_type_to_activate != "unknown":
             for i, other_item in enumerate(self.items):
                 if (
-                    other_item.get("isActive")
-                    and other_item.get("type") == item_type_to_activate
+                    other_item["isActive"]
+                    and other_item["type"] == item_type_to_activate
                     and i != idx
                 ):
                     other_item["isActive"] = False
@@ -208,9 +208,7 @@ class Hud:
 
         # Prevent deactivating the last active skin
         if item.get("type") == "skin":
-            active_skins = [
-                it for it in self.active_items() if it.get("type") == "skin"
-            ]
+            active_skins = [it for it in self.active_items() if it["type"] == "skin"]
             if len(active_skins) <= 1:
                 self.show_hud_alert("Cannot deactivate the last active skin.")
                 return
