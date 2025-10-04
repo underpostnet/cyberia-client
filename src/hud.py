@@ -3,6 +3,7 @@ import pyray as pr
 from dataclasses import is_dataclass, asdict
 from typing import Any, Dict, List, Optional, Tuple
 from config import ASSETS_BASE_URL
+from src.sub_hud import SubHud
 from src.texture_manager import TextureManager
 
 
@@ -21,6 +22,7 @@ class Hud:
         self.client = client
         self.game_state = client.game_state
         self.texture_manager: TextureManager = client.texture_manager
+        self.sub_hud = SubHud(client, self)
 
         # HUD bar state
         self.items: List[Dict[str, Any]] = []  # list of dicts with item data
@@ -37,17 +39,6 @@ class Hud:
         self.scroll_start: float = 0.0
         self.drag_moved: bool = False
         self.click_threshold: int = 6  # pixels threshold to consider click vs drag
-
-        # Sub-HUD state (for associated items)
-        self.sub_items: List[Dict[str, Any]] = []
-        self.sub_bar_height: int = 80
-        self.sub_item_w: int = 70
-        self.sub_item_h: int = 62
-        self.sub_scroll_x: float = 0.0
-        self.sub_dragging: bool = False
-        self.sub_drag_start_x: float = 0.0
-        self.sub_scroll_start: float = 0.0
-        self.sub_drag_moved: bool = False
 
         # view state (store index of selected item or None). Since we removed
         # reorder logic, using an index is stable in the current design.
@@ -239,24 +230,6 @@ class Hud:
         self.alert_text = text
         self.alert_until = time.time() + duration
 
-    def _is_sub_hud_visible(self) -> bool:
-        """Checks if the sub-HUD should be rendered."""
-        if not self.view_open or self.view_selected is None:
-            return False
-        if not (0 <= self.view_selected < len(self.items)):
-            return False
-
-        main_item_id = self.items[self.view_selected].get("id")
-        if not main_item_id:
-            return False
-
-        with self.game_state.mutex:
-            associated_ids = self.game_state.associated_item_ids.get(main_item_id)
-
-        if not associated_ids:
-            return False
-        return True
-
     def _draw_item_animation(
         self, item: Dict[str, Any], dest_rec: pr.Rectangle, is_view: bool = False
     ):
@@ -383,18 +356,6 @@ class Hud:
         hidden_y = screen_height
         y = pr.lerp(base_y, hidden_y, self.slide_progress)
         w = screen_width
-        return x, y, w, h
-
-    def _sub_hud_bar_rect(
-        self, screen_width: int, screen_height: int
-    ) -> Tuple[int, int, int, int]:
-        """Calculates the sub-HUD bar's rectangle, positioned above the main HUD."""
-        main_hud_x, main_hud_y, main_hud_w, main_hud_h = self._hud_bar_rect(
-            screen_width, screen_height
-        )
-        h = self.sub_bar_height
-        y = main_hud_y - h  # Position it directly above the main HUD bar
-        x, w = main_hud_x, main_hud_w
         return x, y, w, h
 
     def draw_hud_item_button(
@@ -571,101 +532,6 @@ class Hud:
 
         return hovered_index, total_w, inner_w
 
-    def draw_sub_hud_bar(self, mouse_pos: Any, screen_width: int, screen_height: int):
-        """Draws the sub-HUD bar for associated items."""
-        if not self._is_sub_hud_visible():
-            return None, 0, 0
-
-        # Populate sub_items if they are not ready for the current view
-        main_item_id = self.items[self.view_selected].get("id")
-        with self.game_state.mutex:
-            associated_ids = self.game_state.associated_item_ids.get(main_item_id, [])
-
-        # Check if sub_items need rebuilding
-        current_sub_item_ids = [item.get("id") for item in self.sub_items]
-        if set(current_sub_item_ids) != set(associated_ids):
-            new_sub_items = []
-            for item_id in associated_ids:
-                ol = self.client.obj_layers_mgr.get_or_fetch(item_id)
-                if not ol:
-                    continue
-
-                # Find if this item is active on the player
-                is_active = False
-                with self.game_state.mutex:
-                    for layer_state in self.game_state.player.object_layers:
-                        if layer_state.itemId == item_id and layer_state.active:
-                            is_active = True
-                            break
-
-                new_sub_items.append(
-                    {
-                        "id": ol.data.item.id,
-                        "name": ol.data.item.id,
-                        "icon": ol.data.item.id[:1].upper(),
-                        "stats": ol.data.stats or Stats(),
-                        "desc": ol.data.item.description,
-                        "isActivable": bool(ol.data.item.activable),
-                        "isActive": is_active,
-                        "type": ol.data.item.type,
-                        "quantity": 1,  # Associated items are single
-                    }
-                )
-            self.sub_items = new_sub_items
-
-        if not self.sub_items:
-            return None, 0, 0
-
-        x, y, w, h = self._sub_hud_bar_rect(screen_width, screen_height)
-
-        inner_x = x + self.bar_padding
-        inner_y = y + (h - self.sub_item_h) / 2
-        inner_w = w - (self.bar_padding * 2)
-
-        count = len(self.sub_items)
-        total_w = count * self.sub_item_w + max(0, (count - 1)) * self.item_spacing
-
-        max_scroll = max(0, total_w - inner_w)
-        if self.sub_scroll_x > 0:
-            self.sub_scroll_x = 0
-        if self.sub_scroll_x < -max_scroll:
-            self.sub_scroll_x = -max_scroll
-
-        pr.draw_rectangle_pro(
-            pr.Rectangle(int(x), int(y), int(w), int(h)),
-            pr.Vector2(0, 0),
-            0,
-            pr.Color(28, 28, 28, 220),
-        )
-
-        offset = inner_x + self.sub_scroll_x
-        hovered_index = None
-        for idx, item in enumerate(self.sub_items):
-            bx = offset + idx * (self.sub_item_w + self.item_spacing)
-            by = inner_y
-            hovered = (
-                mouse_pos.x >= bx
-                and mouse_pos.x <= bx + self.sub_item_w
-                and mouse_pos.y >= by
-                and mouse_pos.y <= by + self.sub_item_h
-            )
-            if hovered:
-                hovered_index = idx
-
-            item["isViewing"] = self.sub_view_selected_idx == idx
-
-            self.draw_hud_item_button(
-                bx,
-                by,
-                self.sub_item_w,
-                self.sub_item_h,
-                item,
-                hovered,
-                is_sub_item=True,
-            )
-
-        return hovered_index, total_w, inner_w
-
     def draw_hud_small_button(
         self, x: float, y: float, w: float, h: float, label: str
     ) -> None:
@@ -713,9 +579,9 @@ class Hud:
         # Determine which item to view: main HUD item or sub-HUD item
         if (
             self.sub_view_selected_idx is not None
-            and 0 <= self.sub_view_selected_idx < len(self.sub_items)
+            and 0 <= self.sub_view_selected_idx < len(self.sub_hud.items)
         ):
-            item = self.sub_items[self.sub_view_selected_idx]
+            item = self.sub_hud.items[self.sub_view_selected_idx]
         else:
             # Fallback to main item if sub-item is invalid
             if not (0 <= self.view_selected < len(self.items)):
@@ -726,7 +592,7 @@ class Hud:
             item = self.items[self.view_selected]
 
         hud_occupied = (1.0 - self.slide_progress) * self.bar_height
-        sub_hud_h = self.sub_bar_height if self._is_sub_hud_visible() else 0
+        sub_hud_h = self.sub_hud.bar_height if self.sub_hud.is_visible() else 0
 
         view_x, view_y, view_w, view_h = (
             0,
@@ -1059,7 +925,7 @@ class Hud:
         btn_w = 50
         btn_h = 50
         btn_x = (screen_width / 2) - (btn_w / 2)
-        sub_hud_h = self.sub_bar_height if self._is_sub_hud_visible() else 0
+        sub_hud_h = self.sub_hud.bar_height if self.sub_hud.is_visible() else 0
 
         # Calculate the button's position when the HUD is fully visible (slide_progress = 0.0).
         # This should be based on the final resting position of the HUDs, not their animated position.

@@ -334,7 +334,7 @@ class RenderCore:
             )
 
         # Sub-HUD bar (drawn on top of view, below main HUD)
-        self.client.hud.draw_sub_hud_bar(
+        self.client.hud.sub_hud.draw(
             mouse_pos, self.client.screen_width, self.client.screen_height
         )
 
