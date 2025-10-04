@@ -693,6 +693,56 @@ class NetworkClient:
                 if self.hud._ignore_next_hud_click:
                     self.hud._ignore_next_hud_click = False
 
+            # Sub-HUD BAR DRAG/CLICK handling
+            if self.hud._is_sub_hud_visible():
+                shx, shy, shw, shh = self.hud._sub_hud_bar_rect(
+                    self.screen_width, self.screen_height
+                )
+                in_sub_hud_area = (
+                    mouse_pos.x >= shx
+                    and mouse_pos.x <= shx + shw
+                    and mouse_pos.y >= shy
+                    and mouse_pos.y <= shy + shh
+                )
+
+                # Start drag if pressed inside sub-hud area
+                if mouse_pressed and in_sub_hud_area:
+                    self.hud.sub_dragging = True
+                    self.hud.sub_drag_start_x = mouse_pos.x
+                    self.hud.sub_scroll_start = self.hud.sub_scroll_x
+                    self.hud.sub_drag_moved = False
+                    consumed_click = True
+
+                # If dragging, update scroll while mouse held
+                if self.hud.sub_dragging and mouse_down:
+                    delta = mouse_pos.x - self.hud.sub_drag_start_x
+                    if abs(delta) > self.hud.click_threshold:
+                        self.hud.sub_drag_moved = True
+                    self.hud.sub_scroll_x = self.hud.sub_scroll_start + delta
+                    consumed_click = True
+
+                # On release, finalize drag or handle click
+                if self.hud.sub_dragging and mouse_released:
+                    sub_hovered, total_w, inner_w = self.hud.draw_sub_hud_bar(
+                        mouse_pos, self.screen_width, self.screen_height
+                    )
+                    max_scroll = max(0, total_w - inner_w)
+                    # Clamp scroll position
+                    if self.hud.sub_scroll_x > 0:
+                        self.hud.sub_scroll_x = 0
+                    if self.hud.sub_scroll_x < -max_scroll:
+                        self.hud.sub_scroll_x = -max_scroll
+
+                    # If it was a click (not a drag), the logic below will handle it
+                    if not self.hud.sub_drag_moved:
+                        mouse_released = True  # Allow click to be processed
+                    else:
+                        mouse_released = (
+                            False  # It was a drag, so don't process as a click
+                        )
+                    self.hud.sub_dragging = False
+                    self.hud.sub_drag_moved = False
+
             # Sub-HUD bar click handling
             if self.hud.view_open and not self.hud.dragging and mouse_released:
                 sub_hovered, _, _ = self.hud.draw_sub_hud_bar(
