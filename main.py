@@ -3,6 +3,7 @@ import websocket
 from src.network_models import (
     AOIUpdatePayload,
     InitPayload,
+    SkillItemIdsPayload,
     VisibleBot,
     VisibleFloor,
     VisibleObject,
@@ -138,6 +139,14 @@ class NetworkClient:
                     # mark and notify main thread
                     self.game_state.init_received = True
                     self.init_event.set()
+
+                elif message_type == "skill_item_ids":
+                    payload_data = data.get("payload", {})
+                    payload = from_dict_generic(payload_data, SkillItemIdsPayload)
+                    if payload.requestedItemId:
+                        self.game_state.associated_item_ids[payload.requestedItemId] = (
+                            payload.associatedItemIds
+                        )
 
                 elif message_type == "aoi_update":
                     payload_data = data.get("payload")
@@ -503,6 +512,20 @@ class NetworkClient:
         except Exception as e:
             print(f"Error sending item activation: {e}")
 
+    def send_get_item_ids(self, item_id: str):
+        """Request associated item IDs for a given item."""
+        if not self.ws:
+            return
+
+        message = {
+            "type": "get_items_ids",
+            "payload": {"itemId": item_id},
+        }
+        try:
+            self.ws.send(json.dumps(message))
+        except Exception as e:
+            print(f"Error sending get_items_ids: {e}")
+
     def on_error(self, ws, error):
         with self.game_state.mutex:
             self.game_state.last_error_message = f"WebSocket Error: {error}"
@@ -644,10 +667,24 @@ class NetworkClient:
                         mouse_pos, self.screen_width, self.screen_height
                     )
                     if hovered_index is not None:
-                        # open/view item (or switch view if already open)
                         with self.game_state.mutex:
-                            self.hud.view_open = True
-                            self.hud.view_selected = hovered_index
+                            # If clicking the same item that's already open, close the view.
+                            if (
+                                self.hud.view_open
+                                and self.hud.view_selected == hovered_index
+                                and self.hud.sub_view_selected_idx is None
+                            ):
+                                self.hud.view_open = False
+                                self.hud.view_selected = None
+                            else:
+                                # Open/view item, or switch to it.
+                                self.hud.view_open = True
+                                self.hud.view_selected = hovered_index
+                                self.hud.sub_view_selected_idx = None  # Reset sub-view
+                                # Request associated items for the new view
+                                item_id = self.hud.items[hovered_index].get("id")
+                                if item_id:
+                                    self.send_get_item_ids(item_id)
                         consumed_click = True
                 # finish dragging
                 self.hud.dragging = False
@@ -655,6 +692,318 @@ class NetworkClient:
                 # after release, clear the temporary ignore (if set) to allow normal clicks next frames
                 if self.hud._ignore_next_hud_click:
                     self.hud._ignore_next_hud_click = False
+
+            # Sub-HUD bar click handling
+            if self.hud.view_open and not self.hud.dragging and mouse_released:
+                sub_hovered, _, _ = self.hud.draw_sub_hud_bar(
+                    mouse_pos, self.screen_width, self.screen_height
+                )
+                if sub_hovered is not None:
+                    with self.game_state.mutex:
+                        # If clicking the same sub-item, reset to main view
+                        if self.hud.sub_view_selected_idx == sub_hovered:
+                            self.hud.sub_view_selected_idx = None
+                        else:
+                            self.hud.sub_view_selected_idx = sub_hovered
+
+                        # Clicking a sub-item consumes the click
+                        consumed_click = True
+
+            # If view open, check close button pressed (top-right inside view area)
+            if (
+                self.hud.view_open
+                and self.hud.view_selected is not None
+                and mouse_pressed
+            ):
+                # Calculate view area, accounting for both HUDs
+                hud_occupied = (1.0 - self.hud.slide_progress) * self.hud.bar_height
+                sub_hud_h = (
+                    self.hud.sub_bar_height if self.hud._is_sub_hud_visible() else 0
+                )
+                view_y_max = self.screen_height - hud_occupied - sub_hud_h
+
+                if mouse_pos.y <= view_y_max:
+                    # check close button
+                    close_x = self.screen_width - self.hud.close_w - 12
+                    close_y = 12
+                    if (
+                        mouse_pos.x >= close_x
+                        and mouse_pos.x <= close_x + self.hud.close_w
+                        and mouse_pos.y >= close_y
+                        and mouse_pos.y <= close_y + self.hud.close_h
+                    ):
+                        with self.game_state.mutex:
+                            self.hud.view_open = False
+                            self.hud.view_selected = None
+                            self.hud.sub_view_selected_idx = None
+                        consumed_click = True
+                    else:
+                        # check activate/deactivate button (if present)
+                        if self.hud.view_button_rect:
+                            bx, by, bw, bh = self.hud.view_button_rect
+                            if (
+                                mouse_pos.x >= bx
+                                and mouse_pos.x <= bx + bw
+                                and mouse_pos.y >= by
+                                and mouse_pos.y <= by + bh
+                            ):
+                                # toggle activation
+                                with self.game_state.mutex:
+                                    # Determine if we are activating a main or sub item
+                                    if self.hud.sub_view_selected_idx is not None:
+                                        # This part is complex: activating a sub-item
+                                        # would require knowing its index in the main `items` list.
+                                        # For now, we'll just show an alert.
+                                        # A full implementation would need to map sub-item IDs
+                                        # back to their main list index if they exist there.
+                                        self.hud.show_hud_alert(
+                                            "Sub-item activation not implemented."
+                                        )
+                                    else:
+                                        sel = self.hud.view_selected
+                                        if sel is not None and 0 <= sel < len(
+                                            self.hud.items
+                                        ):
+                                            if self.hud.items[sel]["isActive"]:
+                                                self.hud.desactivate_item(sel)
+                                            else:
+                                                self.hud.activate_item(
+                                                    sel, self.game_state.sum_stats_limit
+                                                )
+                                consumed_click = True
+                        # clicks anywhere inside view area (except hud_bar) should not pass to world
+                        if not consumed_click:
+                            consumed_click = True
+
+            # HUD toggle button click (handle is separate from hud area)
+            if mouse_pressed and self.hud.toggle_rect:
+                bx, by, bw, bh = self.hud.toggle_rect
+                if (
+                    mouse_pos.x >= bx
+                    and mouse_pos.x <= bx + bw
+                    and mouse_pos.y >= by
+                    and mouse_pos.y <= by + bh
+                ):
+                    # toggle collapsed state: set animation target
+                    self.hud.collapsed = not self.hud.collapsed
+                    self.hud.slide_target = 1.0 if self.hud.collapsed else 0.0
+                    # set ignore flag for a brief window so the same mouse press/release doesn't open an item
+                    self.hud._ignore_next_hud_click = True
+                    self.hud._last_toggle_time = time.time()
+                    consumed_click = True
+                    # ensure we don't accidentally start a drag in same frame
+                    self.hud.dragging = False
+                    self.hud.drag_moved = False
+
+            # If view open, check close button pressed (top-right inside view area)
+            if (
+                self.hud.view_open
+                and self.hud.view_selected is not None
+                and mouse_pressed
+            ):
+                # only check close if click is inside view area (above the hud_bar)
+                hud_occupied = (1.0 - self.hud.slide_progress) * self.hud.bar_height
+                view_y_max = self.screen_height - hud_occupied
+                if mouse_pos.y <= view_y_max:
+                    # check close button
+                    close_x = self.screen_width - self.hud.close_w - 12
+                    close_y = 12
+                    if (
+                        mouse_pos.x >= close_x
+                        and mouse_pos.x <= close_x + self.hud.close_w
+                        and mouse_pos.y >= close_y
+                        and mouse_pos.y <= close_y + self.hud.close_h
+                    ):
+                        with self.game_state.mutex:
+                            self.hud.view_open = False
+                            self.hud.view_selected = None
+                        consumed_click = True
+                    else:
+                        # check activate/deactivate button (if present)
+                        if self.hud.view_button_rect:
+                            bx, by, bw, bh = self.hud.view_button_rect
+                            if (
+                                mouse_pos.x >= bx
+                                and mouse_pos.x <= bx + bw
+                                and mouse_pos.y >= by
+                                and mouse_pos.y <= by + bh
+                            ):
+                                # toggle activation
+                                with self.game_state.mutex:
+                                    sel = self.hud.view_selected
+                                    if sel is not None and 0 <= sel < len(
+                                        self.hud.items
+                                    ):
+                                        if self.hud.items[sel]["isActive"]:
+                                            self.hud.desactivate_item(sel)
+                                        else:
+                                            self.hud.activate_item(
+                                                sel, self.game_state.sum_stats_limit
+                                            )
+                                consumed_click = True
+                        # clicks anywhere inside view area (except hud_bar) should not pass to world
+                        if not consumed_click:
+                            consumed_click = True
+
+            # If not consumed by UI, handle world click for movement
+            if not consumed_click and mouse_pressed:
+                try:
+                    world_pos = pr.get_screen_to_world_2d(
+                        mouse_pos, self.game_state.camera
+                    )
+                    target_x = world_pos.x / (
+                        self.game_state.cell_size
+                        if self.game_state.cell_size > 0
+                        else 12.0
+                    )
+                    target_y = world_pos.y / (
+                        self.game_state.cell_size
+                        if self.game_state.cell_size > 0
+                        else 12.0
+                    )
+                    target_x = math.floor(target_x)
+                    target_y = math.floor(target_y)
+                    self.entity_player_input.send_player_action(
+                        self.ws, target_x, target_y
+                    )
+                    # client-side click pointer effect
+                    self.click_effect.add_click_pointer(world_pos)
+                except Exception:
+                    pass
+
+            # bandwidth
+            current_time = time.time()
+            if current_time - last_download_check_time >= 1:
+                with self.game_state.mutex:
+                    self.dev_ui.download_kbps = (
+                        self.game_state.download_size_bytes / 1024
+                    ) * 8
+                    self.dev_ui.upload_kbps = (
+                        self.game_state.upload_size_bytes / 1024
+                    ) * 8
+                    self.game_state.download_size_bytes = 0
+                    self.game_state.upload_size_bytes = 0
+                last_download_check_time = current_time
+
+            # interpolation (player + entities)
+            self.entity_player_render.interpolate_player_position()
+            self.entity_render.interpolate_entities_positions()
+
+            # camera smoothing: compute desired world target and smooth camera.target to it
+            try:
+                cell_size = (
+                    self.game_state.cell_size if self.game_state.cell_size > 0 else 12.0
+                )
+                # Use player's center so camera keeps player centered regardless of its dimensions
+                desired_center = pr.Vector2(
+                    (
+                        self.game_state.player.interp_pos.x
+                        + self.game_state.player.dims.x / 2.0
+                    )
+                    * cell_size,
+                    (
+                        self.game_state.player.interp_pos.y
+                        + self.game_state.player.dims.y / 2.0
+                    )
+                    * cell_size,
+                )
+                if self.game_state.camera is None:
+                    # safety: create default camera if missing
+                    offset = pr.Vector2(self.screen_width / 2, self.screen_height / 2)
+                    self.game_state.camera = pr.Camera2D(
+                        offset,
+                        desired_center,
+                        0.0,
+                        float(
+                            self.game_state.camera_zoom
+                            if self.game_state.camera_zoom is not None
+                            else 1.0
+                        ),
+                    )
+                current_target = self.game_state.camera.target
+                smooth = (
+                    float(self.game_state.camera_smoothing)
+                    if self.game_state.camera_smoothing is not None
+                    else 0.15
+                )
+                # clamp smoothing to sensible range
+                if smooth < 0:
+                    smooth = 0
+                if smooth > 1:
+                    smooth = 1
+                new_tx = pr.lerp(current_target.x, desired_center.x, smooth)
+                new_ty = pr.lerp(current_target.y, desired_center.y, smooth)
+                # apply
+                try:
+                    self.game_state.camera.target = pr.Vector2(new_tx, new_ty)
+                    # ensure offset remains centered each frame (good practice)
+                    try:
+                        self.game_state.camera.offset = pr.Vector2(
+                            self.screen_width / 2, self.screen_height / 2
+                        )
+                    except Exception:
+                        pass
+                except Exception:
+                    # in some bindings camera fields are attributes directly accessible; attempt attribute set
+                    try:
+                        setattr(
+                            self.game_state.camera, "target", pr.Vector2(new_tx, new_ty)
+                        )
+                        try:
+                            setattr(
+                                self.game_state.camera,
+                                "offset",
+                                pr.Vector2(
+                                    self.screen_width / 2, self.screen_height / 2
+                                ),
+                            )
+                        except Exception:
+                            pass
+                    except Exception:
+                        pass
+            except Exception:
+                pass
+
+            # update client-side effects
+            self.click_effect.update_click_pointers()
+            self.floating_text_manager.update(dt)
+
+            # draw
+            self.render_core.draw_game()
+
+        print("Closing WebSocket...")
+        if self.ws:
+            self.ws.close()
+        self.is_running = False
+        pr.close_window()
+
+
+if __name__ == "__main__":
+    client = NetworkClient()
+    print("Starting WebSocket client thread...")
+    client.ws_thread = threading.Thread(target=client.run_websocket_thread, daemon=True)
+    client.ws_thread.start()
+
+    # Wait until init_data arrives
+    print("Waiting for init_data from server before initializing graphics...")
+    client.init_event.wait()
+    if not client.game_state.init_received:
+        print("init_event triggered but init_received false — aborting.")
+    else:
+        print("init_data received — initializing graphics on main thread.")
+        client.render_core.initialize_graphics()
+
+        # Start the render/game loop (blocks)
+        client.run_game_loop()
+        self.hud.view_open = True
+        self.hud.view_selected = hovered_index
+        consumed_click = True
+        # finish dragging
+        self.hud.dragging = False
+        self.hud.drag_moved = False
+        # after release, clear the temporary ignore (if set) to allow normal clicks next frames
+        if self.hud._ignore_next_hud_click:
+            self.hud._ignore_next_hud_click = False
 
             # HUD toggle button click (handle is separate from hud area)
             if mouse_pressed and self.hud.toggle_rect:

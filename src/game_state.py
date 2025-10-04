@@ -1,6 +1,7 @@
 import threading
 import pyray as pr
 from src.object_layer.object_layer import Direction, ObjectLayerMode
+from typing import Dict, List
 from src.entity_state import PlayerState, BotState, EntityState
 import time
 
@@ -47,6 +48,12 @@ class GameState:
         # bots: keyed by bot_id -> BotState
         self.bots: dict[str, BotState] = {}
         self.last_update_time = time.time()
+
+        # sub-hud state
+        self.associated_item_ids: Dict[str, List[str]] = {}
+
+        # sub-hud state
+        self.associated_item_ids: Dict[str, List[str]] = {}
         self.last_error_message = ""
         self.error_display_time = 0.0
         self.download_size_bytes = 0

@@ -101,6 +101,12 @@ class AOIUpdatePayload:
 
 
 @dataclass
+class SkillItemIdsPayload:
+    requestedItemId: str = ""
+    associatedItemIds: List[str] = field(default_factory=list)
+
+
+@dataclass
 class InitPayload:
     gridW: int = 100
     gridH: int = 100

@@ -333,6 +333,11 @@ class RenderCore:
                 self.client.screen_width, self.client.screen_height
             )
 
+        # Sub-HUD bar (drawn on top of view, below main HUD)
+        self.client.hud.draw_sub_hud_bar(
+            mouse_pos, self.client.screen_width, self.client.screen_height
+        )
+
         # HUD bar (draw only if not fully hidden)
         hovered_index, total_w, inner_w = self.client.hud.draw_hud_bar(
             mouse_pos, self.client.screen_width, self.client.screen_height
