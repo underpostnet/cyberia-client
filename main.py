@@ -1,6 +1,12 @@
 import pyray as pr
 import websocket
-from src.network_models import AOIUpdatePayload, VisibleBot, VisibleFloor, VisibleObject
+from src.network_models import (
+    AOIUpdatePayload,
+    InitPayload,
+    VisibleBot,
+    VisibleFloor,
+    VisibleObject,
+)
 from src.entity_state import PlayerState, BotState, EntityState
 import threading
 import json
@@ -94,74 +100,40 @@ class NetworkClient:
                 self.game_state.download_size_bytes += len(message)
 
                 if message_type == "init_data":
-                    payload = data.get("payload", {})
+                    payload_data = data.get("payload", {})
+                    payload = from_dict_generic(payload_data, InitPayload)
 
                     # map/grid
-                    self.game_state.grid_w = int(payload.get("gridW", 100))
-                    self.game_state.grid_h = int(payload.get("gridH", 100))
+                    self.game_state.grid_w = payload.gridW
+                    self.game_state.grid_h = payload.gridH
 
                     # basic
-                    self.game_state.default_obj_width = float(
-                        payload.get("defaultObjectWidth", 1.0)
-                    )
-                    self.game_state.default_obj_height = float(
-                        payload.get("defaultObjectHeight", 1.0)
-                    )
-                    self.game_state.cell_size = float(payload.get("cellSize", 12.0))
-                    self.game_state.fps = int(payload.get("fps", 60))
-                    self.game_state.interpolation_ms = int(
-                        payload.get("interpolationMs", 200)
-                    )
-                    self.game_state.aoi_radius = float(payload.get("aoiRadius", 15.0))
+                    self.game_state.default_obj_width = payload.defaultObjectWidth
+                    self.game_state.default_obj_height = payload.defaultObjectHeight
+                    self.game_state.cell_size = payload.cellSize
+                    self.game_state.fps = payload.fps
+                    self.game_state.interpolation_ms = payload.interpolationMs
+                    self.game_state.aoi_radius = payload.aoiRadius
 
                     # colors
-                    colors_payload = payload.get("colors", {})
-                    for name, cdict in colors_payload.items():
-                        r = int(cdict.get("r", 255))
-                        g = int(cdict.get("g", 255))
-                        b = int(cdict.get("b", 255))
-                        a = int(cdict.get("a", 255))
-                        self.game_state.colors[name] = pr.Color(r, g, b, a)
+                    for name, c in payload.colors.items():
+                        self.game_state.colors[name] = pr.Color(c.r, c.g, c.b, c.a)
 
                     # graphics hints (do NOT call pyray here)
-                    try:
-                        self.game_state.camera_smoothing = float(
-                            payload.get("cameraSmoothing", 0.15)
-                        )
-                    except Exception:
-                        self.game_state.camera_smoothing = 0.15
-                    try:
-                        self.game_state.camera_zoom = float(
-                            payload.get("cameraZoom", 1.0)
-                        )
-                    except Exception:
-                        self.game_state.camera_zoom = 1.0
-                    try:
-                        self.game_state.default_width_screen_factor = float(
-                            payload.get("defaultWidthScreenFactor", 0.5)
-                        )
-                    except Exception:
-                        self.game_state.default_width_screen_factor = 0.5
-                    try:
-                        self.game_state.default_height_screen_factor = float(
-                            payload.get("defaultHeightScreenFactor", 0.5)
-                        )
-                    except Exception:
-                        self.game_state.default_height_screen_factor = 0.5
+                    self.game_state.camera_smoothing = payload.cameraSmoothing
+                    self.game_state.camera_zoom = payload.cameraZoom
+                    self.game_state.default_width_screen_factor = (
+                        payload.defaultWidthScreenFactor
+                    )
+                    self.game_state.default_height_screen_factor = (
+                        payload.defaultHeightScreenFactor
+                    )
 
                     # sum stats limit per-player (new)
-                    try:
-                        self.game_state.sum_stats_limit = int(
-                            payload.get("sumStatsLimit", 9999)
-                        )
-                    except Exception:
-                        self.game_state.sum_stats_limit = 9999
+                    self.game_state.sum_stats_limit = payload.sumStatsLimit
 
                     # devUi toggle
-                    try:
-                        self.game_state.dev_ui = bool(payload.get("devUi", False))
-                    except Exception:
-                        self.game_state.dev_ui = False
+                    self.game_state.dev_ui = payload.devUi
 
                     # mark and notify main thread
                     self.game_state.init_received = True

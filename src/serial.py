@@ -16,24 +16,29 @@ def _map_value(value: Any, expected_type: Type) -> Any:
     Recursively maps nested lists and objects during deserialization.
     This is the core logic for handling complex dataclass structures.
     """
-    # 1. Handle Lists (Generic type check for List[T])
-    if get_origin(expected_type) is list:
-        # Get the inner type (e.g., Char from List[Char])
-        inner_type = get_args(expected_type)[0]
+    origin_type = get_origin(expected_type)
 
-        # Check if the inner type is another dataclass
+    # 1. Handle Lists (e.g., List[MyDataclass])
+    if origin_type is list:
+        # Get the inner type (e.g., MyDataclass from List[MyDataclass])
+        inner_type = get_args(expected_type)[0]
         if inspect.isclass(inner_type) and hasattr(inner_type, "__dataclass_fields__"):
-            # Recursively map each item in the list
-            # We use json.dumps/loads here to ensure items are properly formatted for recursive deserialization
             return [from_json_generic(json.dumps(item), inner_type) for item in value]
 
-    # 2. Handle Simple Dataclasses (The inner Char object)
+    # 2. Handle Dictionaries (e.g., Dict[str, MyDataclass])
+    if origin_type is dict:
+        # Get the inner value type (e.g., MyDataclass from Dict[str, MyDataclass])
+        value_type = get_args(expected_type)[1]
+        if inspect.isclass(value_type) and hasattr(value_type, "__dataclass_fields__"):
+            return {k: from_dict_generic(v, value_type) for k, v in value.items()}
+
+    # 3. Handle Simple Dataclasses (The inner Char object)
     if inspect.isclass(expected_type) and hasattr(
         expected_type, "__dataclass_fields__"
     ):
         return from_dict_generic(value, expected_type)
 
-    # 3. Handle Primitive types (float, str, int, etc.)
+    # 4. Handle Primitive types (float, str, int, etc.)
     return value
 
 
