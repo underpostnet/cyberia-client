@@ -1196,22 +1196,3 @@ if __name__ == "__main__":
             self.ws.close()
         self.is_running = False
         pr.close_window()
-
-
-if __name__ == "__main__":
-    client = NetworkClient()
-    print("Starting WebSocket client thread...")
-    client.ws_thread = threading.Thread(target=client.run_websocket_thread, daemon=True)
-    client.ws_thread.start()
-
-    # Wait until init_data arrives
-    print("Waiting for init_data from server before initializing graphics...")
-    client.init_event.wait()
-    if not client.game_state.init_received:
-        print("init_event triggered but init_received false — aborting.")
-    else:
-        print("init_data received — initializing graphics on main thread.")
-        client.render_core.initialize_graphics()
-
-        # Start the render/game loop (blocks)
-        client.run_game_loop()
