@@ -1,0 +1,34 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Cyberia Client</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        html, body { width: 100%; height: 100%; overflow: hidden; background: #000; }
+        #canvas { position: absolute; top: 0; left: 0; width: 100%; height: 100%; display: block; }
+        #loading { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); color: #fff; 
+                   font-family: monospace; text-align: center; z-index: 1000; }
+        .spinner { border: 3px solid rgba(255,255,255,0.1); border-top: 3px solid #fff; border-radius: 50%; 
+                   width: 40px; height: 40px; animation: spin 1s linear infinite; margin: 0 auto 20px; }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+        .emscripten-loaded #loading { display: none; }
+    </style>
+</head>
+<body>
+    <div id="loading"><div class="spinner"></div><div>Loading...</div></div>
+    <canvas id="canvas" oncontextmenu="event.preventDefault()" tabindex="0"></canvas>
+    <script type="text/javascript">
+        var Module = {
+            preRun: [],
+            postRun: [function() { console.log('[MODULE] Started'); document.body.classList.add('emscripten-loaded'); }],
+            print: function(text) { if (arguments.length > 1) text = Array.prototype.slice.call(arguments).join(' '); console.log(text); },
+            printErr: function(text) { if (arguments.length > 1) text = Array.prototype.slice.call(arguments).join(' '); console.error(text); },
+            canvas: document.getElementById('canvas'),
+            setStatus: function(text) { console.log('[STATUS]', text); }
+        };
+    </script>
+    {{{ SCRIPT }}}
+</body>
+</html>

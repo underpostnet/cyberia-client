@@ -1,0 +1,25 @@
+# Build artifacts
+cyberia-client.html
+cyberia-client.js
+cyberia-client.wasm
+cyberia-client.data
+
+# Emscripten cache
+*.bc
+
+# Editor files
+*.swp
+*.swo
+*~
+.vscode/
+.idea/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+
+# Temporary files
+*.tmp
