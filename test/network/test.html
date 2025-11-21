@@ -1,0 +1,296 @@
+<!doctype html>
+<html lang="en">
+    <head>
+        <meta charset="UTF-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        <title>Cyberia Client WebSocket Test</title>
+        <style>
+            body {
+                font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+                max-width: 1200px;
+                margin: 0 auto;
+                padding: 20px;
+                background-color: #f5f5f5;
+            }
+            h1 {
+                color: #333;
+                border-bottom: 3px solid #4caf50;
+                padding-bottom: 10px;
+            }
+            .container {
+                background: white;
+                padding: 20px;
+                border-radius: 8px;
+                box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+                margin-bottom: 20px;
+            }
+            .info {
+                background-color: #e3f2fd;
+                border-left: 4px solid #2196f3;
+                padding: 15px;
+                margin-bottom: 20px;
+            }
+            .status {
+                display: inline-block;
+                padding: 5px 15px;
+                border-radius: 20px;
+                font-weight: bold;
+                margin-bottom: 10px;
+            }
+            .status.loading {
+                background-color: #fff3cd;
+                color: #856404;
+            }
+            .status.ready {
+                background-color: #d4edda;
+                color: #155724;
+            }
+            .status.error {
+                background-color: #f8d7da;
+                color: #721c24;
+            }
+            #console {
+                background-color: #1e1e1e;
+                color: #d4d4d4;
+                padding: 15px;
+                border-radius: 5px;
+                font-family: "Courier New", monospace;
+                font-size: 13px;
+                height: 400px;
+                overflow-y: auto;
+                white-space: pre-wrap;
+                word-wrap: break-word;
+            }
+            .log-entry {
+                margin: 5px 0;
+                padding: 3px 0;
+            }
+            .log-info {
+                color: #4fc3f7;
+            }
+            .log-success {
+                color: #81c784;
+            }
+            .log-error {
+                color: #e57373;
+            }
+            .log-warn {
+                color: #ffb74d;
+            }
+            button {
+                background-color: #4caf50;
+                color: white;
+                border: none;
+                padding: 10px 20px;
+                text-align: center;
+                text-decoration: none;
+                display: inline-block;
+                font-size: 14px;
+                margin: 4px 2px;
+                cursor: pointer;
+                border-radius: 4px;
+                transition: background-color 0.3s;
+            }
+            button:hover {
+                background-color: #45a049;
+            }
+            button:disabled {
+                background-color: #cccccc;
+                cursor: not-allowed;
+            }
+        </style>
+    </head>
+    <body>
+        <h1>🌐 Cyberia Client - WebSocket Test</h1>
+
+        <div class="container">
+            <div id="status" class="status loading">Loading WASM Module...</div>
+
+            <div class="info">
+                <strong>ℹ️ Test Information:</strong><br />
+                This page tests the WebSocket functionality of the Cyberia
+                Client compiled to WebAssembly.<br />
+                Make sure you have a WebSocket server running at
+                <code>ws://localhost:8080/ws</code>
+            </div>
+
+            <div>
+                <button id="runTest" disabled>Run WebSocket Test</button>
+                <button id="clearConsole">Clear Console</button>
+            </div>
+        </div>
+
+        <div class="container">
+            <h2>Console Output</h2>
+            <div id="console"></div>
+        </div>
+
+        <script>
+            const consoleDiv = document.getElementById("console");
+            const statusDiv = document.getElementById("status");
+            const runTestBtn = document.getElementById("runTest");
+            const clearConsoleBtn = document.getElementById("clearConsole");
+
+            function log(message, type) {
+                type = type || "info";
+                const timestamp = new Date().toLocaleTimeString();
+                const entry = document.createElement("div");
+                entry.className = "log-entry log-" + type;
+                entry.textContent = "[" + timestamp + "] " + message;
+                consoleDiv.appendChild(entry);
+                consoleDiv.scrollTop = consoleDiv.scrollHeight;
+            }
+
+            function setStatus(text, type) {
+                statusDiv.textContent = text;
+                statusDiv.className = "status " + type;
+            }
+
+            clearConsoleBtn.addEventListener("click", function () {
+                consoleDiv.innerHTML = "";
+            });
+
+            // Save original console methods
+            const originalLog = console.log;
+            const originalError = console.error;
+            const originalWarn = console.warn;
+
+            // Override console methods to capture output
+            console.log = function () {
+                originalLog.apply(console, arguments);
+                var args = Array.prototype.slice.call(arguments);
+                var message = args
+                    .map(function (arg) {
+                        if (typeof arg === "object") {
+                            try {
+                                return JSON.stringify(arg);
+                            } catch (e) {
+                                return String(arg);
+                            }
+                        }
+                        return String(arg);
+                    })
+                    .join(" ");
+                if (message) {
+                    log(message, "info");
+                }
+            };
+
+            console.error = function () {
+                originalError.apply(console, arguments);
+                var args = Array.prototype.slice.call(arguments);
+                var message = args
+                    .map(function (arg) {
+                        if (typeof arg === "object") {
+                            try {
+                                return JSON.stringify(arg);
+                            } catch (e) {
+                                return String(arg);
+                            }
+                        }
+                        return String(arg);
+                    })
+                    .join(" ");
+                if (message) {
+                    log(message, "error");
+                }
+            };
+
+            console.warn = function () {
+                originalWarn.apply(console, arguments);
+                var args = Array.prototype.slice.call(arguments);
+                var message = args
+                    .map(function (arg) {
+                        if (typeof arg === "object") {
+                            try {
+                                return JSON.stringify(arg);
+                            } catch (e) {
+                                return String(arg);
+                            }
+                        }
+                        return String(arg);
+                    })
+                    .join(" ");
+                if (message) {
+                    log(message, "warn");
+                }
+            };
+
+            log("Waiting for Cyberia Client WASM module to load...", "info");
+
+            // Store the module globally when it's ready
+            window.CyberiaModule = null;
+
+            // Function to initialize the module once the script is loaded
+            function initializeModule() {
+                if (typeof CyberiaClient === "undefined") {
+                    log("CyberiaClient not loaded yet, retrying...", "warn");
+                    setTimeout(initializeModule, 100);
+                    return;
+                }
+
+                log("Initializing Cyberia Client WASM module...", "info");
+
+                // Initialize Emscripten module
+                CyberiaClient({
+                    print: function (text) {
+                        log(text, "info");
+                    },
+                    printErr: function (text) {
+                        log(text, "error");
+                    },
+                    onRuntimeInitialized: function () {
+                        log(
+                            "WASM Runtime initialized successfully!",
+                            "success",
+                        );
+                        setStatus("✓ Module Ready", "ready");
+                        runTestBtn.disabled = false;
+                    },
+                })
+                    .then(function (Module) {
+                        window.CyberiaModule = Module;
+                        log("Module instance created", "success");
+                    })
+                    .catch(function (error) {
+                        log(
+                            "Failed to initialize module: " + error.message,
+                            "error",
+                        );
+                        setStatus("✗ Module Init Failed", "error");
+                        originalError("Module initialization error:", error);
+                    });
+            }
+
+            // Start initialization
+            initializeModule();
+
+            runTestBtn.addEventListener("click", function () {
+                log("Starting WebSocket test...", "info");
+                log(
+                    "Make sure your WebSocket server is running on ws://localhost:8080/ws",
+                    "warn",
+                );
+
+                try {
+                    if (window.CyberiaModule) {
+                        // Call the main function which runs the test
+                        window.CyberiaModule.ccall("main", "number", [], []);
+                        log(
+                            "Test initiated. Check console for WebSocket events.",
+                            "success",
+                        );
+                    } else {
+                        log("Module not ready yet", "error");
+                    }
+                } catch (error) {
+                    log("Error running test: " + error.message, "error");
+                    originalError(error);
+                }
+            });
+        </script>
+
+        <!-- Load the Emscripten generated JavaScript -->
+        <script src="emscripten.network.js"></script>
+    </body>
+</html>

@@ -7,6 +7,7 @@
 // Global WebSocket client instance
 static WebSocketClient ws_client;
 static int message_count = 0;
+static WebSocketHandlers handlers; // Make handlers static so it persists
 
 // Test callback: on_open
 void test_on_open(void* user_data) {
@@ -171,8 +172,7 @@ int main() {
     }
     printf("[INIT] WebSocket support: CONFIRMED\n");
 
-    // Setup event handlers
-    WebSocketHandlers handlers;
+    // Setup event handlers (using static global handlers)
     handlers.on_open = test_on_open;
     handlers.on_message = test_on_message;
     handlers.on_error = test_on_error;
