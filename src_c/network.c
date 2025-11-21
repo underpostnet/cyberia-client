@@ -111,7 +111,7 @@ int ws_is_connected(WebSocketClient* client) {
 // Internal event handler: onopen
 static EM_BOOL on_open_internal(int eventType, const EmscriptenWebSocketOpenEvent* event, void* userData) {
     WebSocketHandlers* handlers = (WebSocketHandlers*)userData;
-    
+
     printf("[NETWORK] WebSocket connection opened\n");
 
     // Update connection status through global handlers
@@ -130,13 +130,13 @@ static EM_BOOL on_open_internal(int eventType, const EmscriptenWebSocketOpenEven
 // Internal event handler: onmessage
 static EM_BOOL on_message_internal(int eventType, const EmscriptenWebSocketMessageEvent* event, void* userData) {
     WebSocketHandlers* handlers = (WebSocketHandlers*)userData;
-    
+
     if (event->isText) {
         // Text message received
-        printf("[NETWORK] Received text message (%d bytes)\n", event->numBytes);
+        // printf("[NETWORK] Received text message (%d bytes)\n", event->numBytes);
     } else {
         // Binary message received
-        printf("[NETWORK] Received binary message (%d bytes)\n", event->numBytes);
+        // printf("[NETWORK] Received binary message (%d bytes)\n", event->numBytes);
     }
 
     // Call user callback with message data
@@ -150,7 +150,7 @@ static EM_BOOL on_message_internal(int eventType, const EmscriptenWebSocketMessa
 // Internal event handler: onerror
 static EM_BOOL on_error_internal(int eventType, const EmscriptenWebSocketErrorEvent* event, void* userData) {
     WebSocketHandlers* handlers = (WebSocketHandlers*)userData;
-    
+
     printf("[NETWORK] WebSocket error occurred\n");
 
     // Call user callback
@@ -164,8 +164,8 @@ static EM_BOOL on_error_internal(int eventType, const EmscriptenWebSocketErrorEv
 // Internal event handler: onclose
 static EM_BOOL on_close_internal(int eventType, const EmscriptenWebSocketCloseEvent* event, void* userData) {
     WebSocketHandlers* handlers = (WebSocketHandlers*)userData;
-    
-    printf("[NETWORK] WebSocket closed: code=%d, reason='%s', wasClean=%d\n", 
+
+    printf("[NETWORK] WebSocket closed: code=%d, reason='%s', wasClean=%d\n",
            event->code, event->reason, event->wasClean);
 
     // Call user callback

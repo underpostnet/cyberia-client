@@ -1,34 +1,381 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
-<head>
-    <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Cyberia Client</title>
-    <style>
-        * { margin: 0; padding: 0; box-sizing: border-box; }
-        html, body { width: 100%; height: 100%; overflow: hidden; background: #000; }
-        #canvas { position: absolute; top: 0; left: 0; width: 100%; height: 100%; display: block; }
-        #loading { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); color: #fff; 
-                   font-family: monospace; text-align: center; z-index: 1000; }
-        .spinner { border: 3px solid rgba(255,255,255,0.1); border-top: 3px solid #fff; border-radius: 50%; 
-                   width: 40px; height: 40px; animation: spin 1s linear infinite; margin: 0 auto 20px; }
-        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
-        .emscripten-loaded #loading { display: none; }
-    </style>
-</head>
-<body>
-    <div id="loading"><div class="spinner"></div><div>Loading...</div></div>
-    <canvas id="canvas" oncontextmenu="event.preventDefault()" tabindex="0"></canvas>
-    <script type="text/javascript">
-        var Module = {
-            preRun: [],
-            postRun: [function() { console.log('[MODULE] Started'); document.body.classList.add('emscripten-loaded'); }],
-            print: function(text) { if (arguments.length > 1) text = Array.prototype.slice.call(arguments).join(' '); console.log(text); },
-            printErr: function(text) { if (arguments.length > 1) text = Array.prototype.slice.call(arguments).join(' '); console.error(text); },
-            canvas: document.getElementById('canvas'),
-            setStatus: function(text) { console.log('[STATUS]', text); }
-        };
-    </script>
-    {{{ SCRIPT }}}
-</body>
+    <head>
+        <meta charset="utf-8" />
+        <meta
+            name="viewport"
+            content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"
+        />
+        <title>Cyberia Client</title>
+        <style>
+            * {
+                margin: 0;
+                padding: 0;
+                box-sizing: border-box;
+            }
+
+            html,
+            body {
+                width: 100%;
+                height: 100%;
+                overflow: hidden;
+                background: #000;
+            }
+
+            body {
+                display: flex;
+                justify-content: center;
+                align-items: center;
+            }
+
+            #canvas {
+                display: block;
+                image-rendering: optimizeSpeed;
+                image-rendering: -moz-crisp-edges;
+                image-rendering: -webkit-optimize-contrast;
+                image-rendering: optimize-contrast;
+                image-rendering: pixelated;
+                -ms-interpolation-mode: nearest-neighbor;
+            }
+
+            #loading {
+                position: absolute;
+                top: 50%;
+                left: 50%;
+                transform: translate(-50%, -50%);
+                color: #fff;
+                font-family: monospace;
+                text-align: center;
+                z-index: 1000;
+            }
+
+            .spinner {
+                border: 3px solid rgba(255, 255, 255, 0.1);
+                border-top: 3px solid #fff;
+                border-radius: 50%;
+                width: 40px;
+                height: 40px;
+                animation: spin 1s linear infinite;
+                margin: 0 auto 20px;
+            }
+
+            @keyframes spin {
+                0% {
+                    transform: rotate(0deg);
+                }
+                100% {
+                    transform: rotate(360deg);
+                }
+            }
+
+            .emscripten-loaded #loading {
+                display: none;
+            }
+        </style>
+    </head>
+    <body>
+        <div id="loading">
+            <div class="spinner"></div>
+            <div>Loading...</div>
+        </div>
+        <canvas
+            id="canvas"
+            oncontextmenu="event.preventDefault()"
+            tabindex="0"
+        ></canvas>
+
+        <script type="text/javascript">
+            // ====================================================================
+            // Canvas Aspect Ratio Management & Input Handling
+            // ====================================================================
+
+            (function () {
+                "use strict";
+
+                const canvas = document.getElementById("canvas");
+
+                // Canvas internal resolution (will be set by the C code)
+                let canvasInternalWidth = 800;
+                let canvasInternalHeight = 600;
+                const aspectRatio = canvasInternalWidth / canvasInternalHeight;
+
+                console.log("[CANVAS] Initializing aspect ratio manager");
+                console.log(
+                    "[CANVAS] Internal resolution:",
+                    canvasInternalWidth,
+                    "x",
+                    canvasInternalHeight,
+                );
+                console.log("[CANVAS] Aspect ratio:", aspectRatio.toFixed(4));
+
+                /**
+                 * Scale canvas CSS to fit window while maintaining aspect ratio
+                 * This prevents stretching or squashing of the canvas content
+                 */
+                function scaleCanvasToFitWindow() {
+                    const windowWidth = window.innerWidth;
+                    const windowHeight = window.innerHeight;
+                    const windowAspectRatio = windowWidth / windowHeight;
+
+                    let cssWidth, cssHeight;
+                    let offsetX = 0,
+                        offsetY = 0;
+
+                    if (windowAspectRatio > aspectRatio) {
+                        // Window is wider than canvas aspect ratio
+                        // Fit to height, center horizontally
+                        cssHeight = windowHeight;
+                        cssWidth = cssHeight * aspectRatio;
+                        offsetX = (windowWidth - cssWidth) / 2;
+                    } else {
+                        // Window is taller than canvas aspect ratio
+                        // Fit to width, center vertically
+                        cssWidth = windowWidth;
+                        cssHeight = cssWidth / aspectRatio;
+                        offsetY = (windowHeight - cssHeight) / 2;
+                    }
+
+                    // Apply CSS dimensions (this scales the canvas visually)
+                    canvas.style.width = cssWidth + "px";
+                    canvas.style.height = cssHeight + "px";
+                    canvas.style.position = "absolute";
+                    canvas.style.left = offsetX + "px";
+                    canvas.style.top = offsetY + "px";
+
+                    console.log(
+                        "[CANVAS] Scaled to fit:",
+                        "CSS=" +
+                            cssWidth.toFixed(0) +
+                            "x" +
+                            cssHeight.toFixed(0),
+                        "Offset=" +
+                            offsetX.toFixed(0) +
+                            "," +
+                            offsetY.toFixed(0),
+                    );
+                }
+
+                /**
+                 * Map screen/client coordinates to internal canvas coordinates
+                 * Accounts for CSS scaling and canvas positioning
+                 *
+                 * @param {number} clientX - Screen X coordinate (from mouse/touch event)
+                 * @param {number} clientY - Screen Y coordinate (from mouse/touch event)
+                 * @returns {object} Object with x and y properties in canvas coordinates
+                 */
+                function mapClientToCanvasCoordinates(clientX, clientY) {
+                    const rect = canvas.getBoundingClientRect();
+
+                    // Calculate relative position within the canvas CSS bounds (0 to 1)
+                    const relativeX = (clientX - rect.left) / rect.width;
+                    const relativeY = (clientY - rect.top) / rect.height;
+
+                    // Map to internal canvas coordinates
+                    const canvasX = relativeX * canvasInternalWidth;
+                    const canvasY = relativeY * canvasInternalHeight;
+
+                    return {
+                        x: Math.round(canvasX),
+                        y: Math.round(canvasY),
+                        // Also include normalized coordinates (0 to 1)
+                        normalizedX: relativeX,
+                        normalizedY: relativeY,
+                        // Include original client coordinates for reference
+                        clientX: clientX,
+                        clientY: clientY,
+                    };
+                }
+
+                /**
+                 * Handle mouse down events
+                 */
+                function handleMouseDown(event) {
+                    const coords = mapClientToCanvasCoordinates(
+                        event.clientX,
+                        event.clientY,
+                    );
+
+                    console.log(
+                        "[INPUT] Mouse down:",
+                        "Client(" + coords.clientX + "," + coords.clientY + ")",
+                        "Canvas(" + coords.x + "," + coords.y + ")",
+                        "Normalized(" +
+                            coords.normalizedX.toFixed(3) +
+                            "," +
+                            coords.normalizedY.toFixed(3) +
+                            ")",
+                    );
+
+                    // You can pass these coordinates to the C code via EM_ASM or Module.ccall
+                    // For now, just log them
+                }
+
+                /**
+                 * Handle touch start events
+                 */
+                function handleTouchStart(event) {
+                    event.preventDefault(); // Prevent default touch behavior
+
+                    for (let i = 0; i < event.touches.length; i++) {
+                        const touch = event.touches[i];
+                        const coords = mapClientToCanvasCoordinates(
+                            touch.clientX,
+                            touch.clientY,
+                        );
+
+                        console.log(
+                            "[INPUT] Touch start [" + i + "]:",
+                            "Client(" +
+                                coords.clientX +
+                                "," +
+                                coords.clientY +
+                                ")",
+                            "Canvas(" + coords.x + "," + coords.y + ")",
+                            "Normalized(" +
+                                coords.normalizedX.toFixed(3) +
+                                "," +
+                                coords.normalizedY.toFixed(3) +
+                                ")",
+                        );
+                    }
+
+                    // You can pass these coordinates to the C code
+                }
+
+                /**
+                 * Handle window resize events
+                 */
+                function handleResize() {
+                    console.log(
+                        "[CANVAS] Window resized to:",
+                        window.innerWidth,
+                        "x",
+                        window.innerHeight,
+                    );
+                    scaleCanvasToFitWindow();
+                }
+
+                /**
+                 * Update internal canvas dimensions when they change
+                 * This should be called from C code when the canvas internal size changes
+                 */
+                window.updateCanvasInternalSize = function (width, height) {
+                    canvasInternalWidth = width;
+                    canvasInternalHeight = height;
+                    console.log(
+                        "[CANVAS] Internal size updated:",
+                        width,
+                        "x",
+                        height,
+                    );
+                    scaleCanvasToFitWindow();
+                };
+
+                /**
+                 * Expose coordinate mapping function globally
+                 * So it can be called from C code or other scripts
+                 */
+                window.mapClientToCanvas = mapClientToCanvasCoordinates;
+
+                // ================================================================
+                // Event Listener Registration
+                // ================================================================
+
+                // Resize event (with debouncing)
+                let resizeTimeout;
+                window.addEventListener("resize", function () {
+                    clearTimeout(resizeTimeout);
+                    resizeTimeout = setTimeout(handleResize, 100);
+                });
+
+                // Mouse events
+                canvas.addEventListener("mousedown", handleMouseDown);
+
+                // Touch events
+                canvas.addEventListener("touchstart", handleTouchStart, {
+                    passive: false,
+                });
+
+                // Initial scale on load
+                window.addEventListener("load", function () {
+                    console.log(
+                        "[CANVAS] Page loaded, performing initial scale",
+                    );
+                    scaleCanvasToFitWindow();
+                });
+
+                // Also scale immediately
+                scaleCanvasToFitWindow();
+
+                console.log("[CANVAS] Aspect ratio manager initialized");
+                console.log(
+                    "[CANVAS] Event listeners registered: resize, mousedown, touchstart",
+                );
+            })();
+
+            // ====================================================================
+            // Emscripten Module Configuration
+            // ====================================================================
+
+            var Module = {
+                preRun: [],
+                postRun: [
+                    function () {
+                        console.log(
+                            "[MODULE] Application started successfully",
+                        );
+                        document.body.classList.add("emscripten-loaded");
+
+                        // Update canvas size when module starts
+                        const canvas = document.getElementById("canvas");
+                        if (canvas.width && canvas.height) {
+                            window.updateCanvasInternalSize(
+                                canvas.width,
+                                canvas.height,
+                            );
+                        }
+                    },
+                ],
+
+                print: function (text) {
+                    if (arguments.length > 1) {
+                        text = Array.prototype.slice.call(arguments).join(" ");
+                    }
+                    console.log(text);
+                },
+
+                printErr: function (text) {
+                    if (arguments.length > 1) {
+                        text = Array.prototype.slice.call(arguments).join(" ");
+                    }
+                    console.error(text);
+                },
+
+                canvas: document.getElementById("canvas"),
+
+                setStatus: function (text) {
+                    if (!Module.setStatus.last) {
+                        Module.setStatus.last = { time: Date.now(), text: "" };
+                    }
+
+                    if (text === Module.setStatus.last.text) return;
+
+                    var m = text.match(/([^(]+)\((\d+(\.\d+)?)\/(\d+)\)/);
+                    var now = Date.now();
+
+                    if (m && now - Module.setStatus.last.time < 30) return;
+
+                    Module.setStatus.last.time = now;
+                    Module.setStatus.last.text = text;
+
+                    if (m) {
+                        text = m[1];
+                    }
+
+                    console.log("[STATUS]", text);
+                },
+            };
+        </script>
+        {{{ SCRIPT }}}
+    </body>
 </html>

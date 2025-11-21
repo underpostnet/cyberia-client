@@ -49,7 +49,7 @@ int client_init(void) {
     // Initialize WebSocket connection
     printf("[CLIENT] Connecting to %s\n", WS_URL);
     int result = ws_init(&client_state.ws_client, WS_URL, &client_state.handlers);
-    
+
     if (result != 0) {
         printf("[CLIENT] Failed to initialize WebSocket connection\n");
         return -1;
@@ -120,7 +120,7 @@ const char* client_get_last_message(void) {
 // Called when WebSocket connection is opened
 static void on_websocket_open(void* user_data) {
     printf("[CLIENT] WebSocket connection established\n");
-    
+
 #if defined(PLATFORM_WEB)
     // Log to JavaScript console for debugging
     EM_ASM(
@@ -129,10 +129,10 @@ static void on_websocket_open(void* user_data) {
         console.log('[WS] Ready to send and receive messages');
     );
 #endif
-    
+
     // Update connection status
     client_state.ws_client.connected = 1;
-    
+
     // Send initial handshake message
     const char* handshake = "{\"type\":\"handshake\",\"client\":\"cyberia-immersive\",\"version\":\"1.0.0\"}";
     client_send(handshake);
@@ -145,9 +145,9 @@ static void on_websocket_message(const char* data, int length, void* user_data) 
     }
 
     client_state.message_count++;
-    
-    printf("[CLIENT] Message received (%d bytes) [count: %d]\n", 
-           length, client_state.message_count);
+
+     // printf("[CLIENT] Message received (%d bytes) [count: %d]\n",
+     //       length, client_state.message_count);
 
     // Store the message
     int copy_length = (length < MAX_MESSAGE_SIZE - 1) ? length : MAX_MESSAGE_SIZE - 1;
@@ -157,15 +157,15 @@ static void on_websocket_message(const char* data, int length, void* user_data) 
 #if defined(PLATFORM_WEB)
     // Log to JavaScript console with full message content
     EM_ASM({
-        console.log('%c[WS] on_message', 'color: #00aaff; font-weight: bold');
-        console.log('[WS] Message #' + $0 + ' received (' + $1 + ' bytes)');
+        // console.log('%c[WS] on_message', 'color: #00aaff; font-weight: bold');
+        // console.log('[WS] Message #' + $0 + ' received (' + $1 + ' bytes)');
         var message = UTF8ToString($2, $1);
-        console.log('[WS] Content:', message);
+        // console.log('[WS] Content:', message);
         try {
             var json = JSON.parse(message);
-            console.log('[WS] Parsed JSON:', json);
+            // console.log('[WS] Parsed JSON:', json);
         } catch(e) {
-            console.log('[WS] (Not valid JSON or binary data)');
+            // console.log('[WS] (Not valid JSON or binary data)');
         }
     }, client_state.message_count, length, data);
 #endif
@@ -174,7 +174,7 @@ static void on_websocket_message(const char* data, int length, void* user_data) 
 // Called when WebSocket error occurs
 static void on_websocket_error(void* user_data) {
     printf("[CLIENT] WebSocket error occurred\n");
-    
+
 #if defined(PLATFORM_WEB)
     // Log to JavaScript console
     EM_ASM(
@@ -183,16 +183,16 @@ static void on_websocket_error(void* user_data) {
         console.error('[WS] Connection may have failed or been interrupted');
     );
 #endif
-    
+
     // Mark as disconnected
     client_state.ws_client.connected = 0;
 }
 
 // Called when WebSocket connection is closed
 static void on_websocket_close(int code, const char* reason, void* user_data) {
-    printf("[CLIENT] WebSocket closed (code: %d, reason: %s)\n", 
+    printf("[CLIENT] WebSocket closed (code: %d, reason: %s)\n",
            code, reason ? reason : "none");
-    
+
 #if defined(PLATFORM_WEB)
     // Log to JavaScript console with details
     EM_ASM({
@@ -208,7 +208,7 @@ static void on_websocket_close(int code, const char* reason, void* user_data) {
         else if ($0 === 1011) console.log('[WS] Code meaning: Internal Server Error');
     }, code, reason);
 #endif
-    
+
     // Mark as disconnected
     client_state.ws_client.connected = 0;
 }
