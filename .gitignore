@@ -5,3 +5,5 @@ __pycache__
 color_map.json
 decoder_model.keras
 env
+emscripten.raylib.c.*
+*.html

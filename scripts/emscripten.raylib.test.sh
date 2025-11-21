@@ -2,15 +2,16 @@
 
 set -e
 
-cd /home/dd/cyberia-client/test
-
 # ===============================
 # 1. Configure EMSDK paths
 # ===============================
 EMSDK="$HOME/.emsdk"
 INCLUDE="$EMSDK/upstream/emscripten/cache/sysroot/include"
 LIB="$EMSDK/upstream/emscripten/cache/sysroot/lib/libraylib.a"
-SRC_FILE="emscripten.test.c"
+SRC_FILE="emscripten.raylib.c"
+SRC_PATH="/home/dd/cyberia-client/test/raylib"
+
+cd $SRC_PATH
 
 echo "[INFO] Using EMSDK at: $EMSDK"
 
@@ -45,5 +46,8 @@ echo "     • $SRC_FILE.html"
 echo "     • $SRC_FILE.wasm"
 echo "     • $SRC_FILE.js"
 echo "====================================="
-echo ""
-echo "Run with:  emrun --no_browser --port 8080 ."
+
+echo "Run with:  emrun --no_browser --port 8081 $SRC_PATH"
+echo "Command copied to clipboard."
+
+printf "emrun --no_browser --port 8081 $SRC_PATH" | xsel --clipboard --input
