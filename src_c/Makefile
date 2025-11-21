@@ -57,7 +57,7 @@ RELEASE_FLAGS := \
 # Build Targets
 # ============================================================================
 
-.PHONY: all clean debug release help check-deps info
+.PHONY: all clean debug release help check-deps info serve
 
 # Default target
 all: check-deps $(TARGET_NAME).html
@@ -67,11 +67,35 @@ all: check-deps $(TARGET_NAME).html
 	@echo "=========================================="
 	@echo ""
 	@echo "To run the application:"
-	@echo "  cd src_c && emrun --no_browser --port 8081 ."
+	@echo "  make serve"
+	@echo ""
+	@echo "Or manually:"
+	@echo "  emrun --no_browser --port 8081 ."
 	@echo ""
 	@echo "Then open in browser:"
 	@echo "  http://localhost:8081/$(TARGET_NAME).html"
 	@echo "=========================================="
+
+# Serve the application locally
+serve: check-deps
+	@if [ ! -f "$(TARGET_NAME).html" ]; then \
+		echo "========================================"; \
+		echo "  Building project first..."; \
+		echo "========================================"; \
+		$(MAKE) all; \
+		echo ""; \
+	fi
+	@echo "=========================================="
+	@echo "  Starting local development server"
+	@echo "=========================================="
+	@echo ""
+	@echo "Server running at:"
+	@echo "  http://localhost:8081/$(TARGET_NAME).html"
+	@echo ""
+	@echo "Press Ctrl+C to stop the server"
+	@echo "=========================================="
+	@echo ""
+	@emrun --no_browser --port 8081 .
 
 # Main build target
 $(TARGET_NAME).html: $(SOURCES) $(HEADERS) $(SHELL_FILE)
@@ -143,6 +167,7 @@ info:
 	@echo ""
 	@echo "Available targets:"
 	@echo "  make         - Build the project (default)"
+	@echo "  make serve   - Build and start local server"
 	@echo "  make debug   - Build with debugging symbols"
 	@echo "  make release - Build with optimizations"
 	@echo "  make clean   - Remove build artifacts"
@@ -170,6 +195,7 @@ help:
 	@echo ""
 	@echo "TARGETS:"
 	@echo "  all       Build the project (default)"
+	@echo "  serve     Build and start local development server"
 	@echo "  debug     Build with debugging enabled"
 	@echo "  release   Build with optimizations"
 	@echo "  clean     Remove all build artifacts"
@@ -190,13 +216,14 @@ help:
 	@echo "  make clean && make"
 	@echo ""
 	@echo "RUNNING THE APPLICATION:"
-	@echo "  1. Build the project:"
-	@echo "     make"
+	@echo "  1. Build and serve (easiest):"
+	@echo "     make serve"
 	@echo ""
-	@echo "  2. Start a local web server:"
+	@echo "  2. Or build then serve manually:"
+	@echo "     make"
 	@echo "     emrun --no_browser --port 8081 ."
 	@echo ""
-	@echo "  3. Open in your browser:"
+	@echo "  3. Then open in your browser:"
 	@echo "     http://localhost:8081/$(TARGET_NAME).html"
 	@echo ""
 	@echo "TROUBLESHOOTING:"
