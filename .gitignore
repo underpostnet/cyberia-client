@@ -7,3 +7,5 @@ decoder_model.keras
 env
 emscripten.raylib.c.*
 *.html
+test/network/emscripten.network.wasm
+test/network/emscripten.network.js
