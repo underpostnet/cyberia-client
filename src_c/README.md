@@ -29,7 +29,7 @@ make clean
 make info
 ```
 
-## 🌐 Running
+## Running
 
 1. **Build the project**:
    ```bash
@@ -40,7 +40,10 @@ make info
    ```bash
    emrun --no_browser --port 8081 .
    ```
-
+    Or use the provided Makefile target:
+   ```bash
+   make serve
+   ```
 3. **Open in your browser**:
    ```
    http://localhost:8081/cyberia-client.html
