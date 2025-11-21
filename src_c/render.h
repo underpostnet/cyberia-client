@@ -3,8 +3,8 @@
 
 /**
  * @file render.h
- * @brief Rendering subsystem interface for the immersive client
- * 
+ * @brief Rendering subsystem interface for the client
+ *
  * This module handles all rendering operations using raylib.
  * The renderer displays a red circle in the center of the canvas
  * with a blue border around the edges for responsive testing.
@@ -21,7 +21,7 @@ int render_init(const char* title, int width, int height);
 
 /**
  * @brief Main rendering loop iteration (called each frame)
- * 
+ *
  * This function should be called every frame to update and render
  * the scene. It handles canvas resizing and responsive rendering.
  */
@@ -29,7 +29,7 @@ void render_update(void);
 
 /**
  * @brief Cleanup rendering subsystem
- * 
+ *
  * Releases all rendering resources and closes the window.
  */
 void render_cleanup(void);

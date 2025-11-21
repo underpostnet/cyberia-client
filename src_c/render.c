@@ -32,7 +32,7 @@ int render_init(const char* title, int width, int height) {
 
     // Initialize window with raylib
     InitWindow(width, height, title);
-    
+
     // Set target FPS for smooth rendering
     SetTargetFPS(60);
 
@@ -61,7 +61,7 @@ void render_update(void) {
 
     BeginDrawing();
 
-    // Clear background to black for immersive experience
+    // Clear background to black for experience
     ClearBackground(BLACK);
 
     // Calculate center position
@@ -78,13 +78,13 @@ void render_update(void) {
     // Draw blue border around the edges
     // Top border
     DrawRectangle(0, 0, current_width, BORDER_WIDTH, BORDER_COLOR);
-    
+
     // Bottom border
     DrawRectangle(0, current_height - BORDER_WIDTH, current_width, BORDER_WIDTH, BORDER_COLOR);
-    
+
     // Left border
     DrawRectangle(0, 0, BORDER_WIDTH, current_height, BORDER_COLOR);
-    
+
     // Right border
     DrawRectangle(current_width - BORDER_WIDTH, 0, BORDER_WIDTH, current_height, BORDER_COLOR);
 

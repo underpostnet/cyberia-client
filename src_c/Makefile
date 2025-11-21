@@ -1,4 +1,4 @@
-# Makefile for Cyberia Immersive Client (WebAssembly + Raylib + WebSocket)
+# Makefile for Cyberia Client (WebAssembly + Raylib + WebSocket)
 
 # ============================================================================
 # Project Configuration
@@ -19,7 +19,7 @@ EMSDK_PATH := $(HOME)/.emsdk
 EMSDK_INCLUDE := $(EMSDK_PATH)/upstream/emscripten/cache/sysroot/include
 EMSDK_LIB := $(EMSDK_PATH)/upstream/emscripten/cache/sysroot/lib/libraylib.a
 
-# Shell template for immersive fullscreen experience
+# Shell template for fullscreen experience
 SHELL_FILE := shell.html
 
 # ============================================================================
@@ -125,7 +125,7 @@ clean:
 # Show project information
 info:
 	@echo "=========================================="
-	@echo "  Cyberia Immersive Client - Info"
+	@echo "  Cyberia Client - Info"
 	@echo "=========================================="
 	@echo ""
 	@echo "Project:     $(PROJECT_NAME)"
@@ -153,11 +153,11 @@ info:
 # Help target with detailed instructions
 help:
 	@echo "=========================================="
-	@echo "  Cyberia Immersive Client - Help"
+	@echo "  Cyberia Client - Help"
 	@echo "=========================================="
 	@echo ""
 	@echo "DESCRIPTION:"
-	@echo "  This Makefile builds the Cyberia immersive client"
+	@echo "  This Makefile builds the Cyberia client"
 	@echo "  as a WebAssembly application using Emscripten and Raylib."
 	@echo ""
 	@echo "PREREQUISITES:"
@@ -198,14 +198,6 @@ help:
 	@echo ""
 	@echo "  3. Open in your browser:"
 	@echo "     http://localhost:8081/$(TARGET_NAME).html"
-	@echo ""
-	@echo "FEATURES:"
-	@echo "  • Immersive fullscreen canvas (no UI elements)"
-	@echo "  • Responsive design (adapts to browser size)"
-	@echo "  • WebSocket network layer with event logging"
-	@echo "  • Red circle indicator in center"
-	@echo "  • Blue border for responsive testing"
-	@echo "  • JavaScript console logging for debugging"
 	@echo ""
 	@echo "TROUBLESHOOTING:"
 	@echo "  • If build fails, check that Emscripten is activated:"

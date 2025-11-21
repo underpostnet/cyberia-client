@@ -2,7 +2,7 @@
 
 /**
  * @file config.c
- * @brief Configuration implementation for the Cyberia immersive client
+ * @brief Configuration implementation for the Cyberia client
  */
 
 // ============================================================================
@@ -11,7 +11,7 @@
 
 /**
  * @brief WebSocket server URL
- * 
+ *
  * Default URL for development environment.
  * This can be changed to point to production server.
  */
