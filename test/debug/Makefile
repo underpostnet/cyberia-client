@@ -14,7 +14,7 @@ SOURCES := main.c render.c client.c network.c config.c
 HEADERS := render.h client.h network.h config.h
 
 # Shell template
-SHELL_FILE := ../test/raylib/shell.html
+SHELL_FILE := ../raylib/shell.html
 
 # --- Compiler Flags ---
 EMCC_FLAGS := \

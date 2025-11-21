@@ -6,4 +6,4 @@ color_map.json
 decoder_model.keras
 env
 emscripten*
-src_c/cyberia-client*
+cyberia-client.*
