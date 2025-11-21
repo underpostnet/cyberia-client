@@ -29,7 +29,7 @@ make clean
 make info
 ```
 
-## Running
+### Running
 
 1. **Build the project**:
    ```bash
