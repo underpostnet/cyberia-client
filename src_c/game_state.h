@@ -181,16 +181,24 @@ typedef struct {
 // Color palette for the game
 typedef struct {
     Color background;
-    Color foreground;
-    Color target;
-    Color path;
-    Color aoi;
-    Color grid;
-    Color player;
-    Color bot;
+    Color grid_background;
+    Color floor_background;
     Color obstacle;
+    Color foreground;
+    Color player;
+    Color other_player;
+    Color path;
+    Color target;
+    Color aoi;
+    Color debug_text;
+    Color error_text;
     Color portal;
+    Color portal_label;
+    Color ui_text;
+    Color map_boundary;
+    Color grid;
     Color floor;
+    Color bot;
 } GameColors;
 
 // Main game state structure
@@ -361,5 +369,12 @@ void game_state_init_camera(int screen_width, int screen_height);
  * @brief Update camera position to follow player
  */
 void game_state_update_camera(void);
+
+/**
+ * @brief Update camera offset when screen size changes
+ * @param screen_width Current screen width
+ * @param screen_height Current screen height
+ */
+void game_state_update_camera_offset(int screen_width, int screen_height);
 
 #endif // GAME_STATE_H

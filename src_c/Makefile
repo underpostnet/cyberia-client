@@ -8,8 +8,8 @@ PROJECT_NAME := cyberia-client
 TARGET_NAME := $(PROJECT_NAME)
 
 # Source files
-SOURCES := main.c render.c client.c network.c config.c game_state.c game_render.c message_parser.c input.c serial.c dev_ui.c modal.c ../lib/cJSON/cJSON.c
-HEADERS := render.h client.h network.h config.h game_state.h game_render.h message_parser.h input.h serial.h dev_ui.h modal.h ../lib/cJSON/cJSON.h
+SOURCES := main.c render.c client.c network.c config.c game_state.c game_render.c message_parser.c input.c serial.c dev_ui.c modal.c modal_player.c ../lib/cJSON/cJSON.c
+HEADERS := render.h client.h network.h config.h game_state.h game_render.h message_parser.h input.h serial.h dev_ui.h modal.h modal_player.h ../lib/cJSON/cJSON.h
 
 # ============================================================================
 # Emscripten SDK Configuration

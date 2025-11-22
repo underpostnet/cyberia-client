@@ -4,6 +4,7 @@
 #include "input.h"
 #include "dev_ui.h"
 #include "modal.h"
+#include "modal_player.h"
 #include "raylib.h"
 #include <stdio.h>
 
@@ -62,11 +63,11 @@ int render_init(const char* title, int width, int height) {
         printf("[RENDER] Failed to initialize development UI\n");
     }
 
-    // Initialize modal component
-    if (modal_init() == 0) {
-        printf("[RENDER] Modal component initialized successfully\n");
+    // Initialize player modal component
+    if (modal_player_init() == 0) {
+        printf("[RENDER] Player modal component initialized successfully\n");
     } else {
-        printf("[RENDER] Failed to initialize modal component\n");
+        printf("[RENDER] Failed to initialize player modal component\n");
     }
 
     return 0;
@@ -96,6 +97,9 @@ void render_update(void) {
             game_render_set_screen_size(current_width, current_height);
         }
         
+        // Update camera offset to keep it centered
+        game_state_update_camera_offset(current_width, current_height);
+        
         // Handle input resize event
         input_handle_window_resize(current_width, current_height);
     }
@@ -109,11 +113,14 @@ void render_update(void) {
     game_state_update_interpolation(delta_time);
     game_state_update_camera();
     
+    // Update effects (click effects, floating texts)
+    game_render_update_effects(delta_time);
+    
     // Update dev UI
     dev_ui_update(delta_time);
     
-    // Update modal
-    modal_update(delta_time);
+    // Update player modal
+    modal_player_update(delta_time);
 
     // Use game renderer if available and game state is initialized
     if (render_state.game_initialized && g_game_state.init_received) {
@@ -171,8 +178,8 @@ void render_cleanup(void) {
     // Cleanup development UI
     dev_ui_cleanup();
 
-    // Cleanup modal component
-    modal_cleanup();
+    // Cleanup player modal component
+    modal_player_cleanup();
 
     // Cleanup input system
     input_cleanup();

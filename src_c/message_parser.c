@@ -153,28 +153,46 @@ int message_parser_parse_colors(const cJSON* colors_json) {
         // Map to game state colors
         Color c = (Color){rgba.r, rgba.g, rgba.b, rgba.a};
         
-        if (strcmp(color_name, "background") == 0) {
+        if (strcmp(color_name, "BACKGROUND") == 0) {
             g_game_state.colors.background = c;
-        } else if (strcmp(color_name, "foreground") == 0) {
-            g_game_state.colors.foreground = c;
-        } else if (strcmp(color_name, "target") == 0) {
-            g_game_state.colors.target = c;
-        } else if (strcmp(color_name, "path") == 0) {
-            g_game_state.colors.path = c;
-        } else if (strcmp(color_name, "aoi") == 0) {
-            g_game_state.colors.aoi = c;
-        } else if (strcmp(color_name, "grid") == 0) {
-            g_game_state.colors.grid = c;
-        } else if (strcmp(color_name, "player") == 0) {
-            g_game_state.colors.player = c;
-        } else if (strcmp(color_name, "bot") == 0) {
-            g_game_state.colors.bot = c;
-        } else if (strcmp(color_name, "obstacle") == 0) {
+        } else if (strcmp(color_name, "GRID_BACKGROUND") == 0) {
+            g_game_state.colors.grid_background = c;
+        } else if (strcmp(color_name, "FLOOR_BACKGROUND") == 0) {
+            g_game_state.colors.floor_background = c;
+        } else if (strcmp(color_name, "OBSTACLE") == 0) {
             g_game_state.colors.obstacle = c;
-        } else if (strcmp(color_name, "portal") == 0) {
+        } else if (strcmp(color_name, "FOREGROUND") == 0) {
+            g_game_state.colors.foreground = c;
+        } else if (strcmp(color_name, "PLAYER") == 0) {
+            g_game_state.colors.player = c;
+        } else if (strcmp(color_name, "OTHER_PLAYER") == 0) {
+            g_game_state.colors.other_player = c;
+        } else if (strcmp(color_name, "PATH") == 0) {
+            g_game_state.colors.path = c;
+        } else if (strcmp(color_name, "TARGET") == 0) {
+            g_game_state.colors.target = c;
+        } else if (strcmp(color_name, "AOI") == 0) {
+            g_game_state.colors.aoi = c;
+        } else if (strcmp(color_name, "DEBUG_TEXT") == 0) {
+            g_game_state.colors.debug_text = c;
+        } else if (strcmp(color_name, "ERROR_TEXT") == 0) {
+            g_game_state.colors.error_text = c;
+        } else if (strcmp(color_name, "PORTAL") == 0) {
             g_game_state.colors.portal = c;
+        } else if (strcmp(color_name, "PORTAL_LABEL") == 0) {
+            g_game_state.colors.portal_label = c;
+        } else if (strcmp(color_name, "UI_TEXT") == 0) {
+            g_game_state.colors.ui_text = c;
+        } else if (strcmp(color_name, "MAP_BOUNDARY") == 0) {
+            g_game_state.colors.map_boundary = c;
+        }
+        // Legacy lowercase support
+        else if (strcmp(color_name, "grid") == 0) {
+            g_game_state.colors.grid = c;
         } else if (strcmp(color_name, "floor") == 0) {
             g_game_state.colors.floor = c;
+        } else if (strcmp(color_name, "bot") == 0) {
+            g_game_state.colors.bot = c;
         }
     }
     
