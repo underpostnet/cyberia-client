@@ -121,34 +121,59 @@ void game_render_grid(void) {
     float cell_size = g_game_state.cell_size > 0 ? g_game_state.cell_size : 12.0f;
     int grid_w = g_game_state.grid_w;
     int grid_h = g_game_state.grid_h;
+    float map_w = grid_w * cell_size;
+    float map_h = grid_h * cell_size;
     
-    // Draw grid background
-    Rectangle grid_bg = {
-        0, 0,
-        grid_w * cell_size,
-        grid_h * cell_size
-    };
+    // Always draw grid background
+    Rectangle grid_bg = {0, 0, map_w, map_h};
     DrawRectangleRec(grid_bg, g_game_state.colors.grid_background);
     
-    // Draw grid lines
+    // Only draw grid lines and boundary when dev_ui is enabled
+    if (!g_game_state.dev_ui) {
+        game_state_unlock();
+        return;
+    }
+    
+    // Draw map boundary rectangle outline
+    DrawRectangleLinesEx(
+        (Rectangle){0, 0, map_w, map_h},
+        1.0f,
+        g_game_state.colors.map_boundary
+    );
+    
+    // Draw grid lines - use red color if grid color is too similar to background
     Color grid_color = g_game_state.colors.grid;
+    
+    // If grid color alpha is too low or color is too dark, use visible red
+    if (grid_color.a < 50 || (grid_color.r < 50 && grid_color.g < 50 && grid_color.b < 50)) {
+        grid_color = (Color){255, 0, 0, 128};  // Bright red with semi-transparency
+    }
+    
+    // Draw vertical grid lines with explicit thickness
     for (int x = 0; x <= grid_w; x++) {
-        DrawLine(
-            x * cell_size, 0,
-            x * cell_size, grid_h * cell_size,
+        float x_pos = x * cell_size;
+        DrawLineEx(
+            (Vector2){x_pos, 0},
+            (Vector2){x_pos, map_h},
+            1.0f,
             grid_color
         );
     }
+    
+    // Draw horizontal grid lines with explicit thickness
     for (int y = 0; y <= grid_h; y++) {
-        DrawLine(
-            0, y * cell_size,
-            grid_w * cell_size, y * cell_size,
+        float y_pos = y * cell_size;
+        DrawLineEx(
+            (Vector2){0, y_pos},
+            (Vector2){map_w, y_pos},
+            1.0f,
             grid_color
         );
     }
     
     game_state_unlock();
 }
+
 
 void game_render_floors(void) {
     game_state_lock();

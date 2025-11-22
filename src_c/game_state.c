@@ -43,11 +43,14 @@ int game_state_init(void) {
     
     // Color defaults
     g_game_state.colors.background = (Color){30, 30, 30, 255};
+    g_game_state.colors.grid_background = (Color){20, 20, 20, 255};
+    g_game_state.colors.floor_background = (Color){25, 25, 25, 255};
     g_game_state.colors.foreground = (Color){60, 140, 60, 220};
     g_game_state.colors.target = (Color){255, 255, 0, 255};
     g_game_state.colors.path = (Color){0, 255, 0, 128};
     g_game_state.colors.aoi = (Color){255, 0, 255, 51};
-    g_game_state.colors.grid = (Color){64, 64, 64, 255};
+    g_game_state.colors.grid = (Color){100, 100, 100, 255};
+    g_game_state.colors.map_boundary = (Color){150, 150, 150, 255};
     g_game_state.colors.player = (Color){0, 162, 232, 255};
     g_game_state.colors.bot = (Color){255, 127, 39, 255};
     g_game_state.colors.obstacle = (Color){139, 69, 19, 255};
