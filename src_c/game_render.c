@@ -1,5 +1,7 @@
 #include "game_render.h"
 #include "game_state.h"
+#include "dev_ui.h"
+#include "modal.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -312,28 +314,47 @@ void game_render_aoi_circle(void) {
 }
 
 void game_render_ui(void) {
-    // Render connection status
-    game_render_connection_status();
+    // Render development UI (when dev_ui is enabled and init_received is true)
+    game_state_lock();
+    bool should_render_dev_ui = g_game_state.dev_ui && g_game_state.init_received;
+    game_state_unlock();
     
-    // Render location info
-    game_render_location_info();
+    if (should_render_dev_ui) {
+        // Calculate HUD occupied space (if applicable)
+        int hud_occupied = 0; // TODO: Get actual HUD height when HUD is implemented
+        dev_ui_draw(g_renderer.screen_width, g_renderer.screen_height, hud_occupied);
+    } else {
+        // Render modal with connection status, map, and position (when dev_ui is false)
+        modal_draw(g_renderer.screen_width, g_renderer.screen_height);
+    }
     
     // Render performance info if debug mode
     if (g_renderer.show_debug_info) {
         game_render_performance_info();
     }
     
-    // Render error messages
-    game_render_error_messages();
+    // Render error messages (only if dev_ui is not showing them)
+    if (!should_render_dev_ui) {
+        game_render_error_messages();
+    }
 }
 
 void game_render_location_info(void) {
+    // Render location info when:
+    // 1. init_received is false (not yet initialized), OR
+    // 2. init_received is true BUT dev_ui is disabled (user wants to see it)
+    // Don't render only when both init_received AND dev_ui are true
     game_state_lock();
-    
+    bool init_received = g_game_state.init_received;
+    bool dev_ui_enabled = g_game_state.dev_ui;
     int map_id = g_game_state.player.map_id;
     Vector2 pos = g_game_state.player.base.interp_pos;
-    
     game_state_unlock();
+    
+    // Don't render only when dev_ui is showing it (init_received AND dev_ui both true)
+    if (init_received && dev_ui_enabled) {
+        return; // Dev UI is showing this info
+    }
     
     char map_text[64];
     char pos_text[64];
@@ -343,12 +364,14 @@ void game_render_location_info(void) {
     int font_size = 18;
     int padding = 10;
     
-    // Draw with shadow effect
-    DrawText(map_text, padding + 1, padding + 1, font_size, BLACK);
-    DrawText(map_text, padding, padding, font_size, YELLOW);
+    // Draw with shadow effect (top-right corner)
+    int x_pos = g_renderer.screen_width - MeasureText(map_text, font_size) - padding;
+    DrawText(map_text, x_pos + 1, padding + 1, font_size, BLACK);
+    DrawText(map_text, x_pos, padding, font_size, YELLOW);
     
-    DrawText(pos_text, padding + 1, padding + font_size + 6, font_size, BLACK);
-    DrawText(pos_text, padding, padding + font_size + 5, font_size, YELLOW);
+    x_pos = g_renderer.screen_width - MeasureText(pos_text, font_size) - padding;
+    DrawText(pos_text, x_pos + 1, padding + font_size + 6, font_size, BLACK);
+    DrawText(pos_text, x_pos, padding + font_size + 5, font_size, YELLOW);
 }
 
 void game_render_connection_status(void) {

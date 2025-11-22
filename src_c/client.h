@@ -1,6 +1,8 @@
 #ifndef CLIENT_H
 #define CLIENT_H
 
+#include <stddef.h>
+
 /**
  * @file client.h
  * @brief Client subsystem interface for network communication
@@ -61,5 +63,13 @@ int client_send(const char* message);
  *         Returns "No message" if no message has been received yet
  */
 const char* client_get_last_message(void);
+
+/**
+ * @brief Get network statistics (bytes uploaded and downloaded)
+ * 
+ * @param bytes_downloaded Pointer to store downloaded bytes count
+ * @param bytes_uploaded Pointer to store uploaded bytes count
+ */
+void client_get_network_stats(size_t* bytes_downloaded, size_t* bytes_uploaded);
 
 #endif // CLIENT_H

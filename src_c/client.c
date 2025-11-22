@@ -19,6 +19,8 @@ static struct {
     int initialized;
     char last_message[MAX_MESSAGE_SIZE];
     int message_count;
+    size_t bytes_downloaded;
+    size_t bytes_uploaded;
 } client_state = {0};
 
 // Forward declarations of event callbacks
@@ -38,6 +40,8 @@ int client_init(void) {
     memset(&client_state, 0, sizeof(client_state));
     strncpy(client_state.last_message, "No message received yet", MAX_MESSAGE_SIZE - 1);
     client_state.message_count = 0;
+    client_state.bytes_downloaded = 0;
+    client_state.bytes_uploaded = 0;
 
     // Setup WebSocket event handlers
     client_state.handlers.on_open = on_websocket_open;
@@ -105,12 +109,33 @@ int client_send(const char* message) {
 
     int length = strlen(message);
     printf("[CLIENT] Sending message (%d bytes): %s\n", length, message);
-    return ws_send(&client_state.ws_client, message, length);
+    
+    int result = ws_send(&client_state.ws_client, message, length);
+    if (result == 0) {
+        client_state.bytes_uploaded += length;
+        
+        // Update dev UI with network stats
+        game_state_lock();
+        g_game_state.upload_size_bytes = client_state.bytes_uploaded;
+        game_state_unlock();
+    }
+    
+    return result;
 }
 
 // Get the last received message
 const char* client_get_last_message(void) {
     return client_state.last_message;
+}
+
+// Get network statistics
+void client_get_network_stats(size_t* bytes_downloaded, size_t* bytes_uploaded) {
+    if (bytes_downloaded) {
+        *bytes_downloaded = client_state.bytes_downloaded;
+    }
+    if (bytes_uploaded) {
+        *bytes_uploaded = client_state.bytes_uploaded;
+    }
 }
 
 // ============================================================================
@@ -152,6 +177,14 @@ static void on_websocket_message(const char* data, int length, void* user_data) 
     }
 
     client_state.message_count++;
+    
+    // Track downloaded bytes
+    client_state.bytes_downloaded += length;
+    
+    // Update dev UI with network stats
+    game_state_lock();
+    g_game_state.download_size_bytes = client_state.bytes_downloaded;
+    game_state_unlock();
 
     // Check if message fits in buffer
     if (length >= MAX_MESSAGE_SIZE) {
