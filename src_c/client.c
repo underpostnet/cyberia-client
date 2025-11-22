@@ -1,6 +1,8 @@
 #include "client.h"
 #include "network.h"
 #include "config.h"
+#include "game_state.h"
+#include "message_parser.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -134,8 +136,14 @@ static void on_websocket_open(void* user_data) {
     client_state.ws_client.connected = 1;
 
     // Send initial handshake message
-    const char* handshake = "{\"type\":\"handshake\",\"client\":\"cyberia-immersive\",\"version\":\"1.0.0\"}";
-    client_send(handshake);
+    char handshake_buffer[256];
+    if (create_handshake_json(handshake_buffer, sizeof(handshake_buffer)) == 0) {
+        client_send(handshake_buffer);
+    } else {
+        // Fallback to simple handshake
+        const char* handshake = "{\"type\":\"handshake\",\"client\":\"cyberia-mmo\",\"version\":\"1.0.0\"}";
+        client_send(handshake);
+    }
 }
 
 // Called when WebSocket message is received
@@ -146,26 +154,25 @@ static void on_websocket_message(const char* data, int length, void* user_data) 
 
     client_state.message_count++;
 
-     // printf("[CLIENT] Message received (%d bytes) [count: %d]\n",
-     //       length, client_state.message_count);
-
     // Store the message
     int copy_length = (length < MAX_MESSAGE_SIZE - 1) ? length : MAX_MESSAGE_SIZE - 1;
     memcpy(client_state.last_message, data, copy_length);
     client_state.last_message[copy_length] = '\0';
 
+    // Process the message through the game state system
+    if (message_parser_process(client_state.last_message) != 0) {
+        printf("[CLIENT] Failed to process message: %s\n", client_state.last_message);
+    }
+
 #if defined(PLATFORM_WEB)
     // Log to JavaScript console with full message content
     EM_ASM({
-        // console.log('%c[WS] on_message', 'color: #00aaff; font-weight: bold');
-        // console.log('[WS] Message #' + $0 + ' received (' + $1 + ' bytes)');
         var message = UTF8ToString($2, $1);
-        // console.log('[WS] Content:', message);
         try {
             var json = JSON.parse(message);
-            // console.log('[WS] Parsed JSON:', json);
+            console.log('[WS] Message #' + $0 + ':', json.type || 'unknown');
         } catch(e) {
-            // console.log('[WS] (Not valid JSON or binary data)');
+            console.log('[WS] Non-JSON message received');
         }
     }, client_state.message_count, length, data);
 #endif

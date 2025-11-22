@@ -8,8 +8,8 @@ PROJECT_NAME := cyberia-client
 TARGET_NAME := $(PROJECT_NAME)
 
 # Source files
-SOURCES := main.c render.c client.c network.c config.c
-HEADERS := render.h client.h network.h config.h
+SOURCES := main.c render.c client.c network.c config.c game_state.c game_render.c message_parser.c input.c
+HEADERS := render.h client.h network.h config.h game_state.h game_render.h message_parser.h input.h
 
 # ============================================================================
 # Emscripten SDK Configuration
@@ -38,7 +38,9 @@ EMCC_FLAGS := \
 	-DPLATFORM_WEB \
 	-Wall \
 	-Wextra \
-	-Wno-unused-parameter
+	-Wno-unused-parameter \
+	-s TOTAL_MEMORY=128MB \
+	-s ALLOW_MEMORY_GROWTH=1
 
 # Debug flags (with assertions and safe heap)
 DEBUG_FLAGS := \
