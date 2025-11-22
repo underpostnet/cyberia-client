@@ -2,6 +2,7 @@
 #define MESSAGE_PARSER_H
 
 #include "game_state.h"
+#include "serial.h"
 #include <stdbool.h>
 #include <stddef.h>
 
@@ -10,8 +11,10 @@
  * @brief JSON message parsing for network protocol
  * 
  * This module handles parsing of incoming JSON messages from the server
- * and updating the game state accordingly. It replaces the Python JSON
- * parsing functionality with C implementations using cJSON library.
+ * and updating the game state accordingly. Uses cJSON library and the
+ * general-purpose serialization framework from serial.h.
+ * 
+ * Refactored based on: src/serial.py and src/network_models.py
  */
 
 /**
@@ -32,7 +35,7 @@ typedef enum {
  * 
  * This is the main entry point for processing all server messages.
  * It determines the message type and dispatches to the appropriate
- * parsing function.
+ * parsing function, updating the game state accordingly.
  * 
  * @param json_str Raw JSON message string from server
  * @return 0 on success, -1 on parse error
@@ -40,15 +43,46 @@ typedef enum {
 int message_parser_process(const char* json_str);
 
 /**
+ * @brief Determine message type from JSON string
+ * 
+ * Parses the "type" field from the JSON message to determine
+ * which handler should process it.
+ * 
+ * @param json_str JSON message string
+ * @return MessageType enum value
+ */
+MessageType message_parser_get_type(const char* json_str);
+
+/**
  * @brief Parse init_data message and update game state
  * 
  * Handles the initial game configuration message that contains
  * grid dimensions, colors, camera settings, etc.
  * 
- * @param json_str JSON message string
+ * Message format (InitPayload from network_models.py):
+ * {
+ *   "type": "init_data",
+ *   "payload": {
+ *     "gridW": int,
+ *     "gridH": int,
+ *     "cellSize": float,
+ *     "fps": int,
+ *     "interpolationMs": int,
+ *     "aoiRadius": float,
+ *     "defaultObjectWidth": float,
+ *     "defaultObjectHeight": float,
+ *     "colors": { ... },
+ *     "cameraSmoothing": float,
+ *     "cameraZoom": float,
+ *     "devUi": bool,
+ *     "sumStatsLimit": int
+ *   }
+ * }
+ * 
+ * @param json_root Parsed cJSON root object
  * @return 0 on success, -1 on failure
  */
-int parse_init_data(const char* json_str);
+int message_parser_parse_init_data(const cJSON* json_root);
 
 /**
  * @brief Parse AOI (Area of Interest) update message
@@ -56,162 +90,130 @@ int parse_init_data(const char* json_str);
  * Handles player position updates, visible entities, and world objects.
  * This is the most frequent message type during gameplay.
  * 
- * @param json_str JSON message string
+ * Message format (AOIUpdatePayload from network_models.py):
+ * {
+ *   "type": "aoi_update",
+ *   "payload": {
+ *     "player": { PlayerObject },
+ *     "visiblePlayers": { "id": VisiblePlayer, ... },
+ *     "visibleGridObjects": {
+ *       "bots": { "id": VisibleBot, ... },
+ *       "obstacles": { "id": VisibleObject, ... },
+ *       "portals": { "id": VisibleObject, ... },
+ *       "floors": { "id": VisibleFloor, ... },
+ *       "foregrounds": { "id": VisibleObject, ... }
+ *     }
+ *   }
+ * }
+ * 
+ * @param json_root Parsed cJSON root object
  * @return 0 on success, -1 on failure
  */
-int parse_aoi_update(const char* json_str);
+int message_parser_parse_aoi_update(const cJSON* json_root);
 
 /**
  * @brief Parse skill/item association message
  * 
  * Handles item ID associations for the HUD system.
  * 
- * @param json_str JSON message string
+ * Message format (SkillItemIdsPayload from network_models.py):
+ * {
+ *   "type": "skill_item_ids",
+ *   "payload": {
+ *     "requestedItemId": string,
+ *     "associatedItemIds": [string, ...]
+ *   }
+ * }
+ * 
+ * @param json_root Parsed cJSON root object
  * @return 0 on success, -1 on failure
  */
-int parse_skill_item_ids(const char* json_str);
+int message_parser_parse_skill_item_ids(const cJSON* json_root);
 
 /**
  * @brief Parse error message from server
  * 
- * @param json_str JSON message string
+ * Message format:
+ * {
+ *   "type": "error",
+ *   "payload": {
+ *     "message": string
+ *   }
+ * }
+ * 
+ * @param json_root Parsed cJSON root object
  * @return 0 on success, -1 on failure
  */
-int parse_error_message(const char* json_str);
+int message_parser_parse_error(const cJSON* json_root);
 
 /**
- * @brief Determine message type from JSON string
+ * @brief Parse color dictionary from init_data
  * 
- * @param json_str JSON message string
- * @return MessageType enum value
- */
-MessageType get_message_type(const char* json_str);
-
-/**
- * @brief Parse color from JSON object
+ * Parses the colors object and updates game state color palette.
  * 
- * Helper function to parse RGBA color values from JSON.
- * 
- * @param json JSON object containing color data
- * @param color Output color structure
+ * @param colors_json cJSON object containing color dictionary
  * @return 0 on success, -1 on failure
  */
-int parse_color_rgba(const void* json, ColorRGBA* color);
+int message_parser_parse_colors(const cJSON* colors_json);
 
 /**
- * @brief Parse Vector2 position from JSON object
+ * @brief Parse visible players dictionary
  * 
- * Helper function to parse X,Y coordinates from JSON.
+ * Parses the visiblePlayers object and updates game state.
  * 
- * @param json JSON object containing position data
- * @param pos Output Vector2 structure
+ * @param players_json cJSON object containing player dictionary
  * @return 0 on success, -1 on failure
  */
-int parse_position(const void* json, Vector2* pos);
+int message_parser_parse_visible_players(const cJSON* players_json);
 
 /**
- * @brief Parse Vector2 dimensions from JSON object
+ * @brief Parse visible bots dictionary
  * 
- * Helper function to parse Width,Height from JSON.
+ * Parses the bots object from visibleGridObjects.
  * 
- * @param json JSON object containing dimensions data
- * @param dims Output Vector2 structure
+ * @param bots_json cJSON object containing bot dictionary
  * @return 0 on success, -1 on failure
  */
-int parse_dimensions(const void* json, Vector2* dims);
+int message_parser_parse_visible_bots(const cJSON* bots_json);
 
 /**
- * @brief Parse Direction enum from JSON
+ * @brief Parse visible obstacles dictionary
  * 
- * @param json JSON object or value containing direction
- * @return Direction enum value
- */
-Direction parse_direction(const void* json);
-
-/**
- * @brief Parse ObjectLayerMode enum from JSON
+ * Parses the obstacles object from visibleGridObjects.
  * 
- * @param json JSON object or value containing mode
- * @return ObjectLayerMode enum value
- */
-ObjectLayerMode parse_mode(const void* json);
-
-/**
- * @brief Parse object layer states from JSON array
- * 
- * @param json JSON array containing object layer data
- * @param layers Output array of ObjectLayerState
- * @param max_layers Maximum number of layers to parse
- * @return Number of layers parsed, or -1 on error
- */
-int parse_object_layers(const void* json, ObjectLayerState* layers, int max_layers);
-
-/**
- * @brief Parse player object from JSON
- * 
- * @param json JSON object containing player data
- * @param player Output PlayerState structure
+ * @param obstacles_json cJSON object containing obstacle dictionary
  * @return 0 on success, -1 on failure
  */
-int parse_player_object(const void* json, PlayerState* player);
+int message_parser_parse_visible_obstacles(const cJSON* obstacles_json);
 
 /**
- * @brief Parse visible player from JSON
+ * @brief Parse visible portals dictionary
  * 
- * @param json JSON object containing visible player data
- * @param player Output PlayerState structure (base EntityState fields)
+ * Parses the portals object from visibleGridObjects.
+ * 
+ * @param portals_json cJSON object containing portal dictionary
  * @return 0 on success, -1 on failure
  */
-int parse_visible_player(const void* json, PlayerState* player);
+int message_parser_parse_visible_portals(const cJSON* portals_json);
 
 /**
- * @brief Parse visible bot from JSON
+ * @brief Parse visible floors dictionary
  * 
- * @param json JSON object containing bot data
- * @param bot Output BotState structure
+ * Parses the floors object from visibleGridObjects.
+ * 
+ * @param floors_json cJSON object containing floor dictionary
  * @return 0 on success, -1 on failure
  */
-int parse_visible_bot(const void* json, BotState* bot);
+int message_parser_parse_visible_floors(const cJSON* floors_json);
 
 /**
- * @brief Parse world object from JSON
+ * @brief Parse visible foregrounds dictionary
  * 
- * @param json JSON object containing world object data
- * @param obj Output WorldObject structure
+ * Parses the foregrounds object from visibleGridObjects.
+ * 
+ * @param foregrounds_json cJSON object containing foreground dictionary
  * @return 0 on success, -1 on failure
  */
-int parse_world_object(const void* json, WorldObject* obj);
-
-/**
- * @brief Parse path array from JSON
- * 
- * @param json JSON array containing path points
- * @param path Output array of Vector2 points
- * @param max_points Maximum number of points to parse
- * @return Number of points parsed, or -1 on error
- */
-int parse_path(const void* json, Vector2* path, int max_points);
-
-/**
- * @brief Create player action JSON message
- * 
- * Helper function to create JSON messages to send to server.
- * 
- * @param target_x Target X coordinate
- * @param target_y Target Y coordinate
- * @param output_buffer Buffer to store JSON string
- * @param buffer_size Size of output buffer
- * @return 0 on success, -1 on failure
- */
-int create_player_action_json(float target_x, float target_y, char* output_buffer, size_t buffer_size);
-
-/**
- * @brief Create handshake JSON message
- * 
- * @param output_buffer Buffer to store JSON string
- * @param buffer_size Size of output buffer
- * @return 0 on success, -1 on failure
- */
-int create_handshake_json(char* output_buffer, size_t buffer_size);
+int message_parser_parse_visible_foregrounds(const cJSON* foregrounds_json);
 
 #endif // MESSAGE_PARSER_H

@@ -3,6 +3,7 @@
 #include "config.h"
 #include "game_state.h"
 #include "message_parser.h"
+#include "serial.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -10,9 +11,6 @@
 #if defined(PLATFORM_WEB)
     #include <emscripten/emscripten.h>
 #endif
-
-// Maximum message buffer size
-#define MAX_MESSAGE_SIZE 8192
 
 // Global client state
 static struct {
@@ -136,13 +134,14 @@ static void on_websocket_open(void* user_data) {
     client_state.ws_client.connected = 1;
 
     // Send initial handshake message
-    char handshake_buffer[256];
-    if (create_handshake_json(handshake_buffer, sizeof(handshake_buffer)) == 0) {
-        client_send(handshake_buffer);
+    char* handshake = serial_create_handshake("cyberia-mmo", "1.0.0");
+    if (handshake) {
+        client_send(handshake);
+        free(handshake);
     } else {
         // Fallback to simple handshake
-        const char* handshake = "{\"type\":\"handshake\",\"client\":\"cyberia-mmo\",\"version\":\"1.0.0\"}";
-        client_send(handshake);
+        const char* fallback = "{\"type\":\"handshake\",\"client\":\"cyberia-mmo\",\"version\":\"1.0.0\"}";
+        client_send(fallback);
     }
 }
 
@@ -154,14 +153,22 @@ static void on_websocket_message(const char* data, int length, void* user_data) 
 
     client_state.message_count++;
 
-    // Store the message
-    int copy_length = (length < MAX_MESSAGE_SIZE - 1) ? length : MAX_MESSAGE_SIZE - 1;
-    memcpy(client_state.last_message, data, copy_length);
-    client_state.last_message[copy_length] = '\0';
+    // Check if message fits in buffer
+    if (length >= MAX_MESSAGE_SIZE) {
+        printf("[CLIENT] Warning: Message too large (%d bytes), truncating to %d\n", 
+               length, MAX_MESSAGE_SIZE - 1);
+        length = MAX_MESSAGE_SIZE - 1;
+    }
+
+    // Store the message with proper null termination
+    memcpy(client_state.last_message, data, length);
+    client_state.last_message[length] = '\0';
 
     // Process the message through the game state system
     if (message_parser_process(client_state.last_message) != 0) {
-        printf("[CLIENT] Failed to process message: %s\n", client_state.last_message);
+        // Only print first 500 chars to avoid log spam
+        printf("[CLIENT] Failed to process message (first 500 chars): %.500s\n", 
+               client_state.last_message);
     }
 
 #if defined(PLATFORM_WEB)

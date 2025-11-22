@@ -1,6 +1,7 @@
 #include "input.h"
 #include "game_state.h"
 #include "message_parser.h"
+#include "serial.h"
 #include "client.h"
 #include <stdio.h>
 #include <stdlib.h>
@@ -333,12 +334,14 @@ void input_handle_window_resize(int width, int height) {
 int input_send_player_move(Vector2 target_pos) {
     printf("[INPUT] Sending player move to (%.2f, %.2f)\n", target_pos.x, target_pos.y);
     
-    char json_buffer[256];
     float grid_x = target_pos.x / (g_game_state.cell_size > 0 ? g_game_state.cell_size : 12.0f);
     float grid_y = target_pos.y / (g_game_state.cell_size > 0 ? g_game_state.cell_size : 12.0f);
     
-    if (create_player_action_json(grid_x, grid_y, json_buffer, sizeof(json_buffer)) == 0) {
-        return client_send(json_buffer);
+    char* json_str = serial_create_player_action(grid_x, grid_y);
+    if (json_str) {
+        int result = client_send(json_str);
+        free(json_str);
+        return result;
     }
     
     return -1;
