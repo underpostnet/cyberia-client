@@ -119,8 +119,8 @@ class InitPayload:
     colors: Dict[str, ColorRGBA] = field(default_factory=dict)
     cameraSmoothing: float = 0.15
     cameraZoom: float = 1.0
-    defaultWidthScreenFactor: float = 0.5
-    defaultHeightScreenFactor: float = 0.5
+    defaultWidthScreenFactor: float = 0.5  # Deprecated, don't use
+    defaultHeightScreenFactor: float = 0.5  # Deprecated, don't use
     devUi: bool = False
     sumStatsLimit: int = 9999
     # This field is in the Go struct but not used in the provided client logic.
