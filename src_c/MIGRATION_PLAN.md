@@ -28,13 +28,14 @@ The C codebase already provides:
 - ✅ Cross-platform build system (Makefile)
 
 ### New C Components (Migrated from Python)
-- 🔄 Game state management (`game_state.c/.h`)
-- 🔄 JSON message parsing (`message_parser.c/.h`)
-- 🔄 Enhanced game rendering (`game_render.c/.h`)
-- 🔄 Input handling system (`input.c/.h`)
-- 🔄 UI components and HUD system
+- ✅ Game state management (`game_state.c/.h`)
+- ✅ JSON message parsing (`message_parser.c/.h`)
+- ✅ Enhanced game rendering (`game_render.c/.h`)
+- ✅ Input handling system (`input.c/.h`)
+- ✅ Entity rendering with depth sorting
+- 🔄 UI components and HUD system (labels, life bars, stats bars)
 - 🔄 Entity management and interpolation
-- 🔄 Object layer system
+- 🔄 Object layer system (texture-based rendering)
 
 ## Phase-by-Phase Migration Plan
 
@@ -82,7 +83,7 @@ The C codebase already provides:
 - Player action message creation
 
 ### Phase 3: Enhanced Rendering System ✅
-**Status**: Completed
+**Status**: Completed (Basic entity rendering implemented)
 **Files**: `game_render.h`, `game_render.c`
 
 **Components Migrated**:
@@ -95,8 +96,8 @@ The C codebase already provides:
 **Rendering Features**:
 - Camera-space world rendering
 - Screen-space UI rendering
-- Entity depth sorting
-- Animation frame management
+- Entity depth sorting ✅
+- Animation frame management 🔄
 - Performance tracking
 - Debug visualization toggles
 
@@ -105,6 +106,21 @@ The C codebase already provides:
 - Click effect animations
 - Performance optimized effect pools
 - Screen/world coordinate conversion
+
+**Entity Rendering (Current Stage)**:
+- ✅ Basic entity rendering when `dev_ui = true`
+- ✅ Colored rectangles proportional to entity dimensions
+- ✅ Support for main player, other players, and bots
+- ✅ Depth sorting by bottom Y coordinate (entities lower on screen render on top)
+- ✅ Color selection from server or defaults:
+  - Main player: `PLAYER` color (default: cyan blue)
+  - Other players: `OTHER_PLAYER` color (default: orange)
+  - Hostile bots: `ERROR_TEXT` color (default: red)
+  - Passive bots: `OTHER_PLAYER` color (default: orange/green)
+- ✅ No rendering when `dev_ui = false`
+- 🔄 Texture-based rendering (object layers) - future phase
+- 🔄 Entity labels and UI overlays - future phase
+- 🔄 Life bars and stats bars - future phase
 
 ### Phase 4: Input Management System ✅
 **Status**: Completed
@@ -307,6 +323,42 @@ src_c/
 - **Deployment Complexity**: Automated build and deployment processes
 - **Browser Compatibility**: Comprehensive browser testing matrix
 - **Server Protocol Changes**: Version-aware message parsing
+
+## Current Implementation Status
+
+### Entity Rendering Migration (Latest Update)
+
+**Completed Features**:
+1. ✅ Basic entity rendering infrastructure in `game_render.c`
+2. ✅ Depth sorting algorithm (qsort-based, sorting by bottom Y)
+3. ✅ Color parsing from init_data message in `message_parser.c`
+4. ✅ `dev_ui` flag support - only renders when enabled
+5. ✅ Entity type differentiation (player, other players, bots)
+6. ✅ Behavior-based bot coloring (hostile vs passive)
+7. ✅ Default color fallbacks in `game_state.c`
+8. ✅ Integration with existing game loop and camera system
+
+**Implementation Details**:
+- Uses `EntitySortEntry` structure for efficient sorting
+- Static allocation (no dynamic memory during rendering)
+- Thread-safe access to game state via mutex
+- Proportional rectangle rendering based on entity dimensions from server
+- Compatible with existing interpolation system
+
+**Testing Checklist**:
+- [ ] Test with `dev_ui = true` - entities should render as colored squares
+- [ ] Test with `dev_ui = false` - no entities should render
+- [ ] Verify depth sorting - entities higher on map appear behind lower entities
+- [ ] Verify color customization from server init_data
+- [ ] Test with multiple players and bots simultaneously
+- [ ] Verify hostile vs passive bot color differentiation
+
+**Next Steps for Full Entity Rendering**:
+1. Implement texture loading and object layer rendering
+2. Add entity labels (ID, direction, type)
+3. Add life bars and stats bars
+4. Implement animation frame cycling
+5. Add respawn countdown display
 
 ## Success Metrics
 

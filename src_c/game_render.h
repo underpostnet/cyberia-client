@@ -74,12 +74,6 @@ typedef struct {
     Font game_font;
     bool font_loaded;
     
-    // Render flags
-    bool show_debug_info;
-    bool show_grid;
-    bool show_aoi;
-    bool show_paths;
-    
     // Performance tracking
     int frames_rendered;
     double last_fps_update;
@@ -145,9 +139,14 @@ void game_render_grid(void);
 void game_render_floors(void);
 
 /**
- * @brief Render world objects (obstacles, portals, foregrounds)
+ * @brief Render world objects (obstacles, portals - but NOT foregrounds)
  */
 void game_render_world_objects(void);
+
+/**
+ * @brief Render foreground objects (always on top of entities)
+ */
+void game_render_foregrounds(void);
 
 /**
  * @brief Render all entities (player, other players, bots)
@@ -171,10 +170,7 @@ void game_render_player_path(void);
  */
 void game_render_aoi_circle(void);
 
-/**
- * @brief Render debug information overlay
- */
-void game_render_debug_overlay(void);
+
 
 // ============================================================================
 // Effects Rendering
@@ -365,14 +361,6 @@ Vector2 game_render_interpolate_position(Vector2 start_pos, Vector2 end_pos, flo
  */
 int game_render_get_entity_frame(const EntityState* entity, double time);
 
-/**
- * @brief Set render flags for debugging/development
- * @param show_debug Show debug overlays
- * @param show_grid Show grid lines
- * @param show_aoi Show AOI circle
- * @param show_paths Show movement paths
- */
-void game_render_set_debug_flags(bool show_debug, bool show_grid, 
-                                 bool show_aoi, bool show_paths);
+
 
 #endif // GAME_RENDER_H

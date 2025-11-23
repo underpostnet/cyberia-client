@@ -12,36 +12,32 @@ GameRenderer g_renderer = {0};
 
 int game_render_init(int screen_width, int screen_height) {
     printf("[GAME_RENDER] Initializing game renderer (%dx%d)...\n", screen_width, screen_height);
-    
+
     // Initialize renderer state
     memset(&g_renderer, 0, sizeof(GameRenderer));
-    
+
     g_renderer.screen_width = screen_width;
     g_renderer.screen_height = screen_height;
-    
+
     // Initialize texture cache
     g_renderer.texture_cache.capacity = 100;
     g_renderer.texture_cache.texture_count = 0;
-    
+
     // Initialize effect arrays
     g_renderer.floating_text_count = 0;
     g_renderer.click_effect_count = 0;
-    
-    // Initialize render flags
-    g_renderer.show_debug_info = false;
-    g_renderer.show_grid = true;
-    g_renderer.show_aoi = false;
-    g_renderer.show_paths = true;
+
+    // UI state
     g_renderer.hud_visible = true;
-    
+
     // Performance tracking
     g_renderer.frames_rendered = 0;
     g_renderer.last_fps_update = GetTime();
     g_renderer.current_fps = 60.0f;
-    
+
     // Font loading (using default for now)
     g_renderer.font_loaded = false; // Will use default font
-    
+
     printf("[GAME_RENDER] Game renderer initialized successfully\n");
     return 0;
 }
@@ -49,7 +45,7 @@ int game_render_init(int screen_width, int screen_height) {
 void game_render_set_screen_size(int width, int height) {
     g_renderer.screen_width = width;
     g_renderer.screen_height = height;
-    
+
     // Update HUD area
     g_renderer.hud_area.x = 0;
     g_renderer.hud_area.y = height - 60; // Bottom 60 pixels for HUD
@@ -59,23 +55,23 @@ void game_render_set_screen_size(int width, int height) {
 
 void game_render_frame(void) {
     BeginDrawing();
-    
+
     // Clear background
     ClearBackground(g_game_state.colors.background);
-    
+
     // Begin camera mode for world rendering
     if (g_game_state.camera_initialized) {
         // Ensure camera offset is centered each frame (good practice)
         game_state_update_camera_offset(g_renderer.screen_width, g_renderer.screen_height);
-        
+
         BeginMode2D(g_game_state.camera);
         game_render_world();
         EndMode2D();
     }
-    
+
     // Render UI (screen space)
     game_render_ui();
-    
+
     // Update performance tracking
     g_renderer.frames_rendered++;
     double current_time = GetTime();
@@ -84,166 +80,191 @@ void game_render_frame(void) {
         g_renderer.frames_rendered = 0;
         g_renderer.last_fps_update = current_time;
     }
-    
+
     EndDrawing();
 }
 
 void game_render_world(void) {
-    // Render world components in order
-    if (g_renderer.show_grid) {
-        game_render_grid();
-    }
-    
+    // Render world components in correct z-order
+
+    // 1. Floors (bottom layer)
     game_render_floors();
+
+    // 2. World objects (obstacles, portals - but NOT foregrounds)
     game_render_world_objects();
+
+    // 3. Entities (sorted by depth)
     game_render_entities();
-    
-    if (g_renderer.show_paths) {
+
+    // 4. Player path (if dev_ui enabled)
+    if (g_game_state.dev_ui) {
         game_render_player_path();
     }
-    
-    if (g_renderer.show_aoi) {
+
+    // 5. AOI circle (if dev_ui enabled)
+    if (g_game_state.dev_ui) {
         game_render_aoi_circle();
     }
-    
-    // Render click effects in world space
+
+    // 6. Foregrounds (always on top of entities)
+    game_render_foregrounds();
+
+    // 7. Effects
     game_render_click_effects();
     game_render_floating_texts();
-    
-    if (g_renderer.show_debug_info) {
-        game_render_debug_overlay();
+
+    // 8. Grid overlay (if dev_ui enabled - renders on top of everything)
+    if (g_game_state.dev_ui) {
+        game_render_grid();
     }
 }
 
 void game_render_grid(void) {
+    // Only render grid overlay when dev_ui is enabled
+    // Grid is transparent with red lines and white border on top of everything
+
     game_state_lock();
-    
+
     float cell_size = g_game_state.cell_size > 0 ? g_game_state.cell_size : 12.0f;
     int grid_w = g_game_state.grid_w;
     int grid_h = g_game_state.grid_h;
     float map_w = grid_w * cell_size;
     float map_h = grid_h * cell_size;
-    
-    // Always draw grid background
-    Rectangle grid_bg = {0, 0, map_w, map_h};
-    DrawRectangleRec(grid_bg, g_game_state.colors.grid_background);
-    
-    // Only draw grid lines and boundary when dev_ui is enabled
-    if (!g_game_state.dev_ui) {
-        game_state_unlock();
-        return;
-    }
-    
-    // Draw map boundary rectangle outline
+
+    // Draw white map boundary (outline)
     DrawRectangleLinesEx(
         (Rectangle){0, 0, map_w, map_h},
-        1.0f,
-        g_game_state.colors.map_boundary
+        2.0f,
+        WHITE
     );
-    
-    // Draw grid lines - use red color if grid color is too similar to background
-    Color grid_color = g_game_state.colors.grid;
-    
-    // If grid color alpha is too low or color is too dark, use visible red
-    if (grid_color.a < 50 || (grid_color.r < 50 && grid_color.g < 50 && grid_color.b < 50)) {
-        grid_color = (Color){255, 0, 0, 128};  // Bright red with semi-transparency
-    }
-    
-    // Draw vertical grid lines with explicit thickness
-    for (int x = 0; x <= grid_w; x++) {
+
+    // Draw red grid lines (semi-transparent)
+    Color grid_line_color = (Color){255, 0, 0, 100};
+
+    // Draw vertical grid lines
+    for (int x = 1; x < grid_w; x++) {
         float x_pos = x * cell_size;
         DrawLineEx(
             (Vector2){x_pos, 0},
             (Vector2){x_pos, map_h},
             1.0f,
-            grid_color
+            grid_line_color
         );
     }
-    
-    // Draw horizontal grid lines with explicit thickness
-    for (int y = 0; y <= grid_h; y++) {
+
+    // Draw horizontal grid lines
+    for (int y = 1; y < grid_h; y++) {
         float y_pos = y * cell_size;
         DrawLineEx(
             (Vector2){0, y_pos},
             (Vector2){map_w, y_pos},
             1.0f,
-            grid_color
+            grid_line_color
         );
     }
-    
+
     game_state_unlock();
 }
 
 
 void game_render_floors(void) {
     game_state_lock();
-    
+
     float cell_size = g_game_state.cell_size > 0 ? g_game_state.cell_size : 12.0f;
-    
+
     for (int i = 0; i < g_game_state.floor_count; i++) {
         WorldObject* floor = &g_game_state.floors[i];
-        
+
         Rectangle rect = {
             floor->pos.x * cell_size,
             floor->pos.y * cell_size,
             floor->dims.x * cell_size,
             floor->dims.y * cell_size
         };
-        
+
         DrawRectangleRec(rect, g_game_state.colors.floor_background);
     }
-    
+
     game_state_unlock();
 }
 
 void game_render_world_objects(void) {
     game_state_lock();
-    
+
     float cell_size = g_game_state.cell_size > 0 ? g_game_state.cell_size : 12.0f;
-    
+
     // Render obstacles
     for (int i = 0; i < g_game_state.obstacle_count; i++) {
         WorldObject* obj = &g_game_state.obstacles[i];
-        
+
         Rectangle rect = {
             obj->pos.x * cell_size,
             obj->pos.y * cell_size,
             obj->dims.x * cell_size,
             obj->dims.y * cell_size
         };
-        
+
         DrawRectangleRec(rect, g_game_state.colors.obstacle);
     }
-    
+
     // Render portals
     for (int i = 0; i < g_game_state.portal_count; i++) {
         WorldObject* portal = &g_game_state.portals[i];
-        
+
         Rectangle rect = {
             portal->pos.x * cell_size,
             portal->pos.y * cell_size,
             portal->dims.x * cell_size,
             portal->dims.y * cell_size
         };
-        
+
         DrawRectangleRec(rect, g_game_state.colors.portal);
     }
-    
-    // Render foregrounds
+
+    game_state_unlock();
+}
+
+void game_render_foregrounds(void) {
+    game_state_lock();
+
+    float cell_size = g_game_state.cell_size > 0 ? g_game_state.cell_size : 12.0f;
+
+    // Render foregrounds (always on top of entities)
     for (int i = 0; i < g_game_state.foreground_count; i++) {
         WorldObject* fg = &g_game_state.foregrounds[i];
-        
+
         Rectangle rect = {
             fg->pos.x * cell_size,
             fg->pos.y * cell_size,
             fg->dims.x * cell_size,
             fg->dims.y * cell_size
         };
-        
+
         DrawRectangleRec(rect, g_game_state.colors.foreground);
     }
-    
+
     game_state_unlock();
+}
+
+// Helper structure for depth sorting entities
+typedef struct {
+    enum { ENTITY_TYPE_PLAYER, ENTITY_TYPE_OTHER_PLAYER, ENTITY_TYPE_BOT } type;
+    float bottom_y;  // Y position of entity's bottom edge (for depth sorting)
+    union {
+        PlayerState* player;
+        BotState* bot;
+    } data;
+    bool is_main_player;
+} EntitySortEntry;
+
+// Comparison function for qsort - entities with lower Y render first (appear behind)
+static int compare_entities_by_depth(const void* a, const void* b) {
+    const EntitySortEntry* ea = (const EntitySortEntry*)a;
+    const EntitySortEntry* eb = (const EntitySortEntry*)b;
+
+    if (ea->bottom_y < eb->bottom_y) return -1;
+    if (ea->bottom_y > eb->bottom_y) return 1;
+    return 0;
 }
 
 void game_render_entities(void) {
@@ -251,64 +272,100 @@ void game_render_entities(void) {
     if (!g_game_state.dev_ui) {
         return;
     }
-    
+
     game_state_lock();
-    
+
     float cell_size = g_game_state.cell_size > 0 ? g_game_state.cell_size : 12.0f;
-    
-    // Render main player with PLAYER color
-    Rectangle player_rect = {
-        g_game_state.player.base.interp_pos.x * cell_size,
-        g_game_state.player.base.interp_pos.y * cell_size,
-        g_game_state.player.base.dims.x * cell_size,
-        g_game_state.player.base.dims.y * cell_size
-    };
-    DrawRectangleRec(player_rect, g_game_state.colors.player);
-    
-    // Render other players with OTHER_PLAYER color
+
+    // Create array to hold all entities for sorting
+    static EntitySortEntry sort_entries[MAX_ENTITIES + 1];  // +1 for main player
+    int entry_count = 0;
+
+    // Add main player to sort list
+    float player_bottom_y = g_game_state.player.base.interp_pos.y + g_game_state.player.base.dims.y;
+    sort_entries[entry_count].type = ENTITY_TYPE_PLAYER;
+    sort_entries[entry_count].bottom_y = player_bottom_y;
+    sort_entries[entry_count].data.player = &g_game_state.player;
+    sort_entries[entry_count].is_main_player = true;
+    entry_count++;
+
+    // Add other players to sort list
     for (int i = 0; i < g_game_state.other_player_count; i++) {
         PlayerState* player = &g_game_state.other_players[i];
-        
-        Rectangle rect = {
-            player->base.interp_pos.x * cell_size,
-            player->base.interp_pos.y * cell_size,
-            player->base.dims.x * cell_size,
-            player->base.dims.y * cell_size
-        };
-        
-        DrawRectangleRec(rect, g_game_state.colors.other_player);
+        float bottom_y = player->base.interp_pos.y + player->base.dims.y;
+
+        sort_entries[entry_count].type = ENTITY_TYPE_OTHER_PLAYER;
+        sort_entries[entry_count].bottom_y = bottom_y;
+        sort_entries[entry_count].data.player = player;
+        sort_entries[entry_count].is_main_player = false;
+        entry_count++;
     }
-    
-    // Render bots with color based on behavior
+
+    // Add bots to sort list
     for (int i = 0; i < g_game_state.bot_count; i++) {
         BotState* bot = &g_game_state.bots[i];
-        
-        Rectangle rect = {
-            bot->base.interp_pos.x * cell_size,
-            bot->base.interp_pos.y * cell_size,
-            bot->base.dims.x * cell_size,
-            bot->base.dims.y * cell_size
-        };
-        
-        // Choose color based on behavior
-        Color bot_color;
-        if (strcmp(bot->behavior, "hostile") == 0) {
-            bot_color = g_game_state.colors.error_text;
-        } else {
-            bot_color = g_game_state.colors.other_player;
-        }
-        
-        DrawRectangleRec(rect, bot_color);
+        float bottom_y = bot->base.interp_pos.y + bot->base.dims.y;
+
+        sort_entries[entry_count].type = ENTITY_TYPE_BOT;
+        sort_entries[entry_count].bottom_y = bottom_y;
+        sort_entries[entry_count].data.bot = bot;
+        sort_entries[entry_count].is_main_player = false;
+        entry_count++;
     }
-    
+
+    // Sort entities by depth (bottom Y coordinate)
+    qsort(sort_entries, entry_count, sizeof(EntitySortEntry), compare_entities_by_depth);
+
+    // Render entities in sorted order
+    for (int i = 0; i < entry_count; i++) {
+        EntitySortEntry* entry = &sort_entries[i];
+        Rectangle rect;
+        Color color;
+
+        switch (entry->type) {
+            case ENTITY_TYPE_PLAYER:
+                rect.x = entry->data.player->base.interp_pos.x * cell_size;
+                rect.y = entry->data.player->base.interp_pos.y * cell_size;
+                rect.width = entry->data.player->base.dims.x * cell_size;
+                rect.height = entry->data.player->base.dims.y * cell_size;
+                color = entry->is_main_player ? g_game_state.colors.player : g_game_state.colors.other_player;
+                DrawRectangleRec(rect, color);
+                break;
+
+            case ENTITY_TYPE_OTHER_PLAYER:
+                rect.x = entry->data.player->base.interp_pos.x * cell_size;
+                rect.y = entry->data.player->base.interp_pos.y * cell_size;
+                rect.width = entry->data.player->base.dims.x * cell_size;
+                rect.height = entry->data.player->base.dims.y * cell_size;
+                color = g_game_state.colors.other_player;
+                DrawRectangleRec(rect, color);
+                break;
+
+            case ENTITY_TYPE_BOT:
+                rect.x = entry->data.bot->base.interp_pos.x * cell_size;
+                rect.y = entry->data.bot->base.interp_pos.y * cell_size;
+                rect.width = entry->data.bot->base.dims.x * cell_size;
+                rect.height = entry->data.bot->base.dims.y * cell_size;
+
+                // Choose color based on behavior
+                if (strcmp(entry->data.bot->behavior, "hostile") == 0) {
+                    color = g_game_state.colors.error_text;
+                } else {
+                    color = g_game_state.colors.other_player;
+                }
+                DrawRectangleRec(rect, color);
+                break;
+        }
+    }
+
     game_state_unlock();
 }
 
 void game_render_player_path(void) {
     game_state_lock();
-    
+
     float cell_size = g_game_state.cell_size > 0 ? g_game_state.cell_size : 12.0f;
-    
+
     // Render target position
     if (g_game_state.player.target_pos.x >= 0 && g_game_state.player.target_pos.y >= 0) {
         Rectangle target_rect = {
@@ -319,50 +376,50 @@ void game_render_player_path(void) {
         };
         DrawRectangleRec(target_rect, g_game_state.colors.target);
     }
-    
+
     // Render path
     for (int i = 0; i < g_game_state.player.path_count; i++) {
         Vector2 path_point = g_game_state.player.path[i];
-        
+
         Rectangle path_rect = {
             path_point.x * cell_size,
             path_point.y * cell_size,
             cell_size,
             cell_size
         };
-        
+
         DrawRectangleRec(path_rect, g_game_state.colors.path);
     }
-    
+
     game_state_unlock();
 }
 
 void game_render_aoi_circle(void) {
     game_state_lock();
-    
+
     float cell_size = g_game_state.cell_size > 0 ? g_game_state.cell_size : 12.0f;
     float aoi_radius = g_game_state.aoi_radius * cell_size;
-    
+
     Vector2 center = {
         (g_game_state.player.base.interp_pos.x + g_game_state.player.base.dims.x / 2.0f) * cell_size,
         (g_game_state.player.base.interp_pos.y + g_game_state.player.base.dims.y / 2.0f) * cell_size
     };
-    
+
     DrawCircleLines(center.x, center.y, aoi_radius, g_game_state.colors.aoi);
-    
+
     game_state_unlock();
 }
 
 void game_render_ui(void) {
     // Render error messages (always visible)
     game_render_error_messages();
-    
+
     // Determine what to render based on dev_ui flag
     game_state_lock();
     bool dev_ui_enabled = g_game_state.dev_ui;
     bool init_received = g_game_state.init_received;
     game_state_unlock();
-    
+
     if (dev_ui_enabled && init_received) {
         // Render dev UI only
         dev_ui_draw(g_renderer.screen_width, g_renderer.screen_height, 0);
@@ -386,7 +443,7 @@ void game_render_performance_info(void) {
 
 void game_render_error_messages(void) {
     game_state_lock();
-    
+
     if (g_game_state.last_error_message[0] != '\0') {
         double current_time = GetTime();
         if (current_time - g_game_state.error_display_time < 5.0) {
@@ -394,11 +451,11 @@ void game_render_error_messages(void) {
             int text_width = MeasureText(g_game_state.last_error_message, font_size);
             int x = (g_renderer.screen_width - text_width) / 2;
             int y = 100;
-            
+
             DrawText(g_game_state.last_error_message, x, y, font_size, g_game_state.colors.error_text);
         }
     }
-    
+
     game_state_unlock();
 }
 
@@ -406,17 +463,17 @@ void game_render_click_effects(void) {
     for (int i = 0; i < g_renderer.click_effect_count; i++) {
         ClickEffect* effect = &g_renderer.click_effects[i];
         if (!effect->active) continue;
-        
+
         float alpha = effect->life_time / effect->max_life_time;
         Color c = effect->color;
         c.a = (unsigned char)(c.a * alpha);
-        
+
         float cell_size = g_game_state.cell_size > 0 ? g_game_state.cell_size : 12.0f;
         Vector2 world_pos = {
             effect->position.x * cell_size,
             effect->position.y * cell_size
         };
-        
+
         DrawCircleLines(world_pos.x, world_pos.y, effect->radius, c);
     }
 }
@@ -425,24 +482,22 @@ void game_render_floating_texts(void) {
     for (int i = 0; i < g_renderer.floating_text_count; i++) {
         FloatingText* text = &g_renderer.floating_texts[i];
         if (!text->active) continue;
-        
+
         float alpha = text->life_time / text->max_life_time;
         Color c = text->color;
         c.a = (unsigned char)(c.a * alpha);
-        
+
         float cell_size = g_game_state.cell_size > 0 ? g_game_state.cell_size : 12.0f;
         Vector2 world_pos = {
             text->position.x * cell_size,
             text->position.y * cell_size
         };
-        
+
         DrawText(text->text, world_pos.x, world_pos.y, text->font_size, c);
     }
 }
 
-void game_render_debug_overlay(void) {
-    // Additional debug information can be rendered here
-}
+
 
 Vector2 game_render_world_to_screen(Vector2 world_pos) {
     float cell_size = g_game_state.cell_size > 0 ? g_game_state.cell_size : 12.0f;
@@ -461,7 +516,7 @@ Rectangle game_render_get_camera_bounds(void) {
     Vector2 bottom_right = game_render_screen_to_world(
         (Vector2){g_renderer.screen_width, g_renderer.screen_height}
     );
-    
+
     return (Rectangle){
         top_left.x,
         top_left.y,
@@ -485,7 +540,7 @@ void game_render_add_click_effect(Vector2 world_pos, Color color) {
     }
 }
 
-void game_render_add_floating_text(Vector2 world_pos, const char* text, 
+void game_render_add_floating_text(Vector2 world_pos, const char* text,
                                    Color color, float font_size, float life_time) {
     for (int i = 0; i < 100; i++) {
         if (!g_renderer.floating_texts[i].active) {
@@ -508,29 +563,29 @@ void game_render_update_effects(float delta_time) {
     for (int i = 0; i < g_renderer.click_effect_count; i++) {
         ClickEffect* effect = &g_renderer.click_effects[i];
         if (!effect->active) continue;
-        
+
         effect->life_time -= delta_time;
         if (effect->life_time <= 0.0f) {
             effect->active = false;
             continue;
         }
-        
+
         // Expand radius over time
         float progress = 1.0f - (effect->life_time / effect->max_life_time);
         effect->radius = effect->max_radius * progress;
     }
-    
+
     // Update floating texts
     for (int i = 0; i < g_renderer.floating_text_count; i++) {
         FloatingText* text = &g_renderer.floating_texts[i];
         if (!text->active) continue;
-        
+
         text->life_time -= delta_time;
         if (text->life_time <= 0.0f) {
             text->active = false;
             continue;
         }
-        
+
         // Move text based on velocity
         text->position.x += text->velocity.x * delta_time;
         text->position.y += text->velocity.y * delta_time;
@@ -539,13 +594,13 @@ void game_render_update_effects(float delta_time) {
 
 void game_render_cleanup(void) {
     printf("[GAME_RENDER] Cleaning up game renderer...\n");
-    
+
     // Unload font if loaded
     if (g_renderer.font_loaded) {
         UnloadFont(g_renderer.game_font);
         g_renderer.font_loaded = false;
     }
-    
+
     printf("[GAME_RENDER] Game renderer cleaned up\n");
 }
 

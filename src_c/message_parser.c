@@ -15,7 +15,6 @@ MessageType message_parser_get_type(const char* json_str) {
 
     cJSON* root = cJSON_Parse(json_str);
     if (!root) {
-        printf("[MESSAGE_PARSER] Failed to parse JSON for type detection\n");
         return MSG_TYPE_UNKNOWN;
     }
 
@@ -48,23 +47,14 @@ MessageType message_parser_get_type(const char* json_str) {
 
 int message_parser_process(const char* json_str) {
     if (!json_str) {
-        printf("[MESSAGE_PARSER] Null JSON string received\n");
         return -1;
     }
 
     // Parse JSON
     size_t msg_len = strlen(json_str);
-    printf("[MESSAGE_PARSER] Parsing JSON message, length: %zu bytes\n", msg_len);
-
     cJSON* root = cJSON_Parse(json_str);
     if (!root) {
-        const char* error_ptr = cJSON_GetErrorPtr();
-        printf("[MESSAGE_PARSER] ❌ Failed to parse JSON!\n");
-        printf("[MESSAGE_PARSER] Error: %s\n", error_ptr ? error_ptr : "unknown");
-        printf("[MESSAGE_PARSER] Message length: %zu bytes\n", msg_len);
-        printf("[MESSAGE_PARSER] First 300 chars: %.300s\n", json_str);
-        printf("[MESSAGE_PARSER] Last 100 chars: %s\n",
-               msg_len > 100 ? json_str + msg_len - 100 : json_str);
+        printf("[MESSAGE_PARSER] Failed to parse JSON (length: %zu bytes)\n", msg_len);
         return -1;
     }
 
@@ -78,17 +68,14 @@ int message_parser_process(const char* json_str) {
 
             // Check for init_data indicators
             if (cJSON_HasObjectItem(payload, "gridW") && cJSON_HasObjectItem(payload, "gridH")) {
-                printf("[MESSAGE_PARSER] Inferred message type: init_data (no type field)\n");
                 result = message_parser_parse_init_data(root);
             }
             // Check for aoi_update indicators
             else if (cJSON_HasObjectItem(payload, "player") && cJSON_HasObjectItem(payload, "playerID")) {
-                printf("[MESSAGE_PARSER] Inferred message type: aoi_update (no type field)\n");
                 result = message_parser_parse_aoi_update(root);
             }
             // Check for skill_item_ids indicators
             else if (cJSON_HasObjectItem(payload, "associatedItemIds")) {
-                printf("[MESSAGE_PARSER] Inferred message type: skill_item_ids (no type field)\n");
                 result = message_parser_parse_skill_item_ids(root);
             }
 
@@ -96,13 +83,9 @@ int message_parser_process(const char* json_str) {
             return result;
         }
 
-        printf("[MESSAGE_PARSER] Message missing 'type' field and cannot infer type\n");
-        printf("[MESSAGE_PARSER] Message (first 200 chars): %.200s\n", json_str);
         cJSON_Delete(root);
         return -1;
     }
-
-    printf("[MESSAGE_PARSER] Processing message type: %s\n", type_str);
 
     int result = 0;
 
@@ -116,13 +99,10 @@ int message_parser_process(const char* json_str) {
     } else if (strcmp(type_str, "error") == 0) {
         result = message_parser_parse_error(root);
     } else if (strcmp(type_str, "ping") == 0) {
-        printf("[MESSAGE_PARSER] Received ping\n");
         result = 0;
     } else if (strcmp(type_str, "pong") == 0) {
-        printf("[MESSAGE_PARSER] Received pong\n");
         result = 0;
     } else {
-        printf("[MESSAGE_PARSER] Unknown message type: %s\n", type_str);
         result = -1;
     }
 
@@ -204,12 +184,9 @@ int message_parser_parse_colors(const cJSON* colors_json) {
 int message_parser_parse_init_data(const cJSON* json_root) {
     if (!json_root) return -1;
 
-    printf("[MESSAGE_PARSER] Parsing init_data message\n");
-
     // Get payload object
     cJSON* payload = serial_get_object(json_root, "payload");
     if (!payload) {
-        printf("[MESSAGE_PARSER] init_data missing payload\n");
         return -1;
     }
 
@@ -270,10 +247,6 @@ int message_parser_parse_init_data(const cJSON* json_root) {
     }
 
     game_state_unlock();
-
-    printf("[MESSAGE_PARSER] Init data processed successfully\n");
-    printf("  Grid: %dx%d, Cell Size: %.1f\n", g_game_state.grid_w, g_game_state.grid_h, g_game_state.cell_size);
-    printf("  FPS: %d, Interpolation: %dms\n", g_game_state.fps, g_game_state.interpolation_ms);
     printf("  AOI Radius: %.1f, Dev UI: %s\n", g_game_state.aoi_radius, g_game_state.dev_ui ? "true" : "false");
 
     return 0;
@@ -435,7 +408,6 @@ int message_parser_parse_aoi_update(const cJSON* json_root) {
     // Get payload object
     cJSON* payload = serial_get_object(json_root, "payload");
     if (!payload) {
-        printf("[MESSAGE_PARSER] aoi_update missing payload\n");
         return -1;
     }
 
@@ -464,37 +436,150 @@ int message_parser_parse_aoi_update(const cJSON* json_root) {
         message_parser_parse_visible_players(visible_players);
     }
 
-    // Parse visible grid objects
+    // Parse visible grid objects - this is a FLAT dictionary where each object has a "Type" field
     cJSON* visible_grid_objects = serial_get_object(payload, "visibleGridObjects");
     if (visible_grid_objects) {
-        // Parse bots
-        cJSON* bots = serial_get_object(visible_grid_objects, "bots");
-        if (bots) {
-            message_parser_parse_visible_bots(bots);
-        }
+        // Clear all grid object collections first
+        g_game_state.obstacle_count = 0;
+        g_game_state.portal_count = 0;
+        g_game_state.floor_count = 0;
+        g_game_state.foreground_count = 0;
+        g_game_state.bot_count = 0;
 
-        // Parse obstacles
-        cJSON* obstacles = serial_get_object(visible_grid_objects, "obstacles");
-        if (obstacles) {
-            message_parser_parse_visible_obstacles(obstacles);
-        }
+        // Iterate through all objects in the flat dictionary (it's an object, not an array)
+        // In cJSON, for {"id1": {...}, "id2": {...}}, child points to first key-value pair
+        // obj->string is the key (ID), obj itself is the value object
+        cJSON* obj = visible_grid_objects->child;
+        while (obj != NULL) {
+            // Get the Type field to determine what kind of object this is
+            cJSON* type_field = cJSON_GetObjectItemCaseSensitive(obj, "Type");
+            if (!type_field || !cJSON_IsString(type_field)) {
+                obj = obj->next;
+                continue;
+            }
 
-        // Parse portals
-        cJSON* portals = serial_get_object(visible_grid_objects, "portals");
-        if (portals) {
-            message_parser_parse_visible_portals(portals);
-        }
+            const char* obj_type = type_field->valuestring;
 
-        // Parse floors
-        cJSON* floors = serial_get_object(visible_grid_objects, "floors");
-        if (floors) {
-            message_parser_parse_visible_floors(floors);
-        }
-
-        // Parse foregrounds
-        cJSON* foregrounds = serial_get_object(visible_grid_objects, "foregrounds");
-        if (foregrounds) {
-            message_parser_parse_visible_foregrounds(foregrounds);
+            // Dispatch based on type
+            if (strcmp(obj_type, "obstacle") == 0) {
+                if (g_game_state.obstacle_count < MAX_OBJECTS) {
+                    // Parse obstacle
+                    cJSON* pos = cJSON_GetObjectItemCaseSensitive(obj, "Pos");
+                    cJSON* dims = cJSON_GetObjectItemCaseSensitive(obj, "Dims");
+                    cJSON* id = cJSON_GetObjectItemCaseSensitive(obj, "id");
+                    
+                    if (pos && dims && id && cJSON_IsString(id)) {
+                        WorldObject* obstacle = &g_game_state.obstacles[g_game_state.obstacle_count];
+                        strncpy(obstacle->id, id->valuestring, sizeof(obstacle->id) - 1);
+                        obstacle->pos.x = serial_get_float_default(pos, "X", 0.0f);
+                        obstacle->pos.y = serial_get_float_default(pos, "Y", 0.0f);
+                        obstacle->dims.x = serial_get_float_default(dims, "Width", 1.0f);
+                        obstacle->dims.y = serial_get_float_default(dims, "Height", 1.0f);
+                        g_game_state.obstacle_count++;
+                    }
+                }
+            }
+            else if (strcmp(obj_type, "foreground") == 0) {
+                if (g_game_state.foreground_count < MAX_OBJECTS) {
+                    // Parse foreground
+                    cJSON* pos = cJSON_GetObjectItemCaseSensitive(obj, "Pos");
+                    cJSON* dims = cJSON_GetObjectItemCaseSensitive(obj, "Dims");
+                    cJSON* id = cJSON_GetObjectItemCaseSensitive(obj, "id");
+                    
+                    if (pos && dims && id && cJSON_IsString(id)) {
+                        WorldObject* foreground = &g_game_state.foregrounds[g_game_state.foreground_count];
+                        strncpy(foreground->id, id->valuestring, sizeof(foreground->id) - 1);
+                        foreground->pos.x = serial_get_float_default(pos, "X", 0.0f);
+                        foreground->pos.y = serial_get_float_default(pos, "Y", 0.0f);
+                        foreground->dims.x = serial_get_float_default(dims, "Width", 1.0f);
+                        foreground->dims.y = serial_get_float_default(dims, "Height", 1.0f);
+                        g_game_state.foreground_count++;
+                    }
+                }
+            }
+            else if (strcmp(obj_type, "portal") == 0) {
+                if (g_game_state.portal_count < MAX_OBJECTS) {
+                    // Parse portal
+                    cJSON* pos = cJSON_GetObjectItemCaseSensitive(obj, "Pos");
+                    cJSON* dims = cJSON_GetObjectItemCaseSensitive(obj, "Dims");
+                    cJSON* id = cJSON_GetObjectItemCaseSensitive(obj, "id");
+                    cJSON* label = cJSON_GetObjectItemCaseSensitive(obj, "PortalLabel");
+                    
+                    if (pos && dims && id && cJSON_IsString(id)) {
+                        WorldObject* portal = &g_game_state.portals[g_game_state.portal_count];
+                        strncpy(portal->id, id->valuestring, sizeof(portal->id) - 1);
+                        portal->pos.x = serial_get_float_default(pos, "X", 0.0f);
+                        portal->pos.y = serial_get_float_default(pos, "Y", 0.0f);
+                        portal->dims.x = serial_get_float_default(dims, "Width", 1.0f);
+                        portal->dims.y = serial_get_float_default(dims, "Height", 1.0f);
+                        if (label && cJSON_IsString(label)) {
+                            strncpy(portal->portal_label, label->valuestring, sizeof(portal->portal_label) - 1);
+                        }
+                        g_game_state.portal_count++;
+                    }
+                }
+            }
+            else if (strcmp(obj_type, "floor") == 0) {
+                if (g_game_state.floor_count < MAX_OBJECTS) {
+                    // Parse floor
+                    cJSON* pos = cJSON_GetObjectItemCaseSensitive(obj, "Pos");
+                    cJSON* dims = cJSON_GetObjectItemCaseSensitive(obj, "Dims");
+                    cJSON* id = cJSON_GetObjectItemCaseSensitive(obj, "id");
+                    cJSON* obj_layers = cJSON_GetObjectItemCaseSensitive(obj, "objectLayers");
+                    
+                    if (pos && dims && id && cJSON_IsString(id)) {
+                        WorldObject* floor = &g_game_state.floors[g_game_state.floor_count];
+                        strncpy(floor->id, id->valuestring, sizeof(floor->id) - 1);
+                        floor->pos.x = serial_get_float_default(pos, "X", 0.0f);
+                        floor->pos.y = serial_get_float_default(pos, "Y", 0.0f);
+                        floor->dims.x = serial_get_float_default(dims, "Width", 1.0f);
+                        floor->dims.y = serial_get_float_default(dims, "Height", 1.0f);
+                        
+                        // Parse object layers if present
+                        floor->object_layer_count = 0;
+                        if (obj_layers && cJSON_IsArray(obj_layers)) {
+                            cJSON* layer = NULL;
+                            cJSON_ArrayForEach(layer, obj_layers) {
+                                if (floor->object_layer_count >= MAX_OBJECT_LAYERS) break;
+                                
+                                ObjectLayerState* layer_state = &floor->object_layers[floor->object_layer_count];
+                                
+                                cJSON* item_id = cJSON_GetObjectItemCaseSensitive(layer, "itemId");
+                                cJSON* active = cJSON_GetObjectItemCaseSensitive(layer, "active");
+                                cJSON* quantity = cJSON_GetObjectItemCaseSensitive(layer, "quantity");
+                                
+                                if (item_id && cJSON_IsString(item_id)) {
+                                    strncpy(layer_state->item_id, item_id->valuestring, sizeof(layer_state->item_id) - 1);
+                                }
+                                if (active && cJSON_IsBool(active)) {
+                                    layer_state->active = cJSON_IsTrue(active);
+                                }
+                                if (quantity && cJSON_IsNumber(quantity)) {
+                                    layer_state->quantity = quantity->valueint;
+                                }
+                                
+                                floor->object_layer_count++;
+                            }
+                        }
+                        
+                        g_game_state.floor_count++;
+                    }
+                }
+            }
+            else if (strcmp(obj_type, "bot") == 0) {
+                if (g_game_state.bot_count < MAX_ENTITIES) {
+                    // Parse bot
+                    BotState bot;
+                    memset(&bot, 0, sizeof(BotState));
+                    
+                    if (serial_deserialize_bot_state(obj, &bot) == 0) {
+                        game_state_update_bot(&bot);
+                    }
+                }
+            }
+            
+            // Move to next object in the dictionary
+            obj = obj->next;
         }
     }
 
