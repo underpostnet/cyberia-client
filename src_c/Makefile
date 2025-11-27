@@ -6,6 +6,12 @@
 
 PROJECT_NAME := cyberia-client
 TARGET_NAME := $(PROJECT_NAME)
+BUILD_MODE ?= DEBUG
+PLATFORM := PLATFORM_WEB
+
+# Build directories
+BUILD_DIR := build
+OUTPUT_DIR := bin/$(PLATFORM)/$(BUILD_MODE)
 
 # Source files
 SOURCES := main.c render.c client.c network.c config.c game_state.c game_render.c message_parser.c input.c serial.c dev_ui.c modal.c modal_player.c ../lib/cJSON/cJSON.c
@@ -28,7 +34,6 @@ SHELL_FILE := shell.html
 
 # Base compiler flags
 EMCC_FLAGS := \
-	-Os \
 	-I $(EMSDK_INCLUDE) \
 	-I ../lib/cJSON \
 	$(EMSDK_LIB) \
@@ -43,18 +48,20 @@ EMCC_FLAGS := \
 	-s TOTAL_MEMORY=128MB \
 	-s ALLOW_MEMORY_GROWTH=1
 
-# Debug flags (with assertions and safe heap)
-DEBUG_FLAGS := \
-	-g \
-	-s ASSERTIONS=1 \
-	-s SAFE_HEAP=1 \
-	-s STACK_OVERFLOW_CHECK=2
+# Build mode specific flags
+ifeq ($(BUILD_MODE),DEBUG)
+EMCC_FLAGS += -g -D_DEBUG
+EMCC_FLAGS += -s ASSERTIONS=1
+EMCC_FLAGS += -s SAFE_HEAP=1
+EMCC_FLAGS += -s STACK_OVERFLOW_CHECK=2
+EMCC_FLAGS += -O2 --profiling
+endif
 
-# Release flags (optimizations and minification)
-RELEASE_FLAGS := \
-	-Os \
-	--closure 1 \
-	-s AGGRESSIVE_VARIABLE_ELIMINATION=1
+ifeq ($(BUILD_MODE),RELEASE)
+EMCC_FLAGS += -Os -DNDEBUG
+EMCC_FLAGS += --closure 1
+EMCC_FLAGS += -s AGGRESSIVE_VARIABLE_ELIMINATION=1
+endif
 
 # ============================================================================
 # Build Targets
@@ -63,17 +70,20 @@ RELEASE_FLAGS := \
 .PHONY: all clean debug release help check-deps info serve
 
 # Default target
-all: check-deps $(TARGET_NAME).html
+all: check-deps $(OUTPUT_DIR)/$(TARGET_NAME).html
 	@echo ""
 	@echo "=========================================="
 	@echo "  ✓ Build completed successfully!"
 	@echo "=========================================="
 	@echo ""
+	@echo "Build Mode: $(BUILD_MODE)"
+	@echo "Output Dir: $(OUTPUT_DIR)"
+	@echo ""
 	@echo "To run the application:"
 	@echo "  make serve"
 	@echo ""
 	@echo "Or manually:"
-	@echo "  emrun --no_browser --port 8081 ."
+	@echo "  emrun --no_browser --port 8081 $(OUTPUT_DIR)"
 	@echo ""
 	@echo "Then open in browser:"
 	@echo "  http://localhost:8081/$(TARGET_NAME).html"
@@ -81,7 +91,7 @@ all: check-deps $(TARGET_NAME).html
 
 # Serve the application locally
 serve: check-deps
-	@if [ ! -f "$(TARGET_NAME).html" ]; then \
+	@if [ ! -f "$(OUTPUT_DIR)/$(TARGET_NAME).html" ]; then \
 		echo "========================================"; \
 		echo "  Building project first..."; \
 		echo "========================================"; \
@@ -98,13 +108,18 @@ serve: check-deps
 	@echo "Press Ctrl+C to stop the server"
 	@echo "=========================================="
 	@echo ""
-	@emrun --no_browser --port 8081 .
+	@emrun --no_browser --port 8081 $(OUTPUT_DIR)
 
 # Main build target
-$(TARGET_NAME).html: $(SOURCES) $(HEADERS) $(SHELL_FILE)
+$(OUTPUT_DIR)/$(TARGET_NAME).html: $(SOURCES) $(HEADERS) $(SHELL_FILE)
+	@mkdir -p $(OUTPUT_DIR)
 	@echo "=========================================="
 	@echo "  Building $(PROJECT_NAME)"
 	@echo "=========================================="
+	@echo "Build Mode: $(BUILD_MODE)"
+	@echo "Platform:   $(PLATFORM)"
+	@echo "Output Dir: $(OUTPUT_DIR)"
+	@echo ""
 	@echo "Sources: $(SOURCES)"
 	@echo "Headers: $(HEADERS)"
 	@echo "Shell:   $(SHELL_FILE)"
@@ -113,20 +128,20 @@ $(TARGET_NAME).html: $(SOURCES) $(HEADERS) $(SHELL_FILE)
 	emcc -o $@ $(SOURCES) $(EMCC_FLAGS)
 	@echo ""
 	@echo "Generated files:"
-	@echo "  • $(TARGET_NAME).html"
-	@echo "  • $(TARGET_NAME).js"
-	@echo "  • $(TARGET_NAME).wasm"
+	@echo "  • $(OUTPUT_DIR)/$(TARGET_NAME).html"
+	@echo "  • $(OUTPUT_DIR)/$(TARGET_NAME).js"
+	@echo "  • $(OUTPUT_DIR)/$(TARGET_NAME).wasm"
 
 # Debug build with extra diagnostics
-debug: EMCC_FLAGS += $(DEBUG_FLAGS)
-debug: clean $(TARGET_NAME).html
+debug:
+	@$(MAKE) BUILD_MODE=DEBUG all
 	@echo ""
 	@echo "[DEBUG BUILD] Completed with debugging symbols"
 	@echo "Use browser DevTools for debugging"
 
 # Release build with optimizations
-release: EMCC_FLAGS += $(RELEASE_FLAGS)
-release: clean $(TARGET_NAME).html
+release:
+	@$(MAKE) BUILD_MODE=RELEASE all
 	@echo ""
 	@echo "[RELEASE BUILD] Completed with optimizations"
 	@echo "Files are minified and optimized for production"
@@ -143,10 +158,8 @@ check-deps:
 # Clean build artifacts
 clean:
 	@echo "Cleaning build artifacts..."
-	@rm -f $(TARGET_NAME).html
-	@rm -f $(TARGET_NAME).js
-	@rm -f $(TARGET_NAME).wasm
-	@rm -f $(TARGET_NAME).data
+	@rm -rf $(OUTPUT_DIR)
+	@rm -rf $(BUILD_DIR)
 	@echo "Clean complete"
 
 # Show project information
@@ -157,6 +170,11 @@ info:
 	@echo ""
 	@echo "Project:     $(PROJECT_NAME)"
 	@echo "Target:      $(TARGET_NAME)"
+	@echo "Build Mode:  $(BUILD_MODE)"
+	@echo "Platform:    $(PLATFORM)"
+	@echo ""
+	@echo "Build Dir:   $(BUILD_DIR)"
+	@echo "Output Dir:  $(OUTPUT_DIR)"
 	@echo ""
 	@echo "Sources:"
 	@for src in $(SOURCES); do echo "  • $$src"; done
@@ -169,13 +187,17 @@ info:
 	@echo "Shell:          $(SHELL_FILE)"
 	@echo ""
 	@echo "Available targets:"
-	@echo "  make         - Build the project (default)"
-	@echo "  make serve   - Build and start local server"
-	@echo "  make debug   - Build with debugging symbols"
-	@echo "  make release - Build with optimizations"
-	@echo "  make clean   - Remove build artifacts"
-	@echo "  make info    - Show this information"
-	@echo "  make help    - Show detailed help"
+	@echo "  make              - Build the project (default)"
+	@echo "  make serve        - Build and start local server"
+	@echo "  make debug        - Build with debugging symbols"
+	@echo "  make release      - Build with optimizations"
+	@echo "  make clean        - Remove build artifacts"
+	@echo "  make info         - Show this information"
+	@echo "  make help         - Show detailed help"
+	@echo ""
+	@echo "Build mode can be overridden:"
+	@echo "  make BUILD_MODE=DEBUG"
+	@echo "  make BUILD_MODE=RELEASE"
 	@echo "=========================================="
 
 # Help target with detailed instructions
@@ -224,7 +246,7 @@ help:
 	@echo ""
 	@echo "  2. Or build then serve manually:"
 	@echo "     make"
-	@echo "     emrun --no_browser --port 8081 ."
+	@echo "     emrun --no_browser --port 8081 $(OUTPUT_DIR)"
 	@echo ""
 	@echo "  3. Then open in your browser:"
 	@echo "     http://localhost:8081/$(TARGET_NAME).html"

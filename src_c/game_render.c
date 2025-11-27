@@ -268,10 +268,6 @@ static int compare_entities_by_depth(const void* a, const void* b) {
 }
 
 void game_render_entities(void) {
-    // Only render entities if dev_ui is enabled
-    if (!g_game_state.dev_ui) {
-        return;
-    }
 
     game_state_lock();
 

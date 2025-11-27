@@ -1,50 +1,89 @@
-### Standard Build
+# Cyberia Client - Build Instructions
+
+## Quick Start
 
 ```bash
 cd src_c
 make
+make serve
 ```
 
-### Debug Build (with assertions and debugging symbols)
+Open browser at: http://localhost:8081/cyberia-client.html
 
+---
+
+## Build Commands
+
+### Default Build (Debug)
+```bash
+make
+```
+Output: `bin/PLATFORM_WEB/DEBUG/`
+
+### Debug Build
 ```bash
 make debug
 ```
+Output: `bin/PLATFORM_WEB/DEBUG/`
 
-### Release Build (optimized for production)
-
+### Release Build
 ```bash
 make release
 ```
+Output: `bin/PLATFORM_WEB/RELEASE/`
 
-### Clean Build Artifacts
-
+### Clean
 ```bash
 make clean
 ```
 
-### View Project Information
-
+### Info
 ```bash
 make info
 ```
 
-### Running
+---
 
-1. **Build the project**:
-   ```bash
-   make
-   ```
+## Running the Application
 
-2. **Start a local web server**:
-   ```bash
-   emrun --no_browser --port 8081 .
-   ```
-    Or use the provided Makefile target:
-   ```bash
-   make serve
-   ```
-3. **Open in your browser**:
-   ```
-   http://localhost:8081/cyberia-client.html
-   ```
+### Option 1: Use make serve (recommended)
+```bash
+make serve
+```
+
+### Option 2: Manual server
+```bash
+make
+emrun --no_browser --port 8081 bin/PLATFORM_WEB/DEBUG
+```
+
+Then open: http://localhost:8081/cyberia-client.html
+
+---
+
+## Build Modes
+
+- **DEBUG** (default): Includes debugging symbols, assertions, profiling
+- **RELEASE**: Optimized for production with minification
+
+Override build mode:
+```bash
+make BUILD_MODE=RELEASE
+```
+
+---
+
+## Output Structure
+
+```
+bin/
+└── PLATFORM_WEB/
+    ├── DEBUG/
+    │   ├── cyberia-client.html
+    │   ├── cyberia-client.js
+    │   └── cyberia-client.wasm
+    └── RELEASE/
+        ├── cyberia-client.html
+        ├── cyberia-client.js
+        └── cyberia-client.wasm
+```
