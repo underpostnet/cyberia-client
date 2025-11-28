@@ -1,7 +1,9 @@
 import time
-import pyray as pr
-from dataclasses import is_dataclass, asdict
+from dataclasses import asdict, is_dataclass
 from typing import Any, Dict, List, Optional, Tuple
+
+import pyray as pr
+
 from config import ASSETS_BASE_URL
 from src.sub_hud import SubHud
 from src.texture_manager import TextureManager
@@ -117,9 +119,13 @@ class Hud:
     def can_activate_item(
         self, item: Dict[str, Any], sum_stats_limit: Optional[int]
     ) -> Tuple[bool, str]:
-        # check activable
+        """Check if the item can be activated."""
         if not item.get("isActivable"):
             return False, "Item cannot be activated."
+
+        # Prevent activation when player is dead
+        if self.game_state.player.life <= 0:
+            return False, "Cannot activate items while dead."
 
         # You must have at least one skin active.
         item_type_to_activate = item.get("type")
@@ -210,6 +216,11 @@ class Hud:
             return
         item = self.items[idx]
         if not item.get("isActive"):
+            return
+
+        # Prevent deactivating items when player is dead
+        if self.game_state.player.life <= 0:
+            self.show_hud_alert("Cannot deactivate items while dead.")
             return
 
         # Prevent deactivating the last active skin
@@ -737,7 +748,18 @@ class Hud:
         )
         info_y += 22
 
-        if not item.get("isActivable"):
+        # Show warning if player is dead
+        if self.game_state.player.life <= 0:
+            pr.draw_text_ex(
+                pr.get_font_default(),
+                "Cannot activate items while dead.",
+                pr.Vector2(start_x, info_y),
+                16,
+                1,
+                self.game_state.colors.get("ERROR_TEXT", pr.Color(255, 80, 80, 255)),
+            )
+            info_y += 20
+        elif not item.get("isActivable"):
             pr.draw_text_ex(
                 pr.get_font_default(),
                 "This item cannot be activated.",
