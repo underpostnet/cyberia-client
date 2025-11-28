@@ -5,7 +5,7 @@
 # ============================================================================
 
 PROJECT_NAME := cyberia-client
-TARGET_NAME := $(PROJECT_NAME)
+TARGET_NAME := index
 BUILD_MODE ?= DEBUG
 PLATFORM := PLATFORM_WEB
 
