@@ -45,7 +45,7 @@ class ObjectLayersService:
             # Get JSON data
             json_data = resp.json()
             print(f"[DEBUG API] Response JSON type: {type(json_data)}")
-            print(f"[DEBUG API] Response JSON: {json_data}")
+            # print(f"[DEBUG API] Response JSON: {json_data}")
 
             # Check if json_data is None or not a dict
             if json_data is None:
@@ -62,7 +62,7 @@ class ObjectLayersService:
 
             # Get items array
             items = json_data.get("items")
-            print(f"[DEBUG API] Items from response: {items}")
+            print(f"[DEBUG API] Items from response: {len(items)}")
 
             if items is None:
                 print(
