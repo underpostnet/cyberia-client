@@ -15,4 +15,5 @@
  * Default URL for development environment.
  * This can be changed to point to production server.
  */
-const char* WS_URL = "ws://localhost:8080/ws";
+const char* WS_URL = "wss://server.cyberiaonline.com/ws";
+// const char* WS_URL = "ws://localhost:8080/ws";
