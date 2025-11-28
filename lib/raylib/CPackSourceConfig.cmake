@@ -24,7 +24,7 @@ set(CPACK_IGNORE_FILES "/CVS/;/\\.svn/;/\\.bzr/;/\\.hg/;/\\.git/;\\.swp\$;\\.#;/
 set(CPACK_INSTALLED_DIRECTORIES "/home/dd/cyberia-client/lib/raylib;/")
 set(CPACK_INSTALL_CMAKE_PROJECTS "")
 set(CPACK_INSTALL_PREFIX "/root/.emsdk/upstream/emscripten/cache/sysroot")
-set(CPACK_MODULE_PATH "/root/.emsdk/upstream/emscripten/cmake/Modules;/root/.emsdk/upstream/emscripten/cmake/Modules;/root/.emsdk/upstream/emscripten/cmake/Modules;/root/.emsdk/upstream/emscripten/cmake/Modules;/root/.emsdk/upstream/emscripten/cmake/Modules;/home/dd/cyberia-client/lib/raylib/cmake")
+set(CPACK_MODULE_PATH "/root/.emsdk/upstream/emscripten/cmake/Modules;/root/.emsdk/upstream/emscripten/cmake/Modules;/root/.emsdk/upstream/emscripten/cmake/Modules;/root/.emsdk/upstream/emscripten/cmake/Modules;/home/dd/cyberia-client/lib/raylib/cmake")
 set(CPACK_NSIS_DISPLAY_NAME "raylib 5.5.0")
 set(CPACK_NSIS_INSTALLER_ICON_CODE "")
 set(CPACK_NSIS_INSTALLER_MUI_ICON_CODE "")
