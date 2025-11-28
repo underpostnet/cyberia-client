@@ -1,5 +1,25 @@
+import json
+import math
+import threading
+import time
+import traceback
+
 import pyray as pr
 import websocket
+
+from config import WS_URL
+from src.click_effect import ClickEffect
+from src.dev_ui import DevUI
+from src.direction_converter import DirectionConverter
+from src.entity_bot_render import EntityBotRender
+from src.entity_player_input import EntityPlayerInput
+from src.entity_player_render import EntityPlayerRender
+from src.entity_render import EntityRender
+from src.entity_state import BotState, EntityState, PlayerState
+from src.floating_text import FloatingTextManager
+from src.game_state import GameState
+from src.grid_render import GridRender
+from src.hud import Hud
 from src.network_models import (
     AOIUpdatePayload,
     InitPayload,
@@ -8,30 +28,11 @@ from src.network_models import (
     VisibleFloor,
     VisibleObject,
 )
-from src.entity_state import PlayerState, BotState, EntityState
-import threading
-import json
-import time
-import math
-
-from config import WS_URL
-
 from src.object_layer.object_layer import Direction, ObjectLayerMode
-from src.game_state import GameState
-from src.dev_ui import DevUI
-from src.click_effect import ClickEffect
-from src.hud import Hud
 from src.object_layers_management import ObjectLayersManager
-from src.texture_manager import TextureManager
-from src.floating_text import FloatingTextManager
-from src.direction_converter import DirectionConverter
 from src.render_core import RenderCore
-from src.entity_player_input import EntityPlayerInput
-from src.entity_render import EntityRender
-from src.entity_player_render import EntityPlayerRender
-from src.grid_render import GridRender
-from src.entity_bot_render import EntityBotRender
 from src.serial import from_dict_generic
+from src.texture_manager import TextureManager
 
 
 class NetworkClient:
@@ -82,25 +83,84 @@ class NetworkClient:
         total_quantity = 0
         if not object_layers_state:
             return 0
-        for layer_state in object_layers_state:
-            item_id = layer_state.itemId
-            if not item_id:
+
+        print(
+            f"[DEBUG COIN] Calculating total coin quantity for {len(object_layers_state)} object layers"
+        )
+
+        for idx, layer_state in enumerate(object_layers_state):
+            try:
+                item_id = layer_state.itemId
+                print(
+                    f"[DEBUG COIN] Layer {idx}: item_id={item_id}, quantity={layer_state.quantity}"
+                )
+
+                if not item_id:
+                    print(f"[DEBUG COIN] Layer {idx}: Skipping (no item_id)")
+                    continue
+
+                # This might block, but it's what the user asked for.
+                # It will be cached after the first time.
+                print(
+                    f"[DEBUG COIN] Layer {idx}: Fetching object layer for {item_id}..."
+                )
+                object_layer = self.obj_layers_mgr.get_or_fetch(item_id)
+
+                if not object_layer:
+                    print(
+                        f"[DEBUG COIN] Layer {idx}: ⚠️ WARNING: get_or_fetch returned None for item_id={item_id}"
+                    )
+                    continue
+
+                if not object_layer.data:
+                    print(
+                        f"[DEBUG COIN] Layer {idx}: ⚠️ WARNING: object_layer.data is None for item_id={item_id}"
+                    )
+                    continue
+
+                if not object_layer.data.item:
+                    print(
+                        f"[DEBUG COIN] Layer {idx}: ⚠️ WARNING: object_layer.data.item is None for item_id={item_id}"
+                    )
+                    continue
+
+                item_type = object_layer.data.item.type
+                print(f"[DEBUG COIN] Layer {idx}: item_id={item_id}, type={item_type}")
+
+                if item_type == "coin":
+                    total_quantity += layer_state.quantity
+                    print(
+                        f"[DEBUG COIN] Layer {idx}: Added {layer_state.quantity} coins (total now: {total_quantity})"
+                    )
+
+            except AttributeError as e:
+                print(f"[DEBUG COIN] ❌ AttributeError processing layer {idx}: {e}")
+                print(f"[DEBUG COIN] layer_state: {layer_state}")
+                traceback.print_exc()
                 continue
-            # This might block, but it's what the user asked for.
-            # It will be cached after the first time.
-            object_layer = self.obj_layers_mgr.get_or_fetch(item_id)
-            if object_layer and object_layer.data.item.type == "coin":
-                total_quantity += layer_state.quantity
+            except Exception as e:
+                print(
+                    f"[DEBUG COIN] ❌ Unexpected error processing layer {idx}: {type(e).__name__}: {e}"
+                )
+                print(f"[DEBUG COIN] layer_state: {layer_state}")
+                traceback.print_exc()
+                continue
+
+        print(f"[DEBUG COIN] Total coin quantity calculated: {total_quantity}")
         return total_quantity
 
     def on_message(self, ws, message):
+        print(f"[DEBUG NET] on_message() called, acquiring mutex...")
         with self.game_state.mutex:
+            print(f"[DEBUG NET] Mutex acquired, parsing message...")
             try:
                 data = json.loads(message)
                 message_type = data.get("type")
+                print(f"[DEBUG NET] Message type: {message_type}")
                 self.game_state.download_size_bytes += len(message)
 
                 if message_type == "init_data":
+                    print("[DEBUG NET] Processing init_data...")
                     payload_data = data.get("payload", {})
                     payload = from_dict_generic(payload_data, InitPayload)
 
@@ -487,15 +547,22 @@ class NetworkClient:
                     self.game_state.bots = new_bots
 
             except json.JSONDecodeError as e:
-                with self.game_state.mutex:
-                    self.game_state.last_error_message = f"JSON Decode Error: {e}"
-                    self.game_state.error_display_time = time.time()
-                print(f"JSON Decode Error: {e}")
+                self.game_state.last_error_message = f"JSON Decode Error: {e}"
+                self.game_state.error_display_time = time.time()
+                print(f"[DEBUG NET] ❌ JSON Decode Error: {e}")
+                print("\n--- Full Traceback ---")
+                traceback.print_exc()
+                print("----------------------\n")
             except Exception as e:
-                with self.game_state.mutex:
-                    self.game_state.last_error_message = f"Error: {e}"
-                    self.game_state.error_display_time = time.time()
-                print(f"Error: {e}")
+                self.game_state.last_error_message = f"Error: {e}"
+                self.game_state.error_display_time = time.time()
+                print(
+                    f"[DEBUG NET] ❌ Exception in on_message: {type(e).__name__}: {e}"
+                )
+                print("\n--- Full Traceback ---")
+                traceback.print_exc()
+                print("----------------------\n")
+        print("[DEBUG NET] on_message() completed, mutex released")
 
     def send_item_activation(self, item_id: str, is_active: bool):
         """Send item activation state to the server"""
@@ -574,10 +641,52 @@ class NetworkClient:
             self._last_frame_time = now
 
             # Process any pending texture caching requests from the network thread
-            self.obj_layers_mgr.process_texture_caching_queue()
+            print(
+                f"[DEBUG] Before process_texture_caching_queue. Queue size: {self.obj_layers_mgr.texture_caching_queue.qsize()}"
+            )
+            print(f"[DEBUG] Current time before processing: {now}")
+            print(f"[DEBUG] Delta time (dt): {dt}")
 
+            try:
+                print("[DEBUG] Starting process_texture_caching_queue()...")
+                self.obj_layers_mgr.process_texture_caching_queue()
+                print(
+                    f"[DEBUG] After process_texture_caching_queue. Success. Remaining queue size: {self.obj_layers_mgr.texture_caching_queue.qsize()}"
+                )
+                print(
+                    "[DEBUG] Texture processing completed successfully, continuing game loop..."
+                )
+            except Exception as e:
+                # 🔴 Unexpected: Catch any other error that might happen
+                # Print the simple error type and message
+                print(f"❌ Unexpected Error during texture caching processing!")
+                print(f"Error Type: {type(e).__name__}")
+                print(f"Error Message: {e}")
+                # Print the full stack trace (the "real" error)
+                print("\n--- Full Traceback ---")
+                traceback.print_exc()
+                print("----------------------\n")
+                # Print relevant debug values if a freeze occurs
+                print(f"[DEBUG] Current time: {now}")
+                print(f"[DEBUG] Delta time (dt): {dt}")
+                print(
+                    f"[DEBUG] Last frame time (_last_frame_time): {self._last_frame_time}"
+                )
+                print(f"[DEBUG] Is running: {self.is_running}")
+                print(
+                    f"[DEBUG] Queue size at error: {self.obj_layers_mgr.texture_caching_queue.qsize()}"
+                )
+                # You might want to add more specific state variables related to texture caching or the manager here
+                # For example:
+                # print(f"[DEBUG] obj_layers_mgr state: {self.obj_layers_mgr.__dict__}")
+                # Consider adding a mechanism to gracefully exit or log to a file
+                # For now, just re-raise to ensure the program terminates or the error is noticed.
+                raise  # Re-raise the exception to prevent silent freezes
+
+            print("[DEBUG] Starting mouse input processing...")
             # read mouse input early (for UI hit testing)
             mouse_pos = pr.get_mouse_position()
+            print(f"[DEBUG] Mouse position obtained: ({mouse_pos.x}, {mouse_pos.y})")
             mouse_pressed = pr.is_mouse_button_pressed(
                 pr.MOUSE_LEFT_BUTTON
             )  # down this frame
@@ -585,17 +694,24 @@ class NetworkClient:
             mouse_released = pr.is_mouse_button_released(
                 pr.MOUSE_LEFT_BUTTON
             )  # released this frame
+            print(
+                f"[DEBUG] Mouse state: pressed={mouse_pressed}, down={mouse_down}, released={mouse_released}"
+            )
 
             consumed_click = False
+            print("[DEBUG] Mouse input processing completed")
 
+            print("[DEBUG] Starting HUD processing...")
             # clear temporary ignore if timeout passed
             if (
                 self.hud._ignore_next_hud_click
                 and (now - self.hud._last_toggle_time) > self.hud._toggle_ignore_timeout
             ):
                 self.hud._ignore_next_hud_click = False
+            print("[DEBUG] HUD ignore check completed")
 
             # animate HUD slide progress toward target
+            print("[DEBUG] Starting HUD animation...")
             if abs(self.hud.slide_progress - self.hud.slide_target) > 0.0001:
                 direction = (
                     1.0 if self.hud.slide_target > self.hud.slide_progress else -1.0
@@ -608,17 +724,21 @@ class NetworkClient:
                     self.hud.slide_progress = 1.0
                 # update collapsed state when animation reaches ends
                 self.hud.collapsed = True if self.hud.slide_progress >= 0.999 else False
+            print("[DEBUG] HUD animation completed")
 
             # HUD BAR DRAG/CLICK handling:
+            print("[DEBUG] Starting HUD drag/click handling...")
             hx, hy, hw, hh = self.hud._hud_bar_rect(
                 self.screen_width, self.screen_height
             )
+            print(f"[DEBUG] HUD bar rect: x={hx}, y={hy}, w={hw}, h={hh}")
             in_hud_area = (
                 mouse_pos.x >= hx
                 and mouse_pos.x <= hx + hw
                 and mouse_pos.y >= hy
                 and mouse_pos.y <= hy + hh
             )
+            print(f"[DEBUG] In HUD area: {in_hud_area}")
 
             # start drag if pressed inside hud area (only when hud visible) and not ignoring due to toggle
             if (
@@ -634,6 +754,7 @@ class NetworkClient:
                 consumed_click = (
                     True  # pressing on hud consumes click so it won't pass to world
                 )
+            print(f"[DEBUG] HUD drag started: {self.hud.dragging}")
 
             # if dragging, update scroll while mouse held
             if self.hud.dragging and mouse_down:
@@ -642,13 +763,16 @@ class NetworkClient:
                     self.hud.drag_moved = True
                 self.hud.scroll_x = self.hud.scroll_start + delta
                 consumed_click = True
+            print(f"[DEBUG] HUD dragging update completed")
 
             # on release finalize: if it was a short click (no movement) treat as click on item
             if self.hud.dragging and mouse_released:
+                print("[DEBUG] Processing HUD drag release...")
                 # compute hovered item and layout by calling draw_hud_bar (cheap)
                 hovered_index, total_w, inner_w = self.hud.draw_hud_bar(
                     mouse_pos, self.screen_width, self.screen_height
                 )
+                print(f"[DEBUG] draw_hud_bar completed: hovered_index={hovered_index}")
                 max_scroll = max(0, total_w - inner_w)
                 # clamp
                 if self.hud.scroll_x > 0:
@@ -692,14 +816,18 @@ class NetworkClient:
                 # after release, clear the temporary ignore (if set) to allow normal clicks next frames
                 if self.hud._ignore_next_hud_click:
                     self.hud._ignore_next_hud_click = False
+            print("[DEBUG] HUD drag/click handling completed")
 
             # Sub-HUD input handling (drag, scroll, click)
+            print("[DEBUG] Starting Sub-HUD input handling...")
             if not consumed_click:
                 consumed_click = self.hud.sub_hud.handle_input(
                     mouse_pos, mouse_pressed, mouse_down, mouse_released
                 )
+            print("[DEBUG] Sub-HUD input handling completed")
 
             # If view open, check close button pressed (top-right inside view area)
+            print("[DEBUG] Starting view close button check...")
             if (
                 self.hud.view_open
                 and self.hud.view_selected is not None
@@ -764,8 +892,10 @@ class NetworkClient:
                         # clicks anywhere inside view area (except hud_bar) should not pass to world
                         if not consumed_click:
                             consumed_click = True
+            print("[DEBUG] View close button check completed")
 
             # HUD toggle button click (handle is separate from hud area)
+            print("[DEBUG] Starting HUD toggle button check...")
             if mouse_pressed and self.hud.toggle_rect:
                 bx, by, bw, bh = self.hud.toggle_rect
                 if (
@@ -784,8 +914,10 @@ class NetworkClient:
                     # ensure we don't accidentally start a drag in same frame
                     self.hud.dragging = False
                     self.hud.drag_moved = False
+            print("[DEBUG] HUD toggle button check completed")
 
             # If view open, check close button pressed (top-right inside view area)
+            print("[DEBUG] Starting second view close button check...")
             if (
                 self.hud.view_open
                 and self.hud.view_selected is not None
@@ -834,8 +966,10 @@ class NetworkClient:
                         # clicks anywhere inside view area (except hud_bar) should not pass to world
                         if not consumed_click:
                             consumed_click = True
+            print("[DEBUG] Second view close button check completed")
 
             # If not consumed by UI, handle world click for movement
+            print("[DEBUG] Starting world click handling...")
             if not consumed_click and mouse_pressed:
                 try:
                     world_pos = pr.get_screen_to_world_2d(
@@ -858,10 +992,20 @@ class NetworkClient:
                     )
                     # client-side click pointer effect
                     self.click_effect.add_click_pointer(world_pos)
-                except Exception:
-                    pass
+                except Exception as e:
+                    # 🔴 Unexpected: Catch any other error that might happen
+                    # Print the simple error type and message
+                    print(f"❌ Unexpected Error during world click handling!")
+                    print(f"Error Type: {type(e).__name__}")
+                    print(f"Error Message: {e}")
+                    # Print the full stack trace (the "real" error)
+                    print("\n--- Full Traceback ---")
+                    traceback.print_exc()
+                    print("----------------------\n")
+            print("[DEBUG] World click handling completed")
 
             # bandwidth
+            print("[DEBUG] Starting bandwidth calculation...")
             current_time = time.time()
             if current_time - last_download_check_time >= 1:
                 with self.game_state.mutex:
@@ -874,12 +1018,16 @@ class NetworkClient:
                     self.game_state.download_size_bytes = 0
                     self.game_state.upload_size_bytes = 0
                 last_download_check_time = current_time
+            print("[DEBUG] Bandwidth calculation completed")
 
             # interpolation (player + entities)
+            print("[DEBUG] Starting interpolation...")
             self.entity_player_render.interpolate_player_position()
             self.entity_render.interpolate_entities_positions()
+            print("[DEBUG] Interpolation completed")
 
             # camera smoothing: compute desired world target and smooth camera.target to it
+            print("[DEBUG] Starting camera smoothing...")
             try:
                 cell_size = (
                     self.game_state.cell_size if self.game_state.cell_size > 0 else 12.0
@@ -931,9 +1079,22 @@ class NetworkClient:
                         self.game_state.camera.offset = pr.Vector2(
                             self.screen_width / 2, self.screen_height / 2
                         )
-                    except Exception:
-                        pass
-                except Exception:
+                    except Exception as e:
+                        # 🔴 Unexpected: Catch any other error that might happen
+                        print(f"❌ Unexpected Error setting camera offset directly!")
+                        print(f"Error Type: {type(e).__name__}")
+                        print(f"Error Message: {e}")
+                        print("\n--- Full Traceback ---")
+                        traceback.print_exc()
+                        print("----------------------\n")
+                except Exception as e:
+                    # 🔴 Unexpected: Catch any other error that might happen
+                    print(f"❌ Unexpected Error setting camera target directly!")
+                    print(f"Error Type: {type(e).__name__}")
+                    print(f"Error Message: {e}")
+                    print("\n--- Full Traceback ---")
+                    traceback.print_exc()
+                    print("----------------------\n")
                     # in some bindings camera fields are attributes directly accessible; attempt attribute set
                     try:
                         setattr(
@@ -947,19 +1108,49 @@ class NetworkClient:
                                     self.screen_width / 2, self.screen_height / 2
                                 ),
                             )
-                        except Exception:
-                            pass
-                    except Exception:
-                        pass
-            except Exception:
-                pass
+                        except Exception as e:
+                            # 🔴 Unexpected: Catch any other error that might happen
+                            print(
+                                f"❌ Unexpected Error setting camera offset via setattr fallback!"
+                            )
+                            print(f"Error Type: {type(e).__name__}")
+                            print(f"Error Message: {e}")
+                            print("\n--- Full Traceback ---")
+                            traceback.print_exc()
+                            print("----------------------\n")
+                    except Exception as e:
+                        # 🔴 Unexpected: Catch any other error that might happen
+                        print(
+                            f"❌ Unexpected Error setting camera target via setattr fallback!"
+                        )
+                        print(f"Error Type: {type(e).__name__}")
+                        print(f"Error Message: {e}")
+                        print("\n--- Full Traceback ---")
+                        traceback.print_exc()
+                        print("----------------------\n")
+            except Exception as e:
+                # 🔴 Unexpected: Catch any other error that might happen
+                print(f"❌ Unexpected Error during camera smoothing calculation!")
+                print(f"Error Type: {type(e).__name__}")
+                print(f"Error Message: {e}")
+                print("\n--- Full Traceback ---")
+                traceback.print_exc()
+                print("----------------------\n")
+            print("[DEBUG] Camera smoothing completed")
 
             # update client-side effects
+            print("[DEBUG] Starting client-side effects update...")
             self.click_effect.update_click_pointers()
+            print("[DEBUG] Click effects updated")
             self.floating_text_manager.update(dt)
+            print("[DEBUG] Floating text updated")
+            print("[DEBUG] Client-side effects update completed")
 
             # draw
+            print("[DEBUG] Starting render_core.draw_game()...")
             self.render_core.draw_game()
+            print("[DEBUG] render_core.draw_game() completed")
+            print(f"[DEBUG] ===== FRAME COMPLETED (dt={dt:.4f}s) =====\n")
 
         print("Closing WebSocket...")
         if self.ws:

@@ -1,8 +1,10 @@
-import time
-import pyray as pr
 import math
-from dataclasses import is_dataclass, asdict
+import time
+from dataclasses import asdict, is_dataclass
 from typing import Any, Dict
+
+import pyray as pr
+
 from src.object_layer.object_layer import Direction, ObjectLayerMode
 
 
@@ -56,7 +58,19 @@ class EntityRender:
         Smoothly interpolate positions for other_players and bots using pos_prev -> pos_server
         and the same interpolation time window used for player (interpolation_ms).
         """
-        with self.game_state.mutex:
+        print(
+            "[DEBUG INTERP] interpolate_entities_positions() called, attempting to acquire mutex..."
+        )
+        # Try to acquire mutex with timeout to prevent indefinite freeze
+        acquired = self.game_state.mutex.acquire(timeout=0.1)
+        if not acquired:
+            print(
+                "[DEBUG INTERP] ⚠️ WARNING: Could not acquire mutex for entities interpolation (timeout), skipping this frame"
+            )
+            return
+
+        try:
+            print("[DEBUG INTERP] Mutex acquired for entities interpolation")
             interp_ms = (
                 self.game_state.interpolation_ms
                 if self.game_state.interpolation_ms > 0
@@ -64,9 +78,29 @@ class EntityRender:
             )
             max_dt = interp_ms / 1000.0
             now = time.time()
+            print(
+                f"[DEBUG INTERP] Entities interpolation: interp_ms={interp_ms}, max_dt={max_dt:.4f}"
+            )
+
+            # Check if other_players exists
+            if not self.game_state.other_players:
+                self.game_state.other_players = {}
 
             # other players
+            num_other_players = len(self.game_state.other_players)
+            print(f"[DEBUG INTERP] Processing {num_other_players} other players...")
             for pid, entry in list(self.game_state.other_players.items()):
+                if not entry:
+                    print(
+                        f"[DEBUG INTERP] ⚠️ WARNING: Player entry {pid} is None, skipping"
+                    )
+                    continue
+                if not entry.pos_prev or not entry.pos_server:
+                    print(
+                        f"[DEBUG INTERP] ⚠️ WARNING: Player {pid} positions not initialized, skipping"
+                    )
+                    continue
+
                 last_update = entry.last_update
                 # compute factor relative to when server pos was set
                 dt = now - last_update
@@ -76,12 +110,35 @@ class EntityRender:
                 try:
                     nx = pr.lerp(a.x, b.x, factor)
                     ny = pr.lerp(a.y, b.y, factor)
-                except Exception:
+                except Exception as e:
+                    print(
+                        f"[DEBUG INTERP] ⚠️ WARNING: lerp failed for player {pid}: {e}"
+                    )
                     nx, ny = b.x, b.y
                 entry.interp_pos = pr.Vector2(nx, ny)
+            print(
+                f"[DEBUG INTERP] Completed interpolation for {num_other_players} other players"
+            )
+
+            # Check if bots exists
+            if not self.game_state.bots:
+                self.game_state.bots = {}
 
             # bots
+            num_bots = len(self.game_state.bots)
+            print(f"[DEBUG INTERP] Processing {num_bots} bots...")
             for bid, entry in list(self.game_state.bots.items()):
+                if not entry:
+                    print(
+                        f"[DEBUG INTERP] ⚠️ WARNING: Bot entry {bid} is None, skipping"
+                    )
+                    continue
+                if not entry.pos_prev or not entry.pos_server:
+                    print(
+                        f"[DEBUG INTERP] ⚠️ WARNING: Bot {bid} positions not initialized, skipping"
+                    )
+                    continue
+
                 last_update = entry.last_update
                 dt = now - last_update
                 factor = 1.0 if max_dt <= 0 else min(1.0, dt / max_dt)
@@ -90,9 +147,21 @@ class EntityRender:
                 try:
                     nx = pr.lerp(a.x, b.x, factor)
                     ny = pr.lerp(a.y, b.y, factor)
-                except Exception:
+                except Exception as e:
+                    print(f"[DEBUG INTERP] ⚠️ WARNING: lerp failed for bot {bid}: {e}")
                     nx, ny = b.x, b.y
                 entry.interp_pos = pr.Vector2(nx, ny)
+            print(f"[DEBUG INTERP] Completed interpolation for {num_bots} bots")
+            print("[DEBUG INTERP] Entities interpolation completed, releasing mutex")
+        except Exception as e:
+            print(
+                f"[DEBUG INTERP] ❌ ERROR in interpolate_entities_positions: {type(e).__name__}: {e}"
+            )
+            import traceback
+
+            traceback.print_exc()
+        finally:
+            self.game_state.mutex.release()
 
     def get_entity_active_stats_sum(self, entity_id: str) -> int:
         if not entity_id:

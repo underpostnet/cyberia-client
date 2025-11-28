@@ -1,4 +1,5 @@
 import ctypes
+
 import pyray as pr
 
 
@@ -286,81 +287,125 @@ class RenderCore:
                 )
 
     def draw_game(self):
+        print("[DEBUG RENDER] draw_game() started")
         bg = self.client.game_state.colors.get("BACKGROUND", pr.Color(30, 30, 30, 255))
+        print("[DEBUG RENDER] Got background color")
         pr.begin_drawing()
+        print("[DEBUG RENDER] begin_drawing() called")
         pr.clear_background(bg)
+        print("[DEBUG RENDER] clear_background() called")
 
         # ensure camera offset centered as a good practice before BeginMode2D
+        print("[DEBUG RENDER] Setting up camera...")
         try:
             if self.client.game_state.camera:
                 try:
                     self.client.game_state.camera.offset = pr.Vector2(
                         self.client.screen_width / 2, self.client.screen_height / 2
                     )
+                    print("[DEBUG RENDER] Camera offset set")
                 except Exception:
+                    print("[DEBUG RENDER] Failed to set camera offset")
                     pass
+            print("[DEBUG RENDER] Calling begin_mode_2d()...")
             pr.begin_mode_2d(self.client.game_state.camera)
-        except Exception:
+            print("[DEBUG RENDER] begin_mode_2d() completed")
+        except Exception as e:
             # If begin_mode_2d fails, skip world transforms to avoid crash
+            print(f"[DEBUG RENDER] begin_mode_2d() failed: {e}")
             pass
 
         # world drawing
+        print("[DEBUG RENDER] Drawing grid background...")
         self.client.grid_render.draw_grid_background()
+        print("[DEBUG RENDER] Drawing grid floors...")
         self.client.grid_render.draw_grid_floors()
+        print("[DEBUG RENDER] Drawing grid lines...")
         self.client.grid_render.draw_grid_lines()
+        print("[DEBUG RENDER] Drawing grid objects...")
         self.client.grid_render.draw_grid_objects()
+        print("[DEBUG RENDER] Drawing entities...")
         self.client.entity_render.draw_entities_sorted(
             self.client.entity_player_render, self.client.entity_bot_render
         )
+        print("[DEBUG RENDER] Drawing path...")
         self.draw_path()
         if self.client.game_state.dev_ui:
+            print("[DEBUG RENDER] Drawing AOI circle...")
             self.draw_aoi_circle()
+        print("[DEBUG RENDER] Drawing foregrounds...")
         self.draw_foregrounds()
+        print("[DEBUG RENDER] Drawing click pointers...")
         self.client.click_effect.draw_click_pointers()  # client-only effect
+        print("[DEBUG RENDER] Drawing floating text...")
         self.client.floating_text_manager.draw()
+        print("[DEBUG RENDER] World drawing completed")
 
         try:
+            print("[DEBUG RENDER] Calling end_mode_2d()...")
             pr.end_mode_2d()
-        except Exception:
+            print("[DEBUG RENDER] end_mode_2d() completed")
+        except Exception as e:
+            print(f"[DEBUG RENDER] end_mode_2d() failed: {e}")
             pass
 
         # UI layer (screen coordinates)
+        print("[DEBUG RENDER] Getting mouse position for UI...")
         mouse_pos = pr.get_mouse_position()
+        print(f"[DEBUG RENDER] Mouse position: ({mouse_pos.x}, {mouse_pos.y})")
 
         # If view open: draw view area (above hud_bar). HUD bar will remain visible below.
+        print("[DEBUG RENDER] Checking if HUD view is open...")
         if self.client.hud.view_open and self.client.hud.view_selected is not None:
+            print("[DEBUG RENDER] Drawing HUD view...")
             self.client.hud.draw_hud_view(
                 self.client.screen_width, self.client.screen_height
             )
+            print("[DEBUG RENDER] HUD view drawn")
 
         # Sub-HUD bar (drawn on top of view, below main HUD)
+        print("[DEBUG RENDER] Drawing Sub-HUD...")
         self.client.hud.sub_hud.draw(
             mouse_pos, self.client.screen_width, self.client.screen_height
         )
+        print("[DEBUG RENDER] Sub-HUD drawn")
 
         # HUD bar (draw only if not fully hidden)
+        print("[DEBUG RENDER] Drawing HUD bar...")
         hovered_index, total_w, inner_w = self.client.hud.draw_hud_bar(
             mouse_pos, self.client.screen_width, self.client.screen_height
         )
+        print(f"[DEBUG RENDER] HUD bar drawn (hovered_index={hovered_index})")
 
         # Developer UI (if enabled by server) - now adjusted so it doesn't overlap HUD
+        print("[DEBUG RENDER] Checking dev UI...")
         if self.client.game_state.dev_ui and self.client.hud.view_selected is None:
+            print("[DEBUG RENDER] Drawing dev UI...")
             self.client.dev_ui.draw_dev_ui(
                 self.client.screen_width, self.client.screen_height
             )
+            print("[DEBUG RENDER] Dev UI drawn")
         elif (
             not self.client.game_state.dev_ui and self.client.hud.view_selected is None
         ):
+            print("[DEBUG RENDER] Drawing player location info...")
             self.draw_player_location_info()
+            print("[DEBUG RENDER] Player location info drawn")
 
         # Draw toggle *after* dev UI to ensure it is on top and clickable
+        print("[DEBUG RENDER] Drawing HUD toggle...")
         self.client.hud.draw_hud_toggle(
             mouse_pos, self.client.screen_width, self.client.screen_height
         )
+        print("[DEBUG RENDER] HUD toggle drawn")
 
         # draw any hud alerts
+        print("[DEBUG RENDER] Drawing HUD alerts...")
         self.client.hud.draw_hud_alert(
             self.client.screen_width, self.client.screen_height
         )
+        print("[DEBUG RENDER] HUD alerts drawn")
 
+        print("[DEBUG RENDER] Calling end_drawing()...")
         pr.end_drawing()
+        print("[DEBUG RENDER] draw_game() COMPLETED\n")
