@@ -110,16 +110,37 @@ void game_state_unlock(void) {
 #endif
 }
 
+/**
+ * Update position interpolation for all entities.
+ * 
+ * This function implements smooth position transitions to prevent flickering and jumps.
+ * It interpolates between pos_prev (last interpolated position) and pos_server (new position
+ * from server) over the interpolation_ms time window.
+ * 
+ * How it works:
+ * 1. When a new server position arrives:
+ *    - pos_server = new position from server
+ *    - pos_prev = current interp_pos (preserved in update functions)
+ *    - interp_pos = current interp_pos (no immediate jump)
+ * 
+ * 2. This function gradually moves interp_pos from pos_prev to pos_server:
+ *    - interp_factor starts at 0 (just after update) and grows to 1.0
+ *    - interp_pos = lerp(pos_prev, pos_server, interp_factor)
+ * 
+ * This creates smooth movement even when server updates are infrequent.
+ */
 void game_state_update_interpolation(float delta_time) {
     game_state_lock();
     
     double current_time = GetTime();
+    // Calculate interpolation factor based on time since last server update
     float interp_factor = g_game_state.interpolation_ms > 0 ? 
         (float)(current_time - g_game_state.last_update_time) * 1000.0f / g_game_state.interpolation_ms : 1.0f;
     
+    // Clamp to 1.0 to prevent overshooting
     if (interp_factor > 1.0f) interp_factor = 1.0f;
     
-    // Interpolate main player position
+    // Interpolate main player position (linear interpolation from prev to server position)
     g_game_state.player.base.interp_pos.x = g_game_state.player.base.pos_prev.x + 
         (g_game_state.player.base.pos_server.x - g_game_state.player.base.pos_prev.x) * interp_factor;
     g_game_state.player.base.interp_pos.y = g_game_state.player.base.pos_prev.y + 
@@ -173,12 +194,17 @@ int game_state_update_player(const PlayerState* player) {
     
     PlayerState* existing = game_state_find_player(player->base.id);
     if (existing) {
-        // Update existing player
+        // Update existing player - preserve interpolation state for smooth transitions
+        Vector2 prev_interp_pos = existing->base.interp_pos;
         *existing = *player;
+        // Set pos_prev to the last interpolated position (or current server pos if it's the same)
+        existing->base.pos_prev = prev_interp_pos;
+        // Keep interp_pos at its current value - interpolation will smoothly update it
+        existing->base.interp_pos = prev_interp_pos;
         return 0;
     }
     
-    // Add new player
+    // Add new player - no previous position, so use server position
     if (g_game_state.other_player_count >= MAX_ENTITIES) {
         printf("[GAME_STATE] Cannot add player, maximum entities reached\n");
         return -1;
@@ -194,12 +220,17 @@ int game_state_update_bot(const BotState* bot) {
     
     BotState* existing = game_state_find_bot(bot->base.id);
     if (existing) {
-        // Update existing bot
+        // Update existing bot - preserve interpolation state for smooth transitions
+        Vector2 prev_interp_pos = existing->base.interp_pos;
         *existing = *bot;
+        // Set pos_prev to the last interpolated position (or current server pos if it's the same)
+        existing->base.pos_prev = prev_interp_pos;
+        // Keep interp_pos at its current value - interpolation will smoothly update it
+        existing->base.interp_pos = prev_interp_pos;
         return 0;
     }
     
-    // Add new bot
+    // Add new bot - no previous position, so use server position
     if (g_game_state.bot_count >= MAX_ENTITIES) {
         printf("[GAME_STATE] Cannot add bot, maximum entities reached\n");
         return -1;

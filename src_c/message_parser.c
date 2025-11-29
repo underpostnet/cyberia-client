@@ -259,23 +259,34 @@ int message_parser_parse_init_data(const cJSON* json_root) {
 int message_parser_parse_visible_players(const cJSON* players_json) {
     if (!players_json) return 0;
 
-    // Clear existing other players
-    g_game_state.other_player_count = 0;
-
+    // Mark all existing players as not seen in this update
+    bool player_seen[MAX_ENTITIES] = {false};
+    
+    // Parse all visible players from server
     cJSON* player_obj = NULL;
     cJSON_ArrayForEach(player_obj, players_json) {
-        if (g_game_state.other_player_count >= MAX_ENTITIES) {
-            printf("[MESSAGE_PARSER] Max visible players reached\n");
-            break;
-        }
-
         PlayerState player;
         memset(&player, 0, sizeof(PlayerState));
 
         // Deserialize player as entity (VisiblePlayer is subset of PlayerState)
         if (serial_deserialize_entity_state(player_obj, &player.base) == 0) {
-            // Add to other players list
+            // Update or add player - this preserves smooth interpolation for existing players
             game_state_update_player(&player);
+            
+            // Mark this player as seen
+            for (int i = 0; i < g_game_state.other_player_count; i++) {
+                if (strcmp(g_game_state.other_players[i].base.id, player.base.id) == 0) {
+                    player_seen[i] = true;
+                    break;
+                }
+            }
+        }
+    }
+    
+    // Remove players that are no longer visible
+    for (int i = g_game_state.other_player_count - 1; i >= 0; i--) {
+        if (!player_seen[i]) {
+            game_state_remove_player(g_game_state.other_players[i].base.id);
         }
     }
 
@@ -285,21 +296,33 @@ int message_parser_parse_visible_players(const cJSON* players_json) {
 int message_parser_parse_visible_bots(const cJSON* bots_json) {
     if (!bots_json) return 0;
 
-    // Clear existing bots
-    g_game_state.bot_count = 0;
+    // Mark all existing bots as not seen in this update
+    bool bot_seen[MAX_ENTITIES] = {false};
 
+    // Parse all visible bots from server
     cJSON* bot_obj = NULL;
     cJSON_ArrayForEach(bot_obj, bots_json) {
-        if (g_game_state.bot_count >= MAX_ENTITIES) {
-            printf("[MESSAGE_PARSER] Max visible bots reached\n");
-            break;
-        }
-
         BotState bot;
         memset(&bot, 0, sizeof(BotState));
 
         if (serial_deserialize_bot_state(bot_obj, &bot) == 0) {
+            // Update or add bot - this preserves smooth interpolation for existing bots
             game_state_update_bot(&bot);
+            
+            // Mark this bot as seen
+            for (int i = 0; i < g_game_state.bot_count; i++) {
+                if (strcmp(g_game_state.bots[i].base.id, bot.base.id) == 0) {
+                    bot_seen[i] = true;
+                    break;
+                }
+            }
+        }
+    }
+    
+    // Remove bots that are no longer visible
+    for (int i = g_game_state.bot_count - 1; i >= 0; i--) {
+        if (!bot_seen[i]) {
+            game_state_remove_bot(g_game_state.bots[i].base.id);
         }
     }
 
@@ -420,11 +443,21 @@ int message_parser_parse_aoi_update(const cJSON* json_root) {
         memset(&player, 0, sizeof(PlayerState));
 
         if (serial_deserialize_player_state(player_obj, &player) == 0) {
+            // Preserve previous interpolated position for smooth transitions
+            Vector2 prev_interp_pos = g_game_state.player.base.interp_pos;
+            bool first_update = (g_game_state.player_id[0] == '\0');
+            
             // Update main player state
             memcpy(&g_game_state.player, &player, sizeof(PlayerState));
 
+            // If not first update, set pos_prev to last interpolated position
+            if (!first_update) {
+                g_game_state.player.base.pos_prev = prev_interp_pos;
+                g_game_state.player.base.interp_pos = prev_interp_pos;
+            }
+
             // Store player ID if not set
-            if (g_game_state.player_id[0] == '\0') {
+            if (first_update) {
                 strncpy(g_game_state.player_id, player.base.id, sizeof(g_game_state.player_id) - 1);
             }
         }
@@ -439,12 +472,15 @@ int message_parser_parse_aoi_update(const cJSON* json_root) {
     // Parse visible grid objects - this is a FLAT dictionary where each object has a "Type" field
     cJSON* visible_grid_objects = serial_get_object(payload, "visibleGridObjects");
     if (visible_grid_objects) {
-        // Clear all grid object collections first
+        // Clear all grid object collections first (non-entity objects)
         g_game_state.obstacle_count = 0;
         g_game_state.portal_count = 0;
         g_game_state.floor_count = 0;
         g_game_state.foreground_count = 0;
-        g_game_state.bot_count = 0;
+        
+        // Note: bot_count is managed by game_state_update_bot() to preserve smooth interpolation
+        // Mark all existing bots as not seen in this update
+        bool bot_seen[MAX_ENTITIES] = {false};
 
         // Iterate through all objects in the flat dictionary (it's an object, not an array)
         // In cJSON, for {"id1": {...}, "id2": {...}}, child points to first key-value pair
@@ -567,19 +603,33 @@ int message_parser_parse_aoi_update(const cJSON* json_root) {
                 }
             }
             else if (strcmp(obj_type, "bot") == 0) {
-                if (g_game_state.bot_count < MAX_ENTITIES) {
-                    // Parse bot
-                    BotState bot;
-                    memset(&bot, 0, sizeof(BotState));
+                // Parse bot
+                BotState bot;
+                memset(&bot, 0, sizeof(BotState));
+                
+                if (serial_deserialize_bot_state(obj, &bot) == 0) {
+                    // Update or add bot - preserves smooth interpolation for existing bots
+                    game_state_update_bot(&bot);
                     
-                    if (serial_deserialize_bot_state(obj, &bot) == 0) {
-                        game_state_update_bot(&bot);
+                    // Mark this bot as seen
+                    for (int i = 0; i < g_game_state.bot_count; i++) {
+                        if (strcmp(g_game_state.bots[i].base.id, bot.base.id) == 0) {
+                            bot_seen[i] = true;
+                            break;
+                        }
                     }
                 }
             }
             
             // Move to next object in the dictionary
             obj = obj->next;
+        }
+        
+        // Remove bots that are no longer visible
+        for (int i = g_game_state.bot_count - 1; i >= 0; i--) {
+            if (!bot_seen[i]) {
+                game_state_remove_bot(g_game_state.bots[i].base.id);
+            }
         }
     }
 
