@@ -15,8 +15,8 @@
  * Production: "wss://server.cyberiaonline.com/ws"
  * Development: "ws://localhost:8080/ws"
  */
-// const char* WS_URL = "wss://server.cyberiaonline.com/ws";
-const char* WS_URL = "ws://localhost:8080/ws";
+const char* WS_URL = "wss://server.cyberiaonline.com/ws";
+// const char* WS_URL = "ws://localhost:8080/ws";
 
 // ============================================================================
 // API Configuration
@@ -28,8 +28,8 @@ const char* WS_URL = "ws://localhost:8080/ws";
  * Production: "https://server.cyberiaonline.com/api/v1"
  * Development: "http://localhost:8080/api/v1"
  */
-// const char* API_BASE_URL = "https://server.cyberiaonline.com/api/v1";
-const char* API_BASE_URL = "http://localhost:8080/api/v1";
+const char* API_BASE_URL = "https://server.cyberiaonline.com/api/v1";
+// const char* API_BASE_URL = "http://localhost:8080/api/v1";
 
 // ============================================================================
 // Assets Configuration
@@ -41,8 +41,8 @@ const char* API_BASE_URL = "http://localhost:8080/api/v1";
  * Production: "https://server.cyberiaonline.com/assets"
  * Development: "http://localhost:8080/assets"
  */
-// const char* ASSETS_BASE_URL = "https://server.cyberiaonline.com/assets";
-const char* ASSETS_BASE_URL = "http://localhost:8080/assets";
+const char* ASSETS_BASE_URL = "https://server.cyberiaonline.com/assets";
+// const char* ASSETS_BASE_URL = "http://localhost:8080/assets";
 
 // ============================================================================
 // Game Configuration
