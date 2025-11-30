@@ -235,14 +235,36 @@ void game_render_floors(void) {
     for (int i = 0; i < g_game_state.floor_count; i++) {
         WorldObject* floor = &g_game_state.floors[i];
 
-        Rectangle rect = {
-            floor->pos.x * cell_size,
-            floor->pos.y * cell_size,
-            floor->dims.x * cell_size,
-            floor->dims.y * cell_size
-        };
+        if (floor->object_layer_count > 0) {
+            ObjectLayerState* layers[MAX_OBJECT_LAYERS];
+            for (int j = 0; j < floor->object_layer_count; j++) {
+                layers[j] = &floor->object_layers[j];
+            }
 
-        DrawRectangleRec(rect, g_game_state.colors.floor_background);
+            draw_entity_layers(
+                g_entity_render,
+                floor->id,
+                floor->pos.x,
+                floor->pos.y,
+                floor->dims.x,
+                floor->dims.y,
+                DIRECTION_NONE,
+                MODE_IDLE,
+                layers,
+                floor->object_layer_count,
+                "floor",
+                g_game_state.dev_ui,
+                cell_size
+            );
+        } else {
+            Rectangle rect = {
+                floor->pos.x * cell_size,
+                floor->pos.y * cell_size,
+                floor->dims.x * cell_size,
+                floor->dims.y * cell_size
+            };
+            DrawRectangleRec(rect, g_game_state.colors.floor_background);
+        }
     }
 
     game_state_unlock();
@@ -257,28 +279,72 @@ void game_render_world_objects(void) {
     for (int i = 0; i < g_game_state.obstacle_count; i++) {
         WorldObject* obj = &g_game_state.obstacles[i];
 
-        Rectangle rect = {
-            obj->pos.x * cell_size,
-            obj->pos.y * cell_size,
-            obj->dims.x * cell_size,
-            obj->dims.y * cell_size
-        };
+        if (obj->object_layer_count > 0) {
+            ObjectLayerState* layers[MAX_OBJECT_LAYERS];
+            for (int j = 0; j < obj->object_layer_count; j++) {
+                layers[j] = &obj->object_layers[j];
+            }
 
-        DrawRectangleRec(rect, g_game_state.colors.obstacle);
+            draw_entity_layers(
+                g_entity_render,
+                obj->id,
+                obj->pos.x,
+                obj->pos.y,
+                obj->dims.x,
+                obj->dims.y,
+                DIRECTION_NONE,
+                MODE_IDLE,
+                layers,
+                obj->object_layer_count,
+                "obstacle",
+                g_game_state.dev_ui,
+                cell_size
+            );
+        } else {
+            Rectangle rect = {
+                obj->pos.x * cell_size,
+                obj->pos.y * cell_size,
+                obj->dims.x * cell_size,
+                obj->dims.y * cell_size
+            };
+            DrawRectangleRec(rect, g_game_state.colors.obstacle);
+        }
     }
 
     // Render portals
     for (int i = 0; i < g_game_state.portal_count; i++) {
         WorldObject* portal = &g_game_state.portals[i];
 
-        Rectangle rect = {
-            portal->pos.x * cell_size,
-            portal->pos.y * cell_size,
-            portal->dims.x * cell_size,
-            portal->dims.y * cell_size
-        };
+        if (portal->object_layer_count > 0) {
+            ObjectLayerState* layers[MAX_OBJECT_LAYERS];
+            for (int j = 0; j < portal->object_layer_count; j++) {
+                layers[j] = &portal->object_layers[j];
+            }
 
-        DrawRectangleRec(rect, g_game_state.colors.portal);
+            draw_entity_layers(
+                g_entity_render,
+                portal->id,
+                portal->pos.x,
+                portal->pos.y,
+                portal->dims.x,
+                portal->dims.y,
+                DIRECTION_NONE,
+                MODE_IDLE,
+                layers,
+                portal->object_layer_count,
+                "portal",
+                g_game_state.dev_ui,
+                cell_size
+            );
+        } else {
+            Rectangle rect = {
+                portal->pos.x * cell_size,
+                portal->pos.y * cell_size,
+                portal->dims.x * cell_size,
+                portal->dims.y * cell_size
+            };
+            DrawRectangleRec(rect, g_game_state.colors.portal);
+        }
     }
 
     game_state_unlock();
@@ -293,14 +359,36 @@ void game_render_foregrounds(void) {
     for (int i = 0; i < g_game_state.foreground_count; i++) {
         WorldObject* fg = &g_game_state.foregrounds[i];
 
-        Rectangle rect = {
-            fg->pos.x * cell_size,
-            fg->pos.y * cell_size,
-            fg->dims.x * cell_size,
-            fg->dims.y * cell_size
-        };
+        if (fg->object_layer_count > 0) {
+            ObjectLayerState* layers[MAX_OBJECT_LAYERS];
+            for (int j = 0; j < fg->object_layer_count; j++) {
+                layers[j] = &fg->object_layers[j];
+            }
 
-        DrawRectangleRec(rect, g_game_state.colors.foreground);
+            draw_entity_layers(
+                g_entity_render,
+                fg->id,
+                fg->pos.x,
+                fg->pos.y,
+                fg->dims.x,
+                fg->dims.y,
+                DIRECTION_NONE,
+                MODE_IDLE,
+                layers,
+                fg->object_layer_count,
+                "foreground",
+                g_game_state.dev_ui,
+                cell_size
+            );
+        } else {
+            Rectangle rect = {
+                fg->pos.x * cell_size,
+                fg->pos.y * cell_size,
+                fg->dims.x * cell_size,
+                fg->dims.y * cell_size
+            };
+            DrawRectangleRec(rect, g_game_state.colors.foreground);
+        }
     }
 
     game_state_unlock();
