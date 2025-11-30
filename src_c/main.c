@@ -1,10 +1,14 @@
 #include "render.h"
 #include "client.h"
+#include "config.h"
 #include <stdio.h>
 #include <stdlib.h>
 
 #if defined(PLATFORM_WEB)
     #include <emscripten/emscripten.h>
+    
+    // External JavaScript function to set configuration (defined in js/services.js)
+    extern void js_set_config(const char* api_url, const char* assets_url);
 #endif
 
 // Application configuration
@@ -24,6 +28,13 @@ static struct {
 // Initialize all subsystems
 static int init_app(void) {
     printf("[INIT] Cyberia Client - Starting initialization...\n");
+
+#if defined(PLATFORM_WEB)
+    // Synchronize JavaScript configuration with C config
+    printf("[INIT] Step 0 - Synchronizing JavaScript configuration...\n");
+    js_set_config(API_BASE_URL, ASSETS_BASE_URL);
+    printf("[INIT] JavaScript config synchronized (API: %s)\n", API_BASE_URL);
+#endif
 
     // Initialize rendering subsystem
     printf("[INIT] Step 1/2 - Initializing renderer...\n");

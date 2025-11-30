@@ -82,35 +82,33 @@ typedef struct {
 } Item;
 
 // Render frames structure (simplified for C)
+// Stores the count of frames for each animation state.
+// The actual frame data (3D matrices) is not stored here as we fetch textures.
 typedef struct {
-    int***  up_idle;
-    int***  down_idle;
-    int***  right_idle;
-    int***  left_idle;
-    int***  up_right_idle;
-    int***  down_right_idle;
-    int***  up_left_idle;
-    int***  down_left_idle;
-    int***  default_idle;
-    int***  up_walking;
-    int***  down_walking;
-    int***  right_walking;
-    int***  left_walking;
-    int***  up_right_walking;
-    int***  down_right_walking;
-    int***  up_left_walking;
-    int***  down_left_walking;
-    int***  none_idle;
-    int frame_width;
-    int frame_height;
-    int frame_count;
+    int up_idle_count;
+    int down_idle_count;
+    int right_idle_count;
+    int left_idle_count;
+    int up_right_idle_count;
+    int down_right_idle_count;
+    int up_left_idle_count;
+    int down_left_idle_count;
+    int default_idle_count;
+    int up_walking_count;
+    int down_walking_count;
+    int right_walking_count;
+    int left_walking_count;
+    int up_right_walking_count;
+    int down_right_walking_count;
+    int up_left_walking_count;
+    int down_left_walking_count;
+    int none_idle_count;
 } RenderFrames;
 
 // Render structure
 typedef struct {
     RenderFrames frames;
-    int** colors;
-    int color_count;
+    // colors omitted for now as we use textures
     int frame_duration;
     bool is_stateless;
 } Render;

@@ -6,24 +6,123 @@
  * @brief Configuration file for the Cyberia client
  *
  * This file contains all configuration constants and settings
- * for the client application.
+ * for the client application including network URLs, cache sizes,
+ * and animation parameters.
  */
+
+// ============================================================================
+// WebSocket Configuration
+// ============================================================================
+
+/**
+ * @brief WebSocket server URL
+ *
+ * The URL of the WebSocket server to connect to for real-time updates.
+ * Format: ws://host:port/path or wss://host:port/path for secure connection
+ *
+ * Examples:
+ *   - Local development: "ws://localhost:8080/ws"
+ *   - Production: "wss://server.cyberiaonline.com/ws"
+ */
+extern const char* WS_URL;
+
+// ============================================================================
+// API Configuration
+// ============================================================================
+
+/**
+ * @brief REST API base URL
+ *
+ * The base URL for REST API calls used to fetch object layers,
+ * item data, and other game information.
+ *
+ * Examples:
+ *   - Local development: "http://localhost:8080/api/v1"
+ *   - Production: "https://server.cyberiaonline.com/api/v1"
+ */
+extern const char* API_BASE_URL;
+
+// ============================================================================
+// Assets Configuration
+// ============================================================================
+
+/**
+ * @brief Assets server base URL
+ *
+ * The base URL for fetching textures, images, and other static assets.
+ * Used to construct URLs for entity skins, weapons, and other visual elements.
+ *
+ * Examples:
+ *   - Local development: "http://localhost:8080/assets"
+ *   - Production: "https://server.cyberiaonline.com/assets"
+ */
+extern const char* ASSETS_BASE_URL;
+
+// ============================================================================
+// Game Configuration
+// ============================================================================
+
+/**
+ * @brief Ghost item ID
+ *
+ * The item ID displayed when a player or bot is dead.
+ * Usually "ghost" or similar placeholder.
+ */
+extern const char* GHOST_ITEM_ID;
 
 // ============================================================================
 // Network Configuration
 // ============================================================================
 
 /**
- * @brief WebSocket server URL
+ * @brief HTTP request timeout in seconds
  *
- * The URL of the WebSocket server to connect to.
- * Format: ws://host:port/path or wss://host:port/path for secure connection
- *
- * Examples:
- *   - Local development: "ws://localhost:8080/ws"
- *   - Production: "wss://game.example.com/ws"
+ * Timeout for HTTP requests made to fetch assets and API data.
+ * Set to a reasonable value to handle slow connections and prevent
+ * indefinite hangs.
  */
-extern const char* WS_URL;
+extern const long HTTP_TIMEOUT_SECONDS;
+
+// ============================================================================
+// Cache Configuration
+// ============================================================================
+
+/**
+ * @brief Maximum number of textures in the cache
+ *
+ * Limits the number of textures that can be stored in memory.
+ * Each texture can consume significant VRAM, so this prevents
+ * unbounded memory growth during extended play sessions.
+ */
+extern const int MAX_TEXTURE_CACHE_SIZE;
+
+/**
+ * @brief Maximum number of object layers in the cache
+ *
+ * Limits the number of parsed ObjectLayer definitions stored in memory.
+ * These are the metadata/structure for items, not the textures themselves.
+ */
+extern const int MAX_LAYER_CACHE_SIZE;
+
+/**
+ * @brief Queue size for texture caching requests
+ *
+ * Maximum number of texture loading requests that can be queued.
+ * Prevents unbounded queue growth when many textures need to be cached.
+ */
+extern const int TEXTURE_QUEUE_SIZE;
+
+// ============================================================================
+// Animation Configuration
+// ============================================================================
+
+/**
+ * @brief Default frame duration in milliseconds
+ *
+ * Used for animation frame timing when an object layer doesn't
+ * specify its own frame duration.
+ */
+extern const int DEFAULT_FRAME_DURATION_MS;
 
 // ============================================================================
 // Application Configuration

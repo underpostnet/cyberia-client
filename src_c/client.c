@@ -32,7 +32,6 @@ static void on_websocket_close(int code, const char* reason, void* user_data);
 // Initialize the client subsystem
 int client_init(void) {
     if (client_state.initialized) {
-        printf("[CLIENT] Already initialized\n");
         return 0;
     }
 
@@ -51,17 +50,14 @@ int client_init(void) {
     client_state.handlers.user_data = &client_state;
 
     // Initialize WebSocket connection
-    printf("[CLIENT] Connecting to %s\n", WS_URL);
     int result = ws_init(&client_state.ws_client, WS_URL, &client_state.handlers);
 
     if (result != 0) {
-        printf("[CLIENT] Failed to initialize WebSocket connection\n");
+        fprintf(stderr, "[ERROR] Failed to initialize WebSocket connection\n");
         return -1;
     }
 
     client_state.initialized = 1;
-    printf("[CLIENT] Initialization complete\n");
-
     return 0;
 }
 
@@ -81,10 +77,8 @@ void client_cleanup(void) {
         return;
     }
 
-    printf("[CLIENT] Shutting down...\n");
     ws_close(&client_state.ws_client);
     client_state.initialized = 0;
-    printf("[CLIENT] Cleanup complete\n");
 }
 
 // Check if client is connected
@@ -97,19 +91,11 @@ int client_is_connected(void) {
 
 // Send a message to the server
 int client_send(const char* message) {
-    if (!client_state.initialized) {
-        printf("[CLIENT] Cannot send - not initialized\n");
-        return -1;
-    }
-
-    if (!client_is_connected()) {
-        printf("[CLIENT] Cannot send - not connected\n");
+    if (!client_state.initialized || !client_is_connected()) {
         return -1;
     }
 
     int length = strlen(message);
-    printf("[CLIENT] Sending message (%d bytes): %s\n", length, message);
-    
     int result = ws_send(&client_state.ws_client, message, length);
     if (result == 0) {
         client_state.bytes_uploaded += length;
@@ -144,17 +130,6 @@ void client_get_network_stats(size_t* bytes_downloaded, size_t* bytes_uploaded) 
 
 // Called when WebSocket connection is opened
 static void on_websocket_open(void* user_data) {
-    printf("[CLIENT] WebSocket connection established\n");
-
-#if defined(PLATFORM_WEB)
-    // Log to JavaScript console for debugging
-    EM_ASM(
-        console.log('%c[WS] on_open', 'color: #00ff00; font-weight: bold');
-        console.log('[WS] WebSocket connection successfully established');
-        console.log('[WS] Ready to send and receive messages');
-    );
-#endif
-
     // Update connection status
     client_state.ws_client.connected = 1;
 
@@ -188,8 +163,7 @@ static void on_websocket_message(const char* data, int length, void* user_data) 
 
     // Check if message fits in buffer
     if (length >= MAX_MESSAGE_SIZE) {
-        printf("[CLIENT] Warning: Message too large (%d bytes), truncating to %d\n", 
-               length, MAX_MESSAGE_SIZE - 1);
+        fprintf(stderr, "[WARN] Message too large (%d bytes), truncating\n", length);
         length = MAX_MESSAGE_SIZE - 1;
     }
 
@@ -199,63 +173,23 @@ static void on_websocket_message(const char* data, int length, void* user_data) 
 
     // Process the message through the game state system
     if (message_parser_process(client_state.last_message) != 0) {
-        // Only print first 500 chars to avoid log spam
-        printf("[CLIENT] Failed to process message (first 500 chars): %.500s\n", 
-               client_state.last_message);
+        fprintf(stderr, "[ERROR] Failed to process message\n");
     }
-
-#if defined(PLATFORM_WEB)
-    // Log to JavaScript console with full message content
-    EM_ASM({
-        var message = UTF8ToString($2, $1);
-        try {
-            var json = JSON.parse(message);
-            console.log('[WS] Message #' + $0 + ':', json.type || 'unknown');
-        } catch(e) {
-            console.log('[WS] Non-JSON message received');
-        }
-    }, client_state.message_count, length, data);
-#endif
 }
 
 // Called when WebSocket error occurs
 static void on_websocket_error(void* user_data) {
-    printf("[CLIENT] WebSocket error occurred\n");
-
-#if defined(PLATFORM_WEB)
-    // Log to JavaScript console
-    EM_ASM(
-        console.error('%c[WS] on_error', 'color: #ff0000; font-weight: bold');
-        console.error('[WS] WebSocket error occurred');
-        console.error('[WS] Connection may have failed or been interrupted');
-    );
-#endif
-
-    // Mark as disconnected
+    fprintf(stderr, "[ERROR] WebSocket error occurred\n");
     client_state.ws_client.connected = 0;
 }
 
 // Called when WebSocket connection is closed
 static void on_websocket_close(int code, const char* reason, void* user_data) {
-    printf("[CLIENT] WebSocket closed (code: %d, reason: %s)\n",
-           code, reason ? reason : "none");
-
-#if defined(PLATFORM_WEB)
-    // Log to JavaScript console with details
-    EM_ASM({
-        console.log('%c[WS] on_close', 'color: #ffaa00; font-weight: bold');
-        console.log('[WS] WebSocket connection closed');
-        console.log('[WS] Close code:', $0);
-        var reason = $1 ? UTF8ToString($1) : 'No reason provided';
-        console.log('[WS] Close reason:', reason);
-        if ($0 === 1000) console.log('[WS] Code meaning: Normal Closure');
-        else if ($0 === 1001) console.log('[WS] Code meaning: Going Away');
-        else if ($0 === 1002) console.log('[WS] Code meaning: Protocol Error');
-        else if ($0 === 1006) console.log('[WS] Code meaning: Abnormal Closure');
-        else if ($0 === 1011) console.log('[WS] Code meaning: Internal Server Error');
-    }, code, reason);
-#endif
-
-    // Mark as disconnected
+    // Only log unexpected closures
+    if (code != 1000) {
+        fprintf(stderr, "[WARN] WebSocket closed unexpectedly (code: %d, reason: %s)\n",
+                code, reason ? reason : "none");
+    }
+    
     client_state.ws_client.connected = 0;
 }

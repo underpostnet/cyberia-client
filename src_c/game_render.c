@@ -3,15 +3,22 @@
 #include "dev_ui.h"
 #include "modal.h"
 #include "modal_player.h"
+#include "texture_manager.h"
+#include "object_layers_management.h"
+#include "entity_render.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
-// Global game renderer instance
+// Global renderer instance
 GameRenderer g_renderer = {0};
 
+// Global managers for entity rendering with object layers
+static TextureManager* g_texture_manager = NULL;
+static ObjectLayersManager* g_object_layers_manager = NULL;
+static EntityRender* g_entity_render = NULL;
+
 int game_render_init(int screen_width, int screen_height) {
-    printf("[GAME_RENDER] Initializing game renderer (%dx%d)...\n", screen_width, screen_height);
 
     // Initialize renderer state
     memset(&g_renderer, 0, sizeof(GameRenderer));
@@ -38,7 +45,27 @@ int game_render_init(int screen_width, int screen_height) {
     // Font loading (using default for now)
     g_renderer.font_loaded = false; // Will use default font
 
-    printf("[GAME_RENDER] Game renderer initialized successfully\n");
+    // Initialize object layer rendering system
+    g_texture_manager = create_texture_manager();
+    if (!g_texture_manager) {
+        fprintf(stderr, "[ERROR] Failed to create texture manager\n");
+        return -1;
+    }
+
+    g_object_layers_manager = create_object_layers_manager(g_texture_manager);
+    if (!g_object_layers_manager) {
+        fprintf(stderr, "[ERROR] Failed to create object layers manager\n");
+        destroy_texture_manager(g_texture_manager);
+        return -1;
+    }
+
+    g_entity_render = create_entity_render(g_object_layers_manager, g_texture_manager);
+    if (!g_entity_render) {
+        fprintf(stderr, "[ERROR] Failed to create entity render system\n");
+        destroy_object_layers_manager(g_object_layers_manager);
+        destroy_texture_manager(g_texture_manager);
+        return -1;
+    }
     return 0;
 }
 
@@ -268,6 +295,22 @@ static int compare_entities_by_depth(const void* a, const void* b) {
 }
 
 void game_render_entities(void) {
+    if (!g_entity_render) {
+        // Fallback to old rendering if entity render system not initialized
+        game_state_lock();
+        float cell_size = g_game_state.cell_size > 0 ? g_game_state.cell_size : 12.0f;
+        
+        // Just draw simple rectangles as fallback
+        Rectangle rect;
+        rect.x = g_game_state.player.base.interp_pos.x * cell_size;
+        rect.y = g_game_state.player.base.interp_pos.y * cell_size;
+        rect.width = g_game_state.player.base.dims.x * cell_size;
+        rect.height = g_game_state.player.base.dims.y * cell_size;
+        DrawRectangleRec(rect, g_game_state.colors.player);
+        
+        game_state_unlock();
+        return;
+    }
 
     game_state_lock();
 
@@ -312,45 +355,63 @@ void game_render_entities(void) {
     // Sort entities by depth (bottom Y coordinate)
     qsort(sort_entries, entry_count, sizeof(EntitySortEntry), compare_entities_by_depth);
 
-    // Render entities in sorted order
+    // Allocate temporary layer pointer array for all entities
+    ObjectLayerState* temp_layers[MAX_OBJECT_LAYERS];
+    
+    // Render entities in sorted order using EntityRender system
     for (int i = 0; i < entry_count; i++) {
         EntitySortEntry* entry = &sort_entries[i];
-        Rectangle rect;
-        Color color;
+        
+        const char* entity_type_str = NULL;
+        const char* entity_id = NULL;
+        EntityState* entity_base = NULL;
+        int layers_count = 0;
 
         switch (entry->type) {
             case ENTITY_TYPE_PLAYER:
-                rect.x = entry->data.player->base.interp_pos.x * cell_size;
-                rect.y = entry->data.player->base.interp_pos.y * cell_size;
-                rect.width = entry->data.player->base.dims.x * cell_size;
-                rect.height = entry->data.player->base.dims.y * cell_size;
-                color = entry->is_main_player ? g_game_state.colors.player : g_game_state.colors.other_player;
-                DrawRectangleRec(rect, color);
+                entity_base = &entry->data.player->base;
+                entity_type_str = entry->is_main_player ? "self" : "other";
+                entity_id = entity_base->id;
+                layers_count = entity_base->object_layer_count;
                 break;
 
             case ENTITY_TYPE_OTHER_PLAYER:
-                rect.x = entry->data.player->base.interp_pos.x * cell_size;
-                rect.y = entry->data.player->base.interp_pos.y * cell_size;
-                rect.width = entry->data.player->base.dims.x * cell_size;
-                rect.height = entry->data.player->base.dims.y * cell_size;
-                color = g_game_state.colors.other_player;
-                DrawRectangleRec(rect, color);
+                entity_base = &entry->data.player->base;
+                entity_type_str = "other";
+                entity_id = entity_base->id;
+                layers_count = entity_base->object_layer_count;
                 break;
 
             case ENTITY_TYPE_BOT:
-                rect.x = entry->data.bot->base.interp_pos.x * cell_size;
-                rect.y = entry->data.bot->base.interp_pos.y * cell_size;
-                rect.width = entry->data.bot->base.dims.x * cell_size;
-                rect.height = entry->data.bot->base.dims.y * cell_size;
-
-                // Choose color based on behavior
-                if (strcmp(entry->data.bot->behavior, "hostile") == 0) {
-                    color = g_game_state.colors.error_text;
-                } else {
-                    color = g_game_state.colors.other_player;
-                }
-                DrawRectangleRec(rect, color);
+                entity_base = &entry->data.bot->base;
+                entity_type_str = "bot";
+                entity_id = entity_base->id;
+                layers_count = entity_base->object_layer_count;
                 break;
+        }
+
+        if (entity_base && entity_id) {
+            // Convert object layers to pointer array
+            for (int j = 0; j < layers_count && j < MAX_OBJECT_LAYERS; j++) {
+                temp_layers[j] = &entity_base->object_layers[j];
+            }
+            
+            // Use EntityRender system to draw entity with object layers
+            draw_entity_layers(
+                g_entity_render,
+                entity_id,
+                entity_base->interp_pos.x,
+                entity_base->interp_pos.y,
+                entity_base->dims.x,
+                entity_base->dims.y,
+                entity_base->direction,
+                entity_base->mode,
+                temp_layers,
+                layers_count,
+                entity_type_str,
+                g_game_state.dev_ui,
+                cell_size
+            );
         }
     }
 
@@ -589,15 +650,30 @@ void game_render_update_effects(float delta_time) {
 }
 
 void game_render_cleanup(void) {
-    printf("[GAME_RENDER] Cleaning up game renderer...\n");
+
+    // Cleanup entity rendering system
+    if (g_entity_render) {
+        destroy_entity_render(g_entity_render);
+        g_entity_render = NULL;
+    }
+
+    // Cleanup object layers manager
+    if (g_object_layers_manager) {
+        destroy_object_layers_manager(g_object_layers_manager);
+        g_object_layers_manager = NULL;
+    }
+
+    // Cleanup texture manager
+    if (g_texture_manager) {
+        destroy_texture_manager(g_texture_manager);
+        g_texture_manager = NULL;
+    }
 
     // Unload font if loaded
     if (g_renderer.font_loaded) {
         UnloadFont(g_renderer.game_font);
         g_renderer.font_loaded = false;
     }
-
-    printf("[GAME_RENDER] Game renderer cleaned up\n");
 }
 
 void game_render_clear_texture_cache(void) {

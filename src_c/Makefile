@@ -14,8 +14,8 @@ BUILD_DIR := build
 OUTPUT_DIR := bin/$(PLATFORM)/$(BUILD_MODE)
 
 # Source files
-SOURCES := main.c render.c client.c network.c config.c game_state.c game_render.c message_parser.c input.c serial.c dev_ui.c modal.c modal_player.c ../lib/cJSON/cJSON.c
-HEADERS := render.h client.h network.h config.h game_state.h game_render.h message_parser.h input.h serial.h dev_ui.h modal.h modal_player.h ../lib/cJSON/cJSON.h
+SOURCES := main.c render.c client.c network.c config.c game_state.c game_render.c message_parser.c input.c serial.c dev_ui.c modal.c modal_player.c texture_manager.c object_layers_management.c entity_render.c direction_converter.c object_layer.c ../lib/cJSON/cJSON.c
+HEADERS := render.h client.h network.h config.h game_state.h game_render.h message_parser.h input.h serial.h dev_ui.h modal.h modal_player.h texture_manager.h object_layers_management.h entity_render.h direction_converter.h object_layer.h ../lib/cJSON/cJSON.h
 
 # ============================================================================
 # Emscripten SDK Configuration
@@ -39,7 +39,9 @@ EMCC_FLAGS := \
 	$(EMSDK_LIB) \
 	-s USE_GLFW=3 \
 	-s ASYNCIFY \
+	-s ASYNCIFY_IMPORTS='["js_fetch_object_layer","js_fetch_binary"]' \
 	-lwebsocket.js \
+	--js-library js/services.js \
 	--shell-file $(SHELL_FILE) \
 	-DPLATFORM_WEB \
 	-Wall \
@@ -67,7 +69,7 @@ endif
 # Build Targets
 # ============================================================================
 
-.PHONY: all clean debug release help check-deps info serve
+.PHONY: all clean debug release help check-deps info serve configure-localhost configure-production
 
 # Default target
 all: check-deps $(OUTPUT_DIR)/$(TARGET_NAME).html
@@ -88,6 +90,24 @@ all: check-deps $(OUTPUT_DIR)/$(TARGET_NAME).html
 	@echo "Then open in browser:"
 	@echo "  http://localhost:8081/$(TARGET_NAME).html"
 	@echo "=========================================="
+
+# Configure for localhost development (avoids CORS)
+configure-localhost:
+	@echo "=========================================="
+	@echo "  Configuring for Localhost Development"
+	@echo "=========================================="
+	@./configure.sh localhost
+	@echo ""
+	@echo "Rebuild required. Run: make clean && make"
+
+# Configure for production server
+configure-production:
+	@echo "=========================================="
+	@echo "  Configuring for Production"
+	@echo "=========================================="
+	@./configure.sh production
+	@echo ""
+	@echo "Rebuild required. Run: make clean && make release"
 
 # Serve the application locally
 serve: check-deps
@@ -187,17 +207,21 @@ info:
 	@echo "Shell:          $(SHELL_FILE)"
 	@echo ""
 	@echo "Available targets:"
-	@echo "  make              - Build the project (default)"
-	@echo "  make serve        - Build and start local server"
-	@echo "  make debug        - Build with debugging symbols"
-	@echo "  make release      - Build with optimizations"
-	@echo "  make clean        - Remove build artifacts"
-	@echo "  make info         - Show this information"
-	@echo "  make help         - Show detailed help"
+	@echo "  make                     - Build the project (default)"
+	@echo "  make serve               - Build and start local server"
+	@echo "  make debug               - Build with debugging symbols"
+	@echo "  make release             - Build with optimizations"
+	@echo "  make clean               - Remove build artifacts"
+	@echo "  make configure-localhost - Configure for localhost (avoids CORS)"
+	@echo "  make configure-production- Configure for production server"
+	@echo "  make info                - Show this information"
+	@echo "  make help                - Show detailed help"
 	@echo ""
 	@echo "Build mode can be overridden:"
 	@echo "  make BUILD_MODE=DEBUG"
 	@echo "  make BUILD_MODE=RELEASE"
+	@echo ""
+	@echo "CORS Issues? See docs/CORS_GUIDE.md or run: ./configure.sh localhost"
 	@echo "=========================================="
 
 # Help target with detailed instructions
@@ -219,13 +243,15 @@ help:
 	@echo "  make [target]"
 	@echo ""
 	@echo "TARGETS:"
-	@echo "  all       Build the project (default)"
-	@echo "  serve     Build and start local development server"
-	@echo "  debug     Build with debugging enabled"
-	@echo "  release   Build with optimizations"
-	@echo "  clean     Remove all build artifacts"
-	@echo "  info      Display project information"
-	@echo "  help      Display this help message"
+	@echo "  all                   Build the project (default)"
+	@echo "  serve                 Build and start local development server"
+	@echo "  debug                 Build with debugging enabled"
+	@echo "  release               Build with optimizations"
+	@echo "  clean                 Remove all build artifacts"
+	@echo "  configure-localhost   Configure for localhost development"
+	@echo "  configure-production  Configure for production server"
+	@echo "  info                  Display project information"
+	@echo "  help                  Display this help message"
 	@echo ""
 	@echo "EXAMPLES:"
 	@echo "  # Standard build"
@@ -259,5 +285,9 @@ help:
 	@echo "    ls -la $(EMSDK_LIB)"
 	@echo ""
 	@echo "  • Check shell.html exists in current directory"
+	@echo ""
+	@echo "  • CORS/API fetch errors? Configure for localhost:"
+	@echo "    make configure-localhost"
+	@echo "    See docs/CORS_GUIDE.md for details"
 	@echo ""
 	@echo "=========================================="
