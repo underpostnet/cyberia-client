@@ -14,7 +14,6 @@
 // Application configuration
 #define WINDOW_WIDTH 600
 #define WINDOW_HEIGHT 800
-#define WINDOW_TITLE "Cyberia Client"
 
 // Forward declaration of main loop function
 static void main_loop(void);
@@ -38,7 +37,7 @@ static int init_app(void) {
 
     // Initialize rendering subsystem
     printf("[INIT] Step 1/2 - Initializing renderer...\n");
-    if (render_init(WINDOW_TITLE, WINDOW_WIDTH, WINDOW_HEIGHT) != 0) {
+    if (render_init(APP_NAME, WINDOW_WIDTH, WINDOW_HEIGHT) != 0) {
         printf("[ERROR] Failed to initialize renderer\n");
         return -1;
     }

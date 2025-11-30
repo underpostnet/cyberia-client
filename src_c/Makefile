@@ -9,9 +9,13 @@ TARGET_NAME := index
 BUILD_MODE ?= DEBUG
 PLATFORM := PLATFORM_WEB
 
+# Extract App Title from config.h
+APP_TITLE := $(shell grep "define APP_NAME" config.h | cut -d '"' -f 2)
+
 # Build directories
 BUILD_DIR := build
 OUTPUT_DIR := bin/$(PLATFORM)/$(BUILD_MODE)
+PUBLIC_DIR := public
 
 # Source files
 SOURCES := main.c render.c client.c network.c config.c game_state.c game_render.c message_parser.c input.c serial.c dev_ui.c modal.c modal_player.c texture_manager.c object_layers_management.c entity_render.c direction_converter.c object_layer.c ../lib/cJSON/cJSON.c
@@ -146,6 +150,17 @@ $(OUTPUT_DIR)/$(TARGET_NAME).html: $(SOURCES) $(HEADERS) $(SHELL_FILE)
 	@echo ""
 	@echo "Compiling to WebAssembly..."
 	emcc -o $@ $(SOURCES) $(EMCC_FLAGS)
+	@echo ""
+	@echo "Copying public assets..."
+	@if [ -d "$(PUBLIC_DIR)" ]; then \
+		cp -r $(PUBLIC_DIR)/* $(OUTPUT_DIR)/; \
+		echo "  ✓ Assets copied from $(PUBLIC_DIR) to $(OUTPUT_DIR)"; \
+	else \
+		echo "  ! Public directory not found, skipping assets copy"; \
+	fi
+	@echo ""
+	@echo "Setting HTML title to: $(APP_TITLE)"
+	@sed -i 's/<title>.*<\/title>/<title>$(APP_TITLE)<\/title>/' $@
 	@echo ""
 	@echo "Generated files:"
 	@echo "  • $(OUTPUT_DIR)/$(TARGET_NAME).html"
