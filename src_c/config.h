@@ -136,6 +136,6 @@ extern const int DEFAULT_FRAME_DURATION_MS;
 /**
  * @brief Application name
  */
-#define APP_NAME "Cyberia Client"
+#define APP_NAME "CYBERIA | MMO"
 
 #endif // CONFIG_H
