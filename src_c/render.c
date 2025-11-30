@@ -136,8 +136,8 @@ void render_update(void) {
 static void render_fallback(int width, int height) {
     BeginDrawing();
 
-    // Clear background to black
-    ClearBackground(BLACK);
+    // Clear background to game background color (reduces flicker)
+    ClearBackground((Color){30, 30, 30, 255});
 
     // Calculate center position
     float center_x = (float)width / 2.0f;

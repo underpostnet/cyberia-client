@@ -293,6 +293,8 @@ void draw_entity_layers(
 
     // If any layer data is missing, we can't render the full entity properly.
     if (any_layer_data_missing) {
+        // Draw fallback placeholder while loading layer data
+        DrawRectangleRec(dest_rec, (Color){ 100, 100, 100, 200 });
         return;
     }
 
@@ -436,6 +438,7 @@ void draw_entity_layers(
             }
         }
     } else {
-        // Something is missing, render nothing (wait for load)
+        // Something is missing, render fallback (wait for load)
+        DrawRectangleRec(dest_rec, (Color){ 100, 100, 100, 200 });
     }
 }
