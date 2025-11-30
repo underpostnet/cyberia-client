@@ -1,19 +1,5 @@
 # Cyberia Client - Build Instructions
 
-## ⚠️ Important: CORS Issues
-
-The WebAssembly version runs in a browser and is subject to CORS restrictions. If you encounter errors like:
-```
-Failed to fetch object layer from API for item: ghost
-Access to fetch at 'https://server.cyberiaonline.com/api/v1/object-layers' has been blocked by CORS policy
-```
-
-**See [docs/CORS_GUIDE.md](docs/CORS_GUIDE.md) for solutions.**
-
-**Quick fix for development:** Use localhost API server by editing `config.c` and uncommenting localhost URLs.
-
----
-
 ## Quick Start
 
 ```bash
@@ -130,37 +116,3 @@ To avoid CORS issues, use a local API server:
    ```bash
    make serve
    ```
-
-### Python vs C/WASM Version
-
-| Feature | Python Version | C/WASM Version |
-|---------|----------------|----------------|
-| Environment | Native Desktop | Browser |
-| CORS Issues | ❌ None | ✅ Yes (requires server CORS headers or localhost) |
-| Object Layer Rendering | ✅ Works | ✅ Works (with proper server config) |
-
-**Note:** The Python version doesn't have CORS issues because it runs as a native application, not in a browser. The C/WASM version requires either:
-- Localhost API server (development)
-- Server with CORS headers (production)
-
-See [docs/CORS_GUIDE.md](docs/CORS_GUIDE.md) for detailed troubleshooting.
-
----
-
-## Troubleshooting
-
-### "Failed to fetch object layer" errors
-
-**Symptoms:**
-- Console shows CORS errors
-- Entities render without textures
-- API fetch failures
-
-**Solution:** See [docs/CORS_GUIDE.md](docs/CORS_GUIDE.md)
-
-### Build fails
-
-**Check:**
-- Emscripten SDK is installed and activated
-- `shell.html` exists in `src_c/`
-- Raylib is compiled for Emscripten
