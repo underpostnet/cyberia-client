@@ -92,9 +92,7 @@ bin/
 
 ## Development Setup
 
-### For Local Development (Recommended)
-
-To avoid CORS issues, use a local API server:
+### For Local Development
 
 1. **Edit `config.c`** - Uncomment localhost URLs:
    ```c

@@ -1,98 +1,125 @@
 #include "object_layers_management.h"
 #include "config.h"
+#include "../lib/cJSON/cJSON.h"
 #include "direction_converter.h"
-#include "game_state.h"
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <stdio.h>
 
 #if defined(PLATFORM_WEB)
     #include <emscripten.h>
-    
-    // External JavaScript functions for HTTP requests
-    // Implemented in js/fetch_helper.js
+    // External JS function
     extern char* js_fetch_object_layer(const char* item_id);
 #else
     #include <curl/curl.h>
+    #include <pthread.h>
+    #include <unistd.h>
 #endif
 
-#include "../lib/cJSON/cJSON.h"
-
 #define HASH_TABLE_SIZE 256
-#define MAX_LAYER_ENTRIES 256
+#define MAX_LAYER_ENTRIES 1000
+#define TEXTURE_QUEUE_SIZE 1024
 
-// ============================================================================
-// Data Structures
-// ============================================================================
+// --- Data Structures ---
 
-/**
- * @brief Cache entry for object layers
- */
+#if !defined(PLATFORM_WEB)
+typedef struct {
+    char* url;
+    char* data;
+    size_t size;
+    size_t capacity;
+    volatile int status; // 0: pending, 1: complete, 2: error
+    pthread_t thread;
+} AsyncLayerRequest;
+#endif
+
 typedef struct ObjectLayerEntry {
-    char* key;                          ///< Item ID (cache key)
+    char* key;
     ObjectLayer* layer;
-    struct ObjectLayerEntry* next;      ///< For hash collision chaining
+    struct ObjectLayerEntry* next;
+    #if !defined(PLATFORM_WEB)
+    AsyncLayerRequest* async_req;
+    #endif
 } ObjectLayerEntry;
 
-/**
- * @brief Queue node for texture pre-caching
- */
 typedef struct QueueNode {
     ObjectLayer* layer;
     struct QueueNode* next;
 } QueueNode;
 
-/**
- * @brief Main ObjectLayersManager structure
- */
 struct ObjectLayersManager {
-    ObjectLayerEntry* buckets[HASH_TABLE_SIZE];    ///< Hash table for layers
-    TextureManager* texture_manager;               ///< Reference to texture manager
-    QueueNode* queue_head;                         ///< Head of texture caching queue
-    QueueNode* queue_tail;                         ///< Tail of texture caching queue
-    int layer_count;                               ///< Current number of cached layers
+    ObjectLayerEntry* buckets[HASH_TABLE_SIZE];
+    TextureManager* texture_manager;
+    
+    // Texture pre-caching queue
+    QueueNode* queue_head;
+    QueueNode* queue_tail;
+    int queue_size;
 };
 
-#if !defined(PLATFORM_WEB)
-/**
- * @brief Memory buffer for curl response (native platforms only)
- */
-typedef struct {
-    char* memory;
-    size_t size;
-} MemoryStruct;
-#endif
-
-// ============================================================================
-// Helper Functions - HTTP and Memory
-// ============================================================================
+// --- Helper Functions ---
 
 #if !defined(PLATFORM_WEB)
-/**
- * @brief Callback for curl to write response data to memory buffer (native platforms only)
- */
+// Memory struct for curl response
 static size_t write_memory_callback(void* contents, size_t size, size_t nmemb, void* userp) {
     size_t realsize = size * nmemb;
-    MemoryStruct* mem = (MemoryStruct*)userp;
+    AsyncLayerRequest* req = (AsyncLayerRequest*)userp;
 
-    char* ptr = realloc(mem->memory, mem->size + realsize + 1);
-    if (!ptr) {
-        fprintf(stderr, "[ERROR] Not enough memory for HTTP response\n");
-        return 0;
+    if (req->size + realsize + 1 > req->capacity) {
+        size_t new_capacity = req->capacity == 0 ? (realsize + 4096) : (req->capacity * 2 + realsize);
+        char* ptr = realloc(req->data, new_capacity);
+        if (!ptr) {
+            fprintf(stderr, "[ERROR] Not enough memory (realloc returned NULL)\n");
+            return 0;
+        }
+        req->data = ptr;
+        req->capacity = new_capacity;
     }
 
-    mem->memory = ptr;
-    memcpy(&(mem->memory[mem->size]), contents, realsize);
-    mem->size += realsize;
-    mem->memory[mem->size] = 0;
+    memcpy(&(req->data[req->size]), contents, realsize);
+    req->size += realsize;
+    req->data[req->size] = 0; // Null terminate
 
     return realsize;
 }
+
+static void* fetch_layer_worker(void* arg) {
+    AsyncLayerRequest* req = (AsyncLayerRequest*)arg;
+    
+    CURL* curl_handle = curl_easy_init();
+    if (!curl_handle) {
+        req->status = 2;
+        return NULL;
+    }
+
+    curl_easy_setopt(curl_handle, CURLOPT_URL, req->url);
+    curl_easy_setopt(curl_handle, CURLOPT_WRITEFUNCTION, write_memory_callback);
+    curl_easy_setopt(curl_handle, CURLOPT_WRITEDATA, (void*)req);
+    curl_easy_setopt(curl_handle, CURLOPT_USERAGENT, "libcurl-agent/1.0");
+    curl_easy_setopt(curl_handle, CURLOPT_TIMEOUT, 10L);
+    curl_easy_setopt(curl_handle, CURLOPT_FOLLOWLOCATION, 1L);
+
+    CURLcode res = curl_easy_perform(curl_handle);
+
+    if (res != CURLE_OK) {
+        fprintf(stderr, "[WARN] curl_easy_perform() failed: %s\n", curl_easy_strerror(res));
+        req->status = 2;
+    } else {
+        long response_code;
+        curl_easy_getinfo(curl_handle, CURLINFO_RESPONSE_CODE, &response_code);
+        if (response_code == 200) {
+            req->status = 1;
+        } else {
+            fprintf(stderr, "[WARN] HTTP error %ld for URL: %s\n", response_code, req->url);
+            req->status = 2;
+        }
+    }
+
+    curl_easy_cleanup(curl_handle);
+    return NULL;
+}
 #endif
 
-/**
- * @brief DJB2 hash function for string keys
- */
 static unsigned long hash_string(const char* str) {
     unsigned long hash = 5381;
     int c;
@@ -102,190 +129,119 @@ static unsigned long hash_string(const char* str) {
     return hash;
 }
 
-// ============================================================================
-// Helper Functions - JSON Parsing with cJSON
-// ============================================================================
+// --- JSON Parsing Helpers ---
 
-/**
- * @brief Safely get a string from JSON object
- */
-static char* json_get_string_safe(cJSON* obj, const char* key) {
-    if (!obj || !key) return NULL;
-    cJSON* item = cJSON_GetObjectItemCaseSensitive(obj, key);
-    if (!item || !cJSON_IsString(item)) return NULL;
-    
-    if (!item->valuestring) return NULL;
-    return strdup(item->valuestring);
+static char* json_get_string_safe(cJSON* item, const char* key, const char* default_val) {
+    cJSON* obj = cJSON_GetObjectItemCaseSensitive(item, key);
+    if (cJSON_IsString(obj) && (obj->valuestring != NULL)) {
+        return strdup(obj->valuestring);
+    }
+    return default_val ? strdup(default_val) : NULL;
 }
 
-/**
- * @brief Safely get an integer from JSON object
- */
-static int json_get_int_safe(cJSON* obj, const char* key, int default_val) {
-    if (!obj || !key) return default_val;
-    cJSON* item = cJSON_GetObjectItemCaseSensitive(obj, key);
-    if (!item || !cJSON_IsNumber(item)) return default_val;
-    return item->valueint;
-}
-
-/**
- * @brief Safely get a boolean from JSON object
- */
-static bool json_get_bool_safe(cJSON* obj, const char* key, bool default_val) {
-    if (!obj || !key) return default_val;
-    cJSON* item = cJSON_GetObjectItemCaseSensitive(obj, key);
-    if (!item) return default_val;
-    if (cJSON_IsBool(item)) return item->type == cJSON_True;
-    if (cJSON_IsNumber(item)) return item->valueint != 0;
+static int json_get_int_safe(cJSON* item, const char* key, int default_val) {
+    cJSON* obj = cJSON_GetObjectItemCaseSensitive(item, key);
+    if (cJSON_IsNumber(obj)) {
+        return obj->valueint;
+    }
     return default_val;
 }
 
-/**
- * @brief Count elements in a JSON array
- */
-static int json_array_count(cJSON* obj, const char* key) {
-    if (!obj || !key) return 0;
-    cJSON* arr = cJSON_GetObjectItemCaseSensitive(obj, key);
-    if (!arr || !cJSON_IsArray(arr)) return 0;
-    return cJSON_GetArraySize(arr);
+static bool json_get_bool_safe(cJSON* item, const char* key, bool default_val) {
+    cJSON* obj = cJSON_GetObjectItemCaseSensitive(item, key);
+    if (cJSON_IsBool(obj)) {
+        return cJSON_IsTrue(obj);
+    }
+    return default_val;
 }
 
-/**
- * @brief Parse Stats from JSON
- */
-static void parse_stats(cJSON* stats_obj, Stats* stats) {
-    if (!stats_obj || !stats) return;
-    
-    stats->effect = json_get_int_safe(stats_obj, "effect", 0);
-    stats->resistance = json_get_int_safe(stats_obj, "resistance", 0);
-    stats->agility = json_get_int_safe(stats_obj, "agility", 0);
-    stats->range = json_get_int_safe(stats_obj, "range", 0);
-    stats->intelligence = json_get_int_safe(stats_obj, "intelligence", 0);
-    stats->utility = json_get_int_safe(stats_obj, "utility", 0);
+static int json_array_count(cJSON* array_obj) {
+    if (cJSON_IsArray(array_obj)) {
+        return cJSON_GetArraySize(array_obj);
+    }
+    return 0;
 }
 
-/**
- * @brief Parse RenderFrames from JSON
- */
-static void parse_render_frames(cJSON* frames_obj, RenderFrames* frames) {
-    if (!frames_obj || !frames) return;
-    
-    memset(frames, 0, sizeof(RenderFrames));
-    
-    // Idle animations
-    frames->up_idle_count = json_array_count(frames_obj, "up_idle");
-    frames->down_idle_count = json_array_count(frames_obj, "down_idle");
-    frames->left_idle_count = json_array_count(frames_obj, "left_idle");
-    frames->right_idle_count = json_array_count(frames_obj, "right_idle");
-    
-    frames->up_left_idle_count = json_array_count(frames_obj, "up_left_idle");
-    frames->up_right_idle_count = json_array_count(frames_obj, "up_right_idle");
-    frames->down_left_idle_count = json_array_count(frames_obj, "down_left_idle");
-    frames->down_right_idle_count = json_array_count(frames_obj, "down_right_idle");
-    
-    frames->default_idle_count = json_array_count(frames_obj, "default_idle");
-    frames->none_idle_count = json_array_count(frames_obj, "none_idle");
-    
-    // Walking animations
-    frames->up_walking_count = json_array_count(frames_obj, "up_walking");
-    frames->down_walking_count = json_array_count(frames_obj, "down_walking");
-    frames->left_walking_count = json_array_count(frames_obj, "left_walking");
-    frames->right_walking_count = json_array_count(frames_obj, "right_walking");
-    
-    frames->up_left_walking_count = json_array_count(frames_obj, "up_left_walking");
-    frames->up_right_walking_count = json_array_count(frames_obj, "up_right_walking");
-    frames->down_left_walking_count = json_array_count(frames_obj, "down_left_walking");
-    frames->down_right_walking_count = json_array_count(frames_obj, "down_right_walking");
+// --- Parsing Logic ---
+
+static void parse_stats(cJSON* stats_json, Stats* stats) {
+    if (!stats_json || !stats) return;
+    stats->effect = json_get_int_safe(stats_json, "effect", 0);
+    stats->resistance = json_get_int_safe(stats_json, "resistance", 0);
+    stats->agility = json_get_int_safe(stats_json, "agility", 0);
+    stats->range = json_get_int_safe(stats_json, "range", 0);
+    stats->intelligence = json_get_int_safe(stats_json, "intelligence", 0);
+    stats->utility = json_get_int_safe(stats_json, "utility", 0);
 }
 
-/**
- * @brief Parse Render metadata from JSON
- */
-static void parse_render(cJSON* render_obj, Render* render) {
-    if (!render_obj || !render) return;
+static void parse_render_frames(cJSON* frames_json, RenderFrames* frames) {
+    if (!frames_json || !frames) return;
     
-    memset(render, 0, sizeof(Render));
+    frames->up_idle_count = json_array_count(cJSON_GetObjectItem(frames_json, "up_idle"));
+    frames->down_idle_count = json_array_count(cJSON_GetObjectItem(frames_json, "down_idle"));
+    frames->left_idle_count = json_array_count(cJSON_GetObjectItem(frames_json, "left_idle"));
+    frames->right_idle_count = json_array_count(cJSON_GetObjectItem(frames_json, "right_idle"));
     
-    // Parse frames
-    cJSON* frames_obj = cJSON_GetObjectItemCaseSensitive(render_obj, "frames");
-    if (frames_obj && cJSON_IsObject(frames_obj)) {
-        parse_render_frames(frames_obj, &render->frames);
-    }
+    frames->up_left_idle_count = json_array_count(cJSON_GetObjectItem(frames_json, "up_left_idle"));
+    frames->up_right_idle_count = json_array_count(cJSON_GetObjectItem(frames_json, "up_right_idle"));
+    frames->down_left_idle_count = json_array_count(cJSON_GetObjectItem(frames_json, "down_left_idle"));
+    frames->down_right_idle_count = json_array_count(cJSON_GetObjectItem(frames_json, "down_right_idle"));
     
-    // Parse frame duration
-    render->frame_duration = json_get_int_safe(render_obj, "frame_duration", 100);
+    frames->default_idle_count = json_array_count(cJSON_GetObjectItem(frames_json, "default_idle"));
+    frames->none_idle_count = json_array_count(cJSON_GetObjectItem(frames_json, "none_idle"));
     
-    // Parse stateless flag
-    render->is_stateless = json_get_bool_safe(render_obj, "is_stateless", false);
+    frames->up_walking_count = json_array_count(cJSON_GetObjectItem(frames_json, "up_walking"));
+    frames->down_walking_count = json_array_count(cJSON_GetObjectItem(frames_json, "down_walking"));
+    frames->left_walking_count = json_array_count(cJSON_GetObjectItem(frames_json, "left_walking"));
+    frames->right_walking_count = json_array_count(cJSON_GetObjectItem(frames_json, "right_walking"));
+    
+    frames->up_left_walking_count = json_array_count(cJSON_GetObjectItem(frames_json, "up_left_walking"));
+    frames->up_right_walking_count = json_array_count(cJSON_GetObjectItem(frames_json, "up_right_walking"));
+    frames->down_left_walking_count = json_array_count(cJSON_GetObjectItem(frames_json, "down_left_walking"));
+    frames->down_right_walking_count = json_array_count(cJSON_GetObjectItem(frames_json, "down_right_walking"));
 }
 
-/**
- * @brief Parse Item metadata from JSON
- */
-static void parse_item(cJSON* item_obj, Item* item) {
-    if (!item_obj || !item) return;
+static void parse_render(cJSON* render_json, Render* render) {
+    if (!render_json || !render) return;
     
-    memset(item, 0, sizeof(Item));
+    render->frame_duration = json_get_int_safe(render_json, "frame_duration", 100);
+    render->is_stateless = json_get_bool_safe(render_json, "is_stateless", false);
     
-    // Get strings safely and copy to fixed-size arrays
-    char* id_str = json_get_string_safe(item_obj, "id");
-    if (id_str) {
-        strncpy(item->id, id_str, MAX_ITEM_ID_LENGTH - 1);
-        item->id[MAX_ITEM_ID_LENGTH - 1] = '\0';
-        free(id_str);
-    }
-    
-    char* type_str = json_get_string_safe(item_obj, "type");
-    if (type_str) {
-        strncpy(item->type, type_str, MAX_TYPE_LENGTH - 1);
-        item->type[MAX_TYPE_LENGTH - 1] = '\0';
-        free(type_str);
-    }
-    
-    char* desc_str = json_get_string_safe(item_obj, "description");
-    if (desc_str) {
-        strncpy(item->description, desc_str, MAX_DESCRIPTION_LENGTH - 1);
-        item->description[MAX_DESCRIPTION_LENGTH - 1] = '\0';
-        free(desc_str);
-    }
-    
-    item->activable = json_get_bool_safe(item_obj, "activable", false);
+    cJSON* frames = cJSON_GetObjectItem(render_json, "frames");
+    parse_render_frames(frames, &render->frames);
 }
 
-/**
- * @brief Parse ObjectLayerData from JSON
- */
-static void parse_object_layer_data(cJSON* data_obj, ObjectLayerData* data) {
-    if (!data_obj || !data) return;
+static void parse_item(cJSON* item_json, Item* item) {
+    if (!item_json || !item) return;
     
-    // Parse stats
-    cJSON* stats_obj = cJSON_GetObjectItemCaseSensitive(data_obj, "stats");
-    if (stats_obj && cJSON_IsObject(stats_obj)) {
-        parse_stats(stats_obj, &data->stats);
-    }
+    char* id = json_get_string_safe(item_json, "id", "");
+    char* type = json_get_string_safe(item_json, "type", "");
+    char* desc = json_get_string_safe(item_json, "description", "");
     
-    // Parse render
-    cJSON* render_obj = cJSON_GetObjectItemCaseSensitive(data_obj, "render");
-    if (render_obj && cJSON_IsObject(render_obj)) {
-        parse_render(render_obj, &data->render);
-    }
+    strncpy(item->id, id, MAX_ITEM_ID_LENGTH - 1);
+    strncpy(item->type, type, MAX_TYPE_LENGTH - 1);
+    strncpy(item->description, desc, MAX_DESCRIPTION_LENGTH - 1);
+    item->activable = json_get_bool_safe(item_json, "activable", false);
     
-    // Parse item
-    cJSON* item_obj = cJSON_GetObjectItemCaseSensitive(data_obj, "item");
-    if (item_obj && cJSON_IsObject(item_obj)) {
-        parse_item(item_obj, &data->item);
-    }
+    free(id);
+    free(type);
+    free(desc);
 }
 
-/**
- * @brief Parse complete ObjectLayer from JSON response
- */
-static ObjectLayer* parse_object_layer_json(const char* json_string) {
-    if (!json_string) return NULL;
+static void parse_object_layer_data(cJSON* data_json, ObjectLayerData* data) {
+    if (!data_json || !data) return;
     
-    cJSON* root = cJSON_Parse(json_string);
+    parse_stats(cJSON_GetObjectItem(data_json, "stats"), &data->stats);
+    parse_render(cJSON_GetObjectItem(data_json, "render"), &data->render);
+    parse_item(cJSON_GetObjectItem(data_json, "item"), &data->item);
+}
+
+static ObjectLayer* parse_object_layer_json(const char* json_str) {
+    if (!json_str) return NULL;
+    
+    cJSON* root = cJSON_Parse(json_str);
     if (!root) {
-        fprintf(stderr, "[ERROR] Failed to parse JSON response\n");
+        fprintf(stderr, "[ERROR] Failed to parse ObjectLayer JSON\n");
         return NULL;
     }
     
@@ -295,61 +251,68 @@ static ObjectLayer* parse_object_layer_json(const char* json_string) {
         return NULL;
     }
     
-    // Parse data object
-    cJSON* data_obj = cJSON_GetObjectItemCaseSensitive(root, "data");
-    if (data_obj && cJSON_IsObject(data_obj)) {
-        parse_object_layer_data(data_obj, &layer->data);
+    // Extract sha256
+    char* sha = json_get_string_safe(root, "sha256", "");
+    strncpy(layer->sha256, sha, 64);
+    free(sha);
+    
+    // Extract data
+    cJSON* data = cJSON_GetObjectItem(root, "data");
+    parse_object_layer_data(data, &layer->data);
+    
+    // Ensure item ID is set in data.item if missing (fallback to root id)
+    if (strlen(layer->data.item.id) == 0) {
+        char* root_id = json_get_string_safe(root, "id", "");
+        strncpy(layer->data.item.id, root_id, MAX_ITEM_ID_LENGTH - 1);
+        free(root_id);
     }
     
-    // Parse sha256
-    char* sha256_str = json_get_string_safe(root, "sha256");
-    if (sha256_str) {
-        strncpy(layer->sha256, sha256_str, 64);
-        layer->sha256[64] = '\0';
-        free(sha256_str);
+    // Ensure item type is set
+    if (strlen(layer->data.item.type) == 0) {
+        char* root_type = json_get_string_safe(root, "type", "");
+        strncpy(layer->data.item.type, root_type, MAX_TYPE_LENGTH - 1);
+        free(root_type);
     }
     
     cJSON_Delete(root);
     return layer;
 }
 
-// ============================================================================
-// Helper Functions - Cache Management
-// ============================================================================
+// --- Caching & Queueing ---
 
-/**
- * @brief Add an ObjectLayer to the cache
- */
-static void cache_object_layer(
-    ObjectLayersManager* manager,
-    const char* item_id,
-    ObjectLayer* layer
-) {
+static void cache_object_layer(ObjectLayersManager* manager, const char* item_id, ObjectLayer* layer) {
     if (!manager || !item_id) return;
     
     unsigned long index = hash_string(item_id) % HASH_TABLE_SIZE;
     
+    // Check if exists
+    ObjectLayerEntry* entry = manager->buckets[index];
+    while (entry) {
+        if (strcmp(entry->key, item_id) == 0) {
+            // Update existing
+            if (entry->layer) free_object_layer(entry->layer);
+            entry->layer = layer;
+            return;
+        }
+        entry = entry->next;
+    }
+    
+    // Create new
     ObjectLayerEntry* new_entry = (ObjectLayerEntry*)malloc(sizeof(ObjectLayerEntry));
     if (!new_entry) return;
     
     new_entry->key = strdup(item_id);
-    new_entry->layer = layer;  // Can be NULL to mark failed fetch
+    new_entry->layer = layer;
     new_entry->next = manager->buckets[index];
+    #if !defined(PLATFORM_WEB)
+    new_entry->async_req = NULL;
+    #endif
+    
     manager->buckets[index] = new_entry;
-    manager->layer_count++;
 }
 
-/**
- * @brief Retrieve an ObjectLayer from the cache
- */
-/**
- * @brief Add an ObjectLayer to the texture pre-caching queue
- */
-static void enqueue_for_texture_caching(
-    ObjectLayersManager* manager,
-    ObjectLayer* layer
-) {
-    if (!manager || !layer) return;
+static void enqueue_for_texture_caching(ObjectLayersManager* manager, ObjectLayer* layer) {
+    if (!manager || !layer || manager->queue_size >= TEXTURE_QUEUE_SIZE) return;
     
     QueueNode* node = (QueueNode*)malloc(sizeof(QueueNode));
     if (!node) return;
@@ -365,159 +328,48 @@ static void enqueue_for_texture_caching(
         manager->queue_tail = node;
     }
     
-    printf("[QUEUE] Queued textures for pre-caching: %s\n", layer->data.item.id);
+    manager->queue_size++;
 }
 
-// ============================================================================
-// API Fetching
-// ============================================================================
+// --- Fetching Logic ---
 
-#if defined(PLATFORM_WEB)
-/**
- * @brief Fetch ObjectLayer data from REST API (JavaScript version for web platform)
- * 
- * Uses JavaScript fetch API via Emscripten library function for better
- * CORS handling and reliability in browsers.
- * 
- * Correct API endpoint based on Python implementation:
- * GET {API_BASE_URL}/object-layers?item_id={item_id}&page=1&page_size=1
- * 
- * Returns: { "items": [ { ObjectLayer } ] }
- */
-static char* fetch_object_layer_from_api(const char* item_id) {
-    if (!item_id) return NULL;
-    
-    // Call JavaScript function to perform the fetch
-    // This uses Asyncify to handle the async operation
-    char* response = js_fetch_object_layer(item_id);
-    
-    if (!response) {
-        fprintf(stderr, "[ERROR] Failed to fetch object layer for item: %s (check CORS or use localhost API)\n", item_id);
-        return NULL;
-    }
-    
-    return response;
-}
-#else
-/**
- * @brief Fetch ObjectLayer data from REST API (cURL version for native platforms)
- * 
- * Correct API endpoint based on Python implementation:
- * GET {API_BASE_URL}/object-layers?item_id={item_id}&page=1&page_size=1
- * 
- * Returns: { "items": [ { ObjectLayer } ] }
- */
-static char* fetch_object_layer_from_api(const char* item_id) {
-    if (!item_id) return NULL;
-    
-    CURL* curl = curl_easy_init();
-    if (!curl) {
-        fprintf(stderr, "[ERROR] Failed to initialize curl\n");
-        return NULL;
-    }
-    
-    // Build URL with query parameters
-    char url[512];
-    snprintf(url, sizeof(url),
-             "%s/object-layers?item_id=%s&page=1&page_size=1",
-             API_BASE_URL, item_id);
-    
-    MemoryStruct chunk;
-    chunk.memory = malloc(1);
-    chunk.size = 0;
-    
-    curl_easy_setopt(curl, CURLOPT_URL, url);
-    curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, write_memory_callback);
-    curl_easy_setopt(curl, CURLOPT_WRITEDATA, (void*)&chunk);
-    curl_easy_setopt(curl, CURLOPT_TIMEOUT, HTTP_TIMEOUT_SECONDS);
-    curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, 1L);
-    
-    // Add SSL verification for HTTPS
-    curl_easy_setopt(curl, CURLOPT_SSL_VERIFYPEER, 1L);
-    curl_easy_setopt(curl, CURLOPT_SSL_VERIFYHOST, 2L);
-    
-    CURLcode res = curl_easy_perform(curl);
-    
-    if (res != CURLE_OK) {
-        fprintf(stderr, "[ERROR] Curl request failed: %s\n", curl_easy_strerror(res));
-        curl_easy_cleanup(curl);
-        free(chunk.memory);
-        return NULL;
-    }
-    
-    // Check HTTP response code
-    long http_code = 0;
-    curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &http_code);
-    
-    if (http_code != 200) {
-        fprintf(stderr, "[ERROR] HTTP error %ld for item %s\n", http_code, item_id);
-        curl_easy_cleanup(curl);
-        free(chunk.memory);
-        return NULL;
-    }
-    
-    curl_easy_cleanup(curl);
-    
-    return chunk.memory;
-}
-#endif
-
-/**
- * @brief Extract the first item from API response JSON
- */
 static char* extract_first_item_from_response(const char* response_json) {
     if (!response_json) return NULL;
     
     cJSON* root = cJSON_Parse(response_json);
-    if (!root) {
-        fprintf(stderr, "[ERROR] Failed to parse API response JSON\n");
-        return NULL;
-    }
+    if (!root) return NULL;
     
-    // Get "items" array
-    cJSON* items = cJSON_GetObjectItemCaseSensitive(root, "items");
-    if (!items || !cJSON_IsArray(items)) {
-        fprintf(stderr, "[ERROR] 'items' not found or not an array in response\n");
+    cJSON* items = cJSON_GetObjectItem(root, "items");
+    if (!cJSON_IsArray(items) || cJSON_GetArraySize(items) == 0) {
         cJSON_Delete(root);
         return NULL;
     }
     
-    int item_count = cJSON_GetArraySize(items);
-    if (item_count == 0) {
-        fprintf(stderr, "[ERROR] Empty items array in response\n");
-        cJSON_Delete(root);
-        return NULL;
-    }
-    
-    // Get first item
     cJSON* first_item = cJSON_GetArrayItem(items, 0);
-    if (!first_item) {
-        fprintf(stderr, "[ERROR] Failed to get first item from array\n");
-        cJSON_Delete(root);
-        return NULL;
-    }
-    
-    // Convert to string and return
-    char* item_string = cJSON_Print(first_item);
+    char* item_str = cJSON_Print(first_item);
     
     cJSON_Delete(root);
-    
-    return item_string;
+    return item_str;
 }
 
-// ============================================================================
-// Public API - Lifecycle Management
-// ============================================================================
+// --- Public API ---
 
 ObjectLayersManager* create_object_layers_manager(TextureManager* texture_manager) {
     ObjectLayersManager* manager = (ObjectLayersManager*)malloc(sizeof(ObjectLayersManager));
     if (!manager) return NULL;
     
-    memset(manager, 0, sizeof(ObjectLayersManager));
-    manager->texture_manager = texture_manager;
-    manager->layer_count = 0;
+    for (int i = 0; i < HASH_TABLE_SIZE; i++) {
+        manager->buckets[i] = NULL;
+    }
     
-    printf("[MANAGER] Created ObjectLayersManager\n");
+    manager->texture_manager = texture_manager;
+    manager->queue_head = NULL;
+    manager->queue_tail = NULL;
+    manager->queue_size = 0;
+    
+    #if !defined(PLATFORM_WEB)
+    curl_global_init(CURL_GLOBAL_ALL);
+    #endif
     
     return manager;
 }
@@ -525,13 +377,23 @@ ObjectLayersManager* create_object_layers_manager(TextureManager* texture_manage
 void destroy_object_layers_manager(ObjectLayersManager* manager) {
     if (!manager) return;
     
-    // Free all cache entries
+    // Free cache
     for (int i = 0; i < HASH_TABLE_SIZE; i++) {
         ObjectLayerEntry* entry = manager->buckets[i];
         while (entry) {
             ObjectLayerEntry* next = entry->next;
-            if (entry->key) free(entry->key);
             if (entry->layer) free_object_layer(entry->layer);
+            
+            #if !defined(PLATFORM_WEB)
+            if (entry->async_req) {
+                pthread_join(entry->async_req->thread, NULL);
+                if (entry->async_req->data) free(entry->async_req->data);
+                if (entry->async_req->url) free(entry->async_req->url);
+                free(entry->async_req);
+            }
+            #endif
+            
+            free(entry->key);
             free(entry);
             entry = next;
         }
@@ -545,92 +407,164 @@ void destroy_object_layers_manager(ObjectLayersManager* manager) {
         free(node);
         node = next;
     }
-    manager->queue_head = NULL;
-    manager->queue_tail = NULL;
     
     free(manager);
-    printf("[MANAGER] Destroyed ObjectLayersManager\n");
+    
+    #if !defined(PLATFORM_WEB)
+    curl_global_cleanup();
+    #endif
 }
 
-// ============================================================================
-// Public API - Object Layer Fetching
-// ============================================================================
-
 ObjectLayer* get_or_fetch_object_layer(ObjectLayersManager* manager, const char* item_id) {
-    if (!manager || !item_id) {
-        return NULL;
-    }
+    if (!manager || !item_id) return NULL;
     
-    // 1. Check cache (including failed fetches)
     unsigned long index = hash_string(item_id) % HASH_TABLE_SIZE;
     ObjectLayerEntry* entry = manager->buckets[index];
+    
+    // 1. Check cache
     while (entry) {
         if (strcmp(entry->key, item_id) == 0) {
-            // Found in cache - could be valid layer or NULL (failed fetch)
-            return entry->layer;
+            // Found entry
+            
+            // If we have a layer, return it
+            if (entry->layer) return entry->layer;
+            
+            // If no layer, check async status (Native)
+            #if !defined(PLATFORM_WEB)
+            if (entry->async_req) {
+                if (entry->async_req->status == 1) { // Complete
+                    // Parse data
+                    char* item_json = extract_first_item_from_response(entry->async_req->data);
+                    if (item_json) {
+                        ObjectLayer* layer = parse_object_layer_json(item_json);
+                        free(item_json);
+                        
+                        if (layer) {
+                            entry->layer = layer;
+                            enqueue_for_texture_caching(manager, layer);
+                        }
+                    }
+                    
+                    // Cleanup request
+                    pthread_join(entry->async_req->thread, NULL);
+                    if (entry->async_req->data) free(entry->async_req->data);
+                    if (entry->async_req->url) free(entry->async_req->url);
+                    free(entry->async_req);
+                    entry->async_req = NULL;
+                    
+                    return entry->layer;
+                    
+                } else if (entry->async_req->status == 2) { // Error
+                    // Cleanup and leave layer as NULL (failed)
+                    pthread_join(entry->async_req->thread, NULL);
+                    if (entry->async_req->data) free(entry->async_req->data);
+                    if (entry->async_req->url) free(entry->async_req->url);
+                    free(entry->async_req);
+                    entry->async_req = NULL;
+                    return NULL;
+                } else {
+                    // Still pending
+                    return NULL;
+                }
+            }
+            #endif
+            
+            // If we are here, it means we have an entry but no layer and no active request.
+            // This could mean a previously failed request.
+            // For now, we return NULL. To retry, we'd need logic to clear the entry.
+            return NULL;
         }
         entry = entry->next;
     }
     
-    // 2. Fetch from API
-    char* response_json = fetch_object_layer_from_api(item_id);
-    if (!response_json) {
-        // Cache the NULL result to avoid repeated failed fetches
-        cache_object_layer(manager, item_id, NULL);
-        return NULL;
+    // 2. Not in cache - Start fetch
+    
+    // Create entry placeholder
+    ObjectLayerEntry* new_entry = (ObjectLayerEntry*)malloc(sizeof(ObjectLayerEntry));
+    if (!new_entry) return NULL;
+    
+    new_entry->key = strdup(item_id);
+    new_entry->layer = NULL;
+    new_entry->next = manager->buckets[index];
+    #if !defined(PLATFORM_WEB)
+    new_entry->async_req = NULL;
+    #endif
+    manager->buckets[index] = new_entry;
+    
+    #if defined(PLATFORM_WEB)
+    // Web Sync Fetch (Legacy/Simple) - Blocking for now as JS async is complex to bridge here without callback hell
+    // Ideally this should also be async, but for now we keep the sync behavior or use the JS fetcher if available
+    char* response_json = js_fetch_object_layer(item_id);
+    if (response_json) {
+        char* item_json = extract_first_item_from_response(response_json);
+        free(response_json);
+        if (item_json) {
+            ObjectLayer* layer = parse_object_layer_json(item_json);
+            free(item_json);
+            if (layer) {
+                new_entry->layer = layer;
+                enqueue_for_texture_caching(manager, layer);
+                return layer;
+            }
+        }
     }
+    return NULL;
     
-    // 3. Extract first item from response array
-    char* item_json = extract_first_item_from_response(response_json);
-    free(response_json);
+    #else
+    // Native Async Fetch
+    char url[512];
+    snprintf(url, sizeof(url), "%s/object-layers?item_id=%s&page=1&page_size=1", API_BASE_URL, item_id);
     
-    if (!item_json) {
-        cache_object_layer(manager, item_id, NULL);
-        return NULL;
+    AsyncLayerRequest* req = (AsyncLayerRequest*)malloc(sizeof(AsyncLayerRequest));
+    if (req) {
+        req->url = strdup(url);
+        req->data = NULL;
+        req->size = 0;
+        req->capacity = 0;
+        req->status = 0; // Pending
+        
+        if (pthread_create(&req->thread, NULL, fetch_layer_worker, req) == 0) {
+            new_entry->async_req = req;
+        } else {
+            free(req->url);
+            free(req);
+        }
     }
-    
-    // 4. Parse JSON to ObjectLayer
-    ObjectLayer* layer = parse_object_layer_json(item_json);
-    free(item_json);
-    
-    if (!layer) {
-        cache_object_layer(manager, item_id, NULL);
-        return NULL;
-    }
-    
-    // 5. Cache and queue for texture pre-caching
-    cache_object_layer(manager, item_id, layer);
-    enqueue_for_texture_caching(manager, layer);
-    
-    return layer;
+    return NULL; // Return NULL immediately while loading
+    #endif
 }
 
-// ============================================================================
-// Public API - Texture Pre-caching
-// ============================================================================
-
-/**
- * @brief Process texture caching queue (now a no-op for performance)
- * 
- * Pre-caching is disabled because it causes significant performance drops.
- * Textures are now loaded on-demand when entities need them.
- * The texture cache already prevents duplicate loads.
- */
 void process_texture_caching_queue(ObjectLayersManager* manager) {
-    // Clear queue without processing to free memory
-    if (!manager) return;
+    if (!manager || !manager->queue_head) return;
     
-    while (manager->queue_head) {
+    // Process up to 5 layers per frame to avoid stalling
+    int processed = 0;
+    while (manager->queue_head && processed < 5) {
         QueueNode* node = manager->queue_head;
+        ObjectLayer* layer = node->layer;
+        
+        // Pre-cache textures for this layer
+        // We iterate through common directions
+        const char* directions[] = {"08", "02", "04", "06", "18", "12", "14", "16"};
+        int dir_count = 8;
+        
+        for (int d = 0; d < dir_count; d++) {
+            // Just try to load frame 0 for each direction to get things started
+            // The render loop will request specific frames as needed
+            char uri[512];
+            build_object_layer_uri(uri, sizeof(uri), layer->data.item.type, layer->data.item.id, directions[d], 0);
+            load_texture_from_url(manager->texture_manager, uri);
+        }
+        
+        // Remove from queue
         manager->queue_head = node->next;
+        if (!manager->queue_head) manager->queue_tail = NULL;
+        
         free(node);
+        manager->queue_size--;
+        processed++;
     }
-    manager->queue_tail = NULL;
 }
-
-// ============================================================================
-// Public API - URI Building
-// ============================================================================
 
 void build_object_layer_uri(
     char* buffer,
@@ -640,13 +574,8 @@ void build_object_layer_uri(
     const char* direction_code,
     int frame
 ) {
-    if (!buffer || buffer_size == 0 || !item_type || !item_id || !direction_code) {
-        return;
-    }
+    if (!buffer || buffer_size == 0) return;
     
-    // Format: ASSETS_BASE_URL/item_type/item_id/direction_code/frame.png
-    // Example: https://server.cyberiaonline.com/assets/skin/anon/08/0.png
-    snprintf(buffer, buffer_size,
-             "%s/%s/%s/%s/%d.png",
+    snprintf(buffer, buffer_size, "%s/%s/%s/%s/%d.png", 
              ASSETS_BASE_URL, item_type, item_id, direction_code, frame);
 }

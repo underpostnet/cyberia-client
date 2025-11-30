@@ -1,72 +1,48 @@
 #include "entity_render.h"
+#include "game_state.h"
+#include "texture_manager.h"
+#include "object_layers_management.h"
 #include "direction_converter.h"
-#include "config.h"
-#include "raylib.h"
 #include <stdlib.h>
 #include <string.h>
 #include <stdio.h>
 #include <math.h>
-#include <time.h>
 
-#define HASH_TABLE_SIZE 256
-#define MAX_LAYERS_PER_ENTITY 64
+#define HASH_TABLE_SIZE 1024
+#define MAX_LAYERS_PER_ENTITY 20
+#define DEFAULT_FRAME_DURATION_MS 100
 
-// ============================================================================
-// Data Structures
-// ============================================================================
+// --- Data Structures ---
 
-/**
- * @struct AnimationState
- * Tracks the animation state for a specific entity-item combination.
- * Manages frame progression, timing, and direction memory.
- */
 typedef struct {
-    int frame_index;                    // Current animation frame
-    double last_update_time;            // Time of last frame update (seconds)
-    Direction last_facing_direction;    // Last non-NONE direction faced
-    Direction last_render_direction;    // Direction used in last render
-    ObjectLayerMode last_render_mode;   // Mode used in last render
-    char* last_state_string;            // State string for change detection
+    char* last_state_string;
+    double last_update_time;
+    int frame_index;
+    Direction last_facing_direction;
+    bool textures_ready;
+    int failed_texture_attempts;
 } AnimationState;
 
-/**
- * @struct AnimationEntry
- * Hash table entry for animation state lookup.
- */
 typedef struct AnimationEntry {
-    char* key;                      // "entity_id:item_id"
+    char* key;
     AnimationState state;
-    struct AnimationEntry* next;    // For chaining in hash table
+    struct AnimationEntry* next;
 } AnimationEntry;
 
-/**
- * @struct LayerRenderInfo
- * Temporary structure for sorting layers by render priority.
- */
-typedef struct {
-    ObjectLayerState* state;
-    int priority;
-    ObjectLayer* layer;
-} LayerRenderInfo;
-
-/**
- * @struct EntityRender
- * Main rendering system for entities and their object layers.
- */
 struct EntityRender {
     ObjectLayersManager* obj_layers_mgr;
     TextureManager* texture_manager;
-    AnimationEntry* anim_buckets[HASH_TABLE_SIZE];  // Hash table for animation states
+    AnimationEntry* anim_buckets[HASH_TABLE_SIZE];
 };
 
-// ============================================================================
-// Helper Functions - Hash Table Operations
-// ============================================================================
+typedef struct {
+    ObjectLayerState* state;
+    ObjectLayer* layer;
+    int priority;
+} LayerRenderInfo;
 
-/**
- * @brief Simple hash function for string keys.
- * Uses DJB2 algorithm for consistent hashing.
- */
+// --- Helper Functions ---
+
 static unsigned long hash_string(const char* str) {
     unsigned long hash = 5381;
     int c;
@@ -76,108 +52,69 @@ static unsigned long hash_string(const char* str) {
     return hash;
 }
 
-/**
- * @brief Creates a new animation entry with initialized state.
- */
 static AnimationEntry* create_animation_entry(const char* key) {
     AnimationEntry* entry = (AnimationEntry*)malloc(sizeof(AnimationEntry));
-    if (!entry) return NULL;
-
-    entry->key = (char*)malloc(strlen(key) + 1);
-    if (!entry->key) {
-        free(entry);
-        return NULL;
+    if (entry) {
+        entry->key = strdup(key);
+        entry->state.last_state_string = NULL;
+        entry->state.last_update_time = 0;
+        entry->state.frame_index = 0;
+        entry->state.last_facing_direction = DIRECTION_DOWN;
+        entry->state.textures_ready = false;
+        entry->state.failed_texture_attempts = 0;
+        entry->next = NULL;
     }
-    strcpy(entry->key, key);
-
-    // Initialize animation state
-    memset(&entry->state, 0, sizeof(AnimationState));
-    entry->state.last_facing_direction = DIRECTION_DOWN;
-    entry->state.last_render_direction = DIRECTION_DOWN;
-    entry->state.last_render_mode = MODE_IDLE;
-    entry->state.last_update_time = GetTime();
-    entry->state.last_state_string = NULL;
-    entry->state.frame_index = 0;
-
-    entry->next = NULL;
     return entry;
 }
 
-/**
- * @brief Retrieves or creates animation state for an entity-item pair.
- * Uses hash table for O(1) average lookup.
- */
-static AnimationState* get_animation_state(
-    EntityRender* render,
-    const char* entity_id,
-    const char* item_id
-) {
+static AnimationState* get_animation_state(EntityRender* render, const char* entity_id, const char* item_id) {
     if (!render || !entity_id || !item_id) return NULL;
-
-    char key[512];
-    snprintf(key, sizeof(key), "%s:%s", entity_id, item_id);
-
+    
+    char key[256];
+    snprintf(key, sizeof(key), "%s_%s", entity_id, item_id);
+    
     unsigned long index = hash_string(key) % HASH_TABLE_SIZE;
     AnimationEntry* entry = render->anim_buckets[index];
-
-    // Search for existing entry
+    
     while (entry) {
         if (strcmp(entry->key, key) == 0) {
             return &entry->state;
         }
         entry = entry->next;
     }
-
-    // Create new entry
-    AnimationEntry* new_entry = create_animation_entry(key);
-    if (!new_entry) return NULL;
-
-    new_entry->next = render->anim_buckets[index];
-    render->anim_buckets[index] = new_entry;
-
-    return &new_entry->state;
+    
+    // Create new
+    entry = create_animation_entry(key);
+    if (entry) {
+        entry->next = render->anim_buckets[index];
+        render->anim_buckets[index] = entry;
+        return &entry->state;
+    }
+    
+    return NULL;
 }
 
-// ============================================================================
-// Helper Functions - Rendering Logic
-// ============================================================================
-
-/**
- * @brief Determines render priority based on item type.
- * Lower values render first (background), higher values render last (foreground).
- */
 static int get_priority_for_type(const char* type) {
-    if (!type) return 99;
-
-    if (strcmp(type, "floor") == 0) return 0;
-    if (strcmp(type, "skin") == 0) return 1;
-    if (strcmp(type, "weapon") == 0) return 2;
-    if (strcmp(type, "skill") == 0) return 3;
-    if (strcmp(type, "coin") == 0) return 4;
-
-    return 99;  // Unknown types render on top
+    if (!type) return 0;
+    // Basic priority list based on common RPG layers
+    if (strcmp(type, "skin") == 0 || strcmp(type, "body") == 0) return 10;
+    if (strcmp(type, "eyes") == 0) return 11;
+    if (strcmp(type, "hair") == 0) return 12;
+    if (strcmp(type, "clothes") == 0 || strcmp(type, "armor") == 0) return 20;
+    if (strcmp(type, "hat") == 0 || strcmp(type, "helmet") == 0) return 30;
+    if (strcmp(type, "weapon") == 0) return 40;
+    if (strcmp(type, "shield") == 0) return 41;
+    return 50; // Default
 }
 
-/**
- * @brief Comparison function for qsort.
- * Sorts layers by priority for correct z-order rendering.
- */
 static int compare_layer_priority(const void* a, const void* b) {
-    const LayerRenderInfo* info_a = (const LayerRenderInfo*)a;
-    const LayerRenderInfo* info_b = (const LayerRenderInfo*)b;
+    LayerRenderInfo* info_a = (LayerRenderInfo*)a;
+    LayerRenderInfo* info_b = (LayerRenderInfo*)b;
     return info_a->priority - info_b->priority;
 }
 
-/**
- * @brief Gets the frame count for a specific animation state.
- * Returns the frame list and corresponding direction string with proper fallbacks.
- *
- * This implements the frame selection logic with the following priority:
- * 1. Specific direction + mode (e.g., "up_walking")
- * 2. Same direction idle (e.g., "up_idle")
- * 3. Default idle
- * 4. None idle
- */
+
+
 static int get_frame_count_and_direction(
     RenderFrames* frames,
     Direction dir,
@@ -185,187 +122,52 @@ static int get_frame_count_and_direction(
     bool is_stateless,
     const char** out_dir_string
 ) {
-    int count = 0;
-    const char* dir_str = "default_idle";
-
-    // Handle stateless objects - they use fixed animation
     if (is_stateless) {
-        if (frames->none_idle_count > 0) {
-            count = frames->none_idle_count;
-            dir_str = "none_idle";
-        } else if (frames->default_idle_count > 0) {
-            count = frames->default_idle_count;
-            dir_str = "default_idle";
-        }
-        if (out_dir_string) *out_dir_string = dir_str;
-        return count;
+        *out_dir_string = "default_idle";
+        return frames->default_idle_count;
     }
 
-    // Priority 1: Specific direction + mode
+    // Determine state string and count based on dir and mode
     if (mode == MODE_WALKING) {
         switch (dir) {
-            case DIRECTION_UP:
-                count = frames->up_walking_count;
-                dir_str = "up_walking";
-                break;
-            case DIRECTION_DOWN:
-                count = frames->down_walking_count;
-                dir_str = "down_walking";
-                break;
-            case DIRECTION_LEFT:
-                count = frames->left_walking_count;
-                dir_str = "left_walking";
-                break;
-            case DIRECTION_RIGHT:
-                count = frames->right_walking_count;
-                dir_str = "right_walking";
-                break;
-            case DIRECTION_UP_LEFT:
-                count = frames->up_left_walking_count;
-                dir_str = "up_left_walking";
-                break;
-            case DIRECTION_UP_RIGHT:
-                count = frames->up_right_walking_count;
-                dir_str = "up_right_walking";
-                break;
-            case DIRECTION_DOWN_LEFT:
-                count = frames->down_left_walking_count;
-                dir_str = "down_left_walking";
-                break;
-            case DIRECTION_DOWN_RIGHT:
-                count = frames->down_right_walking_count;
-                dir_str = "down_right_walking";
-                break;
-            default:
-                break;
+            case DIRECTION_UP: *out_dir_string = "up_walking"; return frames->up_walking_count;
+            case DIRECTION_DOWN: *out_dir_string = "down_walking"; return frames->down_walking_count;
+            case DIRECTION_LEFT: *out_dir_string = "left_walking"; return frames->left_walking_count;
+            case DIRECTION_RIGHT: *out_dir_string = "right_walking"; return frames->right_walking_count;
+            case DIRECTION_UP_RIGHT: *out_dir_string = "up_right_walking"; return frames->up_right_walking_count;
+            case DIRECTION_UP_LEFT: *out_dir_string = "up_left_walking"; return frames->up_left_walking_count;
+            case DIRECTION_DOWN_RIGHT: *out_dir_string = "down_right_walking"; return frames->down_right_walking_count;
+            case DIRECTION_DOWN_LEFT: *out_dir_string = "down_left_walking"; return frames->down_left_walking_count;
+            default: *out_dir_string = "down_walking"; return frames->down_walking_count;
         }
     } else {
-        // IDLE mode
+        // Idle
         switch (dir) {
-            case DIRECTION_UP:
-                count = frames->up_idle_count;
-                dir_str = "up_idle";
-                break;
-            case DIRECTION_DOWN:
-                count = frames->down_idle_count;
-                dir_str = "down_idle";
-                break;
-            case DIRECTION_LEFT:
-                count = frames->left_idle_count;
-                dir_str = "left_idle";
-                break;
-            case DIRECTION_RIGHT:
-                count = frames->right_idle_count;
-                dir_str = "right_idle";
-                break;
-            case DIRECTION_UP_LEFT:
-                count = frames->up_left_idle_count;
-                dir_str = "up_left_idle";
-                break;
-            case DIRECTION_UP_RIGHT:
-                count = frames->up_right_idle_count;
-                dir_str = "up_right_idle";
-                break;
-            case DIRECTION_DOWN_LEFT:
-                count = frames->down_left_idle_count;
-                dir_str = "down_left_idle";
-                break;
-            case DIRECTION_DOWN_RIGHT:
-                count = frames->down_right_idle_count;
-                dir_str = "down_right_idle";
-                break;
-            case DIRECTION_NONE:
-                count = frames->none_idle_count;
-                dir_str = "none_idle";
-                break;
-            default:
-                break;
+            case DIRECTION_UP: *out_dir_string = "up_idle"; return frames->up_idle_count;
+            case DIRECTION_DOWN: *out_dir_string = "down_idle"; return frames->down_idle_count;
+            case DIRECTION_LEFT: *out_dir_string = "left_idle"; return frames->left_idle_count;
+            case DIRECTION_RIGHT: *out_dir_string = "right_idle"; return frames->right_idle_count;
+            case DIRECTION_UP_RIGHT: *out_dir_string = "up_right_idle"; return frames->up_right_idle_count;
+            case DIRECTION_UP_LEFT: *out_dir_string = "up_left_idle"; return frames->up_left_idle_count;
+            case DIRECTION_DOWN_RIGHT: *out_dir_string = "down_right_idle"; return frames->down_right_idle_count;
+            case DIRECTION_DOWN_LEFT: *out_dir_string = "down_left_idle"; return frames->down_left_idle_count;
+            case DIRECTION_NONE: *out_dir_string = "down_idle"; return frames->down_idle_count; // Fallback
+            default: *out_dir_string = "down_idle"; return frames->down_idle_count;
         }
     }
-
-    // Priority 2: Fallback to idle for same direction if no frames
-    if (count == 0 && mode != MODE_IDLE) {
-        // Try direction + idle
-        switch (dir) {
-            case DIRECTION_UP:
-                count = frames->up_idle_count;
-                dir_str = "up_idle";
-                break;
-            case DIRECTION_DOWN:
-                count = frames->down_idle_count;
-                dir_str = "down_idle";
-                break;
-            case DIRECTION_LEFT:
-                count = frames->left_idle_count;
-                dir_str = "left_idle";
-                break;
-            case DIRECTION_RIGHT:
-                count = frames->right_idle_count;
-                dir_str = "right_idle";
-                break;
-            case DIRECTION_UP_LEFT:
-                count = frames->up_left_idle_count;
-                dir_str = "up_left_idle";
-                break;
-            case DIRECTION_UP_RIGHT:
-                count = frames->up_right_idle_count;
-                dir_str = "up_right_idle";
-                break;
-            case DIRECTION_DOWN_LEFT:
-                count = frames->down_left_idle_count;
-                dir_str = "down_left_idle";
-                break;
-            case DIRECTION_DOWN_RIGHT:
-                count = frames->down_right_idle_count;
-                dir_str = "down_right_idle";
-                break;
-            default:
-                break;
-        }
-    }
-
-    // Priority 3: Fallback to default idle
-    if (count == 0) {
-        if (frames->default_idle_count > 0) {
-            count = frames->default_idle_count;
-            dir_str = "default_idle";
-        }
-    }
-
-    // Priority 4: Final fallback to none idle
-    if (count == 0) {
-        if (frames->none_idle_count > 0) {
-            count = frames->none_idle_count;
-            dir_str = "none_idle";
-        }
-    }
-
-    if (out_dir_string) *out_dir_string = dir_str;
-    return count;
 }
 
-/**
- * @brief Draws a debug box when dev_ui is enabled.
- * Visual debugging aid to see entity boundaries and types.
- */
-static void draw_dev_ui_box(
-    Rectangle dest_rec,
-    const char* entity_type
-) {
-    Color color = BLACK;
-
-    if (strcmp(entity_type, "self") == 0) {
-        color = (Color){0, 200, 255, 255};      // Cyan for player
-    } else if (strcmp(entity_type, "other") == 0) {
-        color = (Color){255, 100, 0, 255};      // Orange for other players
-    } else if (strcmp(entity_type, "bot") == 0) {
-        color = (Color){100, 200, 100, 255};    // Green for bots
-    } else if (strcmp(entity_type, "floor") == 0) {
-        color = (Color){50, 55, 50, 100};       // Dark gray for floor
-    }
-
-    DrawRectanglePro(dest_rec, (Vector2){0, 0}, 0.0f, color);
+static void draw_dev_ui_box(Rectangle dest_rec, const char* entity_type) {
+    Color color = RED;
+    if (strcmp(entity_type, "self") == 0) color = BLUE;
+    else if (strcmp(entity_type, "other") == 0) color = ORANGE;
+    else if (strcmp(entity_type, "bot") == 0) color = GREEN;
+    
+    DrawRectangleLinesEx(dest_rec, 1.0f, color);
+    DrawText(entity_type, (int)dest_rec.x, (int)dest_rec.y - 10, 10, color);
 }
+
+
 
 // ============================================================================
 // Public API - Lifecycle Management
@@ -412,26 +214,6 @@ void destroy_entity_render(EntityRender* render) {
 // Public API - Rendering
 // ============================================================================
 
-/**
- * @brief Draws all object layers for an entity with proper animation and sorting.
- *
- * When dev_ui is true, also draws debug boxes showing entity boundaries.
- * Only draws when dev_ui is false to render the actual game graphics.
- *
- * @param render The EntityRender system
- * @param entity_id Unique identifier for this entity
- * @param pos_x World X position in grid coordinates
- * @param pos_y World Y position in grid coordinates
- * @param width Entity width in grid units
- * @param height Entity height in grid units
- * @param direction Current facing direction
- * @param mode Current animation mode (Idle, Walking, Teleporting)
- * @param layers_state Array of active object layer states
- * @param layers_count Number of layers in the array
- * @param entity_type Type identifier ("self", "other", "bot", "floor")
- * @param dev_ui Whether developer UI debugging is enabled
- * @param cell_size Size of a grid cell in pixels
- */
 void draw_entity_layers(
     EntityRender* render,
     const char* entity_id,
@@ -469,8 +251,7 @@ void draw_entity_layers(
         draw_dev_ui_box(dest_rec, entity_type);
     }
 
-    // Return early if no layers
-    // Object layers should render regardless of dev_ui setting
+    // If no layers, draw a fallback representation so entity is still visible
     if (!layers_state || layers_count <= 0) {
         return;
     }
@@ -481,6 +262,7 @@ void draw_entity_layers(
 
     LayerRenderInfo layers_to_render[MAX_LAYERS_PER_ENTITY];
     int render_count = 0;
+    bool any_layer_data_missing = false;
 
     for (int i = 0; i < layers_count && render_count < MAX_LAYERS_PER_ENTITY; i++) {
         ObjectLayerState* state = layers_state[i];
@@ -494,6 +276,9 @@ void draw_entity_layers(
             state->item_id
         );
         if (!layer) {
+            // Layer data is being fetched
+            any_layer_data_missing = true;
+            // We continue to ensure all needed layers are requested
             continue;
         }
 
@@ -506,6 +291,11 @@ void draw_entity_layers(
         render_count++;
     }
 
+    // If any layer data is missing, we can't render the full entity properly.
+    if (any_layer_data_missing) {
+        return;
+    }
+
     // Sort layers by priority (lower z-order first)
     qsort(
         layers_to_render,
@@ -515,10 +305,16 @@ void draw_entity_layers(
     );
 
     // ========================================================================
-    // Animation Frame Rendering Loop
+    // Texture Availability Check & Animation Update
     // ========================================================================
-
+    
+    // We need to check if ALL textures for the current frame are available.
+    // We also update animation state here to ensure it progresses.
+    
     double now = GetTime();
+    bool all_textures_ready = true;
+    Texture2D layer_textures[MAX_LAYERS_PER_ENTITY];
+    memset(layer_textures, 0, sizeof(layer_textures));
 
     for (int i = 0; i < render_count; i++) {
         ObjectLayer* layer = layers_to_render[i].layer;
@@ -530,13 +326,12 @@ void draw_entity_layers(
             entity_id,
             state->item_id
         );
-        if (!anim) continue;
+        if (!anim) {
+            all_textures_ready = false;
+            continue;
+        }
 
-        // ====================================================================
-        // Direction and Mode Selection Logic
-        // ====================================================================
-
-        // Update last_facing_direction if we have a new non-NONE direction
+        // Update last_facing_direction
         if (direction != DIRECTION_NONE) {
             anim->last_facing_direction = direction;
         }
@@ -551,10 +346,7 @@ void draw_entity_layers(
             }
         }
 
-        // ====================================================================
-        // Frame Selection with Fallbacks
-        // ====================================================================
-
+        // Frame Selection
         const char* dir_string = NULL;
         int num_frames = get_frame_count_and_direction(
             &layer->data.render.frames,
@@ -565,64 +357,35 @@ void draw_entity_layers(
         );
 
         if (num_frames <= 0) {
-            continue;  // No frames available, skip this layer
+            // No frames for this state? Skip rendering this layer.
+            continue;
         }
 
-        // ====================================================================
-        // State Change Detection and Reset
-        // ====================================================================
-
-        // Reset animation if state has changed
+        // State Change Detection
         if (!anim->last_state_string ||
             strcmp(anim->last_state_string, dir_string) != 0) {
             
-            // Free old string
-            if (anim->last_state_string) {
-                free(anim->last_state_string);
-            }
-
-            // Set new state
-            anim->last_state_string = (char*)malloc(strlen(dir_string) + 1);
-            if (anim->last_state_string) {
-                strcpy(anim->last_state_string, dir_string);
-            }
-
+            if (anim->last_state_string) free(anim->last_state_string);
+            anim->last_state_string = strdup(dir_string);
             anim->frame_index = 0;
             anim->last_update_time = now;
         }
 
-        // ====================================================================
-        // Frame Timing and Animation Advancement
-        // ====================================================================
-
+        // Animation Advancement
         int frame_duration_ms = layer->data.render.frame_duration;
-        if (frame_duration_ms <= 0) {
-            frame_duration_ms = DEFAULT_FRAME_DURATION_MS;
-        }
+        if (frame_duration_ms <= 0) frame_duration_ms = DEFAULT_FRAME_DURATION_MS;
 
-        // Check if enough time has passed to advance to next frame
         double elapsed_ms = (now - anim->last_update_time) * 1000.0;
         if (elapsed_ms >= frame_duration_ms) {
             anim->frame_index = (anim->frame_index + 1) % num_frames;
             anim->last_update_time = now;
         }
+        if (anim->frame_index >= num_frames) anim->frame_index = 0;
 
-        // Safety clamp
-        if (anim->frame_index >= num_frames) {
-            anim->frame_index = 0;
-        }
-
-        // ====================================================================
-        // Texture Loading and Rendering
-        // ====================================================================
-
-        // Get direction code for texture URI construction
+        // Texture Loading Check
         const char* direction_code = get_code_from_direction(dir_string);
-        if (!direction_code) {
-            continue;
-        }
+        if (!direction_code) continue;
 
-        // Build texture URI
         char uri[512];
         build_object_layer_uri(
             uri,
@@ -633,26 +396,46 @@ void draw_entity_layers(
             anim->frame_index
         );
 
-        // Load texture (cached)
+        // Check/Load texture
+        // This will trigger async fetch if not present
         Texture2D texture = load_texture_from_url(render->texture_manager, uri);
 
-        // Draw texture if loaded successfully
         if (texture.id > 0) {
-            Rectangle source_rec = {
-                0.0f,
-                0.0f,
-                (float)texture.width,
-                (float)texture.height
-            };
-
-            DrawTexturePro(
-                texture,
-                source_rec,
-                dest_rec,
-                (Vector2){0.0f, 0.0f},
-                0.0f,
-                WHITE
-            );
+            layer_textures[i] = texture;
+            if (!anim->textures_ready) {
+                anim->textures_ready = true;
+                anim->failed_texture_attempts = 0;
+            }
+        } else {
+            all_textures_ready = false;
+            anim->failed_texture_attempts++;
         }
+    }
+
+    // ========================================================================
+    // Final Rendering
+    // ========================================================================
+
+    if (all_textures_ready) {
+        // All layers are ready, draw them all
+        for (int i = 0; i < render_count; i++) {
+            if (layer_textures[i].id > 0) {
+                Rectangle source_rec = {
+                    0.0f, 0.0f,
+                    (float)layer_textures[i].width,
+                    (float)layer_textures[i].height
+                };
+                DrawTexturePro(
+                    layer_textures[i],
+                    source_rec,
+                    dest_rec,
+                    (Vector2){0.0f, 0.0f},
+                    0.0f,
+                    WHITE
+                );
+            }
+        }
+    } else {
+        // Something is missing, render nothing (wait for load)
     }
 }
