@@ -88,12 +88,23 @@ bin\PLATFORM_DESKTOP\DEBUG\cyberia-client.exe
 WebAssembly applications require a local web server to run due to browser security restrictions (CORS).
 
 #### Method 1: Using Make (Python)
-The makefile includes a helper to serve the build directory:
+The makefile includes helpers to serve the build directory for both development and production environments.
 
+**Development Server:**
+Serves the debug build on port `8080` by default.
 ```bash
-make -f Web.mk serve
+make -f Web.mk serve_development
+# Override port:
+make -f Web.mk serve_development DEV_PORT=9000
 ```
-*Note: This serves the `bin/platform_web/debug` directory by default.*
+
+**Production Server:**
+Serves the release build on port `8000` by default. This is intended to run behind an Envoy reverse proxy in production.
+```bash
+make -f Web.mk serve_production
+# Override port:
+make -f Web.mk serve_production PROD_PORT=9000
+```
 
 #### Method 2: Python Manual
 If you want to serve a specific build mode manually:

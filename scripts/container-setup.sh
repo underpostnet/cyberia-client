@@ -22,6 +22,11 @@ shift
 ENVIRONMENT="${ENVIRONMENT_INPUT}"
 ENVIRONMENT_SLUG="$(printf '%s' "$ENVIRONMENT" | tr '[:upper:]' '[:lower:]' | tr -cs '[:alnum:]-' '-')"
 
+# Check for double dash to separate additional args
+if [ "$#" -gt 0 ] && [ "$1" == "--" ]; then
+  shift
+fi
+
 # Determine Build Mode based on Environment
 if [[ "$ENVIRONMENT_SLUG" == "production" ]]; then
   BUILD_MODE="RELEASE"
@@ -159,11 +164,29 @@ update_container_status() {
 }
 
 start_server() {
-  section "Launching development server"
+  section "Launching server ($ENVIRONMENT_SLUG)"
+
+  # Parse arguments to handle space-separated variables (e.g., "PORT 8080" -> "PORT=8080")
+  local make_args=()
+  while [[ $# -gt 0 ]]; do
+    local key="$1"
+    shift
+    # Heuristic: If arg is all uppercase/digits/underscores and next arg exists, treat as VAR=VAL
+    if [[ "$key" =~ ^[A-Z0-9_]+$ ]] && [[ $# -gt 0 ]] && [[ "$1" != *=* ]]; then
+      make_args+=("$key=$1")
+      shift
+    else
+      make_args+=("$key")
+    fi
+  done
+
   (
     cd "$PROJECT_ROOT"
-    # Use the serve target from Web.mk
-    run make -f Web.mk serve BUILD_MODE="$BUILD_MODE"
+    if [[ "$ENVIRONMENT_SLUG" == "production" ]]; then
+      run make -f Web.mk serve_production "${make_args[@]}"
+    else
+      run make -f Web.mk serve_development BUILD_MODE="$BUILD_MODE" "${make_args[@]}"
+    fi
   )
 }
 
@@ -176,7 +199,7 @@ main() {
   build_raylib
   build_client
   update_container_status
-  start_server
+  start_server "$@"
 }
 
 main "$@"

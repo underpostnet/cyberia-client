@@ -2,6 +2,8 @@ include config.mk
 
 PLATFORM		:= PLATFORM_WEB
 CC				:= emcc
+DEV_PORT		?= 8081
+PROD_PORT		?= 8081
 
 #---------------------------------------------------------------------------------------------
 BUILD_DIR		:= $(call lc,$(BUILD_DIR)/$(PLATFORM)/$(BUILD_MODE))
@@ -45,12 +47,15 @@ OBJS	+= $(BUILD_DIR)/cJSON.o
 #---------------------------------------------------------------------------------------------
 # Specific targets
 
-.PHONY: web serve clean
+.PHONY: web serve_development serve_production clean
 
 web: $(PROJECT_NAME)
 
-serve: web
-	python3 -m http.server 8080 --directory $(OUTPUT_DIR)
+serve_development: web
+	python3 -m http.server $(DEV_PORT) --directory $(OUTPUT_DIR)
+
+serve_production:
+	$(MAKE) -f Web.mk serve_development BUILD_MODE=RELEASE DEV_PORT=$(PROD_PORT)
 
 clean:
 	rm -rf $(BUILD_DIR) $(OUTPUT_DIR)
