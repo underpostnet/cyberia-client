@@ -134,7 +134,7 @@ typedef struct {
 } ObjectLayerState;
 
 // Base entity state structure
-typedef struct EntityState {
+struct EntityState {
     char id[MAX_ID_LENGTH];
     Vector2 pos_server;
     Vector2 pos_prev;
@@ -148,22 +148,22 @@ typedef struct EntityState {
     float max_life;
     float respawn_in;
     double last_update;
-} EntityState;
+};
 
 // Player state structure
-typedef struct PlayerState {
+struct PlayerState {
     EntityState base; // Inheritance simulation
     int map_id;
     Vector2 path[MAX_PATH_POINTS];
     int path_count;
     Vector2 target_pos;
-} PlayerState;
+};
 
 // Bot state structure
-typedef struct BotState {
+struct BotState {
     EntityState base; // Inheritance simulation
     char behavior[MAX_BEHAVIOR_LENGTH];
-} BotState;
+};
 
 // World object structure (for obstacles, portals, etc.)
 typedef struct {
@@ -200,7 +200,7 @@ typedef struct {
 } GameColors;
 
 // Main game state structure
-typedef struct GameState {
+struct GameState {
     // Thread safety (desktop only)
 #if !defined(PLATFORM_WEB)
     pthread_mutex_t mutex;
@@ -270,7 +270,7 @@ typedef struct GameState {
     // Camera
     Camera2D camera;
     bool camera_initialized;
-} GameState;
+};
 
 // Global game state instance
 extern GameState g_game_state;

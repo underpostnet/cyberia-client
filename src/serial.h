@@ -3,18 +3,18 @@
 
 #include <stdbool.h>
 #include <stddef.h>
-#include "../lib/cJSON/cJSON.h"
+#include "cJSON.h"
 #include "game_state.h"
 
 /**
  * @file serial.h
  * @brief General-purpose JSON serialization/deserialization framework
- * 
+ *
  * This module provides C equivalents to Python's serial.py functionality,
  * enabling bidirectional conversion between C structs and JSON.
- * 
+ *
  * Based on: src/serial.py
- * 
+ *
  * Key Features:
  * - Type-safe deserialization from JSON to C structs
  * - Serialization from C structs to JSON

@@ -1,7 +1,7 @@
 #include "message_parser.h"
 #include "serial.h"
 #include "game_state.h"
-#include "../lib/cJSON/cJSON.h"
+#include "cJSON.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -261,7 +261,7 @@ int message_parser_parse_visible_players(const cJSON* players_json) {
 
     // Mark all existing players as not seen in this update
     bool player_seen[MAX_ENTITIES] = {false};
-    
+
     // Parse all visible players from server
     cJSON* player_obj = NULL;
     cJSON_ArrayForEach(player_obj, players_json) {
@@ -272,7 +272,7 @@ int message_parser_parse_visible_players(const cJSON* players_json) {
         if (serial_deserialize_entity_state(player_obj, &player.base) == 0) {
             // Update or add player - this preserves smooth interpolation for existing players
             game_state_update_player(&player);
-            
+
             // Mark this player as seen
             for (int i = 0; i < g_game_state.other_player_count; i++) {
                 if (strcmp(g_game_state.other_players[i].base.id, player.base.id) == 0) {
@@ -282,7 +282,7 @@ int message_parser_parse_visible_players(const cJSON* players_json) {
             }
         }
     }
-    
+
     // Remove players that are no longer visible
     for (int i = g_game_state.other_player_count - 1; i >= 0; i--) {
         if (!player_seen[i]) {
@@ -308,7 +308,7 @@ int message_parser_parse_visible_bots(const cJSON* bots_json) {
         if (serial_deserialize_bot_state(bot_obj, &bot) == 0) {
             // Update or add bot - this preserves smooth interpolation for existing bots
             game_state_update_bot(&bot);
-            
+
             // Mark this bot as seen
             for (int i = 0; i < g_game_state.bot_count; i++) {
                 if (strcmp(g_game_state.bots[i].base.id, bot.base.id) == 0) {
@@ -318,7 +318,7 @@ int message_parser_parse_visible_bots(const cJSON* bots_json) {
             }
         }
     }
-    
+
     // Remove bots that are no longer visible
     for (int i = g_game_state.bot_count - 1; i >= 0; i--) {
         if (!bot_seen[i]) {
@@ -446,7 +446,7 @@ int message_parser_parse_aoi_update(const cJSON* json_root) {
             // Preserve previous interpolated position for smooth transitions
             Vector2 prev_interp_pos = g_game_state.player.base.interp_pos;
             bool first_update = (g_game_state.player_id[0] == '\0');
-            
+
             // Update main player state
             memcpy(&g_game_state.player, &player, sizeof(PlayerState));
 
@@ -477,7 +477,7 @@ int message_parser_parse_aoi_update(const cJSON* json_root) {
         g_game_state.portal_count = 0;
         g_game_state.floor_count = 0;
         g_game_state.foreground_count = 0;
-        
+
         // Note: bot_count is managed by game_state_update_bot() to preserve smooth interpolation
         // Mark all existing bots as not seen in this update
         bool bot_seen[MAX_ENTITIES] = {false};
@@ -503,7 +503,7 @@ int message_parser_parse_aoi_update(const cJSON* json_root) {
                     cJSON* pos = cJSON_GetObjectItemCaseSensitive(obj, "Pos");
                     cJSON* dims = cJSON_GetObjectItemCaseSensitive(obj, "Dims");
                     cJSON* id = cJSON_GetObjectItemCaseSensitive(obj, "id");
-                    
+
                     if (pos && dims && id && cJSON_IsString(id)) {
                         WorldObject* obstacle = &g_game_state.obstacles[g_game_state.obstacle_count];
                         strncpy(obstacle->id, id->valuestring, sizeof(obstacle->id) - 1);
@@ -521,7 +521,7 @@ int message_parser_parse_aoi_update(const cJSON* json_root) {
                     cJSON* pos = cJSON_GetObjectItemCaseSensitive(obj, "Pos");
                     cJSON* dims = cJSON_GetObjectItemCaseSensitive(obj, "Dims");
                     cJSON* id = cJSON_GetObjectItemCaseSensitive(obj, "id");
-                    
+
                     if (pos && dims && id && cJSON_IsString(id)) {
                         WorldObject* foreground = &g_game_state.foregrounds[g_game_state.foreground_count];
                         strncpy(foreground->id, id->valuestring, sizeof(foreground->id) - 1);
@@ -540,7 +540,7 @@ int message_parser_parse_aoi_update(const cJSON* json_root) {
                     cJSON* dims = cJSON_GetObjectItemCaseSensitive(obj, "Dims");
                     cJSON* id = cJSON_GetObjectItemCaseSensitive(obj, "id");
                     cJSON* label = cJSON_GetObjectItemCaseSensitive(obj, "PortalLabel");
-                    
+
                     if (pos && dims && id && cJSON_IsString(id)) {
                         WorldObject* portal = &g_game_state.portals[g_game_state.portal_count];
                         strncpy(portal->id, id->valuestring, sizeof(portal->id) - 1);
@@ -562,7 +562,7 @@ int message_parser_parse_aoi_update(const cJSON* json_root) {
                     cJSON* dims = cJSON_GetObjectItemCaseSensitive(obj, "Dims");
                     cJSON* id = cJSON_GetObjectItemCaseSensitive(obj, "id");
                     cJSON* obj_layers = cJSON_GetObjectItemCaseSensitive(obj, "objectLayers");
-                    
+
                     if (pos && dims && id && cJSON_IsString(id)) {
                         WorldObject* floor = &g_game_state.floors[g_game_state.floor_count];
                         strncpy(floor->id, id->valuestring, sizeof(floor->id) - 1);
@@ -570,20 +570,20 @@ int message_parser_parse_aoi_update(const cJSON* json_root) {
                         floor->pos.y = serial_get_float_default(pos, "Y", 0.0f);
                         floor->dims.x = serial_get_float_default(dims, "Width", 1.0f);
                         floor->dims.y = serial_get_float_default(dims, "Height", 1.0f);
-                        
+
                         // Parse object layers if present
                         floor->object_layer_count = 0;
                         if (obj_layers && cJSON_IsArray(obj_layers)) {
                             cJSON* layer = NULL;
                             cJSON_ArrayForEach(layer, obj_layers) {
                                 if (floor->object_layer_count >= MAX_OBJECT_LAYERS) break;
-                                
+
                                 ObjectLayerState* layer_state = &floor->object_layers[floor->object_layer_count];
-                                
+
                                 cJSON* item_id = cJSON_GetObjectItemCaseSensitive(layer, "itemId");
                                 cJSON* active = cJSON_GetObjectItemCaseSensitive(layer, "active");
                                 cJSON* quantity = cJSON_GetObjectItemCaseSensitive(layer, "quantity");
-                                
+
                                 if (item_id && cJSON_IsString(item_id)) {
                                     strncpy(layer_state->item_id, item_id->valuestring, sizeof(layer_state->item_id) - 1);
                                 }
@@ -593,11 +593,11 @@ int message_parser_parse_aoi_update(const cJSON* json_root) {
                                 if (quantity && cJSON_IsNumber(quantity)) {
                                     layer_state->quantity = quantity->valueint;
                                 }
-                                
+
                                 floor->object_layer_count++;
                             }
                         }
-                        
+
                         g_game_state.floor_count++;
                     }
                 }
@@ -606,11 +606,11 @@ int message_parser_parse_aoi_update(const cJSON* json_root) {
                 // Parse bot
                 BotState bot;
                 memset(&bot, 0, sizeof(BotState));
-                
+
                 if (serial_deserialize_bot_state(obj, &bot) == 0) {
                     // Update or add bot - preserves smooth interpolation for existing bots
                     game_state_update_bot(&bot);
-                    
+
                     // Mark this bot as seen
                     for (int i = 0; i < g_game_state.bot_count; i++) {
                         if (strcmp(g_game_state.bots[i].base.id, bot.base.id) == 0) {
@@ -620,11 +620,11 @@ int message_parser_parse_aoi_update(const cJSON* json_root) {
                     }
                 }
             }
-            
+
             // Move to next object in the dictionary
             obj = obj->next;
         }
-        
+
         // Remove bots that are no longer visible
         for (int i = g_game_state.bot_count - 1; i >= 0; i--) {
             if (!bot_seen[i]) {

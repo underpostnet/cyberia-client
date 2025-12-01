@@ -1,8 +1,0 @@
-*
-
-!*.c
-!*.h
-!Makefile
-!README.md
-!shell.html
-!minishell.html

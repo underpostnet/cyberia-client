@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Script to set up the Cyberia Client development environment inside a container.
 # It handles repository cloning, secrets synchronization, toolchain installation,
+# and building the project using the new Web.mk build system.
 
 set -euo pipefail
 
@@ -20,6 +21,13 @@ ENVIRONMENT_INPUT="$1"
 shift
 ENVIRONMENT="${ENVIRONMENT_INPUT}"
 ENVIRONMENT_SLUG="$(printf '%s' "$ENVIRONMENT" | tr '[:upper:]' '[:lower:]' | tr -cs '[:alnum:]-' '-')"
+
+# Determine Build Mode based on Environment
+if [[ "$ENVIRONMENT_SLUG" == "production" ]]; then
+  BUILD_MODE="RELEASE"
+else
+  BUILD_MODE="DEBUG"
+fi
 
 PROJECT_ROOT="${PROJECT_ROOT:-/home/dd/cyberia-client}"
 PROJECT_PARENT="$(dirname "$PROJECT_ROOT")"
@@ -83,15 +91,23 @@ install_toolchain() {
   section "Installing host toolchain prerequisites"
   (
     cd "$PROJECT_ROOT"
-    run chmod +x ./scripts/rhel-emscripten-setup.sh
-    run ./scripts/rhel-emscripten-setup.sh
+    if [ -f "./scripts/rhel-emscripten-setup.sh" ]; then
+        run chmod +x ./scripts/rhel-emscripten-setup.sh
+        run ./scripts/rhel-emscripten-setup.sh
+    else
+        warn "Toolchain setup script not found at ./scripts/rhel-emscripten-setup.sh"
+    fi
   )
 
   section "Installing and activating EMSDK"
   (
     cd "$PROJECT_ROOT"
-    run chmod +x ./scripts/rhel-emscripten-env.sh
-    run ./scripts/rhel-emscripten-env.sh
+    if [ -f "./scripts/rhel-emscripten-env.sh" ]; then
+        run chmod +x ./scripts/rhel-emscripten-env.sh
+        run ./scripts/rhel-emscripten-env.sh
+    else
+        warn "EMSDK env setup script not found at ./scripts/rhel-emscripten-env.sh"
+    fi
   )
 }
 
@@ -106,30 +122,30 @@ ensure_emsdk_env() {
   source "$EMSDK_ROOT/emsdk_env.sh"
   export PATH="$EMSDK_ROOT:$EMSDK_ROOT/upstream/emscripten:$PATH"
 
-  if ! command -v emcmake >/dev/null 2>&1; then
-    log "ERROR: emcmake is still missing after sourcing EMSDK"
+  if ! command -v emcc >/dev/null 2>&1; then
+    log "ERROR: emcc is still missing after sourcing EMSDK"
     exit 1
   fi
 
-  log "EMSDK activated (emcmake: $(command -v emcmake))"
+  log "EMSDK activated (emcc: $(command -v emcc))"
 }
 
 build_raylib() {
-  section "Building raylib (Web / Release)"
+  section "Building Raylib (Web / $BUILD_MODE)"
+  # The Web.mk file handles building raylib, but we can explicitly invoke the target
+  # to ensure it's built before the main application.
   (
-    cd "$PROJECT_ROOT/lib/raylib"
-    run emcmake cmake . -DPLATFORM=Web -DCMAKE_BUILD_TYPE=Release
-    run emmake make -j"$MAKE_JOBS"
-    run emmake make install
+    cd "$PROJECT_ROOT"
+    run make -f Web.mk libraylib PLATFORM=PLATFORM_WEB BUILD_MODE="$BUILD_MODE"
   )
 }
 
-build_src_c() {
-  section "Building src_c artifacts"
+build_client() {
+  section "Building Cyberia Client (Web / $BUILD_MODE)"
   (
-    cd "$PROJECT_ROOT/src_c"
-    run make clean
-    run make
+    cd "$PROJECT_ROOT"
+    run make -f Web.mk clean
+    run make -f Web.mk web BUILD_MODE="$BUILD_MODE"
   )
 }
 
@@ -145,8 +161,9 @@ update_container_status() {
 start_server() {
   section "Launching development server"
   (
-    cd "$PROJECT_ROOT/src_c"
-    run make serve
+    cd "$PROJECT_ROOT"
+    # Use the serve target from Web.mk
+    run make -f Web.mk serve BUILD_MODE="$BUILD_MODE"
   )
 }
 
@@ -157,7 +174,7 @@ main() {
   install_toolchain
   ensure_emsdk_env
   build_raylib
-  build_src_c
+  build_client
   update_container_status
   start_server
 }

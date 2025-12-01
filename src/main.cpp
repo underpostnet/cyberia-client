@@ -1,6 +1,8 @@
+extern "C" {
 #include "render.h"
 #include "client.h"
 #include "config.h"
+}
 #include <stdio.h>
 #include <stdlib.h>
 
@@ -8,7 +10,7 @@
     #include <emscripten/emscripten.h>
     
     // External JavaScript function to set configuration (defined in js/services.js)
-    extern void js_set_config(const char* api_url, const char* assets_url);
+    extern "C" void js_set_config(const char* api_url, const char* assets_url);
 #endif
 
 // Application configuration
