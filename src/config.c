@@ -1,4 +1,5 @@
 #include "config.h"
+#include <stdbool.h>
 
 /**
  * @file config.c
@@ -89,3 +90,20 @@ const int TEXTURE_QUEUE_SIZE = 1024;
  * @brief Default frame duration in milliseconds for animations
  */
 const int DEFAULT_FRAME_DURATION_MS = 100;
+
+// ============================================================================
+// Development Configuration
+// ============================================================================
+
+/**
+ * @brief Force development UI to always be enabled
+ *
+ * When set to true, the dev_ui will always be enabled regardless of
+ * the server's devUi setting. This overrides the value received from
+ * the server in the init message.
+ *
+ * Production: false (respect server setting)
+ * Development: true (always show dev UI)
+ */
+const bool FORCE_DEV_UI = false;
+// const bool FORCE_DEV_UI = true;

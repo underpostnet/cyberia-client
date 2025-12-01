@@ -1,6 +1,7 @@
 #include "message_parser.h"
 #include "serial.h"
 #include "game_state.h"
+#include "config.h"
 #include "cJSON.h"
 #include <stdio.h>
 #include <stdlib.h>
@@ -213,7 +214,12 @@ int message_parser_parse_init_data(const cJSON* json_root) {
     g_game_state.default_height_screen_factor = serial_get_float_default(payload, "defaultHeightScreenFactor", 0.5f);
 
     // Parse UI settings
-    g_game_state.dev_ui = serial_get_bool_default(payload, "devUi", false);
+    // If FORCE_DEV_UI is enabled, always set dev_ui to true regardless of server response
+    if (FORCE_DEV_UI) {
+        g_game_state.dev_ui = true;
+    } else {
+        g_game_state.dev_ui = serial_get_bool_default(payload, "devUi", false);
+    }
     g_game_state.sum_stats_limit = serial_get_int_default(payload, "sumStatsLimit", 9999);
 
     // Parse colors

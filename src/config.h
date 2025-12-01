@@ -1,6 +1,8 @@
 #ifndef CONFIG_H
 #define CONFIG_H
 
+#include <stdbool.h>
+
 /**
  * @file config.h
  * @brief Configuration file for the Cyberia client
@@ -137,5 +139,20 @@ extern const int DEFAULT_FRAME_DURATION_MS;
  * @brief Application name
  */
 #define APP_NAME "CYBERIA | MMO"
+
+// ============================================================================
+// Development Configuration
+// ============================================================================
+
+/**
+ * @brief Force development UI to always be enabled
+ *
+ * When set to true, the dev_ui will always be enabled regardless of
+ * the server's devUi setting. This overrides the value received from
+ * the server in the init message.
+ *
+ * Set to false to respect the server's dev_ui setting.
+ */
+extern const bool FORCE_DEV_UI;
 
 #endif // CONFIG_H
