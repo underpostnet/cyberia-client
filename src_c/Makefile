@@ -95,7 +95,7 @@ all: check-deps $(OUTPUT_DIR)/$(TARGET_NAME).html
 	@echo "  http://localhost:8081/$(TARGET_NAME).html"
 	@echo "=========================================="
 
-# Configure for localhost development (avoids CORS)
+# Configure for localhost development
 configure-localhost:
 	@echo "=========================================="
 	@echo "  Configuring for Localhost Development"
@@ -227,7 +227,7 @@ info:
 	@echo "  make debug               - Build with debugging symbols"
 	@echo "  make release             - Build with optimizations"
 	@echo "  make clean               - Remove build artifacts"
-	@echo "  make configure-localhost - Configure for localhost (avoids CORS)"
+	@echo "  make configure-localhost - Configure for localhost"
 	@echo "  make configure-production- Configure for production server"
 	@echo "  make info                - Show this information"
 	@echo "  make help                - Show detailed help"
@@ -235,8 +235,6 @@ info:
 	@echo "Build mode can be overridden:"
 	@echo "  make BUILD_MODE=DEBUG"
 	@echo "  make BUILD_MODE=RELEASE"
-	@echo ""
-	@echo "CORS Issues? See docs/CORS_GUIDE.md or run: ./configure.sh localhost"
 	@echo "=========================================="
 
 # Help target with detailed instructions
@@ -300,9 +298,4 @@ help:
 	@echo "    ls -la $(EMSDK_LIB)"
 	@echo ""
 	@echo "  • Check shell.html exists in current directory"
-	@echo ""
-	@echo "  • CORS/API fetch errors? Configure for localhost:"
-	@echo "    make configure-localhost"
-	@echo "    See docs/CORS_GUIDE.md for details"
-	@echo ""
 	@echo "=========================================="
