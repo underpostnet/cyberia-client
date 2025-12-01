@@ -1,9 +1,6 @@
 *.log
-__pycache__
 .vscode
 .env
-color_map.json
-decoder_model.keras
-env
 emscripten*
 src_c/bin
+raylib-makefile-example

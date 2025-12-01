@@ -1,5 +1,0 @@
-raylib
-websocket-client
-matplotlib
-requests
-eventlet
