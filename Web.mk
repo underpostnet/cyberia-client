@@ -19,7 +19,6 @@ CFLAGS += --profiling
 CFLAGS += -O0 # -Og doesn not work in emcc
 endif
 
-CXXFLAGS := $(CFLAGS) #-std=c++23
 # CFLAGS	+= -std=gnu23
 
 #---------------------------------------------------------------------------------------------
@@ -76,10 +75,6 @@ $(PROJECT_NAME): libraylib $(OBJS)
 $(BUILD_DIR)/%.c.o: $(SRC_DIR)/%.c
 	@mkdir -p $(@D)
 	$(CC) -c $< -o $@ -D$(PLATFORM) $(CFLAGS)
-
-$(BUILD_DIR)/%.cpp.o: $(SRC_DIR)/%.cpp
-	@mkdir -p $(@D)
-	$(CC) -c $< -o $@ -D$(PLATFORM) $(CXXFLAGS)
 
 $(BUILD_DIR)/cJSON.o: $(LIBS_DIR)/cJSON/cJSON.c
 	@mkdir -p $(@D)

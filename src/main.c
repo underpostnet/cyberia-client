@@ -1,8 +1,7 @@
-extern "C" {
 #include "render.h"
 #include "client.h"
 #include "config.h"
-}
+
 #include <stdio.h>
 #include <stdlib.h>
 
@@ -10,7 +9,7 @@ extern "C" {
     #include <emscripten/emscripten.h>
     
     // External JavaScript function to set configuration (defined in js/services.js)
-    extern "C" void js_set_config(const char* api_url, const char* assets_url);
+    void js_set_config(const char* api_url, const char* assets_url);
 #endif
 
 // Application configuration
@@ -99,6 +98,9 @@ static void main_loop(void) {
 
 // Main entry point
 int main(int argc, char* argv[]) {
+    (void)argc;
+    (void)argv;
+
     // Initialize the application
     if (init_app() != 0) {
         printf("[FATAL] Application initialization failed\n");

@@ -8,13 +8,13 @@
 
 </div>
 
-A modular client for Cyberia, built with C++, Raylib, and Emscripten. This project supports building for Desktop (Linux, Windows) and Web (WebAssembly) using a unified build system.
+A modular client for Cyberia, built with C, Raylib, and Emscripten. This project supports building for Desktop (Linux, Windows) and Web (WebAssembly) using a unified build system.
 
 ## Prerequisites
 
 ### General
 *   **GNU Make**: Required for the build system.
-*   **C++ Compiler**: GCC, Clang, or MinGW (for Windows).
+*   **C Compiler**: GCC, Clang, or MinGW (for Windows).
 
 ### Desktop (Linux/Windows)
 *   **Raylib**: You need the Raylib library installed or available.
@@ -23,7 +23,7 @@ A modular client for Cyberia, built with C++, Raylib, and Emscripten. This proje
     *   **Windows**: Ensure Raylib headers and libraries are accessible to the compiler (MinGW recommended).
 
 ### Web (WebAssembly)
-*   **Emscripten SDK (emsdk)**: Required to compile C++ to WebAssembly.
+*   **Emscripten SDK (emsdk)**: Required to compile C to WebAssembly.
     *   [Installation Guide](https://emscripten.org/docs/getting_started/downloads.html)
     *   Ensure `emsdk_env` is activated in your terminal.
 
@@ -132,7 +132,7 @@ emrun bin/platform_web/debug/index.html
 
 ## Project Structure
 
-*   `src/`: Source code (C++ and C).
+*   `src/`: Source code (C).
 *   `libs/`: External libraries (Raylib, cJSON).
 *   `src/js/`: JavaScript interop files for Web builds.
 *   `src/public/`: Static assets copied to the output directory.
