@@ -14,7 +14,7 @@ TOOLS_DIR       ?= tools
 # Common sources to include
 SRC_FILES = \
 	$(SRC_DIR)/main.cpp \
-	$(SRC_DIR)/module/utils.c
+	$(wildcard $(SRC_DIR)/*.c)
 
 #---------------------------------------------------------------------------------------------
 # Define common compiler flags
@@ -39,6 +39,11 @@ endif
 # Raylib Dependendy
 RAYLIB_PATH := $(LIBS_DIR)/raylib
 CFLAGS += -I$(RAYLIB_PATH)/src -isystem$(RAYLIB_PATH)/src
+
+#------------------------------------------------
+# cJSON Dependency
+CJSON_PATH := $(LIBS_DIR)/cJSON
+CFLAGS += -I$(CJSON_PATH)
 
 #---------------------------------------------------------------------------------------------
 # Common Targets

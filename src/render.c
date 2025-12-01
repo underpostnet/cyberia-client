@@ -13,10 +13,6 @@
 #endif
 
 // Default configuration for fallback rendering
-#define BORDER_WIDTH 5
-#define BORDER_COLOR (Color){0, 100, 255, 255}  // Blue border
-#define CIRCLE_COLOR RED
-
 // Forward declaration
 static void render_fallback(int width, int height);
 
@@ -26,6 +22,7 @@ static struct {
     int width;
     int height;
     bool game_initialized;
+    Texture2D splash_texture;
 } render_state = {0};
 
 // Initialize the rendering subsystem
@@ -46,6 +43,12 @@ int render_init(const char* title, int width, int height) {
 
     render_state.initialized = 1;
     printf("[RENDER] Basic renderer initialized successfully (%dx%d)\n", width, height);
+
+    // Load splash texture
+    render_state.splash_texture = LoadTexture("splash.png");
+    if (render_state.splash_texture.id == 0) {
+        printf("[RENDER] Failed to load splash texture 'splash.png'\n");
+    }
 
     // Initialize game-specific rendering systems
     if (game_render_init(width, height) == 0) {
@@ -143,17 +146,13 @@ static void render_fallback(int width, int height) {
     float center_x = (float)width / 2.0f;
     float center_y = (float)height / 2.0f;
 
-    // Calculate circle radius (relative to screen size for responsiveness)
-    float radius = (width < height ? width : height) * 0.1f;
-
-    // Draw red circle in the center
-    DrawCircle((int)center_x, (int)center_y, radius, CIRCLE_COLOR);
-
-    // Draw blue border around the edges
-    DrawRectangle(0, 0, width, BORDER_WIDTH, BORDER_COLOR);
-    DrawRectangle(0, height - BORDER_WIDTH, width, BORDER_WIDTH, BORDER_COLOR);
-    DrawRectangle(0, 0, BORDER_WIDTH, height, BORDER_COLOR);
-    DrawRectangle(width - BORDER_WIDTH, 0, BORDER_WIDTH, height, BORDER_COLOR);
+    // Draw splash logo if loaded
+    if (render_state.splash_texture.id != 0) {
+        DrawTexture(render_state.splash_texture,
+            (int)(center_x - render_state.splash_texture.width / 2),
+            (int)(center_y - render_state.splash_texture.height / 2),
+            WHITE);
+    }
 
     // Draw connection status
     const char* status_text = "Connecting to server...";
@@ -167,6 +166,11 @@ static void render_fallback(int width, int height) {
 void render_cleanup(void) {
     if (!render_state.initialized) {
         return;
+    }
+
+    // Unload splash texture
+    if (render_state.splash_texture.id != 0) {
+        UnloadTexture(render_state.splash_texture);
     }
 
     // Cleanup game renderer

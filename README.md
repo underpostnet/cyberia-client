@@ -49,8 +49,8 @@ To build for the web:
     ```
 
 The web artifacts (`.html`, `.js`, `.wasm`, `.data`) will be generated in:
-*   `bin/PLATFORM_WEB/DEBUG/`
-*   `bin/PLATFORM_WEB/RELEASE/`
+*   `bin/platform_web/debug/`
+*   `bin/platform_web/release/`
 
 ### Desktop Build (Linux & Windows)
 
@@ -93,30 +93,30 @@ The makefile includes a helper to serve the build directory:
 ```bash
 make -f Web.mk serve
 ```
-*Note: This serves the `bin/PLATFORM_WEB/DEBUG` directory by default.*
+*Note: This serves the `bin/platform_web/debug` directory by default.*
 
 #### Method 2: Python Manual
 If you want to serve a specific build mode manually:
 
 **Linux/macOS:**
 ```bash
-cd bin/PLATFORM_WEB/RELEASE
+cd bin/platform_web/release
 python3 -m http.server 8080
-# Open http://localhost:8080/cyberia-client.html
+# Open http://localhost:8080/index.html
 ```
 
 **Windows:**
 ```cmd
-cd bin\PLATFORM_WEB\RELEASE
+cd bin\platform_web\release
 python -m http.server 8080
-:: Open http://localhost:8080/cyberia-client.html
+:: Open http://localhost:8080/index.html
 ```
 
 #### Method 3: Emrun
 Emscripten provides a lightweight server that handles COOP/COEP headers automatically (useful for threading support):
 
 ```bash
-emrun bin/PLATFORM_WEB/DEBUG/cyberia-client.html
+emrun bin/platform_web/debug/index.html
 ```
 
 ## Project Structure

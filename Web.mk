@@ -1,237 +1,93 @@
-# Cyberia Client Makefile
-# Supports: Web (Emscripten), Linux, Windows
-#
-# Usage:
-#   make -f Web.mk                # Build for Web (default)
-#   make -f Web.mk desktop        # Build for Desktop
-#   make -f Web.mk clean          # Clean artifacts
-#
-# Configuration:
-#   PLATFORM    : PLATFORM_WEB (default) or PLATFORM_DESKTOP
-#   BUILD_MODE  : DEBUG (default) or RELEASE
-
 include config.mk
 
-# ============================================================================
-# Configuration & Defaults
-# ============================================================================
+PLATFORM		:= PLATFORM_WEB
+CC				:= emcc
 
-# Override generic project name if needed
-ifeq ($(PROJECT_NAME),project-name)
-    PROJECT_NAME := cyberia-client
+#---------------------------------------------------------------------------------------------
+BUILD_DIR		:= $(call lc,$(BUILD_DIR)/$(PLATFORM)/$(BUILD_MODE))
+OUTPUT_DIR		:= $(call lc,$(OUTPUT_DIR)/$(PLATFORM)/$(BUILD_MODE))
+
+#---------------------------------------------------------------------------------------------
+# Specific compiler flags
+CFLAGS += -DGRAPHICS_API_OPENGL_ES2
+CFLAGS += -flto
+
+ifneq ($(BUILD_MODE),RELEASE)
+CFLAGS += --profiling
+CFLAGS += -O0 # -Og doesn not work in emcc
 endif
 
-PLATFORM ?= PLATFORM_WEB
-BUILD_MODE ?= DEBUG
+CXXFLAGS := $(CFLAGS) #-std=c++23
+# CFLAGS	+= -std=gnu23
 
-# Directories
-SRC_DIR ?= src
-LIBS_DIR ?= libs
-BUILD_DIR ?= build
-OUTPUT_DIR ?= bin
+#---------------------------------------------------------------------------------------------
+# Linking flags
+LDFLAGS = -lidbfs.js
+LDFLAGS += -s 'EXPORTED_RUNTIME_METHODS=["writeArrayToMemory","setValue"]'
+LDFLAGS += -sASYNCIFY
+LDFLAGS += -s 'ASYNCIFY_IMPORTS=["js_fetch_object_layer", "js_fetch_binary"]'
+LDFLAGS += -lwebsocket.js
+LDFLAGS += --js-library $(SRC_DIR)/js/services.js
+LDFLAGS += $(RAYLIB_PATH)/src/libraylib.web.a
 
-# Raylib
-RAYLIB_PATH ?= $(LIBS_DIR)/raylib
+#---------------------------------------------------------------------------------------------
+# Web target html container
+WEB_SHELL := $(SRC_DIR)/shell.html
 
-# Source Files
-# Auto-discover sources in src/ directory
-SRC_CPP := $(wildcard $(SRC_DIR)/*.cpp)
-SRC_C   := $(wildcard $(SRC_DIR)/*.c)
-# Add cJSON
-SRC_C   += $(LIBS_DIR)/cJSON/cJSON.c
+WEB_ARTIFACTS := $(OUTPUT_DIR)/index.html
+ARTIFACTS_ARCHIVES := --preload-file $(SRC_DIR)/public/splash.png@splash.png
 
-# Object Files
-OBJ_DIR := $(BUILD_DIR)/$(PLATFORM)/$(BUILD_MODE)
-OBJS    := $(patsubst $(SRC_DIR)/%.cpp, $(OBJ_DIR)/%.o, $(filter $(SRC_DIR)/%.cpp, $(SRC_CPP))) \
-           $(patsubst $(SRC_DIR)/%.c, $(OBJ_DIR)/%.o, $(filter $(SRC_DIR)/%.c, $(SRC_C))) \
-           $(patsubst $(LIBS_DIR)/cJSON/%.c, $(OBJ_DIR)/cJSON.o, $(filter $(LIBS_DIR)/cJSON/%.c, $(SRC_C)))
+#---------------------------------------------------------------------------------------------
+# Util variables
+OBJS	:= $(addprefix $(BUILD_DIR),$(SRC_FILES:$(SRC_DIR)/%=$(OBJ_DIR)/%.o))
+OBJS	+= $(BUILD_DIR)/cJSON.o
 
-# Output Paths
-OUT_DIR := $(OUTPUT_DIR)/$(PLATFORM)/$(BUILD_MODE)
+#---------------------------------------------------------------------------------------------
+# Specific targets
 
-# ============================================================================
-# Platform Specific Settings
-# ============================================================================
+.PHONY: web serve clean
 
-# ----------------------------------------------------------------------------
-# WEB (Emscripten)
-# ----------------------------------------------------------------------------
-ifeq ($(PLATFORM),PLATFORM_WEB)
-    CC = emcc
-    CXX = em++
-    EXT = .html
+web: $(PROJECT_NAME)
 
-    # Web Flags
-    CFLAGS += -DPLATFORM_WEB -DGRAPHICS_API_OPENGL_ES2
-    CXXFLAGS += -DPLATFORM_WEB -DGRAPHICS_API_OPENGL_ES2
+serve: web
+	python3 -m http.server 8080 --directory $(OUTPUT_DIR)
 
-    # Emscripten Linker Flags
-    LDFLAGS += -s USE_GLFW=3 \
-               -s ASYNCIFY \
-               -s ASYNCIFY_IMPORTS='["js_fetch_object_layer","js_fetch_binary"]' \
-               -lwebsocket.js \
-               --js-library $(SRC_DIR)/js/services.js \
-               --shell-file $(SRC_DIR)/shell.html \
-               -s TOTAL_MEMORY=128MB \
-               -s ALLOW_MEMORY_GROWTH=1 \
-               -s 'EXPORTED_RUNTIME_METHODS=["writeArrayToMemory","setValue"]' \
-               -lidbfs.js
-
-    # Raylib for Web (Static build)
-    # We expect libraylib.a to be built in the raylib src directory
-    RAYLIB_LIB_NAME = libraylib.web.a
-    RAYLIB_LIB = $(RAYLIB_PATH)/src/$(RAYLIB_LIB_NAME)
-    LDFLAGS += $(RAYLIB_LIB)
-
-    ifeq ($(BUILD_MODE),RELEASE)
-        LDFLAGS += -O3
-    else
-        LDFLAGS += -O0 --profiling
-    endif
-endif
-
-# ----------------------------------------------------------------------------
-# DESKTOP (Linux / Windows)
-# ----------------------------------------------------------------------------
-ifeq ($(PLATFORM),PLATFORM_DESKTOP)
-    # Detect OS
-    ifeq ($(OS),Windows_NT)
-        PLATFORM_OS = WINDOWS
-        EXT = .exe
-        CC = gcc
-        CXX = g++
-
-        # Windows Libraries
-        LDLIBS = -lraylib -lopengl32 -lgdi32 -lwinmm -static-libgcc -static-libstdc++ -Wl,--allow-multiple-definition
-    else
-        UNAME_S := $(shell uname -s)
-        ifeq ($(UNAME_S),Linux)
-            PLATFORM_OS = LINUX
-            EXT =
-            CC = gcc
-            CXX = g++
-
-            # Linux Libraries
-            LDLIBS = -lraylib -lGL -lm -lpthread -ldl -lrt -lX11
-        endif
-        ifeq ($(UNAME_S),Darwin)
-            PLATFORM_OS = OSX
-            EXT =
-            CC = clang
-            CXX = clang++
-            LDLIBS = -lraylib -framework OpenGL -framework Cocoa -framework IOKit -framework CoreAudio -framework CoreVideo
-        endif
-    endif
-
-    CFLAGS += -DPLATFORM_DESKTOP -D_DEFAULT_SOURCE
-    CXXFLAGS += -DPLATFORM_DESKTOP -D_DEFAULT_SOURCE
-
-    # Linker
-    LDFLAGS += -L$(RAYLIB_PATH)/src
-endif
-
-# ============================================================================
-# Common Flags
-# ============================================================================
-
-COMMON_FLAGS = -Wall -Wextra -Wno-unused-parameter -D_GNU_SOURCE -I$(SRC_DIR) -I$(LIBS_DIR)/cJSON -I$(RAYLIB_PATH)/src
-
-ifeq ($(BUILD_MODE),DEBUG)
-    COMMON_FLAGS += -g -D_DEBUG
-else
-    COMMON_FLAGS += -O2 -DNDEBUG
-endif
-
-CFLAGS += $(COMMON_FLAGS) -std=c99
-CXXFLAGS += $(COMMON_FLAGS) -std=c++11
-
-# ============================================================================
-# Targets
-# ============================================================================
-
-TARGET = $(OUT_DIR)/$(PROJECT_NAME)$(EXT)
-
-.PHONY: all clean web desktop serve info libraylib
-
-all: $(TARGET)
-
-# Link
-$(TARGET): $(OBJS) $(if $(filter PLATFORM_WEB,$(PLATFORM)),libraylib)
-	@mkdir -p $(dir $@)
-	@echo "Linking $(TARGET)..."
-ifeq ($(PLATFORM),PLATFORM_WEB)
-	$(CXX) -o $@ $(OBJS) $(LDFLAGS)
-	@echo "Copying assets..."
-	@if [ -d "$(SRC_DIR)/public" ]; then cp -r $(SRC_DIR)/public/* $(OUT_DIR)/; fi
-else
-	$(CXX) -o $@ $(OBJS) $(LDFLAGS) $(LDLIBS)
-endif
-	@echo "Build successful!"
-
-# Compile C++
-$(OBJ_DIR)/%.o: $(SRC_DIR)/%.cpp
-	@mkdir -p $(dir $@)
-	$(CXX) -c $< -o $@ $(CXXFLAGS)
-
-# Compile C
-$(OBJ_DIR)/%.o: $(SRC_DIR)/%.c
-	@mkdir -p $(dir $@)
-	$(CC) -c $< -o $@ $(CFLAGS)
-
-# Compile cJSON
-$(OBJ_DIR)/cJSON.o: $(LIBS_DIR)/cJSON/cJSON.c
-	@mkdir -p $(dir $@)
-	$(CC) -c $< -o $@ $(CFLAGS)
-
-# Build Raylib for Web
-libraylib:
-ifeq ($(PLATFORM),PLATFORM_WEB)
-	@if [ ! -f "$(RAYLIB_LIB)" ]; then \
-		echo "Building Raylib for Web..."; \
-		if [ "$(OS)" = "Windows_NT" ]; then \
-			cp emar.bat emcc.bat $(RAYLIB_PATH)/src; \
-		fi; \
-		$(MAKE) -j 8 -C $(RAYLIB_PATH)/src raylib \
-			PLATFORM=PLATFORM_WEB \
-			RAYLIB_BUILD_MODE=$(BUILD_MODE) \
-			RAYLIB_LIBTYPE=STATIC; \
-		if [ "$(OS)" = "Windows_NT" ]; then \
-			rm $(RAYLIB_PATH)/src/emar.bat $(RAYLIB_PATH)/src/emcc.bat; \
-		fi; \
-		if [ -f "$(RAYLIB_PATH)/src/libraylib.a" ]; then \
-			mv $(RAYLIB_PATH)/src/libraylib.a $(RAYLIB_LIB); \
-		fi; \
-	fi
-endif
-
-# Clean
 clean:
 	rm -rf $(BUILD_DIR) $(OUTPUT_DIR)
-	@echo "Cleaned build artifacts."
-ifeq ($(PLATFORM),PLATFORM_WEB)
-	@if [ -f "$(RAYLIB_LIB)" ]; then rm $(RAYLIB_LIB); fi
+
+$(PROJECT_NAME): libraylib $(OBJS)
+	@mkdir -p $(OUTPUT_DIR)
+	@cp $(SRC_DIR)/public/favicon.ico $(OUTPUT_DIR)/favicon.ico
+	$(CC) -o $(WEB_ARTIFACTS) $(OBJS) $(LDFLAGS) \
+		-s USE_GLFW=3 \
+		--shell-file $(WEB_SHELL) \
+		-s ALLOW_MEMORY_GROWTH=1 \
+		-s INITIAL_MEMORY=67108864 \
+		-s STACK_SIZE=16777216 \
+		-s ASYNCIFY_STACK_SIZE=1048576 \
+		$(ARTIFACTS_ARCHIVES)
+#		--preload-file $(LOCAL_ASSETS)@res
+
+$(BUILD_DIR)/%.c.o: $(SRC_DIR)/%.c
+	@mkdir -p $(@D)
+	$(CC) -c $< -o $@ -D$(PLATFORM) $(CFLAGS)
+
+$(BUILD_DIR)/%.cpp.o: $(SRC_DIR)/%.cpp
+	@mkdir -p $(@D)
+	$(CC) -c $< -o $@ -D$(PLATFORM) $(CXXFLAGS)
+
+$(BUILD_DIR)/cJSON.o: $(LIBS_DIR)/cJSON/cJSON.c
+	@mkdir -p $(@D)
+	$(CC) -c $< -o $@ -D$(PLATFORM) $(CFLAGS)
+
+libraylib:
+ifeq ($(OS),Windows_NT)
+	@cp emar.bat emcc.bat $(RAYLIB_PATH)/src
 endif
-
-# Aliases
-web:
-	$(MAKE) -f Web.mk PLATFORM=PLATFORM_WEB
-
-desktop:
-	$(MAKE) -f Web.mk PLATFORM=PLATFORM_DESKTOP
-
-# Serve (Web only)
-serve:
-ifeq ($(PLATFORM),PLATFORM_WEB)
-	@echo "Starting web server..."
-	@echo "Open http://localhost:8080/$(PROJECT_NAME).html"
-	python3 -m http.server 8080 --directory $(OUT_DIR)
-else
-	@echo "Serve target is only for Web builds. Use 'make -f Web.mk web serve' or manually run the executable."
+	make -j 8 -C $(RAYLIB_PATH)/src raylib \
+		PLATFORM=PLATFORM_WEB \
+		RAYLIB_BUILD_MODE=$(BUILD_MODE) \
+		RAYLIB_LIBTYPE=STATIC
+ifeq ($(OS),Windows_NT)
+	@rm $(RAYLIB_PATH)/src/emar.bat $(RAYLIB_PATH)/src/emcc.bat
 endif
-
-info:
-	@echo "Project:  $(PROJECT_NAME)"
-	@echo "Platform: $(PLATFORM)"
-	@echo "Mode:     $(BUILD_MODE)"
-	@echo "Output:   $(TARGET)"
-	@echo "Sources:  $(SRC_CPP) $(SRC_C)"
