@@ -1,6 +1,5 @@
 include config.mk
 
-PLATFORM		:= PLATFORM_WEB
 CC				:= emcc
 DEV_PORT		?= 8081
 PROD_PORT		?= 8081
@@ -16,9 +15,10 @@ CFLAGS += -flto
 
 ifneq ($(BUILD_MODE),RELEASE)
 CFLAGS += --profiling
-CFLAGS += -O0 # -Og doesn not work in emcc
+CFLAGS += -O0 # -Og doesnt not work in emcc
 endif
 
+CFLAGS		+= -DPLATFORM_WEB
 # CFLAGS	+= -std=gnu23
 
 #---------------------------------------------------------------------------------------------
@@ -56,9 +56,6 @@ serve_development: web
 serve_production:
 	$(MAKE) -f Web.mk serve_development BUILD_MODE=RELEASE DEV_PORT=$(PROD_PORT)
 
-clean:
-	rm -rf $(BUILD_DIR) $(OUTPUT_DIR)
-
 $(PROJECT_NAME): libraylib $(OBJS)
 	@mkdir -p $(OUTPUT_DIR)
 	@cp $(SRC_DIR)/public/favicon.ico $(OUTPUT_DIR)/favicon.ico
@@ -70,15 +67,14 @@ $(PROJECT_NAME): libraylib $(OBJS)
 		-s STACK_SIZE=16777216 \
 		-s ASYNCIFY_STACK_SIZE=1048576 \
 		$(ARTIFACTS_ARCHIVES)
-#		--preload-file $(LOCAL_ASSETS)@res
 
 $(BUILD_DIR)/%.c.o: $(SRC_DIR)/%.c
 	@mkdir -p $(@D)
-	$(CC) -c $< -o $@ -D$(PLATFORM) $(CFLAGS)
+	$(CC) -c $< -o $@ $(CFLAGS)
 
 $(BUILD_DIR)/cJSON.o: $(LIBS_DIR)/cJSON/cJSON.c
 	@mkdir -p $(@D)
-	$(CC) -c $< -o $@ -D$(PLATFORM) $(CFLAGS)
+	$(CC) -c $< -o $@ $(CFLAGS)
 
 libraylib:
 ifeq ($(OS),Windows_NT)
@@ -87,7 +83,8 @@ endif
 	make -j 8 -C $(RAYLIB_PATH)/src raylib \
 		PLATFORM=PLATFORM_WEB \
 		RAYLIB_BUILD_MODE=$(BUILD_MODE) \
-		RAYLIB_LIBTYPE=STATIC
+		RAYLIB_LIBTYPE=STATIC \
+		$(if $(filter $(BUILD_MODE),RELEASE), 2>/dev/null)
 ifeq ($(OS),Windows_NT)
 	@rm $(RAYLIB_PATH)/src/emar.bat $(RAYLIB_PATH)/src/emcc.bat
 endif
