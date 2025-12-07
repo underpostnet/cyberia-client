@@ -6,15 +6,9 @@
 #include <stdlib.h>
 #include <string.h>
 
-#if defined(PLATFORM_WEB)
-    #include <emscripten.h>
-    // External JS function
-    extern char* js_fetch_object_layer(const char* item_id);
-#else
-    #include <curl/curl.h>
-    #include <pthread.h>
-    #include <unistd.h>
-#endif
+#include <emscripten.h>
+// External JS function
+extern char* js_fetch_object_layer(const char* item_id);
 
 #define HASH_TABLE_SIZE 256
 #define MAX_LAYER_ENTRIES 1000
@@ -22,24 +16,10 @@
 
 // --- Data Structures ---
 
-#if !defined(PLATFORM_WEB)
-typedef struct {
-    char* url;
-    char* data;
-    size_t size;
-    size_t capacity;
-    volatile int status; // 0: pending, 1: complete, 2: error
-    pthread_t thread;
-} AsyncLayerRequest;
-#endif
-
 typedef struct ObjectLayerEntry {
     char* key;
     ObjectLayer* layer;
     struct ObjectLayerEntry* next;
-    #if !defined(PLATFORM_WEB)
-    AsyncLayerRequest* async_req;
-    #endif
 } ObjectLayerEntry;
 
 typedef struct QueueNode {
@@ -58,67 +38,6 @@ struct ObjectLayersManager {
 };
 
 // --- Helper Functions ---
-
-#if !defined(PLATFORM_WEB)
-// Memory struct for curl response
-static size_t write_memory_callback(void* contents, size_t size, size_t nmemb, void* userp) {
-    size_t realsize = size * nmemb;
-    AsyncLayerRequest* req = (AsyncLayerRequest*)userp;
-
-    if (req->size + realsize + 1 > req->capacity) {
-        size_t new_capacity = req->capacity == 0 ? (realsize + 4096) : (req->capacity * 2 + realsize);
-        char* ptr = realloc(req->data, new_capacity);
-        if (!ptr) {
-            fprintf(stderr, "[ERROR] Not enough memory (realloc returned NULL)\n");
-            return 0;
-        }
-        req->data = ptr;
-        req->capacity = new_capacity;
-    }
-
-    memcpy(&(req->data[req->size]), contents, realsize);
-    req->size += realsize;
-    req->data[req->size] = 0; // Null terminate
-
-    return realsize;
-}
-
-static void* fetch_layer_worker(void* arg) {
-    AsyncLayerRequest* req = (AsyncLayerRequest*)arg;
-
-    CURL* curl_handle = curl_easy_init();
-    if (!curl_handle) {
-        req->status = 2;
-        return NULL;
-    }
-
-    curl_easy_setopt(curl_handle, CURLOPT_URL, req->url);
-    curl_easy_setopt(curl_handle, CURLOPT_WRITEFUNCTION, write_memory_callback);
-    curl_easy_setopt(curl_handle, CURLOPT_WRITEDATA, (void*)req);
-    curl_easy_setopt(curl_handle, CURLOPT_USERAGENT, "libcurl-agent/1.0");
-    curl_easy_setopt(curl_handle, CURLOPT_TIMEOUT, 10L);
-    curl_easy_setopt(curl_handle, CURLOPT_FOLLOWLOCATION, 1L);
-
-    CURLcode res = curl_easy_perform(curl_handle);
-
-    if (res != CURLE_OK) {
-        fprintf(stderr, "[WARN] curl_easy_perform() failed: %s\n", curl_easy_strerror(res));
-        req->status = 2;
-    } else {
-        long response_code;
-        curl_easy_getinfo(curl_handle, CURLINFO_RESPONSE_CODE, &response_code);
-        if (response_code == 200) {
-            req->status = 1;
-        } else {
-            fprintf(stderr, "[WARN] HTTP error %ld for URL: %s\n", response_code, req->url);
-            req->status = 2;
-        }
-    }
-
-    curl_easy_cleanup(curl_handle);
-    return NULL;
-}
-#endif
 
 static unsigned long hash_string(const char* str) {
     unsigned long hash = 5381;
@@ -304,9 +223,6 @@ static void cache_object_layer(ObjectLayersManager* manager, const char* item_id
     new_entry->key = strdup(item_id);
     new_entry->layer = layer;
     new_entry->next = manager->buckets[index];
-    #if !defined(PLATFORM_WEB)
-    new_entry->async_req = NULL;
-    #endif
 
     manager->buckets[index] = new_entry;
 }
@@ -367,10 +283,6 @@ ObjectLayersManager* create_object_layers_manager(TextureManager* texture_manage
     manager->queue_tail = NULL;
     manager->queue_size = 0;
 
-    #if !defined(PLATFORM_WEB)
-    curl_global_init(CURL_GLOBAL_ALL);
-    #endif
-
     return manager;
 }
 
@@ -383,15 +295,6 @@ void destroy_object_layers_manager(ObjectLayersManager* manager) {
         while (entry) {
             ObjectLayerEntry* next = entry->next;
             if (entry->layer) free_object_layer(entry->layer);
-
-            #if !defined(PLATFORM_WEB)
-            if (entry->async_req) {
-                pthread_join(entry->async_req->thread, NULL);
-                if (entry->async_req->data) free(entry->async_req->data);
-                if (entry->async_req->url) free(entry->async_req->url);
-                free(entry->async_req);
-            }
-            #endif
 
             free(entry->key);
             free(entry);
@@ -410,9 +313,6 @@ void destroy_object_layers_manager(ObjectLayersManager* manager) {
 
     free(manager);
 
-    #if !defined(PLATFORM_WEB)
-    curl_global_cleanup();
-    #endif
 }
 
 ObjectLayer* get_or_fetch_object_layer(ObjectLayersManager* manager, const char* item_id) {
@@ -428,46 +328,6 @@ ObjectLayer* get_or_fetch_object_layer(ObjectLayersManager* manager, const char*
 
             // If we have a layer, return it
             if (entry->layer) return entry->layer;
-
-            // If no layer, check async status (Native)
-            #if !defined(PLATFORM_WEB)
-            if (entry->async_req) {
-                if (entry->async_req->status == 1) { // Complete
-                    // Parse data
-                    char* item_json = extract_first_item_from_response(entry->async_req->data);
-                    if (item_json) {
-                        ObjectLayer* layer = parse_object_layer_json(item_json);
-                        free(item_json);
-
-                        if (layer) {
-                            entry->layer = layer;
-                            enqueue_for_texture_caching(manager, layer);
-                        }
-                    }
-
-                    // Cleanup request
-                    pthread_join(entry->async_req->thread, NULL);
-                    if (entry->async_req->data) free(entry->async_req->data);
-                    if (entry->async_req->url) free(entry->async_req->url);
-                    free(entry->async_req);
-                    entry->async_req = NULL;
-
-                    return entry->layer;
-
-                } else if (entry->async_req->status == 2) { // Error
-                    // Cleanup and leave layer as NULL (failed)
-                    pthread_join(entry->async_req->thread, NULL);
-                    if (entry->async_req->data) free(entry->async_req->data);
-                    if (entry->async_req->url) free(entry->async_req->url);
-                    free(entry->async_req);
-                    entry->async_req = NULL;
-                    return NULL;
-                } else {
-                    // Still pending
-                    return NULL;
-                }
-            }
-            #endif
 
             // If we are here, it means we have an entry but no layer and no active request.
             // This could mean a previously failed request.
@@ -486,12 +346,8 @@ ObjectLayer* get_or_fetch_object_layer(ObjectLayersManager* manager, const char*
     new_entry->key = strdup(item_id);
     new_entry->layer = NULL;
     new_entry->next = manager->buckets[index];
-    #if !defined(PLATFORM_WEB)
-    new_entry->async_req = NULL;
-    #endif
     manager->buckets[index] = new_entry;
 
-    #if defined(PLATFORM_WEB)
     // Web Sync Fetch (Legacy/Simple) - Blocking for now as JS async is complex to bridge here without callback hell
     // Ideally this should also be async, but for now we keep the sync behavior or use the JS fetcher if available
     char* response_json = js_fetch_object_layer(item_id);
@@ -509,29 +365,6 @@ ObjectLayer* get_or_fetch_object_layer(ObjectLayersManager* manager, const char*
         }
     }
     return NULL;
-
-    #else
-    // Native Async Fetch
-    char url[512];
-    snprintf(url, sizeof(url), "%s/object-layers?item_id=%s&page=1&page_size=1", API_BASE_URL, item_id);
-
-    AsyncLayerRequest* req = (AsyncLayerRequest*)malloc(sizeof(AsyncLayerRequest));
-    if (req) {
-        req->url = strdup(url);
-        req->data = NULL;
-        req->size = 0;
-        req->capacity = 0;
-        req->status = 0; // Pending
-
-        if (pthread_create(&req->thread, NULL, fetch_layer_worker, req) == 0) {
-            new_entry->async_req = req;
-        } else {
-            free(req->url);
-            free(req);
-        }
-    }
-    return NULL; // Return NULL immediately while loading
-    #endif
 }
 
 void process_texture_caching_queue(ObjectLayersManager* manager) {

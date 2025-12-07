@@ -34,10 +34,4 @@ void render_update(void);
  */
 void render_cleanup(void);
 
-/**
- * @brief Check if window should close
- * @return 1 if window should close, 0 otherwise
- */
-int render_should_close(void);
-
 #endif // RENDER_H

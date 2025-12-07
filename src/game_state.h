@@ -6,14 +6,10 @@
 #include <stdint.h>
 #include <stddef.h>
 
-#if !defined(PLATFORM_WEB)
-    #include <pthread.h>
-#endif
-
 /**
  * @file game_state.h
  * @brief Core game state management structures
- * 
+ *
  * This module defines all the data structures needed to maintain
  * the game state, including entities, world objects, and configuration.
  * Migrated from Python GameState and related classes.
@@ -201,14 +197,9 @@ typedef struct {
 
 // Main game state structure
 struct GameState {
-    // Thread safety (desktop only)
-#if !defined(PLATFORM_WEB)
-    pthread_mutex_t mutex;
-#endif
-    
     // Player identification
     char player_id[MAX_ID_LENGTH];
-    
+
     // Game configuration (from init_data)
     int grid_w;
     int grid_h;
@@ -218,39 +209,39 @@ struct GameState {
     float aoi_radius;
     float default_obj_width;
     float default_obj_height;
-    
+
     // Graphics configuration
     float camera_smoothing;
     float camera_zoom;
     float default_width_screen_factor;
     float default_height_screen_factor;
-    
+
     // Game colors
     GameColors colors;
-    
+
     // Main player state
     PlayerState player;
-    
+
     // Other entities
     PlayerState other_players[MAX_ENTITIES];
     int other_player_count;
-    
+
     BotState bots[MAX_ENTITIES];
     int bot_count;
-    
+
     // World objects
     WorldObject obstacles[MAX_OBJECTS];
     int obstacle_count;
-    
+
     WorldObject foregrounds[MAX_OBJECTS];
     int foreground_count;
-    
+
     WorldObject portals[MAX_OBJECTS];
     int portal_count;
-    
+
     WorldObject floors[MAX_OBJECTS];
     int floor_count;
-    
+
     // UI state
     char associated_item_ids[MAX_ENTITIES][MAX_ITEM_ID_LENGTH];
     int associated_item_count;
@@ -258,15 +249,15 @@ struct GameState {
     double error_display_time;
     size_t download_size_bytes;
     size_t upload_size_bytes;
-    
+
     // Stats limit
     int sum_stats_limit;
-    
+
     // Runtime flags
     bool init_received;
     bool dev_ui;
     double last_update_time;
-    
+
     // Camera
     Camera2D camera;
     bool camera_initialized;
@@ -341,20 +332,6 @@ void game_state_remove_player(const char* id);
  * @param id Bot ID to remove
  */
 void game_state_remove_bot(const char* id);
-
-/**
- * @brief Convert Direction enum to string
- * @param dir Direction value
- * @return String representation
- */
-const char* direction_to_string(Direction dir);
-
-/**
- * @brief Convert ObjectLayerMode enum to string
- * @param mode Mode value
- * @return String representation
- */
-const char* mode_to_string(ObjectLayerMode mode);
 
 /**
  * @brief Initialize camera based on current game state

@@ -3,6 +3,8 @@
 
 #include <stdbool.h>
 
+//TODO: Convert to an defines, ini, yml, json, etc
+
 /**
  * @file config.h
  * @brief Configuration file for the Cyberia client
@@ -26,7 +28,8 @@
  *   - Local development: "ws://localhost:8080/ws"
  *   - Production: "wss://server.cyberiaonline.com/ws"
  */
-extern const char* WS_URL;
+static const char* WS_URL = "wss://server.cyberiaonline.com/ws";
+// const char* WS_URL = "ws://localhost:8080/ws";
 
 // ============================================================================
 // API Configuration
@@ -42,7 +45,8 @@ extern const char* WS_URL;
  *   - Local development: "http://localhost:8080/api/v1"
  *   - Production: "https://server.cyberiaonline.com/api/v1"
  */
-extern const char* API_BASE_URL;
+static const char* API_BASE_URL = "https://server.cyberiaonline.com/api/v1";
+// const char* API_BASE_URL = "http://localhost:8080/api/v1";
 
 // ============================================================================
 // Assets Configuration
@@ -58,7 +62,8 @@ extern const char* API_BASE_URL;
  *   - Local development: "http://localhost:8080/assets"
  *   - Production: "https://server.cyberiaonline.com/assets"
  */
-extern const char* ASSETS_BASE_URL;
+static const char* ASSETS_BASE_URL = "https://server.cyberiaonline.com/assets";
+// const char* ASSETS_BASE_URL = "http://localhost:8080/assets";
 
 // ============================================================================
 // Game Configuration
@@ -70,7 +75,7 @@ extern const char* ASSETS_BASE_URL;
  * The item ID displayed when a player or bot is dead.
  * Usually "ghost" or similar placeholder.
  */
-extern const char* GHOST_ITEM_ID;
+static const char* GHOST_ITEM_ID = "ghost";
 
 // ============================================================================
 // Network Configuration
@@ -83,7 +88,7 @@ extern const char* GHOST_ITEM_ID;
  * Set to a reasonable value to handle slow connections and prevent
  * indefinite hangs.
  */
-extern const long HTTP_TIMEOUT_SECONDS;
+static const long HTTP_TIMEOUT_SECONDS = 10L;
 
 // ============================================================================
 // Cache Configuration
@@ -96,7 +101,7 @@ extern const long HTTP_TIMEOUT_SECONDS;
  * Each texture can consume significant VRAM, so this prevents
  * unbounded memory growth during extended play sessions.
  */
-extern const int MAX_TEXTURE_CACHE_SIZE;
+static const int MAX_TEXTURE_CACHE_SIZE = 512;
 
 /**
  * @brief Maximum number of object layers in the cache
@@ -104,7 +109,7 @@ extern const int MAX_TEXTURE_CACHE_SIZE;
  * Limits the number of parsed ObjectLayer definitions stored in memory.
  * These are the metadata/structure for items, not the textures themselves.
  */
-extern const int MAX_LAYER_CACHE_SIZE;
+static const int MAX_LAYER_CACHE_SIZE = 256;
 
 /**
  * @brief Queue size for texture caching requests
@@ -112,7 +117,7 @@ extern const int MAX_LAYER_CACHE_SIZE;
  * Maximum number of texture loading requests that can be queued.
  * Prevents unbounded queue growth when many textures need to be cached.
  */
-extern const int TEXTURE_QUEUE_SIZE;
+static const int TEXTURE_QUEUE_SIZE = 1024;
 
 // ============================================================================
 // Animation Configuration
@@ -124,7 +129,7 @@ extern const int TEXTURE_QUEUE_SIZE;
  * Used for animation frame timing when an object layer doesn't
  * specify its own frame duration.
  */
-extern const int DEFAULT_FRAME_DURATION_MS;
+static const int DEFAULT_FRAME_DURATION_MS = 100;
 
 // ============================================================================
 // Application Configuration
@@ -153,6 +158,7 @@ extern const int DEFAULT_FRAME_DURATION_MS;
  *
  * Set to false to respect the server's dev_ui setting.
  */
-extern const bool FORCE_DEV_UI;
+static const bool FORCE_DEV_UI = false;
+// const bool FORCE_DEV_UI = true;
 
 #endif // CONFIG_H

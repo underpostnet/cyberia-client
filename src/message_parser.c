@@ -43,7 +43,7 @@ MessageType message_parser_get_type(const char* json_str) {
 }
 
 /* ============================================================================
- * Main Message Processing Entry Point
+ * Main Message Processing Entry PointZ
  * ============================================================================ */
 
 int message_parser_process(const char* json_str) {

@@ -8,9 +8,7 @@
 #include <stdlib.h>
 #include <string.h>
 
-#if defined(PLATFORM_WEB)
-    #include <emscripten/emscripten.h>
-#endif
+#include <emscripten/emscripten.h>
 
 // Global client state
 static struct {
@@ -61,16 +59,6 @@ int client_init(void) {
     return 0;
 }
 
-// Client main update (processes events)
-void client_update(void) {
-    if (!client_state.initialized) {
-        return;
-    }
-
-    // WebSocket events are handled asynchronously by Emscripten
-    // This function can be used for periodic tasks if needed
-}
-
 // Client cleanup
 void client_cleanup(void) {
     if (!client_state.initialized) {
@@ -99,13 +87,13 @@ int client_send(const char* message) {
     int result = ws_send(&client_state.ws_client, message, length);
     if (result == 0) {
         client_state.bytes_uploaded += length;
-        
+
         // Update dev UI with network stats
         game_state_lock();
         g_game_state.upload_size_bytes = client_state.bytes_uploaded;
         game_state_unlock();
     }
-    
+
     return result;
 }
 
@@ -152,10 +140,10 @@ static void on_websocket_message(const char* data, int length, void* user_data) 
     }
 
     client_state.message_count++;
-    
+
     // Track downloaded bytes
     client_state.bytes_downloaded += length;
-    
+
     // Update dev UI with network stats
     game_state_lock();
     g_game_state.download_size_bytes = client_state.bytes_downloaded;
@@ -190,6 +178,6 @@ static void on_websocket_close(int code, const char* reason, void* user_data) {
         fprintf(stderr, "[WARN] WebSocket closed unexpectedly (code: %d, reason: %s)\n",
                 code, reason ? reason : "none");
     }
-    
+
     client_state.ws_client.connected = 0;
 }

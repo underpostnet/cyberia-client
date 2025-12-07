@@ -8,16 +8,15 @@
 #include "raylib.h"
 #include <stdio.h>
 
-#if defined(PLATFORM_WEB)
-    #include <emscripten/emscripten.h>
-#endif
+#include <emscripten/emscripten.h>
+
 
 // Default configuration for fallback rendering
 // Forward declaration
-static void render_fallback(int width, int height);
+void render_fallback(int width, int height);
 
 // Global state for rendering
-static struct {
+struct {
     int initialized;
     int width;
     int height;
@@ -94,15 +93,15 @@ void render_update(void) {
         render_state.width = current_width;
         render_state.height = current_height;
         printf("[RENDER] Canvas resized to %dx%d\n", current_width, current_height);
-        
+
         // Update game renderer screen size
         if (render_state.game_initialized) {
             game_render_set_screen_size(current_width, current_height);
         }
-        
+
         // Update camera offset to keep it centered
         game_state_update_camera_offset(current_width, current_height);
-        
+
         // Handle input resize event
         input_handle_window_resize(current_width, current_height);
     }
@@ -112,16 +111,16 @@ void render_update(void) {
     double current_time = GetTime();
     float delta_time = (float)(current_time - last_time);
     last_time = current_time;
-    
+
     game_state_update_interpolation(delta_time);
     game_state_update_camera();
-    
+
     // Update effects (click effects, floating texts)
     game_render_update_effects(delta_time);
-    
+
     // Update dev UI
     dev_ui_update(delta_time);
-    
+
     // Update player modal
     modal_player_update(delta_time);
 
@@ -136,7 +135,7 @@ void render_update(void) {
 }
 
 // Fallback rendering when game systems aren't ready
-static void render_fallback(int width, int height) {
+void render_fallback(int width, int height) {
     BeginDrawing();
 
     // Clear background to game background color (reduces flicker)
@@ -191,9 +190,4 @@ void render_cleanup(void) {
     CloseWindow();
     render_state.initialized = 0;
     printf("[RENDER] Cleanup complete\n");
-}
-
-// Check if window should close
-int render_should_close(void) {
-    return WindowShouldClose();
 }
