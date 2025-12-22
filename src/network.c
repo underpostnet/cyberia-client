@@ -1,9 +1,7 @@
 #include "network.h"
-#include "config.h"
-#include <emscripten/websocket.h>
 #include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
+
+#include <emscripten/websocket.h>
 
 // Global handlers storage (simple approach for single connection)
 static WebSocketHandlers* g_handlers = NULL;

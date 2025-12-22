@@ -1,23 +1,7 @@
 #ifndef RENDER_H
 #define RENDER_H
 
-/**
- * @file render.h
- * @brief Rendering subsystem interface for the client
- *
- * This module handles all rendering operations using raylib.
- * The renderer displays a red circle in the center of the canvas
- * with a blue border around the edges for responsive testing.
- */
-
-/**
- * @brief Initialize the rendering subsystem
- * @param title Window title
- * @param width Initial window width
- * @param height Initial window height
- * @return 0 on success, -1 on failure
- */
-int render_init(const char* title, int width, int height);
+void render_init(int width, int height);
 
 /**
  * @brief Main rendering loop iteration (called each frame)

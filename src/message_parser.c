@@ -1,11 +1,11 @@
 #include "message_parser.h"
 #include "serial.h"
-#include "game_state.h"
 #include "config.h"
 #include "cJSON.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+
 
 /* ============================================================================
  * Message Type Detection
@@ -118,8 +118,6 @@ int message_parser_process(const char* json_str) {
 int message_parser_parse_colors(const cJSON* colors_json) {
     if (!colors_json) return -1;
 
-    game_state_lock();
-
     // Parse each color in the dictionary
     cJSON* item = NULL;
     cJSON_ArrayForEach(item, colors_json) {
@@ -177,8 +175,6 @@ int message_parser_parse_colors(const cJSON* colors_json) {
         }
 
     }
-
-    game_state_unlock();
     return 0;
 }
 
@@ -190,8 +186,6 @@ int message_parser_parse_init_data(const cJSON* json_root) {
     if (!payload) {
         return -1;
     }
-
-    game_state_lock();
 
     // Parse grid configuration
     g_game_state.grid_w = serial_get_int_default(payload, "gridW", 100);
@@ -248,11 +242,7 @@ int message_parser_parse_init_data(const cJSON* json_root) {
     g_game_state.init_received = true;
 
     // Initialize camera if not already done
-    if (!g_game_state.camera_initialized) {
-        game_state_init_camera(800, 600); // Default screen size
-    }
-
-    game_state_unlock();
+    game_state_init_camera(800, 600); // Default screen size
     printf("  AOI Radius: %.1f, Dev UI: %s\n", g_game_state.aoi_radius, g_game_state.dev_ui ? "true" : "false");
 
     return 0;
@@ -439,8 +429,6 @@ int message_parser_parse_aoi_update(const cJSON* json_root) {
     if (!payload) {
         return -1;
     }
-
-    game_state_lock();
 
     // Parse main player object
     cJSON* player_obj = serial_get_object(payload, "player");
@@ -642,8 +630,6 @@ int message_parser_parse_aoi_update(const cJSON* json_root) {
     // Update timestamp
     g_game_state.last_update_time = GetTime();
 
-    game_state_unlock();
-
     return 0;
 }
 
@@ -662,8 +648,6 @@ int message_parser_parse_skill_item_ids(const cJSON* json_root) {
         printf("[MESSAGE_PARSER] skill_item_ids missing payload\n");
         return -1;
     }
-
-    game_state_lock();
 
     // Clear existing associations
     g_game_state.associated_item_count = 0;
@@ -691,8 +675,6 @@ int message_parser_parse_skill_item_ids(const cJSON* json_root) {
         }
     }
 
-    game_state_unlock();
-
     printf("[MESSAGE_PARSER] Skill/Item IDs processed: %d associations\n",
            g_game_state.associated_item_count);
 
@@ -715,8 +697,6 @@ int message_parser_parse_error(const cJSON* json_root) {
         return -1;
     }
 
-    game_state_lock();
-
     // Get error message
     char error_msg[MAX_MESSAGE_SIZE] = {0};
     if (serial_get_string(payload, "message", error_msg, sizeof(error_msg)) == 0) {
@@ -728,8 +708,6 @@ int message_parser_parse_error(const cJSON* json_root) {
                 sizeof(g_game_state.last_error_message) - 1);
         g_game_state.error_display_time = GetTime();
     }
-
-    game_state_unlock();
 
     return 0;
 }

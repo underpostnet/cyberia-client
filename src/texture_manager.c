@@ -1,6 +1,4 @@
 #include "texture_manager.h"
-#include "config.h"
-#include <stdlib.h>
 #include <string.h>
 #include <stdio.h>
 
@@ -58,7 +56,7 @@ static const char* get_file_extension(const char* url) {
 // --- Implementation ---
 
 TextureManager* create_texture_manager(void) {
-    TextureManager* manager = (TextureManager*)malloc(sizeof(TextureManager));
+    TextureManager* manager = malloc(sizeof(TextureManager));
     if (manager) {
         for (int i = 0; i < HASH_TABLE_SIZE; i++) {
             manager->buckets[i] = NULL;
@@ -76,10 +74,9 @@ void destroy_texture_manager(TextureManager* manager) {
 }
 
 Texture2D get_texture(TextureManager* manager, const char* identifier) {
-    if (!manager || !identifier) {
-        Texture2D empty = {0};
-        empty.id = 0;
-        return empty;
+    if (!manager || !identifier)
+    {
+        return (Texture2D){0};
     }
 
     unsigned long index = hash_string(identifier) % HASH_TABLE_SIZE;
@@ -127,83 +124,22 @@ Texture2D get_texture(TextureManager* manager, const char* identifier) {
     }
 
     // Not found
-    Texture2D empty = {0};
-    empty.id = 0;
-    return empty;
-}
-
-static void cache_texture(TextureManager* manager, const char* identifier, Texture2D texture, TextureState state) {
-    if (!manager || !identifier) return;
-
-    unsigned long index = hash_string(identifier) % HASH_TABLE_SIZE;
-
-    // Check if already cached
-    TextureEntry* entry = manager->buckets[index];
-    while (entry) {
-        if (strcmp(entry->key, identifier) == 0) {
-            // Update existing entry
-            if (entry->texture.id > 0 && entry->texture.id != texture.id) {
-                UnloadTexture(entry->texture);
-            }
-            entry->texture = texture;
-            entry->state = state;
-            return;
-        }
-        entry = entry->next;
-    }
-
-    // Create new entry
-    TextureEntry* new_entry = (TextureEntry*)malloc(sizeof(TextureEntry));
-    if (!new_entry) return;
-
-    new_entry->key = strdup(identifier);
-    if (!new_entry->key) {
-        free(new_entry);
-        return;
-    }
-
-    new_entry->texture = texture;
-    new_entry->state = state;
-    new_entry->request_id = 0;
-    new_entry->next = manager->buckets[index];
-    manager->buckets[index] = new_entry;
-}
-
-Texture2D load_texture_from_path(TextureManager* manager, const char* path) {
-    if (!manager || !path) {
-        Texture2D empty = {0};
-        empty.id = 0;
-        return empty;
-    }
-
-    // Check cache first
-    Texture2D cached = get_texture(manager, path);
-    if (cached.id > 0) return cached;
-
-    // Load synchronously from filesystem
-    Texture2D texture = LoadTexture(path);
-    if (texture.id > 0) {
-        cache_texture(manager, path, texture, TEXTURE_STATE_READY);
-    } else {
-        fprintf(stderr, "[ERROR] Failed to load texture from path: %s\n", path);
-        Texture2D empty = {0};
-        empty.id = 0;
-        return empty;
-    }
-    return texture;
+    return (Texture2D){0};
 }
 
 // Async JavaScript fetch implementation for web platform
 Texture2D load_texture_from_url(TextureManager* manager, const char* url) {
-    if (!manager || !url) {
-        Texture2D empty = {0};
-        empty.id = 0;
-        return empty;
+    if (!manager || !url)
+    {
+        return (Texture2D){0};
     }
 
     // Check cache first
     Texture2D cached = get_texture(manager, url);
-    if (cached.id > 0) return cached;
+    if (cached.id > 0)
+    {
+        return cached;
+    }
 
     // Check if entry exists but is loading/error
     unsigned long index = hash_string(url) % HASH_TABLE_SIZE;
@@ -219,7 +155,7 @@ Texture2D load_texture_from_url(TextureManager* manager, const char* url) {
     int req_id = manager->next_request_id++;
 
     // Create entry in LOADING state
-    TextureEntry* new_entry = (TextureEntry*)malloc(sizeof(TextureEntry));
+    TextureEntry* new_entry = malloc(sizeof(TextureEntry));
     if (new_entry) {
         new_entry->key = strdup(url);
         new_entry->texture = (Texture2D){0};
@@ -232,44 +168,7 @@ Texture2D load_texture_from_url(TextureManager* manager, const char* url) {
         js_start_fetch_binary(url, req_id);
     }
 
-    Texture2D empty = {0};
-    empty.id = 0;
-    return empty;
-}
-
-Texture2D load_ui_icon(TextureManager* manager, const char* icon_name) {
-    char url[512];
-    snprintf(url, sizeof(url), "%s/ui-icons/%s", ASSETS_BASE_URL, icon_name);
-    return load_texture_from_url(manager, url);
-}
-
-void unload_texture(TextureManager* manager, const char* identifier) {
-    if (!manager || !identifier) return;
-
-    unsigned long index = hash_string(identifier) % HASH_TABLE_SIZE;
-    TextureEntry* entry = manager->buckets[index];
-    TextureEntry* prev = NULL;
-
-    while (entry) {
-        if (strcmp(entry->key, identifier) == 0) {
-            if (prev) {
-                prev->next = entry->next;
-            } else {
-                manager->buckets[index] = entry->next;
-            }
-
-            // Cleanup texture
-            if (entry->texture.id > 0) {
-                UnloadTexture(entry->texture);
-            }
-
-            free(entry->key);
-            free(entry);
-            return;
-        }
-        prev = entry;
-        entry = entry->next;
-    }
+    return (Texture2D){0};
 }
 
 void unload_all_textures(TextureManager* manager) {

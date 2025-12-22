@@ -31,7 +31,7 @@ CFLAGS += -O3
 CFLAGS += -pedantic
 # CFLAGS += -Werror
 else
-# CFLAGS += -D_DEBUG -g
+CFLAGS += -D_DEBUG -g
 endif
 
 #------------------------------------------------
@@ -46,11 +46,13 @@ CFLAGS += -I$(CJSON_PATH)
 
 #---------------------------------------------------------------------------------------------
 # Common Targets
-.PHONY: $(PROJECT_NAME) clean
+.PHONY: $(PROJECT_NAME) clean full-clean
 
 clean:
 	rm -rf $(BUILD_DIR)
 	rm -rf $(OUTPUT_DIR)
+
+full-clean: clean
 	make -C $(RAYLIB_PATH)/src clean
 
 #---------------------------------------------------------------------------------------------

@@ -64,16 +64,6 @@ typedef struct EntityRender EntityRender;
  *
  * @note The caller does NOT own the manager pointers - they must be freed
  *       separately and must outlive the EntityRender instance
- *
- * Example:
- * @code
- *   TextureManager* tm = create_texture_manager();
- *   ObjectLayersManager* olm = create_object_layers_manager(tm);
- *   EntityRender* render = create_entity_render(olm, tm);
- *   // ... use render ...
- *   destroy_entity_render(render);
- *   destroy_object_layers_manager(olm);
- *   destroy_texture_manager(tm);
  * @endcode
  */
 EntityRender* create_entity_render(
@@ -159,13 +149,13 @@ void destroy_entity_render(EntityRender* render);
  *   layer1.itemId = "anon";  // skin
  *   layer1.active = true;
  *   layer1.quantity = 1;
- *   
+ *
  *   layer2.itemId = "sword";  // weapon
  *   layer2.active = true;
  *   layer2.quantity = 1;
- *   
+ *
  *   ObjectLayerState* layers[] = { &layer1, &layer2 };
- *   
+ *
  *   // Render entity at grid position (10, 15), size 1x2, facing right, walking
  *   draw_entity_layers(
  *       render_system,

@@ -6,6 +6,8 @@
 #include <stdint.h>
 #include <stddef.h>
 
+#include "object_layer.h"
+
 /**
  * @file game_state.h
  * @brief Core game state management structures
@@ -21,9 +23,9 @@
 #define MAX_PATH_POINTS 100
 #define MAX_MESSAGE_SIZE 65536
 #define MAX_ID_LENGTH 64
-#define MAX_ITEM_ID_LENGTH 64
-#define MAX_DESCRIPTION_LENGTH 256
-#define MAX_TYPE_LENGTH 64
+
+
+
 #define MAX_BEHAVIOR_LENGTH 32
 
 // Forward declarations
@@ -32,24 +34,6 @@ typedef struct EntityState EntityState;
 typedef struct PlayerState PlayerState;
 typedef struct BotState BotState;
 
-// Enums corresponding to Python enums
-typedef enum {
-    DIRECTION_UP = 0,
-    DIRECTION_UP_RIGHT = 1,
-    DIRECTION_RIGHT = 2,
-    DIRECTION_DOWN_RIGHT = 3,
-    DIRECTION_DOWN = 4,
-    DIRECTION_DOWN_LEFT = 5,
-    DIRECTION_LEFT = 6,
-    DIRECTION_UP_LEFT = 7,
-    DIRECTION_NONE = 8
-} Direction;
-
-typedef enum {
-    MODE_IDLE = 0,
-    MODE_WALKING = 1,
-    MODE_TELEPORTING = 2
-} ObjectLayerMode;
 
 // Color structure (equivalent to Python ColorRGBA)
 typedef struct {
@@ -58,76 +42,6 @@ typedef struct {
     uint8_t b;
     uint8_t a;
 } ColorRGBA;
-
-// Stats structure
-typedef struct {
-    int effect;
-    int resistance;
-    int agility;
-    int range;
-    int intelligence;
-    int utility;
-} Stats;
-
-// Item structure
-typedef struct {
-    char id[MAX_ITEM_ID_LENGTH];
-    char type[MAX_TYPE_LENGTH];
-    char description[MAX_DESCRIPTION_LENGTH];
-    bool activable;
-} Item;
-
-// Render frames structure (simplified for C)
-// Stores the count of frames for each animation state.
-// The actual frame data (3D matrices) is not stored here as we fetch textures.
-typedef struct {
-    int up_idle_count;
-    int down_idle_count;
-    int right_idle_count;
-    int left_idle_count;
-    int up_right_idle_count;
-    int down_right_idle_count;
-    int up_left_idle_count;
-    int down_left_idle_count;
-    int default_idle_count;
-    int up_walking_count;
-    int down_walking_count;
-    int right_walking_count;
-    int left_walking_count;
-    int up_right_walking_count;
-    int down_right_walking_count;
-    int up_left_walking_count;
-    int down_left_walking_count;
-    int none_idle_count;
-} RenderFrames;
-
-// Render structure
-typedef struct {
-    RenderFrames frames;
-    // colors omitted for now as we use textures
-    int frame_duration;
-    bool is_stateless;
-} Render;
-
-// Object layer data
-typedef struct {
-    Stats stats;
-    Render render;
-    Item item;
-} ObjectLayerData;
-
-// Object layer
-typedef struct {
-    ObjectLayerData data;
-    char sha256[65]; // 64 chars + null terminator
-} ObjectLayer;
-
-// Object layer state
-typedef struct {
-    char item_id[MAX_ITEM_ID_LENGTH];
-    bool active;
-    int quantity;
-} ObjectLayerState;
 
 // Base entity state structure
 struct EntityState {
@@ -260,7 +174,6 @@ struct GameState {
 
     // Camera
     Camera2D camera;
-    bool camera_initialized;
 };
 
 // Global game state instance
@@ -276,16 +189,6 @@ int game_state_init(void);
  * @brief Cleanup game state and free resources
  */
 void game_state_cleanup(void);
-
-/**
- * @brief Lock game state mutex for thread-safe access
- */
-void game_state_lock(void);
-
-/**
- * @brief Unlock game state mutex
- */
-void game_state_unlock(void);
 
 /**
  * @brief Update entity position interpolation

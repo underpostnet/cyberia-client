@@ -1,12 +1,11 @@
 #include "object_layers_management.h"
 #include "config.h"
 #include "cJSON.h"
-#include "direction_converter.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
-#include <emscripten.h>
+#include <emscripten/emscripten.h>
 // External JS function
 extern char* js_fetch_object_layer(const char* item_id);
 
@@ -271,7 +270,7 @@ static char* extract_first_item_from_response(const char* response_json) {
 // --- Public API ---
 
 ObjectLayersManager* create_object_layers_manager(TextureManager* texture_manager) {
-    ObjectLayersManager* manager = (ObjectLayersManager*)malloc(sizeof(ObjectLayersManager));
+    ObjectLayersManager* manager = malloc(sizeof(ObjectLayersManager));
     if (!manager) return NULL;
 
     for (int i = 0; i < HASH_TABLE_SIZE; i++) {
@@ -407,8 +406,6 @@ void build_object_layer_uri(
     const char* direction_code,
     int frame
 ) {
-    if (!buffer || buffer_size == 0) return;
-
     snprintf(buffer, buffer_size, "%s/%s/%s/%s/%d.png",
              ASSETS_BASE_URL, item_type, item_id, direction_code, frame);
 }

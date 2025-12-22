@@ -47,10 +47,6 @@ int game_render_init(int screen_width, int screen_height) {
 
     // Initialize object layer rendering system
     g_texture_manager = create_texture_manager();
-    if (!g_texture_manager) {
-        fprintf(stderr, "[ERROR] Failed to create texture manager\n");
-        return -1;
-    }
 
     g_object_layers_manager = create_object_layers_manager(g_texture_manager);
     if (!g_object_layers_manager) {
@@ -88,34 +84,20 @@ void game_render_frame(void) {
 
     // CRITICAL: Wrap entire rendering in try-catch style error handling
     // This prevents partial rendering that can cause black screens
-    
+
     BeginDrawing();
 
     // Clear background - this ensures we always have SOME color on screen
     ClearBackground(g_game_state.colors.background);
 
-    // Lock game state for consistent rendering
-    game_state_lock();
-    
-    // Cache important values to avoid accessing game_state during rendering
-    bool camera_initialized = g_game_state.camera_initialized;
-    
-    game_state_unlock();
-
     // Begin camera mode for world rendering
-    if (camera_initialized) {
-        // CRITICAL: Always update camera offset before BeginMode2D to prevent flickering
-        // This ensures the camera is properly centered even if screen dimensions changed
-        game_state_update_camera_offset(g_renderer.screen_width, g_renderer.screen_height);
+    // CRITICAL: Always update camera offset before BeginMode2D to prevent flickering
+    // This ensures the camera is properly centered even if screen dimensions changed
+    game_state_update_camera_offset(g_renderer.screen_width, g_renderer.screen_height);
 
-        BeginMode2D(g_game_state.camera);
+    BeginMode2D(g_game_state.camera);
         game_render_world();
-        EndMode2D();
-    } else {
-        // If camera not initialized, still render world in screen space
-        // This prevents complete black screen while waiting for initialization
-        game_render_world();
-    }
+    EndMode2D();
 
     // Render UI (screen space)
     game_render_ui();
@@ -173,8 +155,6 @@ void game_render_grid(void) {
     // Only render grid overlay when dev_ui is enabled
     // Grid is transparent with red lines and white border on top of everything
 
-    game_state_lock();
-
     float cell_size = g_game_state.cell_size > 0 ? g_game_state.cell_size : 12.0f;
     int grid_w = g_game_state.grid_w;
     int grid_h = g_game_state.grid_h;
@@ -212,14 +192,10 @@ void game_render_grid(void) {
             grid_line_color
         );
     }
-
-    game_state_unlock();
 }
 
 
 void game_render_floors(void) {
-    game_state_lock();
-
     float cell_size = g_game_state.cell_size > 0 ? g_game_state.cell_size : 12.0f;
 
     // If we have no floors, draw a default background to prevent black screen
@@ -227,7 +203,7 @@ void game_render_floors(void) {
         // Draw a subtle grid background as fallback
         if (g_game_state.dev_ui) {
             // In dev mode, show that floors are missing with a darker background
-            DrawRectangle(0, 0, g_renderer.screen_width * 2, g_renderer.screen_height * 2, 
+            DrawRectangle(0, 0, g_renderer.screen_width * 2, g_renderer.screen_height * 2,
                          (Color){20, 20, 20, 255});
         }
     }
@@ -266,13 +242,9 @@ void game_render_floors(void) {
             DrawRectangleRec(rect, g_game_state.colors.floor_background);
         }
     }
-
-    game_state_unlock();
 }
 
 void game_render_world_objects(void) {
-    game_state_lock();
-
     float cell_size = g_game_state.cell_size > 0 ? g_game_state.cell_size : 12.0f;
 
     // Render obstacles
@@ -346,13 +318,9 @@ void game_render_world_objects(void) {
             DrawRectangleRec(rect, g_game_state.colors.portal);
         }
     }
-
-    game_state_unlock();
 }
 
 void game_render_foregrounds(void) {
-    game_state_lock();
-
     float cell_size = g_game_state.cell_size > 0 ? g_game_state.cell_size : 12.0f;
 
     // Render foregrounds (always on top of entities)
@@ -390,8 +358,6 @@ void game_render_foregrounds(void) {
             DrawRectangleRec(rect, g_game_state.colors.foreground);
         }
     }
-
-    game_state_unlock();
 }
 
 // Helper structure for depth sorting entities
@@ -419,9 +385,8 @@ void game_render_entities(void) {
     // Safety check - ensure entity render system is initialized
     if (!g_entity_render) {
         // Fallback to simple rendering if entity render system not initialized
-        game_state_lock();
         float cell_size = g_game_state.cell_size > 0 ? g_game_state.cell_size : 12.0f;
-        
+
         // Draw simple rectangles as fallback to ensure entities are visible
         Rectangle rect;
         rect.x = g_game_state.player.base.interp_pos.x * cell_size;
@@ -429,7 +394,7 @@ void game_render_entities(void) {
         rect.width = g_game_state.player.base.dims.x * cell_size;
         rect.height = g_game_state.player.base.dims.y * cell_size;
         DrawRectangleRec(rect, g_game_state.colors.player);
-        
+
         // Also draw other players as rectangles
         for (int i = 0; i < g_game_state.other_player_count; i++) {
             PlayerState* player = &g_game_state.other_players[i];
@@ -441,7 +406,7 @@ void game_render_entities(void) {
             };
             DrawRectangleRec(other_rect, g_game_state.colors.other_player);
         }
-        
+
         // Draw bots as rectangles
         for (int i = 0; i < g_game_state.bot_count; i++) {
             BotState* bot = &g_game_state.bots[i];
@@ -453,14 +418,8 @@ void game_render_entities(void) {
             };
             DrawRectangleRec(bot_rect, (Color){100, 200, 100, 200});
         }
-        
-        game_state_unlock();
         return;
     }
-
-    // CRITICAL: Minimize lock time by copying data first, then unlock before rendering
-    // This prevents holding the lock during expensive texture loading operations
-    game_state_lock();
 
     float cell_size = g_game_state.cell_size > 0 ? g_game_state.cell_size : 12.0f;
     bool dev_ui = g_game_state.dev_ui;
@@ -501,21 +460,17 @@ void game_render_entities(void) {
         entry_count++;
     }
 
-    // CRITICAL: Release lock before sorting and rendering
-    // Sorting and texture loading don't need the lock and can cause deadlocks
-    game_state_unlock();
-
     // Sort entities by depth (bottom Y coordinate) - no lock needed
     qsort(sort_entries, entry_count, sizeof(EntitySortEntry), compare_entities_by_depth);
 
     // Allocate temporary layer pointer array for all entities
     ObjectLayerState* temp_layers[MAX_OBJECT_LAYERS];
-    
+
     // Render entities in sorted order using EntityRender system
     // We don't need lock here as we're using copied data from sort_entries
     for (int i = 0; i < entry_count; i++) {
         EntitySortEntry* entry = &sort_entries[i];
-        
+
         const char* entity_type_str = NULL;
         const char* entity_id = NULL;
         EntityState* entity_base = NULL;
@@ -549,7 +504,7 @@ void game_render_entities(void) {
             for (int j = 0; j < layers_count && j < MAX_OBJECT_LAYERS; j++) {
                 temp_layers[j] = &entity_base->object_layers[j];
             }
-            
+
             // Use EntityRender system to draw entity with object layers
             // This may load textures which can take time - that's why we unlocked earlier
             draw_entity_layers(
@@ -572,8 +527,6 @@ void game_render_entities(void) {
 }
 
 void game_render_player_path(void) {
-    game_state_lock();
-
     float cell_size = g_game_state.cell_size > 0 ? g_game_state.cell_size : 12.0f;
 
     // Render target position
@@ -600,13 +553,9 @@ void game_render_player_path(void) {
 
         DrawRectangleRec(path_rect, g_game_state.colors.path);
     }
-
-    game_state_unlock();
 }
 
 void game_render_aoi_circle(void) {
-    game_state_lock();
-
     float cell_size = g_game_state.cell_size > 0 ? g_game_state.cell_size : 12.0f;
     float aoi_radius = g_game_state.aoi_radius * cell_size;
 
@@ -616,8 +565,6 @@ void game_render_aoi_circle(void) {
     };
 
     DrawCircleLines(center.x, center.y, aoi_radius, g_game_state.colors.aoi);
-
-    game_state_unlock();
 }
 
 void game_render_ui(void) {
@@ -625,10 +572,8 @@ void game_render_ui(void) {
     game_render_error_messages();
 
     // Determine what to render based on dev_ui flag
-    game_state_lock();
     bool dev_ui_enabled = g_game_state.dev_ui;
     bool init_received = g_game_state.init_received;
-    game_state_unlock();
 
     if (dev_ui_enabled && init_received) {
         // Render dev UI only
@@ -652,8 +597,6 @@ void game_render_performance_info(void) {
 }
 
 void game_render_error_messages(void) {
-    game_state_lock();
-
     if (g_game_state.last_error_message[0] != '\0') {
         double current_time = GetTime();
         if (current_time - g_game_state.error_display_time < 5.0) {
@@ -665,8 +608,6 @@ void game_render_error_messages(void) {
             DrawText(g_game_state.last_error_message, x, y, font_size, g_game_state.colors.error_text);
         }
     }
-
-    game_state_unlock();
 }
 
 void game_render_click_effects(void) {

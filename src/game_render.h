@@ -8,7 +8,7 @@
 /**
  * @file game_render.h
  * @brief Enhanced game rendering system
- * 
+ *
  * This module handles all game-specific rendering operations, building on
  * the basic render.c foundation. It includes entity rendering, world objects,
  * UI elements, effects, and all visual game elements.
@@ -58,35 +58,32 @@ typedef struct {
 typedef struct {
     // Texture management
     TextureCache texture_cache;
-    
+
     // Screen dimensions
     int screen_width;
     int screen_height;
-    
+
     // Effects
     FloatingText floating_texts[100];
     int floating_text_count;
-    
+
     ClickEffect click_effects[20];
     int click_effect_count;
-    
+
     // Font
     Font game_font;
     bool font_loaded;
-    
+
     // Performance tracking
     int frames_rendered;
     double last_fps_update;
     float current_fps;
-    
+
     // UI state
     bool hud_visible;
     Rectangle hud_area;
-    
-} GameRenderer;
 
-// Global renderer instance
-extern GameRenderer g_renderer;
+} GameRenderer;
 
 /**
  * @brief Initialize the game renderer
@@ -105,7 +102,7 @@ void game_render_set_screen_size(int width, int height);
 
 /**
  * @brief Main game rendering function (called each frame)
- * 
+ *
  * This is the main entry point for rendering the entire game.
  * Called from the render_update() function in render.c.
  */
@@ -122,7 +119,7 @@ void game_render_cleanup(void);
 
 /**
  * @brief Render the game world (grid, objects, entities)
- * 
+ *
  * This function handles all world-space rendering that should be
  * affected by camera transforms.
  */
@@ -201,7 +198,7 @@ void game_render_add_click_effect(Vector2 world_pos, Color color);
  * @param font_size Font size
  * @param life_time How long the text should be visible
  */
-void game_render_add_floating_text(Vector2 world_pos, const char* text, 
+void game_render_add_floating_text(Vector2 world_pos, const char* text,
                                    Color color, float font_size, float life_time);
 
 /**
@@ -216,7 +213,7 @@ void game_render_update_effects(float delta_time);
 
 /**
  * @brief Render the user interface (HUD, menus, etc.)
- * 
+ *
  * This function handles all screen-space UI rendering that should
  * NOT be affected by camera transforms.
  */
@@ -334,7 +331,7 @@ void game_render_text_with_shadow(const char* text, int x, int y, int font_size,
  * @param outline_color Outline color
  * @param outline_width Outline thickness
  */
-void game_render_rectangle_outlined(Rectangle rect, Color fill_color, 
+void game_render_rectangle_outlined(Rectangle rect, Color fill_color,
                                     Color outline_color, float outline_width);
 
 /**

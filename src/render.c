@@ -1,9 +1,7 @@
 #include "render.h"
 #include "game_render.h"
-#include "game_state.h"
 #include "input.h"
 #include "dev_ui.h"
-#include "modal.h"
 #include "modal_player.h"
 #include "raylib.h"
 #include <stdio.h>
@@ -17,70 +15,30 @@ void render_fallback(int width, int height);
 
 // Global state for rendering
 struct {
-    int initialized;
-    int width;
-    int height;
-    bool game_initialized;
     Texture2D splash_texture;
 } render_state = {0};
 
 // Initialize the rendering subsystem
-int render_init(const char* title, int width, int height) {
-    if (render_state.initialized) {
-        printf("[RENDER] Already initialized\n");
-        return 0;
-    }
-
-    render_state.width = width;
-    render_state.height = height;
-
-    // Initialize window with raylib
-    InitWindow(width, height, title);
-
-    // Set target FPS for smooth rendering
-    SetTargetFPS(60);
-
-    render_state.initialized = 1;
-    printf("[RENDER] Basic renderer initialized successfully (%dx%d)\n", width, height);
-
+void render_init(int width, int height) {
     // Load splash texture
     render_state.splash_texture = LoadTexture("splash.png");
-    if (render_state.splash_texture.id == 0) {
-        printf("[RENDER] Failed to load splash texture 'splash.png'\n");
-    }
 
     // Initialize game-specific rendering systems
-    if (game_render_init(width, height) == 0) {
-        render_state.game_initialized = true;
-        printf("[RENDER] Game renderer initialized successfully\n");
-    } else {
-        printf("[RENDER] Failed to initialize game renderer, using fallback\n");
-        render_state.game_initialized = false;
-    }
+    game_render_init(width, height);
 
     // Initialize development UI
-    if (dev_ui_init() == 0) {
-        printf("[RENDER] Development UI initialized successfully\n");
-    } else {
+    if (0 != dev_ui_init()) {
         printf("[RENDER] Failed to initialize development UI\n");
     }
 
     // Initialize player modal component
-    if (modal_player_init() == 0) {
-        printf("[RENDER] Player modal component initialized successfully\n");
-    } else {
+    if (0 != modal_player_init()) {
         printf("[RENDER] Failed to initialize player modal component\n");
     }
-
-    return 0;
 }
 
 // Main rendering loop iteration
 void render_update(void) {
-    if (!render_state.initialized) {
-        return;
-    }
-
     // Update input system first
     input_update();
 
@@ -89,15 +47,9 @@ void render_update(void) {
     int current_height = GetScreenHeight();
 
     // Update stored dimensions if canvas was resized
-    if (current_width != render_state.width || current_height != render_state.height) {
-        render_state.width = current_width;
-        render_state.height = current_height;
-        printf("[RENDER] Canvas resized to %dx%d\n", current_width, current_height);
-
+    if (IsWindowResized()) {
         // Update game renderer screen size
-        if (render_state.game_initialized) {
-            game_render_set_screen_size(current_width, current_height);
-        }
+        game_render_set_screen_size(current_width, current_height);
 
         // Update camera offset to keep it centered
         game_state_update_camera_offset(current_width, current_height);
@@ -119,27 +71,27 @@ void render_update(void) {
     game_render_update_effects(delta_time);
 
     // Update dev UI
-    dev_ui_update(delta_time);
+    //dev_ui_update(delta_time);
 
     // Update player modal
-    modal_player_update(delta_time);
+    //modal_player_update(delta_time);
 
     // Use game renderer if available and game state is initialized
-    if (render_state.game_initialized && g_game_state.init_received) {
+    if (g_game_state.init_received) {
         // Full game rendering
         game_render_frame();
     } else {
         // Fallback rendering for when game isn't ready yet
+        BeginDrawing();
         render_fallback(current_width, current_height);
+        EndDrawing();
     }
 }
 
 // Fallback rendering when game systems aren't ready
 void render_fallback(int width, int height) {
-    BeginDrawing();
-
     // Clear background to game background color (reduces flicker)
-    ClearBackground((Color){30, 30, 30, 255});
+    ClearBackground(DARKGRAY);
 
     // Calculate center position
     float center_x = (float)width / 2.0f;
@@ -157,26 +109,15 @@ void render_fallback(int width, int height) {
     const char* status_text = "Connecting to server...";
     int text_width = MeasureText(status_text, 20);
     DrawText(status_text, (width - text_width) / 2, height - 40, 20, WHITE);
-
-    EndDrawing();
 }
 
 // Cleanup rendering subsystem
 void render_cleanup(void) {
-    if (!render_state.initialized) {
-        return;
-    }
-
     // Unload splash texture
-    if (render_state.splash_texture.id != 0) {
-        UnloadTexture(render_state.splash_texture);
-    }
+    UnloadTexture(render_state.splash_texture);
 
     // Cleanup game renderer
-    if (render_state.game_initialized) {
-        game_render_cleanup();
-        render_state.game_initialized = false;
-    }
+    game_render_cleanup();
 
     // Cleanup development UI
     dev_ui_cleanup();
@@ -186,8 +127,4 @@ void render_cleanup(void) {
 
     // Cleanup input system
     input_cleanup();
-
-    CloseWindow();
-    render_state.initialized = 0;
-    printf("[RENDER] Cleanup complete\n");
 }

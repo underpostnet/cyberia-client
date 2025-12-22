@@ -3,7 +3,6 @@
 #include "client.h"
 #include <stdio.h>
 #include <string.h>
-#include <math.h>
 
 const char* direction_to_string(Direction dir) {
     switch (dir) {
@@ -159,8 +158,6 @@ int dev_ui_get_active_stats_sum(const char* player_id) {
 
     int total_stats = 0;
 
-    game_state_lock();
-
     // Check if it's the main player
     if (strcmp(g_game_state.player_id, player_id) == 0) {
         EntityState* entity = &g_game_state.player.base;
@@ -176,8 +173,6 @@ int dev_ui_get_active_stats_sum(const char* player_id) {
         }
     }
 
-    game_state_unlock();
-
     return total_stats;
 }
 
@@ -185,8 +180,6 @@ int dev_ui_get_active_item_count(const char* player_id) {
     if (!player_id) return 0;
 
     int active_count = 0;
-
-    game_state_lock();
 
     // Check if it's the main player
     if (strcmp(g_game_state.player_id, player_id) == 0) {
@@ -200,16 +193,12 @@ int dev_ui_get_active_item_count(const char* player_id) {
         }
     }
 
-    game_state_unlock();
-
     return active_count;
 }
 
 void dev_ui_draw(int screen_width, int screen_height, int hud_occupied) {
     // Only draw if dev_ui is enabled in game state
-    game_state_lock();
     bool dev_ui_enabled = g_game_state.dev_ui;
-    game_state_unlock();
 
     if (!dev_ui_enabled) {
         return;
@@ -240,9 +229,6 @@ void dev_ui_draw(int screen_width, int screen_height, int hud_occupied) {
     DrawText(fps_text, x_margin, y_offset, font_size_title, g_dev_ui.debug_text_color);
     y_offset += font_size_title + 10;
 
-    // Lock game state for reading player info
-    game_state_lock();
-
     // Get player information
     const char* player_id = g_game_state.player_id[0] != '\0' ? g_game_state.player_id : "N/A";
     int map_id = g_game_state.player.map_id;
@@ -252,8 +238,6 @@ void dev_ui_draw(int screen_width, int screen_height, int hud_occupied) {
     Vector2 target_pos = g_game_state.player.target_pos;
     int sum_stats_limit = g_game_state.sum_stats_limit;
     const char* error_msg = g_game_state.last_error_message;
-
-    game_state_unlock();
 
     // Get active stats and item count
     int active_stats_sum = dev_ui_get_active_stats_sum(player_id);

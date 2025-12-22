@@ -5,8 +5,8 @@ DEV_PORT		?= 8081
 PROD_PORT		?= 8081
 
 #---------------------------------------------------------------------------------------------
-BUILD_DIR		:= $(call lc,$(BUILD_DIR)/$(PLATFORM)/$(BUILD_MODE))
-OUTPUT_DIR		:= $(call lc,$(OUTPUT_DIR)/$(PLATFORM)/$(BUILD_MODE))
+BUILD_DIR		:= $(call lc,$(BUILD_DIR)/web/$(BUILD_MODE))
+OUTPUT_DIR		:= $(call lc,$(OUTPUT_DIR)/web/$(BUILD_MODE))
 
 #---------------------------------------------------------------------------------------------
 # Specific compiler flags
@@ -40,7 +40,7 @@ ARTIFACTS_ARCHIVES := --preload-file $(SRC_DIR)/public/splash.png@splash.png
 
 #---------------------------------------------------------------------------------------------
 # Util variables
-OBJS	:= $(addprefix $(BUILD_DIR),$(SRC_FILES:$(SRC_DIR)/%=$(OBJ_DIR)/%.o))
+OBJS	:= $(SRC_FILES:$(SRC_DIR)/%=$(BUILD_DIR)/%.o)
 OBJS	+= $(BUILD_DIR)/cJSON.o
 
 #---------------------------------------------------------------------------------------------

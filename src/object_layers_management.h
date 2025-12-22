@@ -121,10 +121,6 @@ typedef struct ObjectLayersManager ObjectLayersManager;
  *                        (must remain valid, not owned)
  * @return Pointer to new manager, or NULL on allocation failure
  *
- * Example:
- * @code
- *   TextureManager* tm = create_texture_manager();
- *   ObjectLayersManager* manager = create_object_layers_manager(tm);
  * @endcode
  */
 ObjectLayersManager* create_object_layers_manager(TextureManager* texture_manager);

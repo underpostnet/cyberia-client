@@ -5,7 +5,6 @@
 #include "message_parser.h"
 #include "serial.h"
 #include <stdio.h>
-#include <stdlib.h>
 #include <string.h>
 
 #include <emscripten/emscripten.h>
@@ -29,10 +28,6 @@ static void on_websocket_close(int code, const char* reason, void* user_data);
 
 // Initialize the client subsystem
 int client_init(void) {
-    if (client_state.initialized) {
-        return 0;
-    }
-
     // Initialize client state
     memset(&client_state, 0, sizeof(client_state));
     strncpy(client_state.last_message, "No message received yet", MAX_MESSAGE_SIZE - 1);
@@ -89,9 +84,7 @@ int client_send(const char* message) {
         client_state.bytes_uploaded += length;
 
         // Update dev UI with network stats
-        game_state_lock();
         g_game_state.upload_size_bytes = client_state.bytes_uploaded;
-        game_state_unlock();
     }
 
     return result;
@@ -145,9 +138,7 @@ static void on_websocket_message(const char* data, int length, void* user_data) 
     client_state.bytes_downloaded += length;
 
     // Update dev UI with network stats
-    game_state_lock();
     g_game_state.download_size_bytes = client_state.bytes_downloaded;
-    game_state_unlock();
 
     // Check if message fits in buffer
     if (length >= MAX_MESSAGE_SIZE) {

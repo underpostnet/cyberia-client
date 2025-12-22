@@ -63,7 +63,6 @@ int game_state_init(void) {
     // Runtime state
     g_game_state.init_received = false;
     g_game_state.dev_ui = false;
-    g_game_state.camera_initialized = false;
     g_game_state.last_update_time = GetTime();
 
     strncpy(g_game_state.last_error_message, "", MAX_MESSAGE_SIZE - 1);
@@ -79,12 +78,6 @@ void game_state_cleanup(void) {
     memset(&g_game_state, 0, sizeof(GameState));
 
     printf("[GAME_STATE] Cleanup complete\n");
-}
-
-void game_state_lock(void) {
-}
-
-void game_state_unlock(void) {
 }
 
 /**
@@ -107,8 +100,6 @@ void game_state_unlock(void) {
  * This creates smooth movement even when server updates are infrequent.
  */
 void game_state_update_interpolation(float delta_time) {
-    game_state_lock();
-
     double current_time = GetTime();
     // Calculate interpolation factor based on time since last server update
     float interp_factor = g_game_state.interpolation_ms > 0 ?
@@ -140,8 +131,6 @@ void game_state_update_interpolation(float delta_time) {
         bot->base.interp_pos.y = bot->base.pos_prev.y +
             (bot->base.pos_server.y - bot->base.pos_prev.y) * interp_factor;
     }
-
-    game_state_unlock();
 }
 
 PlayerState* game_state_find_player(const char* id) {
@@ -249,10 +238,6 @@ void game_state_remove_bot(const char* id) {
 }
 
 void game_state_init_camera(int screen_width, int screen_height) {
-    if (g_game_state.camera_initialized) return;
-
-    game_state_lock();
-
     // Calculate initial target position (player center in world coordinates)
     float player_center_x = (g_game_state.player.base.interp_pos.x + g_game_state.player.base.dims.x / 2.0f) * g_game_state.cell_size;
     float player_center_y = (g_game_state.player.base.interp_pos.y + g_game_state.player.base.dims.y / 2.0f) * g_game_state.cell_size;
@@ -265,19 +250,11 @@ void game_state_init_camera(int screen_width, int screen_height) {
     g_game_state.camera.rotation = 0.0f;
     g_game_state.camera.zoom = g_game_state.camera_zoom;
 
-    g_game_state.camera_initialized = true;
-
     printf("[GAME_STATE] Camera initialized - Target: (%.1f, %.1f), Zoom: %.2f\n",
            target.x, target.y, g_game_state.camera_zoom);
-
-    game_state_unlock();
 }
 
 void game_state_update_camera(void) {
-    if (!g_game_state.camera_initialized) return;
-
-    game_state_lock();
-
     float cell_size = g_game_state.cell_size > 0 ? g_game_state.cell_size : 12.0f;
 
     // Calculate desired target position (smooth follow player)
@@ -292,18 +269,10 @@ void game_state_update_camera(void) {
 
     g_game_state.camera.target.x += (desired_target.x - g_game_state.camera.target.x) * smoothing;
     g_game_state.camera.target.y += (desired_target.y - g_game_state.camera.target.y) * smoothing;
-
-    game_state_unlock();
 }
 
 void game_state_update_camera_offset(int screen_width, int screen_height) {
-    if (!g_game_state.camera_initialized) return;
-
-    game_state_lock();
-
     // Keep camera offset centered on screen (good practice for proper rendering)
     g_game_state.camera.offset.x = screen_width / 2.0f;
     g_game_state.camera.offset.y = screen_height / 2.0f;
-
-    game_state_unlock();
 }
