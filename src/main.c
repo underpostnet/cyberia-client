@@ -28,7 +28,7 @@ void main_loop(void) {
 }
 
 // Main entry point
-int main(/*int argc, char* argv[]*/) {
+int main(void) {
     // Initialize engine API base URL for public API access
     js_init_engine_api(API_BASE_URL);
 

@@ -111,6 +111,7 @@ void client_get_network_stats(size_t* bytes_downloaded, size_t* bytes_uploaded) 
 
 // Called when WebSocket connection is opened
 static void on_websocket_open(void* user_data) {
+    (void)user_data;
     // Update connection status
     client_state.ws_client.connected = 1;
 
@@ -128,6 +129,7 @@ static void on_websocket_open(void* user_data) {
 
 // Called when WebSocket message is received
 static void on_websocket_message(const char* data, int length, void* user_data) {
+    (void)user_data;
     if (!data || length <= 0) {
         return;
     }
@@ -158,12 +160,14 @@ static void on_websocket_message(const char* data, int length, void* user_data) 
 
 // Called when WebSocket error occurs
 static void on_websocket_error(void* user_data) {
+    (void)user_data;
     fprintf(stderr, "[ERROR] WebSocket error occurred\n");
     client_state.ws_client.connected = 0;
 }
 
 // Called when WebSocket connection is closed
 static void on_websocket_close(int code, const char* reason, void* user_data) {
+    (void)user_data;
     // Only log unexpected closures
     if (code != 1000) {
         fprintf(stderr, "[WARN] WebSocket closed unexpectedly (code: %d, reason: %s)\n",

@@ -100,6 +100,7 @@ void game_state_cleanup(void) {
  * This creates smooth movement even when server updates are infrequent.
  */
 void game_state_update_interpolation(float delta_time) {
+    (void)delta_time;
     double current_time = GetTime();
     // Calculate interpolation factor based on time since last server update
     float interp_factor = g_game_state.interpolation_ms > 0 ?

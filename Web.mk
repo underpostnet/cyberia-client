@@ -51,7 +51,7 @@ OBJS	+= $(BUILD_DIR)/cJSON.o
 web: $(PROJECT_NAME)
 
 serve_development: web
-	python -m http.server $(DEV_PORT) --directory $(OUTPUT_DIR)
+	python3 -m http.server $(DEV_PORT) --directory $(OUTPUT_DIR)
 
 serve_production:
 	$(MAKE) -f Web.mk serve_development BUILD_MODE=RELEASE DEV_PORT=$(PROD_PORT)

@@ -74,6 +74,7 @@ void dev_ui_cleanup(void) {
 }
 
 void dev_ui_update(float delta_time) {
+    (void)delta_time;
     // Update FPS tracking
     double current_time = GetTime();
     if (current_time - g_dev_ui.last_fps_update >= 0.1) {
@@ -197,6 +198,7 @@ int dev_ui_get_active_item_count(const char* player_id) {
 }
 
 void dev_ui_draw(int screen_width, int screen_height, int hud_occupied) {
+    (void)screen_width;
     // Only draw if dev_ui is enabled in game state
     bool dev_ui_enabled = g_game_state.dev_ui;
 

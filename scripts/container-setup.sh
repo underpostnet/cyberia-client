@@ -128,11 +128,38 @@ ensure_emsdk_env() {
   export PATH="$EMSDK_ROOT:$EMSDK_ROOT/upstream/emscripten:$PATH"
 
   # emsdk activate clears EMSDK_PYTHON; re-export it so emcc uses Python 3.11+
+  local python_bin=""
   if command -v python3.11 >/dev/null 2>&1; then
-    export EMSDK_PYTHON="$(command -v python3.11)"
+    python_bin="$(command -v python3.11)"
+  elif command -v python3 >/dev/null 2>&1; then
+    python_bin="$(command -v python3)"
+  fi
+
+  # If no python3 found, attempt to install it
+  if [ -z "$python_bin" ]; then
+    warn "python3 not found; attempting to install via dnf"
+    if command -v dnf >/dev/null 2>&1; then
+      dnf install -y python3 || true
+    elif command -v yum >/dev/null 2>&1; then
+      yum install -y python3 || true
+    elif command -v apt-get >/dev/null 2>&1; then
+      apt-get update && apt-get install -y python3 || true
+    fi
+
+    # Re-check after install attempt
+    if command -v python3.11 >/dev/null 2>&1; then
+      python_bin="$(command -v python3.11)"
+    elif command -v python3 >/dev/null 2>&1; then
+      python_bin="$(command -v python3)"
+    fi
+  fi
+
+  if [ -n "$python_bin" ]; then
+    export EMSDK_PYTHON="$python_bin"
     log "Set EMSDK_PYTHON=$EMSDK_PYTHON"
   else
-    warn "python3.11 not found; emcc may fail with Python < 3.10"
+    log "ERROR: python3.11 or python3 not found and could not be installed"
+    exit 1
   fi
 
   if ! command -v emcc >/dev/null 2>&1; then
