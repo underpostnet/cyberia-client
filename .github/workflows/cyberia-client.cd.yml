@@ -34,4 +34,4 @@ jobs:
             underpost run pull
             underpost run secret
             node bin/build dd-cyberia conf
-            underpost run instance --node-name $HOSTNAME 'dd-cyberia,mmo-client'
+            underpost run instance --tls --node-name $HOSTNAME 'dd-cyberia,mmo-client'
