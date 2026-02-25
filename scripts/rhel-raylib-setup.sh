@@ -1,15 +1,30 @@
 #!/bin/bash
 # Setup raylib for Emscripten
 
+# Use Python 3.11+ (required by latest Emscripten SDK)
+if command -v python3.11 &>/dev/null; then
+  export EMSDK_PYTHON=$(which python3.11)
+fi
+
 LIB_DIR=lib/raylib
 
-mkdir -p $LIB_DIR
+if [ -d "$LIB_DIR" ] && [ "$(ls -A $LIB_DIR)" ]; then
+  echo "Directory '$LIB_DIR' already exists, skipping clone..."
+else
+  mkdir -p $LIB_DIR
+  git subrepo clone https://github.com/raysan5/raylib.git $LIB_DIR
+fi
 
-git subrepo clone https://github.com/raysan5/raylib.git $LIB_DIR
+BUILD_DIR="$LIB_DIR/build"
+mkdir -p "$BUILD_DIR"
+cd "$BUILD_DIR"
 
-cd $LIB_DIR
+emcmake cmake .. \
+  -DPLATFORM=Web \
+  -DCMAKE_BUILD_TYPE=Release \
+  -DBUILD_EXAMPLES=OFF \
+  -DBUILD_GAMES=OFF
 
-emcmake cmake . -DPLATFORM=Web -DCMAKE_BUILD_TYPE=Release
 emmake make -j$(nproc)
 
 emmake make install
