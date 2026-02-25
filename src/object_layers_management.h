@@ -11,16 +11,12 @@
  * @brief Object layers management system with atlas sprite sheet caching
  *
  * This module handles:
- * - Authenticating to the Cyberia engine API (www.cyberiaonline.com)
  * - Fetching AtlasSpriteSheet metadata (frame positions in consolidated atlas PNG)
  * - Fetching atlas PNG binary via the File blob API
  * - Caching atlas textures and frame metadata for efficient rendering
  * - Fetching ObjectLayer metadata for item type, stats, frame_duration, etc.
  *
- * Authentication Flow (mirrors cyberia-server):
- *   1. POST {API_BASE_URL}/api/user/auth  { email, password }
- *   2. Receive JWT bearer token
- *   3. Use token in Authorization header for subsequent requests
+ * All endpoints are public GET requests (no authentication required).
  *
  * Atlas Sprite Sheet Flow:
  *   1. GET {API_BASE_URL}/api/atlas-sprite-sheet/?filterModel=...&limit=1
@@ -83,28 +79,6 @@ ObjectLayersManager* create_object_layers_manager(TextureManager* texture_manage
  * @param manager The manager to destroy (may be NULL)
  */
 void destroy_object_layers_manager(ObjectLayersManager* manager);
-
-// ============================================================================
-// Public API - Authentication
-// ============================================================================
-
-/**
- * @brief Initialize authentication with the Cyberia engine API
- *
- * Authenticates against POST {API_BASE_URL}/api/user/auth using
- * the credentials from config.h (AUTH_EMAIL, AUTH_PASSWORD).
- * Stores the resulting JWT token for use in subsequent API calls.
- *
- * This mirrors the CyberiaAPIAuthenticate() flow in cyberia-server.
- * Must be called before any fetch operations that require auth.
- *
- * If credentials are empty, authentication is skipped and unauthenticated
- * endpoints (atlas-sprite-sheet GET, file blob GET) can still be used.
- *
- * @param manager The object layers manager instance
- * @return true on successful authentication, false on failure
- */
-bool object_layers_authenticate(ObjectLayersManager* manager);
 
 // ============================================================================
 // Public API - Object Layer Fetching and Caching

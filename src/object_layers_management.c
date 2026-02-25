@@ -10,7 +10,6 @@
 // External JS functions
 extern char* js_fetch_object_layer(const char* item_id);
 extern char* js_fetch_atlas_sprite_sheet(const char* item_key);
-extern void js_init_engine_api(const char* api_base_url, const char* email, const char* password);
 
 // External JS functions for async binary fetching (reused for atlas PNG blobs)
 extern void js_start_fetch_binary(const char* url, int request_id);
@@ -59,9 +58,6 @@ struct ObjectLayersManager {
     AtlasTextureEntry* tex_buckets[HASH_TABLE_SIZE];
 
     TextureManager* texture_manager;
-
-    // Authentication state
-    bool authenticated;
 
     // Request ID counter for async fetches
     int next_request_id;
@@ -205,9 +201,26 @@ static ObjectLayer* parse_object_layer_json(const char* json_str) {
     strncpy(layer->sha256, sha, 64);
     free(sha);
 
-    // Extract data
+    // Extract data (contains item, stats, etc.)
     cJSON* data = cJSON_GetObjectItem(root, "data");
     parse_object_layer_data(data, &layer->data);
+
+    // Extract frame_duration from objectLayerRenderFramesId (populated reference)
+    // API response structure:
+    //   "objectLayerRenderFramesId": { "_id": "...", "frame_duration": 250 }
+    // This is a sibling of "data" at root level, NOT nested inside data.render.
+    cJSON* render_frames_ref = cJSON_GetObjectItem(root, "objectLayerRenderFramesId");
+    if (render_frames_ref && cJSON_IsObject(render_frames_ref)) {
+        int fd = json_get_int_safe(render_frames_ref, "frame_duration", 0);
+        if (fd > 0) {
+            layer->data.render.frame_duration = fd;
+        }
+        // Also check for is_stateless if present in the reference
+        cJSON* stateless = cJSON_GetObjectItemCaseSensitive(render_frames_ref, "is_stateless");
+        if (cJSON_IsBool(stateless)) {
+            layer->data.render.is_stateless = cJSON_IsTrue(stateless);
+        }
+    }
 
     // Ensure item ID is set in data.item if missing (fallback to root id)
     if (strlen(layer->data.item.id) == 0) {
@@ -614,12 +627,7 @@ ObjectLayersManager* create_object_layers_manager(TextureManager* texture_manage
     }
 
     manager->texture_manager = texture_manager;
-    manager->authenticated = false;
     manager->next_request_id = 1;
-
-    // Initialize the engine API connection and authenticate
-    js_init_engine_api(API_BASE_URL, AUTH_EMAIL, AUTH_PASSWORD);
-    manager->authenticated = true;
 
     return manager;
 }
@@ -669,15 +677,6 @@ void destroy_object_layers_manager(ObjectLayersManager* manager) {
     }
 
     free(manager);
-}
-
-bool object_layers_authenticate(ObjectLayersManager* manager) {
-    if (!manager) return false;
-
-    // Re-trigger authentication via JS
-    js_init_engine_api(API_BASE_URL, AUTH_EMAIL, AUTH_PASSWORD);
-    manager->authenticated = true;
-    return true;
 }
 
 ObjectLayer* get_or_fetch_object_layer(ObjectLayersManager* manager, const char* item_id) {

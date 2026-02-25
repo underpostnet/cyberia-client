@@ -26,7 +26,7 @@ CFLAGS		+= -DPLATFORM_WEB
 LDFLAGS = -lidbfs.js
 LDFLAGS += -s 'EXPORTED_RUNTIME_METHODS=["writeArrayToMemory","setValue"]'
 LDFLAGS += -sASYNCIFY
-LDFLAGS += -s 'ASYNCIFY_IMPORTS=["js_init_engine_api", "js_fetch_object_layer", "js_fetch_atlas_sprite_sheet"]'
+LDFLAGS += -s 'ASYNCIFY_IMPORTS=["js_fetch_object_layer", "js_fetch_atlas_sprite_sheet"]'
 LDFLAGS += -lwebsocket.js
 LDFLAGS += --js-library $(SRC_DIR)/js/services.js
 LDFLAGS += $(RAYLIB_PATH)/src/libraylib.web.a

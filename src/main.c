@@ -8,9 +8,9 @@
 
 #include <emscripten/emscripten.h>
 
-// External JavaScript function to initialize engine API and authenticate
+// External JavaScript function to initialize engine API base URL
 // (defined in js/services.js)
-void js_init_engine_api(const char* api_base_url, const char* email, const char* password);
+void js_init_engine_api(const char* api_base_url);
 
 // Application configuration
 #define WINDOW_WIDTH 600
@@ -29,10 +29,8 @@ void main_loop(void) {
 
 // Main entry point
 int main(/*int argc, char* argv[]*/) {
-    // Initialize engine API connection and authenticate
-    // This sets the API base URL and obtains a JWT token for
-    // authenticated endpoints (mirrors cyberia-server auth flow)
-    js_init_engine_api(API_BASE_URL, AUTH_EMAIL, AUTH_PASSWORD);
+    // Initialize engine API base URL for public API access
+    js_init_engine_api(API_BASE_URL);
 
     // Initialize window with raylib
     InitWindow(WINDOW_WIDTH, WINDOW_HEIGHT, NULL);

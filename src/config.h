@@ -34,43 +34,19 @@ static const char* WS_URL = "wss://server.cyberiaonline.com/ws";
 // ============================================================================
 
 /**
- * @brief Engine API base URL (www.cyberiaonline.com)
+ * @brief Engine API base URL
  *
  * The base URL for the Cyberia engine API. Used for:
- * - Authentication (POST /api/user/auth)
  * - Atlas sprite sheet metadata (GET /api/atlas-sprite-sheet/)
  * - File blob retrieval (GET /api/file/blob/:id)
  * - Object layer metadata (GET /api/object-layer/)
  *
  * Examples:
- *   - Local development: "http://localhost:4001"
+ *   - Local development: "http://localhost:4005"
  *   - Production: "https://www.cyberiaonline.com"
  */
 static const char* API_BASE_URL = "https://www.cyberiaonline.com";
-// static const char* API_BASE_URL = "http://localhost:4001";
-
-// ============================================================================
-// Authentication Configuration
-// ============================================================================
-
-/**
- * @brief API authentication email
- *
- * Email used to authenticate against the Cyberia engine API
- * (POST /api/user/auth). Required for accessing authenticated
- * endpoints such as object layer metadata.
- *
- * Set these to valid credentials before building.
- * In production, consider injecting via build-time defines.
- */
-static const char* AUTH_EMAIL = "";
-
-/**
- * @brief API authentication password
- *
- * Password used to authenticate against the Cyberia engine API.
- */
-static const char* AUTH_PASSWORD = "";
+// static const char* API_BASE_URL = "http://localhost:4005";
 
 // ============================================================================
 // Game Configuration

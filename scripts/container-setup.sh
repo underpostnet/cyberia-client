@@ -127,6 +127,14 @@ ensure_emsdk_env() {
   source "$EMSDK_ROOT/emsdk_env.sh"
   export PATH="$EMSDK_ROOT:$EMSDK_ROOT/upstream/emscripten:$PATH"
 
+  # emsdk activate clears EMSDK_PYTHON; re-export it so emcc uses Python 3.11+
+  if command -v python3.11 >/dev/null 2>&1; then
+    export EMSDK_PYTHON="$(command -v python3.11)"
+    log "Set EMSDK_PYTHON=$EMSDK_PYTHON"
+  else
+    warn "python3.11 not found; emcc may fail with Python < 3.10"
+  fi
+
   if ! command -v emcc >/dev/null 2>&1; then
     log "ERROR: emcc is still missing after sourcing EMSDK"
     exit 1
