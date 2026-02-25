@@ -77,10 +77,8 @@ void game_render_set_screen_size(int width, int height) {
 }
 
 void game_render_frame(void) {
-    // Process texture pre-caching queue
-    if (g_object_layers_manager) {
-        process_texture_caching_queue(g_object_layers_manager);
-    }
+    // Atlas textures are loaded on-demand via get_atlas_texture() during rendering.
+    // No pre-caching queue processing is needed.
 
     // CRITICAL: Wrap entire rendering in try-catch style error handling
     // This prevents partial rendering that can cause black screens

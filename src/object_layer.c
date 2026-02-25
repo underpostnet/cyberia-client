@@ -56,3 +56,51 @@ void free_object_layer_state(ObjectLayerState* state) {
         free(state);
     }
 }
+
+AtlasSpriteSheetData* create_atlas_sprite_sheet_data(void) {
+    AtlasSpriteSheetData* data = (AtlasSpriteSheetData*)malloc(sizeof(AtlasSpriteSheetData));
+    if (data) {
+        memset(data, 0, sizeof(AtlasSpriteSheetData));
+        data->item_key[0] = '\0';
+        data->file_id[0] = '\0';
+        data->atlas_width = 0;
+        data->atlas_height = 0;
+        data->cell_pixel_dim = 20; // Default from engine schema
+    }
+    return data;
+}
+
+void free_atlas_sprite_sheet_data(AtlasSpriteSheetData* data) {
+    if (data) {
+        // No dynamic allocations to free since we use fixed-size arrays
+        free(data);
+    }
+}
+
+const DirectionFrameData* atlas_get_direction_frames(
+    const AtlasSpriteSheetData* atlas,
+    const char* dir_str
+) {
+    if (!atlas || !dir_str) return NULL;
+
+    if (strcmp(dir_str, "up_idle") == 0)             return &atlas->up_idle;
+    if (strcmp(dir_str, "down_idle") == 0)            return &atlas->down_idle;
+    if (strcmp(dir_str, "right_idle") == 0)           return &atlas->right_idle;
+    if (strcmp(dir_str, "left_idle") == 0)            return &atlas->left_idle;
+    if (strcmp(dir_str, "up_right_idle") == 0)        return &atlas->up_right_idle;
+    if (strcmp(dir_str, "down_right_idle") == 0)      return &atlas->down_right_idle;
+    if (strcmp(dir_str, "up_left_idle") == 0)         return &atlas->up_left_idle;
+    if (strcmp(dir_str, "down_left_idle") == 0)       return &atlas->down_left_idle;
+    if (strcmp(dir_str, "default_idle") == 0)         return &atlas->default_idle;
+    if (strcmp(dir_str, "up_walking") == 0)           return &atlas->up_walking;
+    if (strcmp(dir_str, "down_walking") == 0)         return &atlas->down_walking;
+    if (strcmp(dir_str, "right_walking") == 0)        return &atlas->right_walking;
+    if (strcmp(dir_str, "left_walking") == 0)         return &atlas->left_walking;
+    if (strcmp(dir_str, "up_right_walking") == 0)     return &atlas->up_right_walking;
+    if (strcmp(dir_str, "down_right_walking") == 0)   return &atlas->down_right_walking;
+    if (strcmp(dir_str, "up_left_walking") == 0)      return &atlas->up_left_walking;
+    if (strcmp(dir_str, "down_left_walking") == 0)    return &atlas->down_left_walking;
+    if (strcmp(dir_str, "none_idle") == 0)            return &atlas->none_idle;
+
+    return NULL;
+}

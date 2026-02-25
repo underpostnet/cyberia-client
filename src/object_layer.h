@@ -6,6 +6,8 @@
 #define MAX_ITEM_ID_LENGTH 64
 #define MAX_TYPE_LENGTH 64
 #define MAX_DESCRIPTION_LENGTH 256
+#define MAX_FRAMES_PER_DIRECTION 64
+#define MAX_FILE_ID_LENGTH 128
 
 // Enums corresponding to Python enums
 typedef enum {
@@ -43,9 +45,91 @@ typedef struct {
     int utility;
 } Stats;
 
-// Render frames structure (simplified for C)
-// Stores the count of frames for each animation state.
-// The actual frame data (3D matrices) is not stored here as we fetch textures.
+// ============================================================================
+// Atlas Sprite Sheet Structures (FrameMetadataSchema)
+// ============================================================================
+
+/**
+ * @brief Metadata for a single frame within an atlas sprite sheet.
+ *
+ * Corresponds to the FrameMetadataSchema in the engine's
+ * AtlasSpriteSheetModel. Each frame stores its position and
+ * dimensions inside the consolidated atlas PNG so the renderer
+ * can clip (crop) the correct sub-region.
+ */
+typedef struct {
+    int x;           /**< X position in the atlas (pixels) */
+    int y;           /**< Y position in the atlas (pixels) */
+    int width;       /**< Frame width (pixels) */
+    int height;      /**< Frame height (pixels) */
+    int frame_index; /**< Frame index in animation sequence */
+} FrameMetadata;
+
+/**
+ * @brief Array of FrameMetadata for a single animation direction.
+ *
+ * Groups all frames belonging to one direction/mode combination
+ * (e.g. "down_idle", "right_walking") together with a count.
+ */
+typedef struct {
+    FrameMetadata frames[MAX_FRAMES_PER_DIRECTION];
+    int count;
+} DirectionFrameData;
+
+/**
+ * @brief Consolidated atlas sprite sheet data for one object layer item.
+ *
+ * Mirrors the engine's AtlasSpriteSheetModel. Contains the fileId
+ * referencing the consolidated atlas PNG stored via the File API,
+ * overall atlas dimensions, and per-direction frame metadata arrays
+ * used to clip individual animation frames from the single texture.
+ *
+ * Workflow:
+ *  1. Fetch AtlasSpriteSheet doc by metadata.itemKey
+ *  2. Extract fileId and frame metadata
+ *  3. Fetch atlas PNG binary via GET /api/file/blob/{fileId}
+ *  4. Load the single atlas image as a GPU texture
+ *  5. On each render frame, use the DirectionFrameData source rects
+ */
+typedef struct {
+    char item_key[MAX_ITEM_ID_LENGTH];     /**< Item identifier (metadata.itemKey) */
+    char file_id[MAX_FILE_ID_LENGTH];      /**< MongoDB ObjectId hex of the atlas PNG file */
+    int atlas_width;                        /**< Total atlas width in pixels */
+    int atlas_height;                       /**< Total atlas height in pixels */
+    int cell_pixel_dim;                     /**< Pixel dimension of each cell */
+
+    /* Per-direction frame metadata arrays (DirectionFramesSchema) */
+    DirectionFrameData up_idle;
+    DirectionFrameData down_idle;
+    DirectionFrameData right_idle;
+    DirectionFrameData left_idle;
+    DirectionFrameData up_right_idle;
+    DirectionFrameData down_right_idle;
+    DirectionFrameData up_left_idle;
+    DirectionFrameData down_left_idle;
+    DirectionFrameData default_idle;
+    DirectionFrameData up_walking;
+    DirectionFrameData down_walking;
+    DirectionFrameData right_walking;
+    DirectionFrameData left_walking;
+    DirectionFrameData up_right_walking;
+    DirectionFrameData down_right_walking;
+    DirectionFrameData up_left_walking;
+    DirectionFrameData down_left_walking;
+    DirectionFrameData none_idle;
+} AtlasSpriteSheetData;
+
+// ============================================================================
+// Legacy Render Structures (kept for ObjectLayer compatibility)
+// ============================================================================
+
+/**
+ * @brief Frame counts per animation direction.
+ *
+ * Stores how many frames exist for each direction/mode combination.
+ * These counts can be derived from the AtlasSpriteSheetData's
+ * DirectionFrameData.count fields when using atlas-based rendering.
+ */
 typedef struct {
     int up_idle_count;
     int down_idle_count;
@@ -70,7 +154,6 @@ typedef struct {
 // Render structure
 typedef struct {
     RenderFrames frames;
-    // colors omitted for now as we use textures
     int frame_duration;
     bool is_stateless;
 } Render;
@@ -96,26 +179,9 @@ typedef struct {
     char sha256[65]; // 64 chars + null terminator
 } ObjectLayer;
 
-/**
- * @file object_layer.h
- * @brief Object layer structures and functions
- *
- * This module defines object layer data structures used for rendering
- * and managing entity appearance layers (skins, weapons, armor, etc.).
- *
- * Note: Direction, ObjectLayerMode, Stats, Item, Render, RenderFrames,
- * ObjectLayerData, and ObjectLayerState are defined in game_state.h
- * to avoid circular dependencies and duplicate definitions.
- */
-
 // ============================================================================
 // Function Prototypes
 // ============================================================================
-
-/**
- * Note: ObjectLayer is defined in game_state.h
- * It contains ObjectLayerData and sha256 hash field.
- */
 
 /**
  * @brief Create a new ObjectLayer with default values
@@ -140,5 +206,34 @@ ObjectLayerState* create_object_layer_state(void);
  * @param state The ObjectLayerState to free (may be NULL)
  */
 void free_object_layer_state(ObjectLayerState* state);
+
+/**
+ * @brief Create a new AtlasSpriteSheetData with default (zeroed) values
+ * @return Pointer to new AtlasSpriteSheetData, or NULL on allocation failure
+ */
+AtlasSpriteSheetData* create_atlas_sprite_sheet_data(void);
+
+/**
+ * @brief Free an AtlasSpriteSheetData and all its resources
+ * @param data The AtlasSpriteSheetData to free (may be NULL)
+ */
+void free_atlas_sprite_sheet_data(AtlasSpriteSheetData* data);
+
+/**
+ * @brief Look up the DirectionFrameData for a given direction string.
+ *
+ * Maps animation state names (e.g. "down_idle", "right_walking",
+ * "default_idle") to the corresponding DirectionFrameData inside
+ * an AtlasSpriteSheetData struct.
+ *
+ * @param atlas   The atlas sprite sheet data to search
+ * @param dir_str The direction/mode string (e.g. "down_idle")
+ * @return Pointer to the matching DirectionFrameData, or NULL if
+ *         atlas is NULL or dir_str is unrecognised
+ */
+const DirectionFrameData* atlas_get_direction_frames(
+    const AtlasSpriteSheetData* atlas,
+    const char* dir_str
+);
 
 #endif // OBJECT_LAYER_H

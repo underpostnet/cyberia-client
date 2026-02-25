@@ -4,8 +4,7 @@
 
 #include <emscripten.h>
 
-// External JavaScript functions for HTTP requests
-extern unsigned char* js_fetch_binary(const char* url, size_t* size);
+// External JavaScript functions for async HTTP requests
 extern void js_start_fetch_binary(const char* url, int request_id);
 extern unsigned char* js_get_fetch_result(int request_id, int* size);
 

@@ -2,7 +2,6 @@
 #include "game_state.h"
 #include "texture_manager.h"
 #include "object_layers_management.h"
-#include "direction_converter.h"
 #include <stdlib.h>
 #include <string.h>
 #include <stdio.h>
@@ -38,6 +37,7 @@ struct EntityRender {
 typedef struct {
     ObjectLayerState* state;
     ObjectLayer* layer;
+    AtlasSpriteSheetData* atlas;
     int priority;
 } LayerRenderInfo;
 
@@ -96,7 +96,6 @@ static AnimationState* get_animation_state(EntityRender* render, const char* ent
 
 static int get_priority_for_type(const char* type) {
     if (!type) return 0;
-    // Basic priority list based on common RPG layers
     if (strcmp(type, "skin") == 0 || strcmp(type, "body") == 0) return 10;
     if (strcmp(type, "eyes") == 0) return 11;
     if (strcmp(type, "hair") == 0) return 12;
@@ -104,7 +103,7 @@ static int get_priority_for_type(const char* type) {
     if (strcmp(type, "hat") == 0 || strcmp(type, "helmet") == 0) return 30;
     if (strcmp(type, "weapon") == 0) return 40;
     if (strcmp(type, "shield") == 0) return 41;
-    return 50; // Default
+    return 50;
 }
 
 static int compare_layer_priority(const void* a, const void* b) {
@@ -113,10 +112,15 @@ static int compare_layer_priority(const void* a, const void* b) {
     return info_a->priority - info_b->priority;
 }
 
-
-
+/**
+ * @brief Determine the direction string and frame count for the current animation state.
+ *
+ * When atlas data is available, uses the DirectionFrameData counts from the atlas
+ * metadata. Otherwise falls back to the ObjectLayer RenderFrames counts.
+ */
 static int get_frame_count_and_direction(
     RenderFrames* frames,
+    const AtlasSpriteSheetData* atlas,
     Direction dir,
     ObjectLayerMode mode,
     bool is_stateless,
@@ -124,37 +128,81 @@ static int get_frame_count_and_direction(
 ) {
     if (is_stateless) {
         *out_dir_string = "default_idle";
-        return frames->default_idle_count;
+        if (atlas) {
+            const DirectionFrameData* dfd = atlas_get_direction_frames(atlas, "default_idle");
+            return dfd ? dfd->count : 0;
+        }
+        return frames ? frames->default_idle_count : 0;
     }
 
-    // Determine state string and count based on dir and mode
+    // Build the direction string based on direction + mode
+    const char* dir_str = "down_idle";
+    int count = 0;
+
     if (mode == MODE_WALKING) {
         switch (dir) {
-            case DIRECTION_UP: *out_dir_string = "up_walking"; return frames->up_walking_count;
-            case DIRECTION_DOWN: *out_dir_string = "down_walking"; return frames->down_walking_count;
-            case DIRECTION_LEFT: *out_dir_string = "left_walking"; return frames->left_walking_count;
-            case DIRECTION_RIGHT: *out_dir_string = "right_walking"; return frames->right_walking_count;
-            case DIRECTION_UP_RIGHT: *out_dir_string = "up_right_walking"; return frames->up_right_walking_count;
-            case DIRECTION_UP_LEFT: *out_dir_string = "up_left_walking"; return frames->up_left_walking_count;
-            case DIRECTION_DOWN_RIGHT: *out_dir_string = "down_right_walking"; return frames->down_right_walking_count;
-            case DIRECTION_DOWN_LEFT: *out_dir_string = "down_left_walking"; return frames->down_left_walking_count;
-            default: *out_dir_string = "down_walking"; return frames->down_walking_count;
+            case DIRECTION_UP:         dir_str = "up_walking"; break;
+            case DIRECTION_DOWN:       dir_str = "down_walking"; break;
+            case DIRECTION_LEFT:       dir_str = "left_walking"; break;
+            case DIRECTION_RIGHT:      dir_str = "right_walking"; break;
+            case DIRECTION_UP_RIGHT:   dir_str = "up_right_walking"; break;
+            case DIRECTION_UP_LEFT:    dir_str = "up_left_walking"; break;
+            case DIRECTION_DOWN_RIGHT: dir_str = "down_right_walking"; break;
+            case DIRECTION_DOWN_LEFT:  dir_str = "down_left_walking"; break;
+            default:                   dir_str = "down_walking"; break;
         }
     } else {
-        // Idle
         switch (dir) {
-            case DIRECTION_UP: *out_dir_string = "up_idle"; return frames->up_idle_count;
-            case DIRECTION_DOWN: *out_dir_string = "down_idle"; return frames->down_idle_count;
-            case DIRECTION_LEFT: *out_dir_string = "left_idle"; return frames->left_idle_count;
-            case DIRECTION_RIGHT: *out_dir_string = "right_idle"; return frames->right_idle_count;
-            case DIRECTION_UP_RIGHT: *out_dir_string = "up_right_idle"; return frames->up_right_idle_count;
-            case DIRECTION_UP_LEFT: *out_dir_string = "up_left_idle"; return frames->up_left_idle_count;
-            case DIRECTION_DOWN_RIGHT: *out_dir_string = "down_right_idle"; return frames->down_right_idle_count;
-            case DIRECTION_DOWN_LEFT: *out_dir_string = "down_left_idle"; return frames->down_left_idle_count;
-            case DIRECTION_NONE: *out_dir_string = "down_idle"; return frames->down_idle_count; // Fallback
-            default: *out_dir_string = "down_idle"; return frames->down_idle_count;
+            case DIRECTION_UP:         dir_str = "up_idle"; break;
+            case DIRECTION_DOWN:       dir_str = "down_idle"; break;
+            case DIRECTION_LEFT:       dir_str = "left_idle"; break;
+            case DIRECTION_RIGHT:      dir_str = "right_idle"; break;
+            case DIRECTION_UP_RIGHT:   dir_str = "up_right_idle"; break;
+            case DIRECTION_UP_LEFT:    dir_str = "up_left_idle"; break;
+            case DIRECTION_DOWN_RIGHT: dir_str = "down_right_idle"; break;
+            case DIRECTION_DOWN_LEFT:  dir_str = "down_left_idle"; break;
+            case DIRECTION_NONE:       dir_str = "down_idle"; break;
+            default:                   dir_str = "down_idle"; break;
         }
     }
+
+    *out_dir_string = dir_str;
+
+    // Get frame count from atlas if available, else from RenderFrames
+    if (atlas) {
+        const DirectionFrameData* dfd = atlas_get_direction_frames(atlas, dir_str);
+        count = dfd ? dfd->count : 0;
+    } else if (frames) {
+        // Legacy fallback using RenderFrames counts
+        if (mode == MODE_WALKING) {
+            switch (dir) {
+                case DIRECTION_UP:         count = frames->up_walking_count; break;
+                case DIRECTION_DOWN:       count = frames->down_walking_count; break;
+                case DIRECTION_LEFT:       count = frames->left_walking_count; break;
+                case DIRECTION_RIGHT:      count = frames->right_walking_count; break;
+                case DIRECTION_UP_RIGHT:   count = frames->up_right_walking_count; break;
+                case DIRECTION_UP_LEFT:    count = frames->up_left_walking_count; break;
+                case DIRECTION_DOWN_RIGHT: count = frames->down_right_walking_count; break;
+                case DIRECTION_DOWN_LEFT:  count = frames->down_left_walking_count; break;
+                default:                   count = frames->down_walking_count; break;
+            }
+        } else {
+            switch (dir) {
+                case DIRECTION_UP:         count = frames->up_idle_count; break;
+                case DIRECTION_DOWN:       count = frames->down_idle_count; break;
+                case DIRECTION_LEFT:       count = frames->left_idle_count; break;
+                case DIRECTION_RIGHT:      count = frames->right_idle_count; break;
+                case DIRECTION_UP_RIGHT:   count = frames->up_right_idle_count; break;
+                case DIRECTION_UP_LEFT:    count = frames->up_left_idle_count; break;
+                case DIRECTION_DOWN_RIGHT: count = frames->down_right_idle_count; break;
+                case DIRECTION_DOWN_LEFT:  count = frames->down_left_idle_count; break;
+                case DIRECTION_NONE:       count = frames->down_idle_count; break;
+                default:                   count = frames->down_idle_count; break;
+            }
+        }
+    }
+
+    return count;
 }
 
 static void draw_dev_ui_box(Rectangle dest_rec, const char* entity_type) {
@@ -166,8 +214,6 @@ static void draw_dev_ui_box(Rectangle dest_rec, const char* entity_type) {
     DrawRectangleLinesEx(dest_rec, 1.0f, color);
     DrawText(entity_type, (int)dest_rec.x, (int)dest_rec.y - 10, 10, color);
 }
-
-
 
 // ============================================================================
 // Public API - Lifecycle Management
@@ -183,7 +229,6 @@ EntityRender* create_entity_render(
     render->obj_layers_mgr = object_layers_manager;
     render->texture_manager = texture_manager;
 
-    // Initialize hash table
     for (int i = 0; i < HASH_TABLE_SIZE; i++) {
         render->anim_buckets[i] = NULL;
     }
@@ -194,7 +239,6 @@ EntityRender* create_entity_render(
 void destroy_entity_render(EntityRender* render) {
     if (!render) return;
 
-    // Free all animation state entries
     for (int i = 0; i < HASH_TABLE_SIZE; i++) {
         AnimationEntry* entry = render->anim_buckets[i];
         while (entry) {
@@ -233,7 +277,6 @@ void draw_entity_layers(
 
     if (cell_size <= 0.0f) cell_size = 12.0f;
 
-    // Calculate scaled positions and dimensions
     float scaled_pos_x = pos_x * cell_size;
     float scaled_pos_y = pos_y * cell_size;
     float scaled_dims_w = width * cell_size;
@@ -251,7 +294,6 @@ void draw_entity_layers(
         draw_dev_ui_box(dest_rec, entity_type);
     }
 
-    // If no layers, draw a fallback representation so entity is still visible
     if (!layers_state || layers_count <= 0) {
         return;
     }
@@ -262,7 +304,7 @@ void draw_entity_layers(
 
     LayerRenderInfo layers_to_render[MAX_LAYERS_PER_ENTITY];
     int render_count = 0;
-    bool any_layer_data_missing = false;
+    bool any_data_missing = false;
 
     for (int i = 0; i < layers_count && render_count < MAX_LAYERS_PER_ENTITY; i++) {
         ObjectLayerState* state = layers_state[i];
@@ -270,30 +312,35 @@ void draw_entity_layers(
             continue;
         }
 
-        // Fetch object layer data
+        // Fetch object layer metadata (for item type, frame_duration, is_stateless)
         ObjectLayer* layer = get_or_fetch_object_layer(
             render->obj_layers_mgr,
             state->item_id
         );
-        if (!layer) {
-            // Layer data is being fetched
-            any_layer_data_missing = true;
-            // We continue to ensure all needed layers are requested
+
+        // Fetch atlas sprite sheet data (for frame metadata + atlas texture reference)
+        AtlasSpriteSheetData* atlas = get_or_fetch_atlas_data(
+            render->obj_layers_mgr,
+            state->item_id
+        );
+
+        if (!layer && !atlas) {
+            // Neither data source available yet — still loading
+            any_data_missing = true;
             continue;
         }
 
-        // Add to render list
+        // Add to render list (atlas may be NULL if only ObjectLayer is available)
         layers_to_render[render_count].state = state;
         layers_to_render[render_count].layer = layer;
-        layers_to_render[render_count].priority = get_priority_for_type(
-            layer->data.item.type
-        );
+        layers_to_render[render_count].atlas = atlas;
+        layers_to_render[render_count].priority = layer
+            ? get_priority_for_type(layer->data.item.type)
+            : 50; // Default priority if no ObjectLayer metadata yet
         render_count++;
     }
 
-    // If any layer data is missing, we can't render the full entity properly.
-    if (any_layer_data_missing) {
-        // Draw fallback placeholder while loading layer data
+    if (any_data_missing && render_count == 0) {
         DrawRectangleRec(dest_rec, (Color){ 100, 100, 100, 200 });
         return;
     }
@@ -309,18 +356,20 @@ void draw_entity_layers(
     // ========================================================================
     // Texture Availability Check & Animation Update
     // ========================================================================
-    
-    // We need to check if ALL textures for the current frame are available.
-    // We also update animation state here to ensure it progresses.
-    
+
     double now = GetTime();
     bool all_textures_ready = true;
+
+    // Per-layer rendering data
     Texture2D layer_textures[MAX_LAYERS_PER_ENTITY];
+    Rectangle layer_source_rects[MAX_LAYERS_PER_ENTITY];
     memset(layer_textures, 0, sizeof(layer_textures));
+    memset(layer_source_rects, 0, sizeof(layer_source_rects));
 
     for (int i = 0; i < render_count; i++) {
         ObjectLayer* layer = layers_to_render[i].layer;
         ObjectLayerState* state = layers_to_render[i].state;
+        AtlasSpriteSheetData* atlas = layers_to_render[i].atlas;
 
         // Get or create animation state
         AnimationState* anim = get_animation_state(
@@ -348,18 +397,33 @@ void draw_entity_layers(
             }
         }
 
+        // Determine is_stateless and frame_duration from ObjectLayer if available
+        bool is_stateless = false;
+        int frame_duration_ms = DEFAULT_FRAME_DURATION_MS;
+
+        if (layer) {
+            is_stateless = layer->data.render.is_stateless;
+            frame_duration_ms = layer->data.render.frame_duration;
+            if (frame_duration_ms <= 0) frame_duration_ms = DEFAULT_FRAME_DURATION_MS;
+        } else if (atlas) {
+            // Infer is_stateless: if default_idle has frames, treat as stateless
+            is_stateless = (atlas->default_idle.count > 0);
+        }
+
         // Frame Selection
         const char* dir_string = NULL;
+        RenderFrames* render_frames = layer ? &layer->data.render.frames : NULL;
         int num_frames = get_frame_count_and_direction(
-            &layer->data.render.frames,
+            render_frames,
+            atlas,
             render_direction,
             render_mode,
-            layer->data.render.is_stateless,
+            is_stateless,
             &dir_string
         );
 
         if (num_frames <= 0) {
-            // No frames for this state? Skip rendering this layer.
+            // No frames for this state — skip this layer
             continue;
         }
 
@@ -374,9 +438,6 @@ void draw_entity_layers(
         }
 
         // Animation Advancement
-        int frame_duration_ms = layer->data.render.frame_duration;
-        if (frame_duration_ms <= 0) frame_duration_ms = DEFAULT_FRAME_DURATION_MS;
-
         double elapsed_ms = (now - anim->last_update_time) * 1000.0;
         if (elapsed_ms >= frame_duration_ms) {
             anim->frame_index = (anim->frame_index + 1) % num_frames;
@@ -384,31 +445,49 @@ void draw_entity_layers(
         }
         if (anim->frame_index >= num_frames) anim->frame_index = 0;
 
-        // Texture Loading Check
-        const char* direction_code = get_code_from_direction(dir_string);
-        if (!direction_code) continue;
+        // ====================================================================
+        // Atlas-based texture loading (single texture per item)
+        // ====================================================================
 
-        char uri[512];
-        build_object_layer_uri(
-            uri,
-            sizeof(uri),
-            layer->data.item.type,
-            layer->data.item.id,
-            direction_code,
-            anim->frame_index
-        );
+        if (atlas && atlas->file_id[0] != '\0') {
+            // Get or poll the atlas texture (async loading)
+            Texture2D atlas_texture = get_atlas_texture(
+                render->obj_layers_mgr,
+                atlas->file_id
+            );
 
-        // Check/Load texture
-        // This will trigger async fetch if not present
-        Texture2D texture = load_texture_from_url(render->texture_manager, uri);
+            if (atlas_texture.id > 0) {
+                // Atlas texture is ready — look up the source rectangle
+                // from the FrameMetadata for the current direction and frame
+                const DirectionFrameData* dfd = atlas_get_direction_frames(atlas, dir_string);
 
-        if (texture.id > 0) {
-            layer_textures[i] = texture;
-            if (!anim->textures_ready) {
-                anim->textures_ready = true;
-                anim->failed_texture_attempts = 0;
+                if (dfd && anim->frame_index < dfd->count) {
+                    const FrameMetadata* fm = &dfd->frames[anim->frame_index];
+
+                    layer_textures[i] = atlas_texture;
+                    layer_source_rects[i] = (Rectangle){
+                        (float)fm->x,
+                        (float)fm->y,
+                        (float)fm->width,
+                        (float)fm->height
+                    };
+
+                    if (!anim->textures_ready) {
+                        anim->textures_ready = true;
+                        anim->failed_texture_attempts = 0;
+                    }
+                } else {
+                    // Frame metadata missing for this direction/frame
+                    all_textures_ready = false;
+                    anim->failed_texture_attempts++;
+                }
+            } else {
+                // Atlas texture not yet loaded (async in progress)
+                all_textures_ready = false;
+                anim->failed_texture_attempts++;
             }
         } else {
+            // No atlas available — cannot render this layer
             all_textures_ready = false;
             anim->failed_texture_attempts++;
         }
@@ -419,17 +498,12 @@ void draw_entity_layers(
     // ========================================================================
 
     if (all_textures_ready) {
-        // All layers are ready, draw them all
+        // All layers are ready — draw them all with atlas source rects
         for (int i = 0; i < render_count; i++) {
             if (layer_textures[i].id > 0) {
-                Rectangle source_rec = {
-                    0.0f, 0.0f,
-                    (float)layer_textures[i].width,
-                    (float)layer_textures[i].height
-                };
                 DrawTexturePro(
                     layer_textures[i],
-                    source_rec,
+                    layer_source_rects[i],
                     dest_rec,
                     (Vector2){0.0f, 0.0f},
                     0.0f,
@@ -438,7 +512,7 @@ void draw_entity_layers(
             }
         }
     } else {
-        // Something is missing, render fallback (wait for load)
+        // Something is still loading — render fallback placeholder
         DrawRectangleRec(dest_rec, (Color){ 100, 100, 100, 200 });
     }
 }

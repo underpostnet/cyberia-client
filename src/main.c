@@ -8,8 +8,9 @@
 
 #include <emscripten/emscripten.h>
 
-// External JavaScript function to set configuration (defined in js/services.js)
-void js_set_config(const char* api_url, const char* assets_url);
+// External JavaScript function to initialize engine API and authenticate
+// (defined in js/services.js)
+void js_init_engine_api(const char* api_base_url, const char* email, const char* password);
 
 // Application configuration
 #define WINDOW_WIDTH 600
@@ -28,8 +29,10 @@ void main_loop(void) {
 
 // Main entry point
 int main(/*int argc, char* argv[]*/) {
-    // Synchronize JavaScript configuration with C config
-    js_set_config(API_BASE_URL, ASSETS_BASE_URL);
+    // Initialize engine API connection and authenticate
+    // This sets the API base URL and obtains a JWT token for
+    // authenticated endpoints (mirrors cyberia-server auth flow)
+    js_init_engine_api(API_BASE_URL, AUTH_EMAIL, AUTH_PASSWORD);
 
     // Initialize window with raylib
     InitWindow(WINDOW_WIDTH, WINDOW_HEIGHT, NULL);

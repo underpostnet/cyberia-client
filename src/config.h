@@ -3,8 +3,6 @@
 
 #include <stdbool.h>
 
-//TODO: Convert to an defines, ini, yml, json, etc
-
 /**
  * @file config.h
  * @brief Configuration file for the Cyberia client
@@ -29,41 +27,50 @@
  *   - Production: "wss://server.cyberiaonline.com/ws"
  */
 static const char* WS_URL = "wss://server.cyberiaonline.com/ws";
-// const char* WS_URL = "ws://localhost:8080/ws";
+// static const char* WS_URL = "ws://localhost:8080/ws";
 
 // ============================================================================
-// API Configuration
-// ============================================================================
-
-/**
- * @brief REST API base URL
- *
- * The base URL for REST API calls used to fetch object layers,
- * item data, and other game information.
- *
- * Examples:
- *   - Local development: "http://localhost:8080/api/v1"
- *   - Production: "https://server.cyberiaonline.com/api/v1"
- */
-static const char* API_BASE_URL = "https://server.cyberiaonline.com/api/v1";
-// const char* API_BASE_URL = "http://localhost:8080/api/v1";
-
-// ============================================================================
-// Assets Configuration
+// Engine API Configuration
 // ============================================================================
 
 /**
- * @brief Assets server base URL
+ * @brief Engine API base URL (www.cyberiaonline.com)
  *
- * The base URL for fetching textures, images, and other static assets.
- * Used to construct URLs for entity skins, weapons, and other visual elements.
+ * The base URL for the Cyberia engine API. Used for:
+ * - Authentication (POST /api/user/auth)
+ * - Atlas sprite sheet metadata (GET /api/atlas-sprite-sheet/)
+ * - File blob retrieval (GET /api/file/blob/:id)
+ * - Object layer metadata (GET /api/object-layer/)
  *
  * Examples:
- *   - Local development: "http://localhost:8080/assets"
- *   - Production: "https://server.cyberiaonline.com/assets"
+ *   - Local development: "http://localhost:4001"
+ *   - Production: "https://www.cyberiaonline.com"
  */
-static const char* ASSETS_BASE_URL = "https://server.cyberiaonline.com/assets";
-// const char* ASSETS_BASE_URL = "http://localhost:8080/assets";
+static const char* API_BASE_URL = "https://www.cyberiaonline.com";
+// static const char* API_BASE_URL = "http://localhost:4001";
+
+// ============================================================================
+// Authentication Configuration
+// ============================================================================
+
+/**
+ * @brief API authentication email
+ *
+ * Email used to authenticate against the Cyberia engine API
+ * (POST /api/user/auth). Required for accessing authenticated
+ * endpoints such as object layer metadata.
+ *
+ * Set these to valid credentials before building.
+ * In production, consider injecting via build-time defines.
+ */
+static const char* AUTH_EMAIL = "";
+
+/**
+ * @brief API authentication password
+ *
+ * Password used to authenticate against the Cyberia engine API.
+ */
+static const char* AUTH_PASSWORD = "";
 
 // ============================================================================
 // Game Configuration
@@ -97,9 +104,10 @@ static const long HTTP_TIMEOUT_SECONDS = 10L;
 /**
  * @brief Maximum number of textures in the cache
  *
- * Limits the number of textures that can be stored in memory.
- * Each texture can consume significant VRAM, so this prevents
+ * Limits the number of atlas textures that can be stored in memory.
+ * Each atlas texture can consume significant VRAM, so this prevents
  * unbounded memory growth during extended play sessions.
+ * With the atlas approach, each item uses only one texture entry.
  */
 static const int MAX_TEXTURE_CACHE_SIZE = 512;
 
@@ -112,12 +120,13 @@ static const int MAX_TEXTURE_CACHE_SIZE = 512;
 static const int MAX_LAYER_CACHE_SIZE = 256;
 
 /**
- * @brief Queue size for texture caching requests
+ * @brief Maximum number of atlas sprite sheet entries in the cache
  *
- * Maximum number of texture loading requests that can be queued.
- * Prevents unbounded queue growth when many textures need to be cached.
+ * Limits the number of atlas sprite sheet data entries stored in memory.
+ * Each entry contains frame metadata for clipping individual frames
+ * from the consolidated atlas texture.
  */
-static const int TEXTURE_QUEUE_SIZE = 1024;
+static const int MAX_ATLAS_CACHE_SIZE = 256;
 
 // ============================================================================
 // Animation Configuration
@@ -159,6 +168,6 @@ static const int DEFAULT_FRAME_DURATION_MS = 100;
  * Set to false to respect the server's dev_ui setting.
  */
 static const bool FORCE_DEV_UI = false;
-// const bool FORCE_DEV_UI = true;
+// static const bool FORCE_DEV_UI = true;
 
 #endif // CONFIG_H
