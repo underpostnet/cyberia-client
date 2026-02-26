@@ -1,0 +1,12 @@
+; DO NOT EDIT (unless you know what you are doing)
+;
+; This subdirectory is a git "subrepo", and this file is maintained by the
+; git-subrepo command. See https://github.com/ingydotnet/git-subrepo#readme
+;
+[subrepo]
+	remote = https://github.com/DaveGamble/cJSON
+	branch = master
+	commit = 5cc0e39f42dfe28cb8541f95fa2c513f0d550210
+	parent = 8f02e8918906c26a9055436069045f8e636540c0
+	method = merge
+	cmdver = 0.4.9
