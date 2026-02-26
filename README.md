@@ -15,17 +15,27 @@ A modular client for Cyberia, built with C, Raylib, and Emscripten. This project
 ### General
 *   **GNU Make**: Required for the build system.
 *   **C Compiler**: GCC, Clang, or MinGW (for Windows).
+*   **git-subrepo**: Used for managing external dependencies (Raylib, cJSON). See [Setup](#dependency-management) below.
 
 ### Desktop (Linux/Windows)
-*   **Raylib**: You need the Raylib library installed or available.
-    *   **Linux (RHEL/Fedora)**: `sudo dnf install raylib-devel`
-    *   **Linux (Debian/Ubuntu)**: `sudo apt install libraylib-dev`
-    *   **Windows**: Ensure Raylib headers and libraries are accessible to the compiler (MinGW recommended).
+*   **Raylib**: Included as a git-subrepo in `lib/raylib`.
+*   **cJSON**: Included as a git-subrepo in `lib/cJSON`.
 
 ### Web (WebAssembly)
 *   **Emscripten SDK (emsdk)**: Required to compile C to WebAssembly.
     *   [Installation Guide](https://emscripten.org/docs/getting_started/downloads.html)
     *   Ensure `emsdk_env` is activated in your terminal.
+
+## Dependency Management
+
+External libraries are managed with [git-subrepo](https://github.com/ingydotnet/git-subrepo).
+
+Dependencies are already checked into the repository. To update them:
+
+```bash
+git subrepo pull lib/raylib
+git subrepo pull lib/cJSON
+```
 
 ## Building
 
@@ -133,8 +143,9 @@ emrun bin/platform_web/debug/index.html
 ## Project Structure
 
 *   `src/`: Source code (C).
-*   `libs/`: External libraries (Raylib, cJSON).
+*   `lib/`: External libraries managed via git-subrepo (Raylib, cJSON).
 *   `src/js/`: JavaScript interop files for Web builds.
 *   `src/public/`: Static assets copied to the output directory.
+*   `scripts/`: Setup and Helper scripts.
 *   `Web.mk`: Main build configuration file.
 *   `config.mk`: Shared configuration variables.

@@ -5,7 +5,7 @@ BUILD_MODE      ?= DEBUG
 
 ASSETS_DIR      ?= data
 BUILD_DIR       ?= build
-LIBS_DIR		?= libs
+LIBS_DIR		?= lib
 OUTPUT_DIR      ?= bin
 SRC_DIR         ?= src
 TOOLS_DIR       ?= tools
