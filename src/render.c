@@ -71,10 +71,10 @@ void render_update(void) {
     game_render_update_effects(delta_time);
 
     // Update dev UI
-    //dev_ui_update(delta_time);
+    dev_ui_update(delta_time);
 
     // Update player modal
-    //modal_player_update(delta_time);
+    modal_player_update(delta_time);
 
     // Use game renderer if available and game state is initialized
     if (g_game_state.init_received) {

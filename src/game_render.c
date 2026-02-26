@@ -569,15 +569,9 @@ void game_render_ui(void) {
     // Render error messages (always visible)
     game_render_error_messages();
 
-    // Determine what to render based on dev_ui flag
-    bool dev_ui_enabled = g_game_state.dev_ui;
-    bool init_received = g_game_state.init_received;
-
-    if (dev_ui_enabled && init_received) {
-        // Render dev UI only
+    if (g_game_state.dev_ui) {
         dev_ui_draw(g_renderer.screen_width, g_renderer.screen_height, 0);
     } else {
-        // Render player modal only (map, position, FPS)
         modal_player_draw(g_renderer.screen_width, g_renderer.screen_height);
     }
 }

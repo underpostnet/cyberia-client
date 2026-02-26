@@ -135,15 +135,11 @@ static const int DEFAULT_FRAME_DURATION_MS = 100;
 // ============================================================================
 
 /**
- * @brief Force development UI to always be enabled
+ * @brief Enable development UI overlay
  *
- * When set to true, the dev_ui will always be enabled regardless of
- * the server's devUi setting. This overrides the value received from
- * the server in the init message.
- *
- * Set to false to respect the server's dev_ui setting.
+ * When true, the dev UI is rendered instead of the player modal.
+ * When false, only the player modal is rendered.
  */
-static const bool FORCE_DEV_UI = false;
-// static const bool FORCE_DEV_UI = true;
+static const bool ENABLE_DEV_UI = false;
 
 #endif // CONFIG_H

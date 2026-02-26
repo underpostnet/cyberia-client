@@ -11,7 +11,7 @@
  *
  * This module provides a modal display for player information including
  * connection status, map ID, position, and FPS. It uses the general-purpose
- * modal component and is only rendered when dev_ui is false.
+ * modal component and is rendered when dev UI is disabled.
  */
 
 /**
@@ -57,7 +57,7 @@ void modal_player_update(float delta_time);
  * @param screen_width Current screen width
  * @param screen_height Current screen height
  *
- * Renders the player information modal only when dev_ui is false.
+ * Renders the player information modal when dev UI is disabled.
  * The modal displays:
  * - Connection status (Connected/Disconnected)
  * - Map ID

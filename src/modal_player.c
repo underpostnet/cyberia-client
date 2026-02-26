@@ -105,14 +105,6 @@ void modal_player_update(float delta_time) {
 }
 
 void modal_player_draw(int screen_width, int screen_height) {
-    // Only render when dev_ui is false
-    bool dev_ui_enabled = g_game_state.dev_ui;
-
-    if (dev_ui_enabled) {
-        return;
-    }
-
-    // Draw the modal
     modal_draw_struct(&g_modal_player.modal, screen_width, screen_height);
 }
 
