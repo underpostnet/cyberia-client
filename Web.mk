@@ -1,7 +1,7 @@
 include config.mk
 
 CC				:= emcc
-DEV_PORT		?= 8081
+DEV_PORT		?= 8082
 PROD_PORT		?= 8081
 
 #---------------------------------------------------------------------------------------------
@@ -51,6 +51,7 @@ OBJS	+= $(BUILD_DIR)/cJSON.o
 web: $(PROJECT_NAME)
 
 serve_development: web
+	-fuser -k $(DEV_PORT)/tcp 2>/dev/null; sleep 0.3
 	python3 -m http.server $(DEV_PORT) --directory $(OUTPUT_DIR)
 
 serve_production:

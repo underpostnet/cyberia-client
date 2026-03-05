@@ -27,7 +27,7 @@
  *   - Production: "wss://server.cyberiaonline.com/ws"
  */
 static const char* WS_URL = "wss://server.cyberiaonline.com/ws";
-// static const char* WS_URL = "ws://localhost:8080/ws";
+// static const char* WS_URL = "ws://localhost:8081/ws";
 
 // ============================================================================
 // Engine API Configuration

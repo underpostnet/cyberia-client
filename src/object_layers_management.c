@@ -119,41 +119,44 @@ static void parse_stats(cJSON* stats_json, Stats* stats) {
     stats->utility = json_get_int_safe(stats_json, "utility", 0);
 }
 
-static void parse_render_frames(cJSON* frames_json, RenderFrames* frames) {
-    if (!frames_json || !frames) return;
-
-    frames->up_idle_count = json_array_count(cJSON_GetObjectItem(frames_json, "up_idle"));
-    frames->down_idle_count = json_array_count(cJSON_GetObjectItem(frames_json, "down_idle"));
-    frames->left_idle_count = json_array_count(cJSON_GetObjectItem(frames_json, "left_idle"));
-    frames->right_idle_count = json_array_count(cJSON_GetObjectItem(frames_json, "right_idle"));
-
-    frames->up_left_idle_count = json_array_count(cJSON_GetObjectItem(frames_json, "up_left_idle"));
-    frames->up_right_idle_count = json_array_count(cJSON_GetObjectItem(frames_json, "up_right_idle"));
-    frames->down_left_idle_count = json_array_count(cJSON_GetObjectItem(frames_json, "down_left_idle"));
-    frames->down_right_idle_count = json_array_count(cJSON_GetObjectItem(frames_json, "down_right_idle"));
-
-    frames->default_idle_count = json_array_count(cJSON_GetObjectItem(frames_json, "default_idle"));
-    frames->none_idle_count = json_array_count(cJSON_GetObjectItem(frames_json, "none_idle"));
-
-    frames->up_walking_count = json_array_count(cJSON_GetObjectItem(frames_json, "up_walking"));
-    frames->down_walking_count = json_array_count(cJSON_GetObjectItem(frames_json, "down_walking"));
-    frames->left_walking_count = json_array_count(cJSON_GetObjectItem(frames_json, "left_walking"));
-    frames->right_walking_count = json_array_count(cJSON_GetObjectItem(frames_json, "right_walking"));
-
-    frames->up_left_walking_count = json_array_count(cJSON_GetObjectItem(frames_json, "up_left_walking"));
-    frames->up_right_walking_count = json_array_count(cJSON_GetObjectItem(frames_json, "up_right_walking"));
-    frames->down_left_walking_count = json_array_count(cJSON_GetObjectItem(frames_json, "down_left_walking"));
-    frames->down_right_walking_count = json_array_count(cJSON_GetObjectItem(frames_json, "down_right_walking"));
-}
-
+/**
+ * Parse the new Render schema (IPFS CIDs for the atlas sprite sheet).
+ *
+ * Expected JSON:
+ *   { "cid": "Qm...", "metadataCid": "Qm..." }
+ */
 static void parse_render(cJSON* render_json, Render* render) {
     if (!render_json || !render) return;
 
-    render->frame_duration = json_get_int_safe(render_json, "frame_duration", 100);
-    render->is_stateless = json_get_bool_safe(render_json, "is_stateless", false);
+    char* cid = json_get_string_safe(render_json, "cid", "");
+    char* metadata_cid = json_get_string_safe(render_json, "metadataCid", "");
 
-    cJSON* frames = cJSON_GetObjectItem(render_json, "frames");
-    parse_render_frames(frames, &render->frames);
+    strncpy(render->cid, cid, MAX_CID_LENGTH - 1);
+    render->cid[MAX_CID_LENGTH - 1] = '\0';
+    strncpy(render->metadata_cid, metadata_cid, MAX_CID_LENGTH - 1);
+    render->metadata_cid[MAX_CID_LENGTH - 1] = '\0';
+
+    free(cid);
+    free(metadata_cid);
+}
+
+/**
+ * Parse the Ledger schema (blockchain protocol metadata).
+ *
+ * Expected JSON:
+ *   { "type": "ERC20" | "ERC721" | "OFF_CHAIN", "address": "0x..." }
+ */
+static void parse_ledger(cJSON* ledger_json, Ledger* ledger) {
+    if (!ledger_json || !ledger) return;
+
+    char* type_str = json_get_string_safe(ledger_json, "type", "OFF_CHAIN");
+    ledger->type = ledger_type_from_string(type_str);
+    free(type_str);
+
+    char* address = json_get_string_safe(ledger_json, "address", "");
+    strncpy(ledger->address, address, MAX_ADDRESS_LENGTH - 1);
+    ledger->address[MAX_ADDRESS_LENGTH - 1] = '\0';
+    free(address);
 }
 
 static void parse_item(cJSON* item_json, Item* item) {
@@ -177,8 +180,9 @@ static void parse_object_layer_data(cJSON* data_json, ObjectLayerData* data) {
     if (!data_json || !data) return;
 
     parse_stats(cJSON_GetObjectItem(data_json, "stats"), &data->stats);
-    parse_render(cJSON_GetObjectItem(data_json, "render"), &data->render);
     parse_item(cJSON_GetObjectItem(data_json, "item"), &data->item);
+    parse_ledger(cJSON_GetObjectItem(data_json, "ledger"), &data->ledger);
+    parse_render(cJSON_GetObjectItem(data_json, "render"), &data->render);
 }
 
 static ObjectLayer* parse_object_layer_json(const char* json_str) {
@@ -205,20 +209,21 @@ static ObjectLayer* parse_object_layer_json(const char* json_str) {
     cJSON* data = cJSON_GetObjectItem(root, "data");
     parse_object_layer_data(data, &layer->data);
 
-    // Extract frame_duration from objectLayerRenderFramesId (populated reference)
-    // API response structure:
-    //   "objectLayerRenderFramesId": { "_id": "...", "frame_duration": 250 }
-    // This is a sibling of "data" at root level, NOT nested inside data.render.
+    // Extract frame_duration and is_stateless from the populated
+    // objectLayerRenderFramesId reference.  The engine API response includes:
+    //   "objectLayerRenderFramesId": { "_id": "...", "frame_duration": 250, "is_stateless": false }
+    // These are NOT part of data.render (which now holds IPFS CIDs only);
+    // they live on the separate ObjectLayerRenderFrames collection and are
+    // populated into the response by Mongoose .populate().
     cJSON* render_frames_ref = cJSON_GetObjectItem(root, "objectLayerRenderFramesId");
     if (render_frames_ref && cJSON_IsObject(render_frames_ref)) {
         int fd = json_get_int_safe(render_frames_ref, "frame_duration", 0);
         if (fd > 0) {
-            layer->data.render.frame_duration = fd;
+            layer->frame_duration = fd;
         }
-        // Also check for is_stateless if present in the reference
         cJSON* stateless = cJSON_GetObjectItemCaseSensitive(render_frames_ref, "is_stateless");
         if (cJSON_IsBool(stateless)) {
-            layer->data.render.is_stateless = cJSON_IsTrue(stateless);
+            layer->is_stateless = cJSON_IsTrue(stateless);
         }
     }
 

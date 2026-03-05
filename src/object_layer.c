@@ -7,7 +7,7 @@ ObjectLayer* create_object_layer(void) {
     if (layer) {
         // Initialize with zeros
         memset(layer, 0, sizeof(ObjectLayer));
-        
+
         // Set default values for stats
         layer->data.stats.effect = 0;
         layer->data.stats.resistance = 0;
@@ -15,19 +15,27 @@ ObjectLayer* create_object_layer(void) {
         layer->data.stats.range = 0;
         layer->data.stats.intelligence = 0;
         layer->data.stats.utility = 0;
-        
-        // Set default values for render
-        layer->data.render.frame_duration = 100;
-        layer->data.render.is_stateless = false;
-        
+
+        // Set default values for render (IPFS CIDs — empty by default)
+        layer->data.render.cid[0] = '\0';
+        layer->data.render.metadata_cid[0] = '\0';
+
+        // Set default values for ledger
+        layer->data.ledger.type = LEDGER_TYPE_OFF_CHAIN;
+        layer->data.ledger.address[0] = '\0';
+
         // Set default values for item (empty strings)
         layer->data.item.id[0] = '\0';
         layer->data.item.type[0] = '\0';
         layer->data.item.description[0] = '\0';
         layer->data.item.activable = false;
-        
+
         // Initialize sha256 to empty string
         layer->sha256[0] = '\0';
+
+        // Animation metadata (from populated objectLayerRenderFramesId)
+        layer->frame_duration = 100; // default 100ms per frame
+        layer->is_stateless = false;
     }
     return layer;
 }
@@ -103,4 +111,23 @@ const DirectionFrameData* atlas_get_direction_frames(
     if (strcmp(dir_str, "none_idle") == 0)            return &atlas->none_idle;
 
     return NULL;
+}
+
+LedgerType ledger_type_from_string(const char* type_str) {
+    if (!type_str) return LEDGER_TYPE_OFF_CHAIN;
+
+    if (strcmp(type_str, "ERC20") == 0)      return LEDGER_TYPE_ERC20;
+    if (strcmp(type_str, "ERC721") == 0)     return LEDGER_TYPE_ERC721;
+    if (strcmp(type_str, "OFF_CHAIN") == 0)  return LEDGER_TYPE_OFF_CHAIN;
+
+    return LEDGER_TYPE_OFF_CHAIN;
+}
+
+const char* ledger_type_to_string(LedgerType type) {
+    switch (type) {
+        case LEDGER_TYPE_ERC20:     return "ERC20";
+        case LEDGER_TYPE_ERC721:    return "ERC721";
+        case LEDGER_TYPE_OFF_CHAIN: return "OFF_CHAIN";
+        default:                    return "OFF_CHAIN";
+    }
 }

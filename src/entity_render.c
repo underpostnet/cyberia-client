@@ -115,11 +115,13 @@ static int compare_layer_priority(const void* a, const void* b) {
 /**
  * @brief Determine the direction string and frame count for the current animation state.
  *
- * When atlas data is available, uses the DirectionFrameData counts from the atlas
- * metadata. Otherwise falls back to the ObjectLayer RenderFrames counts.
+ * Frame counts are resolved exclusively from AtlasSpriteSheetData metadata.
+ * The legacy RenderFrames fallback has been removed — frame_duration and
+ * is_stateless no longer live on ObjectLayer.data.render; they are resolved
+ * at runtime from the ObjectLayerRenderFrames population or inferred from
+ * atlas metadata.
  */
 static int get_frame_count_and_direction(
-    RenderFrames* frames,
     const AtlasSpriteSheetData* atlas,
     Direction dir,
     ObjectLayerMode mode,
@@ -132,7 +134,7 @@ static int get_frame_count_and_direction(
             const DirectionFrameData* dfd = atlas_get_direction_frames(atlas, "default_idle");
             return dfd ? dfd->count : 0;
         }
-        return frames ? frames->default_idle_count : 0;
+        return 0;
     }
 
     // Build the direction string based on direction + mode
@@ -168,38 +170,10 @@ static int get_frame_count_and_direction(
 
     *out_dir_string = dir_str;
 
-    // Get frame count from atlas if available, else from RenderFrames
+    // Get frame count exclusively from atlas metadata
     if (atlas) {
         const DirectionFrameData* dfd = atlas_get_direction_frames(atlas, dir_str);
         count = dfd ? dfd->count : 0;
-    } else if (frames) {
-        // Legacy fallback using RenderFrames counts
-        if (mode == MODE_WALKING) {
-            switch (dir) {
-                case DIRECTION_UP:         count = frames->up_walking_count; break;
-                case DIRECTION_DOWN:       count = frames->down_walking_count; break;
-                case DIRECTION_LEFT:       count = frames->left_walking_count; break;
-                case DIRECTION_RIGHT:      count = frames->right_walking_count; break;
-                case DIRECTION_UP_RIGHT:   count = frames->up_right_walking_count; break;
-                case DIRECTION_UP_LEFT:    count = frames->up_left_walking_count; break;
-                case DIRECTION_DOWN_RIGHT: count = frames->down_right_walking_count; break;
-                case DIRECTION_DOWN_LEFT:  count = frames->down_left_walking_count; break;
-                default:                   count = frames->down_walking_count; break;
-            }
-        } else {
-            switch (dir) {
-                case DIRECTION_UP:         count = frames->up_idle_count; break;
-                case DIRECTION_DOWN:       count = frames->down_idle_count; break;
-                case DIRECTION_LEFT:       count = frames->left_idle_count; break;
-                case DIRECTION_RIGHT:      count = frames->right_idle_count; break;
-                case DIRECTION_UP_RIGHT:   count = frames->up_right_idle_count; break;
-                case DIRECTION_UP_LEFT:    count = frames->up_left_idle_count; break;
-                case DIRECTION_DOWN_RIGHT: count = frames->down_right_idle_count; break;
-                case DIRECTION_DOWN_LEFT:  count = frames->down_left_idle_count; break;
-                case DIRECTION_NONE:       count = frames->down_idle_count; break;
-                default:                   count = frames->down_idle_count; break;
-            }
-        }
     }
 
     return count;
@@ -312,7 +286,7 @@ void draw_entity_layers(
             continue;
         }
 
-        // Fetch object layer metadata (for item type, frame_duration, is_stateless)
+        // Fetch object layer metadata (for item type, ledger, render CIDs)
         ObjectLayer* layer = get_or_fetch_object_layer(
             render->obj_layers_mgr,
             state->item_id
@@ -397,24 +371,27 @@ void draw_entity_layers(
             }
         }
 
-        // Determine is_stateless and frame_duration from ObjectLayer if available
+        // Determine is_stateless and frame_duration.
+        // These no longer live on ObjectLayer.data.render (which now holds
+        // IPFS CIDs).  They are parsed from the populated
+        // objectLayerRenderFramesId reference and stored directly on the
+        // ObjectLayer struct.  Fall back to atlas inference if ObjectLayer
+        // metadata hasn't loaded yet.
         bool is_stateless = false;
         int frame_duration_ms = DEFAULT_FRAME_DURATION_MS;
 
         if (layer) {
-            is_stateless = layer->data.render.is_stateless;
-            frame_duration_ms = layer->data.render.frame_duration;
+            is_stateless = layer->is_stateless;
+            frame_duration_ms = layer->frame_duration;
             if (frame_duration_ms <= 0) frame_duration_ms = DEFAULT_FRAME_DURATION_MS;
         } else if (atlas) {
-            // Infer is_stateless: if default_idle has frames, treat as stateless
+            // ObjectLayer not loaded yet — infer from atlas metadata
             is_stateless = (atlas->default_idle.count > 0);
         }
 
-        // Frame Selection
+        // Frame Selection — resolved exclusively from atlas metadata
         const char* dir_string = NULL;
-        RenderFrames* render_frames = layer ? &layer->data.render.frames : NULL;
         int num_frames = get_frame_count_and_direction(
-            render_frames,
             atlas,
             render_direction,
             render_mode,

@@ -8,6 +8,8 @@
 #define MAX_DESCRIPTION_LENGTH 256
 #define MAX_FRAMES_PER_DIRECTION 64
 #define MAX_FILE_ID_LENGTH 128
+#define MAX_CID_LENGTH 128
+#define MAX_ADDRESS_LENGTH 128
 
 // Enums corresponding to Python enums
 typedef enum {
@@ -27,6 +29,17 @@ typedef enum {
     MODE_WALKING = 1,
     MODE_TELEPORTING = 2
 } ObjectLayerMode;
+
+/**
+ * @brief Blockchain ledger type for economic classification.
+ *
+ * Maps to the Mongoose enum: ['ERC20', 'ERC721', 'OFF_CHAIN']
+ */
+typedef enum {
+    LEDGER_TYPE_OFF_CHAIN = 0,
+    LEDGER_TYPE_ERC20 = 1,
+    LEDGER_TYPE_ERC721 = 2
+} LedgerType;
 
 // Object layer state
 typedef struct {
@@ -120,43 +133,47 @@ typedef struct {
 } AtlasSpriteSheetData;
 
 // ============================================================================
-// Legacy Render Structures (kept for ObjectLayer compatibility)
+// Render Structure (new: IPFS content identifiers for atlas sprite sheet)
 // ============================================================================
 
 /**
- * @brief Frame counts per animation direction.
+ * @brief IPFS content identifiers for the consolidated atlas sprite sheet.
  *
- * Stores how many frames exist for each direction/mode combination.
- * These counts can be derived from the AtlasSpriteSheetData's
- * DirectionFrameData.count fields when using atlas-based rendering.
+ * Corresponds to the RenderSchema in the new ObjectLayer model:
+ *   - cid:         IPFS CID for the consolidated atlas sprite sheet PNG
+ *   - metadataCid: IPFS CID for the atlas sprite sheet metadata JSON
+ *
+ * These replace the legacy RenderFrames / frame_duration / is_stateless
+ * fields that previously lived directly on the ObjectLayer. Frame-level
+ * data (frame_duration, is_stateless, per-direction frame counts) now
+ * lives exclusively on the ObjectLayerRenderFrames collection and on
+ * the AtlasSpriteSheetData metadata fetched at runtime.
  */
 typedef struct {
-    int up_idle_count;
-    int down_idle_count;
-    int right_idle_count;
-    int left_idle_count;
-    int up_right_idle_count;
-    int down_right_idle_count;
-    int up_left_idle_count;
-    int down_left_idle_count;
-    int default_idle_count;
-    int up_walking_count;
-    int down_walking_count;
-    int right_walking_count;
-    int left_walking_count;
-    int up_right_walking_count;
-    int down_right_walking_count;
-    int up_left_walking_count;
-    int down_left_walking_count;
-    int none_idle_count;
-} RenderFrames;
-
-// Render structure
-typedef struct {
-    RenderFrames frames;
-    int frame_duration;
-    bool is_stateless;
+    char cid[MAX_CID_LENGTH];              /**< IPFS CID for the atlas PNG */
+    char metadata_cid[MAX_CID_LENGTH];     /**< IPFS CID for the atlas metadata JSON */
 } Render;
+
+// ============================================================================
+// Ledger Structure (blockchain protocol metadata)
+// ============================================================================
+
+/**
+ * @brief Blockchain protocol metadata linking the visual object-layer
+ *        prefab to its economic reality.
+ *
+ * Corresponds to the LedgerSchema in the ObjectLayer model:
+ *   - type:    Token standard or off-chain designation (ERC20, ERC721, OFF_CHAIN)
+ *   - address: Solidity smart-contract address (may be empty for OFF_CHAIN)
+ */
+typedef struct {
+    LedgerType type;                        /**< ERC20, ERC721, or OFF_CHAIN */
+    char address[MAX_ADDRESS_LENGTH];       /**< Solidity contract address */
+} Ledger;
+
+// ============================================================================
+// Item Structure
+// ============================================================================
 
 // Item structure
 typedef struct {
@@ -166,17 +183,50 @@ typedef struct {
     bool activable;
 } Item;
 
-// Object layer data
+// ============================================================================
+// ObjectLayer Structures
+// ============================================================================
+
+/**
+ * @brief Core data payload of an ObjectLayer document.
+ *
+ * New schema (matches object-layer.model.js):
+ *   data.stats  — mechanical attributes
+ *   data.item   — human-readable item info
+ *   data.ledger — blockchain / economic metadata
+ *   data.render — IPFS CIDs for the atlas sprite sheet
+ *   data.seed   — UUID v4 (not stored in C struct; server-only)
+ */
 typedef struct {
     Stats stats;
-    Render render;
     Item item;
+    Ledger ledger;
+    Render render;
 } ObjectLayerData;
 
-// Object layer
+/**
+ * @brief Top-level ObjectLayer document.
+ *
+ * The C client only needs a subset of the full Mongoose document.
+ *
+ * frame_duration and is_stateless are NOT part of the ObjectLayer Mongoose
+ * schema (data.render now holds IPFS CIDs only).  They live on the separate
+ * ObjectLayerRenderFrames collection, but the engine API populates them
+ * into the response via:
+ *
+ *   .populate('objectLayerRenderFramesId', { _id:1, frame_duration:1, is_stateless:1 })
+ *
+ * The C parser extracts them from the populated reference and stores them
+ * here as first-class animation metadata so the render loop can use them
+ * without an extra fetch.
+ */
 typedef struct {
     ObjectLayerData data;
-    char sha256[65]; // 64 chars + null terminator
+    char sha256[65];    // 64 hex chars + null terminator
+
+    /* Animation metadata – from populated objectLayerRenderFramesId */
+    int  frame_duration; /**< ms per frame (from ObjectLayerRenderFrames) */
+    bool is_stateless;   /**< true ⇒ always use default_idle direction  */
 } ObjectLayer;
 
 // ============================================================================
@@ -235,5 +285,21 @@ const DirectionFrameData* atlas_get_direction_frames(
     const AtlasSpriteSheetData* atlas,
     const char* dir_str
 );
+
+/**
+ * @brief Parse a LedgerType enum value from a JSON string.
+ *
+ * @param type_str  The string to parse ("ERC20", "ERC721", "OFF_CHAIN")
+ * @return The corresponding LedgerType, defaulting to LEDGER_TYPE_OFF_CHAIN
+ */
+LedgerType ledger_type_from_string(const char* type_str);
+
+/**
+ * @brief Convert a LedgerType enum value to its canonical string.
+ *
+ * @param type  The LedgerType value
+ * @return Static string ("ERC20", "ERC721", or "OFF_CHAIN")
+ */
+const char* ledger_type_to_string(LedgerType type);
 
 #endif // OBJECT_LAYER_H

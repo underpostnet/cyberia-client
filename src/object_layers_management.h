@@ -14,7 +14,7 @@
  * - Fetching AtlasSpriteSheet metadata (frame positions in consolidated atlas PNG)
  * - Fetching atlas PNG binary via the File blob API
  * - Caching atlas textures and frame metadata for efficient rendering
- * - Fetching ObjectLayer metadata for item type, stats, frame_duration, etc.
+ * - Fetching ObjectLayer metadata for item type, stats, ledger, render CIDs, etc.
  *
  * All endpoints are public GET requests (no authentication required).
  *
@@ -29,8 +29,8 @@
  *
  * Object Layer Metadata Flow:
  *   1. GET {API_BASE_URL}/api/object-layer/?filterModel=...&limit=1
- *      Returns: { status, data: { data: [ { data: { item, stats, ... }, sha256 } ] } }
- *   2. Parse item type, stats, frame_duration, is_stateless
+ *      Returns: { status, data: { data: [ { data: { item, stats, ledger, render, ... }, sha256 } ] } }
+ *   2. Parse item type, stats, ledger (blockchain metadata), render CIDs (IPFS)
  *   3. Cache for rendering priority and animation timing
  *
  * Caching Strategy:
@@ -90,8 +90,8 @@ void destroy_object_layers_manager(ObjectLayersManager* manager);
  * Fetches object layer metadata from the engine API. This provides:
  * - Item type (skin, weapon, etc.) for rendering priority
  * - Stats (effect, resistance, etc.)
- * - frame_duration for animation timing
- * - is_stateless flag
+ * - Ledger (blockchain protocol metadata: type + contract address)
+ * - Render CIDs (IPFS content identifiers for atlas sprite sheet)
  *
  * Uses the engine API: GET {API_BASE_URL}/api/object-layer/
  * with filterModel for data.item.id matching.

@@ -103,7 +103,7 @@ void destroy_entity_render(EntityRender* render);
  *
  * Animation Behavior:
  * - Each unique (entity_id, item_id) pair has persistent animation state
- * - Frame advances automatically based on frame_duration from object layer
+ * - Frame advances automatically based on frame_duration inferred from atlas metadata
  * - Animation resets when state string (direction_mode combo) changes
  * - When idle with no direction, uses last known facing direction
  *

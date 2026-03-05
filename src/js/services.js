@@ -160,7 +160,8 @@ mergeInto(LibraryManager.library, {
    * @brief Fetch object layer metadata from the engine API
    *
    * Fetches ObjectLayer data by item ID using the DataQuery filterModel.
-   * This provides item type, stats, frame_duration, is_stateless, etc.
+   * This provides item type, stats, ledger (blockchain metadata),
+   * render CIDs (IPFS content identifiers for atlas sprite sheet), etc.
    *
    * API: GET {api_base_url}/api/object-layer/?filterModel=...&limit=1
    *
