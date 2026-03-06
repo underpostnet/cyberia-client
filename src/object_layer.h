@@ -195,7 +195,6 @@ typedef struct {
  *   data.item   — human-readable item info
  *   data.ledger — blockchain / economic metadata
  *   data.render — IPFS CIDs for the atlas sprite sheet
- *   data.seed   — UUID v4 (not stored in C struct; server-only)
  */
 typedef struct {
     Stats stats;
