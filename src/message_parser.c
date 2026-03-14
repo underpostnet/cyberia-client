@@ -11,6 +11,7 @@
  * Message Type Detection
  * ============================================================================ */
 
+/*
 MessageType message_parser_get_type(const char* json_str) {
     if (!json_str) return MSG_TYPE_UNKNOWN;
 
@@ -41,6 +42,7 @@ MessageType message_parser_get_type(const char* json_str) {
     cJSON_Delete(root);
     return type;
 }
+*/
 
 /* ============================================================================
  * Main Message Processing Entry PointZ
@@ -284,6 +286,7 @@ int message_parser_parse_visible_players(const cJSON* players_json) {
     return 0;
 }
 
+/*
 int message_parser_parse_visible_bots(const cJSON* bots_json) {
     if (!bots_json) return 0;
 
@@ -319,7 +322,9 @@ int message_parser_parse_visible_bots(const cJSON* bots_json) {
 
     return 0;
 }
+*/
 
+/*
 int message_parser_parse_visible_obstacles(const cJSON* obstacles_json) {
     if (!obstacles_json) return 0;
 
@@ -415,6 +420,7 @@ int message_parser_parse_visible_foregrounds(const cJSON* foregrounds_json) {
 
     return 0;
 }
+*/
 
 int message_parser_parse_aoi_update(const cJSON* json_root) {
     if (!json_root) return -1;

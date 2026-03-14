@@ -108,15 +108,3 @@ void modal_player_draw(int screen_width, int screen_height) {
     modal_draw_struct(&g_modal_player.modal, screen_width, screen_height);
 }
 
-void modal_player_set_display_options(bool show_connection, bool show_map,
-                                      bool show_position, bool show_fps) {
-    g_modal_player.show_connection = show_connection;
-    g_modal_player.show_map = show_map;
-    g_modal_player.show_position = show_position;
-    g_modal_player.show_fps = show_fps;
-}
-
-void modal_player_set_position(int position_mode, int margin_top, int margin_right) {
-    modal_set_position(&g_modal_player.modal, position_mode,
-                      margin_top, margin_right, 0, 0);
-}

@@ -108,16 +108,6 @@ void modal_clear_lines(Modal* modal);
 int modal_add_line(Modal* modal, const char* text, Color color);
 
 /**
- * @brief Set a specific line in the modal
- * @param modal Pointer to modal
- * @param line_index Line index (0-based)
- * @param text Text content
- * @param color Text color
- * @return 0 on success, -1 on failure
- */
-int modal_set_line(Modal* modal, int line_index, const char* text, Color color);
-
-/**
  * @brief Update modal state (animations, etc.)
  * @param modal Pointer to modal
  * @param delta_time Time elapsed since last update
@@ -133,13 +123,6 @@ void modal_update_struct(Modal* modal, float delta_time);
 void modal_draw_struct(const Modal* modal, int screen_width, int screen_height);
 
 /**
- * @brief Set modal visibility
- * @param modal Pointer to modal
- * @param visible True to show, false to hide
- */
-void modal_set_visible(Modal* modal, bool visible);
-
-/**
  * @brief Set modal styling
  * @param modal Pointer to modal
  * @param bg_color Background color
@@ -147,14 +130,6 @@ void modal_set_visible(Modal* modal, bool visible);
  * @param alpha Background transparency (0.0 to 1.0)
  */
 void modal_set_style(Modal* modal, Color bg_color, Color border_color, float alpha);
-
-/**
- * @brief Set modal dimensions
- * @param modal Pointer to modal
- * @param min_width Minimum modal width
- * @param min_height Minimum modal height
- */
-void modal_set_dimensions(Modal* modal, int min_width, int min_height);
 
 /**
  * @brief Set modal position mode and margins
@@ -168,14 +143,6 @@ void modal_set_dimensions(Modal* modal, int min_width, int min_height);
 void modal_set_position(Modal* modal, int position_mode, 
                        int margin_top, int margin_right, 
                        int margin_bottom, int margin_left);
-
-/**
- * @brief Set custom modal position
- * @param modal Pointer to modal
- * @param x X position in pixels
- * @param y Y position in pixels
- */
-void modal_set_custom_position(Modal* modal, int x, int y);
 
 /**
  * @brief Set text alignment within the modal

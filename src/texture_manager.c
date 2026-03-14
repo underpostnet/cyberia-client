@@ -1,6 +1,7 @@
 #include "texture_manager.h"
 #include <string.h>
 #include <stdio.h>
+#include "helper.h"
 
 #include <emscripten.h>
 
@@ -32,18 +33,6 @@ struct TextureManager {
     TextureEntry* buckets[HASH_TABLE_SIZE];
     int next_request_id;
 };
-
-// --- Helper Functions ---
-
-// Simple string hash function (djb2)
-static unsigned long hash_string(const char* str) {
-    unsigned long hash = 5381;
-    int c;
-    while ((c = *str++)) {
-        hash = ((hash << 5) + hash) + c; /* hash * 33 + c */
-    }
-    return hash;
-}
 
 // Get file extension from URL/Path
 static const char* get_file_extension(const char* url) {
@@ -123,50 +112,6 @@ Texture2D get_texture(TextureManager* manager, const char* identifier) {
     }
 
     // Not found
-    return (Texture2D){0};
-}
-
-// Async JavaScript fetch implementation for web platform
-Texture2D load_texture_from_url(TextureManager* manager, const char* url) {
-    if (!manager || !url)
-    {
-        return (Texture2D){0};
-    }
-
-    // Check cache first
-    Texture2D cached = get_texture(manager, url);
-    if (cached.id > 0)
-    {
-        return cached;
-    }
-
-    // Check if entry exists but is loading/error
-    unsigned long index = hash_string(url) % HASH_TABLE_SIZE;
-    TextureEntry* entry = manager->buckets[index];
-    while (entry) {
-        if (strcmp(entry->key, url) == 0) {
-            return entry->texture;
-        }
-        entry = entry->next;
-    }
-
-    // Start new async fetch
-    int req_id = manager->next_request_id++;
-
-    // Create entry in LOADING state
-    TextureEntry* new_entry = malloc(sizeof(TextureEntry));
-    if (new_entry) {
-        new_entry->key = strdup(url);
-        new_entry->texture = (Texture2D){0};
-        new_entry->state = TEXTURE_STATE_LOADING;
-        new_entry->request_id = req_id;
-        new_entry->next = manager->buckets[index];
-        manager->buckets[index] = new_entry;
-
-        // Trigger JS fetch
-        js_start_fetch_binary(url, req_id);
-    }
-
     return (Texture2D){0};
 }
 

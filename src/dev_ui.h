@@ -101,32 +101,10 @@ void dev_ui_draw(int screen_width, int screen_height, int hud_occupied);
 void dev_ui_update_network_stats(size_t download_bytes, size_t upload_bytes);
 
 /**
- * @brief Get current download speed in kbps
- * @return Download speed in kilobits per second
- */
-float dev_ui_get_download_kbps(void);
-
-/**
- * @brief Get current upload speed in kbps
- * @return Upload speed in kilobits per second
- */
-float dev_ui_get_upload_kbps(void);
-
-/**
- * @brief Set dev UI display options
- * @param show_network Show network statistics section
- * @param show_player Show player information section
- * @param show_game Show game state section
- * @param show_error Show error message section
- */
-void dev_ui_set_display_options(bool show_network, bool show_player, 
-                                bool show_game, bool show_error);
-
-/**
  * @brief Calculate active stats sum for a player
  * @param player_id Player ID to calculate for
  * @return Sum of active stats, or 0 if player not found
- * 
+ *
  * Helper function to calculate the sum of all active item stats
  * for the specified player.
  */
@@ -138,18 +116,5 @@ int dev_ui_get_active_stats_sum(const char* player_id);
  * @return Number of active items
  */
 int dev_ui_get_active_item_count(const char* player_id);
-
-/**
- * @brief Set dev UI dimensions
- * @param width Width of the dev UI panel
- * @param height Height of the dev UI panel
- */
-void dev_ui_set_dimensions(int width, int height);
-
-/**
- * @brief Set dev UI background transparency
- * @param alpha Alpha value (0.0 to 1.0)
- */
-void dev_ui_set_background_alpha(float alpha);
 
 #endif // DEV_UI_H

@@ -4,6 +4,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include "helper.h"
 
 #include <emscripten/emscripten.h>
 
@@ -63,17 +64,6 @@ struct ObjectLayersManager {
     int next_request_id;
 };
 
-// --- Helper Functions ---
-
-static unsigned long hash_string(const char* str) {
-    unsigned long hash = 5381;
-    int c;
-    while ((c = *str++)) {
-        hash = ((hash << 5) + hash) + c;
-    }
-    return hash;
-}
-
 // --- JSON Parsing Helpers ---
 
 static char* json_get_string_safe(cJSON* item, const char* key, const char* default_val) {
@@ -98,13 +88,6 @@ static bool json_get_bool_safe(cJSON* item, const char* key, bool default_val) {
         return cJSON_IsTrue(obj);
     }
     return default_val;
-}
-
-static int json_array_count(cJSON* array_obj) {
-    if (cJSON_IsArray(array_obj)) {
-        return cJSON_GetArraySize(array_obj);
-    }
-    return 0;
 }
 
 // --- ObjectLayer JSON Parsing ---

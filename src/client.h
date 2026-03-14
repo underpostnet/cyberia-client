@@ -48,14 +48,6 @@ int client_is_connected(void);
 int client_send(const char* message);
 
 /**
- * @brief Get the last received message from the server
- *
- * @return Pointer to the last message (null-terminated string)
- *         Returns "No message" if no message has been received yet
- */
-const char* client_get_last_message(void);
-
-/**
  * @brief Get network statistics (bytes uploaded and downloaded)
  *
  * @param bytes_downloaded Pointer to store downloaded bytes count

@@ -20,14 +20,6 @@ TextureManager* create_texture_manager(void);
 void destroy_texture_manager(TextureManager* manager);
 
 /**
- * @brief Loads a texture from a URL.
- * If cached, returns the cached texture.
- * @param manager The TextureManager.
- * @param url The URL.
- * @return The loaded Texture2D. Returns an empty texture (id=0) on failure.
- */
-Texture2D load_texture_from_url(TextureManager* manager, const char* url);
-/**
  * @brief Retrieves a texture from the cache.
  * @param manager The TextureManager.
  * @param identifier The path or URL used as key.

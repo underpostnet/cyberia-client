@@ -35,12 +35,13 @@
  */
 int serial_deserialize_color_rgba(const cJSON* json, ColorRGBA* out);
 
-/**
+/*
  * @brief Serialize ColorRGBA struct to cJSON object
  * @param color Input ColorRGBA structure
  * @return cJSON object (caller must free) or NULL on failure
- */
-cJSON* serial_serialize_color_rgba(const ColorRGBA* color);
+ * /
+// cJSON* serial_serialize_color_rgba(const ColorRGBA* color);
+*/
 
 /**
  * @brief Deserialize JSON object to Vector2 (Point)
@@ -155,12 +156,13 @@ cJSON* serial_serialize_entity_state(const EntityState* entity);
  */
 int serial_deserialize_player_state(const cJSON* json, PlayerState* out);
 
-/**
+/*
  * @brief Serialize PlayerState to cJSON object
  * @param player Input PlayerState structure
  * @return cJSON object (caller must free) or NULL on failure
- */
-cJSON* serial_serialize_player_state(const PlayerState* player);
+ * /
+// cJSON* serial_serialize_player_state(const PlayerState* player);
+*/
 
 /**
  * @brief Deserialize JSON object to BotState
@@ -170,12 +172,13 @@ cJSON* serial_serialize_player_state(const PlayerState* player);
  */
 int serial_deserialize_bot_state(const cJSON* json, BotState* out);
 
-/**
+/*
  * @brief Serialize BotState to cJSON object
  * @param bot Input BotState structure
  * @return cJSON object (caller must free) or NULL on failure
- */
-cJSON* serial_serialize_bot_state(const BotState* bot);
+ * /
+// cJSON* serial_serialize_bot_state(const BotState* bot);
+*/
 
 /**
  * @brief Deserialize JSON object to WorldObject
@@ -185,12 +188,13 @@ cJSON* serial_serialize_bot_state(const BotState* bot);
  */
 int serial_deserialize_world_object(const cJSON* json, WorldObject* out);
 
-/**
+/*
  * @brief Serialize WorldObject to cJSON object
  * @param obj Input WorldObject structure
  * @return cJSON object (caller must free) or NULL on failure
- */
-cJSON* serial_serialize_world_object(const WorldObject* obj);
+ * /
+// cJSON* serial_serialize_world_object(const WorldObject* obj);
+*/
 
 /**
  * @brief Deserialize JSON array to path (Vector2 array)
@@ -241,14 +245,15 @@ int serial_get_int(const cJSON* json, const char* key, int* out);
  */
 int serial_get_float(const cJSON* json, const char* key, float* out);
 
-/**
+/*
  * @brief Safely get double from cJSON object
  * @param json cJSON object
  * @param key Field name
  * @param out Output double pointer
  * @return 0 on success, -1 if field missing or not a number
- */
-int serial_get_double(const cJSON* json, const char* key, double* out);
+ * /
+// int serial_get_double(const cJSON* json, const char* key, double* out);
+*/
 
 /**
  * @brief Safely get boolean from cJSON object
@@ -333,24 +338,27 @@ char* serial_create_handshake(const char* client_name, const char* version);
  */
 char* serial_create_player_action(float target_x, float target_y);
 
-/**
+/*
  * @brief Create ping JSON message
  * @return JSON string (caller must free) or NULL on failure
- */
-char* serial_create_ping(void);
+ * /
+// char* serial_create_ping(void);
+*/
 
-/**
+/*
  * @brief Create pong JSON message
  * @return JSON string (caller must free) or NULL on failure
- */
-char* serial_create_pong(void);
+ * /
+// char* serial_create_pong(void);
+*/
 
-/**
+/*
  * @brief Create item activation message
  * @param item_id Item ID to activate
  * @param activate True to activate, false to deactivate
  * @return JSON string (caller must free) or NULL on failure
- */
-char* serial_create_item_action(const char* item_id, bool activate);
+ * /
+// char* serial_create_item_action(const char* item_id, bool activate);
+*/
 
 #endif // SERIAL_H

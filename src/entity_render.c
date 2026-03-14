@@ -6,6 +6,7 @@
 #include <string.h>
 #include <stdio.h>
 #include <math.h>
+#include "helper.h"
 
 #define HASH_TABLE_SIZE 1024
 #define MAX_LAYERS_PER_ENTITY 20
@@ -43,15 +44,6 @@ typedef struct {
 
 // --- Helper Functions ---
 
-static unsigned long hash_string(const char* str) {
-    unsigned long hash = 5381;
-    int c;
-    while ((c = *str++)) {
-        hash = ((hash << 5) + hash) + c;
-    }
-    return hash;
-}
-
 static AnimationEntry* create_animation_entry(const char* key) {
     AnimationEntry* entry = (AnimationEntry*)malloc(sizeof(AnimationEntry));
     if (entry) {
@@ -69,20 +61,20 @@ static AnimationEntry* create_animation_entry(const char* key) {
 
 static AnimationState* get_animation_state(EntityRender* render, const char* entity_id, const char* item_id) {
     if (!render || !entity_id || !item_id) return NULL;
-    
+
     char key[256];
     snprintf(key, sizeof(key), "%s_%s", entity_id, item_id);
-    
+
     unsigned long index = hash_string(key) % HASH_TABLE_SIZE;
     AnimationEntry* entry = render->anim_buckets[index];
-    
+
     while (entry) {
         if (strcmp(entry->key, key) == 0) {
             return &entry->state;
         }
         entry = entry->next;
     }
-    
+
     // Create new
     entry = create_animation_entry(key);
     if (entry) {
@@ -90,7 +82,7 @@ static AnimationState* get_animation_state(EntityRender* render, const char* ent
         render->anim_buckets[index] = entry;
         return &entry->state;
     }
-    
+
     return NULL;
 }
 
@@ -184,7 +176,7 @@ static void draw_dev_ui_box(Rectangle dest_rec, const char* entity_type) {
     if (strcmp(entity_type, "self") == 0) color = BLUE;
     else if (strcmp(entity_type, "other") == 0) color = ORANGE;
     else if (strcmp(entity_type, "bot") == 0) color = GREEN;
-    
+
     DrawRectangleLinesEx(dest_rec, 1.0f, color);
     DrawText(entity_type, (int)dest_rec.x, (int)dest_rec.y - 10, 10, color);
 }
@@ -407,7 +399,7 @@ void draw_entity_layers(
         // State Change Detection
         if (!anim->last_state_string ||
             strcmp(anim->last_state_string, dir_string) != 0) {
-            
+
             if (anim->last_state_string) free(anim->last_state_string);
             anim->last_state_string = strdup(dir_string);
             anim->frame_index = 0;

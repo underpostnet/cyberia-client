@@ -39,6 +39,7 @@ int serial_get_float(const cJSON* json, const char* key, float* out) {
     return 0;
 }
 
+/*
 int serial_get_double(const cJSON* json, const char* key, double* out) {
     if (!json || !key || !out) return -1;
 
@@ -48,6 +49,7 @@ int serial_get_double(const cJSON* json, const char* key, double* out) {
     *out = item->valuedouble;
     return 0;
 }
+*/
 
 int serial_get_bool(const cJSON* json, const char* key, bool* out) {
     if (!json || !key || !out) return -1;
@@ -132,6 +134,7 @@ int serial_deserialize_color_rgba(const cJSON* json, ColorRGBA* out) {
     return 0;
 }
 
+/*
 cJSON* serial_serialize_color_rgba(const ColorRGBA* color) {
     if (!color) return NULL;
 
@@ -145,6 +148,7 @@ cJSON* serial_serialize_color_rgba(const ColorRGBA* color) {
 
     return json;
 }
+*/
 
 int serial_deserialize_point(const cJSON* json, Vector2* out) {
     if (!json || !out) return -1;
@@ -484,6 +488,7 @@ int serial_deserialize_player_state(const cJSON* json, PlayerState* out) {
     return 0;
 }
 
+/*
 cJSON* serial_serialize_player_state(const PlayerState* player) {
     if (!player) return NULL;
 
@@ -502,6 +507,7 @@ cJSON* serial_serialize_player_state(const PlayerState* player) {
 
     return json;
 }
+*/
 
 /* ============================================================================
  * BotState Serialization/Deserialization
@@ -521,6 +527,7 @@ int serial_deserialize_bot_state(const cJSON* json, BotState* out) {
     return 0;
 }
 
+/*
 cJSON* serial_serialize_bot_state(const BotState* bot) {
     if (!bot) return NULL;
 
@@ -531,6 +538,7 @@ cJSON* serial_serialize_bot_state(const BotState* bot) {
 
     return json;
 }
+*/
 
 /* ============================================================================
  * WorldObject Serialization/Deserialization
@@ -578,6 +586,7 @@ int serial_deserialize_world_object(const cJSON* json, WorldObject* out) {
     return 0;
 }
 
+/*
 cJSON* serial_serialize_world_object(const WorldObject* obj) {
     if (!obj) return NULL;
 
@@ -606,6 +615,7 @@ cJSON* serial_serialize_world_object(const WorldObject* obj) {
 
     return json;
 }
+*/
 
 /* ============================================================================
  * Message Creation Functions
@@ -644,6 +654,7 @@ char* serial_create_player_action(float target_x, float target_y) {
     return str;
 }
 
+/*
 char* serial_create_ping(void) {
     cJSON* json = cJSON_CreateObject();
     if (!json) return NULL;
@@ -688,3 +699,4 @@ char* serial_create_item_action(const char* item_id, bool activate) {
 
     return str;
 }
+*/

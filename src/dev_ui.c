@@ -124,35 +124,6 @@ void dev_ui_update_network_stats(size_t download_bytes, size_t upload_bytes) {
     g_dev_ui.last_network_update = current_time;
 }
 
-float dev_ui_get_download_kbps(void) {
-    return g_dev_ui.download_kbps;
-}
-
-float dev_ui_get_upload_kbps(void) {
-    return g_dev_ui.upload_kbps;
-}
-
-void dev_ui_set_display_options(bool show_network, bool show_player,
-                                bool show_game, bool show_error) {
-    g_dev_ui.show_network_stats = show_network;
-    g_dev_ui.show_player_stats = show_player;
-    g_dev_ui.show_game_stats = show_game;
-    g_dev_ui.show_error_section = show_error;
-}
-
-void dev_ui_set_dimensions(int width, int height) {
-    g_dev_ui.dev_ui_width = width;
-    g_dev_ui.dev_ui_height = height;
-}
-
-void dev_ui_set_background_alpha(float alpha) {
-    if (alpha < 0.0f) alpha = 0.0f;
-    if (alpha > 1.0f) alpha = 1.0f;
-
-    g_dev_ui.background_alpha = alpha;
-    g_dev_ui.background_color.a = (unsigned char)(255 * alpha);
-}
-
 int dev_ui_get_active_stats_sum(const char* player_id) {
     if (!player_id) return 0;
 

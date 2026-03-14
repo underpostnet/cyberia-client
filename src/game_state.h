@@ -180,17 +180,6 @@ struct GameState {
 extern GameState g_game_state;
 
 /**
- * @brief Initialize game state structure
- * @return 0 on success, -1 on failure
- */
-int game_state_init(void);
-
-/**
- * @brief Cleanup game state and free resources
- */
-void game_state_cleanup(void);
-
-/**
  * @brief Update entity position interpolation
  * @param delta_time Time elapsed since last update
  */

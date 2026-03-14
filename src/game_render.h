@@ -225,24 +225,9 @@ void game_render_ui(void);
 void game_render_hud(void);
 
 /**
- * @brief Render player location info (map ID and coordinates)
- */
-void game_render_location_info(void);
-
-/**
  * @brief Render developer UI (if enabled)
  */
 void game_render_dev_ui(void);
-
-/**
- * @brief Render connection status indicator
- */
-void game_render_connection_status(void);
-
-/**
- * @brief Render performance information (FPS, etc.)
- */
-void game_render_performance_info(void);
 
 /**
  * @brief Render error messages
@@ -273,11 +258,6 @@ Texture2D* game_render_get_texture(const char* name);
  * @param name Texture name
  */
 void game_render_unload_texture(const char* name);
-
-/**
- * @brief Clear all textures from cache
- */
-void game_render_clear_texture_cache(void);
 
 // ============================================================================
 // Utility Functions

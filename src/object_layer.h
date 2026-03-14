@@ -245,18 +245,6 @@ ObjectLayer* create_object_layer(void);
 void free_object_layer(ObjectLayer* layer);
 
 /**
- * @brief Create a new ObjectLayerState with default values
- * @return Pointer to new ObjectLayerState, or NULL on allocation failure
- */
-ObjectLayerState* create_object_layer_state(void);
-
-/**
- * @brief Free an ObjectLayerState and all its resources
- * @param state The ObjectLayerState to free (may be NULL)
- */
-void free_object_layer_state(ObjectLayerState* state);
-
-/**
  * @brief Create a new AtlasSpriteSheetData with default (zeroed) values
  * @return Pointer to new AtlasSpriteSheetData, or NULL on allocation failure
  */
@@ -292,13 +280,5 @@ const DirectionFrameData* atlas_get_direction_frames(
  * @return The corresponding LedgerType, defaulting to LEDGER_TYPE_OFF_CHAIN
  */
 LedgerType ledger_type_from_string(const char* type_str);
-
-/**
- * @brief Convert a LedgerType enum value to its canonical string.
- *
- * @param type  The LedgerType value
- * @return Static string ("ERC20", "ERC721", or "OFF_CHAIN")
- */
-const char* ledger_type_to_string(LedgerType type);
 
 #endif // OBJECT_LAYER_H

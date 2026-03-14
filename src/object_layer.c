@@ -47,24 +47,6 @@ void free_object_layer(ObjectLayer* layer) {
     }
 }
 
-ObjectLayerState* create_object_layer_state(void) {
-    ObjectLayerState* state = (ObjectLayerState*)malloc(sizeof(ObjectLayerState));
-    if (state) {
-        memset(state, 0, sizeof(ObjectLayerState));
-        state->item_id[0] = '\0';
-        state->active = false;
-        state->quantity = 1; // Default quantity
-    }
-    return state;
-}
-
-void free_object_layer_state(ObjectLayerState* state) {
-    if (state) {
-        // No dynamic allocations to free since we use fixed-size arrays
-        free(state);
-    }
-}
-
 AtlasSpriteSheetData* create_atlas_sprite_sheet_data(void) {
     AtlasSpriteSheetData* data = (AtlasSpriteSheetData*)malloc(sizeof(AtlasSpriteSheetData));
     if (data) {
@@ -123,11 +105,3 @@ LedgerType ledger_type_from_string(const char* type_str) {
     return LEDGER_TYPE_OFF_CHAIN;
 }
 
-const char* ledger_type_to_string(LedgerType type) {
-    switch (type) {
-        case LEDGER_TYPE_ERC20:     return "ERC20";
-        case LEDGER_TYPE_ERC721:    return "ERC721";
-        case LEDGER_TYPE_OFF_CHAIN: return "OFF_CHAIN";
-        default:                    return "OFF_CHAIN";
-    }
-}

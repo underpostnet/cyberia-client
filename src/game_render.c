@@ -576,17 +576,6 @@ void game_render_ui(void) {
     }
 }
 
-void game_render_location_info(void) {
-    // This function is no longer used - modal_player handles this
-}
-
-void game_render_connection_status(void) {
-    // This function is no longer used - modal_player handles this
-}
-
-void game_render_performance_info(void) {
-    // This function is no longer used - modal_player handles this
-}
 
 void game_render_error_messages(void) {
     if (g_game_state.last_error_message[0] != '\0') {
@@ -762,6 +751,3 @@ void game_render_cleanup(void) {
     }
 }
 
-void game_render_clear_texture_cache(void) {
-    // Texture cache cleanup (if implemented)
-}

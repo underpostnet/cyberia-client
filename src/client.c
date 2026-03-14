@@ -90,11 +90,6 @@ int client_send(const char* message) {
     return result;
 }
 
-// Get the last received message
-const char* client_get_last_message(void) {
-    return client_state.last_message;
-}
-
 // Get network statistics
 void client_get_network_stats(size_t* bytes_downloaded, size_t* bytes_uploaded) {
     if (bytes_downloaded) {

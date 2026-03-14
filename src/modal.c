@@ -76,22 +76,6 @@ int modal_add_line(Modal* modal, const char* text, Color color) {
     return 0;
 }
 
-int modal_set_line(Modal* modal, int line_index, const char* text, Color color) {
-    if (!modal || !text) return -1;
-    if (line_index < 0 || line_index >= MODAL_MAX_LINES) return -1;
-    
-    strncpy(modal->lines[line_index].text, text, MODAL_MAX_LINE_LENGTH - 1);
-    modal->lines[line_index].text[MODAL_MAX_LINE_LENGTH - 1] = '\0';
-    modal->lines[line_index].color = color;
-    modal->lines[line_index].visible = true;
-    
-    if (line_index >= modal->line_count) {
-        modal->line_count = line_index + 1;
-    }
-    
-    return 0;
-}
-
 void modal_update_struct(Modal* modal, float delta_time) {
     if (!modal) return;
     
@@ -214,11 +198,6 @@ void modal_draw_struct(const Modal* modal, int screen_width, int screen_height) 
     }
 }
 
-void modal_set_visible(Modal* modal, bool visible) {
-    if (!modal) return;
-    modal->visible = visible;
-}
-
 void modal_set_style(Modal* modal, Color bg_color, Color border_color, float alpha) {
     if (!modal) return;
     
@@ -228,13 +207,6 @@ void modal_set_style(Modal* modal, Color bg_color, Color border_color, float alp
     if (alpha < 0.0f) alpha = 0.0f;
     if (alpha > 1.0f) alpha = 1.0f;
     modal->background_alpha = alpha;
-}
-
-void modal_set_dimensions(Modal* modal, int min_width, int min_height) {
-    if (!modal) return;
-    
-    modal->min_width = min_width;
-    modal->min_height = min_height;
 }
 
 void modal_set_position(Modal* modal, int position_mode, 
@@ -247,14 +219,6 @@ void modal_set_position(Modal* modal, int position_mode,
     modal->margin_right = margin_right;
     modal->margin_bottom = margin_bottom;
     modal->margin_left = margin_left;
-}
-
-void modal_set_custom_position(Modal* modal, int x, int y) {
-    if (!modal) return;
-    
-    modal->position_mode = MODAL_POS_CUSTOM;
-    modal->custom_x = x;
-    modal->custom_y = y;
 }
 
 void modal_set_text_alignment(Modal* modal, int align) {
