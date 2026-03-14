@@ -21,3 +21,4 @@ bin/
 build/
 engine-cyberia/
 cyberia-server/
+.claude/
