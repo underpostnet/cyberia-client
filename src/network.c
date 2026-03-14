@@ -102,8 +102,6 @@ int ws_is_connected(WebSocketClient* client) {
 
 // Internal event handler: onopen
 static EM_BOOL on_open_internal(int eventType, const EmscriptenWebSocketOpenEvent* event, void* userData) {
-    (void)eventType;
-    (void)event;
     WebSocketHandlers* handlers = (WebSocketHandlers*)userData;
 
     // Call user callback
@@ -116,10 +114,7 @@ static EM_BOOL on_open_internal(int eventType, const EmscriptenWebSocketOpenEven
 
 // Internal event handler: onmessage
 static EM_BOOL on_message_internal(int eventType, const EmscriptenWebSocketMessageEvent* event, void* userData) {
-    (void)eventType;
     WebSocketHandlers* handlers = (WebSocketHandlers*)userData;
-
-
 
     // Call user callback with message data
     if (handlers && handlers->on_message) {
@@ -131,8 +126,6 @@ static EM_BOOL on_message_internal(int eventType, const EmscriptenWebSocketMessa
 
 // Internal event handler: onerror
 static EM_BOOL on_error_internal(int eventType, const EmscriptenWebSocketErrorEvent* event, void* userData) {
-    (void)eventType;
-    (void)event;
     WebSocketHandlers* handlers = (WebSocketHandlers*)userData;
 
     fprintf(stderr, "[ERROR] WebSocket error occurred\n");
@@ -147,7 +140,6 @@ static EM_BOOL on_error_internal(int eventType, const EmscriptenWebSocketErrorEv
 
 // Internal event handler: onclose
 static EM_BOOL on_close_internal(int eventType, const EmscriptenWebSocketCloseEvent* event, void* userData) {
-    (void)eventType;
     WebSocketHandlers* handlers = (WebSocketHandlers*)userData;
 
     // Only log unexpected closures

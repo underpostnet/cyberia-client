@@ -96,7 +96,6 @@ void modal_update_struct(Modal* modal, float delta_time) {
     if (!modal) return;
     
     // Optional: Add fade in/out animations here if needed
-    (void)delta_time; // Unused for now
 }
 
 void modal_draw_struct(const Modal* modal, int screen_width, int screen_height) {

@@ -18,11 +18,6 @@ void js_init_engine_api(const char* api_base_url);
 
 // Main event loop (called every frame)
 void main_loop(void) {
-    // Check if window should close
-    if (WindowShouldClose()) {
-        emscripten_cancel_main_loop();
-    }
-
     // Update and render the frame
     render_update();
 }
