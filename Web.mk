@@ -78,14 +78,7 @@ $(BUILD_DIR)/cJSON.o: $(LIBS_DIR)/cJSON/cJSON.c
 	$(CC) -c $< -o $@ $(CFLAGS)
 
 libraylib:
-ifeq ($(OS),Windows_NT)
-	@cp emar.bat emcc.bat $(RAYLIB_PATH)/src
-endif
 	make -j 8 -C $(RAYLIB_PATH)/src raylib \
 		PLATFORM=PLATFORM_WEB \
 		RAYLIB_BUILD_MODE=$(BUILD_MODE) \
-		RAYLIB_LIBTYPE=STATIC \
-		$(if $(filter $(BUILD_MODE),RELEASE), 2>/dev/null)
-ifeq ($(OS),Windows_NT)
-	@rm $(RAYLIB_PATH)/src/emar.bat $(RAYLIB_PATH)/src/emcc.bat
-endif
+		RAYLIB_LIBTYPE=STATIC
