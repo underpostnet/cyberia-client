@@ -1,7 +1,6 @@
 #include "game_render.h"
 #include "game_state.h"
 #include "dev_ui.h"
-#include "modal.h"
 #include "modal_player.h"
 #include "texture_manager.h"
 #include "object_layers_management.h"

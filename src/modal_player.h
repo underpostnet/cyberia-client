@@ -2,7 +2,6 @@
 #define MODAL_PLAYER_H
 
 #include "modal.h"
-#include <raylib.h>
 #include <stdbool.h>
 
 /**

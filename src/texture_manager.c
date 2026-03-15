@@ -1,9 +1,8 @@
 #include "texture_manager.h"
 #include <string.h>
+#include <stdlib.h>
 #include <stdio.h>
 #include "helper.h"
-
-#include <emscripten.h>
 
 // External JavaScript functions for async HTTP requests
 extern void js_start_fetch_binary(const char* url, int request_id);

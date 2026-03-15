@@ -1,11 +1,9 @@
 #include "entity_render.h"
-#include "game_state.h"
 #include "texture_manager.h"
 #include "object_layers_management.h"
 #include <stdlib.h>
 #include <string.h>
 #include <stdio.h>
-#include <math.h>
 #include "helper.h"
 
 #define HASH_TABLE_SIZE 1024

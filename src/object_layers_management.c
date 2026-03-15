@@ -6,8 +6,6 @@
 #include <string.h>
 #include "helper.h"
 
-#include <emscripten/emscripten.h>
-
 // External JS functions
 extern char* js_fetch_object_layer(const char* item_id);
 extern char* js_fetch_atlas_sprite_sheet(const char* item_key);

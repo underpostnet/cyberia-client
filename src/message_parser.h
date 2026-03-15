@@ -3,8 +3,6 @@
 
 #include "game_state.h"
 #include "serial.h"
-#include <stdbool.h>
-#include <stddef.h>
 
 /**
  * @file message_parser.h

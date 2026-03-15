@@ -7,8 +7,6 @@
 #include <stdio.h>
 #include <string.h>
 
-#include <emscripten/emscripten.h>
-
 // Global client state
 static struct {
     WebSocketClient ws_client;

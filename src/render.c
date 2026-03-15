@@ -6,8 +6,6 @@
 #include "raylib.h"
 #include <stdio.h>
 
-#include <emscripten/emscripten.h>
-
 
 // Default configuration for fallback rendering
 // Forward declaration
