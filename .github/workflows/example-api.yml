@@ -1,0 +1,14 @@
+name: Run on API call
+on:
+  workflow_dispatch:
+    inputs:
+      input1: {}
+      input2:
+          type: string
+
+jobs:
+  print:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Print string
+        run: echo "Workflow Called with ${{ inputs.input1 }} and ${{ inputs.input2 }}"
