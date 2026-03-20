@@ -218,9 +218,9 @@ start_server() {
   (
     cd "$PROJECT_ROOT"
     if [[ "$ENVIRONMENT_SLUG" == "production" ]]; then
-      run make -f Web.mk serve_production "${make_args[@]}"
+      run make -f Web.mk serve-production "${make_args[@]}"
     else
-      run make -f Web.mk serve_development BUILD_MODE="$BUILD_MODE" "${make_args[@]}"
+      run make -f Web.mk serve-development BUILD_MODE="$BUILD_MODE" "${make_args[@]}"
     fi
   )
 }

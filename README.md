@@ -36,10 +36,10 @@ Output goes to `bin/platform_web/debug/` or `bin/platform_web/release/`.
 
 ```bash
 # Development server (port 8081)
-make -f Web.mk serve_development
+make -f Web.mk serve-development
 
 # Production server (port 8081, release build)
-make -f Web.mk serve_production
+make -f Web.mk serve-production
 ```
 
 Override the port with `DEV_PORT=` or `PROD_PORT=`.

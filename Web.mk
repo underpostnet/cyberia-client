@@ -5,8 +5,8 @@ DEV_PORT		?= 8082
 PROD_PORT		?= 8081
 
 #---------------------------------------------------------------------------------------------
-BUILD_DIR		:= $(call lc,$(BUILD_DIR)/web/$(BUILD_MODE))
-OUTPUT_DIR		:= $(call lc,$(OUTPUT_DIR)/web/$(BUILD_MODE))
+TARGET_BUILD_DIR		:= $(call lc,$(BUILD_DIR)/web/$(BUILD_MODE))
+TARGET_OUTPUT_DIR		:= $(call lc,$(OUTPUT_DIR)/web/$(BUILD_MODE))
 
 #---------------------------------------------------------------------------------------------
 # Specific compiler flags
@@ -35,45 +35,45 @@ LDFLAGS += $(RAYLIB_PATH)/src/libraylib.web.a
 # Web target html container
 WEB_SHELL := $(SRC_DIR)/shell.html
 
-WEB_ARTIFACTS := $(OUTPUT_DIR)/index.html
-ARTIFACTS_ARCHIVES := --preload-file $(SRC_DIR)/public/splash.png@splash.png
+OUTPUT := $(TARGET_OUTPUT_DIR)/index.html
+ASSETS := $(SRC_DIR)/public/splash.png@splash.png
 
 #---------------------------------------------------------------------------------------------
 # Util variables
-OBJS	:= $(SRC_FILES:$(SRC_DIR)/%=$(BUILD_DIR)/%.o)
-OBJS	+= $(BUILD_DIR)/cJSON.o
+OBJS	:= $(SRC_FILES:$(SRC_DIR)/%=$(TARGET_BUILD_DIR)/%.o)
+OBJS	+= $(TARGET_BUILD_DIR)/cJSON.o
 
 #---------------------------------------------------------------------------------------------
 # Specific targets
 
-.PHONY: web serve_development serve_production clean
+.PHONY: all serve-development serve-production
 
-web: $(PROJECT_NAME)
+all:link
 
-serve_development: web
+serve-development: all
 	-fuser -k $(DEV_PORT)/tcp 2>/dev/null; sleep 0.3
-	python3 -m http.server $(DEV_PORT) --directory $(OUTPUT_DIR)
+	python3 -m http.server $(DEV_PORT) --directory $(TARGET_OUTPUT_DIR)
 
-serve_production:
-	$(MAKE) -f Web.mk serve_development BUILD_MODE=RELEASE DEV_PORT=$(PROD_PORT)
+serve-production:
+	make -f Web.mk serve-development BUILD_MODE=RELEASE DEV_PORT=$(PROD_PORT)
 
-$(PROJECT_NAME): libraylib $(OBJS)
-	@mkdir -p $(OUTPUT_DIR)
-	@cp $(SRC_DIR)/public/favicon.ico $(OUTPUT_DIR)/favicon.ico
-	$(CC) -o $(WEB_ARTIFACTS) $(OBJS) $(LDFLAGS) \
+link: libraylib $(OBJS)
+	@mkdir -p $(TARGET_OUTPUT_DIR)
+	@cp $(SRC_DIR)/public/favicon.ico $(TARGET_OUTPUT_DIR)/favicon.ico
+	$(CC) -o $(OUTPUT) $(OBJS) $(LDFLAGS) \
 		-s USE_GLFW=3 \
 		--shell-file $(WEB_SHELL) \
 		-s ALLOW_MEMORY_GROWTH=1 \
 		-s INITIAL_MEMORY=67108864 \
 		-s STACK_SIZE=16777216 \
 		-s ASYNCIFY_STACK_SIZE=1048576 \
-		$(ARTIFACTS_ARCHIVES)
+		--preload-file $(ASSETS)
 
-$(BUILD_DIR)/%.c.o: $(SRC_DIR)/%.c
+$(TARGET_BUILD_DIR)/%.c.o: $(SRC_DIR)/%.c
 	@mkdir -p $(@D)
 	$(CC) -c $< -o $@ $(CFLAGS)
 
-$(BUILD_DIR)/cJSON.o: $(LIBS_DIR)/cJSON/cJSON.c
+$(TARGET_BUILD_DIR)/cJSON.o: $(CJSON_PATH)/cJSON.c
 	@mkdir -p $(@D)
 	$(CC) -c $< -o $@ $(CFLAGS)
 
@@ -82,3 +82,11 @@ libraylib:
 		PLATFORM=PLATFORM_WEB \
 		RAYLIB_BUILD_MODE=$(BUILD_MODE) \
 		RAYLIB_LIBTYPE=STATIC
+
+clean:
+	-rm -rf $(TARGET_BUILD_DIR) $(TARGET_OUTPUT_DIR)
+
+# Remove when safe to
+serve_development: serve-development
+serve_production: serve-production
+web: all
