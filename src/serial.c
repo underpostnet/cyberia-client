@@ -465,8 +465,7 @@ int serial_deserialize_player_state(const cJSON* json, PlayerState* out) {
         return -1;
     }
 
-    // Map ID
-    out->map_id = serial_get_int_default(json, "MapID", 0);
+    serial_get_string_default(json, "MapCode", out->map_code, sizeof(out->map_code), "");
 
     // Target position
     cJSON* target_obj = serial_get_object(json, "targetPos");
@@ -495,7 +494,7 @@ cJSON* serial_serialize_player_state(const PlayerState* player) {
     cJSON* json = serial_serialize_entity_state(&player->base);
     if (!json) return NULL;
 
-    cJSON_AddNumberToObject(json, "MapID", player->map_id);
+    cJSON_AddStringToObject(json, "MapCode", player->map_code);
 
     cJSON* target = serial_serialize_point(&player->target_pos);
     if (target) cJSON_AddItemToObject(json, "targetPos", target);

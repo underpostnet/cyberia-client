@@ -23,6 +23,8 @@
 #define MAX_PATH_POINTS 100
 #define MAX_MESSAGE_SIZE 65536
 #define MAX_ID_LENGTH 64
+#define MAX_SKILL_ENTRIES 64
+#define MAX_LOGIC_EVENT_IDS 8
 
 
 
@@ -58,12 +60,13 @@ struct EntityState {
     float max_life;
     float respawn_in;
     double last_update;
+    ColorRGBA color; /* entity-specific color sent by server (0 = use palette default) */
 };
 
 // Player state structure
 struct PlayerState {
     EntityState base; // Inheritance simulation
-    int map_id;
+    char map_code[MAX_ID_LENGTH]; /* map code string, e.g. "fallback-map-0" */
     Vector2 path[MAX_PATH_POINTS];
     int path_count;
     Vector2 target_pos;
@@ -108,6 +111,13 @@ typedef struct {
     Color floor;
     Color bot;
 } GameColors;
+
+// Skill map entry received from init_data: one trigger item → N logic event IDs
+typedef struct {
+    char trigger_item_id[MAX_ID_LENGTH];
+    char logic_event_ids[MAX_LOGIC_EVENT_IDS][MAX_ID_LENGTH];
+    int  logic_event_count;
+} SkillEntry;
 
 // Main game state structure
 struct GameState {
@@ -159,6 +169,8 @@ struct GameState {
     // UI state
     char associated_item_ids[MAX_ENTITIES][MAX_ITEM_ID_LENGTH];
     int associated_item_count;
+    SkillEntry skill_map[MAX_SKILL_ENTRIES];
+    int skill_map_count;
     char last_error_message[MAX_MESSAGE_SIZE];
     double error_display_time;
     size_t download_size_bytes;

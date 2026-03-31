@@ -80,7 +80,8 @@ libraylib:
 	make -j 8 -C $(RAYLIB_PATH)/src raylib \
 		PLATFORM=PLATFORM_WEB \
 		RAYLIB_BUILD_MODE=$(BUILD_MODE) \
-		RAYLIB_LIBTYPE=STATIC
+		RAYLIB_LIBTYPE=STATIC \
+		CFLAGS_EXTRA="-Wno-deprecated-pragma -Wno-tautological-compare"
 
 clean:
 	-rm -rf $(TARGET_BUILD_DIR) $(TARGET_OUTPUT_DIR)

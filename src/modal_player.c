@@ -59,7 +59,7 @@ void modal_player_update(float delta_time) {
 
     // Get game state data
     bool init_received = g_game_state.init_received;
-    int map_id = g_game_state.player.map_id;
+    const char* map_code = g_game_state.player.map_code;
     Vector2 pos = g_game_state.player.base.interp_pos;
 
     // Get connection status
@@ -77,7 +77,7 @@ void modal_player_update(float delta_time) {
     // Add map ID line
     if (g_modal_player.show_map) {
         if (init_received) {
-            snprintf(line_buffer, sizeof(line_buffer), "Map: %d", map_id);
+            snprintf(line_buffer, sizeof(line_buffer), "Map: %s", map_code[0] ? map_code : "--");
         } else {
             snprintf(line_buffer, sizeof(line_buffer), "Map: --");
         }

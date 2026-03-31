@@ -141,6 +141,12 @@ static void decode_player_entity(BinReader* r, uint8_t flags) {
     } else {
         p->base.respawn_in = 0.0f;
     }
+    if (flags & BIN_FLAG_HAS_COLOR) {
+        p->base.color.r = br_u8(r);
+        p->base.color.g = br_u8(r);
+        p->base.color.b = br_u8(r);
+        p->base.color.a = br_u8(r);
+    }
     p->base.object_layer_count = read_item_ids(
         r, p->base.object_layers, MAX_OBJECT_LAYERS);
 }
@@ -190,6 +196,12 @@ static void decode_bot_entity(BinReader* r, uint8_t flags) {
     }
     if (flags & BIN_FLAG_HAS_BEHAVIOR) {
         br_string(r, b->behavior, MAX_BEHAVIOR_LENGTH);
+    }
+    if (flags & BIN_FLAG_HAS_COLOR) {
+        b->base.color.r = br_u8(r);
+        b->base.color.g = br_u8(r);
+        b->base.color.b = br_u8(r);
+        b->base.color.a = br_u8(r);
     }
     b->base.object_layer_count = read_item_ids(
         r, b->base.object_layers, MAX_OBJECT_LAYERS);
@@ -337,8 +349,8 @@ static void decode_self_player(BinReader* r, uint8_t flags) {
     /* sumStatsLimit */
     gs->sum_stats_limit = (int)br_u16(r);
 
-    /* mapID */
-    p->map_id = (int)br_u16(r);
+    /* mapCode — length-prefixed string */
+    br_string(r, p->map_code, MAX_ID_LENGTH);
 
     /* path */
     uint8_t path_len = br_u8(r);
@@ -374,7 +386,8 @@ int binary_aoi_process(const uint8_t* data, size_t length) {
     GameState* gs = &g_game_state;
 
     uint8_t msg_type = br_u8(&r);
-    /* uint16_t map_id = */ br_u16(&r);
+    /* u16 reserved field — always 0, ignore */
+    br_u16(&r);
     uint16_t entity_count = br_u16(&r);
 
     if (msg_type != BIN_MSG_AOI_UPDATE && msg_type != BIN_MSG_FULL_AOI) {

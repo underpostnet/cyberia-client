@@ -501,28 +501,55 @@ void game_render_entities(void) {
         }
 
         if (entity_base && entity_id) {
-            // Convert object layers to pointer array
-            for (int j = 0; j < layers_count && j < MAX_OBJECT_LAYERS; j++) {
-                temp_layers[j] = &entity_base->object_layers[j];
-            }
+            if (layers_count == 0) {
+                /* No object layers — draw a solid colored rectangle as fallback.
+                 * Use the entity's own color if the server sent one (alpha > 0),
+                 * otherwise fall back to the matching palette color. */
+                Color fallback_color;
+                if (entry->type == ENTITY_TYPE_BOT) {
+                    ColorRGBA ec = entry->data.bot->base.color;
+                    fallback_color = (ec.a > 0)
+                        ? (Color){ ec.r, ec.g, ec.b, ec.a }
+                        : g_game_state.colors.bot;
+                } else if (entry->is_main_player) {
+                    fallback_color = g_game_state.colors.player;
+                } else {
+                    ColorRGBA ec = entity_base->color;
+                    fallback_color = (ec.a > 0)
+                        ? (Color){ ec.r, ec.g, ec.b, ec.a }
+                        : g_game_state.colors.other_player;
+                }
+                Rectangle rect = {
+                    entity_base->interp_pos.x * cell_size,
+                    entity_base->interp_pos.y * cell_size,
+                    entity_base->dims.x * cell_size,
+                    entity_base->dims.y * cell_size
+                };
+                DrawRectangleRec(rect, fallback_color);
+            } else {
+                // Convert object layers to pointer array
+                for (int j = 0; j < layers_count && j < MAX_OBJECT_LAYERS; j++) {
+                    temp_layers[j] = &entity_base->object_layers[j];
+                }
 
-            // Use EntityRender system to draw entity with object layers
-            // This may load textures which can take time - that's why we unlocked earlier
-            draw_entity_layers(
-                g_entity_render,
-                entity_id,
-                entity_base->interp_pos.x,
-                entity_base->interp_pos.y,
-                entity_base->dims.x,
-                entity_base->dims.y,
-                entity_base->direction,
-                entity_base->mode,
-                temp_layers,
-                layers_count,
-                entity_type_str,
-                dev_ui,
-                cell_size
-            );
+                // Use EntityRender system to draw entity with object layers
+                // This may load textures which can take time - that's why we unlocked earlier
+                draw_entity_layers(
+                    g_entity_render,
+                    entity_id,
+                    entity_base->interp_pos.x,
+                    entity_base->interp_pos.y,
+                    entity_base->dims.x,
+                    entity_base->dims.y,
+                    entity_base->direction,
+                    entity_base->mode,
+                    temp_layers,
+                    layers_count,
+                    entity_type_str,
+                    dev_ui,
+                    cell_size
+                );
+            }
         }
     }
 }

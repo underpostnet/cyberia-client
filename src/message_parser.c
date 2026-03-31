@@ -202,6 +202,7 @@ int message_parser_parse_init_data(const cJSON* json_root) {
 
     // Parse game settings
     g_game_state.fps = serial_get_int_default(payload, "fps", 60);
+    if (g_game_state.fps > 0) SetTargetFPS(g_game_state.fps);
     g_game_state.interpolation_ms = serial_get_int_default(payload, "interpolationMs", 200);
     g_game_state.aoi_radius = serial_get_float_default(payload, "aoiRadius", 15.0f);
 
@@ -239,6 +240,36 @@ int message_parser_parse_init_data(const cJSON* json_root) {
         g_game_state.colors.obstacle = (Color){128, 128, 128, 255};
         g_game_state.colors.portal = (Color){255, 0, 255, 255};
         g_game_state.colors.floor = (Color){100, 100, 100, 255};
+    }
+
+    // Parse skill map: { "triggerItemId": ["logicEventId1", ...], ... }
+    g_game_state.skill_map_count = 0;
+    cJSON* skill_map_json = cJSON_GetObjectItem(payload, "skillMap");
+    if (skill_map_json && cJSON_IsObject(skill_map_json)) {
+        cJSON* entry = NULL;
+        cJSON_ArrayForEach(entry, skill_map_json) {
+            if (g_game_state.skill_map_count >= MAX_SKILL_ENTRIES) break;
+            if (!entry->string || !cJSON_IsArray(entry)) continue;
+
+            SkillEntry* se = &g_game_state.skill_map[g_game_state.skill_map_count];
+            strncpy(se->trigger_item_id, entry->string, MAX_ID_LENGTH - 1);
+            se->trigger_item_id[MAX_ID_LENGTH - 1] = '\0';
+            se->logic_event_count = 0;
+
+            cJSON* sid = NULL;
+            cJSON_ArrayForEach(sid, entry) {
+                if (se->logic_event_count >= MAX_LOGIC_EVENT_IDS) break;
+                if (!cJSON_IsString(sid)) continue;
+                strncpy(
+                    se->logic_event_ids[se->logic_event_count],
+                    cJSON_GetStringValue(sid),
+                    MAX_ID_LENGTH - 1
+                );
+                se->logic_event_ids[se->logic_event_count][MAX_ID_LENGTH - 1] = '\0';
+                se->logic_event_count++;
+            }
+            g_game_state.skill_map_count++;
+        }
     }
 
     // Mark as initialized

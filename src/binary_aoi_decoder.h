@@ -33,6 +33,7 @@
 #define BIN_FLAG_HAS_LIFE      0x10
 #define BIN_FLAG_HAS_RESPAWN   0x20
 #define BIN_FLAG_HAS_BEHAVIOR  0x40
+#define BIN_FLAG_HAS_COLOR     0x80
 
 /**
  * @brief Process a binary AOI message from the server.

@@ -34,7 +34,7 @@ else
   BUILD_MODE="DEBUG"
 fi
 
-PROJECT_ROOT="${PROJECT_ROOT:-/home/dd/cyberia-client}"
+PROJECT_ROOT="${PROJECT_ROOT:-$(cd "$(dirname "$0")/.." && pwd)}"
 PROJECT_PARENT="$(dirname "$PROJECT_ROOT")"
 REPO_SLUG="${REPO_SLUG:-underpostnet/cyberia-client}"
 SECRETS_FILE="${SECRETS_FILE:-/etc/config/.env.${ENVIRONMENT_SLUG}}"

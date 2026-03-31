@@ -33,7 +33,7 @@ Connection URLs are compile-time constants in `src/config.h`:
 
 ```c
 // Development
-static const char* WS_URL = "ws://localhost:8080/ws";
+static const char* WS_URL = "ws://localhost:8081/ws";
 static const char* API_BASE_URL = "http://localhost:4005";
 
 // Production
@@ -62,14 +62,14 @@ Output goes to `bin/web/debug/` or `bin/web/release/`.
 ## Development
 
 ```bash
-# 1. Edit src/config.h → set WS_URL = "ws://localhost:8080/ws"
+# 1. Edit src/config.h → set WS_URL = "ws://localhost:8081/ws"
 # 2. Build and serve
 source ~/.emsdk/emsdk_env.sh
 make -f Web.mk clean && make -f Web.mk web
 make -f Web.mk serve-development   # http://localhost:8082
 ```
 
-Requires the Go game server running on `:8080` (see [cyberia-server](../cyberia-server/README.md)).
+Requires the Go game server running on `:8081` (see [cyberia-server](../cyberia-server/README.md)).
 
 ### Full local stack
 
@@ -77,7 +77,7 @@ Requires the Go game server running on `:8080` (see [cyberia-server](../cyberia-
 # Terminal 1: Engine (gRPC :50051 + REST :4005)
 cd /home/dd/engine && npm run dev
 
-# Terminal 2: Go server (WS :8080)
+# Terminal 2: Go server (WS :8081)
 cd /home/dd/engine/cyberia-server && go run main.go
 
 # Terminal 3: C/WASM client (HTTP :8082)
@@ -92,7 +92,7 @@ make -f Web.mk serve-development
 | -------------- | ----- | --------- |
 | Engine Express | 4005  | HTTP      |
 | Engine gRPC    | 50051 | gRPC      |
-| Go server      | 8080  | HTTP + WS |
+| Go server      | 8081  | HTTP + WS |
 | WASM client    | 8082  | HTTP      |
 
 ## Production
@@ -111,7 +111,7 @@ The Go server can serve the WASM client directly:
 
 ```bash
 cp -r bin/web/release/* /home/dd/engine/cyberia-server/public/
-# Then: STATIC_DIR=./public go run main.go → serves WS + WASM on :8080
+# Then: STATIC_DIR=./public go run main.go → serves WS + WASM on :8081
 ```
 
 ### Container deployment

@@ -202,7 +202,7 @@ void dev_ui_draw(int screen_width, int screen_height, int hud_occupied) {
 
     // Get player information
     const char* player_id = g_game_state.player_id[0] != '\0' ? g_game_state.player_id : "N/A";
-    int map_id = g_game_state.player.map_id;
+    const char* map_code = g_game_state.player.map_code[0] != '\0' ? g_game_state.player.map_code : "--";
     const char* mode_str = mode_to_string(g_game_state.player.base.mode);
     const char* dir_str = direction_to_string(g_game_state.player.base.direction);
     Vector2 player_pos = g_game_state.player.base.interp_pos;
@@ -219,7 +219,7 @@ void dev_ui_draw(int screen_width, int screen_height, int hud_occupied) {
     int line_count = 0;
 
     snprintf(text_lines[line_count++], 128, "Player ID: %s", player_id);
-    snprintf(text_lines[line_count++], 128, "Map ID: %d", map_id);
+    snprintf(text_lines[line_count++], 128, "Map: %s", map_code);
     snprintf(text_lines[line_count++], 128, "Mode: %s | Direction: %s", mode_str, dir_str);
     snprintf(text_lines[line_count++], 128, "Pos: (%.2f, %.2f)", player_pos.x, player_pos.y);
     snprintf(text_lines[line_count++], 128, "Target: (%.0f, %.0f)", target_pos.x, target_pos.y);
