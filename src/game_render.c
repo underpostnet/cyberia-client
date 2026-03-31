@@ -64,6 +64,10 @@ int game_render_init(int screen_width, int screen_height) {
     return 0;
 }
 
+ObjectLayersManager* game_render_get_obj_layers_mgr(void) {
+    return g_object_layers_manager;
+}
+
 void game_render_set_screen_size(int width, int height) {
     g_renderer.screen_width = width;
     g_renderer.screen_height = height;

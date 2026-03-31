@@ -3,6 +3,7 @@
 #include "config.h"
 #include "game_state.h"
 #include "message_parser.h"
+#include "binary_aoi_decoder.h"
 #include "serial.h"
 #include <stdio.h>
 #include <string.h>
@@ -20,7 +21,7 @@ static struct {
 
 // Forward declarations of event callbacks
 static void on_websocket_open(void* user_data);
-static void on_websocket_message(const char* data, int length, void* user_data);
+static void on_websocket_message(const char* data, int length, int is_binary, void* user_data);
 static void on_websocket_error(void* user_data);
 static void on_websocket_close(int code, const char* reason, void* user_data);
 
@@ -120,7 +121,7 @@ static void on_websocket_open(void* user_data) {
 }
 
 // Called when WebSocket message is received
-static void on_websocket_message(const char* data, int length, void* user_data) {
+static void on_websocket_message(const char* data, int length, int is_binary, void* user_data) {
     if (!data || length <= 0) {
         return;
     }
@@ -133,19 +134,24 @@ static void on_websocket_message(const char* data, int length, void* user_data) 
     // Update dev UI with network stats
     g_game_state.download_size_bytes = client_state.bytes_downloaded;
 
-    // Check if message fits in buffer
-    if (length >= MAX_MESSAGE_SIZE) {
-        fprintf(stderr, "[WARN] Message too large (%d bytes), truncating\n", length);
-        length = MAX_MESSAGE_SIZE - 1;
-    }
+    if (is_binary) {
+        // Binary message → binary AOI decoder
+        if (binary_aoi_process((const uint8_t*)data, (size_t)length) != 0) {
+            fprintf(stderr, "[ERROR] Failed to process binary AOI message\n");
+        }
+    } else {
+        // Text message → JSON parser (init_data, skill_item_ids, etc.)
+        if (length >= MAX_MESSAGE_SIZE) {
+            fprintf(stderr, "[WARN] Message too large (%d bytes), truncating\n", length);
+            length = MAX_MESSAGE_SIZE - 1;
+        }
 
-    // Store the message with proper null termination
-    memcpy(client_state.last_message, data, length);
-    client_state.last_message[length] = '\0';
+        memcpy(client_state.last_message, data, length);
+        client_state.last_message[length] = '\0';
 
-    // Process the message through the game state system
-    if (message_parser_process(client_state.last_message) != 0) {
-        fprintf(stderr, "[ERROR] Failed to process message\n");
+        if (message_parser_process(client_state.last_message) != 0) {
+            fprintf(stderr, "[ERROR] Failed to process message\n");
+        }
     }
 }
 

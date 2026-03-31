@@ -6,11 +6,7 @@
 #include <string.h>
 #include "helper.h"
 
-// External JS functions
-extern char* js_fetch_object_layer(const char* item_id);
-extern char* js_fetch_atlas_sprite_sheet(const char* item_key);
-
-// External JS functions for async binary fetching (reused for atlas PNG blobs)
+// External JS functions for async binary fetching (atlas PNG blobs only)
 extern void js_start_fetch_binary(const char* url, int request_id);
 extern unsigned char* js_get_fetch_result(int request_id, int* size);
 
@@ -166,66 +162,6 @@ static void parse_object_layer_data(cJSON* data_json, ObjectLayerData* data) {
     parse_render(cJSON_GetObjectItem(data_json, "render"), &data->render);
 }
 
-static ObjectLayer* parse_object_layer_json(const char* json_str) {
-    if (!json_str) return NULL;
-
-    cJSON* root = cJSON_Parse(json_str);
-    if (!root) {
-        fprintf(stderr, "[ERROR] Failed to parse ObjectLayer JSON\n");
-        return NULL;
-    }
-
-    ObjectLayer* layer = create_object_layer();
-    if (!layer) {
-        cJSON_Delete(root);
-        return NULL;
-    }
-
-    // Extract sha256
-    char* sha = json_get_string_safe(root, "sha256", "");
-    strncpy(layer->sha256, sha, 64);
-    free(sha);
-
-    // Extract data (contains item, stats, etc.)
-    cJSON* data = cJSON_GetObjectItem(root, "data");
-    parse_object_layer_data(data, &layer->data);
-
-    // Extract frame_duration and is_stateless from the populated
-    // objectLayerRenderFramesId reference.  The engine API response includes:
-    //   "objectLayerRenderFramesId": { "_id": "...", "frame_duration": 250, "is_stateless": false }
-    // These are NOT part of data.render (which now holds IPFS CIDs only);
-    // they live on the separate ObjectLayerRenderFrames collection and are
-    // populated into the response by Mongoose .populate().
-    cJSON* render_frames_ref = cJSON_GetObjectItem(root, "objectLayerRenderFramesId");
-    if (render_frames_ref && cJSON_IsObject(render_frames_ref)) {
-        int fd = json_get_int_safe(render_frames_ref, "frame_duration", 0);
-        if (fd > 0) {
-            layer->frame_duration = fd;
-        }
-        cJSON* stateless = cJSON_GetObjectItemCaseSensitive(render_frames_ref, "is_stateless");
-        if (cJSON_IsBool(stateless)) {
-            layer->is_stateless = cJSON_IsTrue(stateless);
-        }
-    }
-
-    // Ensure item ID is set in data.item if missing (fallback to root id)
-    if (strlen(layer->data.item.id) == 0) {
-        char* root_id = json_get_string_safe(root, "id", "");
-        strncpy(layer->data.item.id, root_id, MAX_ITEM_ID_LENGTH - 1);
-        free(root_id);
-    }
-
-    // Ensure item type is set
-    if (strlen(layer->data.item.type) == 0) {
-        char* root_type = json_get_string_safe(root, "type", "");
-        strncpy(layer->data.item.type, root_type, MAX_TYPE_LENGTH - 1);
-        free(root_type);
-    }
-
-    cJSON_Delete(root);
-    return layer;
-}
-
 // --- Atlas Sprite Sheet JSON Parsing ---
 
 /**
@@ -255,88 +191,6 @@ static void parse_direction_frame_data(cJSON* array_json, DirectionFrameData* df
         fm->frame_index = json_get_int_safe(frame_json, "frameIndex", i);
         dfd->count++;
     }
-}
-
-/**
- * Parse the atlas sprite sheet JSON response from the API.
- *
- * Expected response structure (after extracting from envelope):
- * {
- *   "_id": "...",
- *   "fileId": { "_id": "hexstring", ... },   // populated, sans data buffer
- *   "metadata": {
- *     "itemKey": "anon",
- *     "atlasWidth": 400,
- *     "atlasHeight": 800,
- *     "cellPixelDim": 20,
- *     "frames": {
- *       "up_idle": [ { x, y, width, height, frameIndex }, ... ],
- *       "down_idle": [ ... ],
- *       ...
- *     }
- *   }
- * }
- */
-static AtlasSpriteSheetData* parse_atlas_sprite_sheet_json(cJSON* atlas_json) {
-    if (!atlas_json) return NULL;
-
-    AtlasSpriteSheetData* atlas = create_atlas_sprite_sheet_data();
-    if (!atlas) return NULL;
-
-    // Extract fileId._id (populated reference)
-    cJSON* file_id_obj = cJSON_GetObjectItem(atlas_json, "fileId");
-    if (file_id_obj) {
-        if (cJSON_IsObject(file_id_obj)) {
-            // Populated: fileId is an object with _id field
-            char* fid = json_get_string_safe(file_id_obj, "_id", "");
-            strncpy(atlas->file_id, fid, MAX_FILE_ID_LENGTH - 1);
-            free(fid);
-        } else if (cJSON_IsString(file_id_obj)) {
-            // Not populated: fileId is a plain string ObjectId
-            strncpy(atlas->file_id, file_id_obj->valuestring, MAX_FILE_ID_LENGTH - 1);
-        }
-    }
-
-    // Extract metadata
-    cJSON* metadata = cJSON_GetObjectItem(atlas_json, "metadata");
-    if (!metadata) {
-        fprintf(stderr, "[WARN] Atlas sprite sheet missing metadata\n");
-        free_atlas_sprite_sheet_data(atlas);
-        return NULL;
-    }
-
-    char* item_key = json_get_string_safe(metadata, "itemKey", "");
-    strncpy(atlas->item_key, item_key, MAX_ITEM_ID_LENGTH - 1);
-    free(item_key);
-
-    atlas->atlas_width = json_get_int_safe(metadata, "atlasWidth", 0);
-    atlas->atlas_height = json_get_int_safe(metadata, "atlasHeight", 0);
-    atlas->cell_pixel_dim = json_get_int_safe(metadata, "cellPixelDim", 20);
-
-    // Parse frames (DirectionFramesSchema)
-    cJSON* frames = cJSON_GetObjectItem(metadata, "frames");
-    if (frames) {
-        parse_direction_frame_data(cJSON_GetObjectItem(frames, "up_idle"), &atlas->up_idle);
-        parse_direction_frame_data(cJSON_GetObjectItem(frames, "down_idle"), &atlas->down_idle);
-        parse_direction_frame_data(cJSON_GetObjectItem(frames, "right_idle"), &atlas->right_idle);
-        parse_direction_frame_data(cJSON_GetObjectItem(frames, "left_idle"), &atlas->left_idle);
-        parse_direction_frame_data(cJSON_GetObjectItem(frames, "up_right_idle"), &atlas->up_right_idle);
-        parse_direction_frame_data(cJSON_GetObjectItem(frames, "down_right_idle"), &atlas->down_right_idle);
-        parse_direction_frame_data(cJSON_GetObjectItem(frames, "up_left_idle"), &atlas->up_left_idle);
-        parse_direction_frame_data(cJSON_GetObjectItem(frames, "down_left_idle"), &atlas->down_left_idle);
-        parse_direction_frame_data(cJSON_GetObjectItem(frames, "default_idle"), &atlas->default_idle);
-        parse_direction_frame_data(cJSON_GetObjectItem(frames, "up_walking"), &atlas->up_walking);
-        parse_direction_frame_data(cJSON_GetObjectItem(frames, "down_walking"), &atlas->down_walking);
-        parse_direction_frame_data(cJSON_GetObjectItem(frames, "right_walking"), &atlas->right_walking);
-        parse_direction_frame_data(cJSON_GetObjectItem(frames, "left_walking"), &atlas->left_walking);
-        parse_direction_frame_data(cJSON_GetObjectItem(frames, "up_right_walking"), &atlas->up_right_walking);
-        parse_direction_frame_data(cJSON_GetObjectItem(frames, "down_right_walking"), &atlas->down_right_walking);
-        parse_direction_frame_data(cJSON_GetObjectItem(frames, "up_left_walking"), &atlas->up_left_walking);
-        parse_direction_frame_data(cJSON_GetObjectItem(frames, "down_left_walking"), &atlas->down_left_walking);
-        parse_direction_frame_data(cJSON_GetObjectItem(frames, "none_idle"), &atlas->none_idle);
-    }
-
-    return atlas;
 }
 
 // --- ObjectLayer Cache Operations ---
@@ -523,81 +377,6 @@ static Texture2D load_or_poll_atlas_texture(ObjectLayersManager* manager, const 
     return entry->state == ATLAS_TEX_READY ? entry->texture : (Texture2D){0};
 }
 
-// --- Response Envelope Extraction ---
-
-/**
- * Extract first item from the engine API list response envelope.
- *
- * Expected structure:
- * { "status": "success", "data": { "data": [ { ... } ], "total": N } }
- *
- * For the legacy object-layer endpoint, the structure may be:
- * { "status": "success", "data": { "data": [ { ... } ] } }
- *
- * Returns a cJSON pointer to the first element of the inner data array.
- * The caller must NOT free the returned pointer; it is owned by root.
- * The caller must free root via cJSON_Delete.
- */
-static cJSON* extract_first_item_from_envelope(cJSON* root) {
-    if (!root) return NULL;
-
-    cJSON* status = cJSON_GetObjectItem(root, "status");
-    if (!status || !cJSON_IsString(status) || strcmp(status->valuestring, "success") != 0) {
-        return NULL;
-    }
-
-    cJSON* outer_data = cJSON_GetObjectItem(root, "data");
-    if (!outer_data) return NULL;
-
-    // Check for nested { data: [...] } (paginated list response)
-    cJSON* inner_data = cJSON_GetObjectItem(outer_data, "data");
-    if (inner_data && cJSON_IsArray(inner_data) && cJSON_GetArraySize(inner_data) > 0) {
-        return cJSON_GetArrayItem(inner_data, 0);
-    }
-
-    // Maybe outer_data itself is the item (single-item response)
-    if (cJSON_IsObject(outer_data)) {
-        return outer_data;
-    }
-
-    return NULL;
-}
-
-/**
- * Extract first item from the legacy object-layer response envelope.
- *
- * The js_fetch_object_layer function returns:
- * { "items": [ { ... } ] }   (old format)
- * OR
- * { "status": "success", "data": { "data": [ { ... } ] } }   (engine format)
- */
-static char* extract_first_item_from_response(const char* response_json) {
-    if (!response_json) return NULL;
-
-    cJSON* root = cJSON_Parse(response_json);
-    if (!root) return NULL;
-
-    // Try engine envelope format first
-    cJSON* first = extract_first_item_from_envelope(root);
-    if (first) {
-        char* item_str = cJSON_Print(first);
-        cJSON_Delete(root);
-        return item_str;
-    }
-
-    // Fall back to legacy { "items": [...] } format
-    cJSON* items = cJSON_GetObjectItem(root, "items");
-    if (cJSON_IsArray(items) && cJSON_GetArraySize(items) > 0) {
-        cJSON* first_item = cJSON_GetArrayItem(items, 0);
-        char* item_str = cJSON_Print(first_item);
-        cJSON_Delete(root);
-        return item_str;
-    }
-
-    cJSON_Delete(root);
-    return NULL;
-}
-
 // ============================================================================
 // Public API
 // ============================================================================
@@ -668,97 +447,109 @@ void destroy_object_layers_manager(ObjectLayersManager* manager) {
 ObjectLayer* get_or_fetch_object_layer(ObjectLayersManager* manager, const char* item_id) {
     if (!manager || !item_id) return NULL;
 
-    // 1. Check cache
-    ObjectLayer* cached = lookup_cached_layer(manager, item_id);
-    if (cached) return cached;
-
-    // 2. Fetch from API via JS
-    char* response_json = js_fetch_object_layer(item_id);
-    if (response_json) {
-        char* item_json = extract_first_item_from_response(response_json);
-        free(response_json);
-        if (item_json) {
-            ObjectLayer* layer = parse_object_layer_json(item_json);
-            free(item_json);
-            if (layer) {
-                cache_object_layer(manager, item_id, layer);
-                return layer;
-            }
-        }
-    }
-
-    // 3. Create placeholder entry to avoid repeated failed fetches
-    ObjectLayerEntry* new_entry = (ObjectLayerEntry*)malloc(sizeof(ObjectLayerEntry));
-    if (new_entry) {
-        new_entry->key = strdup(item_id);
-        new_entry->layer = NULL;
-        new_entry->next = manager->layer_buckets[hash_string(item_id) % HASH_TABLE_SIZE];
-        manager->layer_buckets[hash_string(item_id) % HASH_TABLE_SIZE] = new_entry;
-    }
-
-    return NULL;
+    // Cache-only lookup — metadata is populated from WebSocket "metadata" message.
+    return lookup_cached_layer(manager, item_id);
 }
 
 AtlasSpriteSheetData* get_or_fetch_atlas_data(ObjectLayersManager* manager, const char* item_key) {
     if (!manager || !item_key) return NULL;
 
-    // 1. Check cache
-    AtlasSpriteSheetData* cached = lookup_cached_atlas(manager, item_key);
-    if (cached) return cached;
-
-    // 2. Fetch from atlas-sprite-sheet API via JS
-    char* response_json = js_fetch_atlas_sprite_sheet(item_key);
-    if (!response_json) {
-        fprintf(stderr, "[WARN] Failed to fetch atlas sprite sheet for: %s\n", item_key);
-        return NULL;
-    }
-
-    // 3. Parse the envelope response
-    cJSON* root = cJSON_Parse(response_json);
-    free(response_json);
-
-    if (!root) {
-        fprintf(stderr, "[ERROR] Failed to parse atlas sprite sheet JSON for: %s\n", item_key);
-        return NULL;
-    }
-
-    cJSON* first_item = extract_first_item_from_envelope(root);
-    if (!first_item) {
-        fprintf(stderr, "[WARN] No atlas sprite sheet found for item: %s\n", item_key);
-        cJSON_Delete(root);
-        return NULL;
-    }
-
-    // 4. Parse the atlas sprite sheet data
-    AtlasSpriteSheetData* atlas = parse_atlas_sprite_sheet_json(first_item);
-    cJSON_Delete(root);
-
-    if (!atlas) {
-        fprintf(stderr, "[ERROR] Failed to parse atlas data for: %s\n", item_key);
-        return NULL;
-    }
-
-    // 5. Ensure item_key is set
-    if (atlas->item_key[0] == '\0') {
-        strncpy(atlas->item_key, item_key, MAX_ITEM_ID_LENGTH - 1);
-    }
-
-    // 6. Cache the atlas data
-    cache_atlas_data(manager, item_key, atlas);
-
-    // 7. Start async loading of the atlas texture (if file_id is available)
-    if (atlas->file_id[0] != '\0') {
-        load_or_poll_atlas_texture(manager, atlas->file_id);
-    }
-
-    fprintf(stderr, "[INFO] Atlas sprite sheet cached for: %s (file_id: %s, %dx%d)\n",
-            item_key, atlas->file_id, atlas->atlas_width, atlas->atlas_height);
-
-    return atlas;
+    // Cache-only lookup — metadata is populated from WebSocket "metadata" message.
+    // Atlas texture (PNG blob) is fetched asynchronously via REST when cache is populated.
+    return lookup_cached_atlas(manager, item_key);
 }
 
 Texture2D get_atlas_texture(ObjectLayersManager* manager, const char* file_id) {
     if (!manager || !file_id || file_id[0] == '\0') return (Texture2D){0};
 
     return load_or_poll_atlas_texture(manager, file_id);
+}
+
+// ============================================================================
+// Cache Population from WebSocket Metadata
+// ============================================================================
+
+void populate_object_layer_from_json(ObjectLayersManager* manager, const char* item_id, const cJSON* ol_json) {
+    if (!manager || !item_id || !ol_json) return;
+
+    // Parse OL metadata from the WS metadata JSON shape
+    // (sha256, data.{stats,item,ledger,render}, frame_duration, is_stateless)
+    ObjectLayer* layer = create_object_layer();
+    if (!layer) return;
+
+    char* sha = json_get_string_safe((cJSON*)ol_json, "sha256", "");
+    strncpy(layer->sha256, sha, 64);
+    free(sha);
+
+    cJSON* data = cJSON_GetObjectItem((cJSON*)ol_json, "data");
+    parse_object_layer_data(data, &layer->data);
+
+    layer->frame_duration = json_get_int_safe((cJSON*)ol_json, "frame_duration", 250);
+    layer->is_stateless = json_get_bool_safe((cJSON*)ol_json, "is_stateless", false);
+
+    // Ensure item ID is set
+    if (strlen(layer->data.item.id) == 0) {
+        strncpy(layer->data.item.id, item_id, MAX_ITEM_ID_LENGTH - 1);
+    }
+
+    cache_object_layer(manager, item_id, layer);
+}
+
+/**
+ * @brief Parse direction frames from a JSON object used in WS metadata.
+ *
+ * The Go server sends frames with JSON keys like "up_idle", "down_walking", etc.
+ */
+static void parse_ws_direction_frames(cJSON* frames_json, AtlasSpriteSheetData* atlas) {
+    if (!frames_json || !atlas) return;
+    parse_direction_frame_data(cJSON_GetObjectItem(frames_json, "up_idle"), &atlas->up_idle);
+    parse_direction_frame_data(cJSON_GetObjectItem(frames_json, "down_idle"), &atlas->down_idle);
+    parse_direction_frame_data(cJSON_GetObjectItem(frames_json, "right_idle"), &atlas->right_idle);
+    parse_direction_frame_data(cJSON_GetObjectItem(frames_json, "left_idle"), &atlas->left_idle);
+    parse_direction_frame_data(cJSON_GetObjectItem(frames_json, "up_right_idle"), &atlas->up_right_idle);
+    parse_direction_frame_data(cJSON_GetObjectItem(frames_json, "down_right_idle"), &atlas->down_right_idle);
+    parse_direction_frame_data(cJSON_GetObjectItem(frames_json, "up_left_idle"), &atlas->up_left_idle);
+    parse_direction_frame_data(cJSON_GetObjectItem(frames_json, "down_left_idle"), &atlas->down_left_idle);
+    parse_direction_frame_data(cJSON_GetObjectItem(frames_json, "default_idle"), &atlas->default_idle);
+    parse_direction_frame_data(cJSON_GetObjectItem(frames_json, "up_walking"), &atlas->up_walking);
+    parse_direction_frame_data(cJSON_GetObjectItem(frames_json, "down_walking"), &atlas->down_walking);
+    parse_direction_frame_data(cJSON_GetObjectItem(frames_json, "right_walking"), &atlas->right_walking);
+    parse_direction_frame_data(cJSON_GetObjectItem(frames_json, "left_walking"), &atlas->left_walking);
+    parse_direction_frame_data(cJSON_GetObjectItem(frames_json, "up_right_walking"), &atlas->up_right_walking);
+    parse_direction_frame_data(cJSON_GetObjectItem(frames_json, "down_right_walking"), &atlas->down_right_walking);
+    parse_direction_frame_data(cJSON_GetObjectItem(frames_json, "up_left_walking"), &atlas->up_left_walking);
+    parse_direction_frame_data(cJSON_GetObjectItem(frames_json, "down_left_walking"), &atlas->down_left_walking);
+    parse_direction_frame_data(cJSON_GetObjectItem(frames_json, "none_idle"), &atlas->none_idle);
+}
+
+void populate_atlas_from_json(ObjectLayersManager* manager, const char* item_key, const cJSON* atlas_json) {
+    if (!manager || !item_key || !atlas_json) return;
+
+    AtlasSpriteSheetData* atlas = create_atlas_sprite_sheet_data();
+    if (!atlas) return;
+
+    char* file_id = json_get_string_safe((cJSON*)atlas_json, "fileId", "");
+    strncpy(atlas->file_id, file_id, MAX_FILE_ID_LENGTH - 1);
+    free(file_id);
+
+    strncpy(atlas->item_key, item_key, MAX_ITEM_ID_LENGTH - 1);
+
+    atlas->atlas_width = json_get_int_safe((cJSON*)atlas_json, "atlasWidth", 0);
+    atlas->atlas_height = json_get_int_safe((cJSON*)atlas_json, "atlasHeight", 0);
+    atlas->cell_pixel_dim = json_get_int_safe((cJSON*)atlas_json, "cellPixelDim", 20);
+
+    cJSON* frames = cJSON_GetObjectItem((cJSON*)atlas_json, "frames");
+    if (frames) {
+        parse_ws_direction_frames(frames, atlas);
+    }
+
+    cache_atlas_data(manager, item_key, atlas);
+
+    // Start async loading of the atlas texture
+    if (atlas->file_id[0] != '\0') {
+        load_or_poll_atlas_texture(manager, atlas->file_id);
+    }
+
+    fprintf(stderr, "[INFO] Atlas populated from WS for: %s (file_id: %s, %dx%d)\n",
+            item_key, atlas->file_id, atlas->atlas_width, atlas->atlas_height);
 }

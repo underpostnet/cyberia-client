@@ -32,9 +32,10 @@ typedef void (*on_open_callback)(void* user_data);
  * @brief Callback function type for message received event
  * @param data Pointer to received message data
  * @param length Length of the message in bytes
+ * @param is_binary 1 if message is binary, 0 if text
  * @param user_data User-defined data pointer passed during initialization
  */
-typedef void (*on_message_callback)(const char* data, int length, void* user_data);
+typedef void (*on_message_callback)(const char* data, int length, int is_binary, void* user_data);
 
 /**
  * @brief Callback function type for error event

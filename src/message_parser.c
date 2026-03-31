@@ -2,9 +2,13 @@
 #include "serial.h"
 #include "config.h"
 #include "cJSON.h"
+#include "game_render.h"
+#include "object_layers_management.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+
+static int message_parser_parse_metadata(const cJSON* json_root);
 
 
 /* ============================================================================
@@ -95,6 +99,8 @@ int message_parser_process(const char* json_str) {
     // Dispatch to appropriate handler
     if (strcmp(type_str, "init_data") == 0) {
         result = message_parser_parse_init_data(root);
+    } else if (strcmp(type_str, "metadata") == 0) {
+        result = message_parser_parse_metadata(root);
     } else if (strcmp(type_str, "aoi_update") == 0) {
         result = message_parser_parse_aoi_update(root);
     } else if (strcmp(type_str, "skill_item_ids") == 0) {
@@ -242,6 +248,61 @@ int message_parser_parse_init_data(const cJSON* json_root) {
     game_state_init_camera(800, 600); // Default screen size
     printf("  AOI Radius: %.1f, Dev UI: %s\n", g_game_state.aoi_radius, g_game_state.dev_ui ? "true" : "false");
 
+    return 0;
+}
+
+/* ============================================================================
+ * Metadata Message Parser (ObjectLayer + Atlas data from Go server)
+ * ============================================================================ */
+
+static int message_parser_parse_metadata(const cJSON* json_root) {
+    if (!json_root) return -1;
+
+    cJSON* payload = serial_get_object(json_root, "payload");
+    if (!payload) return -1;
+
+    ObjectLayersManager* mgr = game_render_get_obj_layers_mgr();
+    if (!mgr) {
+        fprintf(stderr, "[METADATA] ObjectLayersManager not initialized yet\n");
+        return -1;
+    }
+
+    // Parse objectLayers: map of itemId → OL metadata
+    cJSON* ol_map = cJSON_GetObjectItem(payload, "objectLayers");
+    int ol_count = 0;
+    if (ol_map && cJSON_IsObject(ol_map)) {
+        cJSON* entry = NULL;
+        cJSON_ArrayForEach(entry, ol_map) {
+            const char* item_id = entry->string;
+            if (item_id && cJSON_IsObject(entry)) {
+                populate_object_layer_from_json(mgr, item_id, entry);
+                ol_count++;
+            }
+        }
+    }
+
+    // Parse atlasData: map of itemKey → atlas metadata
+    cJSON* atlas_map = cJSON_GetObjectItem(payload, "atlasData");
+    int atlas_count = 0;
+    if (atlas_map && cJSON_IsObject(atlas_map)) {
+        cJSON* entry = NULL;
+        cJSON_ArrayForEach(entry, atlas_map) {
+            const char* item_key = entry->string;
+            if (item_key && cJSON_IsObject(entry)) {
+                populate_atlas_from_json(mgr, item_key, entry);
+                atlas_count++;
+            }
+        }
+    }
+
+    // Parse apiBaseUrl if provided (update the Engine API URL for blob fetches)
+    char api_url[256] = {0};
+    if (serial_get_string(payload, "apiBaseUrl", api_url, sizeof(api_url)) == 0 && api_url[0] != '\0') {
+        extern void js_init_engine_api(const char* url);
+        js_init_engine_api(api_url);
+    }
+
+    printf("[METADATA] Cached %d ObjectLayers, %d AtlasSheets from server\n", ol_count, atlas_count);
     return 0;
 }
 

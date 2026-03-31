@@ -3,6 +3,7 @@
 
 #include "object_layer.h"
 #include "texture_manager.h"
+#include "cJSON.h"
 #include <stddef.h>
 #include <stdbool.h>
 
@@ -145,5 +146,34 @@ AtlasSpriteSheetData* get_or_fetch_atlas_data(ObjectLayersManager* manager, cons
  * @return The atlas Texture2D. Returns empty texture (id=0) if not found or not loaded.
  */
 Texture2D get_atlas_texture(ObjectLayersManager* manager, const char* file_id);
+
+// ============================================================================
+// Public API - Cache Population from WebSocket Metadata
+// ============================================================================
+
+/**
+ * @brief Parse and cache an ObjectLayer from a JSON object (from WS metadata message).
+ *
+ * The JSON object has the same shape as a single OL item:
+ *   { "sha256": "...", "data": { "stats": {...}, "item": {...}, ... }, "frame_duration": N, "is_stateless": bool }
+ *
+ * @param manager The object layers manager instance
+ * @param item_id The item ID key for this ObjectLayer
+ * @param ol_json cJSON object representing the ObjectLayer (caller retains ownership)
+ */
+void populate_object_layer_from_json(ObjectLayersManager* manager, const char* item_id, const cJSON* ol_json);
+
+/**
+ * @brief Parse and cache an AtlasSpriteSheetData from a JSON object (from WS metadata message).
+ *
+ * The JSON object mirrors the Go server's AtlasData struct:
+ *   { "fileId": "...", "itemKey": "...", "atlasWidth": N, "atlasHeight": N,
+ *     "cellPixelDim": N, "frames": { "up_idle": [...], ... } }
+ *
+ * @param manager The object layers manager instance
+ * @param item_key The item key for this atlas
+ * @param atlas_json cJSON object representing the atlas data (caller retains ownership)
+ */
+void populate_atlas_from_json(ObjectLayersManager* manager, const char* item_key, const cJSON* atlas_json);
 
 #endif // OBJECT_LAYERS_MANAGEMENT_H

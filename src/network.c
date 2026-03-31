@@ -118,7 +118,8 @@ static EM_BOOL on_message_internal(int eventType, const EmscriptenWebSocketMessa
 
     // Call user callback with message data
     if (handlers && handlers->on_message) {
-        handlers->on_message((const char*)event->data, event->numBytes, handlers->user_data);
+        int is_binary = !event->isText;
+        handlers->on_message((const char*)event->data, event->numBytes, is_binary, handlers->user_data);
     }
 
     return EM_TRUE;

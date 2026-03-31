@@ -338,6 +338,13 @@ Vector2 game_render_interpolate_position(Vector2 start_pos, Vector2 end_pos, flo
  */
 int game_render_get_entity_frame(const EntityState* entity, double time);
 
+// Forward declaration for object layers manager
+typedef struct ObjectLayersManager ObjectLayersManager;
 
+/**
+ * @brief Get the global object layers manager (for metadata caching from WS)
+ * @return Pointer to the ObjectLayersManager, or NULL if not initialized
+ */
+ObjectLayersManager* game_render_get_obj_layers_mgr(void);
 
 #endif // GAME_RENDER_H
