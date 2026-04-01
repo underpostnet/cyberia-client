@@ -205,6 +205,7 @@ static void decode_bot_entity(BinReader* r, uint8_t flags) {
     }
     b->base.object_layer_count = read_item_ids(
         r, b->base.object_layers, MAX_OBJECT_LAYERS);
+    br_string(r, b->caster_id, MAX_ID_LENGTH);
 }
 
 static void decode_floor_entity(BinReader* r, uint8_t flags) {

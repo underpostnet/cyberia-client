@@ -79,6 +79,7 @@ struct PlayerState {
 struct BotState {
     EntityState base; // Inheritance simulation
     char behavior[MAX_BEHAVIOR_LENGTH];
+    char caster_id[MAX_ID_LENGTH];
 };
 
 // World object structure (for obstacles, portals, etc.)
