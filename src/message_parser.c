@@ -180,6 +180,14 @@ int message_parser_parse_colors(const cJSON* colors_json) {
             g_game_state.colors.floor = c;
         } else if (strcmp(color_name, "BOT") == 0) {
             g_game_state.colors.bot = c;
+        } else if (strcmp(color_name, "GHOST") == 0) {
+            g_game_state.colors.ghost = c;
+        } else if (strcmp(color_name, "COIN") == 0) {
+            g_game_state.colors.coin = c;
+        } else if (strcmp(color_name, "WEAPON") == 0) {
+            g_game_state.colors.weapon = c;
+        } else if (strcmp(color_name, "BULLET") == 0) {
+            g_game_state.colors.bullet = c;
         }
 
     }
@@ -245,6 +253,23 @@ int message_parser_parse_init_data(const cJSON* json_root) {
     // Parse skill map: { "triggerItemId": ["logicEventId1", ...], ... }
     g_game_state.skill_map_count = 0;
     cJSON* skill_map_json = cJSON_GetObjectItem(payload, "skillMap");
+
+    // Parse entity type defaults
+    g_game_state.entity_defaults_count = 0;
+    cJSON* entity_defaults_json = cJSON_GetObjectItem(payload, "entityDefaults");
+    if (entity_defaults_json && cJSON_IsArray(entity_defaults_json)) {
+        cJSON* etd = NULL;
+        cJSON_ArrayForEach(etd, entity_defaults_json) {
+            if (g_game_state.entity_defaults_count >= MAX_ENTITY_TYPES) break;
+            EntityTypeDefault* d = &g_game_state.entity_defaults[g_game_state.entity_defaults_count];
+            serial_get_string(etd, "entityType", d->entity_type, sizeof(d->entity_type));
+            serial_get_string(etd, "liveItemId", d->live_item_id, sizeof(d->live_item_id));
+            serial_get_string(etd, "deadItemId", d->dead_item_id, sizeof(d->dead_item_id));
+            serial_get_string(etd, "colorKey",   d->color_key,    sizeof(d->color_key));
+            if (d->entity_type[0] != '\0') g_game_state.entity_defaults_count++;
+        }
+    }
+
     if (skill_map_json && cJSON_IsObject(skill_map_json)) {
         cJSON* entry = NULL;
         cJSON_ArrayForEach(entry, skill_map_json) {

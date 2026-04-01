@@ -231,7 +231,8 @@ void game_render_floors(void) {
                 floor->object_layer_count,
                 "floor",
                 g_game_state.dev_ui,
-                cell_size
+                cell_size,
+                g_game_state.colors.floor
             );
         } else {
             Rectangle rect = {
@@ -271,7 +272,8 @@ void game_render_world_objects(void) {
                 obj->object_layer_count,
                 "obstacle",
                 g_game_state.dev_ui,
-                cell_size
+                cell_size,
+                g_game_state.colors.obstacle
             );
         } else {
             Rectangle rect = {
@@ -307,7 +309,8 @@ void game_render_world_objects(void) {
                 portal->object_layer_count,
                 "portal",
                 g_game_state.dev_ui,
-                cell_size
+                cell_size,
+                g_game_state.colors.portal
             );
         } else {
             Rectangle rect = {
@@ -347,7 +350,8 @@ void game_render_foregrounds(void) {
                 fg->object_layer_count,
                 "foreground",
                 g_game_state.dev_ui,
-                cell_size
+                cell_size,
+                g_game_state.colors.foreground
             );
         } else {
             Rectangle rect = {
@@ -494,38 +498,49 @@ void game_render_entities(void) {
 
             case ENTITY_TYPE_BOT:
                 entity_base = &entry->data.bot->base;
-                entity_type_str = "bot";
+                // Map bot behavior to the entity_type_str used for entity defaults lookup.
+                // Bullets and coins are spawned as bots server-side; their behavior
+                // string distinguishes them so the correct color / item defaults apply.
+                if (strcmp(entry->data.bot->behavior, "bullet") == 0)
+                    entity_type_str = "bullet";
+                else if (strcmp(entry->data.bot->behavior, "coin") == 0)
+                    entity_type_str = "coin";
+                else
+                    entity_type_str = "bot";
                 entity_id = entity_base->id;
                 layers_count = entity_base->object_layer_count;
                 break;
         }
 
         if (entity_base && entity_id) {
+            // Compute the solid-colour fallback once — used both when layers_count==0
+            // and passed into draw_entity_layers so it can use the same colour when
+            // a texture fails to load instead of a generic gray rectangle.
+            // Priority: server-sent entity color (if alpha > 0) → entity_defaults colorKey → neutral gray.
+            ColorRGBA ec = (entry->type == ENTITY_TYPE_BOT)
+                ? entry->data.bot->base.color
+                : entity_base->color;
+            Color entity_fallback_color;
+            if (ec.a > 0) {
+                entity_fallback_color = (Color){ ec.r, ec.g, ec.b, ec.a };
+            } else {
+                const EntityTypeDefault* etd = game_state_get_entity_default(entity_type_str);
+                entity_fallback_color = etd
+                    ? game_state_get_color_by_key(etd->color_key)
+                    : (Color){ 100, 100, 100, 200 };
+            }
+
             if (layers_count == 0) {
                 /* No object layers — draw a solid colored rectangle as fallback.
                  * Use the entity's own color if the server sent one (alpha > 0),
                  * otherwise fall back to the matching palette color. */
-                Color fallback_color;
-                if (entry->type == ENTITY_TYPE_BOT) {
-                    ColorRGBA ec = entry->data.bot->base.color;
-                    fallback_color = (ec.a > 0)
-                        ? (Color){ ec.r, ec.g, ec.b, ec.a }
-                        : g_game_state.colors.bot;
-                } else if (entry->is_main_player) {
-                    fallback_color = g_game_state.colors.player;
-                } else {
-                    ColorRGBA ec = entity_base->color;
-                    fallback_color = (ec.a > 0)
-                        ? (Color){ ec.r, ec.g, ec.b, ec.a }
-                        : g_game_state.colors.other_player;
-                }
                 Rectangle rect = {
                     entity_base->interp_pos.x * cell_size,
                     entity_base->interp_pos.y * cell_size,
                     entity_base->dims.x * cell_size,
                     entity_base->dims.y * cell_size
                 };
-                DrawRectangleRec(rect, fallback_color);
+                DrawRectangleRec(rect, entity_fallback_color);
             } else {
                 // Convert object layers to pointer array
                 for (int j = 0; j < layers_count && j < MAX_OBJECT_LAYERS; j++) {
@@ -547,7 +562,8 @@ void game_render_entities(void) {
                     layers_count,
                     entity_type_str,
                     dev_ui,
-                    cell_size
+                    cell_size,
+                    entity_fallback_color
                 );
             }
         }

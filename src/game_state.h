@@ -5,6 +5,7 @@
 #include <stdbool.h>
 #include <stdint.h>
 #include <stddef.h>
+#include <string.h>
 
 #include "object_layer.h"
 
@@ -29,6 +30,7 @@
 
 
 #define MAX_BEHAVIOR_LENGTH 32
+#define MAX_ENTITY_TYPES     16
 
 // Forward declarations
 typedef struct GameState GameState;
@@ -110,7 +112,19 @@ typedef struct {
     Color grid;
     Color floor;
     Color bot;
+    Color ghost;
+    Color coin;
+    Color weapon;
+    Color bullet;
 } GameColors;
+
+// Per-entity-type visual defaults received in init_data payload.
+typedef struct {
+    char entity_type[32];
+    char live_item_id[128];
+    char dead_item_id[128];
+    char color_key[32];
+} EntityTypeDefault;
 
 // Skill map entry received from init_data: one trigger item → N logic event IDs
 typedef struct {
@@ -142,6 +156,10 @@ struct GameState {
 
     // Game colors
     GameColors colors;
+
+    // Per-entity-type visual defaults (from init_data)
+    EntityTypeDefault entity_defaults[MAX_ENTITY_TYPES];
+    int entity_defaults_count;
 
     // Main player state
     PlayerState player;
@@ -255,5 +273,36 @@ void game_state_update_camera(void);
  * @param screen_height Current screen height
  */
 void game_state_update_camera_offset(int screen_width, int screen_height);
+
+/**
+ * @brief Look up entity type defaults by entity type string.
+ * @return Pointer to matching EntityTypeDefault, or NULL if not found.
+ */
+static inline const EntityTypeDefault* game_state_get_entity_default(const char* entity_type) {
+    for (int i = 0; i < g_game_state.entity_defaults_count; i++) {
+        if (strcmp(g_game_state.entity_defaults[i].entity_type, entity_type) == 0)
+            return &g_game_state.entity_defaults[i];
+    }
+    return NULL;
+}
+
+/**
+ * @brief Resolve a color palette key string to the matching GameColors field.
+ * Falls back to a neutral gray when the key is unrecognised or NULL.
+ */
+static inline Color game_state_get_color_by_key(const char* key) {
+    if (!key || key[0] == '\0') return (Color){ 100, 100, 100, 200 };
+    if (strcmp(key, "PLAYER")       == 0) return g_game_state.colors.player;
+    if (strcmp(key, "OTHER_PLAYER") == 0) return g_game_state.colors.other_player;
+    if (strcmp(key, "BOT")          == 0) return g_game_state.colors.bot;
+    if (strcmp(key, "BULLET")       == 0) return g_game_state.colors.bullet;
+    if (strcmp(key, "COIN")         == 0) return g_game_state.colors.coin;
+    if (strcmp(key, "GHOST")        == 0) return g_game_state.colors.ghost;
+    if (strcmp(key, "FLOOR")        == 0) return g_game_state.colors.floor;
+    if (strcmp(key, "OBSTACLE")     == 0) return g_game_state.colors.obstacle;
+    if (strcmp(key, "PORTAL")       == 0) return g_game_state.colors.portal;
+    if (strcmp(key, "FOREGROUND")   == 0) return g_game_state.colors.foreground;
+    return (Color){ 100, 100, 100, 200 };
+}
 
 #endif // GAME_STATE_H

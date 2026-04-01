@@ -235,7 +235,8 @@ void draw_entity_layers(
     int layers_count,
     const char* entity_type,
     bool dev_ui,
-    float cell_size
+    float cell_size,
+    Color fallback_color
 ) {
     if (!render || !entity_id) return;
 
@@ -305,7 +306,7 @@ void draw_entity_layers(
     }
 
     if (any_data_missing && render_count == 0) {
-        DrawRectangleRec(dest_rec, (Color){ 100, 100, 100, 200 });
+        DrawRectangleRec(dest_rec, fallback_color);
         return;
     }
 
@@ -480,6 +481,6 @@ void draw_entity_layers(
         }
     } else {
         // Something is still loading — render fallback placeholder
-        DrawRectangleRec(dest_rec, (Color){ 100, 100, 100, 200 });
+        DrawRectangleRec(dest_rec, fallback_color);
     }
 }

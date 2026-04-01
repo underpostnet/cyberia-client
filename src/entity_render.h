@@ -204,7 +204,8 @@ void draw_entity_layers(
     int layers_count,
     const char* entity_type,
     bool dev_ui,
-    float cell_size
+    float cell_size,
+    Color fallback_color
 );
 
 #endif // ENTITY_RENDER_H
