@@ -115,7 +115,7 @@ typedef struct {
     Color ghost;
     Color coin;
     Color weapon;
-    Color bullet;
+    Color skill;
 } GameColors;
 
 // Per-entity-type visual defaults received in init_data payload.
@@ -295,7 +295,7 @@ static inline Color game_state_get_color_by_key(const char* key) {
     if (strcmp(key, "PLAYER")       == 0) return g_game_state.colors.player;
     if (strcmp(key, "OTHER_PLAYER") == 0) return g_game_state.colors.other_player;
     if (strcmp(key, "BOT")          == 0) return g_game_state.colors.bot;
-    if (strcmp(key, "BULLET")       == 0) return g_game_state.colors.bullet;
+    if (strcmp(key, "SKILL")        == 0) return g_game_state.colors.skill;
     if (strcmp(key, "COIN")         == 0) return g_game_state.colors.coin;
     if (strcmp(key, "GHOST")        == 0) return g_game_state.colors.ghost;
     if (strcmp(key, "FLOOR")        == 0) return g_game_state.colors.floor;

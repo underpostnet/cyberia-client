@@ -499,10 +499,10 @@ void game_render_entities(void) {
             case ENTITY_TYPE_BOT:
                 entity_base = &entry->data.bot->base;
                 // Map bot behavior to the entity_type_str used for entity defaults lookup.
-                // Bullets and coins are spawned as bots server-side; their behavior
+                // Skills and coins are spawned as bots server-side; their behavior
                 // string distinguishes them so the correct color / item defaults apply.
-                if (strcmp(entry->data.bot->behavior, "bullet") == 0)
-                    entity_type_str = "bullet";
+                if (strcmp(entry->data.bot->behavior, "skill") == 0)
+                    entity_type_str = "skill";
                 else if (strcmp(entry->data.bot->behavior, "coin") == 0)
                     entity_type_str = "coin";
                 else

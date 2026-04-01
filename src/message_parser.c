@@ -186,8 +186,8 @@ int message_parser_parse_colors(const cJSON* colors_json) {
             g_game_state.colors.coin = c;
         } else if (strcmp(color_name, "WEAPON") == 0) {
             g_game_state.colors.weapon = c;
-        } else if (strcmp(color_name, "BULLET") == 0) {
-            g_game_state.colors.bullet = c;
+        } else if (strcmp(color_name, "SKILL") == 0) {
+            g_game_state.colors.skill = c;
         }
 
     }
