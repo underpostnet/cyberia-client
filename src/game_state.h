@@ -31,6 +31,7 @@
 
 #define MAX_BEHAVIOR_LENGTH 32
 #define MAX_ENTITY_TYPES     16
+#define MAX_DEFAULT_ITEM_IDS  8
 
 // Forward declarations
 typedef struct GameState GameState;
@@ -121,8 +122,10 @@ typedef struct {
 // Per-entity-type visual defaults received in init_data payload.
 typedef struct {
     char entity_type[32];
-    char live_item_id[128];
-    char dead_item_id[128];
+    char live_item_ids[MAX_DEFAULT_ITEM_IDS][128];
+    int  live_item_id_count;
+    char dead_item_ids[MAX_DEFAULT_ITEM_IDS][128];
+    int  dead_item_id_count;
     char color_key[32];
 } EntityTypeDefault;
 

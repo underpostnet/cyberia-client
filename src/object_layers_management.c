@@ -360,8 +360,8 @@ static Texture2D load_or_poll_atlas_texture(ObjectLayersManager* manager, const 
                 entry->texture = LoadTextureFromImage(image);
                 UnloadImage(image);
                 entry->state = ATLAS_TEX_READY;
-                fprintf(stderr, "[INFO] Atlas texture loaded for file_id: %s (%dx%d)\n",
-                        file_id, entry->texture.width, entry->texture.height);
+                printf("[INFO] Atlas texture loaded for file_id: %s (%dx%d)\n",
+                       file_id, entry->texture.width, entry->texture.height);
             } else {
                 entry->state = ATLAS_TEX_ERROR;
                 fprintf(stderr, "[WARN] Failed to decode atlas PNG for file_id: %s\n", file_id);
@@ -550,6 +550,6 @@ void populate_atlas_from_json(ObjectLayersManager* manager, const char* item_key
         load_or_poll_atlas_texture(manager, atlas->file_id);
     }
 
-    fprintf(stderr, "[INFO] Atlas populated from WS for: %s (file_id: %s, %dx%d)\n",
-            item_key, atlas->file_id, atlas->atlas_width, atlas->atlas_height);
+    printf("[INFO] Atlas populated from WS for: %s (file_id: %s, %dx%d)\n",
+           item_key, atlas->file_id, atlas->atlas_width, atlas->atlas_height);
 }

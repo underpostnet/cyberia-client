@@ -262,10 +262,40 @@ int message_parser_parse_init_data(const cJSON* json_root) {
         cJSON_ArrayForEach(etd, entity_defaults_json) {
             if (g_game_state.entity_defaults_count >= MAX_ENTITY_TYPES) break;
             EntityTypeDefault* d = &g_game_state.entity_defaults[g_game_state.entity_defaults_count];
+            memset(d, 0, sizeof(EntityTypeDefault));
             serial_get_string(etd, "entityType", d->entity_type, sizeof(d->entity_type));
-            serial_get_string(etd, "liveItemId", d->live_item_id, sizeof(d->live_item_id));
-            serial_get_string(etd, "deadItemId", d->dead_item_id, sizeof(d->dead_item_id));
             serial_get_string(etd, "colorKey",   d->color_key,    sizeof(d->color_key));
+
+            // Parse liveItemIds array
+            cJSON* live_arr = cJSON_GetObjectItem(etd, "liveItemIds");
+            if (live_arr && cJSON_IsArray(live_arr)) {
+                cJSON* item = NULL;
+                cJSON_ArrayForEach(item, live_arr) {
+                    if (d->live_item_id_count >= MAX_DEFAULT_ITEM_IDS) break;
+                    if (cJSON_IsString(item)) {
+                        strncpy(d->live_item_ids[d->live_item_id_count],
+                                cJSON_GetStringValue(item), 127);
+                        d->live_item_ids[d->live_item_id_count][127] = '\0';
+                        d->live_item_id_count++;
+                    }
+                }
+            }
+
+            // Parse deadItemIds array
+            cJSON* dead_arr = cJSON_GetObjectItem(etd, "deadItemIds");
+            if (dead_arr && cJSON_IsArray(dead_arr)) {
+                cJSON* item = NULL;
+                cJSON_ArrayForEach(item, dead_arr) {
+                    if (d->dead_item_id_count >= MAX_DEFAULT_ITEM_IDS) break;
+                    if (cJSON_IsString(item)) {
+                        strncpy(d->dead_item_ids[d->dead_item_id_count],
+                                cJSON_GetStringValue(item), 127);
+                        d->dead_item_ids[d->dead_item_id_count][127] = '\0';
+                        d->dead_item_id_count++;
+                    }
+                }
+            }
+
             if (d->entity_type[0] != '\0') g_game_state.entity_defaults_count++;
         }
     }
