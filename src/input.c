@@ -104,17 +104,11 @@ void input_handle_mouse_click(int button, Vector2 screen_pos) {
     }
 
     if (button == MOUSE_BUTTON_LEFT) {
-        // Left click - move or interact
-        char entity_id[MAX_ID_LENGTH];
+        // Every left click is a TAP — the fundamental game event.
+        // The server independently computes skills (probability-based) and
+        // movement (agility-based rendering effect) from each TAP.
         InputEvent event = {0};
-        if (input_find_entity_at_position(screen_pos, entity_id, sizeof(entity_id))) {
-            // Clicked on entity - interact
-            event.type = INPUT_EVENT_INTERACT;
-            strncpy(event.target_id, entity_id, MAX_ID_LENGTH - 1);
-        } else {
-            // Clicked on empty space - move
-            event.type = INPUT_EVENT_MOVE_TO;
-        }
+        event.type = INPUT_EVENT_MOVE_TO;
         event.screen_position = screen_pos;
         event.world_position = world_pos;
         event.timestamp = GetTime();
