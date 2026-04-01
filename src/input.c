@@ -47,8 +47,8 @@ void input_process_events(void) {
         InputEvent* event = &g_input.event_queue[i];
 
         switch (event->type) {
-            case INPUT_EVENT_MOVE_TO:
-                input_send_player_move(event->world_position);
+            case INPUT_EVENT_TAP:
+                input_send_tap(event->world_position);
                 break;
             case INPUT_EVENT_TOGGLE_DEBUG:
                 input_toggle_debug_mode();
@@ -108,7 +108,7 @@ void input_handle_mouse_click(int button, Vector2 screen_pos) {
         // The server independently computes skills (probability-based) and
         // movement (agility-based rendering effect) from each TAP.
         InputEvent event = {0};
-        event.type = INPUT_EVENT_MOVE_TO;
+        event.type = INPUT_EVENT_TAP;
         event.screen_position = screen_pos;
         event.world_position = world_pos;
         event.timestamp = GetTime();
@@ -163,8 +163,8 @@ void input_handle_window_resize(int width, int height) {
     g_game_state.camera.offset.y = height / 2.0f;
 }
 
-int input_send_player_move(Vector2 target_pos) {
-    printf("[INPUT] Sending player move to (%.2f, %.2f)\n", target_pos.x, target_pos.y);
+int input_send_tap(Vector2 target_pos) {
+    printf("[INPUT] TAP at world (%.2f, %.2f)\n", target_pos.x, target_pos.y);
 
     float grid_x = target_pos.x / (g_game_state.cell_size > 0 ? g_game_state.cell_size : 12.0f);
     float grid_y = target_pos.y / (g_game_state.cell_size > 0 ? g_game_state.cell_size : 12.0f);

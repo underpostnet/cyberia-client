@@ -21,7 +21,7 @@
  */
 typedef enum {
     INPUT_EVENT_NONE = 0,
-    INPUT_EVENT_MOVE_TO,        // Player clicked to move to a position
+    INPUT_EVENT_TAP,            // Player tapped a screen coordinate (fundamental game event)
     INPUT_EVENT_INTERACT,       // Player clicked on an interactive object
     INPUT_EVENT_USE_SKILL,      // Player activated a skill/ability
     INPUT_EVENT_TOGGLE_HUD,     // Player toggled HUD visibility
@@ -133,11 +133,11 @@ void input_handle_window_resize(int width, int height);
 // ============================================================================
 
 /**
- * @brief Send player move command to server
+ * @brief Send TAP event to server (player_action with target coordinates)
  * @param target_pos Target position in world coordinates
  * @return 0 on success, -1 on failure
  */
-int input_send_player_move(Vector2 target_pos);
+int input_send_tap(Vector2 target_pos);
 
 /**
  * @brief Toggle debug mode
