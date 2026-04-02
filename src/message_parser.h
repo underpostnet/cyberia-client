@@ -72,7 +72,7 @@ int message_parser_process(const char* json_str);
  *     "colors": { ... },
  *     "cameraSmoothing": float,
  *     "cameraZoom": float,
- *     "devUi": bool,
+ *     "devUi": bool,       // used unless ENABLE_DEV_UI=true forces override
  *     "sumStatsLimit": int
  *   }
  * }

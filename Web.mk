@@ -42,6 +42,10 @@ ASSETS := $(SRC_DIR)/public/splash.png@splash.png
 OBJS	:= $(SRC_FILES:$(SRC_DIR)/%=$(TARGET_BUILD_DIR)/%.o)
 OBJS	+= $(TARGET_BUILD_DIR)/cJSON.o
 
+# Auto-generated header dependency files
+DEPS	:= $(OBJS:.o=.d)
+-include $(DEPS)
+
 #---------------------------------------------------------------------------------------------
 # Specific targets
 
@@ -51,7 +55,7 @@ all:link
 
 serve-development: all
 	-fuser -k $(DEV_PORT)/tcp 2>/dev/null; sleep 0.3
-	python3 -m http.server $(DEV_PORT) --directory $(TARGET_OUTPUT_DIR)
+	python3 scripts/serve.py $(DEV_PORT) $(TARGET_OUTPUT_DIR)
 
 serve-production:
 	make -f Web.mk serve-development BUILD_MODE=RELEASE DEV_PORT=$(PROD_PORT)
@@ -70,7 +74,7 @@ link: libraylib $(OBJS)
 
 $(TARGET_BUILD_DIR)/%.c.o: $(SRC_DIR)/%.c
 	@mkdir -p $(@D)
-	$(CC) -c $< -o $@ $(CFLAGS)
+	$(CC) -c $< -o $@ $(CFLAGS) -MMD -MP
 
 $(TARGET_BUILD_DIR)/cJSON.o: $(CJSON_PATH)/cJSON.c
 	@mkdir -p $(@D)

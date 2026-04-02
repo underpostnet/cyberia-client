@@ -233,7 +233,8 @@ int message_parser_parse_init_data(const cJSON* json_root) {
     g_game_state.default_height_screen_factor = serial_get_float_default(payload, "defaultHeightScreenFactor", 0.5f);
 
     // Parse UI settings
-    g_game_state.dev_ui = ENABLE_DEV_UI;
+    // ENABLE_DEV_UI=true forces dev UI on regardless of server; false defers to server
+    g_game_state.dev_ui = ENABLE_DEV_UI ? true : serial_get_bool_default(payload, "devUi", false);
     g_game_state.sum_stats_limit = serial_get_int_default(payload, "sumStatsLimit", 9999);
 
     // Parse colors

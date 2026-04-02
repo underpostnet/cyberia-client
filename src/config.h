@@ -52,14 +52,6 @@ static const char* API_BASE_URL = "http://localhost:4005";
 // Game Configuration
 // ============================================================================
 
-/**
- * @brief Ghost item ID
- *
- * The item ID displayed when a player or bot is dead.
- * Usually "ghost" or similar placeholder.
- */
-static const char* GHOST_ITEM_ID = "ghost";
-
 // ============================================================================
 // Network Configuration
 // ============================================================================
@@ -137,9 +129,9 @@ static const int DEFAULT_FRAME_DURATION_MS = 100;
 /**
  * @brief Enable development UI overlay
  *
- * When true, the dev UI is rendered instead of the player modal.
- * When false, only the player modal is rendered.
+ * When true, forces the dev UI on regardless of the server's devUi setting.
+ * When false, follows the server's devUi value from the init payload.
  */
-static const bool ENABLE_DEV_UI = true;
+static const bool ENABLE_DEV_UI = false;
 
 #endif // CONFIG_H
