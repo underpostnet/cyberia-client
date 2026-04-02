@@ -203,8 +203,9 @@ struct GameState {
     size_t download_size_bytes;
     size_t upload_size_bytes;
 
-    // Stats limit
+    // Stats
     int sum_stats_limit;
+    int active_stats_sum;
 
     // Runtime flags
     bool init_received;

@@ -127,24 +127,13 @@ void dev_ui_update_network_stats(size_t download_bytes, size_t upload_bytes) {
 int dev_ui_get_active_stats_sum(const char* player_id) {
     if (!player_id) return 0;
 
-    int total_stats = 0;
-
-    // Check if it's the main player
+    // Server computes the sum of all active object layer stats and sends it
+    // in the binary AOI self-player section — just use it directly.
     if (strcmp(g_game_state.player_id, player_id) == 0) {
-        EntityState* entity = &g_game_state.player.base;
-
-        // Sum up stats from active object layers
-        for (int i = 0; i < entity->object_layer_count; i++) {
-            if (entity->object_layers[i].active) {
-                // Note: This is a placeholder - actual implementation would need
-                // to look up the ObjectLayer data by item_id and sum the stats
-                // For now, we just count active items * some baseline
-                total_stats += 1; // Simplified - would need full item data access
-            }
-        }
+        return g_game_state.active_stats_sum;
     }
 
-    return total_stats;
+    return 0;
 }
 
 int dev_ui_get_active_item_count(const char* player_id) {

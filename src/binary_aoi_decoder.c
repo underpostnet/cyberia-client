@@ -359,6 +359,9 @@ static void decode_self_player(BinReader* r, uint8_t flags) {
     /* sumStatsLimit */
     gs->sum_stats_limit = (int)br_u16(r);
 
+    /* activeStatsSum */
+    gs->active_stats_sum = (int)br_u16(r);
+
     /* mapCode — length-prefixed string */
     br_string(r, p->map_code, MAX_ID_LENGTH);
 
