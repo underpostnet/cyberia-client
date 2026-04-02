@@ -166,6 +166,14 @@ int message_parser_parse_colors(const cJSON* colors_json) {
             g_game_state.colors.error_text = c;
         } else if (strcmp(color_name, "PORTAL") == 0) {
             g_game_state.colors.portal = c;
+        } else if (strcmp(color_name, "PORTAL_INTER_PORTAL") == 0) {
+            g_game_state.colors.portal_inter_portal = c;
+        } else if (strcmp(color_name, "PORTAL_INTER_RANDOM") == 0) {
+            g_game_state.colors.portal_inter_random = c;
+        } else if (strcmp(color_name, "PORTAL_INTRA_RANDOM") == 0) {
+            g_game_state.colors.portal_intra_random = c;
+        } else if (strcmp(color_name, "PORTAL_INTRA_PORTAL") == 0) {
+            g_game_state.colors.portal_intra_portal = c;
         } else if (strcmp(color_name, "PORTAL_LABEL") == 0) {
             g_game_state.colors.portal_label = c;
         } else if (strcmp(color_name, "UI_TEXT") == 0) {
@@ -247,6 +255,10 @@ int message_parser_parse_init_data(const cJSON* json_root) {
         g_game_state.colors.bot = (Color){255, 128, 0, 255};
         g_game_state.colors.obstacle = (Color){128, 128, 128, 255};
         g_game_state.colors.portal = (Color){255, 0, 255, 255};
+        g_game_state.colors.portal_inter_portal = (Color){0, 200, 200, 255};
+        g_game_state.colors.portal_inter_random = (Color){80, 130, 255, 255};
+        g_game_state.colors.portal_intra_random = (Color){220, 200, 50, 255};
+        g_game_state.colors.portal_intra_portal = (Color){200, 80, 200, 255};
         g_game_state.colors.floor = (Color){100, 100, 100, 255};
     }
 

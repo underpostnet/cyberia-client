@@ -91,6 +91,7 @@ typedef struct {
     char portal_label[MAX_ID_LENGTH]; // For portals
     ObjectLayerState object_layers[MAX_OBJECT_LAYERS];
     int object_layer_count;
+    Color color; // Per-entity color (portals use subtype-specific colors)
 } WorldObject;
 
 // Color palette for the game
@@ -108,6 +109,10 @@ typedef struct {
     Color debug_text;
     Color error_text;
     Color portal;
+    Color portal_inter_portal;
+    Color portal_inter_random;
+    Color portal_intra_random;
+    Color portal_intra_portal;
     Color portal_label;
     Color ui_text;
     Color map_boundary;
@@ -304,7 +309,11 @@ static inline Color game_state_get_color_by_key(const char* key) {
     if (strcmp(key, "GHOST")        == 0) return g_game_state.colors.ghost;
     if (strcmp(key, "FLOOR")        == 0) return g_game_state.colors.floor;
     if (strcmp(key, "OBSTACLE")     == 0) return g_game_state.colors.obstacle;
-    if (strcmp(key, "PORTAL")       == 0) return g_game_state.colors.portal;
+    if (strcmp(key, "PORTAL")              == 0) return g_game_state.colors.portal;
+    if (strcmp(key, "PORTAL_INTER_PORTAL") == 0) return g_game_state.colors.portal_inter_portal;
+    if (strcmp(key, "PORTAL_INTER_RANDOM") == 0) return g_game_state.colors.portal_inter_random;
+    if (strcmp(key, "PORTAL_INTRA_RANDOM") == 0) return g_game_state.colors.portal_intra_random;
+    if (strcmp(key, "PORTAL_INTRA_PORTAL") == 0) return g_game_state.colors.portal_intra_portal;
     if (strcmp(key, "FOREGROUND")   == 0) return g_game_state.colors.foreground;
     return (Color){ 100, 100, 100, 200 };
 }

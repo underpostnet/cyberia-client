@@ -289,6 +289,7 @@ void game_render_world_objects(void) {
     // Render portals
     for (int i = 0; i < g_game_state.portal_count; i++) {
         WorldObject* portal = &g_game_state.portals[i];
+        Color portal_color = portal->color.a > 0 ? portal->color : g_game_state.colors.portal;
 
         if (portal->object_layer_count > 0) {
             ObjectLayerState* layers[MAX_OBJECT_LAYERS];
@@ -310,7 +311,7 @@ void game_render_world_objects(void) {
                 "portal",
                 g_game_state.dev_ui,
                 cell_size,
-                g_game_state.colors.portal
+                portal_color
             );
         } else {
             Rectangle rect = {
@@ -319,7 +320,7 @@ void game_render_world_objects(void) {
                 portal->dims.x * cell_size,
                 portal->dims.y * cell_size
             };
-            DrawRectangleRec(rect, g_game_state.colors.portal);
+            DrawRectangleRec(rect, portal_color);
         }
     }
 }

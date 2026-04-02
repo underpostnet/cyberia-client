@@ -257,7 +257,6 @@ static void decode_obstacle_entity(BinReader* r, uint8_t flags) {
 }
 
 static void decode_portal_entity(BinReader* r, uint8_t flags) {
-    (void)flags;
     GameState* gs = &g_game_state;
     char id[MAX_ID_LENGTH];
     br_id(r, id, sizeof(id));
@@ -273,6 +272,15 @@ static void decode_portal_entity(BinReader* r, uint8_t flags) {
     char label[MAX_ID_LENGTH];
     br_string(r, label, sizeof(label));
 
+    /* per-portal color (RGBA) */
+    Color portal_color = gs->colors.portal; /* fallback */
+    if (flags & BIN_FLAG_HAS_COLOR) {
+        portal_color.r = br_u8(r);
+        portal_color.g = br_u8(r);
+        portal_color.b = br_u8(r);
+        portal_color.a = br_u8(r);
+    }
+
     if (gs->portal_count >= MAX_OBJECTS) return;
     int idx = gs->portal_count++;
     WorldObject* p = &gs->portals[idx];
@@ -282,6 +290,7 @@ static void decode_portal_entity(BinReader* r, uint8_t flags) {
     p->dims = (Vector2){ dw, dh };
     strncpy(p->type, "portal", MAX_TYPE_LENGTH - 1);
     strncpy(p->portal_label, label, MAX_ID_LENGTH - 1);
+    p->color = portal_color;
 }
 
 static void decode_foreground_entity(BinReader* r, uint8_t flags) {
