@@ -43,10 +43,10 @@
 #define EOHUD_GAP_ABOVE_ENTITY  0.10f   /* world units */
 
 /** Height of each bar (HP / load) in world units. */
-#define EOHUD_BAR_HEIGHT        0.14f
+#define EOHUD_BAR_HEIGHT        0.22f
 
-/** Vertical spacing between HP bar and load bar. */
-#define EOHUD_BAR_SPACING       0.04f
+/** Vertical gap between stacked bars (label now sits inside the bar). */
+#define EOHUD_BAR_SPACING       0.06f
 
 /** Vertical spacing between load bar and nameplate text. */
 #define EOHUD_NAME_SPACING      0.04f
@@ -58,7 +58,10 @@
 #define EOHUD_NAME_FONT_SIZE    10
 
 /** Font size for the HP label (e.g. "HP 73/100") in screen pixels. */
-#define EOHUD_HP_LABEL_FONT_SIZE  8
+#define EOHUD_HP_LABEL_FONT_SIZE   11
+
+/** Font size for the OL label (e.g. "OL 15 / 30") in screen pixels. */
+#define EOHUD_LOAD_LABEL_FONT_SIZE 11
 
 /* ── Data model ─────────────────────────────────────────────────────────── */
 

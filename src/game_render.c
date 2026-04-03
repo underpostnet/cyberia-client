@@ -635,14 +635,30 @@ void game_render_entities(void) {
             if (!is_skill_or_coin) {
                 bool is_self = entry->is_main_player;
 
+                /* For non-self entities derive load from their active object
+                 * layers (each active layer = one equipped stat slot).      */
+                int proxy_load = 0;
+                int proxy_max  = 0;
+                if (is_self) {
+                    proxy_load = g_game_state.active_stats_sum;
+                    proxy_max  = g_game_state.sum_stats_limit;
+                } else {
+                    for (int j = 0; j < entity_base->object_layer_count; j++) {
+                        if (entity_base->object_layers[j].active)
+                            proxy_load++;
+                    }
+                    proxy_max = entity_base->object_layer_count;
+                }
+
                 EntityOverheadParams ohp = {
                     .name         = entity_base->id,
-                    .current_load = is_self ? g_game_state.active_stats_sum : 0,
-                    .max_load     = is_self ? g_game_state.sum_stats_limit   : 0,
+                    .current_load = proxy_load,
+                    .max_load     = proxy_max,
                     .life         = entity_base->life,
                     .max_life     = entity_base->max_life,
                     .show_name    = true,
-                    .show_load    = is_self && g_game_state.sum_stats_limit > 0,
+                    .show_load    = proxy_max > 0
+                                    && entity_base->respawn_in <= 0.0f,
                     .show_hp      = entity_base->max_life > 0.0f
                                     && entity_base->respawn_in <= 0.0f,
                 };

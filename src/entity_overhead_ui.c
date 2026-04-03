@@ -26,22 +26,22 @@
 /* ── Internal colours ────────────────────────────────────────────────── */
 
 /* Bar backgrounds */
-static const Color C_BAR_BG      = { 30,  30,  30, 180 };
+static const Color C_BAR_BG      = { 30,  30,  30, 100 };
 
 /* HP bar fill */
-static const Color C_HP_FULL     = { 70, 210,  70, 240 };   /* bright green */
-static const Color C_HP_LOW      = {230,  60,  40, 240 };   /* red when ≤25% */
-static const Color C_HP_MID      = {230, 175,  30, 240 };   /* amber at 50 % */
+static const Color C_HP_FULL     = { 70, 210,  70, 170 };   /* bright green */
+static const Color C_HP_LOW      = {230,  60,  40, 170 };   /* red when ≤25% */
+static const Color C_HP_MID      = {230, 175,  30, 170 };   /* amber at 50 % */
 
 /* Load bar fill — green (low) → yellow (near limit) */
-static const Color C_LOAD_SAFE   = { 80, 200,  80, 240 };
-static const Color C_LOAD_WARN   = {230, 200,  30, 240 };
-static const Color C_LOAD_FULL   = {230, 100,  30, 240 };   /* orange at cap  */
+static const Color C_LOAD_SAFE   = { 80, 200,  80, 170 };
+static const Color C_LOAD_WARN   = {230, 200,  30, 170 };
+static const Color C_LOAD_FULL   = {230, 100,  30, 170 };   /* orange at cap  */
 
 /* Text colours */
 static const Color C_NAME_TEXT   = {255, 255, 255, 230 };
 static const Color C_NAME_SHADOW = {  0,   0,   0, 130 };
-static const Color C_HP_LABEL    = {200, 200, 200, 200 };
+static const Color C_HP_LABEL    = {235, 235, 235, 230 };
 
 /* ── Colour lerp helper ───────────────────────────────────────────────── */
 
@@ -102,7 +102,17 @@ static void draw_load_bar(Rectangle bar_rect, int current, int max) {
     DrawRectangleRec(fill_rect, fill);
 
     /* 1-px border */
-    DrawRectangleLinesEx(bar_rect, 1.0f, (Color){ 80, 80, 80, 160 });
+    DrawRectangleLinesEx(bar_rect, 1.0f, (Color){ 80, 80, 80, 100 });
+
+    /* OL label: "OL X / Y" centred inside the bar */
+    char label[32];
+    snprintf(label, sizeof(label), "OL %d / %d", current, max);
+    int lfs = EOHUD_LOAD_LABEL_FONT_SIZE;
+    int ltw = MeasureText(label, lfs);
+    int lx  = (int)(bar_rect.x + bar_rect.width * 0.5f - ltw * 0.5f);
+    int ly  = (int)(bar_rect.y + (bar_rect.height - lfs) * 0.5f);
+    DrawText(label, lx + 1, ly + 1, lfs, (Color){ 0, 0, 0, 160 }); /* shadow */
+    DrawText(label, lx,     ly,     lfs, C_HP_LABEL);
 }
 
 /* ── Sub-component: health bar ───────────────────────────────────────── */
@@ -132,9 +142,9 @@ static void draw_hp_bar(Rectangle bar_rect, float life, float max_life) {
     DrawRectangleRec(fill_rect, fill);
 
     /* 1-px border */
-    DrawRectangleLinesEx(bar_rect, 1.0f, (Color){ 80, 80, 80, 160 });
+    DrawRectangleLinesEx(bar_rect, 1.0f, (Color){ 80, 80, 80, 100 });
 
-    /* HP label: "HP 73 / 100" centred below the bar */
+    /* HP label: "HP 73 / 100" centred inside the bar */
     int ilif  = (int)(life + 0.5f);
     int imaxl = (int)(max_life + 0.5f);
     char label[32];
@@ -142,8 +152,8 @@ static void draw_hp_bar(Rectangle bar_rect, float life, float max_life) {
     int lfs = EOHUD_HP_LABEL_FONT_SIZE;
     int ltw = MeasureText(label, lfs);
     int lx  = (int)(bar_rect.x + bar_rect.width * 0.5f - ltw * 0.5f);
-    int ly  = (int)(bar_rect.y + bar_rect.height + 1.0f);
-    DrawText(label, lx + 1, ly + 1, lfs, (Color){ 0, 0, 0, 100 }); /* shadow */
+    int ly  = (int)(bar_rect.y + (bar_rect.height - lfs) * 0.5f);
+    DrawText(label, lx + 1, ly + 1, lfs, (Color){ 0, 0, 0, 160 }); /* shadow */
     DrawText(label, lx,     ly,     lfs, C_HP_LABEL);
 }
 
@@ -181,13 +191,12 @@ void entity_overhead_ui_draw(
             bar_h_px
         };
         draw_hp_bar(hprect, p->life, p->max_life);
-        /* Reserve space for the HP label below the bar. */
         cursor_px -= EOHUD_BAR_SPACING * cell_size;
     }
 
     /* ── Load / capacity bar (above HP bar) ──────────────────────────── */
     if (p->show_load && p->max_load > 0) {
-        cursor_px -= bar_h_px + EOHUD_BAR_SPACING * cell_size;
+        cursor_px -= bar_h_px;
         Rectangle ldrect = {
             entity_cx_px - bar_w_px * 0.5f,
             cursor_px,
