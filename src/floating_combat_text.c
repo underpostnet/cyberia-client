@@ -2,30 +2,35 @@
  * @file floating_combat_text.c
  * @brief Floating Combat Text — animated pop-up numbers for the Cyberia client.
  *
- * Follows the Fountain & Sink Economy model: every coin event (gain, loss, sink)
- * and every combat event (damage, regen) is surfaced to the player as a
- * short-lived animated number that rises, arcs, and fades from the event's
- * world position.
+ * Surfaces every combat and economy event as a short-lived animated number
+ * that pops, rises, and fades from the event's world position.
  *
- * Animation phases (total lifetime FCT_TOTAL_LIFETIME seconds):
+ * Animation phases (FCT_TOTAL_LIFETIME seconds total):
  *   Phase 1 — Pop   [0, FCT_POP_DURATION):
- *       Font size scales from 40 % → 120 % with a brief overshoot, giving the
- *       number a punchy "pop" entrance.  Alpha ramps from 0.4 → 1.0.
+ *       Font blasts from 40% → pop_overshoot (1.20–1.70×, scaled with value)
+ *       then snaps back to 1.0. Alpha ramps 0.2 → 1.0.
  *
  *   Phase 2 — Rise  [FCT_POP_DURATION, FCT_FADE_START):
- *       Constant upward velocity (FCT_RISE_SPEED world-units/s) with a random
- *       horizontal drift (FCT_DRIFT_MIN … FCT_DRIFT_MAX).  Full alpha.
+ *       Upward velocity (per-type FCT_RISE_* world-units/s) plus random
+ *       horizontal drift.  Damage: fast and wide.  Regen: gentle.  Coins: medium.
  *
  *   Phase 3 — Fade  [FCT_FADE_START, FCT_TOTAL_LIFETIME):
- *       Vertical velocity decelerates exponentially; horizontal drift reduces;
- *       alpha decays linearly to 0.
+ *       Velocity decelerates (×(1−dt×5) each frame); alpha decays to 0.
  *
- * Size:  font_px = clamp(FCT_FONT_SIZE_MIN + (FCT_FONT_SIZE_MAX - MIN) *
- *                        log2(value + 1) / 10.0, MIN, MAX)
- *        → small hits (1–10) get ~10–14 px; large hits (1000+) get ~24–26 px.
+ * Rendering — 6 DrawText calls per active entry:
+ *   1. Black drop-shadow at (+1, +2).
+ *   2–5. Black outline at the 4 cardinal offsets (±1 px).
+ *   6. Main colored text.
  *
- * The module has no external dependencies beyond game_state.h (for cell_size)
- * and Raylib (for DrawText/MeasureText).
+ * Screen overlay (fct_draw_overlay(), called in screen space after EndMode2D):
+ *   Damage → brief red   vignette (max alpha 0.28, decays in ~0.45 s).
+ *   Regen  → brief green vignette (max alpha 0.14, decays in ~0.55 s).
+ *
+ * Per-type visual tuning:
+ *   FCT_TYPE_DAMAGE    red   {255,60,60}   rise 3.8  drift ±1.8  font 14–44  overshoot ≤1.70×
+ *   FCT_TYPE_REGEN     green {80,240,80}   rise 2.2  drift ±0.5  font 14–32  overshoot ≤1.45×
+ *   FCT_TYPE_COIN_GAIN gold  {255,215,0}   rise 2.6  drift ±1.2  font 14–36  overshoot ≤1.50×
+ *   FCT_TYPE_COIN_LOSS amber {255,130,0}   rise 2.6  drift ±1.2  font 14–36  overshoot ≤1.50×
  */
 
 #include "floating_combat_text.h"
@@ -35,40 +40,75 @@
 #include <stdio.h>
 #include <string.h>
 
-/* ── Tuning constants ─────────────────────────────────────────────────── */
+/* ── Global timing ─────────────────────────────────────────────────────── */
 
-#define FCT_TOTAL_LIFETIME  1.8f   /* total seconds before entry is freed    */
-#define FCT_POP_DURATION    0.12f  /* seconds for the pop-in scale animation  */
-#define FCT_FADE_START      1.3f   /* second at which alpha decay begins      */
-#define FCT_RISE_SPEED      1.6f   /* world units / second (upward)           */
-#define FCT_DRIFT_MIN       0.20f  /* min absolute horizontal drift wu/s      */
-#define FCT_DRIFT_MAX       0.65f  /* max absolute horizontal drift wu/s      */
-#define FCT_FONT_SIZE_MIN   10     /* pixels for value = 1                    */
-#define FCT_FONT_SIZE_MAX   26     /* pixels for value ≥ 1024                 */
+#define FCT_TOTAL_LIFETIME   2.2f   /* total seconds before entry is freed   */
+#define FCT_POP_DURATION     0.09f  /* violent snap pop-in                   */
+#define FCT_FADE_START       1.6f   /* second at which alpha decay begins    */
 
-/* ── Base colours (alpha is per-frame computed) ───────────────────────── */
+/* ── Per-type rise speeds (world units/second, upward) ────────────────── */
 
-static const Color s_color_damage    = {220,  50,  50, 255};  /* red    */
-static const Color s_color_regen     = { 60, 210,  60, 255};  /* green  */
-static const Color s_color_coin      = {255, 210,  40, 255};  /* yellow */
-static const Color s_color_fallback  = {190, 190, 190, 255};  /* grey   */
+#define FCT_RISE_DAMAGE      3.8f
+#define FCT_RISE_REGEN       2.2f
+#define FCT_RISE_COIN        2.6f
 
-/* ── Internal entry structure ─────────────────────────────────────────── */
+/* ── Per-type max horizontal drift (world units/second) ───────────────── */
+
+#define FCT_DRIFT_DAMAGE     1.8f
+#define FCT_DRIFT_REGEN      0.5f
+#define FCT_DRIFT_COIN       1.2f
+#define FCT_DRIFT_MIN        0.2f   /* minimum absolute drift for all types  */
+
+/* ── Per-type font sizing ──────────────────────────────────────────────── */
+
+#define FCT_FONT_MIN         14     /* minimum pixels (all types)            */
+#define FCT_FONT_MAX_DAMAGE  44     /* upper limit for damage hits           */
+#define FCT_FONT_MAX_REGEN   32     /* upper limit for regen pulses          */
+#define FCT_FONT_MAX_COIN    36     /* upper limit for coin events           */
+
+/* Log-base divisor: log2(value+1)/div → 1.0 at the "saturating" value.
+ * Smaller = font maxes out at lower hit values (more aggressive growth).  */
+#define FCT_LOG_DIV_DAMAGE   5.0f   /* log2(32)  ≈ 5  → hit   33 = full sz */
+#define FCT_LOG_DIV_REGEN    7.0f   /* log2(128) ≈ 7  → regen 129 = full   */
+#define FCT_LOG_DIV_COIN     6.0f   /* log2(64)  ≈ 6  → coins  65 = full   */
+
+/* ── Screen-overlay vignette ───────────────────────────────────────────── */
+
+#define FCT_OVERLAY_DMG_ALPHA  0.28f  /* peak red-flash alpha               */
+#define FCT_OVERLAY_DMG_DECAY  2.20f  /* alpha units lost per second        */
+#define FCT_OVERLAY_RGN_ALPHA  0.14f  /* peak green-pulse alpha             */
+#define FCT_OVERLAY_RGN_DECAY  1.80f  /* alpha units lost per second        */
+
+/* ── Base colours ──────────────────────────────────────────────────────── */
+
+static const Color s_color_damage    = {255,  60,  60, 255};  /* bright red   */
+static const Color s_color_regen     = { 80, 240,  80, 255};  /* bright green */
+static const Color s_color_coin_gain = {255, 215,   0, 255};  /* bright gold  */
+static const Color s_color_coin_loss = {255, 130,   0, 255};  /* burnt orange */
+static const Color s_color_fallback  = {190, 190, 190, 255};  /* grey         */
+
+/* ── Internal entry ────────────────────────────────────────────────────── */
 
 typedef struct {
-    float   x, y;         /* current world position (moves each frame)      */
-    float   vx, vy;       /* velocity in world units / second               */
-    float   age;          /* seconds elapsed since spawn                    */
-    int     font_px;      /* font size in screen pixels (fixed at spawn)     */
-    char    text[14];     /* formatted string: "+42", "-1337", etc.         */
-    Color   base_color;   /* colour before alpha is applied                 */
+    float   x, y;           /* current world position (moves each frame)    */
+    float   vx, vy;         /* velocity in world units / second             */
+    float   age;            /* seconds elapsed since spawn                  */
+    int     font_px;        /* base font size in pixels (fixed at spawn)    */
+    float   pop_overshoot;  /* peak scale during pop-in (type + value)      */
+    char    text[14];       /* formatted string: "+42", "-1337", etc.       */
+    Color   base_color;     /* colour before alpha is applied               */
+    uint8_t type;           /* FCT_TYPE_* — for draw-time differentiation   */
     bool    active;
 } FCTEntry;
 
 static FCTEntry s_pool[FCT_MAX_ENTRIES];
 static bool     s_init = false;
 
-/* ── Deterministic LCG — avoids touching the global rand() state ──────── */
+/* Screen-overlay alphas: updated by fct_spawn/fct_update, read by fct_draw_overlay. */
+static float s_damage_overlay = 0.0f;
+static float s_regen_overlay  = 0.0f;
+
+/* ── Deterministic LCG — avoids touching the global rand() state ────────── */
 
 static uint32_t s_lcg = 0xBEEF1337u;
 
@@ -77,10 +117,12 @@ static float lcg_f01(void) {
     return (float)(s_lcg >> 8) / (float)(1u << 24);
 }
 
-/* ── Public API ────────────────────────────────────────────────────────── */
+/* ── Public API ─────────────────────────────────────────────────────────── */
 
 void fct_init(void) {
     memset(s_pool, 0, sizeof(s_pool));
+    s_damage_overlay = 0.0f;
+    s_regen_overlay  = 0.0f;
     s_init = true;
 }
 
@@ -88,66 +130,121 @@ void fct_spawn(float world_x, float world_y, uint32_t value, uint8_t type) {
     if (!s_init) fct_init();
 
     /* Find a free slot; evict the oldest active entry if the pool is full. */
-    FCTEntry *slot = NULL;
-    float oldest_age = -1.0f;
-    int   oldest_idx = 0;
+    FCTEntry *slot      = NULL;
+    float     oldest   = -1.0f;
+    int       oldest_i = 0;
     for (int i = 0; i < FCT_MAX_ENTRIES; i++) {
         if (!s_pool[i].active) { slot = &s_pool[i]; break; }
-        if (s_pool[i].age > oldest_age) { oldest_age = s_pool[i].age; oldest_idx = i; }
+        if (s_pool[i].age > oldest) { oldest = s_pool[i].age; oldest_i = i; }
     }
-    if (!slot) slot = &s_pool[oldest_idx];
+    if (!slot) slot = &s_pool[oldest_i];
 
-    /* ── Format text ───────────────────────────────────────────────── */
-    if (type == FCT_TYPE_REGEN || type == FCT_TYPE_COIN_GAIN) {
+    /* ── Format text ─────────────────────────────────────────────────── */
+    if (type == FCT_TYPE_REGEN || type == FCT_TYPE_COIN_GAIN)
         snprintf(slot->text, sizeof(slot->text), "+%u", value);
-    } else {
+    else
         snprintf(slot->text, sizeof(slot->text), "-%u", value);
+
+    /* ── Per-type tuning ──────────────────────────────────────────────── */
+    float rise_speed, drift_max, log_div, base_overshoot;
+    int   font_max;
+    Color base_color;
+
+    switch (type) {
+        case FCT_TYPE_DAMAGE:
+            rise_speed     = FCT_RISE_DAMAGE;
+            drift_max      = FCT_DRIFT_DAMAGE;
+            log_div        = FCT_LOG_DIV_DAMAGE;
+            font_max       = FCT_FONT_MAX_DAMAGE;
+            base_color     = s_color_damage;
+            base_overshoot = 1.45f;
+            s_damage_overlay = FCT_OVERLAY_DMG_ALPHA;  /* trigger screen flash */
+            break;
+        case FCT_TYPE_REGEN:
+            rise_speed     = FCT_RISE_REGEN;
+            drift_max      = FCT_DRIFT_REGEN;
+            log_div        = FCT_LOG_DIV_REGEN;
+            font_max       = FCT_FONT_MAX_REGEN;
+            base_color     = s_color_regen;
+            base_overshoot = 1.20f;
+            s_regen_overlay = FCT_OVERLAY_RGN_ALPHA;   /* trigger screen pulse */
+            break;
+        case FCT_TYPE_COIN_GAIN:
+            rise_speed     = FCT_RISE_COIN;
+            drift_max      = FCT_DRIFT_COIN;
+            log_div        = FCT_LOG_DIV_COIN;
+            font_max       = FCT_FONT_MAX_COIN;
+            base_color     = s_color_coin_gain;
+            base_overshoot = 1.25f;
+            break;
+        case FCT_TYPE_COIN_LOSS:
+            rise_speed     = FCT_RISE_COIN;
+            drift_max      = FCT_DRIFT_COIN;
+            log_div        = FCT_LOG_DIV_COIN;
+            font_max       = FCT_FONT_MAX_COIN;
+            base_color     = s_color_coin_loss;
+            base_overshoot = 1.25f;
+            break;
+        default:
+            rise_speed     = FCT_RISE_COIN;
+            drift_max      = FCT_DRIFT_COIN;
+            log_div        = FCT_LOG_DIV_COIN;
+            font_max       = FCT_FONT_MAX_COIN;
+            base_color     = s_color_fallback;
+            base_overshoot = 1.20f;
+            break;
     }
 
-    /* ── Font size: log₂ scale so 1 → ~10 px, 1024 → ~26 px ──────── */
-    float log_v   = (value > 0) ? (float)log2((double)value + 1.0) : 1.0f;
-    float size_f  = FCT_FONT_SIZE_MIN
-                  + (float)(FCT_FONT_SIZE_MAX - FCT_FONT_SIZE_MIN)
-                  * (log_v / 10.0f);   /* log2(1024) ≈ 10 → full range */
-    if (size_f < (float)FCT_FONT_SIZE_MIN) size_f = (float)FCT_FONT_SIZE_MIN;
-    if (size_f > (float)FCT_FONT_SIZE_MAX) size_f = (float)FCT_FONT_SIZE_MAX;
+    /* ── Font size — log₂ scale, per-type grow rate ─────────────────── */
+    float log_v  = (value > 0) ? (float)log2((double)value + 1.0) : 1.0f;
+    float size_f = (float)FCT_FONT_MIN
+                 + (float)(font_max - FCT_FONT_MIN) * (log_v / log_div);
+    if (size_f < (float)FCT_FONT_MIN) size_f = (float)FCT_FONT_MIN;
+    if (size_f > (float)font_max)     size_f = (float)font_max;
     slot->font_px = (int)(size_f + 0.5f);
 
-    /* ── Colour ────────────────────────────────────────────────────── */
-    switch (type) {
-        case FCT_TYPE_DAMAGE:                   slot->base_color = s_color_damage;   break;
-        case FCT_TYPE_REGEN:                    slot->base_color = s_color_regen;    break;
-        case FCT_TYPE_COIN_GAIN:
-        case FCT_TYPE_COIN_LOSS:                slot->base_color = s_color_coin;     break;
-        default:                                slot->base_color = s_color_fallback; break;
-    }
+    /* ── Pop overshoot — scales with hit magnitude ────────────────────── */
+    float t_norm = log_v / log_div;
+    if (t_norm > 1.0f) t_norm = 1.0f;
+    slot->pop_overshoot = base_overshoot + 0.25f * t_norm;
 
-    /* ── Random horizontal drift (left or right) ───────────────────── */
-    float drift = FCT_DRIFT_MIN + lcg_f01() * (FCT_DRIFT_MAX - FCT_DRIFT_MIN);
+    /* ── Colour / type ────────────────────────────────────────────────── */
+    slot->base_color = base_color;
+    slot->type       = type;
+
+    /* ── Velocity — random drift direction ────────────────────────────── */
+    float drift = FCT_DRIFT_MIN + lcg_f01() * (drift_max - FCT_DRIFT_MIN);
     if (lcg_f01() < 0.5f) drift = -drift;
 
-    slot->x         = world_x;
-    slot->y         = world_y;
-    slot->vx        = drift;
-    slot->vy        = -FCT_RISE_SPEED;
-    slot->age       = 0.0f;
-    slot->active    = true;
+    slot->x      = world_x;
+    slot->y      = world_y;
+    slot->vx     = drift;
+    slot->vy     = -rise_speed;
+    slot->age    = 0.0f;
+    slot->active = true;
 }
 
 void fct_update(float dt) {
+    /* Decay screen-space overlays. */
+    if (s_damage_overlay > 0.0f) {
+        s_damage_overlay -= dt * FCT_OVERLAY_DMG_DECAY;
+        if (s_damage_overlay < 0.0f) s_damage_overlay = 0.0f;
+    }
+    if (s_regen_overlay > 0.0f) {
+        s_regen_overlay -= dt * FCT_OVERLAY_RGN_DECAY;
+        if (s_regen_overlay < 0.0f) s_regen_overlay = 0.0f;
+    }
+
     for (int i = 0; i < FCT_MAX_ENTRIES; i++) {
         FCTEntry *e = &s_pool[i];
         if (!e->active) continue;
 
         e->age += dt;
-        if (e->age >= FCT_TOTAL_LIFETIME) {
-            e->active = false;
-            continue;
-        }
+        if (e->age >= FCT_TOTAL_LIFETIME) { e->active = false; continue; }
 
-        /* During fade phase: decelerate velocity to create a floating stop. */
+        /* Fade phase: decelerate to a floating stop. */
         if (e->age > FCT_FADE_START) {
-            float decel = 1.0f - dt * 4.0f;
+            float decel = 1.0f - dt * 5.0f;
             if (decel < 0.0f) decel = 0.0f;
             e->vy *= decel;
             e->vx *= decel;
@@ -165,13 +262,11 @@ void fct_draw(void) {
         FCTEntry *e = &s_pool[i];
         if (!e->active) continue;
 
-        /* ── Alpha ─────────────────────────────────────────────────── */
+        /* ── Alpha ───────────────────────────────────────────────────── */
         float alpha;
         if (e->age < FCT_POP_DURATION) {
-            /* Pop-in: ramp 0.4 → 1.0 */
-            alpha = 0.4f + 0.6f * (e->age / FCT_POP_DURATION);
+            alpha = 0.2f + 0.8f * (e->age / FCT_POP_DURATION);
         } else if (e->age >= FCT_FADE_START) {
-            /* Fade-out: 1.0 → 0.0 */
             float frac = (e->age - FCT_FADE_START) / (FCT_TOTAL_LIFETIME - FCT_FADE_START);
             alpha = 1.0f - frac;
         } else {
@@ -180,25 +275,58 @@ void fct_draw(void) {
         if (alpha < 0.0f) alpha = 0.0f;
         if (alpha > 1.0f) alpha = 1.0f;
 
-        /* ── Pop scale: overshoot at 70 % of pop duration ─────────── */
+        /* ── Pop scale: blast up to overshoot, then snap to 1.0 ──────── */
         int font_px = e->font_px;
         if (e->age < FCT_POP_DURATION) {
             float t = e->age / FCT_POP_DURATION;
-            /* ease-out-back: small overshoot then settle */
-            float scale = (t < 0.7f)
-                ? 0.4f + (t / 0.7f) * 0.8f          /* 0.4 → 1.2 */
-                : 1.2f - ((t - 0.7f) / 0.3f) * 0.2f; /* 1.2 → 1.0 */
+            float scale;
+            if (t < 0.6f) {
+                scale = 0.4f + (t / 0.6f) * (e->pop_overshoot - 0.4f);
+            } else {
+                scale = e->pop_overshoot
+                      - ((t - 0.6f) / 0.4f) * (e->pop_overshoot - 1.0f);
+            }
             font_px = (int)((float)e->font_px * scale + 0.5f);
             if (font_px < 4) font_px = 4;
         }
 
-        /* ── Draw ──────────────────────────────────────────────────── */
-        Color c   = e->base_color;
-        c.a       = (unsigned char)(alpha * 255.0f + 0.5f);
-        float px  = e->x * cell_size;
-        float py  = e->y * cell_size;
-        /* Centre the text horizontally over the origin position. */
-        int   tw  = MeasureText(e->text, font_px);
-        DrawText(e->text, (int)(px - tw * 0.5f), (int)py, font_px, c);
+        /* ── Screen position (text centered on world origin) ─────────── */
+        int tw = MeasureText(e->text, font_px);
+        int tx = (int)(e->x * cell_size - tw * 0.5f);
+        int ty = (int)(e->y * cell_size);
+
+        unsigned char a_main   = (unsigned char)(alpha * 255.0f + 0.5f);
+        unsigned char a_shadow = (unsigned char)(alpha * 180.0f + 0.5f);
+        unsigned char a_outln  = (unsigned char)(alpha * 220.0f + 0.5f);
+
+        /* ── 1. Drop shadow ──────────────────────────────────────────── */
+        DrawText(e->text, tx + 1, ty + 2, font_px, (Color){0, 0, 0, a_shadow});
+
+        /* ── 2. Outline — 4 cardinal offsets, black ──────────────────── */
+        Color outline = {0, 0, 0, a_outln};
+        DrawText(e->text, tx - 1, ty,     font_px, outline);
+        DrawText(e->text, tx + 1, ty,     font_px, outline);
+        DrawText(e->text, tx,     ty - 1, font_px, outline);
+        DrawText(e->text, tx,     ty + 1, font_px, outline);
+
+        /* ── 3. Main colored text ────────────────────────────────────── */
+        Color c = e->base_color;
+        c.a = a_main;
+        DrawText(e->text, tx, ty, font_px, c);
+    }
+}
+
+void fct_draw_overlay(void) {
+    /* Called outside BeginMode2D — draws full-screen tints in screen space.
+     * Damage: brief red vignette.  Regen: brief green pulse.            */
+    if (s_damage_overlay > 0.0f) {
+        unsigned char a = (unsigned char)(s_damage_overlay * 255.0f + 0.5f);
+        DrawRectangle(0, 0, GetScreenWidth(), GetScreenHeight(),
+                      (Color){180, 0, 0, a});
+    }
+    if (s_regen_overlay > 0.0f) {
+        unsigned char a = (unsigned char)(s_regen_overlay * 255.0f + 0.5f);
+        DrawRectangle(0, 0, GetScreenWidth(), GetScreenHeight(),
+                      (Color){0, 180, 0, a});
     }
 }

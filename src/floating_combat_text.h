@@ -85,4 +85,11 @@ void fct_update(float dt);
  */
 void fct_draw(void);
 
+/**
+ * @brief Draw screen-space vignette overlays for damage and regen events.
+ * Must be called OUTSIDE BeginMode2D (in screen space), after EndMode2D.
+ * Damage spawns a brief red flash; regen spawns a brief green pulse.
+ */
+void fct_draw_overlay(void);
+
 #endif /* FLOATING_COMBAT_TEXT_H */

@@ -153,6 +153,9 @@ void game_render_frame(void) {
         game_render_world();
     EndMode2D();
 
+    // FCT screen-space overlay: damage red flash / regen green pulse
+    fct_draw_overlay();
+
     // Render UI (screen space)
     game_render_ui();
 
