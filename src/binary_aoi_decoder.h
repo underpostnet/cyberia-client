@@ -16,9 +16,21 @@
 #include <stddef.h>
 
 /* ── Message types ─────────────────────────────────────────────── */
-#define BIN_MSG_AOI_UPDATE  0x01
-#define BIN_MSG_INIT_DATA   0x02
-#define BIN_MSG_FULL_AOI    0x03
+#define BIN_MSG_AOI_UPDATE 0x01
+#define BIN_MSG_INIT_DATA  0x02
+#define BIN_MSG_FULL_AOI   0x03
+/* BIN_MSG_FCT — Floating Combat Text event (14 bytes, little-endian).
+ * Wire layout:
+ *   [0]      u8   0x04
+ *   [1]      u8   FCT_TYPE_* (see constants below)
+ *   [2..5]   f32  world_x
+ *   [6..9]   f32  world_y
+ *   [10..13] u32  value   (always positive; sign implied by type)     */
+#define BIN_MSG_FCT        0x04
+/* FCT event type constants are defined in floating_combat_text.h — the
+ * single source of truth for the FCT subsystem.  Include it directly
+ * rather than duplicating the defines here.                              */
+#include "floating_combat_text.h"
 
 /* ── Entity type bits (lower 3 bits of flags byte) ────────────── */
 #define BIN_ENTITY_PLAYER      0

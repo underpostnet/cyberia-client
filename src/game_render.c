@@ -2,6 +2,7 @@
 #include "game_state.h"
 #include "dev_ui.h"
 #include "modal_player.h"
+#include "floating_combat_text.h"
 #include "texture_manager.h"
 #include "object_layers_management.h"
 #include "entity_render.h"
@@ -66,6 +67,58 @@ int game_render_init(int screen_width, int screen_height) {
 
 ObjectLayersManager* game_render_get_obj_layers_mgr(void) {
     return g_object_layers_manager;
+}
+
+void game_render_draw_object_layer_as_down_idle_ico(const char* item_key, int x, int y, int icon_size) {
+    if (item_key && g_object_layers_manager) {
+        AtlasSpriteSheetData* atlas = get_or_fetch_atlas_data(g_object_layers_manager, item_key);
+        if (atlas) {
+            Texture2D tex = get_atlas_texture(g_object_layers_manager, atlas->file_id);
+            if (tex.id > 0) {
+                const DirectionFrameData* dfd = atlas_get_direction_frames(atlas, "default_idle");
+                if (dfd && dfd->count > 0) {
+                    const FrameMetadata* fm = &dfd->frames[0];
+                    Rectangle src = { (float)fm->x, (float)fm->y,
+                                      (float)fm->width, (float)fm->height };
+                    Rectangle dst = { (float)x, (float)y,
+                                      (float)icon_size, (float)icon_size };
+                    DrawTexturePro(tex, src, dst, (Vector2){0.0f, 0.0f}, 0.0f, WHITE);
+                    return;
+                }
+            }
+        }
+    }
+    // Fallback: neutral circle when atlas not yet loaded
+    int r = icon_size / 2;
+    DrawCircle(x + r, y + r, (float)r, (Color){160, 160, 160, 200});
+}
+
+#define GAME_RENDER_FRAME_DURATION_MS 100
+
+void game_render_draw_object_layer_animated_ico(const char* item_key, int x, int y, int icon_size) {
+    if (item_key && g_object_layers_manager) {
+        AtlasSpriteSheetData* atlas = get_or_fetch_atlas_data(g_object_layers_manager, item_key);
+        if (atlas) {
+            Texture2D tex = get_atlas_texture(g_object_layers_manager, atlas->file_id);
+            if (tex.id > 0) {
+                const DirectionFrameData* dfd = atlas_get_direction_frames(atlas, "default_idle");
+                if (dfd && dfd->count > 0) {
+                    int frame_idx = (int)(GetTime() * 1000.0 / GAME_RENDER_FRAME_DURATION_MS)
+                                    % dfd->count;
+                    const FrameMetadata* fm = &dfd->frames[frame_idx];
+                    Rectangle src = { (float)fm->x, (float)fm->y,
+                                      (float)fm->width, (float)fm->height };
+                    Rectangle dst = { (float)x, (float)y,
+                                      (float)icon_size, (float)icon_size };
+                    DrawTexturePro(tex, src, dst, (Vector2){0.0f, 0.0f}, 0.0f, WHITE);
+                    return;
+                }
+            }
+        }
+    }
+    // Fallback: neutral circle when atlas not yet loaded
+    int r = icon_size / 2;
+    DrawCircle(x + r, y + r, (float)r, (Color){160, 160, 160, 200});
 }
 
 void game_render_set_screen_size(int width, int height) {
@@ -142,9 +195,10 @@ void game_render_world(void) {
     // 6. Foregrounds (always on top of entities) - creates depth
     game_render_foregrounds();
 
-    // 7. Effects - click effects and floating text
+    // 7. Effects — click effects, legacy floating text, FCT pop-ups
     game_render_click_effects();
     game_render_floating_texts();
+    fct_draw();
 
     // 8. Grid overlay (if dev_ui enabled - renders on top of everything)
     if (g_game_state.dev_ui) {

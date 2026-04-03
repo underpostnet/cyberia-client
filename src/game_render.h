@@ -347,4 +347,34 @@ typedef struct ObjectLayersManager ObjectLayersManager;
  */
 ObjectLayersManager* game_render_get_obj_layers_mgr(void);
 
+/**
+ * @brief Draw an object-layer item as a small icon (frame 0, default_idle direction).
+ *
+ * Fetches the atlas for @p item_key, draws frame 0 of its "default_idle"
+ * animation direction scaled to icon_size x icon_size at (x, y).
+ * Falls back to a filled grey circle when the atlas is not yet loaded so
+ * the UI never shows an empty gap.
+ *
+ * @param item_key   Object-layer live item ID to look up in the atlas.
+ * @param x          Left edge of the icon in screen pixels.
+ * @param y          Top edge of the icon in screen pixels.
+ * @param icon_size  Width and height of the drawn icon in pixels.
+ */
+void game_render_draw_object_layer_as_down_idle_ico(const char* item_key, int x, int y, int icon_size);
+
+/**
+ * @brief Draw an object-layer item as an animated looped icon (default_idle direction).
+ *
+ * Cycles through all frames of the "default_idle" animation using GetTime()
+ * at DEFAULT_FRAME_DURATION_MS (100 ms) per frame, matching the in-world
+ * entity render behaviour.  Falls back to a filled grey circle when the
+ * atlas is not yet loaded.
+ *
+ * @param item_key   Object-layer live item ID to look up in the atlas.
+ * @param x          Left edge of the icon in screen pixels.
+ * @param y          Top edge of the icon in screen pixels.
+ * @param icon_size  Width and height of the drawn icon in pixels.
+ */
+void game_render_draw_object_layer_animated_ico(const char* item_key, int x, int y, int icon_size);
+
 #endif // GAME_RENDER_H

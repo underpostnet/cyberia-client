@@ -1,5 +1,6 @@
 #include "render.h"
 #include "game_render.h"
+#include "floating_combat_text.h"
 #include "input.h"
 #include "dev_ui.h"
 #include "modal_player.h"
@@ -65,8 +66,9 @@ void render_update(void) {
     game_state_update_interpolation(delta_time);
     game_state_update_camera();
 
-    // Update effects (click effects, floating texts)
+    // Update effects (click effects, floating texts, FCT pop-ups)
     game_render_update_effects(delta_time);
+    fct_update(delta_time);
 
     // Update dev UI
     dev_ui_update(delta_time);

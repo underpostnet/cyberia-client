@@ -207,6 +207,9 @@ struct GameState {
     int sum_stats_limit;
     int active_stats_sum;
 
+    // Economy
+    int player_coins; /* coin balance pushed by server each AOI frame */
+
     // Runtime flags
     bool init_received;
     bool dev_ui;
@@ -317,6 +320,17 @@ static inline Color game_state_get_color_by_key(const char* key) {
     if (strcmp(key, "PORTAL_INTRA_PORTAL") == 0) return g_game_state.colors.portal_intra_portal;
     if (strcmp(key, "FOREGROUND")   == 0) return g_game_state.colors.foreground;
     return (Color){ 100, 100, 100, 200 };
+}
+
+/**
+ * @brief Return the player's current coin balance.
+ *
+ * The value is pushed by the server in every AOI frame as a dedicated u32
+ * field at the end of the self-player section.  It is stored directly in
+ * GameState.player_coins so no object-layer scanning is needed.
+ */
+static inline int game_state_get_player_coins(void) {
+    return g_game_state.player_coins;
 }
 
 #endif // GAME_STATE_H

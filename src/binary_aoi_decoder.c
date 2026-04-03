@@ -8,6 +8,7 @@
 
 #include "binary_aoi_decoder.h"
 #include "game_state.h"
+#include "floating_combat_text.h"
 #include <string.h>
 #include <stdio.h>
 #include <math.h>
@@ -39,6 +40,16 @@ static inline uint16_t br_u16(BinReader* r) {
 
 static inline int16_t br_i16(BinReader* r) {
     return (int16_t)br_u16(r);
+}
+
+static inline uint32_t br_u32(BinReader* r) {
+    if (r->pos + 4 > r->len) { r->pos = r->len; return 0; }
+    uint32_t v = (uint32_t)r->data[r->pos]
+               | ((uint32_t)r->data[r->pos + 1] << 8)
+               | ((uint32_t)r->data[r->pos + 2] << 16)
+               | ((uint32_t)r->data[r->pos + 3] << 24);
+    r->pos += 4;
+    return v;
 }
 
 static inline float br_f32(BinReader* r) {
@@ -385,12 +396,15 @@ static void decode_self_player(BinReader* r, uint8_t flags) {
     /* activePortalID — skip (not used by client renderer) */
     char portal_id_buf[MAX_ID_LENGTH];
     br_string(r, portal_id_buf, sizeof(portal_id_buf));
+
+    /* Coin balance — u32, always present after activePortalID */
+    gs->player_coins = (int)br_u32(r);
 }
 
 /* ── Main entry point ──────────────────────────────────────────── */
 
 int binary_aoi_process(const uint8_t* data, size_t length) {
-    if (!data || length < 5) {
+    if (!data || length < 2) {
         printf("[BINARY_AOI] Message too short (%zu bytes)\n", length);
         return -1;
     }
@@ -399,6 +413,27 @@ int binary_aoi_process(const uint8_t* data, size_t length) {
     GameState* gs = &g_game_state;
 
     uint8_t msg_type = br_u8(&r);
+
+    /* ── Floating Combat Text event — compact 14-byte message ──────────── */
+    if (msg_type == BIN_MSG_FCT) {
+        if (length < 14) {
+            printf("[BINARY_AOI] FCT message too short (%zu bytes, need 14)\n", length);
+            return -1;
+        }
+        uint8_t  fct_type = br_u8(&r);
+        float    world_x  = br_f32(&r);
+        float    world_y  = br_f32(&r);
+        uint32_t value    = br_u32(&r);
+        fct_spawn(world_x, world_y, value, fct_type);
+        return 0;
+    }
+
+    /* ── AOI update / full AOI — standard entity-loop format ─────────── */
+    if (length < 5) {
+        printf("[BINARY_AOI] AOI message too short (%zu bytes)\n", length);
+        return -1;
+    }
+
     /* u16 reserved field — always 0, ignore */
     br_u16(&r);
     uint16_t entity_count = br_u16(&r);

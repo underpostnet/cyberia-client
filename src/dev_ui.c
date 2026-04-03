@@ -1,4 +1,5 @@
 #include "dev_ui.h"
+#include "game_render.h"
 #include "game_state.h"
 #include "client.h"
 #include <stdio.h>
@@ -221,6 +222,18 @@ void dev_ui_draw(int screen_width, int screen_height, int hud_occupied) {
     // Draw all text lines
     for (int i = 0; i < line_count; i++) {
         DrawText(text_lines[i], x_margin, y_offset, font_size_text, g_dev_ui.text_color);
+        y_offset += line_spacing;
+    }
+
+    // Draw coin icon + count (icon left, number right, no overlap)
+    if (g_game_state.init_received) {
+        int icon_size = font_size_text;
+        const EntityTypeDefault* _cdef = game_state_get_entity_default("coin");
+        const char* _ckey = (_cdef && _cdef->live_item_id_count > 0) ? _cdef->live_item_ids[0] : NULL;
+        game_render_draw_object_layer_as_down_idle_ico(_ckey, x_margin, y_offset, icon_size);
+        char coin_str[32];
+        snprintf(coin_str, sizeof(coin_str), "%d", game_state_get_player_coins());
+        DrawText(coin_str, x_margin + icon_size + 4, y_offset, font_size_text, g_game_state.colors.coin);
         y_offset += line_spacing;
     }
 

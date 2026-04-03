@@ -1,4 +1,5 @@
 #include "modal_player.h"
+#include "game_render.h"
 #include "game_state.h"
 #include "client.h"
 #include <stdio.h>
@@ -100,11 +101,43 @@ void modal_player_update(float delta_time) {
         modal_add_line(&g_modal_player.modal, line_buffer, WHITE);
     }
 
+    // Add coin count line (number only — icon drawn separately in modal_player_draw)
+    if (init_received) {
+        int coins = game_state_get_player_coins();
+        snprintf(line_buffer, sizeof(line_buffer), "%d", coins);
+        modal_add_line(&g_modal_player.modal, line_buffer, g_game_state.colors.coin);
+    }
+
     // Update modal animation state
     modal_update_struct(&g_modal_player.modal, delta_time);
 }
 
 void modal_player_draw(int screen_width, int screen_height) {
     modal_draw_struct(&g_modal_player.modal, screen_width, screen_height);
+
+    // Draw coin icon to the left of the coin number (last modal line)
+    if (g_game_state.init_received && g_modal_player.modal.line_count > 0) {
+        const Modal* m = &g_modal_player.modal;
+
+        // Replicate modal layout to find the coin line's rendered position
+        int max_text_width = 0;
+        for (int i = 0; i < m->line_count; i++) {
+            int w = MeasureText(m->lines[i].text, m->font_size);
+            if (w > max_text_width) max_text_width = w;
+        }
+        int modal_width = max_text_width + (m->padding * 2);
+        if (modal_width < m->min_width) modal_width = m->min_width;
+        int modal_x = screen_width - modal_width - m->margin_right;
+
+        int coin_idx = m->line_count - 1;
+        int coin_y = m->margin_top + m->padding + (coin_idx * m->line_spacing);
+        int coin_text_w = MeasureText(m->lines[coin_idx].text, m->font_size);
+        int coin_text_x = modal_x + (modal_width - coin_text_w) / 2; // CENTER aligned
+
+        int icon_size = m->font_size;
+        const EntityTypeDefault* _cdef = game_state_get_entity_default("coin");
+        const char* _ckey = (_cdef && _cdef->live_item_id_count > 0) ? _cdef->live_item_ids[0] : NULL;
+        game_render_draw_object_layer_animated_ico(_ckey, coin_text_x - icon_size - 4, coin_y, icon_size);
+    }
 }
 
