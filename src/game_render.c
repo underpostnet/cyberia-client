@@ -6,6 +6,7 @@
 #include "texture_manager.h"
 #include "object_layers_management.h"
 #include "entity_render.h"
+#include "entity_overhead_ui.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -622,6 +623,36 @@ void game_render_entities(void) {
                     dev_ui,
                     cell_size,
                     entity_fallback_color
+                );
+            }
+
+            /* ── Overhead UI — nameplate, capacity bar, HP bar ─────────── */
+            /* Skip for skill/coin bots — they are short-lived projectiles. */
+            bool is_skill_or_coin = (entry->type == ENTITY_TYPE_BOT)
+                && (strcmp(entity_type_str, "skill") == 0
+                    || strcmp(entity_type_str, "coin")  == 0);
+
+            if (!is_skill_or_coin) {
+                bool is_self = entry->is_main_player;
+
+                EntityOverheadParams ohp = {
+                    .name         = entity_base->id,
+                    .current_load = is_self ? g_game_state.active_stats_sum : 0,
+                    .max_load     = is_self ? g_game_state.sum_stats_limit   : 0,
+                    .life         = entity_base->life,
+                    .max_life     = entity_base->max_life,
+                    .show_name    = true,
+                    .show_load    = is_self && g_game_state.sum_stats_limit > 0,
+                    .show_hp      = entity_base->max_life > 0.0f
+                                    && entity_base->respawn_in <= 0.0f,
+                };
+                entity_overhead_ui_draw(
+                    &ohp,
+                    entity_base->interp_pos.x,
+                    entity_base->interp_pos.y,
+                    entity_base->dims.x,
+                    entity_base->dims.y,
+                    cell_size
                 );
             }
         }
