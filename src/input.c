@@ -6,6 +6,8 @@
 // TODO: Remove deps
 #include "serial.h"
 #include "client.h"
+#include "inventory_bar.h"
+#include "inventory_modal.h"
 
 // Global input manager instance
 InputManager g_input = {0};
@@ -94,6 +96,24 @@ Vector2 input_get_mouse_world_pos(void) {
 void input_handle_mouse_click(int button, Vector2 screen_pos) {
     printf("[INPUT] Mouse click: button=%d, pos=(%.1f, %.1f)\n",
            button, screen_pos.x, screen_pos.y);
+
+    int mx = (int)screen_pos.x;
+    int my = (int)screen_pos.y;
+
+    // Inventory modal consumes all clicks when open
+    if (inventory_modal_is_open()) {
+        inventory_modal_handle_click(mx, my, true);
+        return;
+    }
+
+    // Inventory bar tap: open modal or scroll
+    if (button == MOUSE_BUTTON_LEFT) {
+        int hit = inventory_bar_get_tapped_slot(mx, my);
+        if (hit >= 0) {
+            inventory_modal_open(hit);
+            return;
+        }
+    }
 
     Vector2 world_pos = GetScreenToWorld2D(screen_pos, g_game_state.camera);
 
@@ -251,7 +271,9 @@ bool input_find_entity_at_position(Vector2 screen_pos, char* entity_id, size_t i
 }
 
 bool input_is_over_ui(Vector2 screen_pos) {
-    // TODO: Implement proper UI hit testing when UI system is ready
-    // For now, just check if in the bottom HUD area
-    return screen_pos.y > GetScreenHeight() - 60;
+    // Inventory modal blocks all world interaction when open
+    if (inventory_modal_is_open()) return true;
+    // Inventory bar occupies the bottom strip
+    if (screen_pos.y > GetScreenHeight() - INV_BAR_HEIGHT) return true;
+    return false;
 }

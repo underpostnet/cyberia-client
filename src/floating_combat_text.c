@@ -85,19 +85,21 @@ static const Color s_color_damage    = {255,  60,  60, 255};  /* bright red   */
 static const Color s_color_regen     = { 80, 240,  80, 255};  /* bright green */
 static const Color s_color_coin_gain = {255, 215,   0, 255};  /* bright gold  */
 static const Color s_color_coin_loss = {255, 130,   0, 255};  /* burnt orange */
+static const Color s_color_item_gain = { 80, 220, 255, 255};  /* cyan         */
+static const Color s_color_item_loss = {180,  80, 255, 255};  /* purple       */
 static const Color s_color_fallback  = {190, 190, 190, 255};  /* grey         */
 
 /* ── Internal entry ────────────────────────────────────────────────────── */
 
 typedef struct {
-    float   x, y;           /* current world position (moves each frame)    */
-    float   vx, vy;         /* velocity in world units / second             */
-    float   age;            /* seconds elapsed since spawn                  */
-    int     font_px;        /* base font size in pixels (fixed at spawn)    */
-    float   pop_overshoot;  /* peak scale during pop-in (type + value)      */
-    char    text[14];       /* formatted string: "+42", "-1337", etc.       */
-    Color   base_color;     /* colour before alpha is applied               */
-    uint8_t type;           /* FCT_TYPE_* — for draw-time differentiation   */
+    float   x, y;                    /* current world position (moves each frame)    */
+    float   vx, vy;                  /* velocity in world units / second             */
+    float   age;                     /* seconds elapsed since spawn                  */
+    int     font_px;                 /* base font size in pixels (fixed at spawn)    */
+    float   pop_overshoot;           /* peak scale during pop-in (type + value)      */
+    char    text[32];                /* formatted string: "+42 wood", "-1337", etc.  */
+    Color   base_color;              /* colour before alpha is applied               */
+    uint8_t type;                    /* FCT_TYPE_* — for draw-time differentiation   */
     bool    active;
 } FCTEntry;
 
@@ -185,6 +187,22 @@ void fct_spawn(float world_x, float world_y, uint32_t value, uint8_t type) {
             base_color     = s_color_coin_loss;
             base_overshoot = 1.25f;
             break;
+        case FCT_TYPE_ITEM_GAIN:
+            rise_speed     = FCT_RISE_COIN;
+            drift_max      = FCT_DRIFT_COIN;
+            log_div        = FCT_LOG_DIV_COIN;
+            font_max       = FCT_FONT_MAX_COIN;
+            base_color     = s_color_item_gain;
+            base_overshoot = 1.20f;
+            break;
+        case FCT_TYPE_ITEM_LOSS:
+            rise_speed     = FCT_RISE_COIN;
+            drift_max      = FCT_DRIFT_COIN;
+            log_div        = FCT_LOG_DIV_COIN;
+            font_max       = FCT_FONT_MAX_COIN;
+            base_color     = s_color_item_loss;
+            base_overshoot = 1.20f;
+            break;
         default:
             rise_speed     = FCT_RISE_COIN;
             drift_max      = FCT_DRIFT_COIN;
@@ -222,6 +240,38 @@ void fct_spawn(float world_x, float world_y, uint32_t value, uint8_t type) {
     slot->vy     = -rise_speed;
     slot->age    = 0.0f;
     slot->active = true;
+}
+
+// fct_spawn_item spawns a labeled FCT for item quantity changes.
+// The label is formatted as "+N itemId" or "-N itemId".
+void fct_spawn_item(float world_x, float world_y, uint32_t quantity,
+                    uint8_t type, const char* item_id) {
+    if (!s_init) fct_init();
+    if (quantity == 0) return;
+
+    /* Reuse fct_spawn's slot-finding logic by calling it directly, then
+     * patch the text with the item label. Use ITEM_GAIN/LOSS types so the
+     * colour switch in fct_spawn picks the right palette. */
+    fct_spawn(world_x, world_y, quantity, type);
+
+    /* fct_spawn wrote to the most recently activated slot — find it. */
+    FCTEntry* slot = NULL;
+    float latest = -1.0f;
+    for (int i = 0; i < FCT_MAX_ENTRIES; i++) {
+        if (s_pool[i].active && s_pool[i].age <= 0.001f) {
+            if (s_pool[i].age >= latest) {
+                latest = s_pool[i].age;
+                slot = &s_pool[i];
+            }
+        }
+    }
+    if (!slot) return;
+
+    /* Overwrite text with labeled form: "+45 wood" or "-30 stone". */
+    if (item_id && item_id[0] != '\0') {
+        const char* sign = (type == FCT_TYPE_ITEM_GAIN) ? "+" : "-";
+        snprintf(slot->text, sizeof(slot->text), "%s%u %s", sign, quantity, item_id);
+    }
 }
 
 void fct_update(float dt) {

@@ -211,6 +211,12 @@ struct GameState {
     // Economy
     int player_coins; /* coin balance pushed by server each AOI frame */
 
+    // Full inventory (all OLs including inactive) \u2014 self-player only.
+    // Decoded from WriteSelfPlayer's writeFullInventory section.
+    // Powers the inventory bottom bar and modal UI.
+    ObjectLayerState full_inventory[MAX_OBJECT_LAYERS];
+    int full_inventory_count;
+
     // Runtime flags
     bool init_received;
     bool dev_ui;

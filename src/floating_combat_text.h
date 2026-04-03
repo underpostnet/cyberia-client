@@ -50,6 +50,8 @@
 #define FCT_TYPE_REGEN     0x01   /* life gain    — green  "+N"            */
 #define FCT_TYPE_COIN_GAIN 0x02   /* coins in     — yellow "+N"            */
 #define FCT_TYPE_COIN_LOSS 0x03   /* coins out    — yellow "-N" (PvP/sink) */
+#define FCT_TYPE_ITEM_GAIN 0x04   /* item qty in  — cyan   "+N ItemID"     */
+#define FCT_TYPE_ITEM_LOSS 0x05   /* item qty out — purple "-N ItemID"     */
 
 /** Maximum number of concurrently active FCT entries. */
 #define FCT_MAX_ENTRIES 64
@@ -61,6 +63,20 @@
  * Must be called before any other fct_* function (safe to call multiple times).
  */
 void fct_init(void);
+
+/**
+ * @brief Spawn an item quantity FCT entry (e.g. "+45 wood", "-30 stone").
+ *
+ * Same animation as coin events, but the label includes the item key.
+ *
+ * @param world_x  World-space X coordinate.
+ * @param world_y  World-space Y coordinate.
+ * @param quantity Magnitude of the change (always non-negative).
+ * @param type     FCT_TYPE_ITEM_GAIN or FCT_TYPE_ITEM_LOSS.
+ * @param item_id  Null-terminated item identifier string (e.g. "wood").
+ */
+void fct_spawn_item(float world_x, float world_y, uint32_t quantity,
+                    uint8_t type, const char* item_id);
 
 /**
  * @brief Spawn a new Floating Combat Text entry at a world position.

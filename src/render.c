@@ -4,6 +4,8 @@
 #include "input.h"
 #include "dev_ui.h"
 #include "modal_player.h"
+#include "inventory_bar.h"
+#include "inventory_modal.h"
 #include "raylib.h"
 #include <stdio.h>
 
@@ -69,6 +71,12 @@ void render_update(void) {
     // Update effects (click effects, floating texts, FCT pop-ups)
     game_render_update_effects(delta_time);
     fct_update(delta_time);
+
+    // Update inventory UI
+    inventory_bar_update(delta_time);
+    if (inventory_modal_is_open()) {
+        inventory_modal_update(delta_time);
+    }
 
     // Update dev UI
     dev_ui_update(delta_time);

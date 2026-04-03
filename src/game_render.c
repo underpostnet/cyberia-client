@@ -7,6 +7,8 @@
 #include "object_layers_management.h"
 #include "entity_render.h"
 #include "entity_overhead_ui.h"
+#include "inventory_bar.h"
+#include "inventory_modal.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -63,6 +65,9 @@ int game_render_init(int screen_width, int screen_height) {
         destroy_texture_manager(g_texture_manager);
         return -1;
     }
+
+    inventory_bar_init(g_object_layers_manager);
+    inventory_modal_init(g_object_layers_manager);
     return 0;
 }
 
@@ -709,6 +714,14 @@ void game_render_ui(void) {
         dev_ui_draw(g_renderer.screen_width, g_renderer.screen_height, 0);
     } else {
         modal_player_draw(g_renderer.screen_width, g_renderer.screen_height);
+    }
+
+    // Inventory bar (always visible in screen space)
+    inventory_bar_draw();
+
+    // Inventory modal (shown on top of everything when open)
+    if (inventory_modal_is_open()) {
+        inventory_modal_draw();
     }
 }
 

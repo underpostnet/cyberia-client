@@ -96,12 +96,13 @@ static int read_item_ids(BinReader* r, ObjectLayerState* layers, int max_layers)
     for (int i = 0; i < n; i++) {
         br_string(r, layers[i].item_id, MAX_ITEM_ID_LENGTH);
         layers[i].active = true;
-        layers[i].quantity = 1;
+        layers[i].quantity = (int)br_u16(r); /* quantity now carried on wire */
     }
     /* Skip any excess items we couldn't store */
     for (int i = n; i < (int)count; i++) {
         uint8_t slen = br_u8(r);
         r->pos += slen; /* skip itemId */
+        r->pos += 2;    /* skip quantity u16 */
     }
     return n;
 }
@@ -404,6 +405,26 @@ static void decode_self_player(BinReader* r, uint8_t flags) {
 
     /* Coin balance — u32, always present after activePortalID */
     gs->player_coins = (int)br_u32(r);
+
+    /* Full inventory — ALL ObjectLayers (active + inactive) with quantities.
+     * Powered by writeFullInventory on the server; used by inventory_bar. */
+    {
+        uint8_t inv_count = br_u8(r);
+        int ni = (inv_count < MAX_OBJECT_LAYERS) ? (int)inv_count : MAX_OBJECT_LAYERS;
+        for (int i = 0; i < ni; i++) {
+            br_string(r, gs->full_inventory[i].item_id, MAX_ITEM_ID_LENGTH);
+            gs->full_inventory[i].active   = (br_u8(r) != 0);
+            gs->full_inventory[i].quantity = (int)br_u16(r);
+        }
+        /* Skip excess slots we couldn't store */
+        for (int i = ni; i < (int)inv_count; i++) {
+            uint8_t slen = br_u8(r);
+            r->pos += slen; /* skip itemId  */
+            r->pos += 1;    /* skip active  */
+            r->pos += 2;    /* skip quantity */
+        }
+        gs->full_inventory_count = ni;
+    }
 }
 
 /* ── Main entry point ──────────────────────────────────────────── */
@@ -432,7 +453,25 @@ int binary_aoi_process(const uint8_t* data, size_t length) {
         fct_spawn(world_x, world_y, value, fct_type);
         return 0;
     }
-
+    /* ── Item FCT event — variable-length message (≥15 bytes) ─────────────── */
+    if (msg_type == BIN_MSG_ITEM_FCT) {
+        if (length < 15) {
+            printf("[BINARY_AOI] ItemFCT message too short (%zu bytes)\n", length);
+            return -1;
+        }
+        uint8_t  fct_type = br_u8(&r);
+        float    world_x  = br_f32(&r);
+        float    world_y  = br_f32(&r);
+        uint32_t qty      = br_u32(&r);
+        uint8_t  id_len   = br_u8(&r);
+        char     item_id[MAX_ITEM_ID_LENGTH];
+        memset(item_id, 0, sizeof(item_id));
+        if (id_len > 0 && id_len < MAX_ITEM_ID_LENGTH && r.pos + id_len <= r.len) {
+            memcpy(item_id, r.data + r.pos, id_len);
+        }
+        fct_spawn_item(world_x, world_y, qty, fct_type, item_id);
+        return 0;
+    }
     /* ── AOI update / full AOI — standard entity-loop format ─────────── */
     if (length < 5) {
         printf("[BINARY_AOI] AOI message too short (%zu bytes)\n", length);

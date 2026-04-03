@@ -27,6 +27,15 @@
  *   [6..9]   f32  world_y
  *   [10..13] u32  value   (always positive; sign implied by type)     */
 #define BIN_MSG_FCT        0x04
+/* BIN_MSG_ITEM_FCT \u2014 Item quantity FCT event (\u226515 bytes, little-endian).
+ *   [0]     u8   0x05 (this constant)
+ *   [1]     u8   fct_type (FCT_TYPE_ITEM_GAIN=0x04 or FCT_TYPE_ITEM_LOSS=0x05)
+ *   [2..5]  f32  worldX
+ *   [6..9]  f32  worldY
+ *   [10..13] u32 quantity
+ *   [14]    u8   itemId length (0\u201363)
+ *   [15..]  str  itemId bytes                                               */
+#define BIN_MSG_ITEM_FCT   0x05
 /* FCT event type constants are defined in floating_combat_text.h — the
  * single source of truth for the FCT subsystem.  Include it directly
  * rather than duplicating the defines here.                              */
