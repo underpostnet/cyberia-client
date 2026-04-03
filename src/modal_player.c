@@ -1,143 +1,116 @@
+/**
+ * @file modal_player.c
+ * @brief Compact frameless HUD for player information.
+ *
+ * Renders a minimal two-line HUD at the top-right corner:
+ *   ● <map_code>  (drop shadow)
+ *   (<x>, <y>)  <fps>fps
+ *
+ * No border frame — just a semi-transparent rounded background + text shadows.
+ * Coin balance is now visible in the pinned coin slot of the inventory bar, so
+ * it is intentionally omitted here.
+ */
+
 #include "modal_player.h"
-#include "game_render.h"
 #include "game_state.h"
 #include "client.h"
+#include <raylib.h>
 #include <stdio.h>
 #include <string.h>
+#include <math.h>
 
-// Global player modal instance
+/* Global instance */
 ModalPlayer g_modal_player = {0};
 
+/* ── Initialisation ───────────────────────────────────────────────────── */
+
 int modal_player_init(void) {
-    printf("[MODAL_PLAYER] Initializing player modal component...\n");
-
     memset(&g_modal_player, 0, sizeof(ModalPlayer));
-
-    // Initialize the underlying modal
-    if (modal_init_struct(&g_modal_player.modal) != 0) {
-        printf("[MODAL_PLAYER] Failed to initialize modal structure\n");
-        return -1;
-    }
-
-    // Configure modal position and style
-    modal_set_position(&g_modal_player.modal, MODAL_POS_TOP_RIGHT, 10, 10, 0, 0);
-    modal_set_style(&g_modal_player.modal,
-                   (Color){0, 0, 0, 200},
-                   (Color){100, 100, 100, 200},
-                   0.78f);
-    modal_set_font(&g_modal_player.modal, 16, 22);
-    modal_set_text_alignment(&g_modal_player.modal, MODAL_ALIGN_CENTER);
-
-    // Set display options (show all by default)
-    g_modal_player.show_connection = true;
-    g_modal_player.show_map = true;
-    g_modal_player.show_position = true;
-    g_modal_player.show_fps = true;
-
-    // Initialize FPS tracking
-    g_modal_player.cached_fps = 60.0f;
-    g_modal_player.last_fps_update = 0.0;
-
-    printf("[MODAL_PLAYER] Player modal component initialized\n");
+    g_modal_player.show_connection  = true;
+    g_modal_player.show_map         = true;
+    g_modal_player.show_position    = true;
+    g_modal_player.show_fps         = true;
+    g_modal_player.cached_fps       = 60.0f;
+    g_modal_player.last_fps_update  = 0.0;
     return 0;
 }
 
 void modal_player_cleanup(void) {
-    printf("[MODAL_PLAYER] Cleaning up player modal component...\n");
     memset(&g_modal_player, 0, sizeof(ModalPlayer));
 }
 
+/* ── Update ───────────────────────────────────────────────────────────── */
+
 void modal_player_update(float delta_time) {
-    // Update FPS tracking
-    double current_time = GetTime();
-    if (current_time - g_modal_player.last_fps_update >= 0.5) {
-        g_modal_player.cached_fps = GetFPS();
-        g_modal_player.last_fps_update = current_time;
+    (void)delta_time;
+    double t = GetTime();
+    if (t - g_modal_player.last_fps_update >= 0.5) {
+        g_modal_player.cached_fps      = (float)GetFPS();
+        g_modal_player.last_fps_update = t;
     }
-
-    // Clear existing lines
-    modal_clear_lines(&g_modal_player.modal);
-
-    // Get game state data
-    bool init_received = g_game_state.init_received;
-    const char* map_code = g_game_state.player.map_code;
-    Vector2 pos = g_game_state.player.base.interp_pos;
-
-    // Get connection status
-    bool is_connected = client_is_connected();
-
-    char line_buffer[MODAL_MAX_LINE_LENGTH];
-
-    // Add connection status line
-    if (g_modal_player.show_connection) {
-        const char* status_text = is_connected ? "Connected" : "Disconnected";
-        Color status_color = is_connected ? GREEN : RED;
-        modal_add_line(&g_modal_player.modal, status_text, status_color);
-    }
-
-    // Add map ID line
-    if (g_modal_player.show_map) {
-        if (init_received) {
-            snprintf(line_buffer, sizeof(line_buffer), "Map: %s", map_code[0] ? map_code : "--");
-        } else {
-            snprintf(line_buffer, sizeof(line_buffer), "Map: --");
-        }
-        modal_add_line(&g_modal_player.modal, line_buffer, YELLOW);
-    }
-
-    // Add position line
-    if (g_modal_player.show_position) {
-        if (init_received) {
-            snprintf(line_buffer, sizeof(line_buffer), "Pos: (%.1f, %.1f)", pos.x, pos.y);
-        } else {
-            snprintf(line_buffer, sizeof(line_buffer), "Pos: (--, --)");
-        }
-        modal_add_line(&g_modal_player.modal, line_buffer, YELLOW);
-    }
-
-    // Add FPS line
-    if (g_modal_player.show_fps) {
-        snprintf(line_buffer, sizeof(line_buffer), "FPS: %.0f", g_modal_player.cached_fps);
-        modal_add_line(&g_modal_player.modal, line_buffer, WHITE);
-    }
-
-    // Add coin count line (number only — icon drawn separately in modal_player_draw)
-    if (init_received) {
-        int coins = game_state_get_player_coins();
-        snprintf(line_buffer, sizeof(line_buffer), "%d", coins);
-        modal_add_line(&g_modal_player.modal, line_buffer, g_game_state.colors.coin);
-    }
-
-    // Update modal animation state
-    modal_update_struct(&g_modal_player.modal, delta_time);
 }
+
+/* ── Draw helpers ─────────────────────────────────────────────────────── */
+
+/* shadow_text renders `text` with a subtle 1-pixel black shadow. */
+static void shadow_text(const char* text, int x, int y, int fs, Color c) {
+    DrawText(text, x + 1, y + 1, fs, (Color){ 0, 0, 0, 160 });
+    DrawText(text, x,     y,     fs, c);
+}
+
+/* ── Draw ─────────────────────────────────────────────────────────────── */
 
 void modal_player_draw(int screen_width, int screen_height) {
-    modal_draw_struct(&g_modal_player.modal, screen_width, screen_height);
+    (void)screen_height;
 
-    // Draw coin icon to the left of the coin number (last modal line)
-    if (g_game_state.init_received && g_modal_player.modal.line_count > 0) {
-        const Modal* m = &g_modal_player.modal;
+    /* Always draw — shows disconnected state too. */
+    bool connected = client_is_connected();
 
-        // Replicate modal layout to find the coin line's rendered position
-        int max_text_width = 0;
-        for (int i = 0; i < m->line_count; i++) {
-            int w = MeasureText(m->lines[i].text, m->font_size);
-            if (w > max_text_width) max_text_width = w;
-        }
-        int modal_width = max_text_width + (m->padding * 2);
-        if (modal_width < m->min_width) modal_width = m->min_width;
-        int modal_x = screen_width - modal_width - m->margin_right;
+    const char* map = g_game_state.player.map_code;
+    float px        = g_game_state.player.base.interp_pos.x;
+    float py        = g_game_state.player.base.interp_pos.y;
+    int   fps       = (int)roundf(g_modal_player.cached_fps);
+    bool  init      = g_game_state.init_received;
 
-        int coin_idx = m->line_count - 1;
-        int coin_y = m->margin_top + m->padding + (coin_idx * m->line_spacing);
-        int coin_text_w = MeasureText(m->lines[coin_idx].text, m->font_size);
-        int coin_text_x = modal_x + (modal_width - coin_text_w) / 2; // CENTER aligned
+    /* ── Build two compact lines ──────────────────────────────────────── */
 
-        int icon_size = m->font_size;
-        const EntityTypeDefault* _cdef = game_state_get_entity_default("coin");
-        const char* _ckey = (_cdef && _cdef->live_item_id_count > 0) ? _cdef->live_item_ids[0] : NULL;
-        game_render_draw_object_layer_animated_ico(_ckey, coin_text_x - icon_size - 4, coin_y, icon_size);
-    }
+    /* Line 1:  [dot space] <map>   (dot drawn separately) */
+    char line1[64];
+    snprintf(line1, sizeof(line1), "  %s",
+             (init && map && map[0]) ? map : "--");
+
+    /* Line 2:  (<x>, <y>)  <fps>fps */
+    char line2[64];
+    if (init)
+        snprintf(line2, sizeof(line2), "(%.0f,%.0f) %dfps", px, py, fps);
+    else
+        snprintf(line2, sizeof(line2), "--  %dfps", fps);
+
+    /* ── Measure for background rect ─────────────────────────────────── */
+    int fs  = 11;          /* font size */
+    int pad = 5;           /* inner padding */
+    int lsp = fs + 4;      /* line spacing */
+    int w1  = MeasureText(line1, fs);
+    int w2  = MeasureText(line2, fs);
+    int box_w  = (w1 > w2 ? w1 : w2) + pad * 2 + 10; /* +10 for dot */
+    int box_h  = lsp * 2 + pad * 2 - 2;
+    int margin = 10;
+    int bx     = screen_width - box_w - margin;
+    int by     = margin;
+
+    /* ── Background: rounded rect, no border ─────────────────────────── */
+    DrawRectangleRounded(
+        (Rectangle){ (float)bx, (float)by, (float)box_w, (float)box_h },
+        0.35f, 8, (Color){ 0, 0, 0, 130 });
+
+    /* ── Status dot (connection indicator) ───────────────────────────── */
+    Color dot_c = connected ? (Color){ 60, 220, 80, 255 }
+                            : (Color){ 220, 60, 60, 255 };
+    DrawCircle(bx + pad + 4, by + pad + fs / 2 + 1, 3.0f, dot_c);
+
+    /* ── Line 1: map code ─────────────────────────────────────────────── */
+    shadow_text(line1, bx + pad, by + pad, fs, (Color){ 240, 215, 100, 230 });
+
+    /* ── Line 2: position + fps ───────────────────────────────────────── */
+    shadow_text(line2, bx + pad, by + pad + lsp, fs, (Color){ 180, 195, 220, 210 });
 }
-
