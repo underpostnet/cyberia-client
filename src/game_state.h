@@ -64,6 +64,7 @@ struct EntityState {
     float respawn_in;
     double last_update;
     ColorRGBA color; /* entity-specific color sent by server (0 = use palette default) */
+    int effective_level; /* clamped sum of all stat fields, sent by server for all entities */
 };
 
 // Player state structure

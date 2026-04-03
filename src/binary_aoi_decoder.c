@@ -160,6 +160,7 @@ static void decode_player_entity(BinReader* r, uint8_t flags) {
     }
     p->base.object_layer_count = read_item_ids(
         r, p->base.object_layers, MAX_OBJECT_LAYERS);
+    p->base.effective_level = (int)br_u16(r);
 }
 
 static void decode_bot_entity(BinReader* r, uint8_t flags) {
@@ -217,6 +218,7 @@ static void decode_bot_entity(BinReader* r, uint8_t flags) {
     b->base.object_layer_count = read_item_ids(
         r, b->base.object_layers, MAX_OBJECT_LAYERS);
     br_string(r, b->caster_id, MAX_ID_LENGTH);
+    b->base.effective_level = (int)br_u16(r);
 }
 
 static void decode_floor_entity(BinReader* r, uint8_t flags) {
@@ -372,6 +374,9 @@ static void decode_self_player(BinReader* r, uint8_t flags) {
 
     /* activeStatsSum */
     gs->active_stats_sum = (int)br_u16(r);
+    /* Mirror to self-entity for uniform overhead UI access */
+    p->base.effective_level = (gs->active_stats_sum < gs->sum_stats_limit)
+        ? gs->active_stats_sum : gs->sum_stats_limit;
 
     /* mapCode — length-prefixed string */
     br_string(r, p->map_code, MAX_ID_LENGTH);

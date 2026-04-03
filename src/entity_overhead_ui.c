@@ -34,9 +34,9 @@ static const Color C_HP_LOW      = {230,  60,  40, 170 };   /* red when ≤25% *
 static const Color C_HP_MID      = {230, 175,  30, 170 };   /* amber at 50 % */
 
 /* Load bar fill — green (low) → yellow (near limit) */
-static const Color C_LOAD_SAFE   = { 80, 200,  80, 170 };
-static const Color C_LOAD_WARN   = {230, 200,  30, 170 };
-static const Color C_LOAD_FULL   = {230, 100,  30, 170 };   /* orange at cap  */
+static const Color C_LEVEL_SAFE   = { 80, 200,  80, 170 };
+static const Color C_LEVEL_WARN   = {230, 200,  30, 170 };
+static const Color C_LEVEL_FULL   = {230, 100,  30, 170 };   /* orange at cap  */
 
 /* Text colours */
 static const Color C_NAME_TEXT   = {255, 255, 255, 230 };
@@ -75,11 +75,11 @@ static void draw_nameplate(const char *name, float cx, float sy) {
     DrawText(name, tx, ty, fs, C_NAME_TEXT);
 }
 
-/* ── Sub-component: load / capacity bar ──────────────────────────────── */
+/* ── Sub-component: effective level bar ─────────────────────────────── */
 
-/** Draws the active-stat-load bar.
+/** Draws the effective-level bar.
  *  @param bar_rect  Screen-space rectangle for the full bar background. */
-static void draw_load_bar(Rectangle bar_rect, int current, int max) {
+static void draw_level_bar(Rectangle bar_rect, int current, int max) {
     /* Background */
     DrawRectangleRec(bar_rect, C_BAR_BG);
 
@@ -88,12 +88,12 @@ static void draw_load_bar(Rectangle bar_rect, int current, int max) {
     float frac = (float)current / (float)max;
     if (frac > 1.0f) frac = 1.0f;
 
-    /* Colour: green → yellow → orange as load grows */
+    /* Colour: green → yellow → orange as level grows */
     Color fill;
     if (frac < 0.5f) {
-        fill = color_lerp(C_LOAD_SAFE, C_LOAD_WARN, frac * 2.0f);
+        fill = color_lerp(C_LEVEL_SAFE, C_LEVEL_WARN, frac * 2.0f);
     } else {
-        fill = color_lerp(C_LOAD_WARN, C_LOAD_FULL, (frac - 0.5f) * 2.0f);
+        fill = color_lerp(C_LEVEL_WARN, C_LEVEL_FULL, (frac - 0.5f) * 2.0f);
     }
 
     Rectangle fill_rect = bar_rect;
@@ -104,10 +104,10 @@ static void draw_load_bar(Rectangle bar_rect, int current, int max) {
     /* 1-px border */
     DrawRectangleLinesEx(bar_rect, 1.0f, (Color){ 80, 80, 80, 100 });
 
-    /* OL label: "OL X / Y" centred inside the bar */
+    /* Level label: "Lv. X / Y" centred inside the bar */
     char label[32];
-    snprintf(label, sizeof(label), "OL %d / %d", current, max);
-    int lfs = EOHUD_LOAD_LABEL_FONT_SIZE;
+    snprintf(label, sizeof(label), "Lv. %d / %d", current, max);
+    int lfs = EOHUD_LEVEL_LABEL_FONT_SIZE;
     int ltw = MeasureText(label, lfs);
     int lx  = (int)(bar_rect.x + bar_rect.width * 0.5f - ltw * 0.5f);
     int ly  = (int)(bar_rect.y + (bar_rect.height - lfs) * 0.5f);
@@ -194,8 +194,8 @@ void entity_overhead_ui_draw(
         cursor_px -= EOHUD_BAR_SPACING * cell_size;
     }
 
-    /* ── Load / capacity bar (above HP bar) ──────────────────────────── */
-    if (p->show_load && p->max_load > 0) {
+    /* ── Level bar (above HP bar) ────────────────────────────────────── */
+    if (p->show_level && p->max_level > 0) {
         cursor_px -= bar_h_px;
         Rectangle ldrect = {
             entity_cx_px - bar_w_px * 0.5f,
@@ -203,7 +203,7 @@ void entity_overhead_ui_draw(
             bar_w_px,
             bar_h_px
         };
-        draw_load_bar(ldrect, p->current_load, p->max_load);
+        draw_level_bar(ldrect, p->effective_level, p->max_level);
     }
 
     /* ── Nameplate (topmost) ──────────────────────────────────────────── */

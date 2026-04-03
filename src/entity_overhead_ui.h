@@ -6,7 +6,7 @@
  * in world space (inside BeginMode2D / EndMode2D):
  *
  *   ┌──────────────────────┐   ← nameplate   (display name label)
- *   │  [====load bar=====] │   ← capacity bar (active stat load / sum_stats_limit)
+ *   │  [===level bar=====] │   ← level bar   (effective level / sum_stats_limit)
  *   │  [====HP  bar======] │   ← health bar   (life / max_life)
  *   └──────────────────────┘
  *            │
@@ -16,12 +16,12 @@
  * but still inside BeginMode2D:
  *
  *   EntityOverheadParams p = {
- *       .name         = entity_base->id,
- *       .current_load = g_game_state.active_stats_sum,
- *       .max_load     = g_game_state.sum_stats_limit,
- *       .life         = entity_base->life,
- *       .max_life     = entity_base->max_life,
- *       .show_load    = is_self_player,  // load bar only meaningful for self
+ *       .name            = entity_base->id,
+ *       .effective_level = entity_base->effective_level,
+ *       .max_level       = g_game_state.sum_stats_limit,
+ *       .life            = entity_base->life,
+ *       .max_life        = entity_base->max_life,
+ *       .show_level      = true,
  *   };
  *   entity_overhead_ui_draw(&p,
  *       entity_base->interp_pos.x, entity_base->interp_pos.y,
@@ -60,8 +60,8 @@
 /** Font size for the HP label (e.g. "HP 73/100") in screen pixels. */
 #define EOHUD_HP_LABEL_FONT_SIZE   11
 
-/** Font size for the OL label (e.g. "OL 15 / 30") in screen pixels. */
-#define EOHUD_LOAD_LABEL_FONT_SIZE 11
+/** Font size for the level label (e.g. "Lv. 15 / 30") in screen pixels. */
+#define EOHUD_LEVEL_LABEL_FONT_SIZE 11
 
 /* ── Data model ─────────────────────────────────────────────────────────── */
 
@@ -77,16 +77,16 @@ typedef struct {
     const char *name;
 
     /**
-     * Current sum of active ObjectLayer stat points.
-     * For bots / other players this can be set to 0 if unknown.
+     * Current effective level (clamped sum of all stat fields).
+     * Transmitted by the server for every entity (player and bot).
      */
-    int current_load;
+    int effective_level;
 
     /**
-     * Maximum allowed active stat load (sum_stats_limit).
-     * Set to 0 to hide the load bar entirely.
+     * Maximum effective level (sum_stats_limit).
+     * Set to 0 to hide the level bar entirely.
      */
-    int max_load;
+    int max_level;
 
     /** Current life (HP). */
     float life;
@@ -95,11 +95,10 @@ typedef struct {
     float max_life;
 
     /**
-     * Whether to render the capacity / load bar.
-     * Typically true only for the self player; false for bots / other players
-     * since their stats are not transmitted over the wire.
+     * Whether to render the effective level bar.
+     * Display for all living entities.
      */
-    bool show_load;
+    bool show_level;
 
     /**
      * Whether to render the nameplate.

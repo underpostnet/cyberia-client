@@ -633,34 +633,19 @@ void game_render_entities(void) {
                     || strcmp(entity_type_str, "coin")  == 0);
 
             if (!is_skill_or_coin) {
-                bool is_self = entry->is_main_player;
-
-                /* For non-self entities derive load from their active object
-                 * layers (each active layer = one equipped stat slot).      */
-                int proxy_load = 0;
-                int proxy_max  = 0;
-                if (is_self) {
-                    proxy_load = g_game_state.active_stats_sum;
-                    proxy_max  = g_game_state.sum_stats_limit;
-                } else {
-                    for (int j = 0; j < entity_base->object_layer_count; j++) {
-                        if (entity_base->object_layers[j].active)
-                            proxy_load++;
-                    }
-                    proxy_max = entity_base->object_layer_count;
-                }
-
+                /* All entities now carry an effective_level transmitted by the
+                 * server (clamped sum of all stat fields). Use it directly.  */
                 EntityOverheadParams ohp = {
-                    .name         = entity_base->id,
-                    .current_load = proxy_load,
-                    .max_load     = proxy_max,
-                    .life         = entity_base->life,
-                    .max_life     = entity_base->max_life,
-                    .show_name    = true,
-                    .show_load    = proxy_max > 0
-                                    && entity_base->respawn_in <= 0.0f,
-                    .show_hp      = entity_base->max_life > 0.0f
-                                    && entity_base->respawn_in <= 0.0f,
+                    .name            = entity_base->id,
+                    .effective_level = entity_base->effective_level,
+                    .max_level       = g_game_state.sum_stats_limit,
+                    .life            = entity_base->life,
+                    .max_life        = entity_base->max_life,
+                    .show_name       = true,
+                    .show_level      = g_game_state.sum_stats_limit > 0
+                                       && entity_base->respawn_in <= 0.0f,
+                    .show_hp         = entity_base->max_life > 0.0f
+                                       && entity_base->respawn_in <= 0.0f,
                 };
                 entity_overhead_ui_draw(
                     &ohp,
