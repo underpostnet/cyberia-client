@@ -397,22 +397,38 @@ void inventory_modal_draw(void) {
     (void)y_cursor; /* remaining space above activate button */
 
     /* 11. Activate / Deactivate button (anchored to card bottom) */
-    if (activable) {
+    {
         bool currently_active = ols->active;
         const char* btn_label = currently_active ? "Deactivate" : "Activate";
-        Color btn_color       = currently_active ? C_BTN_DEACT : C_BTN_ACTIVATE;
+
+        /* Determine whether the button should be enabled */
+        bool btn_enabled = activable;
+        if (btn_enabled && item_type[0] != '\0') {
+            /* Item type must be in activeItemTypes to be activable */
+            if (!game_state_is_active_item_type(item_type))
+                btn_enabled = false;
+            /* Active skins cannot be deactivated when requireSkin is set */
+            if (currently_active && strcmp(item_type, "skin") == 0
+                && g_game_state.equipment_rules.require_skin)
+                btn_enabled = false;
+        }
+
+        Color btn_color = !btn_enabled ? (Color){ 50, 50, 60, 200 }
+                        : currently_active ? C_BTN_DEACT : C_BTN_ACTIVATE;
+        Color txt_color = !btn_enabled ? (Color){ 100, 100, 110, 160 } : C_BTN_TEXT;
 
         float btn_x = cx + (cw - MODAL_BTN_W) * 0.5f;
         float btn_y = card.y + card.height - MODAL_BTN_H - 14;
         DrawRectangleRec((Rectangle){ btn_x, btn_y, MODAL_BTN_W, MODAL_BTN_H }, btn_color);
         DrawRectangleLinesEx((Rectangle){ btn_x, btn_y, MODAL_BTN_W, MODAL_BTN_H },
-                             1.5f, (Color){ 220, 220, 220, 120 });
+                             1.5f, btn_enabled ? (Color){ 220, 220, 220, 120 }
+                                               : (Color){ 60, 60, 70, 100 });
         int bfs = MODAL_FONT_BODY + 2;
         int btw = MeasureText(btn_label, bfs);
         DrawText(btn_label,
                  (int)(btn_x + (MODAL_BTN_W - btw) * 0.5f),
                  (int)(btn_y + (MODAL_BTN_H - bfs) * 0.5f),
-                 bfs, C_BTN_TEXT);
+                 bfs, txt_color);
     }
 }
 
@@ -458,11 +474,23 @@ bool inventory_modal_handle_click(int mx, int my, bool clicked) {
     if (s_inv_idx >= 0 && s_inv_idx < g_game_state.full_inventory_count) {
         const ObjectLayerState* ols = &g_game_state.full_inventory[s_inv_idx];
         bool activable = true;
+        const char* item_type = "";
         if (s_ol_manager) {
             ObjectLayer* ol_data = get_or_fetch_object_layer(s_ol_manager, ols->item_id);
-            if (ol_data) activable = ol_data->data.item.activable;
+            if (ol_data) {
+                activable = ol_data->data.item.activable;
+                item_type = ol_data->data.item.type;
+            }
         }
-        if (activable) {
+        bool btn_enabled = activable;
+        if (btn_enabled && item_type[0] != '\0') {
+            if (!game_state_is_active_item_type(item_type))
+                btn_enabled = false;
+            if (ols->active && strcmp(item_type, "skin") == 0
+                && g_game_state.equipment_rules.require_skin)
+                btn_enabled = false;
+        }
+        if (btn_enabled) {
             float btn_x = card.x + (card.width - MODAL_BTN_W) * 0.5f;
             float btn_y = card.y + card.height - MODAL_BTN_H - 14;
             Rectangle btn_r = { btn_x, btn_y, MODAL_BTN_W, MODAL_BTN_H };

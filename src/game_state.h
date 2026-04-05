@@ -32,6 +32,7 @@
 #define MAX_BEHAVIOR_LENGTH 32
 #define MAX_ENTITY_TYPES     16
 #define MAX_DEFAULT_ITEM_IDS  8
+#define MAX_ACTIVE_ITEM_TYPES 8
 
 // Forward declarations
 typedef struct GameState GameState;
@@ -126,6 +127,14 @@ typedef struct {
     Color skill;
 } GameColors;
 
+// Equipment rules received from metadata message (mirrors Go EquipmentRulesConfig).
+typedef struct {
+    char active_item_types[MAX_ACTIVE_ITEM_TYPES][32]; // set of activable item types
+    int  active_item_type_count;
+    bool one_per_type;   // enforce one active per type
+    bool require_skin;   // require ≥ 1 active skin
+} EquipmentRules;
+
 // Per-entity-type visual defaults received in init_data payload.
 typedef struct {
     char entity_type[32];
@@ -210,6 +219,9 @@ struct GameState {
 
     // Economy
     int player_coins; /* coin balance pushed by server each AOI frame */
+
+    // Equipment rules (from metadata message)
+    EquipmentRules equipment_rules;
 
     // Full inventory (all OLs including inactive) \u2014 self-player only.
     // Decoded from WriteSelfPlayer's writeFullInventory section.
@@ -338,6 +350,18 @@ static inline Color game_state_get_color_by_key(const char* key) {
  */
 static inline int game_state_get_player_coins(void) {
     return g_game_state.player_coins;
+}
+
+/**
+ * @brief Check if an item type is in the activeItemTypes equipment rule set.
+ */
+static inline bool game_state_is_active_item_type(const char* item_type) {
+    if (!item_type || item_type[0] == '\0') return false;
+    for (int i = 0; i < g_game_state.equipment_rules.active_item_type_count; i++) {
+        if (strcmp(g_game_state.equipment_rules.active_item_types[i], item_type) == 0)
+            return true;
+    }
+    return false;
 }
 
 #endif // GAME_STATE_H

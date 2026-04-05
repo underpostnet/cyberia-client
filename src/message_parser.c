@@ -401,6 +401,33 @@ static int message_parser_parse_metadata(const cJSON* json_root) {
         js_init_engine_api(api_url);
     }
 
+    // Parse equipmentRules if provided
+    cJSON* eq_rules = cJSON_GetObjectItem(payload, "equipmentRules");
+    if (eq_rules && cJSON_IsObject(eq_rules)) {
+        g_game_state.equipment_rules.active_item_type_count = 0;
+        cJSON* ait = cJSON_GetObjectItem(eq_rules, "activeItemTypes");
+        if (ait && cJSON_IsObject(ait)) {
+            cJSON* entry = NULL;
+            cJSON_ArrayForEach(entry, ait) {
+                if (entry->string && cJSON_IsTrue(entry) &&
+                    g_game_state.equipment_rules.active_item_type_count < MAX_ACTIVE_ITEM_TYPES) {
+                    strncpy(g_game_state.equipment_rules.active_item_types[
+                        g_game_state.equipment_rules.active_item_type_count],
+                        entry->string, 31);
+                    g_game_state.equipment_rules.active_item_type_count++;
+                }
+            }
+        }
+        cJSON* opt = cJSON_GetObjectItem(eq_rules, "onePerType");
+        g_game_state.equipment_rules.one_per_type = (opt && cJSON_IsTrue(opt));
+        cJSON* rs = cJSON_GetObjectItem(eq_rules, "requireSkin");
+        g_game_state.equipment_rules.require_skin = (rs && cJSON_IsTrue(rs));
+        printf("[METADATA] Equipment rules: %d activeItemTypes, onePerType=%d, requireSkin=%d\n",
+               g_game_state.equipment_rules.active_item_type_count,
+               g_game_state.equipment_rules.one_per_type,
+               g_game_state.equipment_rules.require_skin);
+    }
+
     printf("[METADATA] Cached %d ObjectLayers, %d AtlasSheets from server\n", ol_count, atlas_count);
     return 0;
 }

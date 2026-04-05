@@ -106,14 +106,13 @@ static void draw_slot(Rectangle r, const ObjectLayerState* ols, ObjectLayersMana
         if (ol_data) activable = ol_data->data.item.activable;
     }
 
-    /* Border: active glow (activable only) or dim border */
+    /* Border: always consistent 2px thickness — color varies by state */
     if (active && activable) {
-        Rectangle glow = { r.x - 4, r.y - 4, r.width + 8, r.height + 8 };
-        DrawRectangleRec(glow, (Color){ C_ACTIVE_GLOW.r, C_ACTIVE_GLOW.g,
-                                        C_ACTIVE_GLOW.b, 50 });
-        DrawRectangleLinesEx(r, (float)INV_ACTIVE_BORDER, C_ACTIVE_GLOW);
+        DrawRectangleLinesEx(r, 2.0f, C_ACTIVE_GLOW);
+    } else if (!activable) {
+        DrawRectangleLinesEx(r, 2.0f, C_SLOT_BORDER);
     } else {
-        DrawRectangleLinesEx(r, 1.0f, C_SLOT_BORDER);
+        DrawRectangleLinesEx(r, 2.0f, C_SLOT_BORDER);
     }
 
     /* Sprite via ol_as_animated_ico */
@@ -243,8 +242,8 @@ void inventory_bar_draw(void) {
 
     /* Count scrollable slots (all except the coin slot) */
     int scroll_count = 0;
-    int scroll_map[/*MAX_OBJECT_LAYERS*/ 20]; /* maps vis index → full_inventory index */
-    for (int i = 0; i < n_inv && scroll_count < 20; i++) {
+    int scroll_map[MAX_OBJECT_LAYERS]; /* maps vis index → full_inventory index */
+    for (int i = 0; i < n_inv && scroll_count < MAX_OBJECT_LAYERS; i++) {
         if (i != coin_idx) scroll_map[scroll_count++] = i;
     }
 
@@ -272,14 +271,14 @@ void inventory_bar_draw(void) {
     Rectangle cr = coin_slot_rect(screen_w, screen_h);
     draw_coin_slot(cr, coin_idx, s_ol_manager);
 
-    /* Scroll indicator dots (for scrollable slots only) */
+    /* Scroll indicator dots — positioned ABOVE slot area, at the top of the bar */
     if (scroll_count > vis) {
         int dot_count = scroll_count > 40 ? 40 : scroll_count;
         int dot_r     = 3;
         int dot_gap   = 4;
         int total_w   = dot_count * (dot_r * 2 + dot_gap) - dot_gap;
         int dot_x     = (screen_w / 2 - total_w / 2);
-        int dot_y     = screen_h - 8;
+        int dot_y     = bar_top + 4;
         for (int i = 0; i < dot_count; i++) {
             bool on = (i >= s_scroll_offset && i < s_scroll_offset + vis);
             Color dc = on ? (Color){180, 200, 255, 220} : (Color){60, 60, 90, 140};
@@ -299,9 +298,9 @@ int inventory_bar_get_tapped_slot(int mx, int my) {
 
     /* Build scroll map (excluding coin slot) */
     int coin_idx = find_coin_slot();
-    int scroll_map[20];
+    int scroll_map[MAX_OBJECT_LAYERS];
     int scroll_count = 0;
-    for (int i = 0; i < n_inv && scroll_count < 20; i++) {
+    for (int i = 0; i < n_inv && scroll_count < MAX_OBJECT_LAYERS; i++) {
         if (i != coin_idx) scroll_map[scroll_count++] = i;
     }
 
