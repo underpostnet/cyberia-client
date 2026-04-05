@@ -79,7 +79,7 @@ void game_render_draw_object_layer_as_down_idle_ico(const char* item_key, int x,
     if (item_key && g_object_layers_manager) {
         AtlasSpriteSheetData* atlas = get_or_fetch_atlas_data(g_object_layers_manager, item_key);
         if (atlas) {
-            Texture2D tex = get_atlas_texture(g_object_layers_manager, atlas->file_id);
+            Texture2D tex = get_atlas_texture(g_object_layers_manager, atlas->item_key);
             if (tex.id > 0) {
                 const DirectionFrameData* dfd = atlas_get_direction_frames(atlas, "default_idle");
                 if (dfd && dfd->count > 0) {
@@ -105,7 +105,7 @@ void game_render_draw_object_layer_animated_ico(const char* item_key, int x, int
     if (item_key && g_object_layers_manager) {
         AtlasSpriteSheetData* atlas = get_or_fetch_atlas_data(g_object_layers_manager, item_key);
         if (atlas) {
-            Texture2D tex = get_atlas_texture(g_object_layers_manager, atlas->file_id);
+            Texture2D tex = get_atlas_texture(g_object_layers_manager, atlas->item_key);
             if (tex.id > 0) {
                 const DirectionFrameData* dfd = atlas_get_direction_frames(atlas, "default_idle");
                 if (dfd && dfd->count > 0) {

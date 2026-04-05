@@ -135,17 +135,17 @@ ObjectLayer* get_or_fetch_object_layer(ObjectLayersManager* manager, const char*
 AtlasSpriteSheetData* get_or_fetch_atlas_data(ObjectLayersManager* manager, const char* item_key);
 
 /**
- * @brief Retrieves the cached atlas GPU texture for a given file ID
+ * @brief Retrieves the cached atlas GPU texture for a given item key
  *
- * Returns the Texture2D for the consolidated atlas PNG that was loaded
- * when get_or_fetch_atlas_data() first fetched the item. The texture
- * is cached in the TextureManager by file_id key.
+ * Returns the Texture2D for the consolidated atlas PNG. The texture
+ * is fetched asynchronously from the atlas-sprite-sheet blob API
+ * using the item key and cached for subsequent calls.
  *
  * @param manager The object layers manager instance
- * @param file_id The MongoDB ObjectId hex string of the atlas file
+ * @param item_key The item identifier key (e.g., "anon", "lain")
  * @return The atlas Texture2D. Returns empty texture (id=0) if not found or not loaded.
  */
-Texture2D get_atlas_texture(ObjectLayersManager* manager, const char* file_id);
+Texture2D get_atlas_texture(ObjectLayersManager* manager, const char* item_key);
 
 // ============================================================================
 // Public API - Cache Population from WebSocket Metadata

@@ -417,11 +417,11 @@ void draw_entity_layers(
         // Atlas-based texture loading (single texture per item)
         // ====================================================================
 
-        if (atlas && atlas->file_id[0] != '\0') {
+        if (atlas && atlas->item_key[0] != '\0') {
             // Get or poll the atlas texture (async loading)
             Texture2D atlas_texture = get_atlas_texture(
                 render->obj_layers_mgr,
-                atlas->file_id
+                atlas->item_key
             );
 
             if (atlas_texture.id > 0) {

@@ -64,7 +64,7 @@ void ol_as_ico_draw(ObjectLayersManager* mgr,
         return;
     }
 
-    Texture2D tex = get_atlas_texture(mgr, atlas->file_id);
+    Texture2D tex = get_atlas_texture(mgr, item_key);
     if (tex.id == 0) {
         fallback_circle(x, y, icon_size);
         return;

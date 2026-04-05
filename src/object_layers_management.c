@@ -35,7 +35,7 @@ typedef enum {
 } AtlasTextureState;
 
 typedef struct AtlasTextureEntry {
-    char* file_id;
+    char* item_key;
     Texture2D texture;
     AtlasTextureState state;
     int request_id;
@@ -281,14 +281,14 @@ static AtlasSpriteSheetData* lookup_cached_atlas(ObjectLayersManager* manager, c
 
 // --- Atlas Texture Cache Operations ---
 
-static AtlasTextureEntry* lookup_tex_entry(ObjectLayersManager* manager, const char* file_id) {
-    if (!manager || !file_id) return NULL;
+static AtlasTextureEntry* lookup_tex_entry(ObjectLayersManager* manager, const char* item_key) {
+    if (!manager || !item_key) return NULL;
 
-    unsigned long index = hash_string(file_id) % HASH_TABLE_SIZE;
+    unsigned long index = hash_string(item_key) % HASH_TABLE_SIZE;
     AtlasTextureEntry* entry = manager->tex_buckets[index];
 
     while (entry) {
-        if (strcmp(entry->file_id, file_id) == 0) {
+        if (strcmp(entry->item_key, item_key) == 0) {
             return entry;
         }
         entry = entry->next;
@@ -296,19 +296,19 @@ static AtlasTextureEntry* lookup_tex_entry(ObjectLayersManager* manager, const c
     return NULL;
 }
 
-static AtlasTextureEntry* create_tex_entry(ObjectLayersManager* manager, const char* file_id) {
-    if (!manager || !file_id) return NULL;
+static AtlasTextureEntry* create_tex_entry(ObjectLayersManager* manager, const char* item_key) {
+    if (!manager || !item_key) return NULL;
 
     AtlasTextureEntry* entry = (AtlasTextureEntry*)malloc(sizeof(AtlasTextureEntry));
     if (!entry) return NULL;
 
-    entry->file_id = strdup(file_id);
+    entry->item_key = strdup(item_key);
     entry->texture = (Texture2D){0};
     entry->state = ATLAS_TEX_NONE;
     entry->request_id = 0;
     entry->next = NULL;
 
-    unsigned long index = hash_string(file_id) % HASH_TABLE_SIZE;
+    unsigned long index = hash_string(item_key) % HASH_TABLE_SIZE;
     entry->next = manager->tex_buckets[index];
     manager->tex_buckets[index] = entry;
 
@@ -316,25 +316,25 @@ static AtlasTextureEntry* create_tex_entry(ObjectLayersManager* manager, const c
 }
 
 /**
- * Start or poll the async loading of an atlas texture by file_id.
+ * Start or poll the async loading of an atlas texture by item_key.
  * Returns the loaded Texture2D (id > 0 when ready), or empty (id == 0) when still loading.
  */
-static Texture2D load_or_poll_atlas_texture(ObjectLayersManager* manager, const char* file_id) {
-    if (!manager || !file_id || file_id[0] == '\0') return (Texture2D){0};
+static Texture2D load_or_poll_atlas_texture(ObjectLayersManager* manager, const char* item_key) {
+    if (!manager || !item_key || item_key[0] == '\0') return (Texture2D){0};
 
-    AtlasTextureEntry* entry = lookup_tex_entry(manager, file_id);
+    AtlasTextureEntry* entry = lookup_tex_entry(manager, item_key);
 
     if (!entry) {
         // First request — start async fetch
-        entry = create_tex_entry(manager, file_id);
+        entry = create_tex_entry(manager, item_key);
         if (!entry) return (Texture2D){0};
 
         entry->request_id = manager->next_request_id++;
         entry->state = ATLAS_TEX_LOADING;
 
-        // Build blob URL: {API_BASE_URL}/api/file/blob/{file_id}
+        // Build blob URL: {API_BASE_URL}/api/atlas-sprite-sheet/blob/{item_key}
         char url[512];
-        snprintf(url, sizeof(url), "%s/api/file/blob/%s", API_BASE_URL, file_id);
+        snprintf(url, sizeof(url), "%s/api/atlas-sprite-sheet/blob/%s", API_BASE_URL, item_key);
 
         js_start_fetch_binary(url, entry->request_id);
         return (Texture2D){0};
@@ -360,16 +360,16 @@ static Texture2D load_or_poll_atlas_texture(ObjectLayersManager* manager, const 
                 entry->texture = LoadTextureFromImage(image);
                 UnloadImage(image);
                 entry->state = ATLAS_TEX_READY;
-                printf("[INFO] Atlas texture loaded for file_id: %s (%dx%d)\n",
-                       file_id, entry->texture.width, entry->texture.height);
+                printf("[INFO] Atlas texture loaded for item_key: %s (%dx%d)\n",
+                       item_key, entry->texture.width, entry->texture.height);
             } else {
                 entry->state = ATLAS_TEX_ERROR;
-                fprintf(stderr, "[WARN] Failed to decode atlas PNG for file_id: %s\n", file_id);
+                fprintf(stderr, "[WARN] Failed to decode atlas PNG for item_key: %s\n", item_key);
             }
             free(data);
         } else if (size == -1) {
             entry->state = ATLAS_TEX_ERROR;
-            fprintf(stderr, "[WARN] Async fetch failed for atlas file_id: %s\n", file_id);
+            fprintf(stderr, "[WARN] Async fetch failed for atlas item_key: %s\n", item_key);
         }
         // else: size == 0 means still pending, keep polling
     }
@@ -434,7 +434,7 @@ void destroy_object_layers_manager(ObjectLayersManager* manager) {
             if (entry->texture.id > 0) {
                 UnloadTexture(entry->texture);
             }
-            free(entry->file_id);
+            free(entry->item_key);
             free(entry);
             entry = next;
         }
@@ -459,10 +459,10 @@ AtlasSpriteSheetData* get_or_fetch_atlas_data(ObjectLayersManager* manager, cons
     return lookup_cached_atlas(manager, item_key);
 }
 
-Texture2D get_atlas_texture(ObjectLayersManager* manager, const char* file_id) {
-    if (!manager || !file_id || file_id[0] == '\0') return (Texture2D){0};
+Texture2D get_atlas_texture(ObjectLayersManager* manager, const char* item_key) {
+    if (!manager || !item_key || item_key[0] == '\0') return (Texture2D){0};
 
-    return load_or_poll_atlas_texture(manager, file_id);
+    return load_or_poll_atlas_texture(manager, item_key);
 }
 
 // ============================================================================
@@ -545,11 +545,11 @@ void populate_atlas_from_json(ObjectLayersManager* manager, const char* item_key
 
     cache_atlas_data(manager, item_key, atlas);
 
-    // Start async loading of the atlas texture
-    if (atlas->file_id[0] != '\0') {
-        load_or_poll_atlas_texture(manager, atlas->file_id);
+    // Start async loading of the atlas texture by item_key
+    if (item_key[0] != '\0') {
+        load_or_poll_atlas_texture(manager, item_key);
     }
 
-    printf("[INFO] Atlas populated from WS for: %s (file_id: %s, %dx%d)\n",
-           item_key, atlas->file_id, atlas->atlas_width, atlas->atlas_height);
+    printf("[INFO] Atlas populated from WS for: %s (%dx%d)\n",
+           item_key, atlas->atlas_width, atlas->atlas_height);
 }
