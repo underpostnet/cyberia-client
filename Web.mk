@@ -12,6 +12,7 @@ TARGET_OUTPUT_DIR		:= $(call lc,$(OUTPUT_DIR)/web/$(BUILD_MODE))
 # Specific compiler flags
 CFLAGS += -DGRAPHICS_API_OPENGL_ES2
 CFLAGS += -flto
+CFLAGS += -Wno-unused-parameter
 
 ifneq ($(BUILD_MODE),RELEASE)
 CFLAGS += --profiling
