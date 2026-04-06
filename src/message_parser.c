@@ -366,7 +366,10 @@ static int message_parser_parse_metadata(const cJSON* json_root) {
         return -1;
     }
 
-    // Parse objectLayers: map of itemId → OL metadata
+    // Parse objectLayers: map of itemId → OL metadata, then schedule
+    // atlas sprite sheet REST fetch for each item (two requests per itemKey:
+    // 1. GET /api/atlas-sprite-sheet/metadata/:itemKey  → cache frames + dims
+    // 2. GET /api/atlas-sprite-sheet/blob/:itemKey      → cache PNG texture)
     cJSON* ol_map = cJSON_GetObjectItem(payload, "objectLayers");
     int ol_count = 0;
     if (ol_map && cJSON_IsObject(ol_map)) {
@@ -375,21 +378,8 @@ static int message_parser_parse_metadata(const cJSON* json_root) {
             const char* item_id = entry->string;
             if (item_id && cJSON_IsObject(entry)) {
                 populate_object_layer_from_json(mgr, item_id, entry);
+                obj_layers_mgr_schedule_atlas_fetch(mgr, item_id);
                 ol_count++;
-            }
-        }
-    }
-
-    // Parse atlasData: map of itemKey → atlas metadata
-    cJSON* atlas_map = cJSON_GetObjectItem(payload, "atlasData");
-    int atlas_count = 0;
-    if (atlas_map && cJSON_IsObject(atlas_map)) {
-        cJSON* entry = NULL;
-        cJSON_ArrayForEach(entry, atlas_map) {
-            const char* item_key = entry->string;
-            if (item_key && cJSON_IsObject(entry)) {
-                populate_atlas_from_json(mgr, item_key, entry);
-                atlas_count++;
             }
         }
     }
@@ -428,7 +418,7 @@ static int message_parser_parse_metadata(const cJSON* json_root) {
                g_game_state.equipment_rules.require_skin);
     }
 
-    printf("[METADATA] Cached %d ObjectLayers, %d AtlasSheets from server\n", ol_count, atlas_count);
+    printf("[METADATA] Cached %d ObjectLayers, scheduled %d atlas REST fetches\n", ol_count, ol_count);
     return 0;
 }
 

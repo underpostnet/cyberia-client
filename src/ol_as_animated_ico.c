@@ -60,6 +60,11 @@ void ol_as_ico_draw(ObjectLayersManager* mgr,
 
     AtlasSpriteSheetData* atlas = get_or_fetch_atlas_data(mgr, item_key);
     if (!atlas) {
+        /* Atlas not cached yet — pump the fetch state machine so metadata REST
+         * request is scheduled (first call) or polled (subsequent calls).
+         * Once metadata arrives, get_atlas_texture will automatically kick off
+         * the PNG blob fetch on the next frame. */
+        get_atlas_texture(mgr, item_key);
         fallback_circle(x, y, icon_size);
         return;
     }

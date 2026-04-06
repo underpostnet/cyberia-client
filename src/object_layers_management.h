@@ -176,4 +176,21 @@ void populate_object_layer_from_json(ObjectLayersManager* manager, const char* i
  */
 void populate_atlas_from_json(ObjectLayersManager* manager, const char* item_key, const cJSON* atlas_json);
 
+/**
+ * @brief Schedule a REST fetch for atlas sprite sheet metadata by item_key.
+ *
+ * Triggers: GET {API_BASE_URL}/api/atlas-sprite-sheet/metadata/{item_key}
+ * Response: { status, data: { metadata: { itemKey, atlasWidth, atlasHeight,
+ *                                         cellPixelDim, frames }, cid } }
+ *
+ * After metadata is received, get_atlas_texture() automatically fetches
+ * and caches the PNG blob on the next call.
+ *
+ * Safe to call multiple times — repeated calls for the same item_key are no-ops.
+ *
+ * @param manager  The object layers manager instance
+ * @param item_key The item identifier key (= metadata.itemKey from the atlas doc)
+ */
+void obj_layers_mgr_schedule_atlas_fetch(ObjectLayersManager* manager, const char* item_key);
+
 #endif // OBJECT_LAYERS_MANAGEMENT_H

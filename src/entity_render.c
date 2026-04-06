@@ -289,6 +289,15 @@ void draw_entity_layers(
             state->item_id
         );
 
+        // If atlas metadata not yet cached, pump the async REST fetch state
+        // machine each frame. On first call: schedules
+        // GET /api/atlas-sprite-sheet/metadata/:itemKey. On subsequent calls:
+        // polls the in-flight request and caches the JSON when it arrives,
+        // then automatically kicks off the PNG blob fetch.
+        if (!atlas) {
+            get_atlas_texture(render->obj_layers_mgr, state->item_id);
+        }
+
         if (!layer && !atlas) {
             // Neither data source available yet — still loading
             any_data_missing = true;
