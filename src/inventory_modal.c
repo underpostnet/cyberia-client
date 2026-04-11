@@ -233,14 +233,6 @@ void inventory_modal_draw(void) {
         ? (0.80f + 0.20f * (1.0f - powf(1.0f - s_age / pop_dur, 3.0f)))
         : 1.0f;
 
-    float fade    = s_age / 0.20f;
-    if (fade > 1.0f) fade = 1.0f;
-    unsigned char oa = (unsigned char)(C_OVERLAY_BG.a * fade);
-
-    /* 1. Backdrop */
-    DrawRectangle(0, 0, screen_w, screen_h,
-                  (Color){ C_OVERLAY_BG.r, C_OVERLAY_BG.g, C_OVERLAY_BG.b, oa });
-
     /* 2. Card */
     Rectangle card = card_rect(screen_w, screen_h, scale);
     DrawRectangleRec(card, C_CARD_BG);

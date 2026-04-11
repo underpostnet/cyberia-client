@@ -760,13 +760,6 @@ void game_render_aoi_circle(void) {
 }
 
 void game_render_ui(void) {
-    // FrozenInteractionState — subtle blue tint over the game world
-    // so the player perceives they're in a protected "pause bubble".
-    // Drawn first so modals render cleanly on top.
-    if (g_game_state.frozen) {
-        DrawRectangle(0, 0, g_renderer.screen_width, g_renderer.screen_height,
-                      (Color){ 10, 15, 40, 45 });
-    }
 
     // Render error messages (always visible)
     game_render_error_messages();
