@@ -235,6 +235,11 @@ struct GameState {
     ObjectLayerState full_inventory[MAX_OBJECT_LAYERS];
     int full_inventory_count;
 
+    // FrozenInteractionState — authoritative flag from the Go server.
+    // While true, the player is in a modal interaction: no outgoing taps,
+    // no incoming damage.  Set by the binary AOI self-player payload.
+    bool frozen;
+
     // Runtime flags
     bool init_received;
     bool dev_ui;

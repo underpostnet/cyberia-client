@@ -209,6 +209,9 @@ void input_handle_window_resize(int width, int height) {
 }
 
 int input_send_tap(Vector2 target_pos) {
+    // FrozenInteractionState — server says we're frozen, drop the tap.
+    if (g_game_state.frozen) return 0;
+
     printf("[INPUT] TAP at world (%.2f, %.2f)\n", target_pos.x, target_pos.y);
 
     float cell = g_game_state.cell_size > 0 ? g_game_state.cell_size : 12.0f;

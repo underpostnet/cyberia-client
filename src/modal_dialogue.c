@@ -77,14 +77,14 @@ static const Color C_CARD_BG   = {  12,  12,  24, 230 };
 static const Color C_CARD_BORD = {  70,  70, 120, 200 };
 /* ── Helpers ──────────────────────────────────────────────────────────── */
 
-static void send_dialogue_msg(const char* type) {
+static void send_freeze_msg(const char* type, const char* reason) {
     char buf[256];
     snprintf(buf, sizeof(buf),
-        "{\"type\":\"%s\",\"payload\":{\"entityId\":\"%s\",\"itemId\":\"%s\"}}",
-        type, s_entity_id, s_item_id);
+        "{\"type\":\"%s\",\"payload\":{\"reason\":\"%s\",\"entityId\":\"%s\",\"itemId\":\"%s\"}}",
+        type, reason, s_entity_id, s_item_id);
     int rc = client_send(buf);
-    printf("[MODAL_DIALOGUE] WS -> %s (entity=%s, item=%s) rc=%d\n",
-           type, s_entity_id, s_item_id, rc);
+    printf("[MODAL_DIALOGUE] WS -> %s (reason=%s, entity=%s, item=%s) rc=%d\n",
+           type, reason, s_entity_id, s_item_id, rc);
 }
 
 static Rectangle panel_rect(int sw, int sh) {
@@ -146,8 +146,8 @@ void modal_dialogue_open(const char* entity_id, const char* item_id,
     printf("[MODAL_DIALOGUE] Open: entity=%s item=%s lines=%d\n",
            s_entity_id, s_item_id, s_line_count);
 
-    /* Notify server → immunity starts */
-    send_dialogue_msg("dialogue_start");
+    /* Notify server → FrozenInteractionState */
+    send_freeze_msg("freeze_start", "dialogue");
 }
 
 void modal_dialogue_close(void) {
@@ -156,15 +156,25 @@ void modal_dialogue_close(void) {
 
     printf("[MODAL_DIALOGUE] Close: entity=%s item=%s\n", s_entity_id, s_item_id);
 
-    /* Notify server → immunity ends */
-    send_dialogue_msg("dialogue_end");
-    s_line_count = 0;
-    s_current    = 0;
-
-    /* Fire and clear the one-shot on_close callback */
+    /* ── Bridge-safe ordering ──────────────────────────────────────────
+     * Fire the on_close callback BEFORE sending freeze_end.
+     * If the callback opens another modal (e.g. inventory), that modal's
+     * freeze_start reaches the server first and overrides the freeze
+     * reason.  The stale freeze_end we send afterwards carries the old
+     * reason ("dialogue"), which the server's reason-matched ThawPlayer
+     * rejects — keeping the player frozen throughout the transition with
+     * zero gap.
+     * For the normal (non-bridge) case the callback is NULL, so the order
+     * change is invisible.
+     */
     ModalDialogueOnClose cb = s_on_close;
     s_on_close = NULL;
     if (cb) cb();
+
+    /* Notify server → thaw (ignored by server if reason was overridden) */
+    send_freeze_msg("freeze_end", "dialogue");
+    s_line_count = 0;
+    s_current    = 0;
 }
 
 void modal_dialogue_set_on_close(ModalDialogueOnClose cb) {

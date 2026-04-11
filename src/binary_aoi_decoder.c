@@ -425,6 +425,11 @@ static void decode_self_player(BinReader* r, uint8_t flags) {
         }
         gs->full_inventory_count = ni;
     }
+
+    /* FrozenInteractionState — u8 (0 = normal, 1 = frozen).
+     * Authoritative flag from the Go server; drives visual feedback
+     * and client-side action blocking. */
+    gs->frozen = (br_u8(r) != 0);
 }
 
 /* ── Main entry point ──────────────────────────────────────────── */

@@ -201,11 +201,15 @@ void inventory_modal_open(int inv_idx) {
     strncpy(s_dir,  "down", sizeof(s_dir)  - 1);
     strncpy(s_mode, "idle", sizeof(s_mode) - 1);
     rebuild_dir_str();
+    /* Notify server → FrozenInteractionState */
+    client_send("{\"type\":\"freeze_start\",\"payload\":{\"reason\":\"inventory\"}}");
 }
 
 void inventory_modal_close(void) {
     s_open    = false;
     s_inv_idx = -1;
+    /* Notify server → thaw */
+    client_send("{\"type\":\"freeze_end\",\"payload\":{\"reason\":\"inventory\"}}");
 }
 
 bool inventory_modal_is_open(void) { return s_open; }
@@ -543,9 +547,15 @@ bool inventory_modal_handle_click(int mx, int my, bool clicked) {
             const ObjectLayerState* ols = &g_game_state.full_inventory[s_inv_idx];
             const DialogueDataSet* d = dialogue_data_get(ols->item_id);
             if (d && d->state == DLG_DATA_READY && d->line_count > 0) {
-                /* Close inventory modal (keep s_inv_idx for re-open) */
+                /* ── Bridge-safe transition: inventory → dialogue ──────
+                 * Close the inventory UI WITHOUT sending freeze_end.
+                 * modal_dialogue_open() will send freeze_start("dialogue")
+                 * which overrides the active reason on the server.
+                 * We then send the stale freeze_end("inventory") which the
+                 * server rejects (reason mismatch) — zero gap.
+                 */
                 int saved_idx = s_inv_idx;
-                inventory_modal_close();
+                s_open    = false;  /* close UI only — no WS message */
                 s_inv_idx = saved_idx;
 
                 /* Open dialogue modal with return callback */
@@ -554,6 +564,9 @@ bool inventory_modal_handle_click(int mx, int my, bool clicked) {
                     g_game_state.player_id,  /* self as entity context */
                     ols->item_id,
                     d->lines, d->line_count);
+
+                /* Stale thaw — rejected by server's reason-match check */
+                client_send("{\"type\":\"freeze_end\",\"payload\":{\"reason\":\"inventory\"}}");
                 return true;
             }
         }
