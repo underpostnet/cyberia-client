@@ -47,6 +47,14 @@ typedef struct {
     int  order;
 } DialogueLine;
 
+/**
+ * @brief Optional callback invoked when the dialogue modal closes.
+ *
+ * Used by the inventory modal to regain focus after a dialogue preview.
+ * The callback fires after the server "dialogue_end" message is sent.
+ */
+typedef void (*ModalDialogueOnClose)(void);
+
 /* ── Public API ──────────────────────────────────────────────────────── */
 
 /**
@@ -68,8 +76,17 @@ void modal_dialogue_open(const char* entity_id, const char* item_id,
 
 /**
  * @brief Close the dialogue (sends "dialogue_end" to server).
+ *
+ * If an on_close callback was set, it fires after the close.
  */
 void modal_dialogue_close(void);
+
+/**
+ * @brief Set a one-shot callback that fires when the modal closes.
+ *
+ * The callback is cleared after it fires (one-shot).  Pass NULL to remove.
+ */
+void modal_dialogue_set_on_close(ModalDialogueOnClose cb);
 
 /**
  * @brief True while the dialogue overlay is visible.

@@ -40,6 +40,9 @@ static float s_char_timer    = 0.0f;
 static int   s_chars_visible = 0;
 static bool  s_line_complete = false;
 
+/* One-shot close callback (cleared after firing) */
+static ModalDialogueOnClose s_on_close = NULL;
+
 /* The underlying modal used purely for the text-box chrome.
  * We call modal_draw_struct() for the background/border then overlay
  * our custom content on top.  */
@@ -120,6 +123,7 @@ void modal_dialogue_init(ObjectLayersManager* ol_manager) {
     s_open       = false;
     s_line_count = 0;
     s_current    = 0;
+    s_on_close   = NULL;
     modal_init_struct(&s_modal);
 }
 
@@ -162,6 +166,15 @@ void modal_dialogue_close(void) {
     send_dialogue_msg("dialogue_end");
     s_line_count = 0;
     s_current    = 0;
+
+    /* Fire and clear the one-shot on_close callback */
+    ModalDialogueOnClose cb = s_on_close;
+    s_on_close = NULL;
+    if (cb) cb();
+}
+
+void modal_dialogue_set_on_close(ModalDialogueOnClose cb) {
+    s_on_close = cb;
 }
 
 bool modal_dialogue_is_open(void) { return s_open; }

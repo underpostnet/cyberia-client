@@ -24,6 +24,8 @@
 #include "client.h"
 #include "object_layers_management.h"
 #include "object_layer.h"
+#include "modal_dialogue.h"
+#include "dialogue_data.h"
 #include <raylib.h>
 #include <stdio.h>
 #include <string.h>
@@ -46,6 +48,10 @@ static char  s_dir_str[32] = "down_idle";
 static Rectangle s_dir_btn_rects[DIR_BTN_COUNT];
 static bool      s_dir_btn_enabled[DIR_BTN_COUNT]; /* false = no frames */
 
+/* Lore button (dialogue preview) */
+static Rectangle s_lore_btn_rect;
+static bool      s_lore_btn_visible = false;
+
 /* ── Layout constants ───────────────────────────────────────────────────── */
 
 /* The inventory modal now fills most of the screen (with margin) rather than
@@ -61,12 +67,14 @@ static bool      s_dir_btn_enabled[DIR_BTN_COUNT]; /* false = no frames */
 #define MODAL_SPRITE_MIN   80
 #define MODAL_SPRITE_MAX   160
 
-#define MODAL_FONT_TITLE   22
-#define MODAL_FONT_BODY    16
-#define MODAL_FONT_STAT    14
-#define MODAL_BTN_W        180
-#define MODAL_BTN_H         46
-#define MODAL_CLOSE_SIZE    34
+#define MODAL_FONT_TITLE   26
+#define MODAL_FONT_BODY    18
+#define MODAL_FONT_STAT    16
+#define MODAL_BTN_W        200
+#define MODAL_BTN_H         50
+#define MODAL_CLOSE_SIZE    36
+#define MODAL_LORE_BTN_W   200
+#define MODAL_LORE_BTN_H    44
 
 #define DIR_BTN_W  56
 #define DIR_BTN_H  28
@@ -93,8 +101,16 @@ static const Color C_DIR_BTN_DEF   = {  35,  38,  60, 220 };   /* unselected  */
 static const Color C_DIR_BTN_DIS   = {  22,  22,  30, 180 };   /* disabled    */
 static const Color C_MODE_IDLE     = {  40,  90,  40, 230 };
 static const Color C_MODE_WALK     = {  90,  50,  10, 230 };
+static const Color C_LORE_BTN     = {  50,  50, 120, 240 };
 
 /* ── Helpers ──────────────────────────────────────────────────────────── */
+
+/* Callback for dialogue modal → re-opens the inventory modal at the same slot. */
+static void on_dialogue_close_reopen(void) {
+    if (s_inv_idx >= 0 && s_inv_idx < g_game_state.full_inventory_count) {
+        inventory_modal_open(s_inv_idx);
+    }
+}
 
 static void rebuild_dir_str(void) {
     snprintf(s_dir_str, sizeof(s_dir_str), "%s_%s", s_dir, s_mode);
@@ -420,9 +436,34 @@ void inventory_modal_draw(void) {
         y_cursor += MODAL_FONT_BODY + 8;
     }
 
-    (void)y_cursor; /* remaining space above activate button */
+    (void)y_cursor; /* remaining space above bottom buttons */
 
-    /* 11. Activate / Deactivate button (anchored to card bottom) */
+    /* ── Bottom-anchored buttons ────────────────────────────────────── */
+
+    /* 11. Lore button — visible only when dialogue data exists for item */
+    s_lore_btn_visible = false;
+    if (ols->item_id[0] != '\0') {
+        dialogue_data_request(ols->item_id);
+        if (dialogue_data_available(ols->item_id)) {
+            s_lore_btn_visible = true;
+            float lore_x = cx + (cw - MODAL_LORE_BTN_W) * 0.5f;
+            float lore_y = card.y + card.height - MODAL_BTN_H - MODAL_LORE_BTN_H - 24;
+            s_lore_btn_rect = (Rectangle){ lore_x, lore_y,
+                                            MODAL_LORE_BTN_W, MODAL_LORE_BTN_H };
+            DrawRectangleRec(s_lore_btn_rect, C_LORE_BTN);
+            DrawRectangleLinesEx(s_lore_btn_rect, 1.5f,
+                                 (Color){ 120, 120, 200, 160 });
+            const char* lore_label = "Lore";
+            int lfs = MODAL_FONT_BODY;
+            int ltw = MeasureText(lore_label, lfs);
+            DrawText(lore_label,
+                     (int)(lore_x + (MODAL_LORE_BTN_W - ltw) * 0.5f),
+                     (int)(lore_y + (MODAL_LORE_BTN_H - lfs) * 0.5f),
+                     lfs, C_BTN_TEXT);
+        }
+    }
+
+    /* 12. Activate / Deactivate button (anchored to card bottom) */
     {
         bool currently_active = ols->active;
         const char* btn_label = currently_active ? "Deactivate" : "Activate";
@@ -494,6 +535,28 @@ bool inventory_modal_handle_click(int mx, int my, bool clicked) {
             strncpy(s_mode, "idle",    sizeof(s_mode) - 1);
         rebuild_dir_str();
         return true;
+    }
+
+    /* Lore button */
+    if (s_lore_btn_visible && hit_rect(mx, my, s_lore_btn_rect)) {
+        if (s_inv_idx >= 0 && s_inv_idx < g_game_state.full_inventory_count) {
+            const ObjectLayerState* ols = &g_game_state.full_inventory[s_inv_idx];
+            const DialogueDataSet* d = dialogue_data_get(ols->item_id);
+            if (d && d->state == DLG_DATA_READY && d->line_count > 0) {
+                /* Close inventory modal (keep s_inv_idx for re-open) */
+                int saved_idx = s_inv_idx;
+                inventory_modal_close();
+                s_inv_idx = saved_idx;
+
+                /* Open dialogue modal with return callback */
+                modal_dialogue_set_on_close(on_dialogue_close_reopen);
+                modal_dialogue_open(
+                    g_game_state.player_id,  /* self as entity context */
+                    ols->item_id,
+                    d->lines, d->line_count);
+                return true;
+            }
+        }
     }
 
     /* Activate / Deactivate */
