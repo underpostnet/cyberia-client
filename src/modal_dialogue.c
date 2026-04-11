@@ -47,14 +47,25 @@ static Modal s_modal;
 
 /* ── Layout constants ───────────────────────────────────────────────────── */
 
-#define DLG_CARD_W        420
-#define DLG_CARD_H        160
-#define DLG_SPRITE_SIZE    48
-#define DLG_FONT_SPEAKER   15
-#define DLG_FONT_TEXT      13
-#define DLG_FONT_HINT      11
-#define DLG_PAD            14
-#define DLG_TYPEWRITER_SPD  0.025f  /* seconds per character */
+/* The dialogue panel fills the entire bottom half of the screen (minus the
+ * inventory bar) with generous padding and large readable fonts.
+ * No fixed pixel sizes — everything is derived from screen dimensions
+ * so it scales naturally across resolutions.                               */
+
+#define DLG_SPRITE_FRAC     0.22f   /* sprite size as fraction of panel height */
+#define DLG_SPRITE_MIN      48      /* minimum sprite px                       */
+#define DLG_SPRITE_MAX      128     /* maximum sprite px                       */
+#define DLG_FONT_SPEAKER    22
+#define DLG_FONT_TEXT       18
+#define DLG_FONT_HINT       14
+#define DLG_PAD_FRAC        0.03f   /* padding as fraction of panel width      */
+#define DLG_PAD_MIN         12
+#define DLG_PAD_MAX         32
+#define DLG_TYPEWRITER_SPD  0.022f  /* seconds per character                   */
+
+/* Vertical split: panel occupies [50 % … bottom − bar_h] of the screen.   */
+#define DLG_TOP_FRAC        0.50f
+#define DLG_BAR_OFFSET      72      /* inventory bar height                    */
 
 /* ── Colours ──────────────────────────────────────────────────────────── */
 
@@ -76,10 +87,25 @@ static void send_dialogue_msg(const char* type) {
            type, s_entity_id, s_item_id, rc);
 }
 
-static Rectangle card_rect(int sw, int sh) {
-    float x = (sw - DLG_CARD_W) * 0.5f;
-    float y = sh - DLG_CARD_H - 60.0f;  /* anchored near bottom */
-    return (Rectangle){ x, y, DLG_CARD_W, DLG_CARD_H };
+static Rectangle panel_rect(int sw, int sh) {
+    float top = sh * DLG_TOP_FRAC;
+    float bot = (float)(sh - DLG_BAR_OFFSET);
+    if (bot <= top) bot = top + 60.0f;
+    return (Rectangle){ 0.0f, top, (float)sw, bot - top };
+}
+
+static int dlg_pad(int sw) {
+    int p = (int)(sw * DLG_PAD_FRAC);
+    if (p < DLG_PAD_MIN) p = DLG_PAD_MIN;
+    if (p > DLG_PAD_MAX) p = DLG_PAD_MAX;
+    return p;
+}
+
+static int dlg_sprite_size(float panel_h) {
+    int s = (int)(panel_h * DLG_SPRITE_FRAC);
+    if (s < DLG_SPRITE_MIN) s = DLG_SPRITE_MIN;
+    if (s > DLG_SPRITE_MAX) s = DLG_SPRITE_MAX;
+    return s;
 }
 
 static bool hit_rect(int mx, int my, Rectangle r) {
@@ -166,52 +192,71 @@ void modal_dialogue_draw(void) {
 
     /* Pop-in animation */
     float pop = 0.12f;
-    float scale = (s_age < pop)
-        ? 0.85f + 0.15f * (1.0f - powf(1.0f - s_age / pop, 3.0f))
-        : 1.0f;
+    float t   = s_age < pop ? s_age / pop : 1.0f;
+    float ease = 1.0f - powf(1.0f - t, 3.0f);
     float fade = s_age / 0.18f;
     if (fade > 1.0f) fade = 1.0f;
-    unsigned char oa = (unsigned char)(120.0f * fade);
+    unsigned char oa = (unsigned char)(100.0f * fade);
 
-    /* Dim backdrop */
-    DrawRectangle(0, 0, sw, sh, (Color){ 0, 0, 0, oa });
+    /* Dim only the bottom half */
+    Rectangle panel = panel_rect(sw, sh);
+    DrawRectangle(0, (int)panel.y, sw, (int)panel.height + DLG_BAR_OFFSET,
+                  (Color){ 0, 0, 0, oa });
 
-    /* Card */
-    Rectangle base = card_rect(sw, sh);
-    float cx = base.x + (base.width  - DLG_CARD_W * scale) * 0.5f;
-    float cy = base.y + (base.height - DLG_CARD_H * scale) * 0.5f;
-    Rectangle card = { cx, cy, DLG_CARD_W * scale, DLG_CARD_H * scale };
+    /* Slide-up: panel starts 20px below its rest position */
+    float slide_offset = 20.0f * (1.0f - ease);
+    Rectangle card = {
+        panel.x, panel.y + slide_offset,
+        panel.width, panel.height
+    };
 
+    /* Card background with subtle top border */
     DrawRectangleRec(card, C_CARD_BG);
-    DrawRectangleLinesEx(card, 1.5f, C_CARD_BORD);
+    DrawLine((int)card.x, (int)card.y,
+             (int)(card.x + card.width), (int)card.y, C_CARD_BORD);
 
-    float pad = DLG_PAD * scale;
-    float x0  = card.x + pad;
-    float y0  = card.y + pad;
+    int pad       = dlg_pad(sw);
+    int sprite_sz = dlg_sprite_size(card.height);
 
-    /* Item sprite */
-    float sprite_sz = DLG_SPRITE_SIZE * scale;
+    /* ── Layout: sprite left-aligned, text area to the right ─────── */
+    float x0 = card.x + pad;
+    float y0 = card.y + pad;
+
+    /* Item sprite (ol as icon) */
     if (s_item_id[0] != '\0' && s_ol_manager) {
         ol_as_ico_draw(s_ol_manager, s_item_id,
-                       (int)x0, (int)y0, (int)sprite_sz,
+                       (int)x0, (int)y0, sprite_sz,
                        "down_idle", 0, WHITE);
     }
-    DrawRectangleLinesEx((Rectangle){ x0, y0, sprite_sz, sprite_sz },
+    DrawRectangleLinesEx((Rectangle){ x0, y0, (float)sprite_sz, (float)sprite_sz },
                          1.0f, C_CARD_BORD);
 
-    /* Speaker name */
+    /* Speaker name — right of sprite, vertically centred with sprite top */
     float txt_x = x0 + sprite_sz + pad;
+    float txt_max_w = card.x + card.width - txt_x - pad;
     const DialogueLine* line = &s_lines[s_current];
+
+    int fs_speaker = DLG_FONT_SPEAKER;
     if (line->speaker[0] != '\0') {
-        DrawText(line->speaker, (int)txt_x, (int)y0, (int)(DLG_FONT_SPEAKER * scale), C_SPEAKER);
+        DrawText(line->speaker, (int)txt_x, (int)y0, fs_speaker, C_SPEAKER);
     }
 
-    /* Dialogue text (typewriter) */
-    float text_y = y0 + DLG_FONT_SPEAKER * scale + 6.0f * scale;
-    float max_w  = card.width - sprite_sz - pad * 3;
-    int   fs     = (int)(DLG_FONT_TEXT * scale);
+    /* Progress indicator (e.g. "2 / 5") next to speaker or right-aligned */
+    if (s_line_count > 1) {
+        char prog[16];
+        snprintf(prog, sizeof(prog), "%d / %d", s_current + 1, s_line_count);
+        int pfs = DLG_FONT_HINT;
+        int pw  = MeasureText(prog, pfs);
+        DrawText(prog,
+                 (int)(card.x + card.width - pw - pad),
+                 (int)(y0 + 2), pfs, C_HINT);
+    }
 
-    /* Render only s_chars_visible characters */
+    /* ── Dialogue text (typewriter, word-wrapped) ───────────────────── */
+    float text_y = y0 + fs_speaker + 8.0f;
+    int   fs     = DLG_FONT_TEXT;
+
+    /* Build the partial string for the typewriter */
     char partial[DIALOGUE_MAX_TEXT];
     int len = s_chars_visible;
     if (len > (int)sizeof(partial) - 1) len = (int)sizeof(partial) - 1;
@@ -219,7 +264,7 @@ void modal_dialogue_draw(void) {
     memcpy(partial, line->text, len);
     partial[len] = '\0';
 
-    /* Simple word-wrap rendering */
+    /* Word-wrap rendering */
     {
         char copy[DIALOGUE_MAX_TEXT];
         strncpy(copy, partial, sizeof(copy) - 1);
@@ -227,6 +272,7 @@ void modal_dialogue_draw(void) {
 
         char line_buf[256] = {0};
         float cur_y = text_y;
+        float max_w = txt_max_w;
         char* tok = strtok(copy, " ");
         while (tok) {
             char test[256];
@@ -237,7 +283,7 @@ void modal_dialogue_draw(void) {
 
             if (MeasureText(test, fs) > (int)max_w && line_buf[0] != '\0') {
                 DrawText(line_buf, (int)txt_x, (int)cur_y, fs, C_TEXT);
-                cur_y += fs + 2;
+                cur_y += fs + 4;
                 snprintf(line_buf, sizeof(line_buf), "%s", tok);
             } else {
                 snprintf(line_buf, sizeof(line_buf), "%s", test);
@@ -249,7 +295,7 @@ void modal_dialogue_draw(void) {
         }
     }
 
-    /* Hint at bottom-right of card */
+    /* ── Hint at bottom-right of panel ─────────────────────────────── */
     const char* hint;
     if (!s_line_complete)
         hint = "...";
@@ -258,7 +304,7 @@ void modal_dialogue_draw(void) {
     else
         hint = "[Tap to close]";
 
-    int hfs = (int)(DLG_FONT_HINT * scale);
+    int hfs = DLG_FONT_HINT;
     int htw = MeasureText(hint, hfs);
     DrawText(hint,
              (int)(card.x + card.width - htw - pad),
@@ -273,7 +319,7 @@ bool modal_dialogue_handle_click(int mx, int my, bool clicked) {
 
     int sw = GetScreenWidth();
     int sh = GetScreenHeight();
-    Rectangle card = card_rect(sw, sh);
+    Rectangle card = panel_rect(sw, sh);
 
     bool inside = hit_rect(mx, my, card);
 

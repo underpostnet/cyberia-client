@@ -48,20 +48,30 @@ static bool      s_dir_btn_enabled[DIR_BTN_COUNT]; /* false = no frames */
 
 /* ── Layout constants ───────────────────────────────────────────────────── */
 
-#define MODAL_CARD_W      380
-#define MODAL_CARD_H      540
-#define MODAL_SPRITE_SIZE 112     /* animated item preview */
-#define MODAL_FONT_TITLE  18
-#define MODAL_FONT_BODY   13
-#define MODAL_FONT_STAT   12
-#define MODAL_BTN_W       140
-#define MODAL_BTN_H        40
-#define MODAL_CLOSE_SIZE   30
+/* The inventory modal now fills most of the screen (with margin) rather than
+ * using a fixed 380×540 card.  All inner sizes derive from the card
+ * dimensions so everything scales across resolutions.                       */
 
-#define DIR_BTN_W  52
-#define DIR_BTN_H  24
-#define DIR_BTN_GAP 4
-#define MODE_BTN_W 76
+#define MODAL_CARD_W_FRAC  0.88f   /* fraction of screen width              */
+#define MODAL_CARD_H_FRAC  0.82f   /* fraction of screen height             */
+#define MODAL_CARD_W_MAX   600     /* hard max px                            */
+#define MODAL_CARD_H_MAX   800
+
+#define MODAL_SPRITE_FRAC  0.22f   /* sprite size as fraction of card width */
+#define MODAL_SPRITE_MIN   80
+#define MODAL_SPRITE_MAX   160
+
+#define MODAL_FONT_TITLE   22
+#define MODAL_FONT_BODY    16
+#define MODAL_FONT_STAT    14
+#define MODAL_BTN_W        180
+#define MODAL_BTN_H         46
+#define MODAL_CLOSE_SIZE    34
+
+#define DIR_BTN_W  56
+#define DIR_BTN_H  28
+#define DIR_BTN_GAP 5
+#define MODE_BTN_W 82
 
 /* ── Colours ──────────────────────────────────────────────────────────── */
 
@@ -91,9 +101,20 @@ static void rebuild_dir_str(void) {
 }
 
 static Rectangle card_rect(int sw, int sh, float scale) {
-    float cx = sw * 0.5f, cy = sh * 0.5f;
-    float w = MODAL_CARD_W * scale, h = MODAL_CARD_H * scale;
-    return (Rectangle){ cx - w * 0.5f, cy - h * 0.5f, w, h };
+    float w = sw * MODAL_CARD_W_FRAC;
+    float h = sh * MODAL_CARD_H_FRAC;
+    if (w > MODAL_CARD_W_MAX) w = MODAL_CARD_W_MAX;
+    if (h > MODAL_CARD_H_MAX) h = MODAL_CARD_H_MAX;
+    w *= scale;
+    h *= scale;
+    return (Rectangle){ (sw - w) * 0.5f, (sh - h) * 0.5f, w, h };
+}
+
+static int modal_sprite_size(float card_w) {
+    int s = (int)(card_w * MODAL_SPRITE_FRAC);
+    if (s < MODAL_SPRITE_MIN) s = MODAL_SPRITE_MIN;
+    if (s > MODAL_SPRITE_MAX) s = MODAL_SPRITE_MAX;
+    return s;
 }
 
 static void send_activation(const char* item_id, bool active) {
@@ -208,7 +229,11 @@ void inventory_modal_draw(void) {
     float cx  = card.x;
     float cy  = card.y;
     float cw  = card.width;
-    int   pad = 14;
+    int   pad = (int)(cw * 0.04f);
+    if (pad < 14) pad = 14;
+    if (pad > 28) pad = 28;
+
+    (void)cy; /* used below */
 
     /* 3. Close button */
     Rectangle close_r = { cx + cw - MODAL_CLOSE_SIZE - 6, cy + 6,
@@ -226,20 +251,21 @@ void inventory_modal_draw(void) {
         atlas = get_or_fetch_atlas_data(s_ol_manager, ols->item_id);
 
     /* 4. Animated sprite via ol_as_animated_ico */
-    float sprite_x = cx + cw * 0.5f - MODAL_SPRITE_SIZE * 0.5f;
+    int sprite_sz = modal_sprite_size(cw);
+    float sprite_x = cx + cw * 0.5f - sprite_sz * 0.5f;
     float sprite_y = cy + 14.0f;
     Rectangle sprite_dst = { sprite_x, sprite_y,
-                              MODAL_SPRITE_SIZE, MODAL_SPRITE_SIZE };
+                              (float)sprite_sz, (float)sprite_sz };
 
     if (ols->item_id[0] != '\0') {
         ol_as_ico_draw(s_ol_manager, ols->item_id,
-                       (int)sprite_x, (int)sprite_y, MODAL_SPRITE_SIZE,
+                       (int)sprite_x, (int)sprite_y, sprite_sz,
                        s_dir_str, 0, WHITE);
     }
     DrawRectangleLinesEx(sprite_dst, 1.0f, C_CARD_BORDER);
 
     /* 5. Direction / mode buttons — placed right below the sprite ────── */
-    float dir_row_y = sprite_y + MODAL_SPRITE_SIZE + 6.0f;
+    float dir_row_y = sprite_y + sprite_sz + 8.0f;
     {
         /* Compute total row width to centre it */
         int n_dir   = 4;
