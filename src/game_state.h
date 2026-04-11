@@ -75,6 +75,12 @@ struct PlayerState {
     Vector2 path[MAX_PATH_POINTS];
     int path_count;
     Vector2 target_pos;
+
+    // Local prediction & smoothing (main player only)
+    Vector2 tap_target;      // grid-coords of last tap for local prediction
+    bool has_tap_target;     // whether a prediction target is active
+    float estimated_speed;   // grid-units/second derived from server deltas
+    Vector2 velocity;        // estimated velocity vector from server deltas
 };
 
 // Bot state structure
@@ -296,8 +302,9 @@ void game_state_init_camera(int screen_width, int screen_height);
 
 /**
  * @brief Update camera position to follow player
+ * @param delta_time Time elapsed since last frame (for frame-rate independent smoothing)
  */
-void game_state_update_camera(void);
+void game_state_update_camera(float delta_time);
 
 /**
  * @brief Update camera offset when screen size changes

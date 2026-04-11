@@ -2,44 +2,101 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <math.h>
 #include <raylib.h>
 
 // Global game state instance
 GameState g_game_state = {0};
 
 /**
+ * Compute a Direction enum from a 2D movement vector.
+ * Returns DIRECTION_NONE when the vector is near-zero.
+ */
+static Direction direction_from_delta(float dx, float dy) {
+    if (dx * dx + dy * dy < 0.0001f) return DIRECTION_NONE;
+    float angle = atan2f(dy, dx); // radians, right=0, down=+π/2
+    // Map to 8 compass directions (each covers 45°)
+    // Boundaries at ±22.5° from each axis
+    if (angle < -2.748893f) return DIRECTION_LEFT;        // (-π, -157.5°)
+    if (angle < -1.963495f) return DIRECTION_UP_LEFT;     // (-157.5°, -112.5°)
+    if (angle < -1.178097f) return DIRECTION_UP;          // (-112.5°, -67.5°)
+    if (angle < -0.392699f) return DIRECTION_UP_RIGHT;    // (-67.5°, -22.5°)
+    if (angle <  0.392699f) return DIRECTION_RIGHT;       // (-22.5°, +22.5°)
+    if (angle <  1.178097f) return DIRECTION_DOWN_RIGHT;  // (+22.5°, +67.5°)
+    if (angle <  1.963495f) return DIRECTION_DOWN;        // (+67.5°, +112.5°)
+    if (angle <  2.748893f) return DIRECTION_DOWN_LEFT;   // (+112.5°, +157.5°)
+    return DIRECTION_LEFT;                                 // (+157.5°, +π)
+}
+
+/**
  * Update position interpolation for all entities.
  *
- * This function implements smooth position transitions to prevent flickering and jumps.
- * It interpolates between pos_prev (last interpolated position) and pos_server (new position
- * from server) over the interpolation_ms time window.
+ * Main player: local prediction toward tap target + exponential blend
+ * toward server position. This provides:
+ *   - Immediate visual feedback on TAP (no latency gap)
+ *   - Smooth server correction (no backward snaps)
+ *   - Frame-rate independent behavior via exponential decay
  *
- * How it works:
- * 1. When a new server position arrives:
- *    - pos_server = new position from server
- *    - pos_prev = current interp_pos (preserved in update functions)
- *    - interp_pos = current interp_pos (no immediate jump)
- *
- * 2. This function gradually moves interp_pos from pos_prev to pos_server:
- *    - interp_factor starts at 0 (just after update) and grows to 1.0
- *    - interp_pos = lerp(pos_prev, pos_server, interp_factor)
- *
- * This creates smooth movement even when server updates are infrequent.
+ * Other players / bots: linear interpolation between pos_prev and
+ * pos_server over the interpolation_ms window (unchanged).
  */
 void game_state_update_interpolation(float delta_time) {
     double current_time = GetTime();
-    // Calculate interpolation factor based on time since last server update
+
+    // === Main player: prediction + exponential server correction ===
+    {
+        PlayerState* p = &g_game_state.player;
+        float speed = p->estimated_speed > 0.1f ? p->estimated_speed : 3.0f;
+
+        // Track frame movement for predicted direction
+        float frame_dx = 0.0f, frame_dy = 0.0f;
+
+        // Local prediction: move interp_pos toward tap target
+        if (p->has_tap_target) {
+            float dx = p->tap_target.x - p->base.interp_pos.x;
+            float dy = p->tap_target.y - p->base.interp_pos.y;
+            float dist = sqrtf(dx * dx + dy * dy);
+            if (dist > 0.05f) {
+                float step = speed * delta_time;
+                if (step > dist) step = dist;
+                float mx = (dx / dist) * step;
+                float my = (dy / dist) * step;
+                p->base.interp_pos.x += mx;
+                p->base.interp_pos.y += my;
+                frame_dx += mx;
+                frame_dy += my;
+            } else {
+                p->has_tap_target = false;
+            }
+        }
+
+        // Exponential blend toward server position (smooth correction)
+        float correction_rate = 8.0f;
+        float blend = 1.0f - expf(-correction_rate * delta_time);
+        float cx = (p->base.pos_server.x - p->base.interp_pos.x) * blend;
+        float cy = (p->base.pos_server.y - p->base.interp_pos.y) * blend;
+        p->base.interp_pos.x += cx;
+        p->base.interp_pos.y += cy;
+        frame_dx += cx;
+        frame_dy += cy;
+
+        // Predicted direction & mode from the frame's actual movement vector.
+        // This keeps the sprite facing the direction it visually moves,
+        // regardless of whether the server update has arrived yet.
+        Direction predicted_dir = direction_from_delta(frame_dx, frame_dy);
+        if (predicted_dir != DIRECTION_NONE) {
+            p->base.direction = predicted_dir;
+            p->base.mode = MODE_WALKING;
+        } else if (!p->has_tap_target) {
+            // Stopped predicting — let server direction/mode take over.
+            // Don't force IDLE here; the server already sends the right state.
+        }
+    }
+
+    // === Other players and bots: linear interpolation (unchanged) ===
     float interp_factor = g_game_state.interpolation_ms > 0 ?
         (float)(current_time - g_game_state.last_update_time) * 1000.0f / g_game_state.interpolation_ms : 1.0f;
-
-    // Clamp to 1.0 to prevent overshooting
     if (interp_factor > 1.0f) interp_factor = 1.0f;
-
-    // Interpolate main player position (linear interpolation from prev to server position)
-    g_game_state.player.base.interp_pos.x = g_game_state.player.base.pos_prev.x +
-        (g_game_state.player.base.pos_server.x - g_game_state.player.base.pos_prev.x) * interp_factor;
-    g_game_state.player.base.interp_pos.y = g_game_state.player.base.pos_prev.y +
-        (g_game_state.player.base.pos_server.y - g_game_state.player.base.pos_prev.y) * interp_factor;
 
     // Interpolate other players
     for (int i = 0; i < g_game_state.other_player_count; i++) {
@@ -181,7 +238,7 @@ void game_state_init_camera(int screen_width, int screen_height) {
            target.x, target.y, g_game_state.camera_zoom);
 }
 
-void game_state_update_camera(void) {
+void game_state_update_camera(float delta_time) {
     float cell_size = g_game_state.cell_size > 0 ? g_game_state.cell_size : 12.0f;
 
     // Calculate desired target position (smooth follow player)
@@ -191,11 +248,13 @@ void game_state_update_camera(void) {
 
     Vector2 desired_target = {player_center_x, player_center_y};
 
-    // Apply camera smoothing
-    float smoothing = g_game_state.camera_smoothing > 0 ? g_game_state.camera_smoothing : 0.15f;
+    // Frame-rate independent exponential smoothing.
+    // camera_smoothing 0.15 was tuned at 60 fps → lambda ≈ 10.
+    float lambda = 10.0f;
+    float blend = 1.0f - expf(-lambda * delta_time);
 
-    g_game_state.camera.target.x += (desired_target.x - g_game_state.camera.target.x) * smoothing;
-    g_game_state.camera.target.y += (desired_target.y - g_game_state.camera.target.y) * smoothing;
+    g_game_state.camera.target.x += (desired_target.x - g_game_state.camera.target.x) * blend;
+    g_game_state.camera.target.y += (desired_target.y - g_game_state.camera.target.y) * blend;
 }
 
 void game_state_update_camera_offset(int screen_width, int screen_height) {

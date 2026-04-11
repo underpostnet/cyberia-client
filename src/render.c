@@ -69,7 +69,7 @@ void render_update(void) {
     last_time = current_time;
 
     game_state_update_interpolation(delta_time);
-    game_state_update_camera();
+    game_state_update_camera(delta_time);
 
     // Update effects (click effects, floating texts, FCT pop-ups)
     game_render_update_effects(delta_time);

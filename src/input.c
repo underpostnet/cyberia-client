@@ -200,8 +200,13 @@ void input_handle_window_resize(int width, int height) {
 int input_send_tap(Vector2 target_pos) {
     printf("[INPUT] TAP at world (%.2f, %.2f)\n", target_pos.x, target_pos.y);
 
-    float grid_x = target_pos.x / (g_game_state.cell_size > 0 ? g_game_state.cell_size : 12.0f);
-    float grid_y = target_pos.y / (g_game_state.cell_size > 0 ? g_game_state.cell_size : 12.0f);
+    float cell = g_game_state.cell_size > 0 ? g_game_state.cell_size : 12.0f;
+    float grid_x = target_pos.x / cell;
+    float grid_y = target_pos.y / cell;
+
+    // Set local prediction target so the player starts moving immediately
+    g_game_state.player.tap_target = (Vector2){grid_x, grid_y};
+    g_game_state.player.has_tap_target = true;
 
     char* json_str = serial_create_player_action(grid_x, grid_y);
     if (json_str) {

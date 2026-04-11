@@ -7,6 +7,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <math.h>
 
 static int message_parser_parse_metadata(const cJSON* json_root);
 
@@ -615,16 +616,47 @@ int message_parser_parse_aoi_update(const cJSON* json_root) {
         memset(&player, 0, sizeof(PlayerState));
 
         if (serial_deserialize_player_state(player_obj, &player) == 0) {
-            // Preserve previous interpolated position for smooth transitions
-            Vector2 prev_interp_pos = g_game_state.player.base.interp_pos;
             bool first_update = (g_game_state.player_id[0] == '\0');
+
+            // Save prediction state and current interp_pos before overwrite
+            Vector2 prev_interp_pos = g_game_state.player.base.interp_pos;
+            Vector2 prev_server_pos = g_game_state.player.base.pos_server;
+            Vector2 tap_target = g_game_state.player.tap_target;
+            bool has_tap_target = g_game_state.player.has_tap_target;
+            float estimated_speed = g_game_state.player.estimated_speed;
+            Vector2 velocity = g_game_state.player.velocity;
+
+            // Estimate velocity from server position delta
+            if (!first_update) {
+                double dt = GetTime() - g_game_state.last_update_time;
+                if (dt > 0.001) {
+                    float dx = player.base.pos_server.x - prev_server_pos.x;
+                    float dy = player.base.pos_server.y - prev_server_pos.y;
+                    velocity = (Vector2){dx / (float)dt, dy / (float)dt};
+                    float speed = sqrtf(dx * dx + dy * dy) / (float)dt;
+                    estimated_speed = estimated_speed > 0.1f ?
+                        estimated_speed * 0.7f + speed * 0.3f : speed;
+                }
+
+                // Clear tap target if server shows player stopped
+                float sdx = player.base.pos_server.x - prev_server_pos.x;
+                float sdy = player.base.pos_server.y - prev_server_pos.y;
+                if (sdx * sdx + sdy * sdy < 0.0001f) {
+                    has_tap_target = false;
+                }
+            }
 
             // Update main player state
             memcpy(&g_game_state.player, &player, sizeof(PlayerState));
 
-            // If not first update, set pos_prev to last interpolated position
+            // Restore prediction state (memcpy zeroed them)
+            g_game_state.player.tap_target = tap_target;
+            g_game_state.player.has_tap_target = has_tap_target;
+            g_game_state.player.estimated_speed = estimated_speed;
+            g_game_state.player.velocity = velocity;
+
+            // For exponential blend: keep interp_pos where it was (no hard reset)
             if (!first_update) {
-                g_game_state.player.base.pos_prev = prev_interp_pos;
                 g_game_state.player.base.interp_pos = prev_interp_pos;
             }
 
