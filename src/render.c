@@ -8,7 +8,7 @@
 #include "inventory_modal.h"
 #include "modal_dialogue.h"
 #include "dialogue_data.h"
-#include "dialogue_bubble.h"
+#include "interaction_bubble.h"
 #include "ui_icon.h"
 #include "raylib.h"
 #include <stdio.h>
@@ -88,7 +88,7 @@ void render_update(void) {
     // Poll async dialogue data fetches and rebuild bubble column
     dialogue_data_poll();
     ui_icon_poll();
-    dialogue_bubble_update();
+    interaction_bubble_update();
 
     // Update dev UI
     dev_ui_update(delta_time);

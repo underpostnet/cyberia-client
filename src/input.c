@@ -9,7 +9,8 @@
 #include "inventory_bar.h"
 #include "inventory_modal.h"
 #include "modal_dialogue.h"
-#include "dialogue_bubble.h"
+#include "interaction_bubble.h"
+#include "social_bridge.h"
 #include "game_render.h"
 
 // Global input manager instance
@@ -103,10 +104,16 @@ void input_handle_mouse_click(int button, Vector2 screen_pos) {
     int mx = (int)screen_pos.x;
     int my = (int)screen_pos.y;
 
-    // Dialogue modal consumes all clicks when open (highest priority)
+    // Dialogue modal consumes all clicks when open (highest priority —
+    // the JS social panel hides itself while dialogue is active)
     if (modal_dialogue_is_open()) {
         modal_dialogue_handle_click(mx, my, true);
         return;
+    }
+
+    // JS social panel consumes clicks when visible
+    if (js_social_overlay_is_open()) {
+        return; /* JS DOM handles the click */
     }
 
     // Inventory modal consumes all clicks when open
@@ -115,10 +122,9 @@ void input_handle_mouse_click(int button, Vector2 screen_pos) {
         return;
     }
 
-    // Dialogue bubble column: clicking an icon opens dialogue modal
+    // Interaction bubble column: clicking opens the JS social overlay
     if (button == MOUSE_BUTTON_LEFT) {
-        dialogue_bubble_handle_click(mx, my, true);
-        if (modal_dialogue_is_open()) return;
+        if (interaction_bubble_handle_click(mx, my, true)) return;
     }
 
     // Inventory bar tap: open modal or scroll
@@ -306,11 +312,13 @@ bool input_find_entity_at_position(Vector2 screen_pos, char* entity_id, size_t i
 bool input_is_over_ui(Vector2 screen_pos) {
     // Dialogue modal blocks all world interaction when open
     if (modal_dialogue_is_open()) return true;
+    // JS social overlay blocks world interaction when open
+    if (js_social_overlay_is_open()) return true;
     // Inventory modal blocks all world interaction when open
     if (inventory_modal_is_open()) return true;
-    // Dialogue bubble column occupies left strip
-    if (dialogue_bubble_slot_count() > 0 &&
-        screen_pos.x < DBUBBLE_MARGIN_X + DBUBBLE_ICON_SIZE + DBUBBLE_MARGIN_X) return true;
+    // Interaction bubble column occupies left strip
+    if (interaction_bubble_slot_count() > 0 &&
+        screen_pos.x < IBUBBLE_MARGIN_X + IBUBBLE_ICON_SIZE + IBUBBLE_MARGIN_X) return true;
     // Inventory bar occupies the bottom strip
     if (screen_pos.y > GetScreenHeight() - INV_BAR_HEIGHT) return true;
     // Zoom buttons above the inventory bar

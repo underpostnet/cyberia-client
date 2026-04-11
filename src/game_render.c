@@ -7,8 +7,8 @@
 #include "object_layers_management.h"
 #include "entity_render.h"
 #include "entity_overhead_ui.h"
-#include "dialogue_bubble.h"
 #include "dialogue_data.h"
+#include "interaction_bubble.h"
 #include "inventory_bar.h"
 #include "inventory_modal.h"
 #include "modal_dialogue.h"
@@ -119,7 +119,7 @@ int game_render_init(int screen_width, int screen_height) {
     inventory_modal_init(g_object_layers_manager);
     modal_dialogue_init(g_object_layers_manager);
     dialogue_data_init();
-    dialogue_bubble_init(g_object_layers_manager);
+    interaction_bubble_init();
     ui_icon_init();
     return 0;
 }
@@ -773,8 +773,8 @@ void game_render_ui(void) {
         modal_player_draw(g_renderer.screen_width, g_renderer.screen_height);
     }
 
-    // Dialogue bubble column (left side, always visible)
-    dialogue_bubble_draw();
+    // Entity interaction bubbles (left side, always visible)
+    interaction_bubble_draw();
 
     // Inventory bar (always visible in screen space)
     inventory_bar_draw();
@@ -787,10 +787,12 @@ void game_render_ui(void) {
         inventory_modal_draw();
     }
 
-    // Dialogue modal (highest priority overlay)
+    // Dialogue modal (text-only, legacy entry point)
     if (modal_dialogue_is_open()) {
         modal_dialogue_draw();
     }
+
+
 }
 
 
