@@ -162,6 +162,7 @@ static void decode_player_entity(BinReader* r, uint8_t flags) {
     p->base.object_layer_count = read_item_ids(
         r, p->base.object_layers, MAX_OBJECT_LAYERS);
     p->base.effective_level = (int)br_u16(r);
+    p->base.status_icon = br_u8(r);  /* Entity Status Indicator */
 }
 
 static void decode_bot_entity(BinReader* r, uint8_t flags) {
@@ -220,6 +221,7 @@ static void decode_bot_entity(BinReader* r, uint8_t flags) {
         r, b->base.object_layers, MAX_OBJECT_LAYERS);
     br_string(r, b->caster_id, MAX_ID_LENGTH);
     b->base.effective_level = (int)br_u16(r);
+    b->base.status_icon = br_u8(r);  /* Entity Status Indicator */
 }
 
 static void decode_floor_entity(BinReader* r, uint8_t flags) {
@@ -430,6 +432,10 @@ static void decode_self_player(BinReader* r, uint8_t flags) {
      * Authoritative flag from the Go server; drives visual feedback
      * and client-side action blocking. */
     gs->frozen = (br_u8(r) != 0);
+
+    /* Entity Status Indicator — u8 overhead icon ID for self-player. */
+    gs->self_status_icon = br_u8(r);
+    gs->player.base.status_icon = gs->self_status_icon;
 }
 
 /* ── Main entry point ──────────────────────────────────────────── */

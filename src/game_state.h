@@ -33,6 +33,7 @@
 #define MAX_ENTITY_TYPES     16
 #define MAX_DEFAULT_ITEM_IDS  8
 #define MAX_ACTIVE_ITEM_TYPES 8
+#define MAX_STATUS_ICONS 16
 
 // Forward declarations
 typedef struct GameState GameState;
@@ -66,6 +67,7 @@ struct EntityState {
     double last_update;
     ColorRGBA color; /* entity-specific color sent by server (0 = use palette default) */
     int effective_level; /* clamped sum of all stat fields, sent by server for all entities */
+    uint8_t status_icon; /* overhead status indicator ID — mapped via status_icons config */
 };
 
 // Player state structure
@@ -151,6 +153,13 @@ typedef struct {
     char color_key[32];
 } EntityTypeDefault;
 
+// Status icon config entry — maps a u8 ID to a ui-icon filename stem.
+// Received in init_data.statusIcons from the server.
+typedef struct {
+    uint8_t id;
+    char icon_id[MAX_ID_LENGTH];
+} StatusIconConfig;
+
 // Skill map entry received from init_data: one trigger item → N logic event IDs
 typedef struct {
     char trigger_item_id[MAX_ID_LENGTH];
@@ -185,6 +194,10 @@ struct GameState {
     // Per-entity-type visual defaults (from init_data)
     EntityTypeDefault entity_defaults[MAX_ENTITY_TYPES];
     int entity_defaults_count;
+
+    // Status icon mapping (from init_data.statusIcons)
+    StatusIconConfig status_icons[MAX_STATUS_ICONS];
+    int status_icon_count;
 
     // Main player state
     PlayerState player;
@@ -239,6 +252,11 @@ struct GameState {
     // While true, the player is in a modal interaction: no outgoing taps,
     // no incoming damage.  Set by the binary AOI self-player payload.
     bool frozen;
+
+    // Entity Status Indicator for the local player (from AOI self-player).
+    // Mirrors player.base.status_icon but decoded from a separate position
+    // in the self-player payload.  Used by overhead UI for self-entity.
+    uint8_t self_status_icon;
 
     // Runtime flags
     bool init_received;

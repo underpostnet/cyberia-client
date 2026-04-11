@@ -19,6 +19,8 @@
  */
 
 #include "entity_overhead_ui.h"
+#include "game_state.h"
+#include "ui_icon.h"
 #include <raylib.h>
 #include <stdio.h>
 #include <string.h>
@@ -210,5 +212,33 @@ void entity_overhead_ui_draw(
     if (p->show_name) {
         cursor_px -= EOHUD_NAME_SPACING * cell_size;
         draw_nameplate(p->name, entity_cx_px, cursor_px);
+        cursor_px -= (float)EOHUD_NAME_FONT_SIZE;
+    }
+
+    /* ── Status icon (above nameplate) ────────────────────────────────── */
+    if (p->status_icon != 0) {
+        const char* icon_id = NULL;
+        for (int i = 0; i < g_game_state.status_icon_count; i++) {
+            if (g_game_state.status_icons[i].id == p->status_icon) {
+                icon_id = g_game_state.status_icons[i].icon_id;
+                break;
+            }
+        }
+        if (icon_id) {
+            cursor_px -= EOHUD_ICON_SPACING * cell_size;
+            /* Scale icon with zoom: roughly 55% of one cell, clamped. */
+            int icon_sz = (int)(0.55f * world_w * cell_size);
+            if (icon_sz < 20) icon_sz = 20;
+            if (icon_sz > 36) icon_sz = 36;
+            /* Phase offset: simple hash of entity name for desync. */
+            float phase = 0.0f;
+            if (p->name) {
+                unsigned int h = 0;
+                for (const char* c = p->name; *c; c++) h = h * 31 + (unsigned char)*c;
+                phase = (float)(h % 1000) * 0.001f * 6.2832f;
+            }
+            ui_icon_draw(icon_id, entity_cx_px, cursor_px - icon_sz * 0.5f,
+                         icon_sz, true, phase);
+        }
     }
 }

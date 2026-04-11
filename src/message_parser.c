@@ -314,6 +314,24 @@ int message_parser_parse_init_data(const cJSON* json_root) {
         }
     }
 
+    // Parse status icon mapping
+    g_game_state.status_icon_count = 0;
+    cJSON* status_icons_json = cJSON_GetObjectItem(payload, "statusIcons");
+    if (status_icons_json && cJSON_IsArray(status_icons_json)) {
+        cJSON* si = NULL;
+        cJSON_ArrayForEach(si, status_icons_json) {
+            if (g_game_state.status_icon_count >= MAX_STATUS_ICONS) break;
+            StatusIconConfig* sc = &g_game_state.status_icons[g_game_state.status_icon_count];
+            memset(sc, 0, sizeof(StatusIconConfig));
+            cJSON* id_json = cJSON_GetObjectItem(si, "id");
+            if (id_json && cJSON_IsNumber(id_json)) {
+                sc->id = (uint8_t)id_json->valueint;
+            }
+            serial_get_string(si, "iconId", sc->icon_id, sizeof(sc->icon_id));
+            if (sc->icon_id[0] != '\0') g_game_state.status_icon_count++;
+        }
+    }
+
     if (skill_map_json && cJSON_IsObject(skill_map_json)) {
         cJSON* entry = NULL;
         cJSON_ArrayForEach(entry, skill_map_json) {

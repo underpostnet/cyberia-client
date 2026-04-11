@@ -35,6 +35,7 @@
 #define ENTITY_OVERHEAD_UI_H
 
 #include <stdbool.h>
+#include <stdint.h>
 #include <raylib.h>
 
 /* ── Layout constants (world-space, scaled by cell_size at draw time) ─── */
@@ -50,6 +51,9 @@
 
 /** Vertical spacing between load bar and nameplate text. */
 #define EOHUD_NAME_SPACING      0.04f
+
+/** Vertical spacing between nameplate and status icon. */
+#define EOHUD_ICON_SPACING      0.06f
 
 /** Bar width relative to entity width (1.0 = same as entity). */
 #define EOHUD_BAR_WIDTH_RATIO   1.10f
@@ -111,6 +115,14 @@ typedef struct {
      * May be suppressed for dead entities (respawn_in > 0).
      */
     bool show_hp;
+
+    /**
+     * Server-assigned Entity Status Indicator icon ID (u8).
+     * 0 = none.  See entity_status.h for the enum values.
+     * The entity_overhead_ui module calls entity_status_icon_id() to
+     * resolve this to a ui-icon filename and renders it above the nameplate.
+     */
+    uint8_t status_icon;
 } EntityOverheadParams;
 
 /* ── Public API ─────────────────────────────────────────────────────────── */

@@ -12,6 +12,7 @@
 #include "inventory_bar.h"
 #include "inventory_modal.h"
 #include "modal_dialogue.h"
+#include "ui_icon.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -119,6 +120,7 @@ int game_render_init(int screen_width, int screen_height) {
     modal_dialogue_init(g_object_layers_manager);
     dialogue_data_init();
     dialogue_bubble_init(g_object_layers_manager);
+    ui_icon_init();
     return 0;
 }
 
@@ -702,6 +704,7 @@ void game_render_entities(void) {
                                        && entity_base->respawn_in <= 0.0f,
                     .show_hp         = entity_base->max_life > 0.0f
                                        && entity_base->respawn_in <= 0.0f,
+                    .status_icon     = entity_base->status_icon,
                 };
                 entity_overhead_ui_draw(
                     &ohp,
@@ -963,5 +966,7 @@ void game_render_cleanup(void) {
         UnloadFont(g_renderer.game_font);
         g_renderer.font_loaded = false;
     }
+
+    ui_icon_cleanup();
 }
 
