@@ -6,6 +6,9 @@
 #include "modal_player.h"
 #include "inventory_bar.h"
 #include "inventory_modal.h"
+#include "modal_dialogue.h"
+#include "dialogue_data.h"
+#include "dialogue_bubble.h"
 #include "raylib.h"
 #include <stdio.h>
 
@@ -77,6 +80,13 @@ void render_update(void) {
     if (inventory_modal_is_open()) {
         inventory_modal_update(delta_time);
     }
+    if (modal_dialogue_is_open()) {
+        modal_dialogue_update(delta_time);
+    }
+
+    // Poll async dialogue data fetches and rebuild bubble column
+    dialogue_data_poll();
+    dialogue_bubble_update();
 
     // Update dev UI
     dev_ui_update(delta_time);

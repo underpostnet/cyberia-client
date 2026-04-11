@@ -8,6 +8,8 @@
 #include "client.h"
 #include "inventory_bar.h"
 #include "inventory_modal.h"
+#include "modal_dialogue.h"
+#include "dialogue_bubble.h"
 
 // Global input manager instance
 InputManager g_input = {0};
@@ -100,10 +102,22 @@ void input_handle_mouse_click(int button, Vector2 screen_pos) {
     int mx = (int)screen_pos.x;
     int my = (int)screen_pos.y;
 
+    // Dialogue modal consumes all clicks when open (highest priority)
+    if (modal_dialogue_is_open()) {
+        modal_dialogue_handle_click(mx, my, true);
+        return;
+    }
+
     // Inventory modal consumes all clicks when open
     if (inventory_modal_is_open()) {
         inventory_modal_handle_click(mx, my, true);
         return;
+    }
+
+    // Dialogue bubble column: clicking an icon opens dialogue modal
+    if (button == MOUSE_BUTTON_LEFT) {
+        dialogue_bubble_handle_click(mx, my, true);
+        if (modal_dialogue_is_open()) return;
     }
 
     // Inventory bar tap: open modal or scroll
@@ -271,8 +285,13 @@ bool input_find_entity_at_position(Vector2 screen_pos, char* entity_id, size_t i
 }
 
 bool input_is_over_ui(Vector2 screen_pos) {
+    // Dialogue modal blocks all world interaction when open
+    if (modal_dialogue_is_open()) return true;
     // Inventory modal blocks all world interaction when open
     if (inventory_modal_is_open()) return true;
+    // Dialogue bubble column occupies left strip
+    if (dialogue_bubble_slot_count() > 0 &&
+        screen_pos.x < DBUBBLE_MARGIN_X + DBUBBLE_ICON_SIZE + DBUBBLE_MARGIN_X) return true;
     // Inventory bar occupies the bottom strip
     if (screen_pos.y > GetScreenHeight() - INV_BAR_HEIGHT) return true;
     return false;
