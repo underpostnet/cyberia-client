@@ -52,10 +52,9 @@ static bool hit_rect(int mx, int my, Rectangle r) {
 static bool try_add_slot(const char* entity_id, const char* item_id) {
     if (!item_id || item_id[0] == '\0') return false;
 
-    /* If already tracked, just re-activate */
+    /* If this item_id is already tracked (any entity), just re-activate */
     for (int i = 0; i < s_slot_count; i++) {
-        if (strcmp(s_slots[i].entity_id, entity_id) == 0 &&
-            strcmp(s_slots[i].item_id, item_id) == 0) {
+        if (strcmp(s_slots[i].item_id, item_id) == 0) {
             s_slots[i].active = true;
             return true;
         }
