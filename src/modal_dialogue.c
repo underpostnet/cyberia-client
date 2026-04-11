@@ -55,9 +55,7 @@ static Modal s_modal;
  * No fixed pixel sizes — everything is derived from screen dimensions
  * so it scales naturally across resolutions.                               */
 
-#define DLG_SPRITE_FRAC     0.22f   /* sprite size as fraction of panel height */
-#define DLG_SPRITE_MIN      48      /* minimum sprite px                       */
-#define DLG_SPRITE_MAX      128     /* maximum sprite px                       */
+#define DLG_SPRITE_FRAC     0.50f   /* sprite width as fraction of card width  */
 #define DLG_FONT_SPEAKER    22
 #define DLG_FONT_TEXT       18
 #define DLG_FONT_HINT       14
@@ -77,7 +75,6 @@ static const Color C_TEXT      = { 220, 220, 230, 240 };
 static const Color C_HINT      = { 140, 140, 160, 180 };
 static const Color C_CARD_BG   = {  12,  12,  24, 230 };
 static const Color C_CARD_BORD = {  70,  70, 120, 200 };
-
 /* ── Helpers ──────────────────────────────────────────────────────────── */
 
 static void send_dialogue_msg(const char* type) {
@@ -104,11 +101,8 @@ static int dlg_pad(int sw) {
     return p;
 }
 
-static int dlg_sprite_size(float panel_h) {
-    int s = (int)(panel_h * DLG_SPRITE_FRAC);
-    if (s < DLG_SPRITE_MIN) s = DLG_SPRITE_MIN;
-    if (s > DLG_SPRITE_MAX) s = DLG_SPRITE_MAX;
-    return s;
+static int dlg_sprite_size(float card_w) {
+    return (int)(card_w * DLG_SPRITE_FRAC);
 }
 
 static bool hit_rect(int mx, int my, Rectangle r) {
@@ -229,32 +223,30 @@ void modal_dialogue_draw(void) {
              (int)(card.x + card.width), (int)card.y, C_CARD_BORD);
 
     int pad       = dlg_pad(sw);
-    int sprite_sz = dlg_sprite_size(card.height);
+    int sprite_sz = dlg_sprite_size(card.width);
 
-    /* ── Layout: sprite left-aligned, text area to the right ─────── */
-    float x0 = card.x + pad;
-    float y0 = card.y + pad;
+    /* ── Layout: sprite left-aligned (half width), text to the right ── */
+    float x0 = card.x;
+    float y0 = card.y;
 
-    /* Item sprite (ol as icon) */
+    /* Item sprite — left half of the card, no border */
     if (s_item_id[0] != '\0' && s_ol_manager) {
         ol_as_ico_draw(s_ol_manager, s_item_id,
                        (int)x0, (int)y0, sprite_sz,
                        "down_idle", 0, WHITE);
     }
-    DrawRectangleLinesEx((Rectangle){ x0, y0, (float)sprite_sz, (float)sprite_sz },
-                         1.0f, C_CARD_BORD);
 
-    /* Speaker name — right of sprite, vertically centred with sprite top */
-    float txt_x = x0 + sprite_sz + pad;
-    float txt_max_w = card.x + card.width - txt_x - pad;
+    /* Speaker name + progress — right of sprite */
     const DialogueLine* line = &s_lines[s_current];
-
     int fs_speaker = DLG_FONT_SPEAKER;
+    float txt_x    = x0 + sprite_sz + pad;
+    float txt_max  = card.x + card.width - txt_x - pad;
+    float ty       = y0 + pad;
+
     if (line->speaker[0] != '\0') {
-        DrawText(line->speaker, (int)txt_x, (int)y0, fs_speaker, C_SPEAKER);
+        DrawText(line->speaker, (int)txt_x, (int)ty, fs_speaker, C_SPEAKER);
     }
 
-    /* Progress indicator (e.g. "2 / 5") next to speaker or right-aligned */
     if (s_line_count > 1) {
         char prog[16];
         snprintf(prog, sizeof(prog), "%d / %d", s_current + 1, s_line_count);
@@ -262,14 +254,14 @@ void modal_dialogue_draw(void) {
         int pw  = MeasureText(prog, pfs);
         DrawText(prog,
                  (int)(card.x + card.width - pw - pad),
-                 (int)(y0 + 2), pfs, C_HINT);
+                 (int)(ty + 2), pfs, C_HINT);
     }
 
-    /* ── Dialogue text (typewriter, word-wrapped) ───────────────────── */
-    float text_y = y0 + fs_speaker + 8.0f;
-    int   fs     = DLG_FONT_TEXT;
+    float text_y = ty + fs_speaker + 6.0f;
 
-    /* Build the partial string for the typewriter */
+    /* ── Dialogue text (typewriter, word-wrapped) ──────────────────── */
+    int fs = DLG_FONT_TEXT;
+
     char partial[DIALOGUE_MAX_TEXT];
     int len = s_chars_visible;
     if (len > (int)sizeof(partial) - 1) len = (int)sizeof(partial) - 1;
@@ -277,7 +269,6 @@ void modal_dialogue_draw(void) {
     memcpy(partial, line->text, len);
     partial[len] = '\0';
 
-    /* Word-wrap rendering */
     {
         char copy[DIALOGUE_MAX_TEXT];
         strncpy(copy, partial, sizeof(copy) - 1);
@@ -285,7 +276,6 @@ void modal_dialogue_draw(void) {
 
         char line_buf[256] = {0};
         float cur_y = text_y;
-        float max_w = txt_max_w;
         char* tok = strtok(copy, " ");
         while (tok) {
             char test[256];
@@ -294,7 +284,7 @@ void modal_dialogue_draw(void) {
             else
                 snprintf(test, sizeof(test), "%s %s", line_buf, tok);
 
-            if (MeasureText(test, fs) > (int)max_w && line_buf[0] != '\0') {
+            if (MeasureText(test, fs) > (int)txt_max && line_buf[0] != '\0') {
                 DrawText(line_buf, (int)txt_x, (int)cur_y, fs, C_TEXT);
                 cur_y += fs + 4;
                 snprintf(line_buf, sizeof(line_buf), "%s", tok);

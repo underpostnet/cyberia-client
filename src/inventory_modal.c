@@ -63,9 +63,9 @@ static bool      s_lore_btn_visible = false;
 #define MODAL_CARD_W_MAX   600     /* hard max px                            */
 #define MODAL_CARD_H_MAX   800
 
-#define MODAL_SPRITE_FRAC  0.22f   /* sprite size as fraction of card width */
-#define MODAL_SPRITE_MIN   80
-#define MODAL_SPRITE_MAX   160
+#define MODAL_SPRITE_FRAC  0.38f   /* sprite size as fraction of card width */
+#define MODAL_SPRITE_MIN   100
+#define MODAL_SPRITE_MAX   240
 
 #define MODAL_FONT_TITLE   26
 #define MODAL_FONT_BODY    18
@@ -76,10 +76,10 @@ static bool      s_lore_btn_visible = false;
 #define MODAL_LORE_BTN_W   200
 #define MODAL_LORE_BTN_H    44
 
-#define DIR_BTN_W  56
-#define DIR_BTN_H  28
-#define DIR_BTN_GAP 5
-#define MODE_BTN_W 82
+#define DIR_BTN_W  64
+#define DIR_BTN_H  32
+#define DIR_BTN_GAP 6
+#define MODE_BTN_W 90
 
 /* ── Colours ──────────────────────────────────────────────────────────── */
 
