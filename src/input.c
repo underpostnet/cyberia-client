@@ -10,6 +10,7 @@
 #include "inventory_modal.h"
 #include "modal_dialogue.h"
 #include "dialogue_bubble.h"
+#include "game_render.h"
 
 // Global input manager instance
 InputManager g_input = {0};
@@ -125,6 +126,16 @@ void input_handle_mouse_click(int button, Vector2 screen_pos) {
         int hit = inventory_bar_get_tapped_slot(mx, my);
         if (hit >= 0) {
             inventory_modal_open(hit);
+            return;
+        }
+    }
+
+    // Zoom buttons (above inventory bar)
+    if (button == MOUSE_BUTTON_LEFT) {
+        int zh = game_render_zoom_btn_hit(mx, my);
+        if (zh != 0) {
+            float factor = (zh > 0) ? 1.1f : 0.9f;
+            input_set_camera_zoom(g_game_state.camera_zoom * factor);
             return;
         }
     }
@@ -299,5 +310,7 @@ bool input_is_over_ui(Vector2 screen_pos) {
         screen_pos.x < DBUBBLE_MARGIN_X + DBUBBLE_ICON_SIZE + DBUBBLE_MARGIN_X) return true;
     // Inventory bar occupies the bottom strip
     if (screen_pos.y > GetScreenHeight() - INV_BAR_HEIGHT) return true;
+    // Zoom buttons above the inventory bar
+    if (game_render_zoom_btn_hit((int)screen_pos.x, (int)screen_pos.y) != 0) return true;
     return false;
 }

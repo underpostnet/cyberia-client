@@ -16,6 +16,51 @@
 #include <stdlib.h>
 #include <string.h>
 
+/* ── Zoom buttons ─────────────────────────────────────────────────────── */
+#define ZOOM_BTN_SIZE   44
+#define ZOOM_BTN_GAP     6
+#define ZOOM_BTN_MARGIN 10
+
+static Rectangle zoom_btn_rect(int idx, int sw, int sh) {
+    /* Two square buttons stacked vertically, bottom-right, above the bar. */
+    float x = sw - ZOOM_BTN_SIZE - ZOOM_BTN_MARGIN;
+    float y = sh - INV_BAR_HEIGHT - ZOOM_BTN_MARGIN
+              - (2 - idx) * (ZOOM_BTN_SIZE + ZOOM_BTN_GAP) + ZOOM_BTN_GAP;
+    return (Rectangle){ x, y, ZOOM_BTN_SIZE, ZOOM_BTN_SIZE };
+}
+
+static void draw_zoom_buttons(int sw, int sh) {
+    const char* labels[2] = { "+", "-" };   /* 0 = zoom-in, 1 = zoom-out */
+    int mx = GetMouseX(), my = GetMouseY();
+    for (int i = 0; i < 2; i++) {
+        Rectangle r = zoom_btn_rect(i, sw, sh);
+        bool hov = ((float)mx >= r.x && (float)mx < r.x + r.width &&
+                    (float)my >= r.y && (float)my < r.y + r.height);
+        Color bg = hov ? (Color){ 50, 50, 70, 220 }
+                       : (Color){ 20, 20, 35, 200 };
+        DrawRectangleRec(r, bg);
+        DrawRectangleLinesEx(r, 1.0f, (Color){ 80, 80, 120, 180 });
+        int fs  = 24;
+        int tw  = MeasureText(labels[i], fs);
+        DrawText(labels[i],
+                 (int)(r.x + (r.width  - tw) * 0.5f),
+                 (int)(r.y + (r.height - fs) * 0.5f),
+                 fs, (Color){ 200, 210, 230, 240 });
+    }
+}
+
+int game_render_zoom_btn_hit(int mx, int my) {
+    int sw = GetScreenWidth(), sh = GetScreenHeight();
+    for (int i = 0; i < 2; i++) {
+        Rectangle r = zoom_btn_rect(i, sw, sh);
+        if ((float)mx >= r.x && (float)mx < r.x + r.width &&
+            (float)my >= r.y && (float)my < r.y + r.height) {
+            return (i == 0) ? 1 : -1;
+        }
+    }
+    return 0;
+}
+
 // Global renderer instance
 GameRenderer g_renderer = {0};
 
@@ -729,6 +774,9 @@ void game_render_ui(void) {
 
     // Inventory bar (always visible in screen space)
     inventory_bar_draw();
+
+    // Zoom buttons (above inventory bar, right side)
+    draw_zoom_buttons(g_renderer.screen_width, g_renderer.screen_height);
 
     // Inventory modal (shown on top of everything when open)
     if (inventory_modal_is_open()) {

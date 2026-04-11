@@ -234,6 +234,12 @@ void game_render_dev_ui(void);
  */
 void game_render_error_messages(void);
 
+/**
+ * @brief Check if a screen point hits a zoom button.
+ * @return +1 for zoom-in, -1 for zoom-out, 0 for no hit.
+ */
+int game_render_zoom_btn_hit(int mx, int my);
+
 // ============================================================================
 // Texture Management
 // ============================================================================
