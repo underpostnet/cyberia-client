@@ -1,21 +1,16 @@
-# Build mode for project: DEBUG or RELEASE
+# RELEASE | DEBUG
 BUILD_MODE      ?= DEBUG
 
-ASSETS_DIR      ?= data
+# -- Master folders
+ASSETS_DIR      ?= assets
 BUILD_DIR       ?= build
 LIBS_DIR		?= lib
 OUTPUT_DIR      ?= bin
 SRC_DIR         ?= src
 
-#------------------------------------------------
-# Common sources to include
-SRC_FILES = \
-	$(wildcard $(SRC_DIR)/*.c)
-
 #---------------------------------------------------------------------------------------------
 # Define common compiler flags
 #-------------------------------
-#  -Werror=pointer-arith    catch unportable code that does direct arithmetic on void pointers
 CFLAGS = -Wextra
 CFLAGS += -Wunused-result
 CFLAGS += -Wunused-variable
@@ -32,22 +27,19 @@ CFLAGS += -D_DEBUG -g
 endif
 
 #------------------------------------------------
+# Common sources to include
+src_files = \
+	$(wildcard $(SRC_DIR)/*.c)
+
+#------------------------------------------------
 # Raylib Dependendy
-RAYLIB_PATH := $(LIBS_DIR)/raylib
+RAYLIB_PATH ?= $(LIBS_DIR)/raylib
 CFLAGS += -I$(RAYLIB_PATH)/src -isystem$(RAYLIB_PATH)/src
 
 #------------------------------------------------
 # cJSON Dependency
 CJSON_PATH := $(LIBS_DIR)/cJSON
 CFLAGS += -I$(CJSON_PATH)
-
-#---------------------------------------------------------------------------------------------
-# Common Targets
-.PHONY: all clean full-clean
-
-full-clean: clean
-	-rm -rf $(BUILD_DIR) $(OUTPUT_DIR)
-	make -C $(RAYLIB_PATH)/src clean
 
 #---------------------------------------------------------------------------------------------
 # Util functions
