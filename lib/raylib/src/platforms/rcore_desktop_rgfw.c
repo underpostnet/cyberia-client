@@ -174,7 +174,6 @@ extern "C" {
 // Types and Structures Definition
 //----------------------------------------------------------------------------------
 typedef struct {
-    double startTime;
     RGFW_window *window;                // Native display device (physical screen connection)
     RGFW_monitor *monitor;
     mg_gamepads minigamepad;
@@ -479,7 +478,7 @@ void ToggleFullscreen(void)
     if (!FLAG_IS_SET(CORE.Window.flags, FLAG_FULLSCREEN_MODE))
     {
         FLAG_SET(CORE.Window.flags, FLAG_FULLSCREEN_MODE);
-        // Store previous window position (in case we exit fullscreen)
+        // Store previous window position (in case of exiting fullscreen)
         Vector2 currentPosition = GetWindowPosition();
         CORE.Window.previousPosition.x = currentPosition.x;
         CORE.Window.previousPosition.y = currentPosition.y;
@@ -493,7 +492,7 @@ void ToggleFullscreen(void)
     {
         FLAG_CLEAR(CORE.Window.flags, FLAG_FULLSCREEN_MODE);
 
-        // we update the window position right away
+        // Update the window position right away
         CORE.Window.position = CORE.Window.previousPosition;
         RGFW_window_setFullscreen(platform.window, 0);
         RGFW_window_move(platform.window, CORE.Window.position.x, CORE.Window.position.y);
@@ -534,7 +533,7 @@ void ToggleBorderlessWindowed(void)
     {
         FLAG_CLEAR(CORE.Window.flags, FLAG_BORDERLESS_WINDOWED_MODE);
         RGFW_window_setBorder(platform.window, 1);
-        
+
         CORE.Window.position = CORE.Window.previousPosition;
 
         RGFW_window_resize(platform.window, CORE.Window.previousScreen.width, CORE.Window.previousScreen.height);
@@ -724,7 +723,7 @@ void SetWindowIcon(Image image)
         TRACELOG(LOG_WARNING, "RGFW: Window icon image must be in R8G8B8A8 pixel format");
         return;
     }
-    RGFW_window_setIcon(platform.window, (u8 *)image.data, image.width, image.height, 4);
+    RGFW_window_setIcon(platform.window, (u8 *)image.data, image.width, image.height, RGFW_formatRGBA8);
 }
 
 // Set icon for window
@@ -750,8 +749,8 @@ void SetWindowIcons(Image *images, int count)
             if ((smallIcon == NULL) || ((images[i].width < smallIcon->width) && (images[i].height > smallIcon->height))) smallIcon = &images[i];
         }
 
-        if (smallIcon != NULL) RGFW_window_setIconEx(platform.window, (u8 *)smallIcon->data, smallIcon->width, smallIcon->height, 4, RGFW_iconWindow);
-        if (bigIcon != NULL) RGFW_window_setIconEx(platform.window, (u8 *)bigIcon->data, bigIcon->width, bigIcon->height, 4, RGFW_iconTaskbar);
+        if (smallIcon != NULL) RGFW_window_setIconEx(platform.window, (u8 *)smallIcon->data, smallIcon->width, smallIcon->height, RGFW_formatRGBA8, RGFW_iconWindow);
+        if (bigIcon != NULL) RGFW_window_setIconEx(platform.window, (u8 *)bigIcon->data, bigIcon->width, bigIcon->height, RGFW_formatRGBA8, RGFW_iconTaskbar);
     }
 }
 
@@ -821,7 +820,12 @@ void SetWindowSize(int width, int height)
         CORE.Window.screen.width = width;
         CORE.Window.screen.height = height;
     }
-    
+
+    if (!CORE.Window.usingFbo)
+    {
+        SetupViewport(CORE.Window.screen.width, CORE.Window.screen.height);
+    }
+
     RGFW_window_resize(platform.window, CORE.Window.screen.width, CORE.Window.screen.height);
 }
 
@@ -957,17 +961,17 @@ Vector2 GetWindowScaleDPI(void)
     else monitor = RGFW_getPrimaryMonitor();
 
     #if defined(__APPLE__)
-        // apple does < 1.0f scaling, example: 0.66f, 0.5f
-        // we want to convert this to be consistent
-        return (Vector2){ 1.0f / monitor->scaleX, 1.0f / monitor->scaleX };
+        // Apple does < 1.0f scaling, example: 0.66f, 0.5f
+        // it needs to be convert to be consistent
+        return (Vector2){ 1.0f/monitor->scaleX, 1.0f/monitor->scaleX };
     #else
-        // linux and windows do >= 1.0f scaling, example: 1.0f, 1.25f, 2.0f
+        // Linux and Windows do >= 1.0f scaling, example: 1.0f, 1.25f, 2.0f
         return (Vector2){ monitor->scaleX, monitor->scaleX };
     #endif
 }
 
-// Not part of raylib. Mac has a different pixel ratio for retina displays
-// and we want to be able to handle it
+// Get monitor pixel ratio
+// WARNING: Function not used, neither exposed by raylib
 float GetMonitorPixelRatio(void)
 {
     RGFW_monitor *monitor = NULL;
@@ -992,13 +996,16 @@ const char *GetClipboardText(void)
     return RGFW_readClipboard(NULL);
 }
 
-#if defined(SUPPORT_CLIPBOARD_IMAGE)
+#if SUPPORT_CLIPBOARD_IMAGE
 #if defined(_WIN32)
     #define WIN32_CLIPBOARD_IMPLEMENTATION
     #define WINUSER_ALREADY_INCLUDED
     #define WINBASE_ALREADY_INCLUDED
     #define WINGDI_ALREADY_INCLUDED
     #include "../external/win32_clipboard.h"
+#elif defined(__linux__) && defined(DRGFW_X11)
+    #include <X11/Xlib.h>
+    #include <X11/Xatom.h>
 #endif
 #endif
 
@@ -1006,8 +1013,10 @@ const char *GetClipboardText(void)
 Image GetClipboardImage(void)
 {
     Image image = { 0 };
-#if defined(SUPPORT_CLIPBOARD_IMAGE)
+
+#if SUPPORT_CLIPBOARD_IMAGE && SUPPORT_MODULE_RTEXTURES
 #if defined(_WIN32)
+
     unsigned long long int dataSize = 0; // moved into _WIN32 scope until other platforms gain support
     void *fileData = NULL; // moved into _WIN32 scope until other platforms gain support
 
@@ -1017,9 +1026,58 @@ Image GetClipboardImage(void)
 
     if (fileData == NULL) TRACELOG(LOG_WARNING, "Clipboard image: Couldn't get clipboard data");
     else image = LoadImageFromMemory(".bmp", (const unsigned char *)fileData, dataSize);
+
+#elif defined(__linux__) && defined(DRGFW_X11)
+
+    // REF: https://github.com/ColleagueRiley/Clipboard-Copy-Paste/blob/main/x11.c
+    Display *dpy = XOpenDisplay(NULL);
+    if (!dpy) return image;
+
+    Window root = DefaultRootWindow(dpy);
+    Window win = XCreateSimpleWindow(
+        dpy,      // The connection to the X Server
+        root,     // The 'Parent' window (usually the desktop/root)
+        0, 0,     // X and Y position on the screen
+        1, 1,     // Width and Height (1x1 pixel)
+        0,        // Border width
+        0,        // Border color
+        0         // Background color
+    );
+
+    Atom clipboard = XInternAtom(dpy, "CLIPBOARD", False);
+    Atom targetType = XInternAtom(dpy, "image/png", False); // Ask for PNG
+    Atom property = XInternAtom(dpy, "RAYLIB_CLIPBOARD_MANAGER", False);
+
+    // Request the data: "Convert whatever is in CLIPBOARD to image/png and put it in RAYLIB_CLIPBOARD_MANAGER"
+    XConvertSelection(dpy, clipboard, targetType, property, win, CurrentTime);
+
+    // Wait for the SelectionNotify event
+    XEvent ev = { 0 };
+    XNextEvent(dpy, &ev);
+
+    Atom actualType = { 0 };
+    int actualFormat = 0;
+    unsigned long nitems = 0;
+    unsigned long bytesAfter = 0;
+    unsigned char *data = NULL;
+
+    // Read the data from our ghost window's property
+    XGetWindowProperty(dpy, win, property, 0, ~0L, False, AnyPropertyType,
+        &actualType, &actualFormat, &nitems, &bytesAfter, &data);
+
+    if (data != NULL)
+    {
+        image = LoadImageFromMemory(".png", data, (int)nitems);
+        XFree(data);
+    }
+
+    XDestroyWindow(dpy, win);
+    XCloseDisplay(dpy);
 #else
     TRACELOG(LOG_WARNING, "Clipboard image: PLATFORM_DESKTOP_RGFW doesn't implement GetClipboardImage() for this OS");
-#endif
+#endif // defined(_WIN32)
+#else
+    TRACELOG(LOG_WARNING, "Clipboard image: SUPPORT_CLIPBOARD_IMAGE requires SUPPORT_MODULE_RTEXTURES to work properly");
 #endif // SUPPORT_CLIPBOARD_IMAGE
 
     return image;
@@ -1042,7 +1100,7 @@ void HideCursor(void)
 // Enables cursor (unlock cursor)
 void EnableCursor(void)
 {
-    RGFW_window_captureMouse(platform.window, false);
+    RGFW_window_captureRawMouse(platform.window, false);
 
     // Set cursor position in the middle
     SetMousePosition(CORE.Window.screen.width/2, CORE.Window.screen.height/2);
@@ -1054,7 +1112,7 @@ void EnableCursor(void)
 // Disables cursor (lock cursor)
 void DisableCursor(void)
 {
-    RGFW_window_captureMouse(platform.window, true);
+    RGFW_window_captureRawMouse(platform.window, true);
     HideCursor();
 
     CORE.Input.Mouse.cursorLocked = true;
@@ -1073,7 +1131,9 @@ void SwapScreenBuffer(void)
 // Get elapsed time measure in seconds since InitTimer()
 double GetTime(void)
 {
-    return get_time_seconds() - platform.startTime;
+    double time = get_time_seconds() - CORE.Time.base;
+
+    return time;
 }
 
 // Open URL with default system browser (if available)
@@ -1142,9 +1202,9 @@ const char *GetKeyName(int key)
 // Register all input events
 void PollInputEvents(void)
 {
-#if defined(SUPPORT_GESTURES_SYSTEM)
+#if SUPPORT_GESTURES_SYSTEM
     // NOTE: Gestures update must be called every frame to reset gestures correctly
-    // because ProcessGestureEvent() is just called on an event, not every frame
+    // because ProcessGestureEvent() is called on an event, not every frame
     UpdateGestures();
 #endif
 
@@ -1229,8 +1289,8 @@ void PollInputEvents(void)
                 {
                     if (CORE.Window.dropFileCount == 0)
                     {
-                        // When a new file is dropped, we reserve a fixed number of slots for all possible dropped files
-                        // at the moment we limit the number of drops at once to 1024 files but this behaviour should probably be reviewed
+                        // When a new file is dropped, reserve a fixed number of slots for all possible dropped files
+                        // at the moment limiting the number of drops at once to 1024 files but this behaviour should probably be reviewed
                         // TODO: Pointers should probably be reallocated for any new file added...
                         CORE.Window.dropFilepaths = (char **)RL_CALLOC(1024, sizeof(char *));
 
@@ -1277,19 +1337,20 @@ void PollInputEvents(void)
                     CORE.Window.currentFbo.width = CORE.Window.render.width;
                     CORE.Window.currentFbo.height = CORE.Window.render.height;
                 #elif defined(PLATFORM_WEB_RGFW)
-                    // do nothing for web
-                    return;
+                    // do nothing but prevent other behavior
                 #else
                     SetupViewport(platform.window->w, platform.window->h);
-                    // if we are doing automatic DPI scaling, then the "screen" size is divided by the window scale
+
+                    // Consider content scaling if required
                     if (FLAG_IS_SET(CORE.Window.flags, FLAG_WINDOW_HIGHDPI))
                     {
                         Vector2 scaleDpi = GetWindowScaleDPI();
                         CORE.Window.screen.width = (int)(platform.window->w/scaleDpi.x);
                         CORE.Window.screen.height = (int)(platform.window->h/scaleDpi.y);
                         CORE.Window.screenScale = MatrixScale(scaleDpi.x, scaleDpi.y, 1.0f);
-                        // mouse scale doesnt seem needed
-                        // SetMouseScale(1.0f/scaleDpi.x, 1.0f/scaleDpi.y);
+
+                        // Mouse scale does not seem to be needed
+                        //SetMouseScale(1.0f/scaleDpi.x, 1.0f/scaleDpi.y);
                     }
                     else
                     {
@@ -1349,7 +1410,7 @@ void PollInputEvents(void)
 
             case RGFW_keyChar:
             {
-                // NOTE: event.text.text data comes an UTF-8 text sequence but we register codepoints (int)
+                // NOTE: event.text.text data comes an UTF-8 text sequence but registering codepoints (int)
                 // Check if there is space available in the queue
                 if (CORE.Input.Keyboard.charPressedQueueCount < MAX_CHAR_PRESSED_QUEUE)
                 {
@@ -1391,15 +1452,35 @@ void PollInputEvents(void)
             } break;
             case RGFW_mousePosChanged:
             {
+                float mouseX = 0.0f;
+                float mouseY = 0.0f;
                 if (RGFW_window_isCaptured(platform.window))
                 {
-                    CORE.Input.Mouse.currentPosition.x += (float)rgfw_event.mouse.vecX;
-                    CORE.Input.Mouse.currentPosition.y += (float)rgfw_event.mouse.vecY;
+                    mouseX = (float)rgfw_event.mouse.vecX;
+                    mouseY = (float)rgfw_event.mouse.vecY;
                 }
                 else
                 {
-                    CORE.Input.Mouse.currentPosition.x = (float)rgfw_event.mouse.x;
-                    CORE.Input.Mouse.currentPosition.y = (float)rgfw_event.mouse.y;
+                    mouseX = (float)rgfw_event.mouse.x;
+                    mouseY = (float)rgfw_event.mouse.y;
+                }
+
+#if defined(__EMSCRIPTEN__)
+                double canvasWidth = 0.0;
+                double canvasHeight = 0.0;
+                emscripten_get_element_css_size("#canvas", &canvasWidth, &canvasHeight);
+                mouseX *= ((float)GetScreenWidth()/(float)canvasWidth);
+                mouseY *= ((float)GetScreenHeight()/(float)canvasHeight);
+#endif
+                if (RGFW_window_isCaptured(platform.window))
+                {
+                    CORE.Input.Mouse.currentPosition.x += mouseX;
+                    CORE.Input.Mouse.currentPosition.y += mouseY;
+                }
+                else
+                {
+                    CORE.Input.Mouse.currentPosition.x = mouseX;
+                    CORE.Input.Mouse.currentPosition.y = mouseY;
                 }
 
                 CORE.Input.Touch.position[0] = CORE.Input.Mouse.currentPosition;
@@ -1408,7 +1489,7 @@ void PollInputEvents(void)
             default: break;
         }
 
-#if defined(SUPPORT_GESTURES_SYSTEM)
+#if SUPPORT_GESTURES_SYSTEM
         if (touchAction > -1)
         {
             // Process mouse events as touches to be able to use mouse-gestures
@@ -1573,7 +1654,7 @@ int InitPlatform(void)
 
     RGFW_setGlobalHints_OpenGL(hints);
     platform.window = RGFW_createWindow((CORE.Window.title != 0)? CORE.Window.title : " ", 0, 0, CORE.Window.screen.width, CORE.Window.screen.height, flags | RGFW_windowOpenGL);
-    platform.startTime = get_time_seconds();
+    CORE.Time.base = get_time_seconds();
 
 #ifndef PLATFORM_WEB_RGFW
     i32 screenSizeWidth;
@@ -1610,7 +1691,7 @@ int InitPlatform(void)
 
     //----------------------------------------------------------------------------
 
-    // If everything work as expected, we can continue
+    // If everything work as expected, continue
     CORE.Window.position.x = platform.window->x;
     CORE.Window.position.y = platform.window->y;
     CORE.Window.render.width = CORE.Window.screen.width;
@@ -1691,6 +1772,7 @@ int InitPlatform(void)
 // Close platform
 void ClosePlatform(void)
 {
+    mg_gamepads_free(&platform.minigamepad);
     RGFW_window_close(platform.window);
 }
 
