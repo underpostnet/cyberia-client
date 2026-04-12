@@ -7,12 +7,12 @@
  * The icon is the entity's full active ObjectLayer stack rendered at
  * icon size, so players recognise entities at a glance.
  *
- * Tapping a bubble opens the JS social overlay (via social_bridge.h)
+ * Tapping a bubble opens the JS social overlay (via js/services.h)
  * and sends freeze_start("social") to protect the player.
  */
 
 #include "interaction_bubble.h"
-#include "social_bridge.h"
+#include "js/services.h"
 #include "dialogue_data.h"
 #include "ol_as_animated_ico.h"
 #include "game_state.h"

@@ -16,10 +16,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-/* ── WASM JS bridge (shared with atlas / dialogue systems) ───────────── */
-
-extern void           js_start_fetch_binary(const char* url, int request_id);
-extern unsigned char*  js_get_fetch_result(int request_id, int* size);
+#include "js/services.h"
 
 /* ── Icon texture cache ─────────────────────────────────────────────── */
 

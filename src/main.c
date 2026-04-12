@@ -8,9 +8,7 @@
 
 #include <emscripten/emscripten.h>
 
-// External JavaScript function to initialize engine API base URL
-// (defined in js/services.js)
-void js_init_engine_api(const char* api_base_url);
+#include "js/services.h"
 
 // Application configuration
 #define WINDOW_WIDTH 600

@@ -10,7 +10,7 @@
 #include "inventory_modal.h"
 #include "modal_dialogue.h"
 #include "interaction_bubble.h"
-#include "social_bridge.h"
+#include "js/services.h"
 #include "game_render.h"
 
 // Global input manager instance

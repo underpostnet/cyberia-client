@@ -4,7 +4,8 @@
 #include "cJSON.h"
 #include "game_render.h"
 #include "object_layers_management.h"
-#include "social_bridge.h"
+#include "js/services.h"
+#include "js/services.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -419,7 +420,6 @@ static int message_parser_parse_metadata(const cJSON* json_root) {
     // Parse apiBaseUrl if provided (update the Engine API URL for blob fetches)
     char api_url[256] = {0};
     if (serial_get_string(payload, "apiBaseUrl", api_url, sizeof(api_url)) == 0 && api_url[0] != '\0') {
-        extern void js_init_engine_api(const char* url);
         js_init_engine_api(api_url);
     }
 

@@ -7,7 +7,7 @@
  * systems (WebSocket send, dialogue modal open, freeze state).
  */
 
-#include "social_bridge.h"
+#include "js/services.h"
 #include "client.h"
 #include "modal_dialogue.h"
 #include "dialogue_data.h"
