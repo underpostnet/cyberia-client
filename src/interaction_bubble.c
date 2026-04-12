@@ -13,7 +13,8 @@
 #include "interaction_bubble.h"
 #include "interact_bridge.h"
 #include "dialogue_data.h"
-#include "ol_as_animated_ico.h"
+#include "ol_stack_ico.h"
+#include "object_layers_management.h"
 #include "game_state.h"
 #include "entity_render.h"
 #include "game_render.h"
@@ -34,6 +35,7 @@ static int                   s_slot_count = 0;
 static const Color C_SLOT_BG        = {  14,  14,  26, 210 };
 static const Color C_SLOT_BORDER    = {  70,  70, 120, 200 };
 static const Color C_SLOT_HOVER     = {  35,  45,  75, 230 };
+static const Color C_SELF_BORDER    = { 220, 190,  60, 240 };  /* gold border for self-player */
 
 /* ── Helpers ──────────────────────────────────────────────────────────── */
 
@@ -201,6 +203,12 @@ void interaction_bubble_update(void) {
     for (int i = 0; i < s_slot_count; i++)
         s_slots[i].active = false;
 
+    /* Self-player is always scanned first → occupies slot 0. */
+    if (g_game_state.player_id[0] != '\0') {
+        scan_entity(g_game_state.player_id,
+                    &g_game_state.player.base, true, NULL);
+    }
+
     for (int i = 0; i < g_game_state.other_player_count; i++) {
         scan_entity(
             g_game_state.other_players[i].base.id,
@@ -240,9 +248,12 @@ void interaction_bubble_draw(void) {
         InteractionBubbleSlot* slot = &s_slots[i];
         Rectangle r = slot_rect(i);
         bool hovered = hit_rect(mx, my, r);
+        bool is_self = (strcmp(slot->entity_id, g_game_state.player_id) == 0);
 
         DrawRectangleRounded(r, 0.15f, 4, hovered ? C_SLOT_HOVER : C_SLOT_BG);
-        DrawRectangleRoundedLinesEx(r, 0.15f, 4, 1.5f, C_SLOT_BORDER);
+        DrawRectangleRoundedLinesEx(r, 0.15f, 4,
+                                    is_self ? 2.0f : 1.5f,
+                                    is_self ? C_SELF_BORDER : C_SLOT_BORDER);
 
         /* Always render the alive OL stack so the entity is recognisable
          * even when dead (ghost state is indicated by the status icon). */
@@ -250,12 +261,10 @@ void interaction_bubble_draw(void) {
         const ObjectLayerState* icon_layers = slot->alive_layer_count > 0 ? slot->alive_layers : slot->layers;
 
         if (mgr && icon_lc > 0) {
-            for (int j = 0; j < icon_lc; j++) {
-                ol_as_ico_draw(mgr, icon_layers[j].item_id,
-                               (int)r.x + 3, (int)r.y + 3,
-                               IBUBBLE_ICON_SIZE - 6,
-                               "down_idle", 0, WHITE);
-            }
+            ol_stack_ico_draw(mgr, icon_layers, icon_lc,
+                              (int)r.x + 3, (int)r.y + 3,
+                              IBUBBLE_ICON_SIZE - 6,
+                              "down_idle", 0, WHITE);
         } else {
             int cx = (int)(r.x + r.width * 0.5f);
             int cy = (int)(r.y + r.height * 0.5f);
@@ -304,6 +313,8 @@ void interaction_bubble_draw(void) {
 bool interaction_bubble_handle_click(int mx, int my, bool clicked) {
     if (s_slot_count <= 0 || !clicked) return false;
 
+    ObjectLayersManager* mgr = game_render_get_obj_layers_mgr();
+
     for (int i = 0; i < s_slot_count; i++) {
         Rectangle r = slot_rect(i);
         if (hit_rect(mx, my, r)) {
@@ -313,11 +324,56 @@ bool interaction_bubble_handle_click(int mx, int my, bool clicked) {
 
             /* Open the JS interact panel — NO freeze, player stays active
              * in real-time PVP/PVE.  Only NPC dialogue freezes. */
+            bool is_self = (strcmp(slot->entity_id, g_game_state.player_id) == 0);
             js_interact_overlay_open(slot->entity_id,
                                      slot->display_name,
                                      slot->dialogue_item_id,
                                      slot->interact_flags,
-                                     slot->is_player ? 1 : 0);
+                                     slot->is_player ? 1 : 0,
+                                     is_self ? 1 : 0);
+
+            /* Pass the entity's active OL stack to the JS overlay for
+             * preview rendering and per-item dialog buttons.  Each entry
+             * includes itemId, type (for static asset URL construction),
+             * and a hasDialogue flag. */
+            {
+                int icon_lc = slot->alive_layer_count > 0
+                    ? slot->alive_layer_count : slot->layer_count;
+                const ObjectLayerState* icon_layers = slot->alive_layer_count > 0
+                    ? slot->alive_layers : slot->layers;
+
+                char json[4096];
+                int off = 0;
+                json[off++] = '[';
+
+                for (int j = 0; j < icon_lc; j++) {
+                    if (!icon_layers[j].active || icon_layers[j].item_id[0] == '\0')
+                        continue;
+
+                    const char* item_type = "";
+                    if (mgr) {
+                        ObjectLayer* ol_data = get_or_fetch_object_layer(
+                            mgr, icon_layers[j].item_id);
+                        if (ol_data && ol_data->data.item.type[0] != '\0')
+                            item_type = ol_data->data.item.type;
+                    }
+
+                    bool has_dlg = dialogue_data_available(icon_layers[j].item_id);
+
+                    int wrote = snprintf(json + off, sizeof(json) - off,
+                        "%s{\"itemId\":\"%s\",\"type\":\"%s\",\"hasDialogue\":%s}",
+                        off > 1 ? "," : "",
+                        icon_layers[j].item_id,
+                        item_type,
+                        has_dlg ? "true" : "false");
+                    if (wrote > 0 && off + wrote < (int)sizeof(json) - 2)
+                        off += wrote;
+                }
+
+                json[off++] = ']';
+                json[off] = '\0';
+                js_interact_overlay_set_ol_stack(json);
+            }
             return true;
         }
     }

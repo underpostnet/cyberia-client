@@ -32,6 +32,8 @@ mergeInto(LibraryManager.library, {
     dlgItemId: '',
     interactFlags: 0,
     isPlayer: false,
+    isSelf: false,
+    olStack: [],
     activeTab: 'chat',
     chatHistory: [],
     dom: {},
@@ -139,6 +141,7 @@ mergeInto(LibraryManager.library, {
     '$IP_QC',
     '$ipRenderChat',
     '$ipSwitchTab',
+    '$FetchState',
     'js_interact_overlay_close',
     'js_interact_overlay_send_chat',
   ],
@@ -292,6 +295,7 @@ mergeInto(LibraryManager.library, {
     '$ipBuildDialogTab',
     '$ipBuildChatTab',
     '$ipBuildActionsTab',
+    '$ipBuildOlStackPreview',
   ],
   $ipSwitchTab: function (tabId) {
     var P = IP,
@@ -332,36 +336,178 @@ mergeInto(LibraryManager.library, {
   },
 
   /* ================================================================
-   * Dialog tab — delegates to C modal_dialogue
+   * OL Stack Preview — renders entity's active OL stack as composited
+   * images using the public static asset directory convention:
+   *   {api_base_url}/assets/{type}/{itemId}/08/0.png
+   * Direction code 08 = down_idle (standard icon direction).
    * ================================================================ */
 
-  $ipBuildDialogTab__deps: ['$IP', '$IPS', '$ipEl', '$ipBtn'],
+  $ipBuildOlStackPreview__deps: ['$IP', '$IPS', '$ipEl', '$FetchState'],
+  $ipBuildOlStackPreview: function (parent, size) {
+    var P = IP,
+      S = IPS;
+    var stack = P.olStack;
+    if (!stack || stack.length === 0) return null;
+
+    var wrap = ipEl(
+      'div',
+      {
+        position: 'relative',
+        width: size + 'px',
+        height: size + 'px',
+        flexShrink: '0',
+        borderRadius: '6px',
+        overflow: 'hidden',
+        background: 'rgba(20,20,40,0.6)',
+        border: P.isSelf ? '2px solid rgba(220,190,60,0.8)' : '1px solid ' + S.border,
+      },
+      parent,
+    );
+
+    var base = FetchState.api_base_url;
+    for (var i = 0; i < stack.length; i++) {
+      var ol = stack[i];
+      if (!ol.type) continue;
+      var img = ipEl(
+        'img',
+        {
+          position: 'absolute',
+          top: '0',
+          left: '0',
+          width: '100%',
+          height: '100%',
+          imageRendering: 'pixelated',
+          pointerEvents: 'none',
+        },
+        wrap,
+      );
+      img.src = base + '/assets/' + ol.type + '/' + ol.itemId + '/08/0.png';
+      img.alt = '';
+      img.onerror = function () {
+        this.style.display = 'none';
+      };
+    }
+
+    return wrap;
+  },
+
+  /* ================================================================
+   * Dialog tab — 2-column layout:
+   *   Left:  full OL stack composite preview
+   *   Right: per-active-OL dialog entry buttons
+   * ================================================================ */
+
+  $ipBuildDialogTab__deps: ['$IP', '$IPS', '$ipEl', '$ipBtn', '$ipBuildOlStackPreview', '$FetchState'],
   $ipBuildDialogTab: function (container) {
     var P = IP,
       S = IPS;
+    var stack = P.olStack;
 
-    if (!P.dlgItemId) {
-      var hint = ipEl('div', { color: S.hintCol, fontSize: '14px', padding: '16px 0' }, container);
-      hint.textContent = 'No dialog available for this entity.';
-      return;
+    /* 2-column wrapper */
+    var row = ipEl('div', { display: 'flex', gap: '10px', height: '100%' }, container);
+
+    /* Left column: composite OL stack preview */
+    ipBuildOlStackPreview(row, 120);
+
+    /* Right column: per-item dialog buttons */
+    var right = ipEl(
+      'div',
+      {
+        flex: '1',
+        display: 'flex',
+        flexDirection: 'column',
+        gap: '4px',
+        overflowY: 'auto',
+        WebkitOverflowScrolling: 'touch',
+      },
+      row,
+    );
+
+    var anyDialogue = false;
+    var base = typeof FetchState !== 'undefined' ? FetchState.api_base_url : '';
+
+    for (var i = 0; i < stack.length; i++) {
+      (function (ol) {
+        var itemRow = ipEl(
+          'div',
+          {
+            display: 'flex',
+            alignItems: 'center',
+            gap: '6px',
+            padding: '4px',
+            background: 'rgba(20,22,40,0.5)',
+            borderRadius: '4px',
+          },
+          right,
+        );
+
+        /* Small OL icon preview (single item) */
+        if (ol.type) {
+          var ico = ipEl(
+            'img',
+            {
+              width: '28px',
+              height: '28px',
+              imageRendering: 'pixelated',
+              flexShrink: '0',
+              borderRadius: '3px',
+              background: 'rgba(14,14,28,0.6)',
+            },
+            itemRow,
+          );
+          ico.src = base + '/assets/' + ol.type + '/' + ol.itemId + '/08/0.png';
+          ico.alt = '';
+          ico.onerror = function () {
+            this.style.display = 'none';
+          };
+        }
+
+        /* Item label */
+        var label = ipEl(
+          'span',
+          {
+            flex: '1',
+            fontSize: '13px',
+            color: S.textCol,
+            overflow: 'hidden',
+            textOverflow: 'ellipsis',
+            whiteSpace: 'nowrap',
+          },
+          itemRow,
+        );
+        label.textContent = ol.itemId;
+
+        /* Dialog button — only if this OL has dialogue data */
+        if (ol.hasDialogue) {
+          anyDialogue = true;
+          ipBtn(
+            '\uD83D\uDCDC',
+            function () {
+              P.hidden = true;
+              P.el.style.display = 'none';
+              P.backdrop.style.display = 'none';
+              var ePtr = allocateUTF8(P.entityId);
+              var iPtr = allocateUTF8(ol.itemId);
+              Module._c_open_dialogue_from_js(ePtr, iPtr);
+              _free(ePtr);
+              _free(iPtr);
+            },
+            itemRow,
+            {
+              background: S.btnAccent,
+              fontSize: '14px',
+              padding: '4px 10px',
+              flexShrink: '0',
+            },
+          );
+        }
+      })(stack[i]);
     }
 
-    ipBtn(
-      '\uD83D\uDCDC Dialog',
-      function () {
-        if (!P.dlgItemId) return;
-        P.hidden = true;
-        P.el.style.display = 'none';
-        P.backdrop.style.display = 'none';
-        var ePtr = allocateUTF8(P.entityId);
-        var iPtr = allocateUTF8(P.dlgItemId);
-        Module._c_open_dialogue_from_js(ePtr, iPtr);
-        _free(ePtr);
-        _free(iPtr);
-      },
-      container,
-      { background: S.btnAccent, fontSize: '16px', padding: '10px 20px' },
-    );
+    if (stack.length === 0 || (!anyDialogue && !P.dlgItemId)) {
+      var hint = ipEl('div', { color: S.hintCol, fontSize: '14px', padding: '8px 0' }, right);
+      hint.textContent = 'No dialog available for this entity.';
+    }
   },
 
   /* ================================================================
@@ -538,8 +684,11 @@ mergeInto(LibraryManager.library, {
       S = IPS;
     var flags = P.interactFlags;
 
-    /* Header: players show their websocket ID, bots show display name. */
-    D.nameEl.textContent = P.isPlayer ? P.entityId : P.displayName || P.entityId.substring(0, 12);
+    /* Header: self-player gets a gold tag, players show wsId, bots show name. */
+    var headerText = P.isPlayer ? P.entityId : P.displayName || P.entityId.substring(0, 12);
+    if (P.isSelf) headerText = '\u2726 ' + headerText + ' (You)';
+    D.nameEl.textContent = headerText;
+    D.nameEl.style.color = P.isSelf ? 'rgba(220,190,60,1)' : S.nameCol;
 
     /* Rebuild tab bar */
     D.tabBar.innerHTML = '';
@@ -586,7 +735,14 @@ mergeInto(LibraryManager.library, {
    * ================================================================ */
 
   js_interact_overlay_open__deps: ['$IP', '$NB', '$nbEnsure', '$ipBuild', '$ipPopulate'],
-  js_interact_overlay_open: function (entity_id_ptr, display_name_ptr, dlg_item_id_ptr, interact_flags, is_player) {
+  js_interact_overlay_open: function (
+    entity_id_ptr,
+    display_name_ptr,
+    dlg_item_id_ptr,
+    interact_flags,
+    is_player,
+    is_self,
+  ) {
     var P = IP;
 
     P.entityId = UTF8ToString(entity_id_ptr);
@@ -594,6 +750,8 @@ mergeInto(LibraryManager.library, {
     P.dlgItemId = UTF8ToString(dlg_item_id_ptr);
     P.interactFlags = interact_flags;
     P.isPlayer = !!is_player;
+    P.isSelf = !!is_self;
+    P.olStack = [];
     P.open = true;
     P.hidden = false;
 
@@ -611,6 +769,19 @@ mergeInto(LibraryManager.library, {
 
     P.el.style.display = 'flex';
     P.backdrop.style.display = 'block';
+  },
+
+  js_interact_overlay_set_ol_stack__deps: ['$IP', '$ipPopulate'],
+  js_interact_overlay_set_ol_stack: function (json_ptr) {
+    var P = IP;
+    var json = UTF8ToString(json_ptr);
+    try {
+      P.olStack = JSON.parse(json);
+    } catch (e) {
+      P.olStack = [];
+    }
+    /* Re-populate so the dialog tab picks up the OL data. */
+    if (P.open && P.el) ipPopulate();
   },
 
   js_interact_overlay_close__deps: ['$IP'],

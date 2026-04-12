@@ -26,11 +26,14 @@ extern void js_interact_overlay_open(const char* entity_id,
                                      const char* display_name,
                                      const char* dlg_item_id,
                                      uint32_t interact_flags,
-                                     int is_player);
+                                     int is_player,
+                                     int is_self);
 
 extern void js_interact_overlay_close(void);
 
 extern int  js_interact_overlay_is_open(void);
+
+extern void js_interact_overlay_set_ol_stack(const char* json);
 
 extern void js_interact_overlay_receive_chat(const char* from_id,
                                              const char* from_name,
