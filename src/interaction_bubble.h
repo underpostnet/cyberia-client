@@ -38,16 +38,23 @@
 
 /**
  * @brief One visible bubble slot — entity-specific, stores full OL snapshot.
+ *
+ * `alive_layers` holds the last-known alive OL stack so the bubble icon
+ * always shows the living appearance (even when the entity is dead/ghost).
+ * `layers` tracks whatever the server currently sends (dead items if ghost).
  */
 typedef struct {
     char entity_id[MAX_ID_LENGTH];
     char display_name[MAX_ID_LENGTH];
     ObjectLayerState layers[IBUBBLE_MAX_LAYERS];
     int layer_count;
+    ObjectLayerState alive_layers[IBUBBLE_MAX_LAYERS];
+    int alive_layer_count;
     int direction;
     uint32_t interact_flags;
     char dialogue_item_id[128];
     uint8_t status_icon;
+    bool is_player;
     bool active;
     double appeared_at;
 } InteractionBubbleSlot;

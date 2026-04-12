@@ -19,6 +19,7 @@
 #include "game_render.h"
 #include "client.h"
 #include "ui_icon.h"
+#include "notify_badge.h"
 #include <raylib.h>
 #include <string.h>
 #include <stdio.h>
@@ -88,28 +89,52 @@ static InteractionBubbleSlot* upsert_slot(const char* entity_id) {
 static void scan_entity(const char* entity_id, const EntityState* base,
                         bool is_player, const char* behavior) {
     if (!base || !entity_id || entity_id[0] == '\0') return;
-    if (base->respawn_in > 0.0f) return;
-
-    uint32_t flags = 0;
-    char dlg_item[128] = {0};
-
-    for (int i = 0; i < base->object_layer_count; i++) {
-        const ObjectLayerState* ol = &base->object_layers[i];
-        if (!ol->active || ol->item_id[0] == '\0') continue;
-
-        dialogue_data_request(ol->item_id);
-
-        if (dialogue_data_available(ol->item_id)) {
-            flags |= INTERACT_DIALOGUE;
-            if (dlg_item[0] == '\0') {
-                strncpy(dlg_item, ol->item_id, sizeof(dlg_item) - 1);
-            }
-        }
-    }
 
     if (behavior) {
         if (strcmp(behavior, "skill") == 0) return;
         if (strcmp(behavior, "coin")  == 0) return;
+    }
+
+    bool is_dead = (base->respawn_in > 0.0f);
+
+    /* Determine interaction capabilities from the ALIVE layers.
+     * When dead the server sends ghost OLs — we still want to know
+     * what dialogue the entity had, so we use the cached alive_layers
+     * (populated on a prior alive frame) or fall back to current layers
+     * for the very first scan (entity spawned alive). */
+    InteractionBubbleSlot* existing = find_slot(entity_id);
+
+    uint32_t flags = 0;
+    char dlg_item[128] = {0};
+
+    if (!is_dead) {
+        /* Entity is alive — scan its current active OLs normally. */
+        for (int i = 0; i < base->object_layer_count; i++) {
+            const ObjectLayerState* ol = &base->object_layers[i];
+            if (!ol->active || ol->item_id[0] == '\0') continue;
+
+            dialogue_data_request(ol->item_id);
+
+            if (dialogue_data_available(ol->item_id)) {
+                flags |= INTERACT_DIALOGUE;
+                if (dlg_item[0] == '\0')
+                    strncpy(dlg_item, ol->item_id, sizeof(dlg_item) - 1);
+            }
+        }
+    } else if (existing && existing->alive_layer_count > 0) {
+        /* Entity is dead — reuse cached alive layers for dialogue check. */
+        for (int i = 0; i < existing->alive_layer_count; i++) {
+            const ObjectLayerState* ol = &existing->alive_layers[i];
+            if (!ol->active || ol->item_id[0] == '\0') continue;
+
+            dialogue_data_request(ol->item_id);
+
+            if (dialogue_data_available(ol->item_id)) {
+                flags |= INTERACT_DIALOGUE;
+                if (dlg_item[0] == '\0')
+                    strncpy(dlg_item, ol->item_id, sizeof(dlg_item) - 1);
+            }
+        }
     }
 
     /* Every interactable entity gets INTERACT_SOCIAL so the chat
@@ -124,16 +149,35 @@ static void scan_entity(const char* entity_id, const EntityState* base,
     if (!slot) return;
 
     slot->interact_flags = flags;
-    strncpy(slot->dialogue_item_id, dlg_item, sizeof(slot->dialogue_item_id) - 1);
     slot->status_icon = base->status_icon;
+    slot->is_player = is_player;
 
+    /* Always snapshot current layers (dead or alive) into layers[]. */
     snapshot_layers(slot, base->object_layers, base->object_layer_count,
                     (int)base->direction);
 
-    /* Always use the full entity ID (= websocket ID for players).
-     * For NPCs with dialogue, prefer the speaker name from the first
-     * dialogue line as a friendlier display name. */
+    /* Cache alive layers: only update when entity is alive.
+     * When dead, alive_layers[] retains the last alive snapshot. */
+    if (!is_dead) {
+        slot->alive_layer_count = 0;
+        for (int i = 0; i < base->object_layer_count && slot->alive_layer_count < IBUBBLE_MAX_LAYERS; i++) {
+            if (base->object_layers[i].active && base->object_layers[i].item_id[0] != '\0') {
+                slot->alive_layers[slot->alive_layer_count] = base->object_layers[i];
+                slot->alive_layer_count++;
+            }
+        }
+    }
+
+    /* Dialogue item — prefer alive data, fall back to existing cache. */
     if (dlg_item[0] != '\0') {
+        strncpy(slot->dialogue_item_id, dlg_item, sizeof(slot->dialogue_item_id) - 1);
+    } else if (!existing || existing->dialogue_item_id[0] == '\0') {
+        slot->dialogue_item_id[0] = '\0';
+    }
+
+    /* Display name: for bots with dialogue, use speaker name (= skin label).
+     * For players and everything else, use the full entity ID (= websocket ID). */
+    if (!is_player && dlg_item[0] != '\0') {
         const DialogueDataSet* d = dialogue_data_get(dlg_item);
         if (d && d->line_count > 0 && d->lines[0].speaker[0] != '\0') {
             strncpy(slot->display_name, d->lines[0].speaker,
@@ -200,9 +244,14 @@ void interaction_bubble_draw(void) {
         DrawRectangleRounded(r, 0.15f, 4, hovered ? C_SLOT_HOVER : C_SLOT_BG);
         DrawRectangleRoundedLinesEx(r, 0.15f, 4, 1.5f, C_SLOT_BORDER);
 
-        if (mgr && slot->layer_count > 0) {
-            for (int j = 0; j < slot->layer_count; j++) {
-                ol_as_ico_draw(mgr, slot->layers[j].item_id,
+        /* Always render the alive OL stack so the entity is recognisable
+         * even when dead (ghost state is indicated by the status icon). */
+        int icon_lc = slot->alive_layer_count > 0 ? slot->alive_layer_count : slot->layer_count;
+        const ObjectLayerState* icon_layers = slot->alive_layer_count > 0 ? slot->alive_layers : slot->layers;
+
+        if (mgr && icon_lc > 0) {
+            for (int j = 0; j < icon_lc; j++) {
+                ol_as_ico_draw(mgr, icon_layers[j].item_id,
                                (int)r.x + 3, (int)r.y + 3,
                                IBUBBLE_ICON_SIZE - 6,
                                "down_idle", 0, WHITE);
@@ -234,6 +283,21 @@ void interaction_bubble_draw(void) {
                 ui_icon_draw(icon_id, ix, iy, ico_sz, false, phase);
             }
         }
+
+        /* Notification badge — red circle with unread count, top-right */
+        int badge_n = js_notify_badge_count(slot->entity_id);
+        if (badge_n > 0) {
+            float br = 8.0f;
+            float bx = r.x + r.width - br;
+            float by = r.y + br;
+            DrawCircle((int)bx, (int)by, br, (Color){200, 50, 50, 230});
+            char badge_txt[8];
+            snprintf(badge_txt, sizeof(badge_txt), "%d", badge_n > 99 ? 99 : badge_n);
+            int bfs = 10;
+            int btw = MeasureText(badge_txt, bfs);
+            DrawText(badge_txt, (int)(bx - btw * 0.5f), (int)(by - bfs * 0.5f),
+                     bfs, (Color){255, 255, 255, 240});
+        }
     }
 }
 
@@ -252,7 +316,8 @@ bool interaction_bubble_handle_click(int mx, int my, bool clicked) {
             js_interact_overlay_open(slot->entity_id,
                                      slot->display_name,
                                      slot->dialogue_item_id,
-                                     slot->interact_flags);
+                                     slot->interact_flags,
+                                     slot->is_player ? 1 : 0);
             return true;
         }
     }

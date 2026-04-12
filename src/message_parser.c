@@ -5,6 +5,7 @@
 #include "game_render.h"
 #include "object_layers_management.h"
 #include "interact_bridge.h"
+#include "notify_badge.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -121,6 +122,9 @@ int message_parser_process(const char* json_str) {
             serial_get_string(payload, "from", from_id, sizeof(from_id));
             serial_get_string(payload, "text", text, sizeof(text));
             if (from_id[0] && text[0]) {
+                /* Always persist in the badge store (survives overlay close). */
+                js_notify_badge_push(from_id, from_id, text);
+                /* Live-update the overlay if it's showing this entity's chat. */
                 js_interact_overlay_receive_chat(from_id, from_id, text);
             }
         }

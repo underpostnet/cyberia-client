@@ -25,7 +25,8 @@
 extern void js_interact_overlay_open(const char* entity_id,
                                      const char* display_name,
                                      const char* dlg_item_id,
-                                     uint32_t interact_flags);
+                                     uint32_t interact_flags,
+                                     int is_player);
 
 extern void js_interact_overlay_close(void);
 

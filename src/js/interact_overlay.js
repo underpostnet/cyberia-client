@@ -31,6 +31,7 @@ mergeInto(LibraryManager.library, {
     displayName: '',
     dlgItemId: '',
     interactFlags: 0,
+    isPlayer: false,
     activeTab: 'chat',
     chatHistory: [],
     dom: {},
@@ -262,11 +263,11 @@ mergeInto(LibraryManager.library, {
       P.el,
     );
 
-    /* ── Tab body — seamless with active tab ── */
+    /* ── Tab body — seamless with active tab, consistent height ── */
     D.tabBody = ipEl(
       'div',
       {
-        flex: '1',
+        height: '180px',
         background: S.tabActive,
         padding: '10px 12px',
         overflowY: 'auto',
@@ -284,6 +285,7 @@ mergeInto(LibraryManager.library, {
   $ipSwitchTab__deps: [
     '$IP',
     '$IPS',
+    '$NB',
     '$ipEl',
     '$ipBtn',
     '$ipRenderChat',
@@ -296,6 +298,11 @@ mergeInto(LibraryManager.library, {
       S = IPS,
       D = P.dom;
     P.activeTab = tabId;
+
+    /* Clear badge when user views the chat tab. */
+    if (tabId === 'chat' && NB.store[P.entityId]) {
+      NB.store[P.entityId].unread = 0;
+    }
 
     /* Update tab button styles */
     var btns = D.tabBar.querySelectorAll('button');
@@ -531,7 +538,8 @@ mergeInto(LibraryManager.library, {
       S = IPS;
     var flags = P.interactFlags;
 
-    D.nameEl.textContent = P.displayName || P.entityId.substring(0, 12);
+    /* Header: players show their websocket ID, bots show display name. */
+    D.nameEl.textContent = P.isPlayer ? P.entityId : P.displayName || P.entityId.substring(0, 12);
 
     /* Rebuild tab bar */
     D.tabBar.innerHTML = '';
@@ -577,17 +585,26 @@ mergeInto(LibraryManager.library, {
    * Public API — called from C via extern declarations
    * ================================================================ */
 
-  js_interact_overlay_open__deps: ['$IP', '$ipBuild', '$ipPopulate'],
-  js_interact_overlay_open: function (entity_id_ptr, display_name_ptr, dlg_item_id_ptr, interact_flags) {
+  js_interact_overlay_open__deps: ['$IP', '$NB', '$nbEnsure', '$ipBuild', '$ipPopulate'],
+  js_interact_overlay_open: function (entity_id_ptr, display_name_ptr, dlg_item_id_ptr, interact_flags, is_player) {
     var P = IP;
 
     P.entityId = UTF8ToString(entity_id_ptr);
     P.displayName = UTF8ToString(display_name_ptr);
     P.dlgItemId = UTF8ToString(dlg_item_id_ptr);
     P.interactFlags = interact_flags;
+    P.isPlayer = !!is_player;
     P.open = true;
     P.hidden = false;
-    P.chatHistory = [];
+
+    /* Load persisted messages from the badge store so chat history
+     * survives across overlay open/close cycles. */
+    var entry = nbEnsure(P.entityId);
+    P.chatHistory = entry.messages.map(function (m) {
+      return { sender: m.sender, text: m.text, isMe: false, ts: m.ts };
+    });
+    /* Mark as read — the user is now viewing this entity's chat. */
+    entry.unread = 0;
 
     ipBuild();
     ipPopulate();
@@ -614,7 +631,7 @@ mergeInto(LibraryManager.library, {
     return IP.open && !IP.hidden ? 1 : 0;
   },
 
-  js_interact_overlay_send_chat__deps: ['$IP', '$ipRenderChat'],
+  js_interact_overlay_send_chat__deps: ['$IP', '$NB', '$nbEnsure', '$ipRenderChat'],
   js_interact_overlay_send_chat: function (text_ptr) {
     var P = IP;
     var text = UTF8ToString(text_ptr);
@@ -623,8 +640,14 @@ mergeInto(LibraryManager.library, {
     if (!text || !text.trim()) return;
     text = text.trim().substring(0, 128);
 
-    P.chatHistory.push({ sender: 'You', text: text, isMe: true, ts: Date.now() });
+    var msg = { sender: 'You', text: text, isMe: true, ts: Date.now() };
+    P.chatHistory.push(msg);
     if (P.activeTab === 'chat') ipRenderChat();
+
+    /* Persist in badge store so history survives overlay close. */
+    var entry = nbEnsure(P.entityId);
+    entry.messages.push({ sender: 'You', text: text, ts: Date.now() });
+    if (entry.messages.length > NB.MAX_MESSAGES) entry.messages = entry.messages.slice(-NB.MAX_MESSAGES);
 
     var json = JSON.stringify({ type: 'chat', payload: { to: P.entityId, text: text } });
     var jPtr = allocateUTF8(json);
@@ -632,21 +655,27 @@ mergeInto(LibraryManager.library, {
     _free(jPtr);
   },
 
-  js_interact_overlay_receive_chat__deps: ['$IP', '$ipRenderChat'],
+  js_interact_overlay_receive_chat__deps: ['$IP', '$NB', '$ipRenderChat'],
   js_interact_overlay_receive_chat: function (from_id_ptr, from_name_ptr, text_ptr) {
     var P = IP;
     var fromId = UTF8ToString(from_id_ptr);
     var fromName = UTF8ToString(from_name_ptr);
     var text = UTF8ToString(text_ptr);
 
-    P.chatHistory.push({
-      sender: fromName || fromId.substring(0, 8),
-      text: text,
-      isMe: false,
-      ts: Date.now(),
-    });
+    /* Only update the live overlay if it's open for THIS entity. */
+    if (P.open && P.entityId === fromId) {
+      P.chatHistory.push({
+        sender: fromName || fromId.substring(0, 8),
+        text: text,
+        isMe: false,
+        ts: Date.now(),
+      });
 
-    if (P.open && P.activeTab === 'chat') ipRenderChat();
+      /* Clear unread since the user is viewing this entity's chat. */
+      if (NB.store[fromId]) NB.store[fromId].unread = 0;
+
+      if (P.activeTab === 'chat') ipRenderChat();
+    }
   },
 
   js_interact_overlay_restore__deps: ['$IP'],
