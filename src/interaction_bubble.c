@@ -7,18 +7,18 @@
  * The icon is the entity's full active ObjectLayer stack rendered at
  * icon size, so players recognise entities at a glance.
  *
- * Tapping a bubble opens the JS social overlay (via social_bridge.h)
- * and sends freeze_start("social") to protect the player.
+ * Tapping a bubble opens the JS interact overlay (via interact_bridge.h).
  */
 
 #include "interaction_bubble.h"
-#include "social_bridge.h"
+#include "interact_bridge.h"
 #include "dialogue_data.h"
 #include "ol_as_animated_ico.h"
 #include "game_state.h"
 #include "entity_render.h"
 #include "game_render.h"
 #include "client.h"
+#include "ui_icon.h"
 #include <raylib.h>
 #include <string.h>
 #include <stdio.h>
@@ -33,8 +33,6 @@ static int                   s_slot_count = 0;
 static const Color C_SLOT_BG        = {  14,  14,  26, 210 };
 static const Color C_SLOT_BORDER    = {  70,  70, 120, 200 };
 static const Color C_SLOT_HOVER     = {  35,  45,  75, 230 };
-static const Color C_SLOT_DIALOGUE  = {  60, 120, 200, 255 };
-static const Color C_SLOT_SOCIAL    = { 100, 200, 120, 255 };
 
 /* ── Helpers ──────────────────────────────────────────────────────────── */
 
@@ -127,10 +125,14 @@ static void scan_entity(const char* entity_id, const EntityState* base,
 
     slot->interact_flags = flags;
     strncpy(slot->dialogue_item_id, dlg_item, sizeof(slot->dialogue_item_id) - 1);
+    slot->status_icon = base->status_icon;
 
     snapshot_layers(slot, base->object_layers, base->object_layer_count,
                     (int)base->direction);
 
+    /* Always use the full entity ID (= websocket ID for players).
+     * For NPCs with dialogue, prefer the speaker name from the first
+     * dialogue line as a friendlier display name. */
     if (dlg_item[0] != '\0') {
         const DialogueDataSet* d = dialogue_data_get(dlg_item);
         if (d && d->line_count > 0 && d->lines[0].speaker[0] != '\0') {
@@ -140,8 +142,7 @@ static void scan_entity(const char* entity_id, const EntityState* base,
             strncpy(slot->display_name, entity_id, sizeof(slot->display_name) - 1);
         }
     } else {
-        strncpy(slot->display_name, entity_id, 8);
-        slot->display_name[8] = '\0';
+        strncpy(slot->display_name, entity_id, sizeof(slot->display_name) - 1);
     }
 }
 
@@ -212,16 +213,26 @@ void interaction_bubble_draw(void) {
             DrawCircle(cx, cy, r.width * 0.3f, (Color){100, 100, 120, 180});
         }
 
-        float dot_r = 4.0f;
-        float dx = r.x + r.width - dot_r - 4.0f;
-        float dy = r.y + r.height - dot_r - 4.0f;
-
-        if (slot->interact_flags & INTERACT_DIALOGUE) {
-            DrawCircle((int)dx, (int)dy, dot_r, C_SLOT_DIALOGUE);
-            dy -= dot_r * 2.5f;
-        }
-        if (slot->interact_flags & INTERACT_SOCIAL) {
-            DrawCircle((int)dx, (int)dy, dot_r, C_SLOT_SOCIAL);
+        /* Status icon — small icon in bottom-right corner of the bubble */
+        if (slot->status_icon != 0) {
+            const char* icon_id = NULL;
+            for (int si = 0; si < g_game_state.status_icon_count; si++) {
+                if (g_game_state.status_icons[si].id == slot->status_icon) {
+                    icon_id = g_game_state.status_icons[si].icon_id;
+                    break;
+                }
+            }
+            if (icon_id) {
+                int ico_sz = 16;
+                float ix = r.x + r.width - ico_sz * 0.5f - 2.0f;
+                float iy = r.y + r.height - ico_sz * 0.5f - 2.0f;
+                /* Phase from entity_id hash for desync */
+                unsigned int h = 0;
+                for (const char* c = slot->entity_id; *c; c++)
+                    h = h * 31 + (unsigned char)*c;
+                float phase = (float)(h % 1000) * 0.001f * 6.2832f;
+                ui_icon_draw(icon_id, ix, iy, ico_sz, false, phase);
+            }
         }
     }
 }
@@ -236,12 +247,12 @@ bool interaction_bubble_handle_click(int mx, int my, bool clicked) {
             printf("[INTERACTION_BUBBLE] Slot %d clicked: entity=%s flags=0x%x\n",
                    i, slot->entity_id, slot->interact_flags);
 
-            /* Open the JS social panel — NO freeze, player stays active
+            /* Open the JS interact panel — NO freeze, player stays active
              * in real-time PVP/PVE.  Only NPC dialogue freezes. */
-            js_social_overlay_open(slot->entity_id,
-                                   slot->display_name,
-                                   slot->dialogue_item_id,
-                                   slot->interact_flags);
+            js_interact_overlay_open(slot->entity_id,
+                                     slot->display_name,
+                                     slot->dialogue_item_id,
+                                     slot->interact_flags);
             return true;
         }
     }

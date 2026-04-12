@@ -10,7 +10,7 @@
 #include "inventory_modal.h"
 #include "modal_dialogue.h"
 #include "interaction_bubble.h"
-#include "social_bridge.h"
+#include "interact_bridge.h"
 #include "game_render.h"
 
 // Global input manager instance
@@ -105,14 +105,14 @@ void input_handle_mouse_click(int button, Vector2 screen_pos) {
     int my = (int)screen_pos.y;
 
     // Dialogue modal consumes all clicks when open (highest priority —
-    // the JS social panel hides itself while dialogue is active)
+    // the JS interact panel hides itself while dialogue is active)
     if (modal_dialogue_is_open()) {
         modal_dialogue_handle_click(mx, my, true);
         return;
     }
 
-    // JS social panel consumes clicks when visible
-    if (js_social_overlay_is_open()) {
+    // JS interact panel consumes clicks when visible
+    if (js_interact_overlay_is_open()) {
         return; /* JS DOM handles the click */
     }
 
@@ -122,7 +122,7 @@ void input_handle_mouse_click(int button, Vector2 screen_pos) {
         return;
     }
 
-    // Interaction bubble column: clicking opens the JS social overlay
+    // Interaction bubble column: clicking opens the JS interact overlay
     if (button == MOUSE_BUTTON_LEFT) {
         if (interaction_bubble_handle_click(mx, my, true)) return;
     }
@@ -312,8 +312,8 @@ bool input_find_entity_at_position(Vector2 screen_pos, char* entity_id, size_t i
 bool input_is_over_ui(Vector2 screen_pos) {
     // Dialogue modal blocks all world interaction when open
     if (modal_dialogue_is_open()) return true;
-    // JS social overlay blocks world interaction when open
-    if (js_social_overlay_is_open()) return true;
+    // JS interact overlay blocks world interaction when open
+    if (js_interact_overlay_is_open()) return true;
     // Inventory modal blocks all world interaction when open
     if (inventory_modal_is_open()) return true;
     // Interaction bubble column occupies left strip

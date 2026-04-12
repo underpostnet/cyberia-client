@@ -6,9 +6,9 @@
  * own bubble whose icon is the full active ObjectLayer stack — exactly
  * how the entity appears in the world.
  *
- * Tapping a bubble opens the JS social overlay (social_overlay.js) via
- * the social_bridge module.  The overlay provides tabs for Dialogue,
- * Social (chat), and Quest interactions.
+ * Tapping a bubble opens the JS interact overlay (interact_overlay.js)
+ * via the interact_bridge module.  The overlay provides tabs for Dialog,
+ * Chat, and Actions interactions.
  *
  * Keyed by **entity ID** (not item ID) — one bubble per entity.
  */
@@ -47,6 +47,7 @@ typedef struct {
     int direction;
     uint32_t interact_flags;
     char dialogue_item_id[128];
+    uint8_t status_icon;
     bool active;
     double appeared_at;
 } InteractionBubbleSlot;

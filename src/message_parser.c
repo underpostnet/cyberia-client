@@ -4,7 +4,7 @@
 #include "cJSON.h"
 #include "game_render.h"
 #include "object_layers_management.h"
-#include "social_bridge.h"
+#include "interact_bridge.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -121,7 +121,7 @@ int message_parser_process(const char* json_str) {
             serial_get_string(payload, "from", from_id, sizeof(from_id));
             serial_get_string(payload, "text", text, sizeof(text));
             if (from_id[0] && text[0]) {
-                js_social_overlay_receive_chat(from_id, from_id, text);
+                js_interact_overlay_receive_chat(from_id, from_id, text);
             }
         }
         result = 0;

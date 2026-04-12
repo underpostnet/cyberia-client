@@ -29,8 +29,8 @@ LDFLAGS += -s 'EXPORTED_RUNTIME_METHODS=["writeArrayToMemory","setValue","alloca
 LDFLAGS += -sASYNCIFY
 LDFLAGS += -lwebsocket.js
 LDFLAGS += --js-library $(SRC_DIR)/js/services.js
-LDFLAGS += --js-library $(SRC_DIR)/js/social_overlay.js
-LDFLAGS += -sEXPORTED_FUNCTIONS='["_main","_c_send_ws_message","_c_open_dialogue_from_js","_c_social_overlay_did_close"]'
+LDFLAGS += --js-library $(SRC_DIR)/js/interact_overlay.js
+LDFLAGS += -sEXPORTED_FUNCTIONS='["_main","_c_send_ws_message","_c_open_dialogue_from_js","_c_interact_overlay_did_close"]'
 LDFLAGS += $(RAYLIB_PATH)/src/libraylib.web.a
 
 #---------------------------------------------------------------------------------------------

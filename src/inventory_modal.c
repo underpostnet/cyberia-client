@@ -449,7 +449,7 @@ void inventory_modal_draw(void) {
             DrawRectangleRec(s_lore_btn_rect, C_LORE_BTN);
             DrawRectangleLinesEx(s_lore_btn_rect, 1.5f,
                                  (Color){ 120, 120, 200, 160 });
-            const char* lore_label = "Lore";
+            const char* lore_label = "Dialog";
             int lfs = MODAL_FONT_BODY;
             int ltw = MeasureText(lore_label, lfs);
             DrawText(lore_label,
