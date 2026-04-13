@@ -14,6 +14,7 @@
 #include "interact_bridge.h"
 #include "dialogue_data.h"
 #include "ol_stack_ico.h"
+#include "layer_z_order.h"
 #include "object_layers_management.h"
 #include "game_state.h"
 #include "entity_render.h"
@@ -370,28 +371,33 @@ bool interaction_bubble_handle_click(int mx, int my, bool clicked) {
                 const ObjectLayerState* icon_layers = slot->alive_layer_count > 0
                     ? slot->alive_layers : slot->layers;
 
+                /* Z-sort layers so the JS overlay renders skin first,
+                 * weapon on top — same order as the grid and bubble. */
+                LayerZEntry z_sorted[32];
+                int z_count = layer_z_sort(mgr, icon_layers, icon_lc,
+                                           z_sorted, 32);
+
                 char json[4096];
                 int off = 0;
                 json[off++] = '[';
 
-                for (int j = 0; j < icon_lc; j++) {
-                    if (!icon_layers[j].active || icon_layers[j].item_id[0] == '\0')
-                        continue;
+                for (int j = 0; j < z_count; j++) {
+                    const ObjectLayerState* ls = &icon_layers[z_sorted[j].index];
 
                     const char* item_type = "";
                     if (mgr) {
                         ObjectLayer* ol_data = get_or_fetch_object_layer(
-                            mgr, icon_layers[j].item_id);
+                            mgr, ls->item_id);
                         if (ol_data && ol_data->data.item.type[0] != '\0')
                             item_type = ol_data->data.item.type;
                     }
 
-                    bool has_dlg = dialogue_data_available(icon_layers[j].item_id);
+                    bool has_dlg = dialogue_data_available(ls->item_id);
 
                     int wrote = snprintf(json + off, sizeof(json) - off,
                         "%s{\"itemId\":\"%s\",\"type\":\"%s\",\"hasDialogue\":%s}",
                         off > 1 ? "," : "",
-                        icon_layers[j].item_id,
+                        ls->item_id,
                         item_type,
                         has_dlg ? "true" : "false");
                     if (wrote > 0 && off + wrote < (int)sizeof(json) - 2)

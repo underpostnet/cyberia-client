@@ -1,6 +1,7 @@
 #include "entity_render.h"
 #include "texture_manager.h"
 #include "object_layers_management.h"
+#include "layer_z_order.h"
 #include <stdlib.h>
 #include <string.h>
 #include <stdio.h>
@@ -82,18 +83,6 @@ static AnimationState* get_animation_state(EntityRender* render, const char* ent
     }
 
     return NULL;
-}
-
-static int get_priority_for_type(const char* type) {
-    if (!type) return 0;
-    if (strcmp(type, "skin") == 0 || strcmp(type, "body") == 0) return 10;
-    if (strcmp(type, "eyes") == 0) return 11;
-    if (strcmp(type, "hair") == 0) return 12;
-    if (strcmp(type, "clothes") == 0 || strcmp(type, "armor") == 0) return 20;
-    if (strcmp(type, "hat") == 0 || strcmp(type, "helmet") == 0) return 30;
-    if (strcmp(type, "weapon") == 0) return 40;
-    if (strcmp(type, "shield") == 0) return 41;
-    return 50;
 }
 
 static int compare_layer_priority(const void* a, const void* b) {
@@ -309,7 +298,7 @@ void draw_entity_layers(
         layers_to_render[render_count].layer = layer;
         layers_to_render[render_count].atlas = atlas;
         layers_to_render[render_count].priority = layer
-            ? get_priority_for_type(layer->data.item.type)
+            ? layer_z_priority(layer->data.item.type)
             : 50; // Default priority if no ObjectLayer metadata yet
         render_count++;
     }
