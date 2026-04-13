@@ -51,10 +51,6 @@ OBJS	+= $(target_build_dir)/libraylib.web.a
 
 all: link
 
-libraylib: $(target_build_dir)/libraylib.web.a
-
-web: all
-
 serve-development: all
 	-fuser -k $(DEV_PORT)/tcp 2>/dev/null; sleep 0.3
 	python3 scripts/serve.py $(DEV_PORT) $(target_output_dir)
@@ -95,3 +91,8 @@ $(target_build_dir)/libraylib.web.a:
 
 clean:
 	-rm -rf $(BUILD_DIR) $(OUTPUT_DIR)
+
+
+# Remove these when safe to - Callers should be calling all instead of web and libraylib is for internal use only
+# libraylib: $(target_build_dir)/libraylib.web.a
+# web: all

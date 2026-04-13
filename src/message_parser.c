@@ -4,8 +4,8 @@
 #include "cJSON.h"
 #include "game_render.h"
 #include "object_layers_management.h"
-#include "interact_bridge.h"
-#include "notify_badge.h"
+#include "js/interact_bridge.h"
+#include "js/notify_badge.h"
 #include "js/services.h"
 #include <stdio.h>
 #include <stdlib.h>

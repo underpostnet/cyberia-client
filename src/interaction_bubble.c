@@ -11,7 +11,7 @@
  */
 
 #include "interaction_bubble.h"
-#include "interact_bridge.h"
+#include "js/interact_bridge.h"
 #include "dialogue_data.h"
 #include "ol_stack_ico.h"
 #include "layer_z_order.h"
@@ -22,7 +22,7 @@
 #include "game_render.h"
 #include "client.h"
 #include "ui_icon.h"
-#include "notify_badge.h"
+#include "js/notify_badge.h"
 #include <raylib.h>
 #include <string.h>
 #include <stdio.h>

@@ -11,7 +11,8 @@ SRC_DIR         ?= src
 #---------------------------------------------------------------------------------------------
 # Define common compiler flags
 #-------------------------------
-CFLAGS = -Wextra
+CFLAGS = -I$(SRC_DIR)
+CFLAGS += -Wextra
 CFLAGS += -Wunused-result
 CFLAGS += -Wunused-variable
 CFLAGS += -Wpointer-arith
@@ -29,7 +30,8 @@ endif
 #------------------------------------------------
 # Common sources to include
 src_files = \
-	$(wildcard $(SRC_DIR)/*.c)
+	$(wildcard $(SRC_DIR)/*.c) \
+	$(wildcard $(SRC_DIR)/js/*.c)
 
 #------------------------------------------------
 # Raylib Dependendy
