@@ -41,31 +41,40 @@
 /* ── Layout constants (world-space, scaled by cell_size at draw time) ─── */
 
 /** Vertical gap between the top of the entity and the bottom of the HP bar.  */
-#define EOHUD_GAP_ABOVE_ENTITY  0.10f   /* world units */
+#define EOHUD_GAP_ABOVE_ENTITY  0.12f   /* world units */
 
 /** Height of each bar (HP / load) in world units. */
-#define EOHUD_BAR_HEIGHT        0.22f
+#define EOHUD_BAR_HEIGHT        0.30f
 
 /** Vertical gap between stacked bars (label now sits inside the bar). */
-#define EOHUD_BAR_SPACING       0.06f
+#define EOHUD_BAR_SPACING       0.08f
 
 /** Vertical spacing between load bar and nameplate text. */
-#define EOHUD_NAME_SPACING      0.04f
+#define EOHUD_NAME_SPACING      0.08f
 
 /** Vertical spacing between nameplate and status icon. */
-#define EOHUD_ICON_SPACING      0.06f
+#define EOHUD_ICON_SPACING      0.08f
 
 /** Bar width relative to entity width (1.0 = same as entity). */
-#define EOHUD_BAR_WIDTH_RATIO   1.10f
+#define EOHUD_BAR_WIDTH_RATIO   1.20f
 
 /** Font size for the nameplate in screen pixels. Fixed; not world-scaled. */
-#define EOHUD_NAME_FONT_SIZE    10
+#define EOHUD_NAME_FONT_SIZE    13
 
 /** Font size for the HP label (e.g. "HP 73/100") in screen pixels. */
-#define EOHUD_HP_LABEL_FONT_SIZE   11
+#define EOHUD_HP_LABEL_FONT_SIZE   12
 
 /** Font size for the level label (e.g. "Lv. 15 / 30") in screen pixels. */
-#define EOHUD_LEVEL_LABEL_FONT_SIZE 11
+#define EOHUD_LEVEL_LABEL_FONT_SIZE 12
+
+/** Horizontal padding around the nameplate text for the background pill. */
+#define EOHUD_NAME_PAD_X        6
+
+/** Vertical padding around the nameplate text for the background pill. */
+#define EOHUD_NAME_PAD_Y        3
+
+/** Corner roundness of bars (pixels). */
+#define EOHUD_BAR_ROUNDING      3.0f
 
 /* ── Data model ─────────────────────────────────────────────────────────── */
 

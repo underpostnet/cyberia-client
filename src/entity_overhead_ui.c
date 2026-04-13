@@ -27,23 +27,28 @@
 
 /* ── Internal colours ────────────────────────────────────────────────── */
 
-/* Bar backgrounds */
-static const Color C_BAR_BG      = { 30,  30,  30, 100 };
+/* Bar backgrounds — solid black for maximum contrast with fills. */
+static const Color C_BAR_BG      = {  8,   8,   8, 210 };
 
-/* HP bar fill */
-static const Color C_HP_FULL     = { 70, 210,  70, 170 };   /* bright green */
-static const Color C_HP_LOW      = {230,  60,  40, 170 };   /* red when ≤25% */
-static const Color C_HP_MID      = {230, 175,  30, 170 };   /* amber at 50 % */
+/* HP bar fill — green palette (bright → amber → red as HP drops). */
+static const Color C_HP_FULL     = { 50, 220,  50, 240 };   /* vivid green   */
+static const Color C_HP_LOW      = {230,  50,  40, 240 };   /* red when ≤25% */
+static const Color C_HP_MID      = {200, 180,  30, 240 };   /* amber at 50 % */
 
-/* Load bar fill — green (low) → yellow (near limit) */
-static const Color C_LEVEL_SAFE   = { 80, 200,  80, 170 };
-static const Color C_LEVEL_WARN   = {230, 200,  30, 170 };
-static const Color C_LEVEL_FULL   = {230, 100,  30, 170 };   /* orange at cap  */
+/* Level bar fill — yellow / gold palette (warm → orange at cap). */
+static const Color C_LEVEL_LOW    = {210, 190,  50, 240 };   /* gold           */
+static const Color C_LEVEL_MID    = {240, 175,  30, 240 };   /* warm amber     */
+static const Color C_LEVEL_FULL   = {245, 120,  20, 240 };   /* deep orange    */
+
+/* Bar border — subtle bright edge for definition. */
+static const Color C_BAR_BORDER  = {120, 120, 120, 160 };
 
 /* Text colours */
-static const Color C_NAME_TEXT   = {255, 255, 255, 230 };
-static const Color C_NAME_SHADOW = {  0,   0,   0, 130 };
-static const Color C_HP_LABEL    = {235, 235, 235, 230 };
+static const Color C_NAME_TEXT   = {255, 255, 255, 255 };
+static const Color C_NAME_SHADOW = {  0,   0,   0, 200 };
+static const Color C_NAME_BG     = {  4,   4,  12, 180 };   /* pill backdrop  */
+static const Color C_BAR_LABEL   = {255, 255, 255, 245 };
+static const Color C_BAR_LABEL_S = {  0,   0,   0, 200 };   /* label shadow   */
 
 /* ── Colour lerp helper ───────────────────────────────────────────────── */
 
@@ -71,7 +76,16 @@ static void draw_nameplate(const char *name, float cx, float sy) {
     int tx = (int)(cx - tw * 0.5f);
     int ty = (int)(sy - fs);
 
-    /* Drop shadow */
+    /* Dark rounded pill behind the text for readability. */
+    Rectangle pill = {
+        (float)(tx - EOHUD_NAME_PAD_X),
+        (float)(ty - EOHUD_NAME_PAD_Y),
+        (float)(tw + EOHUD_NAME_PAD_X * 2),
+        (float)(fs + EOHUD_NAME_PAD_Y * 2)
+    };
+    DrawRectangleRounded(pill, 0.4f, 6, C_NAME_BG);
+
+    /* Drop shadow (2-px offset for bolder contrast). */
     DrawText(name, tx + 1, ty + 1, fs, C_NAME_SHADOW);
     /* Main label */
     DrawText(name, tx, ty, fs, C_NAME_TEXT);
@@ -82,39 +96,39 @@ static void draw_nameplate(const char *name, float cx, float sy) {
 /** Draws the effective-level bar.
  *  @param bar_rect  Screen-space rectangle for the full bar background. */
 static void draw_level_bar(Rectangle bar_rect, int current, int max) {
-    /* Background */
-    DrawRectangleRec(bar_rect, C_BAR_BG);
+    /* Solid black background — the unfilled portion is clearly dark. */
+    DrawRectangleRounded(bar_rect, 0.3f, 6, C_BAR_BG);
 
     if (max <= 0 || current < 0) return;
 
     float frac = (float)current / (float)max;
     if (frac > 1.0f) frac = 1.0f;
 
-    /* Colour: green → yellow → orange as level grows */
+    /* Colour: gold → amber → deep orange as stats load grows. */
     Color fill;
     if (frac < 0.5f) {
-        fill = color_lerp(C_LEVEL_SAFE, C_LEVEL_WARN, frac * 2.0f);
+        fill = color_lerp(C_LEVEL_LOW, C_LEVEL_MID, frac * 2.0f);
     } else {
-        fill = color_lerp(C_LEVEL_WARN, C_LEVEL_FULL, (frac - 0.5f) * 2.0f);
+        fill = color_lerp(C_LEVEL_MID, C_LEVEL_FULL, (frac - 0.5f) * 2.0f);
     }
 
     Rectangle fill_rect = bar_rect;
     fill_rect.width = bar_rect.width * frac;
     if (fill_rect.width < 1.0f && current > 0) fill_rect.width = 1.0f;
-    DrawRectangleRec(fill_rect, fill);
+    DrawRectangleRounded(fill_rect, 0.3f, 6, fill);
 
-    /* 1-px border */
-    DrawRectangleLinesEx(bar_rect, 1.0f, (Color){ 80, 80, 80, 100 });
+    /* Border for definition. */
+    DrawRectangleRoundedLinesEx(bar_rect, 0.3f, 6, 1.0f, C_BAR_BORDER);
 
-    /* Level label: "Lv. X / Y" centred inside the bar */
+    /* Level label: "Lv. X / Y" centred inside the bar. */
     char label[32];
     snprintf(label, sizeof(label), "Lv. %d / %d", current, max);
     int lfs = EOHUD_LEVEL_LABEL_FONT_SIZE;
     int ltw = MeasureText(label, lfs);
     int lx  = (int)(bar_rect.x + bar_rect.width * 0.5f - ltw * 0.5f);
     int ly  = (int)(bar_rect.y + (bar_rect.height - lfs) * 0.5f);
-    DrawText(label, lx + 1, ly + 1, lfs, (Color){ 0, 0, 0, 160 }); /* shadow */
-    DrawText(label, lx,     ly,     lfs, C_HP_LABEL);
+    DrawText(label, lx + 1, ly + 1, lfs, C_BAR_LABEL_S);
+    DrawText(label, lx,     ly,     lfs, C_BAR_LABEL);
 }
 
 /* ── Sub-component: health bar ───────────────────────────────────────── */
@@ -122,15 +136,15 @@ static void draw_level_bar(Rectangle bar_rect, int current, int max) {
 /** Draws the HP bar + "HP cur / max" label below it.
  *  @param bar_rect  Screen-space rectangle for the full bar background.  */
 static void draw_hp_bar(Rectangle bar_rect, float life, float max_life) {
-    /* Background */
-    DrawRectangleRec(bar_rect, C_BAR_BG);
+    /* Solid black background — the unfilled portion is clearly dark. */
+    DrawRectangleRounded(bar_rect, 0.3f, 6, C_BAR_BG);
 
     if (max_life <= 0.0f || life < 0.0f) return;
 
     float frac = life / max_life;
     if (frac > 1.0f) frac = 1.0f;
 
-    /* Colour: green → amber → red as HP falls */
+    /* Colour: vivid green → amber → red as HP falls. */
     Color fill;
     if (frac > 0.5f) {
         fill = color_lerp(C_HP_MID, C_HP_FULL, (frac - 0.5f) * 2.0f);
@@ -141,12 +155,12 @@ static void draw_hp_bar(Rectangle bar_rect, float life, float max_life) {
     Rectangle fill_rect = bar_rect;
     fill_rect.width = bar_rect.width * frac;
     if (fill_rect.width < 1.0f && life > 0.0f) fill_rect.width = 1.0f;
-    DrawRectangleRec(fill_rect, fill);
+    DrawRectangleRounded(fill_rect, 0.3f, 6, fill);
 
-    /* 1-px border */
-    DrawRectangleLinesEx(bar_rect, 1.0f, (Color){ 80, 80, 80, 100 });
+    /* Border for definition. */
+    DrawRectangleRoundedLinesEx(bar_rect, 0.3f, 6, 1.0f, C_BAR_BORDER);
 
-    /* HP label: "HP 73 / 100" centred inside the bar */
+    /* HP label: "HP 73 / 100" centred inside the bar. */
     int ilif  = (int)(life + 0.5f);
     int imaxl = (int)(max_life + 0.5f);
     char label[32];
@@ -155,8 +169,8 @@ static void draw_hp_bar(Rectangle bar_rect, float life, float max_life) {
     int ltw = MeasureText(label, lfs);
     int lx  = (int)(bar_rect.x + bar_rect.width * 0.5f - ltw * 0.5f);
     int ly  = (int)(bar_rect.y + (bar_rect.height - lfs) * 0.5f);
-    DrawText(label, lx + 1, ly + 1, lfs, (Color){ 0, 0, 0, 160 }); /* shadow */
-    DrawText(label, lx,     ly,     lfs, C_HP_LABEL);
+    DrawText(label, lx + 1, ly + 1, lfs, C_BAR_LABEL_S);
+    DrawText(label, lx,     ly,     lfs, C_BAR_LABEL);
 }
 
 /* ── Public API ─────────────────────────────────────────────────────── */
@@ -212,7 +226,7 @@ void entity_overhead_ui_draw(
     if (p->show_name) {
         cursor_px -= EOHUD_NAME_SPACING * cell_size;
         draw_nameplate(p->name, entity_cx_px, cursor_px);
-        cursor_px -= (float)EOHUD_NAME_FONT_SIZE;
+        cursor_px -= (float)(EOHUD_NAME_FONT_SIZE + EOHUD_NAME_PAD_Y * 2);
     }
 
     /* ── Status icon (above nameplate) ────────────────────────────────── */
