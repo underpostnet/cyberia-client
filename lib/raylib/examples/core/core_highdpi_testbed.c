@@ -4,7 +4,7 @@
 *
 *   Example complexity rating: [★☆☆☆] 1/4
 *
-*   Example originally created with raylib 5.6-dev, last time updated with raylib 5.6-dev
+*   Example originally created with raylib 6.0, last time updated with raylib 6.0
 *
 *   Example contributed by Ramon Santamaria (@raysan5) and reviewed by Ramon Santamaria (@raysan5)
 *
@@ -73,7 +73,7 @@ int main(void)
             }
 
             // Draw UI info
-            DrawText(TextFormat("CURRENT MONITOR: %i/%i (%ix%i)", currentMonitor + 1, GetMonitorCount(), 
+            DrawText(TextFormat("CURRENT MONITOR: %i/%i (%ix%i)", currentMonitor + 1, GetMonitorCount(),
                 GetMonitorWidth(currentMonitor), GetMonitorHeight(currentMonitor)), 50, 50, 20, DARKGRAY);
             DrawText(TextFormat("WINDOW POSITION: %ix%i", (int)windowPos.x, (int)windowPos.y), 50, 90, 20, DARKGRAY);
             DrawText(TextFormat("SCREEN SIZE: %ix%i", GetScreenWidth(), GetScreenHeight()), 50, 130, 20, DARKGRAY);
@@ -86,10 +86,10 @@ int main(void)
 
             // Draw mouse position
             DrawCircleV(GetMousePosition(), 20, MAROON);
-            DrawRectangle(mousePos.x - 25, mousePos.y, 50, 2, BLACK);
-            DrawRectangle(mousePos.x, mousePos.y - 25, 2, 50, BLACK);
+            DrawRectangleRec((Rectangle) { mousePos.x - 25, mousePos.y, 50, 2 }, BLACK);
+            DrawRectangleRec((Rectangle) { mousePos.x, mousePos.y - 25, 2, 50 }, BLACK);
             DrawText(TextFormat("[%i,%i]", GetMouseX(), GetMouseY()), mousePos.x - 44,
-                (mousePos.y > GetScreenHeight() - 60)? mousePos.y - 46 : mousePos.y + 30, 20, BLACK);
+                (mousePos.y > GetScreenHeight() - 60)? (int)mousePos.y - 46 : (int)mousePos.y + 30, 20, BLACK);
 
         EndDrawing();
         //----------------------------------------------------------------------------------

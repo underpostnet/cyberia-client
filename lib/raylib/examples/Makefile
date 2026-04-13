@@ -69,7 +69,7 @@ endif
 
 # Define required raylib variables
 PROJECT_NAME          ?= raylib_examples
-RAYLIB_VERSION        ?= 5.5.0
+RAYLIB_VERSION        ?= 6.0.0
 RAYLIB_PATH           ?= ..
 
 # Define raylib source code path
@@ -94,6 +94,11 @@ USE_EXTERNAL_GLFW     ?= FALSE
 # NOTE: Wayland is disabled by default, only enable if you are sure
 GLFW_LINUX_ENABLE_WAYLAND  ?= FALSE
 GLFW_LINUX_ENABLE_X11      ?= TRUE
+
+# Enable support for X11 by default on Linux when using RGFW
+# NOTE: Wayland is disabled by default, only enable if you are sure
+RGFW_LINUX_ENABLE_WAYLAND  ?= FALSE
+RGFW_LINUX_ENABLE_X11      ?= TRUE
 
 # PLATFORM_DESKTOP_SDL: It requires SDL library to be provided externally
 # WARNING: Library is not included in raylib, it MUST be configured by users
@@ -150,15 +155,6 @@ ifeq ($(TARGET_PLATFORM),PLATFORM_DRM)
     endif
 endif
 
-# RAYLIB_PATH adjustment for LINUX platform
-# TODO: Do we really need this?
-ifeq ($(TARGET_PLATFORM),PLATFORM_DESKTOP_GLFW)
-    ifeq ($(PLATFORM_OS),LINUX)
-        RAYLIB_PREFIX  ?= ..
-        RAYLIB_PATH     = $(realpath $(RAYLIB_PREFIX))
-    endif
-endif
-
 # Default path for raylib on Raspberry Pi
 ifeq ($(TARGET_PLATFORM),PLATFORM_DRM)
     RAYLIB_PATH        ?= /home/pi/raylib
@@ -173,8 +169,8 @@ ifeq ($(TARGET_PLATFORM),$(filter $(TARGET_PLATFORM),PLATFORM_WEB PLATFORM_WEB_R
 		EMSDK_PATH         ?= C:/raylib/emsdk
 		EMSCRIPTEN_PATH    ?= $(EMSDK_PATH)/upstream/emscripten
 		CLANG_PATH          = $(EMSDK_PATH)/upstream/bin
-		PYTHON_PATH         = $(EMSDK_PATH)/python/3.9.2-nuget_64bit
-		NODE_PATH           = $(EMSDK_PATH)/node/20.18.0_64bit/bin
+		PYTHON_PATH         = $(EMSDK_PATH)/python/3.13.3_64bit
+		NODE_PATH           = $(EMSDK_PATH)/node/22.16.0_64bit/bin
 		export PATH         = $(EMSDK_PATH);$(EMSCRIPTEN_PATH);$(CLANG_PATH);$(NODE_PATH);$(PYTHON_PATH):$$(PATH)
     endif
 endif
@@ -299,7 +295,7 @@ endif
 
 # Define library paths containing required libs: LDFLAGS
 #------------------------------------------------------------------------------------------------
-LDFLAGS = -L. -L$(RAYLIB_RELEASE_PATH) -L$(RAYLIB_PATH)/src
+LDFLAGS = -L. -L$(RAYLIB_RELEASE_PATH)
 
 ifeq ($(TARGET_PLATFORM),PLATFORM_DESKTOP_GLFW)
     ifeq ($(PLATFORM_OS),WINDOWS)
@@ -475,7 +471,15 @@ ifeq ($(TARGET_PLATFORM),PLATFORM_DESKTOP_RGFW)
         # Libraries for Debian GNU/Linux desktop compipling
         # NOTE: Required packages: libegl1-mesa-dev
         LDFLAGS += -L../src
-        LDLIBS = -lraylib -lGL -lX11 -lXrandr -lXinerama -lXi -lXxf86vm -lXcursor -lm -lpthread -ldl -lrt
+        LDLIBS = -lraylib -lm
+
+        ifeq ($(RGFW_LINUX_ENABLE_X11),TRUE)
+            LDLIBS += -lGL -lX11 -lXrandr -lXinerama -lXi -lXxf86vm -lXcursor -lpthread -ldl -lrt
+        endif
+
+        ifeq ($(RGFW_LINUX_ENABLE_WAYLAND),TRUE)
+            LDLIBS += -lwayland-client -lwayland-cursor -lwayland-egl -lxkbcommon
+        endif
 
         # Explicit link to libc
         ifeq ($(RAYLIB_LIBTYPE),SHARED)
@@ -618,6 +622,7 @@ TEXTURES = \
     textures/textures_blend_modes \
     textures/textures_bunnymark \
     textures/textures_cellular_automata \
+    textures/textures_clipboard_image \
     textures/textures_fog_of_war \
     textures/textures_framebuffer_rendering \
     textures/textures_gif_player \
@@ -630,6 +635,7 @@ TEXTURES = \
     textures/textures_image_rotate \
     textures/textures_image_text \
     textures/textures_logo_raylib \
+    textures/textures_magnifying_glass \
     textures/textures_mouse_painting \
     textures/textures_npatch_drawing \
     textures/textures_particles_blending \
@@ -699,6 +705,7 @@ SHADERS = \
     shaders/shaders_ascii_rendering \
     shaders/shaders_basic_lighting \
     shaders/shaders_basic_pbr \
+    shaders/shaders_cel_shading \
     shaders/shaders_color_correction \
     shaders/shaders_custom_uniform \
     shaders/shaders_deferred_rendering \
@@ -740,6 +747,7 @@ AUDIO = \
     audio/audio_sound_multi \
     audio/audio_sound_positioning \
     audio/audio_spectrum_visualizer \
+    audio/audio_stream_callback \
     audio/audio_stream_effects
 #EXAMPLES_LIST_END
 
