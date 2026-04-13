@@ -1,24 +1,21 @@
-#*
+*
 
-#!*/
-#!*.c
-#!*.cpp
-#!*.h
-#!*.mk
-#!*.html
-#!*.js
-#!*.md
-#!*.ps1
-#!*.sh
-#!*.bat
-#!.gitignore
-#!.gitmodules
+!lib/**
+!scripts/**
+!github/**
 
-.env
-*.log
-/log
-bin/
-build/
-engine-cyberia/
-cyberia-server/
-.claude/
+!*/
+!*.h
+!*.c
+!*.cpp
+!*.md
+
+!.gitignore
+
+!*.mk
+!Makefile
+
+# specific whitelist
+!src/shell.html
+!src/public/**
+!src/js/**

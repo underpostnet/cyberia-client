@@ -1,16 +1,16 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-#include "raylib.h"
+#include "input.h"
+#include "game_state.h"
 #include "render.h"
 #include "client.h"
 #include "config.h"
 
+#include <raylib.h>
 #include <emscripten/emscripten.h>
 
-// External JavaScript function to initialize engine API base URL
-// (defined in js/services.js)
-void js_init_engine_api(const char* api_base_url);
+#include "js/services.h"
 
 // Application configuration
 #define WINDOW_WIDTH 600
@@ -18,8 +18,16 @@ void js_init_engine_api(const char* api_base_url);
 
 // Main event loop (called every frame)
 void main_loop(void) {
-    // Update and render the frame
-    render_update();
+    const float dt = GetFrameTime();
+
+    // Update input system at the beggining of the frame
+    input_update();
+
+    // update frame state
+    game_state_update_interpolation(dt);
+
+    // render the frame/
+    render_update(dt);
 }
 
 // Main entry point
@@ -43,6 +51,7 @@ int main(void) {
     emscripten_set_main_loop(main_loop, 0, 1);
 
     client_cleanup();
+    input_cleanup();
     render_cleanup();
 
     CloseWindow();

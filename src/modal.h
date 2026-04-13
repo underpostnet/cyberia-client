@@ -7,7 +7,7 @@
 /**
  * @file modal.h
  * @brief General-purpose modal container component for displaying text
- * 
+ *
  * This module provides a flexible modal/overlay container that can display
  * multiple lines of text with customizable styling and positioning.
  * It serves as a reusable UI component for various game status displays.
@@ -32,7 +32,7 @@ typedef struct {
     // Content
     ModalLine lines[MODAL_MAX_LINES];
     int line_count;
-    
+
     // Layout configuration
     int min_width;
     int min_height;
@@ -41,7 +41,7 @@ typedef struct {
     int margin_right;
     int margin_bottom;
     int margin_left;
-    
+
     // Positioning mode
     enum {
         MODAL_POS_TOP_LEFT,
@@ -51,11 +51,11 @@ typedef struct {
         MODAL_POS_CENTER,
         MODAL_POS_CUSTOM
     } position_mode;
-    
+
     // Custom position (used when position_mode is MODAL_POS_CUSTOM)
     int custom_x;
     int custom_y;
-    
+
     // Styling
     Color background_color;
     Color border_color;
@@ -64,25 +64,25 @@ typedef struct {
     float border_width;
     bool draw_shadow;
     bool draw_border;
-    
+
     // Font settings
     int font_size;
     int line_spacing;
-    
+
     // Text alignment
     enum {
         MODAL_ALIGN_LEFT,
         MODAL_ALIGN_CENTER,
         MODAL_ALIGN_RIGHT
     } text_align;
-    
+
     // Visibility
     bool visible;
-    
+
     // Animation
     float fade_alpha;
     bool fade_in;
-    
+
 } Modal;
 
 /**
@@ -106,13 +106,6 @@ void modal_clear_lines(Modal* modal);
  * @return 0 on success, -1 if modal is full
  */
 int modal_add_line(Modal* modal, const char* text, Color color);
-
-/**
- * @brief Update modal state (animations, etc.)
- * @param modal Pointer to modal
- * @param delta_time Time elapsed since last update
- */
-void modal_update_struct(Modal* modal, float delta_time);
 
 /**
  * @brief Render the modal
@@ -140,8 +133,8 @@ void modal_set_style(Modal* modal, Color bg_color, Color border_color, float alp
  * @param margin_bottom Bottom margin in pixels
  * @param margin_left Left margin in pixels
  */
-void modal_set_position(Modal* modal, int position_mode, 
-                       int margin_top, int margin_right, 
+void modal_set_position(Modal* modal, int position_mode,
+                       int margin_top, int margin_right,
                        int margin_bottom, int margin_left);
 
 /**

@@ -13,9 +13,7 @@
 #include <stdlib.h>
 #include <string.h>
 
-/* JS bridge (shared with object_layers_management.c) */
-extern void js_start_fetch_binary(const char* url, int request_id);
-extern unsigned char* js_get_fetch_result(int request_id, int* size);
+#include "js/services.h"
 
 /* ── Internal types ──────────────────────────────────────────────────── */
 

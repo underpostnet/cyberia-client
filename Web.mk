@@ -5,22 +5,20 @@ DEV_PORT		?= 8082
 PROD_PORT		?= 8081
 
 #---------------------------------------------------------------------------------------------
-TARGET_BUILD_DIR		:= $(call lc,$(BUILD_DIR)/web/$(BUILD_MODE))
-TARGET_OUTPUT_DIR		:= $(call lc,$(OUTPUT_DIR)/web/$(BUILD_MODE))
+target_build_dir	:= $(call lc,$(BUILD_DIR)/web/$(BUILD_MODE))
+target_output_dir	:= $(call lc,$(OUTPUT_DIR)/web/$(BUILD_MODE))
 
 #---------------------------------------------------------------------------------------------
 # Specific compiler flags
-CFLAGS += -DGRAPHICS_API_OPENGL_ES2
-CFLAGS += -flto
-CFLAGS += -Wno-unused-parameter
+CFLAGS	+= -DPLATFORM_WEB
+CFLAGS	+= -DGRAPHICS_API_OPENGL_ES2
+CFLAGS	+= -flto
+CFLAGS	+= -Wno-unused-parameter
 
 ifneq ($(BUILD_MODE),RELEASE)
-CFLAGS += --profiling
-CFLAGS += -O0 # -Og doesnt not work in emcc
+CFLAGS	+= --profiling
+CFLAGS	+= -O0 # -Og doesnt not work in emcc
 endif
-
-CFLAGS		+= -DPLATFORM_WEB
-# CFLAGS	+= -std=gnu23
 
 #---------------------------------------------------------------------------------------------
 # Linking flags
@@ -38,35 +36,32 @@ LDFLAGS += $(RAYLIB_PATH)/src/libraylib.web.a
 # Web target html container
 WEB_SHELL := $(SRC_DIR)/shell.html
 
-OUTPUT := $(TARGET_OUTPUT_DIR)/index.html
+OUTPUT := $(target_output_dir)/index.html
 ASSETS := $(SRC_DIR)/public/splash.png@splash.png
 
 #---------------------------------------------------------------------------------------------
 # Util variables
-OBJS	:= $(SRC_FILES:$(SRC_DIR)/%=$(TARGET_BUILD_DIR)/%.o)
-OBJS	+= $(TARGET_BUILD_DIR)/cJSON.o
-
-# Auto-generated header dependency files
-DEPS	:= $(OBJS:.o=.d)
--include $(DEPS)
+OBJS	:= $(src_files:$(SRC_DIR)/%=$(target_build_dir)/%.o)
+OBJS	+= $(target_build_dir)/cJSON.o
+OBJS	+= $(target_build_dir)/libraylib.web.a
 
 #---------------------------------------------------------------------------------------------
-# Specific targets
+# Platform Specific targets
 
 .PHONY: all serve-development serve-production
 
-all:link
+all: link
 
 serve-development: all
 	-fuser -k $(DEV_PORT)/tcp 2>/dev/null; sleep 0.3
-	python3 scripts/serve.py $(DEV_PORT) $(TARGET_OUTPUT_DIR)
+	python3 scripts/serve.py $(DEV_PORT) $(target_output_dir)
 
 serve-production:
 	make -f Web.mk serve-development BUILD_MODE=RELEASE DEV_PORT=$(PROD_PORT)
 
-link: libraylib $(OBJS)
-	@mkdir -p $(TARGET_OUTPUT_DIR)
-	@cp $(SRC_DIR)/public/favicon.ico $(TARGET_OUTPUT_DIR)/favicon.ico
+link: $(OBJS)
+	@mkdir -p $(target_output_dir)
+	@cp $(SRC_DIR)/public/favicon.ico $(target_output_dir)/favicon.ico
 	$(CC) -o $(OUTPUT) $(OBJS) $(LDFLAGS) \
 		-s USE_GLFW=3 \
 		--shell-file $(WEB_SHELL) \
@@ -76,25 +71,24 @@ link: libraylib $(OBJS)
 		-s ASYNCIFY_STACK_SIZE=1048576 \
 		--preload-file $(ASSETS)
 
-$(TARGET_BUILD_DIR)/%.c.o: $(SRC_DIR)/%.c
+$(target_build_dir)/%.c.o: $(SRC_DIR)/%.c
 	@mkdir -p $(@D)
 	$(CC) -c $< -o $@ $(CFLAGS) -MMD -MP
 
-$(TARGET_BUILD_DIR)/cJSON.o: $(CJSON_PATH)/cJSON.c
+$(target_build_dir)/cJSON.o: $(CJSON_PATH)/cJSON.c
 	@mkdir -p $(@D)
 	$(CC) -c $< -o $@ $(CFLAGS)
 
-libraylib:
+# Raylib dep
+$(target_build_dir)/libraylib.web.a:
+	@mkdir -p $(target_build_dir)
 	make -j 8 -C $(RAYLIB_PATH)/src raylib \
 		PLATFORM=PLATFORM_WEB \
 		RAYLIB_BUILD_MODE=$(BUILD_MODE) \
 		RAYLIB_LIBTYPE=STATIC \
+		RAYLIB_RELEASE_PATH=$(CURDIR)/$(target_build_dir) \
 		CFLAGS_EXTRA="-Wno-deprecated-pragma -Wno-tautological-compare"
+	make -C $(RAYLIB_PATH)/src clean
 
 clean:
-	-rm -rf $(TARGET_BUILD_DIR) $(TARGET_OUTPUT_DIR)
-
-# Remove when safe to
-serve_development: serve-development
-serve_production: serve-production
-web: all
+	-rm -rf $(BUILD_DIR) $(OUTPUT_DIR)

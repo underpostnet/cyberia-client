@@ -43,10 +43,7 @@ void render_init(int width, int height) {
 }
 
 // Main rendering loop iteration
-void render_update(void) {
-    // Update input system first
-    input_update();
-
+void render_update(float delta_time) {
     // Get current canvas dimensions (handles browser resize)
     int current_width = GetScreenWidth();
     int current_height = GetScreenHeight();
@@ -63,14 +60,7 @@ void render_update(void) {
         input_handle_window_resize(current_width, current_height);
     }
 
-    // Update game state interpolation
-    static double last_time = 0.0;
-    double current_time = GetTime();
-    float delta_time = (float)(current_time - last_time);
-    last_time = current_time;
-
-    game_state_update_interpolation(delta_time);
-    game_state_update_camera(delta_time);
+    game_state_update_camera(delta_time); // TODO: camera shouldn't be in the GameState
 
     // Update effects (click effects, floating texts, FCT pop-ups)
     game_render_update_effects(delta_time);
@@ -102,14 +92,13 @@ void render_update(void) {
         game_render_frame();
     } else {
         // Fallback rendering for when game isn't ready yet
-        BeginDrawing();
         render_fallback(current_width, current_height);
-        EndDrawing();
     }
 }
 
 // Fallback rendering when game systems aren't ready
 void render_fallback(int width, int height) {
+    BeginDrawing();
     // Clear background to game background color (reduces flicker)
     ClearBackground(DARKGRAY);
 
@@ -129,6 +118,7 @@ void render_fallback(int width, int height) {
     const char* status_text = "Connecting to server...";
     int text_width = MeasureText(status_text, 20);
     DrawText(status_text, (width - text_width) / 2, height - 40, 20, WHITE);
+    EndDrawing();
 }
 
 // Cleanup rendering subsystem
@@ -144,7 +134,4 @@ void render_cleanup(void) {
 
     // Cleanup player modal component
     modal_player_cleanup();
-
-    // Cleanup input system
-    input_cleanup();
 }
