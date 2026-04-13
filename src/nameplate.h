@@ -7,10 +7,10 @@
  * interaction bubble, JS overlay header) shows a consistent name.
  *
  * Rules:
- *   - **Players** → "AnonPlayer" + first 8 characters of the websocket ID.
- *   - **Bots**    → The item_id of the active "skin" (or "body") layer.
- *                    Falls back to the first active layer's item_id,
- *                    then to the raw entity ID truncated to fit.
+ *   - **Players** → "Anon-" + first 8 characters of the websocket ID.
+ *   - **Bots**    → First-char-uppercased active skin item_id + "-" +
+ *                    first 8 characters of the entity ID.
+ *                    Falls back to first active layer, then raw ID.
  */
 
 #ifndef NAMEPLATE_H
