@@ -77,4 +77,14 @@ int  interaction_bubble_slot_count(void);
  */
 void interaction_bubble_dead_equip(const char* item_id, bool active);
 
+/**
+ * @brief Look up the cached alive-OL stack for an entity.
+ *
+ * Returns the alive layer snapshot and count via out-params.
+ * If the entity has no bubble slot or no alive cache, returns NULL
+ * and sets *out_count to 0.
+ */
+const ObjectLayerState* interaction_bubble_get_alive_layers(
+    const char *entity_id, int *out_count);
+
 #endif /* INTERACTION_BUBBLE_H */

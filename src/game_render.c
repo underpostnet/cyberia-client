@@ -697,9 +697,21 @@ void game_render_entities(void) {
                 bool np_is_player = (entry->type == ENTITY_TYPE_PLAYER
                                   || entry->type == ENTITY_TYPE_OTHER_PLAYER);
                 char np_buf[80];
+                /* For bots, prefer the alive-layer cache so the nameplate
+                 * always reflects the living skin (even when dead/ghost). */
+                const ObjectLayerState *np_layers = entity_base->object_layers;
+                int np_lc = entity_base->object_layer_count;
+                if (!np_is_player) {
+                    int alive_lc = 0;
+                    const ObjectLayerState *alive = interaction_bubble_get_alive_layers(
+                        entity_base->id, &alive_lc);
+                    if (alive && alive_lc > 0) {
+                        np_layers = alive;
+                        np_lc = alive_lc;
+                    }
+                }
                 nameplate_resolve(entity_base->id, np_is_player,
-                                  entity_base->object_layers,
-                                  entity_base->object_layer_count,
+                                  np_layers, np_lc,
                                   g_object_layers_manager,
                                   np_buf, (int)sizeof(np_buf));
                 EntityOverheadParams ohp = {

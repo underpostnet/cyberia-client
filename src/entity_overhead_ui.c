@@ -46,7 +46,7 @@ static const Color C_BAR_BORDER  = {120, 120, 120, 160 };
 /* Text colours */
 static const Color C_NAME_TEXT   = {255, 255, 255, 255 };
 static const Color C_NAME_SHADOW = {  0,   0,   0, 200 };
-static const Color C_NAME_BG     = {  4,   4,  12, 180 };   /* pill backdrop  */
+static const Color C_NAME_BG     = {  4,   4,  12, 110 };   /* pill backdrop  */
 static const Color C_BAR_LABEL   = {255, 255, 255, 245 };
 static const Color C_BAR_LABEL_S = {  0,   0,   0, 200 };   /* label shadow   */
 

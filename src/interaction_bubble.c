@@ -299,6 +299,17 @@ void interaction_bubble_draw(void) {
             DrawCircle(cx, cy, r.width * 0.3f, (Color){100, 100, 120, 180});
         }
 
+        /* Nameplate label — top-left, just to the right of the icon */
+        if (slot->display_name[0] != '\0') {
+            int np_fs = 9;
+            int np_x = (int)(r.x + r.width + 4);
+            int np_y = (int)(r.y + 2);
+            DrawText(slot->display_name, np_x + 1, np_y + 1, np_fs,
+                     (Color){0, 0, 0, 180});
+            DrawText(slot->display_name, np_x, np_y, np_fs,
+                     (Color){220, 220, 230, 240});
+        }
+
         /* Status icon — small icon in bottom-right corner of the bubble */
         if (slot->status_icon != 0) {
             const char* icon_id = NULL;
@@ -481,4 +492,14 @@ void interaction_bubble_dead_equip(const char* item_id, bool active) {
         }
     }
     printf("[INTERACTION_BUBBLE] Dead-equip: item=%s active=%d\n", item_id, active);
+}
+
+const ObjectLayerState* interaction_bubble_get_alive_layers(
+    const char *entity_id, int *out_count) {
+    if (out_count) *out_count = 0;
+    if (!entity_id || entity_id[0] == '\0') return NULL;
+    InteractionBubbleSlot* slot = find_slot(entity_id);
+    if (!slot || slot->alive_layer_count <= 0) return NULL;
+    if (out_count) *out_count = slot->alive_layer_count;
+    return slot->alive_layers;
 }
