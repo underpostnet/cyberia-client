@@ -15,6 +15,7 @@
 #include "dialogue_data.h"
 #include "ol_stack_ico.h"
 #include "layer_z_order.h"
+#include "nameplate.h"
 #include "object_layers_management.h"
 #include "game_state.h"
 #include "entity_render.h"
@@ -196,18 +197,19 @@ static void scan_entity(const char* entity_id, const EntityState* base,
         slot->dialogue_item_id[0] = '\0';
     }
 
-    /* Display name: for bots with dialogue, use speaker name (= skin label).
-     * For players and everything else, use the full entity ID (= websocket ID). */
-    if (!is_player && dlg_item[0] != '\0') {
-        const DialogueDataSet* d = dialogue_data_get(dlg_item);
-        if (d && d->line_count > 0 && d->lines[0].speaker[0] != '\0') {
-            strncpy(slot->display_name, d->lines[0].speaker,
-                    sizeof(slot->display_name) - 1);
-        } else {
-            strncpy(slot->display_name, entity_id, sizeof(slot->display_name) - 1);
-        }
-    } else {
-        strncpy(slot->display_name, entity_id, sizeof(slot->display_name) - 1);
+    /* Display name: resolved centrally by the nameplate module.
+     * Players → "AnonPlayer<first 8 chars of ws id>".
+     * Bots    → skin/body item_id (with manager lookup). */
+    {
+        ObjectLayersManager* np_mgr = game_render_get_obj_layers_mgr();
+        const ObjectLayerState* np_layers = slot->alive_layer_count > 0
+            ? slot->alive_layers : base->object_layers;
+        int np_lc = slot->alive_layer_count > 0
+            ? slot->alive_layer_count : base->object_layer_count;
+        nameplate_resolve(entity_id, is_player,
+                          np_layers, np_lc, np_mgr,
+                          slot->display_name,
+                          (int)sizeof(slot->display_name));
     }
 }
 

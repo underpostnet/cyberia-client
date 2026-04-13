@@ -13,6 +13,7 @@
 #include "inventory_modal.h"
 #include "modal_dialogue.h"
 #include "ui_icon.h"
+#include "nameplate.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -693,8 +694,16 @@ void game_render_entities(void) {
             if (!is_skill_or_coin) {
                 /* All entities now carry an effective_level transmitted by the
                  * server (clamped sum of all stat fields). Use it directly.  */
+                bool np_is_player = (entry->type == ENTITY_TYPE_PLAYER
+                                  || entry->type == ENTITY_TYPE_OTHER_PLAYER);
+                char np_buf[80];
+                nameplate_resolve(entity_base->id, np_is_player,
+                                  entity_base->object_layers,
+                                  entity_base->object_layer_count,
+                                  g_object_layers_manager,
+                                  np_buf, (int)sizeof(np_buf));
                 EntityOverheadParams ohp = {
-                    .name            = entity_base->id,
+                    .name            = np_buf,
                     .effective_level = entity_base->effective_level,
                     .max_level       = g_game_state.sum_stats_limit,
                     .life            = entity_base->life,

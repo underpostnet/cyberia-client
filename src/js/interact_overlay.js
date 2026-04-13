@@ -696,9 +696,9 @@ mergeInto(LibraryManager.library, {
     var statusCol = P.borderColor;
     if (P.el) P.el.style.borderTopColor = statusCol;
 
-    /* Header: self-player gets the border colour as name highlight;
-     * others also get the status-specific border colour. */
-    var headerText = P.isPlayer ? P.entityId : P.displayName || P.entityId.substring(0, 12);
+    /* Header: use the display name resolved by the C nameplate module
+     * for both players and bots — consistent with overhead UI and bubbles. */
+    var headerText = P.displayName || P.entityId.substring(0, 12);
     if (P.isSelf) headerText = '\u2726 ' + headerText + ' (You)';
     D.nameEl.textContent = headerText;
     D.nameEl.style.color = statusCol;
