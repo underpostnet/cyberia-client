@@ -54,22 +54,28 @@ typedef struct {
     // Input event queue
     InputEvent event_queue[32];
     int event_count;
-
-
 } InputManager;
 
+
 /**
- * @brief Update input system (call each frame)
- *
  * Processes all input events and updates input state.
  * Should be called before game logic update.
  */
 void input_update(void);
 
-/**
- * @brief Cleanup input system
- */
+/** Cleanup input system */
 void input_cleanup(void);
+
+/**
+ * Handle window resize event
+ * @param width New window width
+ * @param height New window height
+ */
+void input_handle_window_resize(int width, int height);
+
+// ============================================================================
+// Internal - Candidates for removal
+// ============================================================================
 
 /**
  * @brief Process input events and generate game actions
@@ -97,11 +103,6 @@ void input_clear_events(void);
  */
 Vector2 input_get_mouse_world_pos(void);
 
-
-// ============================================================================
-// Input Event Handlers
-// ============================================================================
-
 /**
  * @brief Handle mouse click event
  * @param button Mouse button that was clicked
@@ -122,17 +123,6 @@ void input_handle_mouse_wheel(float wheel_move);
 void input_handle_key_press(int key);
 
 /**
- * @brief Handle window resize event
- * @param width New window width
- * @param height New window height
- */
-void input_handle_window_resize(int width, int height);
-
-// ============================================================================
-// Game Action Functions
-// ============================================================================
-
-/**
  * @brief Send TAP event to server (player_action with target coordinates)
  * @param target_pos Target position in world coordinates
  * @return 0 on success, -1 on failure
@@ -149,10 +139,6 @@ void input_toggle_debug_mode(void);
  * @param zoom New zoom level (1.0 = normal, >1.0 = zoomed in, <1.0 = zoomed out)
  */
 void input_set_camera_zoom(float zoom);
-
-// ============================================================================
-// Hit Testing and Object Selection
-// ============================================================================
 
 /**
  * @brief Find entity at screen position

@@ -9,7 +9,7 @@ void render_init(int width, int height);
  * This function should be called every frame to update and render
  * the scene. It handles canvas resizing and responsive rendering.
  */
-void render_update(void);
+void render_update(float delta_time);
 
 /**
  * @brief Cleanup rendering subsystem

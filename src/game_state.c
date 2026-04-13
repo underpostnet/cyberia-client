@@ -41,7 +41,7 @@ static Direction direction_from_delta(float dx, float dy) {
  * pos_server over the interpolation_ms window (unchanged).
  */
 void game_state_update_interpolation(float delta_time) {
-    double current_time = GetTime();
+    const double current_time = GetTime();
 
     // === Main player: prediction + exponential server correction ===
     {
