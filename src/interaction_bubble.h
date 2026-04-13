@@ -67,4 +67,14 @@ void interaction_bubble_draw(void);
 bool interaction_bubble_handle_click(int mx, int my, bool clicked);
 int  interaction_bubble_slot_count(void);
 
+/**
+ * @brief Optimistically update the self-player bubble's alive-OL cache
+ *        after an equip/unequip while dead.
+ *
+ * The server queues dead-equip in PreRespawnObjectLayers (never sent to
+ * the client), so the bubble must apply the change locally to keep the
+ * icon in sync with what will render on revive.
+ */
+void interaction_bubble_dead_equip(const char* item_id, bool active);
+
 #endif /* INTERACTION_BUBBLE_H */

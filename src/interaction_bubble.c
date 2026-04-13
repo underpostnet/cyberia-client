@@ -29,13 +29,31 @@
 
 static InteractionBubbleSlot s_slots[IBUBBLE_MAX_SLOTS];
 static int                   s_slot_count = 0;
+static int                   s_border_color_dbg = 0;
 
 /* ── Colours ──────────────────────────────────────────────────────────── */
 
 static const Color C_SLOT_BG        = {  14,  14,  26, 210 };
-static const Color C_SLOT_BORDER    = {  70,  70, 120, 200 };
 static const Color C_SLOT_HOVER     = {  35,  45,  75, 230 };
-static const Color C_SELF_BORDER    = { 220, 190,  60, 240 };  /* gold border for self-player */
+
+/**
+ * @brief Return the border colour for a bubble slot.
+ * Self-player uses the SELF_BORDER palette colour; everyone else
+ * uses the per-status border colour from the StatusIconConfig table
+ * (server-driven, received in init_data).
+ */
+static Color status_border_color(const InteractionBubbleSlot* slot, bool is_self) {
+    if (is_self) return game_state_get_color_by_key("SELF_BORDER");
+    Color c = game_state_get_status_border_color(slot->status_icon);
+    if (s_border_color_dbg < 12) {
+        printf("[BORDER] entity=%s status_icon=%d border=(%d,%d,%d,%d) count=%d\n",
+               slot->entity_id, slot->status_icon,
+               c.r, c.g, c.b, c.a,
+               g_game_state.status_icon_count);
+        s_border_color_dbg++;
+    }
+    return c;
+}
 
 /* ── Helpers ──────────────────────────────────────────────────────────── */
 
@@ -250,10 +268,17 @@ void interaction_bubble_draw(void) {
         bool hovered = hit_rect(mx, my, r);
         bool is_self = (strcmp(slot->entity_id, g_game_state.player_id) == 0);
 
+        Color border = status_border_color(slot, is_self);
+        float thick = 3.0f;
+
+        /* Draw border as a slightly larger filled rounded rect behind the slot.
+         * DrawRectangleRoundedLinesEx uses GL line primitives which are
+         * unreliable / invisible in many WebGL contexts, so we simulate
+         * the border with two filled rounded rects instead. */
+        Rectangle outer = { r.x - thick, r.y - thick,
+                            r.width + 2*thick, r.height + 2*thick };
+        DrawRectangleRounded(outer, 0.15f, 4, border);
         DrawRectangleRounded(r, 0.15f, 4, hovered ? C_SLOT_HOVER : C_SLOT_BG);
-        DrawRectangleRoundedLinesEx(r, 0.15f, 4,
-                                    is_self ? 2.0f : 1.5f,
-                                    is_self ? C_SELF_BORDER : C_SLOT_BORDER);
 
         /* Always render the alive OL stack so the entity is recognisable
          * even when dead (ghost state is indicated by the status icon). */
@@ -325,12 +350,15 @@ bool interaction_bubble_handle_click(int mx, int my, bool clicked) {
             /* Open the JS interact panel — NO freeze, player stays active
              * in real-time PVP/PVE.  Only NPC dialogue freezes. */
             bool is_self = (strcmp(slot->entity_id, g_game_state.player_id) == 0);
+            Color bc = status_border_color(slot, is_self);
             js_interact_overlay_open(slot->entity_id,
                                      slot->display_name,
                                      slot->dialogue_item_id,
                                      slot->interact_flags,
                                      slot->is_player ? 1 : 0,
-                                     is_self ? 1 : 0);
+                                     is_self ? 1 : 0,
+                                     (int)bc.r, (int)bc.g,
+                                     (int)bc.b, (int)bc.a);
 
             /* Pass the entity's active OL stack to the JS overlay for
              * preview rendering and per-item dialog buttons.  Each entry
@@ -382,4 +410,67 @@ bool interaction_bubble_handle_click(int mx, int my, bool clicked) {
 
 int interaction_bubble_slot_count(void) {
     return s_slot_count;
+}
+
+/* ── Dead-equip: optimistically update self-player alive_layers ──────── */
+void interaction_bubble_dead_equip(const char* item_id, bool active) {
+    if (s_slot_count <= 0) return;
+    /* Self-player is always slot 0. */
+    InteractionBubbleSlot* slot = &s_slots[0];
+    if (strcmp(slot->entity_id, g_game_state.player_id) != 0) return;
+
+    if (active) {
+        /* Activate: mark matching item active, apply one-per-type rule. */
+        int target = -1;
+        for (int i = 0; i < slot->alive_layer_count; i++) {
+            if (strcmp(slot->alive_layers[i].item_id, item_id) == 0) {
+                slot->alive_layers[i].active = true;
+                target = i;
+                break;
+            }
+        }
+        /* Item wasn't in alive_layers (was inactive before death).
+         * Pull it from the full inventory and append to alive_layers. */
+        if (target < 0 && slot->alive_layer_count < IBUBBLE_MAX_LAYERS) {
+            for (int i = 0; i < g_game_state.full_inventory_count; i++) {
+                if (strcmp(g_game_state.full_inventory[i].item_id, item_id) == 0) {
+                    int idx = slot->alive_layer_count++;
+                    slot->alive_layers[idx] = g_game_state.full_inventory[i];
+                    slot->alive_layers[idx].active = true;
+                    target = idx;
+                    break;
+                }
+            }
+        }
+        /* One-per-type deactivation (mirrors server logic). */
+        if (target >= 0 && g_game_state.equipment_rules.one_per_type) {
+            ObjectLayersManager* mgr = game_render_get_obj_layers_mgr();
+            const char* req_type = "";
+            if (mgr) {
+                ObjectLayer* ol = get_or_fetch_object_layer(mgr, item_id);
+                if (ol && ol->data.item.type[0] != '\0')
+                    req_type = ol->data.item.type;
+            }
+            if (req_type[0] != '\0') {
+                for (int j = 0; j < slot->alive_layer_count; j++) {
+                    if (j == target || !slot->alive_layers[j].active) continue;
+                    if (mgr) {
+                        ObjectLayer* other = get_or_fetch_object_layer(
+                            mgr, slot->alive_layers[j].item_id);
+                        if (other && strcmp(other->data.item.type, req_type) == 0)
+                            slot->alive_layers[j].active = false;
+                    }
+                }
+            }
+        }
+    } else {
+        /* Deactivate. */
+        for (int i = 0; i < slot->alive_layer_count; i++) {
+            if (strcmp(slot->alive_layers[i].item_id, item_id) == 0) {
+                slot->alive_layers[i].active = false;
+                break;
+            }
+        }
+    }
+    printf("[INTERACTION_BUBBLE] Dead-equip: item=%s active=%d\n", item_id, active);
 }

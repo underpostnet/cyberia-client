@@ -133,6 +133,7 @@ typedef struct {
     Color coin;
     Color weapon;
     Color skill;
+    Color self_border;
 } GameColors;
 
 // Equipment rules received from metadata message (mirrors Go EquipmentRulesConfig).
@@ -153,11 +154,13 @@ typedef struct {
     char color_key[32];
 } EntityTypeDefault;
 
-// Status icon config entry — maps a u8 ID to a ui-icon filename stem.
-// Received in init_data.statusIcons from the server.
+// Status icon config entry — maps a u8 ID to a ui-icon filename stem
+// and an interaction-bubble border colour.  All fields are server-driven
+// (received in init_data.statusIcons from the Go server via gRPC).
 typedef struct {
     uint8_t id;
     char icon_id[MAX_ID_LENGTH];
+    Color border_color;
 } StatusIconConfig;
 
 // Skill map entry received from init_data: one trigger item → N logic event IDs
@@ -368,7 +371,21 @@ static inline Color game_state_get_color_by_key(const char* key) {
     if (strcmp(key, "PORTAL_INTRA_RANDOM") == 0) return g_game_state.colors.portal_intra_random;
     if (strcmp(key, "PORTAL_INTRA_PORTAL") == 0) return g_game_state.colors.portal_intra_portal;
     if (strcmp(key, "FOREGROUND")   == 0) return g_game_state.colors.foreground;
+    if (strcmp(key, "SELF_BORDER") == 0) return g_game_state.colors.self_border;
     return (Color){ 100, 100, 100, 200 };
+}
+
+/**
+ * @brief Return the interaction-bubble border colour for a status_icon u8.
+ * Looks up the dynamically-loaded StatusIconConfig table from init_data.
+ * Falls back to neutral grey when the ID is unknown.
+ */
+static inline Color game_state_get_status_border_color(uint8_t status_icon) {
+    for (int i = 0; i < g_game_state.status_icon_count; i++) {
+        if (g_game_state.status_icons[i].id == status_icon)
+            return g_game_state.status_icons[i].border_color;
+    }
+    return (Color){ 70, 70, 120, 200 }; /* neutral fallback */
 }
 
 /**

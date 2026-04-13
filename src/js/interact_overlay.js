@@ -34,6 +34,7 @@ mergeInto(LibraryManager.library, {
     isPlayer: false,
     isSelf: false,
     olStack: [],
+    borderColor: 'rgba(70,70,120,0.78)',
     activeTab: 'chat',
     chatHistory: [],
     dom: {},
@@ -194,6 +195,7 @@ mergeInto(LibraryManager.library, {
         animation: 'ipSlide 0.14s ease-out',
         maxHeight: '42vh',
         pointerEvents: 'auto',
+        borderTop: '2px solid ' + S.border,
       },
       document.body,
     );
@@ -308,7 +310,7 @@ mergeInto(LibraryManager.library, {
       NB.store[P.entityId].unread = 0;
     }
 
-    /* Update tab button styles */
+    /* Update tab button styles + remove badge dots when cleared */
     var btns = D.tabBar.querySelectorAll('button');
     for (var i = 0; i < btns.length; i++) {
       var b = btns[i];
@@ -317,6 +319,11 @@ mergeInto(LibraryManager.library, {
       b.style.color = isActive ? S.tabTextActive : S.tabTextInactive;
       b.style.borderBottom = isActive ? 'none' : '1px solid ' + S.border;
       b.style.fontWeight = isActive ? 'bold' : 'normal';
+      /* Remove transported badge dot if chat was opened */
+      if (b.dataset.tabId === 'chat' && tabId === 'chat') {
+        var dots = b.querySelectorAll('span');
+        for (var d = 0; d < dots.length; d++) dots[d].remove();
+      }
     }
 
     /* Rebuild body for the selected tab */
@@ -359,7 +366,7 @@ mergeInto(LibraryManager.library, {
         borderRadius: '6px',
         overflow: 'hidden',
         background: 'rgba(20,20,40,0.6)',
-        border: P.isSelf ? '2px solid rgba(220,190,60,0.8)' : '1px solid ' + S.border,
+        border: P.isSelf ? '2px solid ' + P.borderColor : '1px solid ' + S.border,
       },
       parent,
     );
@@ -677,18 +684,24 @@ mergeInto(LibraryManager.library, {
    * Populate — rebuild tabs and content for the current entity
    * ================================================================ */
 
-  $ipPopulate__deps: ['$IP', '$IPS', '$ipEl', '$ipSwitchTab'],
+  $ipPopulate__deps: ['$IP', '$IPS', '$ipEl', '$ipSwitchTab', '$NB'],
   $ipPopulate: function () {
     var P = IP,
       D = P.dom,
       S = IPS;
     var flags = P.interactFlags;
 
-    /* Header: self-player gets a gold tag, players show wsId, bots show name. */
+    /* Border colour resolved by C from server-driven config — already a
+     * CSS rgba() string on P.borderColor. */
+    var statusCol = P.borderColor;
+    if (P.el) P.el.style.borderTopColor = statusCol;
+
+    /* Header: self-player gets the border colour as name highlight;
+     * others also get the status-specific border colour. */
     var headerText = P.isPlayer ? P.entityId : P.displayName || P.entityId.substring(0, 12);
     if (P.isSelf) headerText = '\u2726 ' + headerText + ' (You)';
     D.nameEl.textContent = headerText;
-    D.nameEl.style.color = P.isSelf ? 'rgba(220,190,60,1)' : S.nameCol;
+    D.nameEl.style.color = statusCol;
 
     /* Rebuild tab bar */
     D.tabBar.innerHTML = '';
@@ -713,10 +726,30 @@ mergeInto(LibraryManager.library, {
           cursor: 'pointer',
           touchAction: 'manipulation',
           transition: 'background 0.1s, color 0.1s',
+          position: 'relative',
         },
         D.tabBar,
       );
       btn.textContent = tab.label;
+
+      /* Badge transport: show unread dot on the Chat tab button */
+      if (tab.id === 'chat' && NB.store[P.entityId] && NB.store[P.entityId].unread > 0) {
+        var dot = ipEl(
+          'span',
+          {
+            position: 'absolute',
+            top: '4px',
+            right: '8px',
+            width: '8px',
+            height: '8px',
+            borderRadius: '50%',
+            background: 'rgba(210,50,50,0.95)',
+            display: 'inline-block',
+          },
+          btn,
+        );
+      }
+
       btn.dataset.tabId = tab.id;
       btn.onclick = function (ev) {
         ev.stopPropagation();
@@ -742,6 +775,10 @@ mergeInto(LibraryManager.library, {
     interact_flags,
     is_player,
     is_self,
+    border_r,
+    border_g,
+    border_b,
+    border_a,
   ) {
     var P = IP;
 
@@ -751,6 +788,10 @@ mergeInto(LibraryManager.library, {
     P.interactFlags = interact_flags;
     P.isPlayer = !!is_player;
     P.isSelf = !!is_self;
+    /* Border colour resolved by C from server-driven StatusIconConfig.
+     * Convert to CSS rgba string for DOM styling. */
+    var a = ((border_a & 0xff) / 255).toFixed(2);
+    P.borderColor = 'rgba(' + (border_r & 0xff) + ',' + (border_g & 0xff) + ',' + (border_b & 0xff) + ',' + a + ')';
     P.olStack = [];
     P.open = true;
     P.hidden = false;
@@ -761,8 +802,9 @@ mergeInto(LibraryManager.library, {
     P.chatHistory = entry.messages.map(function (m) {
       return { sender: m.sender, text: m.text, isMe: false, ts: m.ts };
     });
-    /* Mark as read — the user is now viewing this entity's chat. */
-    entry.unread = 0;
+    /* Badge is NOT cleared here — it transports to the chat tab button
+     * and only clears when the user actually switches to the chat tab
+     * (see $ipSwitchTab).  This is the "abstract context" model. */
 
     ipBuild();
     ipPopulate();
@@ -842,8 +884,9 @@ mergeInto(LibraryManager.library, {
         ts: Date.now(),
       });
 
-      /* Clear unread since the user is viewing this entity's chat. */
-      if (NB.store[fromId]) NB.store[fromId].unread = 0;
+      /* Clear badge only if the user is actually VIEWING the chat tab
+       * right now — the abstract-context model. */
+      if (P.activeTab === 'chat' && NB.store[fromId]) NB.store[fromId].unread = 0;
 
       if (P.activeTab === 'chat') ipRenderChat();
     }

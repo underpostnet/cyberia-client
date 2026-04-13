@@ -19,6 +19,7 @@
 
 #include "inventory_modal.h"
 #include "inventory_bar.h"
+#include "interaction_bubble.h"
 #include "ol_as_animated_ico.h"
 #include "game_state.h"
 #include "client.h"
@@ -589,7 +590,15 @@ bool inventory_modal_handle_click(int mx, int my, bool clicked) {
             float btn_y = card.y + card.height - MODAL_BTN_H - 14;
             Rectangle btn_r = { btn_x, btn_y, MODAL_BTN_W, MODAL_BTN_H };
             if (hit_rect(mx, my, btn_r)) {
-                send_activation(ols->item_id, !ols->active);
+                bool new_active = !ols->active;
+                send_activation(ols->item_id, new_active);
+
+                /* Dead-equip: optimistically update the self-player bubble
+                 * so it reflects what will render on revive (the server
+                 * only mutates PreRespawnObjectLayers, never sent to us). */
+                if (g_game_state.self_status_icon == 5) /* StatusDead */
+                    interaction_bubble_dead_equip(ols->item_id, new_active);
+
                 inventory_modal_close();
                 return true;
             }

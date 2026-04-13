@@ -144,6 +144,10 @@ int message_parser_process(const char* json_str) {
 int message_parser_parse_colors(const cJSON* colors_json) {
     if (!colors_json) return -1;
 
+    // Pre-initialise colours that may be absent from older DB documents
+    // so they still have a visible default when the server doesn't send them.
+    g_game_state.colors.self_border = (Color){ 220, 190, 60, 240 };
+
     // Parse each color in the dictionary
     cJSON* item = NULL;
     cJSON_ArrayForEach(item, colors_json) {
@@ -214,6 +218,8 @@ int message_parser_parse_colors(const cJSON* colors_json) {
             g_game_state.colors.weapon = c;
         } else if (strcmp(color_name, "SKILL") == 0) {
             g_game_state.colors.skill = c;
+        } else if (strcmp(color_name, "SELF_BORDER") == 0) {
+            g_game_state.colors.self_border = c;
         }
 
     }
@@ -331,7 +337,7 @@ int message_parser_parse_init_data(const cJSON* json_root) {
         }
     }
 
-    // Parse status icon mapping
+    // Parse status icon mapping (id → icon filename + border colour)
     g_game_state.status_icon_count = 0;
     cJSON* status_icons_json = cJSON_GetObjectItem(payload, "statusIcons");
     if (status_icons_json && cJSON_IsArray(status_icons_json)) {
@@ -345,8 +351,31 @@ int message_parser_parse_init_data(const cJSON* json_root) {
                 sc->id = (uint8_t)id_json->valueint;
             }
             serial_get_string(si, "iconId", sc->icon_id, sizeof(sc->icon_id));
-            if (sc->icon_id[0] != '\0') g_game_state.status_icon_count++;
+            /* Parse borderColor sub-object {r,g,b,a} — server-driven. */
+            cJSON* bc = cJSON_GetObjectItem(si, "borderColor");
+            if (bc && cJSON_IsObject(bc)) {
+                cJSON* cr = cJSON_GetObjectItem(bc, "r");
+                cJSON* cg = cJSON_GetObjectItem(bc, "g");
+                cJSON* cb = cJSON_GetObjectItem(bc, "b");
+                cJSON* ca = cJSON_GetObjectItem(bc, "a");
+                sc->border_color = (Color){
+                    (unsigned char)(cr && cJSON_IsNumber(cr) ? cr->valueint : 100),
+                    (unsigned char)(cg && cJSON_IsNumber(cg) ? cg->valueint : 100),
+                    (unsigned char)(cb && cJSON_IsNumber(cb) ? cb->valueint : 100),
+                    (unsigned char)(ca && cJSON_IsNumber(ca) ? ca->valueint : 200),
+                };
+            } else {
+                sc->border_color = (Color){ 100, 100, 100, 200 };
+            }
+            g_game_state.status_icon_count++;
         }
+    }
+    printf("[MSG_PARSER] Parsed %d status icons\n", g_game_state.status_icon_count);
+    for (int dbg = 0; dbg < g_game_state.status_icon_count; dbg++) {
+        StatusIconConfig* d = &g_game_state.status_icons[dbg];
+        printf("[MSG_PARSER]   icon[%d] id=%d iconId=%s border=(%d,%d,%d,%d)\n",
+               dbg, d->id, d->icon_id,
+               d->border_color.r, d->border_color.g, d->border_color.b, d->border_color.a);
     }
 
     if (skill_map_json && cJSON_IsObject(skill_map_json)) {
