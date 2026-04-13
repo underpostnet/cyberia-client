@@ -30,7 +30,6 @@ LDFLAGS += --js-library $(SRC_DIR)/js/services.js
 LDFLAGS += --js-library $(SRC_DIR)/js/interact_overlay.js
 LDFLAGS += --js-library $(SRC_DIR)/js/notify_badge.js
 LDFLAGS += -sEXPORTED_FUNCTIONS='["_main","_c_send_ws_message","_c_open_dialogue_from_js","_c_interact_overlay_did_close"]'
-LDFLAGS += $(RAYLIB_PATH)/src/libraylib.web.a
 
 #---------------------------------------------------------------------------------------------
 # Web target html container
@@ -48,9 +47,13 @@ OBJS	+= $(target_build_dir)/libraylib.web.a
 #---------------------------------------------------------------------------------------------
 # Platform Specific targets
 
-.PHONY: all serve-development serve-production
+.PHONY: all serve-development serve-production libraylib web
 
 all: link
+
+libraylib: $(target_build_dir)/libraylib.web.a
+
+web: all
 
 serve-development: all
 	-fuser -k $(DEV_PORT)/tcp 2>/dev/null; sleep 0.3
@@ -87,7 +90,7 @@ $(target_build_dir)/libraylib.web.a:
 		RAYLIB_BUILD_MODE=$(BUILD_MODE) \
 		RAYLIB_LIBTYPE=STATIC \
 		RAYLIB_RELEASE_PATH=$(CURDIR)/$(target_build_dir) \
-		CFLAGS_EXTRA="-Wno-deprecated-pragma -Wno-tautological-compare"
+		CFLAGS_EXTRA="-Wno-deprecated-pragma -Wno-tautological-compare -D__EMSCRIPTEN_major__=__EMSCRIPTEN_MAJOR__ -D__EMSCRIPTEN_minor__=__EMSCRIPTEN_MINOR__ -D__EMSCRIPTEN_tiny__=__EMSCRIPTEN_TINY__"
 	make -C $(RAYLIB_PATH)/src clean
 
 clean:
