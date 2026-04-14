@@ -1,6 +1,5 @@
 name: CD | Cyberia mmo client | remote ssh
 on:
-  push:
   workflow_dispatch:
     inputs:
       job:
@@ -18,10 +17,7 @@ jobs:
   deploy:
     if: >-
       github.repository == 'underpostnet/cyberia-client'
-      && (
-        startsWith(github.event.head_commit.message, 'cd(ssh-cyberia-client)')
-        || (github.event_name == 'workflow_dispatch' && github.event.inputs.job == 'deploy')
-      )
+      && github.event.inputs.job == 'deploy'
     name: Remote SSH deployment
     runs-on: ubuntu-latest
     steps:
