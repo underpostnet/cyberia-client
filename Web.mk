@@ -36,7 +36,7 @@ LDFLAGS += -sEXPORTED_FUNCTIONS='["_main","_c_send_ws_message","_c_open_dialogue
 WEB_SHELL := $(SRC_DIR)/shell.html
 
 OUTPUT := $(target_output_dir)/index.html
-ASSETS := $(SRC_DIR)/public/splash.png@splash.png
+ASSETS := $(ASSETS_DIR)/splash.png@splash.png
 
 #---------------------------------------------------------------------------------------------
 # Util variables
@@ -47,7 +47,7 @@ OBJS	+= $(target_build_dir)/libraylib.web.a
 #---------------------------------------------------------------------------------------------
 # Platform Specific targets
 
-.PHONY: all serve-development serve-production libraylib web
+.PHONY: all clean serve-development serve-production
 
 all: link
 
@@ -60,7 +60,7 @@ serve-production:
 
 link: $(OBJS)
 	@mkdir -p $(target_output_dir)
-	@cp $(SRC_DIR)/public/favicon.ico $(target_output_dir)/favicon.ico
+	@cp $(ASSETS_DIR)/favicon.ico $(target_output_dir)/favicon.ico
 	$(CC) -o $(OUTPUT) $(OBJS) $(LDFLAGS) \
 		-s USE_GLFW=3 \
 		--shell-file $(WEB_SHELL) \

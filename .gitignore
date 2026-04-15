@@ -1,6 +1,7 @@
 *
 
 !lib/**
+!assets/**
 !scripts/**
 !github/**
 
