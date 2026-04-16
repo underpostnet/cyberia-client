@@ -4,6 +4,7 @@
 #include <string.h>
 #include <math.h>
 #include <raylib.h>
+#include <assert.h>
 
 // Global game state instance
 GameState g_game_state = {0};

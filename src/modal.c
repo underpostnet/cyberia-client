@@ -1,6 +1,7 @@
 #include "modal.h"
 #include <stdio.h>
 #include <string.h>
+#include <assert.h>
 
 int modal_init_struct(Modal* modal) {
     if (!modal) return -1;

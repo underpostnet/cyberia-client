@@ -1,10 +1,11 @@
 #include "object_layers_management.h"
 #include "config.h"
-#include "cJSON.h"
+#include <cJSON.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include "helper.h"
+#include <assert.h>
 
 #include "js/services.h"
 

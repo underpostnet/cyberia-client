@@ -1,5 +1,6 @@
 #include "serial.h"
 #include <string.h>
+#include <assert.h>
 
 /* ============================================================================
  * Helper Utilities Implementation

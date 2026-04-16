@@ -10,6 +10,7 @@
 #include "ol_stack_ico.h"
 #include "ol_as_animated_ico.h"
 #include "layer_z_order.h"
+#include <assert.h>
 
 #define OL_STACK_ICO_MAX_LAYERS 32
 

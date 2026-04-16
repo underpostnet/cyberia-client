@@ -15,6 +15,7 @@
 #include "ol_as_animated_ico.h"
 #include <raylib.h>
 #include <string.h>
+#include <assert.h>
 
 /* ── Internal helpers ─────────────────────────────────────────────────── */
 

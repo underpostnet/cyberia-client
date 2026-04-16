@@ -1,5 +1,6 @@
 #include "network.h"
 #include <stdio.h>
+#include <assert.h>
 
 #include <emscripten/websocket.h>
 

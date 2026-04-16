@@ -26,6 +26,7 @@
 #include <raylib.h>
 #include <string.h>
 #include <stdio.h>
+#include <assert.h>
 
 /* ── Module state ─────────────────────────────────────────────────────── */
 

@@ -72,10 +72,6 @@ void input_cleanup(void);
  */
 void input_handle_window_resize(int width, int height);
 
-// ============================================================================
-// Internal - Candidates for removal
-// ============================================================================
-
 /**
  * @brief Process input events and generate game actions
  *
@@ -83,71 +79,5 @@ void input_handle_window_resize(int width, int height);
  * into appropriate game actions (network messages, state changes, etc.)
  */
 void input_process_events(void);
-
-/**
- * @brief Add an input event to the queue
- * @param event Event to add
- * @return 0 on success, -1 if queue is full
- */
-int input_add_event(InputEvent event);
-
-/**
- * @brief Clear all events from the input queue
- */
-void input_clear_events(void);
-
-/**
- * @brief Get current mouse position in world coordinates
- * @return World position vector
- */
-Vector2 input_get_mouse_world_pos(void);
-
-/**
- * @brief Handle mouse wheel scroll event
- * @param wheel_move Scroll amount (positive = up, negative = down)
- */
-void input_handle_mouse_wheel(float wheel_move);
-
-/**
- * @brief Handle keyboard key press event
- * @param key Key that was pressed
- */
-void input_handle_key_press(int key);
-
-/**
- * @brief Send TAP event to server (player_action with target coordinates)
- * @param target_pos Target position in world coordinates
- * @return 0 on success, -1 on failure
- */
-int input_send_tap(Vector2 target_pos);
-
-/**
- * @brief Toggle debug mode
- */
-void input_toggle_debug_mode(void);
-
-/**
- * @brief Set camera zoom level
- * @param zoom New zoom level (1.0 = normal, >1.0 = zoomed in, <1.0 = zoomed out)
- */
-void input_set_camera_zoom(float zoom);
-
-/**
- * @brief Find entity at screen position
- * @param screen_pos Position in screen coordinates
- * @param entity_id Output buffer for entity ID
- * @param id_size Size of entity_id buffer
- * @return true if entity found, false otherwise
- */
-bool input_find_entity_at_position(Vector2 screen_pos, char* entity_id, size_t id_size);
-
-/**
- * @brief Check if screen position is over UI element
- * @param screen_pos Position in screen coordinates
- * @return true if over UI, false otherwise
- */
-bool input_is_over_ui(Vector2 screen_pos);
-
-
 
 #endif // INPUT_H

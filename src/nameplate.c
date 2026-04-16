@@ -7,6 +7,7 @@
 #include <ctype.h>
 #include <stdio.h>
 #include <string.h>
+#include <assert.h>
 
 /**
  * @brief Copy src into dst, uppercasing the first character.

@@ -12,6 +12,7 @@
 #include <string.h>
 #include <stdio.h>
 #include <math.h>
+#include <assert.h>
 
 /* ── Little-endian readers ─────────────────────────────────────── */
 

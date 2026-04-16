@@ -3,77 +3,34 @@
 #include <string.h>
 
 ObjectLayer* create_object_layer(void) {
-    ObjectLayer* layer = (ObjectLayer*)malloc(sizeof(ObjectLayer));
+    ObjectLayer* layer = (ObjectLayer*)calloc(1, sizeof(ObjectLayer));
     if (layer) {
-        // Initialize with zeros
-        memset(layer, 0, sizeof(ObjectLayer));
-
-        // Set default values for stats
-        layer->data.stats.effect = 0;
-        layer->data.stats.resistance = 0;
-        layer->data.stats.agility = 0;
-        layer->data.stats.range = 0;
-        layer->data.stats.intelligence = 0;
-        layer->data.stats.utility = 0;
-
-        // Set default values for render (IPFS CIDs — empty by default)
-        layer->data.render.cid[0] = '\0';
-        layer->data.render.metadata_cid[0] = '\0';
-
-        // Set default values for ledger
         layer->data.ledger.type = LEDGER_TYPE_OFF_CHAIN;
-        layer->data.ledger.address[0] = '\0';
-
-        // Set default values for item (empty strings)
-        layer->data.item.id[0] = '\0';
-        layer->data.item.type[0] = '\0';
-        layer->data.item.description[0] = '\0';
-        layer->data.item.activable = false;
-
-        // Initialize sha256 to empty string
-        layer->sha256[0] = '\0';
-
-        // Animation metadata (from populated objectLayerRenderFramesId)
         layer->frame_duration = 100; // default 100ms per frame
-        layer->is_stateless = false;
     }
     return layer;
 }
 
 void free_object_layer(ObjectLayer* layer) {
-    if (layer) {
-        // No dynamic allocations to free since we use fixed-size arrays
-        free(layer);
-    }
+    free(layer);
 }
 
 AtlasSpriteSheetData* create_atlas_sprite_sheet_data(void) {
-    AtlasSpriteSheetData* data = (AtlasSpriteSheetData*)malloc(sizeof(AtlasSpriteSheetData));
+    AtlasSpriteSheetData* data = (AtlasSpriteSheetData*)calloc(1, sizeof(AtlasSpriteSheetData));
     if (data) {
-        memset(data, 0, sizeof(AtlasSpriteSheetData));
-        data->item_key[0] = '\0';
-        data->file_id[0] = '\0';
-        data->atlas_width = 0;
-        data->atlas_height = 0;
         data->cell_pixel_dim = 20; // Default from engine schema
     }
     return data;
 }
 
 void free_atlas_sprite_sheet_data(AtlasSpriteSheetData* data) {
-    if (data) {
-        // No dynamic allocations to free since we use fixed-size arrays
-        free(data);
-    }
+    free(data);
 }
 
-const DirectionFrameData* atlas_get_direction_frames(
-    const AtlasSpriteSheetData* atlas,
-    const char* dir_str
-) {
+const DirectionFrameData* atlas_get_direction_frames(const AtlasSpriteSheetData* atlas, const char* dir_str) {
     if (!atlas || !dir_str) return NULL;
 
-    if (strcmp(dir_str, "up_idle") == 0)             return &atlas->up_idle;
+    if (strcmp(dir_str, "up_idle") == 0)              return &atlas->up_idle;
     if (strcmp(dir_str, "down_idle") == 0)            return &atlas->down_idle;
     if (strcmp(dir_str, "right_idle") == 0)           return &atlas->right_idle;
     if (strcmp(dir_str, "left_idle") == 0)            return &atlas->left_idle;

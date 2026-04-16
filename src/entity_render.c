@@ -5,6 +5,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <stdio.h>
+#include <assert.h>
 #include "helper.h"
 
 #define HASH_TABLE_SIZE 1024
@@ -59,7 +60,7 @@ static AnimationEntry* create_animation_entry(const char* key) {
 }
 
 static AnimationState* get_animation_state(EntityRender* render, const char* entity_id, const char* item_id) {
-    if (!render || !entity_id || !item_id) return NULL;
+    assert(render && entity_id && item_id);
 
     char key[256];
     snprintf(key, sizeof(key), "%s_%s", entity_id, item_id);
@@ -227,7 +228,7 @@ void draw_entity_layers(
     float cell_size,
     Color fallback_color
 ) {
-    if (!render || !entity_id) return;
+    assert(render && entity_id);
 
     if (cell_size <= 0.0f) cell_size = 12.0f;
 
@@ -309,12 +310,7 @@ void draw_entity_layers(
     }
 
     // Sort layers by priority (lower z-order first)
-    qsort(
-        layers_to_render,
-        render_count,
-        sizeof(LayerRenderInfo),
-        compare_layer_priority
-    );
+    qsort(layers_to_render, render_count, sizeof(LayerRenderInfo), compare_layer_priority);
 
     // ========================================================================
     // Texture Availability Check & Animation Update
@@ -324,10 +320,8 @@ void draw_entity_layers(
     bool all_textures_ready = true;
 
     // Per-layer rendering data
-    Texture2D layer_textures[MAX_LAYERS_PER_ENTITY];
-    Rectangle layer_source_rects[MAX_LAYERS_PER_ENTITY];
-    memset(layer_textures, 0, sizeof(layer_textures));
-    memset(layer_source_rects, 0, sizeof(layer_source_rects));
+    Texture2D layer_textures[MAX_LAYERS_PER_ENTITY] = { 0 };
+    Rectangle layer_source_rects[MAX_LAYERS_PER_ENTITY] = { 0 };
 
     for (int i = 0; i < render_count; i++) {
         ObjectLayer* layer = layers_to_render[i].layer;

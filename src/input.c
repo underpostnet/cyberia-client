@@ -2,6 +2,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <assert.h>
 
 // TODO: Remove deps
 #include "serial.h"
@@ -13,9 +14,18 @@
 #include "js/interact_bridge.h"
 #include "game_render.h"
 
-void input_handle_tap(InputEvent event);
+static void input_handle_tap(InputEvent event);
+static int input_add_event(InputEvent event);
+static void input_clear_events(void);
+static Vector2 input_get_mouse_world_pos(void);
+static void input_handle_mouse_wheel(float wheel_move);
+static void input_handle_key_press(int key);
+static int input_send_tap(Vector2 target_pos);
+static void input_toggle_debug_mode(void);
+static void input_set_camera_zoom(float zoom);
+static bool input_find_entity_at_position(Vector2 screen_pos, char* entity_id, size_t id_size);
+static bool input_is_over_ui(Vector2 screen_pos);
 
-// Global input manager instance
 InputManager g_input = {0};
 
 void input_update(void) {
@@ -80,7 +90,7 @@ void input_process_events(void) {
     input_clear_events();
 }
 
-int input_add_event(InputEvent event) {
+static int input_add_event(InputEvent event) {
     if (g_input.event_count >= 32) {
         return -1; // Queue full
     }
@@ -91,15 +101,15 @@ int input_add_event(InputEvent event) {
     return 0;
 }
 
-void input_clear_events(void) {
+static void input_clear_events(void) {
     g_input.event_count = 0;
 }
 
-Vector2 input_get_mouse_world_pos(void) {
+static Vector2 input_get_mouse_world_pos(void) {
     return GetScreenToWorld2D(g_input.mouse_screen_pos, g_game_state.camera);
 }
 
-void input_handle_tap(InputEvent event) {
+static void input_handle_tap(InputEvent event) {
     Vector2 screen_pos = event.screen_position;
     int mx = (int)screen_pos.x;
     int my = (int)screen_pos.y;
@@ -158,22 +168,18 @@ void input_handle_tap(InputEvent event) {
     input_send_tap(event.world_position);
 }
 
-void input_handle_mouse_wheel(float wheel_move) {
-    InputEvent event = {0};
-    event.timestamp = GetTime();
-    if (wheel_move > 0) {
-        event.type = INPUT_EVENT_ZOOM_IN;
-    } else if (wheel_move < 0) {
-        event.type = INPUT_EVENT_ZOOM_OUT;
-    }
+static void input_handle_mouse_wheel(float wheel_move) {
+    InputEvent event = {
+        .timestamp = GetTime(),
+        .type = wheel_move >= 0 ? INPUT_EVENT_ZOOM_IN : INPUT_EVENT_ZOOM_OUT
+    };
     input_add_event(event);
 }
 
-void input_handle_key_press(int key) {
+static void input_handle_key_press(int key) {
     printf("[INPUT] Key pressed: %d\n", key);
 
-    InputEvent event = {0};
-    event.timestamp = GetTime();
+    InputEvent event = { .timestamp = GetTime(), };
 
     switch (key) {
         case KEY_H:
@@ -205,7 +211,7 @@ void input_handle_window_resize(int width, int height) {
     g_game_state.camera.offset.y = height / 2.0f;
 }
 
-int input_send_tap(Vector2 target_pos) {
+static int input_send_tap(Vector2 target_pos) {
     // FrozenInteractionState — server says we're frozen, drop the tap.
     if (g_game_state.frozen) return 0;
 
@@ -229,12 +235,12 @@ int input_send_tap(Vector2 target_pos) {
     return -1;
 }
 
-void input_toggle_debug_mode(void) {
+static void input_toggle_debug_mode(void) {
     g_game_state.dev_ui = !g_game_state.dev_ui;
     printf("[INPUT] Debug mode %s\n", g_game_state.dev_ui ? "enabled" : "disabled");
 }
 
-void input_set_camera_zoom(float zoom) {
+static void input_set_camera_zoom(float zoom) {
     // Clamp zoom to reasonable range
     if (zoom < 0.1f) zoom = 0.1f;
     if (zoom > 5.0f) zoom = 5.0f;
@@ -246,7 +252,7 @@ void input_set_camera_zoom(float zoom) {
 }
 
 
-bool input_find_entity_at_position(Vector2 screen_pos, char* entity_id, size_t id_size) {
+static bool input_find_entity_at_position(Vector2 screen_pos, char* entity_id, size_t id_size) {
     Vector2 world_pos = GetScreenToWorld2D(screen_pos, g_game_state.camera);
     float cell_size = g_game_state.cell_size > 0 ? g_game_state.cell_size : 12.0f;
 
@@ -300,7 +306,7 @@ bool input_find_entity_at_position(Vector2 screen_pos, char* entity_id, size_t i
     return false;
 }
 
-bool input_is_over_ui(Vector2 screen_pos) {
+static bool input_is_over_ui(Vector2 screen_pos) {
     // Dialogue modal blocks all world interaction when open
     if (modal_dialogue_is_open()) return true;
     // JS interact overlay blocks world interaction when open

@@ -3,6 +3,7 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include "helper.h"
+#include <assert.h>
 
 #include "js/services.h"
 
@@ -52,10 +53,8 @@ TextureManager* create_texture_manager(void) {
 }
 
 void destroy_texture_manager(TextureManager* manager) {
-    if (manager) {
-        unload_all_textures(manager);
-        free(manager);
-    }
+    unload_all_textures(manager);
+    free(manager);
 }
 
 Texture2D get_texture(TextureManager* manager, const char* identifier) {

@@ -6,6 +6,7 @@
 #include "layer_z_order.h"
 #include <stdlib.h>
 #include <string.h>
+#include <assert.h>
 
 int layer_z_priority(const char* type) {
     if (!type) return 50;

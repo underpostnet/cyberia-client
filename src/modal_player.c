@@ -18,6 +18,7 @@
 #include <stdio.h>
 #include <string.h>
 #include <math.h>
+#include <assert.h>
 
 /* Global instance */
 ModalPlayer g_modal_player = {0};

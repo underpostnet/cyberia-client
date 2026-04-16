@@ -12,6 +12,7 @@
 #include "ui_icon.h"
 #include "raylib.h"
 #include <stdio.h>
+#include <assert.h>
 
 
 // Default configuration for fallback rendering

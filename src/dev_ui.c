@@ -4,6 +4,7 @@
 #include "client.h"
 #include <stdio.h>
 #include <string.h>
+#include <assert.h>
 
 const char* direction_to_string(Direction dir) {
     switch (dir) {

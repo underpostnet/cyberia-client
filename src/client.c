@@ -7,6 +7,7 @@
 #include "serial.h"
 #include <stdio.h>
 #include <string.h>
+#include <assert.h>
 
 // Global client state
 static struct {

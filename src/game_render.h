@@ -72,7 +72,6 @@ typedef struct {
 
     // Font
     Font game_font;
-    bool font_loaded;
 
     // Performance tracking
     int frames_rendered;

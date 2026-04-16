@@ -17,6 +17,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <assert.h>
 
 /* ── Zoom buttons ─────────────────────────────────────────────────────── */
 #define ZOOM_BTN_SIZE   44
@@ -94,9 +95,6 @@ int game_render_init(int screen_width, int screen_height) {
     g_renderer.frames_rendered = 0;
     g_renderer.last_fps_update = GetTime();
     g_renderer.current_fps = 60.0f;
-
-    // Font loading (using default for now)
-    g_renderer.font_loaded = false; // Will use default font
 
     // Initialize object layer rendering system
     g_texture_manager = create_texture_manager();
@@ -511,11 +509,12 @@ void game_render_entities(void) {
         float cell_size = g_game_state.cell_size > 0 ? g_game_state.cell_size : 12.0f;
 
         // Draw simple rectangles as fallback to ensure entities are visible
-        Rectangle rect;
-        rect.x = g_game_state.player.base.interp_pos.x * cell_size;
-        rect.y = g_game_state.player.base.interp_pos.y * cell_size;
-        rect.width = g_game_state.player.base.dims.x * cell_size;
-        rect.height = g_game_state.player.base.dims.y * cell_size;
+        Rectangle rect ={
+            .x = g_game_state.player.base.interp_pos.x * cell_size,
+            .y = g_game_state.player.base.interp_pos.y * cell_size,
+            .width = g_game_state.player.base.dims.x * cell_size,
+            .height = g_game_state.player.base.dims.y * cell_size
+        };
         DrawRectangleRec(rect, g_game_state.colors.player);
 
         // Also draw other players as rectangles
@@ -967,27 +966,20 @@ void game_render_update_effects(float delta_time) {
 void game_render_cleanup(void) {
 
     // Cleanup entity rendering system
-    if (g_entity_render) {
-        destroy_entity_render(g_entity_render);
-        g_entity_render = NULL;
-    }
+    destroy_entity_render(g_entity_render);
+    g_entity_render = NULL;
 
     // Cleanup object layers manager
-    if (g_object_layers_manager) {
-        destroy_object_layers_manager(g_object_layers_manager);
-        g_object_layers_manager = NULL;
-    }
+    destroy_object_layers_manager(g_object_layers_manager);
+    g_object_layers_manager = NULL;
 
     // Cleanup texture manager
-    if (g_texture_manager) {
-        destroy_texture_manager(g_texture_manager);
-        g_texture_manager = NULL;
-    }
+    destroy_texture_manager(g_texture_manager);
+    g_texture_manager = NULL;
 
     // Unload font if loaded
-    if (g_renderer.font_loaded) {
+    if (IsFontValid(g_renderer.game_font)) {
         UnloadFont(g_renderer.game_font);
-        g_renderer.font_loaded = false;
     }
 
     ui_icon_cleanup();
