@@ -49,11 +49,10 @@ typedef struct {
 typedef struct {
     // Current mouse state
     Vector2 mouse_screen_pos;
-    bool mouse_left_down;
 
     // Input event queue
     InputEvent event_queue[32];
-    int event_count;
+    uint32_t event_count;
 } InputManager;
 
 
@@ -90,7 +89,7 @@ void input_process_events(void);
  * @param event Event to add
  * @return 0 on success, -1 if queue is full
  */
-int input_add_event(const InputEvent* event);
+int input_add_event(InputEvent event);
 
 /**
  * @brief Clear all events from the input queue
@@ -102,13 +101,6 @@ void input_clear_events(void);
  * @return World position vector
  */
 Vector2 input_get_mouse_world_pos(void);
-
-/**
- * @brief Handle mouse click event
- * @param button Mouse button that was clicked
- * @param screen_pos Click position in screen coordinates
- */
-void input_handle_mouse_click(int button, Vector2 screen_pos);
 
 /**
  * @brief Handle mouse wheel scroll event

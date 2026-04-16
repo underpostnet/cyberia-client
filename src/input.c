@@ -13,18 +13,23 @@
 #include "js/interact_bridge.h"
 #include "game_render.h"
 
+void input_handle_tap(InputEvent event);
+
 // Global input manager instance
 InputManager g_input = {0};
 
 void input_update(void) {
     g_input.mouse_screen_pos = GetMousePosition();
 
-    // Update mouse button states
-    g_input.mouse_left_down = IsMouseButtonDown(MOUSE_BUTTON_LEFT);
-
     // Handle mouse clicks
     if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
-        input_handle_mouse_click(MOUSE_BUTTON_LEFT, g_input.mouse_screen_pos);
+        InputEvent event = {
+            .type = INPUT_EVENT_TAP,
+            .screen_position = g_input.mouse_screen_pos,
+            .world_position = GetScreenToWorld2D(g_input.mouse_screen_pos, g_game_state.camera),
+            .timestamp = GetTime()
+        };
+        input_add_event(event);
     }
 
     // Handle mouse wheel
@@ -38,23 +43,20 @@ void input_update(void) {
     if (key != 0) {
         input_handle_key_press(key);
     }
-
-    // Process queued events
-    input_process_events();
 }
 
 void input_cleanup(void) {
-    // Clear input state
+    // Note InputManager is Stack only, this could be skipped
     memset(&g_input, 0, sizeof(InputManager));
 }
 
 void input_process_events(void) {
-    for (int i = 0; i < g_input.event_count; i++) {
-        InputEvent* event = &g_input.event_queue[i];
+    for (uint32_t i = 0; i < g_input.event_count; i++) {
+        InputEvent event = g_input.event_queue[i];
 
-        switch (event->type) {
+        switch (event.type) {
             case INPUT_EVENT_TAP:
-                input_send_tap(event->world_position);
+                input_handle_tap(event);
                 break;
             case INPUT_EVENT_TOGGLE_DEBUG:
                 input_toggle_debug_mode();
@@ -78,12 +80,12 @@ void input_process_events(void) {
     input_clear_events();
 }
 
-int input_add_event(const InputEvent* event) {
-    if (!event || g_input.event_count >= 32) {
-        return -1; // Queue full or invalid event
+int input_add_event(InputEvent event) {
+    if (g_input.event_count >= 32) {
+        return -1; // Queue full
     }
 
-    g_input.event_queue[g_input.event_count] = *event;
+    g_input.event_queue[g_input.event_count] = event;
     g_input.event_count++;
 
     return 0;
@@ -97,12 +99,13 @@ Vector2 input_get_mouse_world_pos(void) {
     return GetScreenToWorld2D(g_input.mouse_screen_pos, g_game_state.camera);
 }
 
-void input_handle_mouse_click(int button, Vector2 screen_pos) {
-    printf("[INPUT] Mouse click: button=%d, pos=(%.1f, %.1f)\n",
-           button, screen_pos.x, screen_pos.y);
-
+void input_handle_tap(InputEvent event) {
+    Vector2 screen_pos = event.screen_position;
     int mx = (int)screen_pos.x;
     int my = (int)screen_pos.y;
+
+    printf("[INPUT] Mouse click: button=%d, pos=(%.1f, %.1f)\n",
+           MOUSE_BUTTON_LEFT, screen_pos.x, screen_pos.y);
 
     // Dialogue modal consumes all clicks when open (highest priority —
     // the JS interact panel hides itself while dialogue is active)
@@ -123,12 +126,12 @@ void input_handle_mouse_click(int button, Vector2 screen_pos) {
     }
 
     // Interaction bubble column: clicking opens the JS interact overlay
-    if (button == MOUSE_BUTTON_LEFT) {
-        if (interaction_bubble_handle_click(mx, my, true)) return;
+    if (interaction_bubble_handle_click(mx, my, true)) {
+        return;
     }
 
     // Inventory bar tap: open modal or scroll
-    if (button == MOUSE_BUTTON_LEFT) {
+    {
         int hit = inventory_bar_get_tapped_slot(mx, my);
         if (hit >= 0) {
             inventory_modal_open(hit);
@@ -137,7 +140,7 @@ void input_handle_mouse_click(int button, Vector2 screen_pos) {
     }
 
     // Zoom buttons (above inventory bar)
-    if (button == MOUSE_BUTTON_LEFT) {
+    {
         int zh = game_render_zoom_btn_hit(mx, my);
         if (zh != 0) {
             float factor = (zh > 0) ? 1.1f : 0.9f;
@@ -146,25 +149,13 @@ void input_handle_mouse_click(int button, Vector2 screen_pos) {
         }
     }
 
-    Vector2 world_pos = GetScreenToWorld2D(screen_pos, g_game_state.camera);
-
     // Check if click is over UI
     if (input_is_over_ui(screen_pos)) {
         printf("[INPUT] Click over UI, ignoring world interaction\n");
         return;
     }
 
-    if (button == MOUSE_BUTTON_LEFT) {
-        // Every left click is a TAP — the fundamental game event.
-        // The server independently computes skills (probability-based) and
-        // movement (agility-based rendering effect) from each TAP.
-        InputEvent event = {0};
-        event.type = INPUT_EVENT_TAP;
-        event.screen_position = screen_pos;
-        event.world_position = world_pos;
-        event.timestamp = GetTime();
-        input_add_event(&event);
-    }
+    input_send_tap(event.world_position);
 }
 
 void input_handle_mouse_wheel(float wheel_move) {
@@ -175,7 +166,7 @@ void input_handle_mouse_wheel(float wheel_move) {
     } else if (wheel_move < 0) {
         event.type = INPUT_EVENT_ZOOM_OUT;
     }
-    input_add_event(&event);
+    input_add_event(event);
 }
 
 void input_handle_key_press(int key) {
@@ -187,17 +178,17 @@ void input_handle_key_press(int key) {
     switch (key) {
         case KEY_H:
             event.type = INPUT_EVENT_TOGGLE_HUD;
-            input_add_event(&event);
+            input_add_event(event);
             break;
 
         case KEY_F3:
             event.type = INPUT_EVENT_TOGGLE_DEBUG;
-            input_add_event(&event);
+            input_add_event(event);
             break;
 
         case KEY_ESCAPE:
             event.type = INPUT_EVENT_CANCEL_ACTION;
-            input_add_event(&event);
+            input_add_event(event);
             break;
 
         default:

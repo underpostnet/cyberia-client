@@ -23,6 +23,9 @@ void main_loop(void) {
     // Update input system at the beggining of the frame
     input_update();
 
+    // Process queued events
+    input_process_events();
+
     // update frame state
     game_state_update_interpolation(dt);
 
