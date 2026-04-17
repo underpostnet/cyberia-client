@@ -178,7 +178,7 @@ static bool draw_small_btn(Rectangle r, const char* label, Color bg, bool select
 /* dir_has_frames checks if the atlas has any frames for dir+mode combo. */
 static bool dir_has_frames(AtlasSpriteSheetData* atlas,
                             const char* dir, const char* mode) {
-    if (!atlas) return false;
+    assert(atlas);
     char full[48];
     snprintf(full, sizeof(full), "%s_%s", dir, mode);
     const DirectionFrameData* dfd = atlas_get_direction_frames(atlas, full);

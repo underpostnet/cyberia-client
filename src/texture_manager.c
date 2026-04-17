@@ -112,7 +112,7 @@ Texture2D get_texture(TextureManager* manager, const char* identifier) {
 }
 
 void unload_all_textures(TextureManager* manager) {
-    if (!manager) return;
+    assert(manager);
 
     for (int i = 0; i < HASH_TABLE_SIZE; i++) {
         TextureEntry* entry = manager->buckets[i];

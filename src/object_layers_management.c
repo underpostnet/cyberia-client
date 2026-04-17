@@ -105,7 +105,7 @@ static bool json_get_bool_safe(cJSON* item, const char* key, bool default_val) {
 // --- ObjectLayer JSON Parsing ---
 
 static void parse_stats(cJSON* stats_json, Stats* stats) {
-    if (!stats_json || !stats) return;
+    assert(stats_json && stats);
     stats->effect = json_get_int_safe(stats_json, "effect", 0);
     stats->resistance = json_get_int_safe(stats_json, "resistance", 0);
     stats->agility = json_get_int_safe(stats_json, "agility", 0);
@@ -121,7 +121,7 @@ static void parse_stats(cJSON* stats_json, Stats* stats) {
  *   { "cid": "Qm...", "metadataCid": "Qm..." }
  */
 static void parse_render(cJSON* render_json, Render* render) {
-    if (!render_json || !render) return;
+    assert(render_json && render);
 
     char* cid = json_get_string_safe(render_json, "cid", "");
     char* metadata_cid = json_get_string_safe(render_json, "metadataCid", "");
@@ -142,7 +142,7 @@ static void parse_render(cJSON* render_json, Render* render) {
  *   { "type": "ERC20" | "ERC721" | "OFF_CHAIN", "address": "0x..." }
  */
 static void parse_ledger(cJSON* ledger_json, Ledger* ledger) {
-    if (!ledger_json || !ledger) return;
+    assert(ledger_json && ledger);
 
     char* type_str = json_get_string_safe(ledger_json, "type", "OFF_CHAIN");
     ledger->type = ledger_type_from_string(type_str);
@@ -155,7 +155,7 @@ static void parse_ledger(cJSON* ledger_json, Ledger* ledger) {
 }
 
 static void parse_item(cJSON* item_json, Item* item) {
-    if (!item_json || !item) return;
+    assert(item_json && item);
 
     char* id = json_get_string_safe(item_json, "id", "");
     char* type = json_get_string_safe(item_json, "type", "");
@@ -172,7 +172,7 @@ static void parse_item(cJSON* item_json, Item* item) {
 }
 
 static void parse_object_layer_data(cJSON* data_json, ObjectLayerData* data) {
-    if (!data_json || !data) return;
+    assert(data_json && data);
 
     parse_stats(cJSON_GetObjectItem(data_json, "stats"), &data->stats);
     parse_item(cJSON_GetObjectItem(data_json, "item"), &data->item);
@@ -189,7 +189,7 @@ static void parse_object_layer_data(cJSON* data_json, ObjectLayerData* data) {
  *   { "x": N, "y": N, "width": N, "height": N, "frameIndex": N }
  */
 static void parse_direction_frame_data(cJSON* array_json, DirectionFrameData* dfd) {
-    if (!dfd) return;
+    assert(dfd);
     dfd->count = 0;
 
     if (!array_json || !cJSON_IsArray(array_json)) return;
@@ -214,7 +214,7 @@ static void parse_direction_frame_data(cJSON* array_json, DirectionFrameData* df
 // --- ObjectLayer Cache Operations ---
 
 static void cache_object_layer(ObjectLayersManager* manager, const char* item_id, ObjectLayer* layer) {
-    if (!manager || !item_id) return;
+    assert(manager && item_id);
 
     unsigned long index = hash_string(item_id) % HASH_TABLE_SIZE;
 
@@ -240,7 +240,7 @@ static void cache_object_layer(ObjectLayersManager* manager, const char* item_id
 }
 
 static ObjectLayer* lookup_cached_layer(ObjectLayersManager* manager, const char* item_id) {
-    if (!manager || !item_id) return NULL;
+    assert(manager && item_id);
 
     unsigned long index = hash_string(item_id) % HASH_TABLE_SIZE;
     ObjectLayerEntry* entry = manager->layer_buckets[index];
@@ -257,7 +257,7 @@ static ObjectLayer* lookup_cached_layer(ObjectLayersManager* manager, const char
 // --- Atlas Cache Operations ---
 
 static void cache_atlas_data(ObjectLayersManager* manager, const char* item_key, AtlasSpriteSheetData* atlas) {
-    if (!manager || !item_key) return;
+    assert(manager && item_key);
 
     unsigned long index = hash_string(item_key) % HASH_TABLE_SIZE;
 
@@ -283,7 +283,7 @@ static void cache_atlas_data(ObjectLayersManager* manager, const char* item_key,
 }
 
 static AtlasSpriteSheetData* lookup_cached_atlas(ObjectLayersManager* manager, const char* item_key) {
-    if (!manager || !item_key) return NULL;
+    assert(manager && item_key);
 
     unsigned long index = hash_string(item_key) % HASH_TABLE_SIZE;
     AtlasEntry* entry = manager->atlas_buckets[index];
@@ -300,7 +300,7 @@ static AtlasSpriteSheetData* lookup_cached_atlas(ObjectLayersManager* manager, c
 // --- Atlas Texture Cache Operations ---
 
 static AtlasTextureEntry* lookup_tex_entry(ObjectLayersManager* manager, const char* item_key) {
-    if (!manager || !item_key) return NULL;
+    assert(manager && item_key);
 
     unsigned long index = hash_string(item_key) % HASH_TABLE_SIZE;
     AtlasTextureEntry* entry = manager->tex_buckets[index];
@@ -315,7 +315,7 @@ static AtlasTextureEntry* lookup_tex_entry(ObjectLayersManager* manager, const c
 }
 
 static AtlasTextureEntry* create_tex_entry(ObjectLayersManager* manager, const char* item_key) {
-    if (!manager || !item_key) return NULL;
+    assert(manager && item_key);
 
     AtlasTextureEntry* entry = (AtlasTextureEntry*)malloc(sizeof(AtlasTextureEntry));
     if (!entry) return NULL;
@@ -476,14 +476,14 @@ void destroy_object_layers_manager(ObjectLayersManager* manager) {
 }
 
 ObjectLayer* get_or_fetch_object_layer(ObjectLayersManager* manager, const char* item_id) {
-    if (!manager || !item_id) return NULL;
+    assert(manager && item_id);
 
     // Cache-only lookup — metadata is populated from WebSocket "metadata" message.
     return lookup_cached_layer(manager, item_id);
 }
 
 AtlasSpriteSheetData* get_or_fetch_atlas_data(ObjectLayersManager* manager, const char* item_key) {
-    if (!manager || !item_key) return NULL;
+    assert(manager && item_key);
 
     // Cache-only lookup — metadata is populated from WebSocket "metadata" message.
     // Atlas texture (PNG blob) is fetched asynchronously via REST when cache is populated.
@@ -594,7 +594,7 @@ void obj_layers_mgr_schedule_atlas_fetch(ObjectLayersManager* manager, const cha
 }
 
 void populate_object_layer_from_json(ObjectLayersManager* manager, const char* item_id, const cJSON* ol_json) {
-    if (!manager || !item_id || !ol_json) return;
+    assert(manager && item_id && ol_json);
 
     // Parse OL metadata from the WS metadata JSON shape
     // (sha256, data.{stats,item,ledger,render}, frame_duration, is_stateless)
@@ -625,7 +625,7 @@ void populate_object_layer_from_json(ObjectLayersManager* manager, const char* i
  * The Go server sends frames with JSON keys like "up_idle", "down_walking", etc.
  */
 static void parse_ws_direction_frames(cJSON* frames_json, AtlasSpriteSheetData* atlas) {
-    if (!frames_json || !atlas) return;
+    assert(frames_json && atlas);
     parse_direction_frame_data(cJSON_GetObjectItem(frames_json, "up_idle"), &atlas->up_idle);
     parse_direction_frame_data(cJSON_GetObjectItem(frames_json, "down_idle"), &atlas->down_idle);
     parse_direction_frame_data(cJSON_GetObjectItem(frames_json, "right_idle"), &atlas->right_idle);
@@ -647,7 +647,7 @@ static void parse_ws_direction_frames(cJSON* frames_json, AtlasSpriteSheetData* 
 }
 
 void populate_atlas_from_json(ObjectLayersManager* manager, const char* item_key, const cJSON* atlas_json) {
-    if (!manager || !item_key || !atlas_json) return;
+    assert(manager && item_key && atlas_json);
 
     AtlasSpriteSheetData* atlas = create_atlas_sprite_sheet_data();
     if (!atlas) return;

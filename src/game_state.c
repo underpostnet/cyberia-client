@@ -119,7 +119,7 @@ void game_state_update_interpolation(float delta_time) {
 }
 
 PlayerState* game_state_find_player(const char* id) {
-    if (!id) return NULL;
+    assert(id);
 
     for (int i = 0; i < g_game_state.other_player_count; i++) {
         if (strcmp(g_game_state.other_players[i].base.id, id) == 0) {
@@ -130,7 +130,7 @@ PlayerState* game_state_find_player(const char* id) {
 }
 
 BotState* game_state_find_bot(const char* id) {
-    if (!id) return NULL;
+    assert(id);
 
     for (int i = 0; i < g_game_state.bot_count; i++) {
         if (strcmp(g_game_state.bots[i].base.id, id) == 0) {
@@ -141,7 +141,7 @@ BotState* game_state_find_bot(const char* id) {
 }
 
 int game_state_update_player(const PlayerState* player) {
-    if (!player) return -1;
+    assert(player);
 
     PlayerState* existing = game_state_find_player(player->base.id);
     if (existing) {
@@ -167,7 +167,7 @@ int game_state_update_player(const PlayerState* player) {
 }
 
 int game_state_update_bot(const BotState* bot) {
-    if (!bot) return -1;
+    assert(bot);
 
     BotState* existing = game_state_find_bot(bot->base.id);
     if (existing) {
@@ -193,7 +193,7 @@ int game_state_update_bot(const BotState* bot) {
 }
 
 void game_state_remove_player(const char* id) {
-    if (!id) return;
+    assert(id);
 
     for (int i = 0; i < g_game_state.other_player_count; i++) {
         if (strcmp(g_game_state.other_players[i].base.id, id) == 0) {
@@ -208,7 +208,7 @@ void game_state_remove_player(const char* id) {
 }
 
 void game_state_remove_bot(const char* id) {
-    if (!id) return;
+    assert(id);
 
     for (int i = 0; i < g_game_state.bot_count; i++) {
         if (strcmp(g_game_state.bots[i].base.id, id) == 0) {

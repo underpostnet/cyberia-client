@@ -127,7 +127,7 @@ void dev_ui_update_network_stats(size_t download_bytes, size_t upload_bytes) {
 }
 
 int dev_ui_get_active_stats_sum(const char* player_id) {
-    if (!player_id) return 0;
+    assert(player_id);
 
     // Server computes the sum of all active object layer stats and sends it
     // in the binary AOI self-player section — just use it directly.
@@ -139,7 +139,7 @@ int dev_ui_get_active_stats_sum(const char* player_id) {
 }
 
 int dev_ui_get_active_item_count(const char* player_id) {
-    if (!player_id) return 0;
+    assert(player_id);
 
     int active_count = 0;
 

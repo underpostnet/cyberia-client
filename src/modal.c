@@ -4,7 +4,7 @@
 #include <assert.h>
 
 int modal_init_struct(Modal* modal) {
-    if (!modal) return -1;
+    assert(modal);
 
     memset(modal, 0, sizeof(Modal));
 
@@ -55,7 +55,7 @@ int modal_init_struct(Modal* modal) {
 }
 
 void modal_clear_lines(Modal* modal) {
-    if (!modal) return;
+    assert(modal);
 
     modal->line_count = 0;
     for (int i = 0; i < MODAL_MAX_LINES; i++) {
@@ -65,7 +65,7 @@ void modal_clear_lines(Modal* modal) {
 }
 
 int modal_add_line(Modal* modal, const char* text, Color color) {
-    if (!modal || !text) return -1;
+    assert(modal && text);
     if (modal->line_count >= MODAL_MAX_LINES) return -1;
 
     strncpy(modal->lines[modal->line_count].text, text, MODAL_MAX_LINE_LENGTH - 1);
@@ -78,7 +78,8 @@ int modal_add_line(Modal* modal, const char* text, Color color) {
 }
 
 void modal_draw_struct(const Modal* modal, int screen_width, int screen_height) {
-    if (!modal || !modal->visible) return;
+    assert(modal);
+    if (!modal->visible) return;
     if (modal->line_count == 0) return;
 
     // Calculate content dimensions
@@ -194,7 +195,7 @@ void modal_draw_struct(const Modal* modal, int screen_width, int screen_height) 
 }
 
 void modal_set_style(Modal* modal, Color bg_color, Color border_color, float alpha) {
-    if (!modal) return;
+    assert(modal);
 
     modal->background_color = bg_color;
     modal->border_color = border_color;
@@ -207,7 +208,7 @@ void modal_set_style(Modal* modal, Color bg_color, Color border_color, float alp
 void modal_set_position(Modal* modal, int position_mode,
                        int margin_top, int margin_right,
                        int margin_bottom, int margin_left) {
-    if (!modal) return;
+    assert(modal);
 
     modal->position_mode = position_mode;
     modal->margin_top = margin_top;
@@ -217,12 +218,12 @@ void modal_set_position(Modal* modal, int position_mode,
 }
 
 void modal_set_text_alignment(Modal* modal, int align) {
-    if (!modal) return;
+    assert(modal);
     modal->text_align = align;
 }
 
 void modal_set_font(Modal* modal, int font_size, int line_spacing) {
-    if (!modal) return;
+    assert(modal);
 
     modal->font_size = font_size;
     modal->line_spacing = line_spacing;

@@ -112,7 +112,7 @@ int message_parser_process(const char* json_str) {
  * ============================================================================ */
 
 static int message_parser_parse_colors(const cJSON* colors_json) {
-    if (!colors_json) return -1;
+    assert(colors_json);
 
     // Pre-initialise colours that may be absent from older DB documents
     // so they still have a visible default when the server doesn't send them.
@@ -197,7 +197,7 @@ static int message_parser_parse_colors(const cJSON* colors_json) {
 }
 
 static int message_parser_parse_init_data(const cJSON* json_root) {
-    if (!json_root) return -1;
+    assert(json_root);
 
     // Get payload object
     cJSON* payload = serial_get_object(json_root, "payload");
@@ -390,7 +390,7 @@ static int message_parser_parse_init_data(const cJSON* json_root) {
  * ============================================================================ */
 
 static int message_parser_parse_metadata(const cJSON* json_root) {
-    if (!json_root) return -1;
+    assert(json_root);
 
     cJSON* payload = serial_get_object(json_root, "payload");
     if (!payload) return -1;
@@ -461,7 +461,7 @@ static int message_parser_parse_metadata(const cJSON* json_root) {
  * ============================================================================ */
 
 static int message_parser_parse_visible_players(const cJSON* players_json) {
-    if (!players_json) return 0;
+    assert(players_json);
 
     // Mark all existing players as not seen in this update
     bool player_seen[MAX_ENTITIES] = {false};
@@ -497,7 +497,7 @@ static int message_parser_parse_visible_players(const cJSON* players_json) {
 }
 
 static int message_parser_parse_aoi_update(const cJSON* json_root) {
-    if (!json_root) return -1;
+    assert(json_root);
 
     // Get payload object
     cJSON* payload = serial_get_object(json_root, "payload");
@@ -742,7 +742,7 @@ static int message_parser_parse_aoi_update(const cJSON* json_root) {
  * ============================================================================ */
 
 static int message_parser_parse_skill_item_ids(const cJSON* json_root) {
-    if (!json_root) return -1;
+    assert(json_root);
 
     printf("[MESSAGE_PARSER] Parsing skill_item_ids message\n");
 
@@ -790,7 +790,7 @@ static int message_parser_parse_skill_item_ids(const cJSON* json_root) {
  * ============================================================================ */
 
 static int message_parser_parse_error(const cJSON* json_root) {
-    if (!json_root) return -1;
+    assert(json_root);
 
     printf("[MESSAGE_PARSER] Parsing error message\n");
 

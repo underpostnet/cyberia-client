@@ -1,6 +1,7 @@
 #include "object_layer.h"
 #include <stdlib.h>
 #include <string.h>
+#include <assert.h>
 
 ObjectLayer* create_object_layer(void) {
     ObjectLayer* layer = (ObjectLayer*)calloc(1, sizeof(ObjectLayer));
@@ -28,7 +29,7 @@ void free_atlas_sprite_sheet_data(AtlasSpriteSheetData* data) {
 }
 
 const DirectionFrameData* atlas_get_direction_frames(const AtlasSpriteSheetData* atlas, const char* dir_str) {
-    if (!atlas || !dir_str) return NULL;
+    assert(atlas && dir_str);
 
     if (strcmp(dir_str, "up_idle") == 0)              return &atlas->up_idle;
     if (strcmp(dir_str, "down_idle") == 0)            return &atlas->down_idle;
@@ -53,7 +54,7 @@ const DirectionFrameData* atlas_get_direction_frames(const AtlasSpriteSheetData*
 }
 
 LedgerType ledger_type_from_string(const char* type_str) {
-    if (!type_str) return LEDGER_TYPE_OFF_CHAIN;
+    assert(type_str);
 
     if (strcmp(type_str, "ERC20") == 0)      return LEDGER_TYPE_ERC20;
     if (strcmp(type_str, "ERC721") == 0)     return LEDGER_TYPE_ERC721;

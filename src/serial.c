@@ -7,7 +7,7 @@
  * ============================================================================ */
 
 int serial_get_string(const cJSON* json, const char* key, char* out, size_t max_len) {
-    if (!json || !key || !out || max_len == 0) return -1;
+    assert(json && key && out && max_len > 0);
 
     const cJSON* item = cJSON_GetObjectItemCaseSensitive(json, key);
     if (!item || !cJSON_IsString(item)) return -1;
@@ -21,7 +21,7 @@ int serial_get_string(const cJSON* json, const char* key, char* out, size_t max_
 }
 
 int serial_get_int(const cJSON* json, const char* key, int* out) {
-    if (!json || !key || !out) return -1;
+    assert(json && key && out);
 
     const cJSON* item = cJSON_GetObjectItemCaseSensitive(json, key);
     if (!item || !cJSON_IsNumber(item)) return -1;
@@ -31,7 +31,7 @@ int serial_get_int(const cJSON* json, const char* key, int* out) {
 }
 
 int serial_get_float(const cJSON* json, const char* key, float* out) {
-    if (!json || !key || !out) return -1;
+    assert(json && key && out);
 
     const cJSON* item = cJSON_GetObjectItemCaseSensitive(json, key);
     if (!item || !cJSON_IsNumber(item)) return -1;
@@ -53,7 +53,7 @@ int serial_get_double(const cJSON* json, const char* key, double* out) {
 */
 
 int serial_get_bool(const cJSON* json, const char* key, bool* out) {
-    if (!json || !key || !out) return -1;
+    assert(json && key && out);
 
     const cJSON* item = cJSON_GetObjectItemCaseSensitive(json, key);
     if (!item || !cJSON_IsBool(item)) return -1;
@@ -63,7 +63,7 @@ int serial_get_bool(const cJSON* json, const char* key, bool* out) {
 }
 
 cJSON* serial_get_object(const cJSON* json, const char* key) {
-    if (!json || !key) return NULL;
+    assert(json && key);
 
     cJSON* item = cJSON_GetObjectItemCaseSensitive(json, key);
     if (!item || !cJSON_IsObject(item)) return NULL;
@@ -72,7 +72,7 @@ cJSON* serial_get_object(const cJSON* json, const char* key) {
 }
 
 cJSON* serial_get_array(const cJSON* json, const char* key) {
-    if (!json || !key) return NULL;
+    assert(json && key);
 
     cJSON* item = cJSON_GetObjectItemCaseSensitive(json, key);
     if (!item || !cJSON_IsArray(item)) return NULL;
@@ -125,7 +125,7 @@ bool serial_get_bool_default(const cJSON* json, const char* key, bool default_va
  * ============================================================================ */
 
 int serial_deserialize_color_rgba(const cJSON* json, ColorRGBA* out) {
-    if (!json || !out) return -1;
+    assert(json && out);
 
     out->r = serial_get_int_default(json, "r", 255);
     out->g = serial_get_int_default(json, "g", 255);
@@ -152,7 +152,7 @@ cJSON* serial_serialize_color_rgba(const ColorRGBA* color) {
 */
 
 int serial_deserialize_point(const cJSON* json, Vector2* out) {
-    if (!json || !out) return -1;
+    assert(json && out);
 
     if (serial_get_float(json, "X", &out->x) != 0) return -1;
     if (serial_get_float(json, "Y", &out->y) != 0) return -1;
@@ -161,7 +161,7 @@ int serial_deserialize_point(const cJSON* json, Vector2* out) {
 }
 
 cJSON* serial_serialize_point(const Vector2* point) {
-    if (!point) return NULL;
+    assert(point);
 
     cJSON* json = cJSON_CreateObject();
     if (!json) return NULL;
@@ -173,7 +173,7 @@ cJSON* serial_serialize_point(const Vector2* point) {
 }
 
 int serial_deserialize_dimensions(const cJSON* json, Vector2* out) {
-    if (!json || !out) return -1;
+    assert(json && out);
 
     if (serial_get_float(json, "Width", &out->x) != 0) return -1;
     if (serial_get_float(json, "Height", &out->y) != 0) return -1;
@@ -182,7 +182,7 @@ int serial_deserialize_dimensions(const cJSON* json, Vector2* out) {
 }
 
 cJSON* serial_serialize_dimensions(const Vector2* dims) {
-    if (!dims) return NULL;
+    assert(dims);
 
     cJSON* json = cJSON_CreateObject();
     if (!json) return NULL;
@@ -194,7 +194,7 @@ cJSON* serial_serialize_dimensions(const Vector2* dims) {
 }
 
 Direction serial_deserialize_direction(const cJSON* json) {
-    if (!json) return DIRECTION_NONE;
+    assert(json);
 
     if (cJSON_IsNumber(json)) {
         int val = json->valueint;
@@ -223,7 +223,7 @@ cJSON* serial_serialize_direction(Direction dir) {
 }
 
 ObjectLayerMode serial_deserialize_mode(const cJSON* json) {
-    if (!json) return MODE_IDLE;
+    assert(json);
 
     if (cJSON_IsNumber(json)) {
         int val = json->valueint;
@@ -251,7 +251,7 @@ cJSON* serial_serialize_mode(ObjectLayerMode mode) {
  * ============================================================================ */
 
 int serial_deserialize_object_layer_state(const cJSON* json, ObjectLayerState* out) {
-    if (!json || !out) return -1;
+    assert(json && out);
 
     // Initialize with defaults
     memset(out, 0, sizeof(ObjectLayerState));
@@ -265,7 +265,7 @@ int serial_deserialize_object_layer_state(const cJSON* json, ObjectLayerState* o
 }
 
 cJSON* serial_serialize_object_layer_state(const ObjectLayerState* state) {
-    if (!state) return NULL;
+    assert(state);
 
     cJSON* json = cJSON_CreateObject();
     if (!json) return NULL;
@@ -355,7 +355,7 @@ cJSON* serial_serialize_path(const Vector2* path, int count) {
  * ============================================================================ */
 
 int serial_deserialize_entity_state(const cJSON* json, EntityState* out) {
-    if (!json || !out) return -1;
+    assert(json && out);
 
     // Initialize
     memset(out, 0, sizeof(EntityState));
@@ -419,7 +419,7 @@ int serial_deserialize_entity_state(const cJSON* json, EntityState* out) {
 }
 
 cJSON* serial_serialize_entity_state(const EntityState* entity) {
-    if (!entity) return NULL;
+    assert(entity);
 
     cJSON* json = cJSON_CreateObject();
     if (!json) return NULL;
@@ -459,7 +459,7 @@ cJSON* serial_serialize_entity_state(const EntityState* entity) {
  * ============================================================================ */
 
 int serial_deserialize_player_state(const cJSON* json, PlayerState* out) {
-    if (!json || !out) return -1;
+    assert(json && out);
 
     // Deserialize base entity
     if (serial_deserialize_entity_state(json, &out->base) != 0) {
@@ -514,7 +514,7 @@ cJSON* serial_serialize_player_state(const PlayerState* player) {
  * ============================================================================ */
 
 int serial_deserialize_bot_state(const cJSON* json, BotState* out) {
-    if (!json || !out) return -1;
+    assert(json && out);
 
     // Deserialize base entity
     if (serial_deserialize_entity_state(json, &out->base) != 0) {
@@ -545,7 +545,7 @@ cJSON* serial_serialize_bot_state(const BotState* bot) {
  * ============================================================================ */
 
 int serial_deserialize_world_object(const cJSON* json, WorldObject* out) {
-    if (!json || !out) return -1;
+    assert(json && out);
 
     // Initialize
     memset(out, 0, sizeof(WorldObject));
@@ -680,7 +680,7 @@ char* serial_create_pong(void) {
 }
 
 char* serial_create_item_action(const char* item_id, bool activate) {
-    if (!item_id) return NULL;
+    assert(item_id);
 
     cJSON* json = cJSON_CreateObject();
     if (!json) return NULL;

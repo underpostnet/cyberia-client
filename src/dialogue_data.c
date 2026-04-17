@@ -188,7 +188,7 @@ void dialogue_data_poll(void) {
 }
 
 const DialogueDataSet* dialogue_data_get(const char* item_id) {
-    if (!item_id) return NULL;
+    assert(item_id);
     DlgCacheEntry* e = lookup(item_id);
     return e ? &e->data : NULL;
 }
