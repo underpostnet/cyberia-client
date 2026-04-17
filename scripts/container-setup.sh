@@ -170,22 +170,12 @@ ensure_emsdk_env() {
   log "EMSDK activated (emcc: $(command -v emcc))"
 }
 
-build_raylib() {
-  section "Building Raylib (Web / $BUILD_MODE)"
-  # The Web.mk file handles building raylib, but we can explicitly invoke the target
-  # to ensure it's built before the main application.
-  (
-    cd "$PROJECT_ROOT"
-    run make -f Web.mk libraylib PLATFORM=PLATFORM_WEB BUILD_MODE="$BUILD_MODE"
-  )
-}
-
 build_client() {
   section "Building Cyberia Client (Web / $BUILD_MODE)"
   (
     cd "$PROJECT_ROOT"
     run make -f Web.mk clean
-    run make -f Web.mk web BUILD_MODE="$BUILD_MODE"
+    run make -f Web.mk all BUILD_MODE="$BUILD_MODE"
   )
 }
 
@@ -231,7 +221,6 @@ main() {
   ensure_repo
   install_toolchain
   ensure_emsdk_env
-  build_raylib
   build_client
   update_container_status
   start_server "$@"
