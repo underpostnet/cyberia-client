@@ -326,6 +326,7 @@ void game_render_floors(void) {
 
     for (int i = 0; i < g_game_state.floor_count; i++) {
         WorldObject* floor = &g_game_state.floors[i];
+        Color floor_color = floor->color.a > 0 ? floor->color : g_game_state.colors.floor;
 
         if (floor->object_layer_count > 0) {
             ObjectLayerState* layers[MAX_OBJECT_LAYERS];
@@ -347,16 +348,17 @@ void game_render_floors(void) {
                 "floor",
                 g_game_state.dev_ui,
                 cell_size,
-                g_game_state.colors.floor
+                floor_color
             );
         } else {
+            Color fallback = floor->color.a > 0 ? floor->color : g_game_state.colors.floor_background;
             Rectangle rect = {
                 floor->pos.x * cell_size,
                 floor->pos.y * cell_size,
                 floor->dims.x * cell_size,
                 floor->dims.y * cell_size
             };
-            DrawRectangleRec(rect, g_game_state.colors.floor_background);
+            DrawRectangleRec(rect, fallback);
         }
     }
 }
@@ -367,6 +369,7 @@ void game_render_world_objects(void) {
     // Render obstacles
     for (int i = 0; i < g_game_state.obstacle_count; i++) {
         WorldObject* obj = &g_game_state.obstacles[i];
+        Color obs_color = obj->color.a > 0 ? obj->color : g_game_state.colors.obstacle;
 
         if (obj->object_layer_count > 0) {
             ObjectLayerState* layers[MAX_OBJECT_LAYERS];
@@ -388,7 +391,7 @@ void game_render_world_objects(void) {
                 "obstacle",
                 g_game_state.dev_ui,
                 cell_size,
-                g_game_state.colors.obstacle
+                obs_color
             );
         } else {
             Rectangle rect = {
@@ -397,7 +400,7 @@ void game_render_world_objects(void) {
                 obj->dims.x * cell_size,
                 obj->dims.y * cell_size
             };
-            DrawRectangleRec(rect, g_game_state.colors.obstacle);
+            DrawRectangleRec(rect, obs_color);
         }
     }
 
@@ -446,6 +449,7 @@ void game_render_foregrounds(void) {
     // Render foregrounds (always on top of entities)
     for (int i = 0; i < g_game_state.foreground_count; i++) {
         WorldObject* fg = &g_game_state.foregrounds[i];
+        Color fg_color = fg->color.a > 0 ? fg->color : g_game_state.colors.foreground;
 
         if (fg->object_layer_count > 0) {
             ObjectLayerState* layers[MAX_OBJECT_LAYERS];
@@ -467,7 +471,7 @@ void game_render_foregrounds(void) {
                 "foreground",
                 g_game_state.dev_ui,
                 cell_size,
-                g_game_state.colors.foreground
+                fg_color
             );
         } else {
             Rectangle rect = {
@@ -476,7 +480,7 @@ void game_render_foregrounds(void) {
                 fg->dims.x * cell_size,
                 fg->dims.y * cell_size
             };
-            DrawRectangleRec(rect, g_game_state.colors.foreground);
+            DrawRectangleRec(rect, fg_color);
         }
     }
 }

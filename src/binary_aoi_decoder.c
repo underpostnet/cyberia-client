@@ -237,6 +237,14 @@ static void decode_floor_entity(BinReader* r, uint8_t flags) {
     br_u8(r); /* direction — unused for floors */
     br_u8(r); /* mode      — unused for floors */
 
+    Color floor_color = {0, 0, 0, 0};
+    if (flags & BIN_FLAG_HAS_COLOR) {
+        floor_color.r = br_u8(r);
+        floor_color.g = br_u8(r);
+        floor_color.b = br_u8(r);
+        floor_color.a = br_u8(r);
+    }
+
     if (gs->floor_count >= MAX_OBJECTS) return;
     int idx = gs->floor_count++;
     WorldObject* f = &gs->floors[idx];
@@ -245,13 +253,13 @@ static void decode_floor_entity(BinReader* r, uint8_t flags) {
     f->pos  = (Vector2){ px, py };
     f->dims = (Vector2){ dw, dh };
     strncpy(f->type, "floor", MAX_TYPE_LENGTH - 1);
+    f->color = floor_color;
 
     f->object_layer_count = read_item_ids(
         r, f->object_layers, MAX_OBJECT_LAYERS);
 }
 
 static void decode_obstacle_entity(BinReader* r, uint8_t flags) {
-    (void)flags;
     GameState* gs = &g_game_state;
     char id[MAX_ID_LENGTH];
     br_id(r, id, sizeof(id));
@@ -263,6 +271,14 @@ static void decode_obstacle_entity(BinReader* r, uint8_t flags) {
     br_u8(r); /* direction */
     br_u8(r); /* mode */
 
+    Color obs_color = {0, 0, 0, 0};
+    if (flags & BIN_FLAG_HAS_COLOR) {
+        obs_color.r = br_u8(r);
+        obs_color.g = br_u8(r);
+        obs_color.b = br_u8(r);
+        obs_color.a = br_u8(r);
+    }
+
     if (gs->obstacle_count >= MAX_OBJECTS) return;
     int idx = gs->obstacle_count++;
     WorldObject* o = &gs->obstacles[idx];
@@ -271,6 +287,7 @@ static void decode_obstacle_entity(BinReader* r, uint8_t flags) {
     o->pos  = (Vector2){ px, py };
     o->dims = (Vector2){ dw, dh };
     strncpy(o->type, "obstacle", MAX_TYPE_LENGTH - 1);
+    o->color = obs_color;
 }
 
 static void decode_portal_entity(BinReader* r, uint8_t flags) {
@@ -311,7 +328,6 @@ static void decode_portal_entity(BinReader* r, uint8_t flags) {
 }
 
 static void decode_foreground_entity(BinReader* r, uint8_t flags) {
-    (void)flags;
     GameState* gs = &g_game_state;
     char id[MAX_ID_LENGTH];
     br_id(r, id, sizeof(id));
@@ -323,6 +339,14 @@ static void decode_foreground_entity(BinReader* r, uint8_t flags) {
     br_u8(r); /* direction */
     br_u8(r); /* mode */
 
+    Color fg_color = {0, 0, 0, 0};
+    if (flags & BIN_FLAG_HAS_COLOR) {
+        fg_color.r = br_u8(r);
+        fg_color.g = br_u8(r);
+        fg_color.b = br_u8(r);
+        fg_color.a = br_u8(r);
+    }
+
     if (gs->foreground_count >= MAX_OBJECTS) return;
     int idx = gs->foreground_count++;
     WorldObject* fg = &gs->foregrounds[idx];
@@ -331,6 +355,7 @@ static void decode_foreground_entity(BinReader* r, uint8_t flags) {
     fg->pos  = (Vector2){ px, py };
     fg->dims = (Vector2){ dw, dh };
     strncpy(fg->type, "foreground", MAX_TYPE_LENGTH - 1);
+    fg->color = fg_color;
 }
 
 /* ── Self-player decoder ───────────────────────────────────────── */
