@@ -6,10 +6,9 @@
 #include "layer_z_order.h"
 #include <stdlib.h>
 #include <string.h>
-#include <assert.h>
 
 int layer_z_priority(const char* type) {
-    assert(type);
+    if (!type || type[0] == '\0') return 50;
     if (strcmp(type, "skin") == 0 || strcmp(type, "body") == 0) return 10;
     if (strcmp(type, "eyes") == 0)    return 11;
     if (strcmp(type, "hair") == 0)    return 12;
