@@ -487,7 +487,7 @@ void game_render_foregrounds(void) {
 
 // Helper structure for depth sorting entities
 typedef struct {
-    enum { ENTITY_TYPE_PLAYER, ENTITY_TYPE_OTHER_PLAYER, ENTITY_TYPE_BOT } type;
+    enum { ENTITY_TYPE_PLAYER, ENTITY_TYPE_OTHER_PLAYER, ENTITY_TYPE_BOT, ENTITY_TYPE_RESOURCE } type;
     float bottom_y;  // Y position of entity's bottom edge (for depth sorting)
     union {
         PlayerState* player;
@@ -551,7 +551,7 @@ void game_render_entities(void) {
     bool dev_ui = g_game_state.dev_ui;
 
     // Create array to hold all entities for sorting
-    static EntitySortEntry sort_entries[MAX_ENTITIES + 1];  // +1 for main player
+    static EntitySortEntry sort_entries[MAX_ENTITIES * 3 + 1];  // players + bots + resources + main player
     int entry_count = 0;
 
     // Add main player to sort list
@@ -582,6 +582,18 @@ void game_render_entities(void) {
         sort_entries[entry_count].type = ENTITY_TYPE_BOT;
         sort_entries[entry_count].bottom_y = bottom_y;
         sort_entries[entry_count].data.bot = bot;
+        sort_entries[entry_count].is_main_player = false;
+        entry_count++;
+    }
+
+    // Add resources to sort list
+    for (int i = 0; i < g_game_state.resource_count; i++) {
+        BotState* res = &g_game_state.resources[i];
+        float bottom_y = res->base.interp_pos.y + res->base.dims.y;
+
+        sort_entries[entry_count].type = ENTITY_TYPE_RESOURCE;
+        sort_entries[entry_count].bottom_y = bottom_y;
+        sort_entries[entry_count].data.bot = res;
         sort_entries[entry_count].is_main_player = false;
         entry_count++;
     }
@@ -628,6 +640,13 @@ void game_render_entities(void) {
                     entity_type_str = "coin";
                 else
                     entity_type_str = "bot";
+                entity_id = entity_base->id;
+                layers_count = entity_base->object_layer_count;
+                break;
+
+            case ENTITY_TYPE_RESOURCE:
+                entity_base = &entry->data.bot->base;
+                entity_type_str = "resource";
                 entity_id = entity_base->id;
                 layers_count = entity_base->object_layer_count;
                 break;

@@ -358,6 +358,55 @@ static void decode_foreground_entity(BinReader* r, uint8_t flags) {
     fg->color = fg_color;
 }
 
+/* ── Resource entity decoder ───────────────────────────────────── */
+
+static void decode_resource_entity(BinReader* r, uint8_t flags) {
+    GameState* gs = &g_game_state;
+    char id[MAX_ID_LENGTH];
+    br_id(r, id, sizeof(id));
+
+    float px = br_f32(r);
+    float py = br_f32(r);
+    float dw = br_f32(r);
+    float dh = br_f32(r);
+    uint8_t dir = br_u8(r);
+    uint8_t mode = br_u8(r);
+
+    if (gs->resource_count >= MAX_ENTITIES) return;
+    int idx = gs->resource_count++;
+    BotState* res = &gs->resources[idx];
+    memset(res, 0, sizeof(BotState));
+    strncpy(res->base.id, id, MAX_ID_LENGTH - 1);
+
+    res->base.pos_server = (Vector2){ px, py };
+    res->base.pos_prev = res->base.pos_server;
+    res->base.interp_pos = res->base.pos_server; /* static — no interpolation */
+    res->base.dims = (Vector2){ dw, dh };
+    res->base.direction = (Direction)dir;
+    res->base.mode = (ObjectLayerMode)mode;
+    res->base.last_update = gs->last_update_time;
+
+    if (flags & BIN_FLAG_HAS_LIFE) {
+        res->base.life = br_f32(r);
+        res->base.max_life = br_f32(r);
+    }
+    if (flags & BIN_FLAG_HAS_RESPAWN) {
+        res->base.respawn_in = br_f32(r);
+    } else {
+        res->base.respawn_in = 0.0f;
+    }
+    if (flags & BIN_FLAG_HAS_COLOR) {
+        res->base.color.r = br_u8(r);
+        res->base.color.g = br_u8(r);
+        res->base.color.b = br_u8(r);
+        res->base.color.a = br_u8(r);
+    }
+    res->base.object_layer_count = read_item_ids(
+        r, res->base.object_layers, MAX_OBJECT_LAYERS);
+    res->base.status_icon = br_u8(r);
+    strncpy(res->behavior, "resource", MAX_BEHAVIOR_LENGTH - 1);
+}
+
 /* ── Self-player decoder ───────────────────────────────────────── */
 
 static void decode_self_player(BinReader* r, uint8_t flags) {
@@ -527,6 +576,7 @@ int binary_aoi_process(const uint8_t* data, size_t length) {
     /* Clear world objects (same as JSON parser does each AOI frame) */
     gs->other_player_count = 0;
     gs->bot_count = 0;
+    gs->resource_count = 0;
     gs->obstacle_count = 0;
     gs->foreground_count = 0;
     gs->portal_count = 0;
@@ -552,6 +602,7 @@ int binary_aoi_process(const uint8_t* data, size_t length) {
             case BIN_ENTITY_OBSTACLE:   decode_obstacle_entity(&r, flags);   break;
             case BIN_ENTITY_PORTAL:     decode_portal_entity(&r, flags);     break;
             case BIN_ENTITY_FOREGROUND: decode_foreground_entity(&r, flags); break;
+            case BIN_ENTITY_RESOURCE:   decode_resource_entity(&r, flags);   break;
             default:
                 printf("[BINARY_AOI] Unknown entity type %d at offset %zu\n", etype, r.pos);
                 return -1;

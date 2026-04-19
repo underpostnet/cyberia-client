@@ -219,6 +219,9 @@ struct GameState {
     WorldObject foregrounds[MAX_OBJECTS];
     int foreground_count;
 
+    BotState resources[MAX_ENTITIES];
+    int resource_count;
+
     WorldObject portals[MAX_OBJECTS];
     int portal_count;
 
