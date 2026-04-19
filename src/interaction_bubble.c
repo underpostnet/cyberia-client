@@ -175,6 +175,20 @@ static void scan_entity(const char* entity_id, const EntityState* base,
     slot->status_icon = base->status_icon;
     slot->is_player = is_player;
 
+    /* Resolve the solid-colour fallback for the bubble icon:
+     * 1. Per-entity DB colour (server-sent, alpha > 0)
+     * 2. Palette colour via entity_defaults[].colorKey
+     * 3. Neutral gray (last resort) */
+    if (base->color.a > 0) {
+        slot->fallback_color = (Color){ base->color.r, base->color.g, base->color.b, base->color.a };
+    } else {
+        const char* etype = is_player ? "player" : "bot";
+        const EntityTypeDefault* etd = game_state_get_entity_default(etype);
+        slot->fallback_color = etd
+            ? game_state_get_color_by_key(etd->color_key)
+            : (Color){ 100, 100, 120, 180 };
+    }
+
     /* Always snapshot current layers (dead or alive) into layers[]. */
     snapshot_layers(slot, base->object_layers, base->object_layer_count,
                     (int)base->direction);
@@ -297,7 +311,7 @@ void interaction_bubble_draw(void) {
         } else {
             int cx = (int)(r.x + r.width * 0.5f);
             int cy = (int)(r.y + r.height * 0.5f);
-            DrawCircle(cx, cy, r.width * 0.3f, (Color){100, 100, 120, 180});
+            DrawCircle(cx, cy, r.width * 0.3f, slot->fallback_color);
         }
 
         /* Nameplate label — top-left, just to the right of the icon */

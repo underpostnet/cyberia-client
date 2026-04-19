@@ -57,6 +57,7 @@ typedef struct {
     bool is_player;
     bool active;
     double appeared_at;
+    Color fallback_color; /* solid colour when no OLs — entity DB colour or palette default */
 } InteractionBubbleSlot;
 
 /* ── Public API ────────────────────────────────────────────────────────── */
