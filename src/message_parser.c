@@ -354,24 +354,49 @@ static int message_parser_parse_init_data(const cJSON* json_root) {
             if (g_game_state.skill_map_count >= MAX_SKILL_ENTRIES) break;
             if (!entry->string || !cJSON_IsArray(entry)) continue;
 
-            SkillEntry* se = &g_game_state.skill_map[g_game_state.skill_map_count];
-            strncpy(se->trigger_item_id, entry->string, MAX_ID_LENGTH - 1);
-            se->trigger_item_id[MAX_ID_LENGTH - 1] = '\0';
-            se->logic_event_count = 0;
+            /* Each value is an array of skill-definition objects:
+             * [ { logicEventId: "...", description: "...", summonedEntityItemId: "..." }, ... ]
+             * We flatten into one SkillEntry per (triggerItemId, definition). */
+            cJSON* def_obj = NULL;
+            cJSON_ArrayForEach(def_obj, entry) {
+                if (g_game_state.skill_map_count >= MAX_SKILL_ENTRIES) break;
+                if (!cJSON_IsObject(def_obj)) continue;
 
-            cJSON* sid = NULL;
-            cJSON_ArrayForEach(sid, entry) {
-                if (se->logic_event_count >= MAX_LOGIC_EVENT_IDS) break;
-                if (!cJSON_IsString(sid)) continue;
-                strncpy(
-                    se->logic_event_ids[se->logic_event_count],
-                    cJSON_GetStringValue(sid),
-                    MAX_ID_LENGTH - 1
-                );
-                se->logic_event_ids[se->logic_event_count][MAX_ID_LENGTH - 1] = '\0';
-                se->logic_event_count++;
+                SkillEntry* se = &g_game_state.skill_map[g_game_state.skill_map_count];
+                memset(se, 0, sizeof(*se));
+                strncpy(se->trigger_item_id, entry->string, MAX_ID_LENGTH - 1);
+                se->trigger_item_id[MAX_ID_LENGTH - 1] = '\0';
+
+                /* logicEventId (singular) */
+                cJSON* id_json = cJSON_GetObjectItem(def_obj, "logicEventId");
+                if (id_json && cJSON_IsString(id_json)) {
+                    strncpy(se->logic_event_id, cJSON_GetStringValue(id_json), MAX_ID_LENGTH - 1);
+                    se->logic_event_id[MAX_ID_LENGTH - 1] = '\0';
+                }
+
+                /* name */
+                cJSON* name_json = cJSON_GetObjectItem(def_obj, "name");
+                if (name_json && cJSON_IsString(name_json)) {
+                    strncpy(se->name, cJSON_GetStringValue(name_json), MAX_ID_LENGTH - 1);
+                    se->name[MAX_ID_LENGTH - 1] = '\0';
+                }
+
+                /* description */
+                cJSON* desc_json = cJSON_GetObjectItem(def_obj, "description");
+                if (desc_json && cJSON_IsString(desc_json)) {
+                    strncpy(se->description, cJSON_GetStringValue(desc_json), sizeof(se->description) - 1);
+                    se->description[sizeof(se->description) - 1] = '\0';
+                }
+
+                /* summonedEntityItemId */
+                cJSON* summon_json = cJSON_GetObjectItem(def_obj, "summonedEntityItemId");
+                if (summon_json && cJSON_IsString(summon_json)) {
+                    strncpy(se->summoned_entity_item_id, cJSON_GetStringValue(summon_json), MAX_ID_LENGTH - 1);
+                    se->summoned_entity_item_id[MAX_ID_LENGTH - 1] = '\0';
+                }
+
+                g_game_state.skill_map_count++;
             }
-            g_game_state.skill_map_count++;
         }
     }
 

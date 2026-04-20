@@ -54,6 +54,13 @@ static bool      s_dir_btn_enabled[DIR_BTN_COUNT]; /* false = no frames */
 static Rectangle s_lore_btn_rect;
 static bool      s_lore_btn_visible = false;
 
+/* Skill pagination (arrow buttons when >1 skill matches the item) */
+static int       s_skill_page = 0;
+static int       s_skill_total = 0;
+static Rectangle s_skill_prev_rect;
+static Rectangle s_skill_next_rect;
+static bool      s_skill_arrows_visible = false;
+
 /* ── Layout constants ───────────────────────────────────────────────────── */
 
 /* The inventory modal now fills most of the screen (with margin) rather than
@@ -73,10 +80,10 @@ static bool      s_lore_btn_visible = false;
 #define MODAL_FONT_BODY    18
 #define MODAL_FONT_STAT    16
 #define MODAL_BTN_W        200
-#define MODAL_BTN_H         50
+#define MODAL_BTN_H         40
 #define MODAL_CLOSE_SIZE    36
 #define MODAL_LORE_BTN_W   200
-#define MODAL_LORE_BTN_H    44
+#define MODAL_LORE_BTN_H    36
 
 #define DIR_BTN_W  64
 #define DIR_BTN_H  32
@@ -185,6 +192,32 @@ static bool dir_has_frames(AtlasSpriteSheetData* atlas,
     return (dfd && dfd->count > 0);
 }
 
+/* resolve_summoned_item_id resolves the summonedEntityItemId for display.
+ * "$active_skin" is replaced by the player's currently active skin item ID,
+ * since doppelganger clones inherit the caster's appearance.
+ * Returns a pointer to a static or existing buffer — do NOT free. */
+static const char* resolve_summoned_item_id(const char* raw_id) {
+    static char s_resolved[MAX_ID_LENGTH];
+    if (strcmp(raw_id, "$active_skin") != 0) return raw_id;
+
+    /* Walk the player's full inventory to find the first active skin. */
+    for (int i = 0; i < g_game_state.full_inventory_count; i++) {
+        const ObjectLayerState* ol = &g_game_state.full_inventory[i];
+        if (!ol->active || ol->item_id[0] == '\0') continue;
+        if (!s_ol_manager) continue;
+        ObjectLayer* data = get_or_fetch_object_layer(s_ol_manager, ol->item_id);
+        if (data && strcmp(data->data.item.type, "skin") == 0) {
+            strncpy(s_resolved, ol->item_id, MAX_ID_LENGTH - 1);
+            s_resolved[MAX_ID_LENGTH - 1] = '\0';
+            return s_resolved;
+        }
+    }
+    /* Fallback if no active skin found */
+    strncpy(s_resolved, raw_id, MAX_ID_LENGTH - 1);
+    s_resolved[MAX_ID_LENGTH - 1] = '\0';
+    return s_resolved;
+}
+
 /* ── Public API ──────────────────────────────────────────────────────── */
 
 void inventory_modal_init(ObjectLayersManager* ol_manager) {
@@ -203,6 +236,9 @@ void inventory_modal_open(int inv_idx) {
     strncpy(s_dir,  "down", sizeof(s_dir)  - 1);
     strncpy(s_mode, "idle", sizeof(s_mode) - 1);
     rebuild_dir_str();
+    s_skill_page = 0;
+    s_skill_total = 0;
+    s_skill_arrows_visible = false;
     /* Notify server → FrozenInteractionState */
     client_send("{\"type\":\"freeze_start\",\"payload\":{\"reason\":\"inventory\"}}");
 }
@@ -434,6 +470,173 @@ void inventory_modal_draw(void) {
         y_cursor += MODAL_FONT_BODY + 8;
     }
 
+    /* 10b. Skill bar — summoned entities associated via skillConfig ──── */
+    /* Shows one skill at a time with left/right arrows when multiple match.
+     * Layout:
+     *   [separator]
+     *   SkillName (1/2)                              < >
+     *   [sprite] summonedItemId
+     *            word-wrapped description...
+     */
+    s_skill_arrows_visible = false;
+    s_skill_total = 0;
+    if (ols->item_id[0] != '\0') {
+        /* First pass: count matching skills */
+        int match_indices[MAX_SKILL_ENTRIES];
+        int match_count = 0;
+        for (int si = 0; si < g_game_state.skill_map_count; si++) {
+            const SkillEntry* se = &g_game_state.skill_map[si];
+            if (strcmp(se->trigger_item_id, ols->item_id) != 0) continue;
+            if (se->summoned_entity_item_id[0] == '\0') continue;
+            if (match_count < MAX_SKILL_ENTRIES)
+                match_indices[match_count++] = si;
+        }
+        s_skill_total = match_count;
+
+        if (match_count > 0) {
+            /* Clamp page */
+            if (s_skill_page >= match_count) s_skill_page = match_count - 1;
+            if (s_skill_page < 0) s_skill_page = 0;
+
+            const SkillEntry* se = &g_game_state.skill_map[match_indices[s_skill_page]];
+            const char* resolved_summon = resolve_summoned_item_id(se->summoned_entity_item_id);
+
+            /* Separator line */
+            DrawLine((int)(cx + pad), (int)y_cursor,
+                     (int)(cx + cw - pad), (int)y_cursor,
+                     (Color){ 70, 70, 100, 140 });
+            y_cursor += 6;
+
+            /* ── Header row: skill name (left) + pagination arrows (right) ── */
+            {
+                /* Skill name — use se->name if available, otherwise logicEventId */
+                const char* skill_label = (se->name[0] != '\0') ? se->name : se->logic_event_id;
+                char header_buf[96];
+                if (match_count > 1)
+                    snprintf(header_buf, sizeof(header_buf), "%s (%d/%d)",
+                             skill_label, s_skill_page + 1, match_count);
+                else
+                    snprintf(header_buf, sizeof(header_buf), "%s", skill_label);
+
+                DrawText(header_buf, (int)(cx + pad), (int)y_cursor,
+                         MODAL_FONT_STAT, (Color){ 180, 160, 255, 220 });
+
+                /* Right-aligned arrows (only when >1 skill) */
+                if (match_count > 1) {
+                    float arrow_w = 28;
+                    float arrow_h = 22;
+                    float arrow_y = y_cursor;
+                    float next_x = cx + cw - pad - arrow_w;
+                    float prev_x = next_x - arrow_w - 4;
+
+                    s_skill_prev_rect = (Rectangle){ prev_x, arrow_y, arrow_w, arrow_h };
+                    s_skill_next_rect = (Rectangle){ next_x, arrow_y, arrow_w, arrow_h };
+                    s_skill_arrows_visible = true;
+
+                    int mx = GetMouseX(), my = GetMouseY();
+
+                    /* Prev arrow */
+                    Color prev_bg = s_skill_page > 0
+                        ? (hit_rect(mx, my, s_skill_prev_rect)
+                            ? (Color){ 60, 60, 100, 240 } : (Color){ 40, 42, 68, 220 })
+                        : C_DIR_BTN_DIS;
+                    DrawRectangleRec(s_skill_prev_rect, prev_bg);
+                    DrawRectangleLinesEx(s_skill_prev_rect, 1.0f, (Color){ 60, 65, 90, 160 });
+                    {
+                        const char* pl = "<";
+                        int ptw = MeasureText(pl, MODAL_FONT_STAT);
+                        Color ptc = s_skill_page > 0
+                            ? (Color){ 200, 210, 230, 240 } : (Color){ 60, 65, 75, 140 };
+                        DrawText(pl, (int)(prev_x + (arrow_w - ptw) * 0.5f),
+                                 (int)(arrow_y + (arrow_h - MODAL_FONT_STAT) * 0.5f),
+                                 MODAL_FONT_STAT, ptc);
+                    }
+
+                    /* Next arrow */
+                    Color next_bg = s_skill_page < match_count - 1
+                        ? (hit_rect(mx, my, s_skill_next_rect)
+                            ? (Color){ 60, 60, 100, 240 } : (Color){ 40, 42, 68, 220 })
+                        : C_DIR_BTN_DIS;
+                    DrawRectangleRec(s_skill_next_rect, next_bg);
+                    DrawRectangleLinesEx(s_skill_next_rect, 1.0f, (Color){ 60, 65, 90, 160 });
+                    {
+                        const char* nl = ">";
+                        int ntw = MeasureText(nl, MODAL_FONT_STAT);
+                        Color ntc = s_skill_page < match_count - 1
+                            ? (Color){ 200, 210, 230, 240 } : (Color){ 60, 65, 75, 140 };
+                        DrawText(nl, (int)(next_x + (arrow_w - ntw) * 0.5f),
+                                 (int)(arrow_y + (arrow_h - MODAL_FONT_STAT) * 0.5f),
+                                 MODAL_FONT_STAT, ntc);
+                    }
+                }
+
+                y_cursor += MODAL_FONT_STAT + 6;
+            }
+
+            /* ── Content row: [sprite] + summoned item name + description ── */
+            int ico_sz = 36;
+            float ico_x = cx + pad;
+            float ico_y = y_cursor;
+
+            /* Animated sprite of the summoned entity */
+            if (s_ol_manager && resolved_summon[0] != '\0' && resolved_summon[0] != '$') {
+                ol_as_ico_draw(s_ol_manager, resolved_summon,
+                               (int)ico_x, (int)ico_y, ico_sz,
+                               "down_idle", 0, WHITE);
+            }
+            DrawRectangleLinesEx(
+                (Rectangle){ ico_x, ico_y, (float)ico_sz, (float)ico_sz },
+                1.0f, (Color){ 80, 80, 130, 160 });
+
+            /* Summoned item name right of sprite */
+            float text_x = ico_x + ico_sz + 8;
+            DrawText(resolved_summon,
+                     (int)text_x, (int)ico_y,
+                     MODAL_FONT_STAT, (Color){ 200, 220, 255, 240 });
+
+            /* Skill description below the name, word-wrapped */
+            if (se->description[0] != '\0') {
+                float desc_y = ico_y + MODAL_FONT_STAT + 3;
+                int fs_sk = MODAL_FONT_STAT - 1;
+                int max_desc_w = (int)(cx + cw - pad - text_x);
+                char sk_desc[256];
+                strncpy(sk_desc, se->description, sizeof(sk_desc) - 1);
+                sk_desc[sizeof(sk_desc) - 1] = '\0';
+
+                char sk_line[256] = {0};
+                char* stok = strtok(sk_desc, " ");
+                while (stok) {
+                    char stest[256];
+                    if (sk_line[0] == '\0')
+                        snprintf(stest, sizeof(stest), "%s", stok);
+                    else
+                        snprintf(stest, sizeof(stest), "%s %s", sk_line, stok);
+
+                    if (MeasureText(stest, fs_sk) > max_desc_w && sk_line[0] != '\0') {
+                        DrawText(sk_line, (int)text_x, (int)desc_y, fs_sk,
+                                 (Color){ 160, 165, 180, 200 });
+                        desc_y += fs_sk + 2;
+                        snprintf(sk_line, sizeof(sk_line), "%s", stok);
+                    } else {
+                        snprintf(sk_line, sizeof(sk_line), "%s", stest);
+                    }
+                    stok = strtok(NULL, " ");
+                }
+                if (sk_line[0] != '\0') {
+                    DrawText(sk_line, (int)text_x, (int)desc_y, fs_sk,
+                             (Color){ 160, 165, 180, 200 });
+                    desc_y += fs_sk + 2;
+                }
+                /* Advance y_cursor to the bottom of the taller element */
+                float sprite_bottom = ico_y + ico_sz;
+                float text_bottom = desc_y;
+                y_cursor = (sprite_bottom > text_bottom ? sprite_bottom : text_bottom) + 6;
+            } else {
+                y_cursor = ico_y + ico_sz + 6;
+            }
+        }
+    }
+
     (void)y_cursor; /* remaining space above bottom buttons */
 
     /* ── Bottom-anchored buttons ────────────────────────────────────── */
@@ -533,6 +736,18 @@ bool inventory_modal_handle_click(int mx, int my, bool clicked) {
             strncpy(s_mode, "idle",    sizeof(s_mode) - 1);
         rebuild_dir_str();
         return true;
+    }
+
+    /* Skill pagination arrows */
+    if (s_skill_arrows_visible && s_skill_total > 1) {
+        if (s_skill_page > 0 && hit_rect(mx, my, s_skill_prev_rect)) {
+            s_skill_page--;
+            return true;
+        }
+        if (s_skill_page < s_skill_total - 1 && hit_rect(mx, my, s_skill_next_rect)) {
+            s_skill_page++;
+            return true;
+        }
     }
 
     /* Lore button */

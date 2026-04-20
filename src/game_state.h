@@ -25,7 +25,6 @@
 #define MAX_MESSAGE_SIZE 65536
 #define MAX_ID_LENGTH 64
 #define MAX_SKILL_ENTRIES 64
-#define MAX_LOGIC_EVENT_IDS 8
 
 
 
@@ -163,11 +162,16 @@ typedef struct {
     Color border_color;
 } StatusIconConfig;
 
-// Skill map entry received from init_data: one trigger item → N logic event IDs
+// Skill map entry received from init_data: one trigger item → N skill definitions.
+// Each entry represents a single logicEventId with its own description and summoned entity.
+// If summoned_entity_item_id equals "$active_skin", the client resolves it dynamically
+// to the player's currently active skin item at render time.
 typedef struct {
     char trigger_item_id[MAX_ID_LENGTH];
-    char logic_event_ids[MAX_LOGIC_EVENT_IDS][MAX_ID_LENGTH];
-    int  logic_event_count;
+    char logic_event_id[MAX_ID_LENGTH];
+    char name[MAX_ID_LENGTH];
+    char description[256];
+    char summoned_entity_item_id[MAX_ID_LENGTH];
 } SkillEntry;
 
 // Main game state structure
