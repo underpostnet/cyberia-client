@@ -299,7 +299,7 @@ void draw_entity_layers(
         layers_to_render[render_count].layer = layer;
         layers_to_render[render_count].atlas = atlas;
         layers_to_render[render_count].priority = layer
-            ? layer_z_priority(layer->data.item.type)
+            ? layer_z_priority(layer->data.item.type, direction == DIRECTION_UP)
             : 50; // Default priority if no ObjectLayer metadata yet
         render_count++;
     }

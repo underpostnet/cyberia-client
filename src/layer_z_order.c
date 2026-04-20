@@ -7,15 +7,10 @@
 #include <stdlib.h>
 #include <string.h>
 
-int layer_z_priority(const char* type) {
+int layer_z_priority(const char* type, bool facing_up) {
     if (!type || type[0] == '\0') return 50;
-    if (strcmp(type, "skin") == 0 || strcmp(type, "body") == 0) return 10;
-    if (strcmp(type, "eyes") == 0)    return 11;
-    if (strcmp(type, "hair") == 0)    return 12;
-    if (strcmp(type, "clothes") == 0 || strcmp(type, "armor") == 0) return 20;
-    if (strcmp(type, "hat") == 0 || strcmp(type, "helmet") == 0)    return 30;
-    if (strcmp(type, "weapon") == 0)  return 40;
-    if (strcmp(type, "shield") == 0)  return 41;
+    if (strcmp(type, "skin") == 0)   return facing_up ? 40 : 10;
+    if (strcmp(type, "weapon") == 0) return facing_up ? 10 : 40;
     return 50;
 }
 
@@ -27,7 +22,8 @@ static int cmp_z_entry(const void* a, const void* b) {
 
 int layer_z_sort(ObjectLayersManager* mgr,
                  const ObjectLayerState* layers, int count,
-                 LayerZEntry* out, int out_cap) {
+                 LayerZEntry* out, int out_cap,
+                 bool facing_up) {
     if (!layers || count <= 0 || !out || out_cap <= 0) return 0;
 
     int n = 0;
@@ -42,7 +38,7 @@ int layer_z_sort(ObjectLayersManager* mgr,
         }
 
         out[n].index    = i;
-        out[n].priority = layer_z_priority(type);
+        out[n].priority = layer_z_priority(type, facing_up);
         n++;
     }
 

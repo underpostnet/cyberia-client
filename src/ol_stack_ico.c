@@ -11,6 +11,7 @@
 #include "ol_as_animated_ico.h"
 #include "layer_z_order.h"
 #include <assert.h>
+#include <string.h>
 
 #define OL_STACK_ICO_MAX_LAYERS 32
 
@@ -22,8 +23,10 @@ void ol_stack_ico_draw(ObjectLayersManager* mgr,
                        Color tint) {
     if (!mgr || !layers || count <= 0) return;
 
+    bool facing_up = (dir_str && (strcmp(dir_str, "up_idle") == 0 || strcmp(dir_str, "up_walking") == 0));
+
     LayerZEntry sorted[OL_STACK_ICO_MAX_LAYERS];
-    int n = layer_z_sort(mgr, layers, count, sorted, OL_STACK_ICO_MAX_LAYERS);
+    int n = layer_z_sort(mgr, layers, count, sorted, OL_STACK_ICO_MAX_LAYERS, facing_up);
 
     for (int i = 0; i < n; i++) {
         const ObjectLayerState* s = &layers[sorted[i].index];

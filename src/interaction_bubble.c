@@ -403,7 +403,7 @@ bool interaction_bubble_handle_click(int mx, int my, bool clicked) {
                  * weapon on top — same order as the grid and bubble. */
                 LayerZEntry z_sorted[32];
                 int z_count = layer_z_sort(mgr, icon_layers, icon_lc,
-                                           z_sorted, 32);
+                                           z_sorted, 32, false);
 
                 char json[4096];
                 int off = 0;
