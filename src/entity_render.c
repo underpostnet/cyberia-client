@@ -274,13 +274,15 @@ void draw_entity_layers(
 
     LayerRenderInfo layers_to_render[MAX_LAYERS_PER_ENTITY];
     int render_count = 0;
-    bool any_data_missing = false;
+    bool has_associated_item_id = false;
 
     for (int i = 0; i < layers_count && render_count < MAX_LAYERS_PER_ENTITY; i++) {
         ObjectLayerState* state = layers_state[i];
         if (!state || !state->active || state->item_id[0] == '\0') {
             continue;
         }
+
+        has_associated_item_id = true;
 
         // Fetch object layer metadata (for item type, ledger, render CIDs)
         ObjectLayer* layer = get_or_fetch_object_layer(
@@ -305,7 +307,6 @@ void draw_entity_layers(
 
         if (!layer && !atlas) {
             // Neither data source available yet — still loading
-            any_data_missing = true;
             continue;
         }
 
@@ -319,8 +320,12 @@ void draw_entity_layers(
         render_count++;
     }
 
-    if (any_data_missing && render_count == 0) {
+    if (!has_associated_item_id) {
         DrawRectangleRec(dest_rec, fallback_color);
+        return;
+    }
+
+    if (render_count == 0) {
         return;
     }
 
@@ -332,8 +337,6 @@ void draw_entity_layers(
     // ========================================================================
 
     double now = GetTime();
-    bool all_textures_ready = true;
-
     // Per-layer rendering data
     Texture2D layer_textures[MAX_LAYERS_PER_ENTITY] = { 0 };
     Rectangle layer_source_rects[MAX_LAYERS_PER_ENTITY] = { 0 };
@@ -349,7 +352,6 @@ void draw_entity_layers(
             state->item_id
         );
         if (!anim) {
-            all_textures_ready = false;
             continue;
         }
 
@@ -441,17 +443,14 @@ void draw_entity_layers(
                     }
                 } else {
                     // Frame metadata missing for this direction/frame
-                    all_textures_ready = false;
                     anim->failed_texture_attempts++;
                 }
             } else {
                 // Atlas texture not yet loaded (async in progress)
-                all_textures_ready = false;
                 anim->failed_texture_attempts++;
             }
         } else {
             // No atlas available — cannot render this layer
-            all_textures_ready = false;
             anim->failed_texture_attempts++;
         }
     }
@@ -460,22 +459,16 @@ void draw_entity_layers(
     // Final Rendering
     // ========================================================================
 
-    if (all_textures_ready) {
-        // All layers are ready — draw them all with atlas source rects
-        for (int i = 0; i < render_count; i++) {
-            if (layer_textures[i].id > 0) {
-                DrawTexturePro(
-                    layer_textures[i],
-                    layer_source_rects[i],
-                    dest_rec,
-                    (Vector2){0.0f, 0.0f},
-                    0.0f,
-                    WHITE
-                );
-            }
+    for (int i = 0; i < render_count; i++) {
+        if (layer_textures[i].id > 0) {
+            DrawTexturePro(
+                layer_textures[i],
+                layer_source_rects[i],
+                dest_rec,
+                (Vector2){0.0f, 0.0f},
+                0.0f,
+                WHITE
+            );
         }
-    } else {
-        // Something is still loading — render fallback placeholder
-        DrawRectangleRec(dest_rec, fallback_color);
     }
 }
