@@ -7,7 +7,6 @@ ObjectLayer* create_object_layer(void) {
     ObjectLayer* layer = (ObjectLayer*)calloc(1, sizeof(ObjectLayer));
     if (layer) {
         layer->data.ledger.type = LEDGER_TYPE_OFF_CHAIN;
-        layer->frame_duration = 100; // default 100ms per frame
     }
     return layer;
 }
@@ -20,6 +19,7 @@ AtlasSpriteSheetData* create_atlas_sprite_sheet_data(void) {
     AtlasSpriteSheetData* data = (AtlasSpriteSheetData*)calloc(1, sizeof(AtlasSpriteSheetData));
     if (data) {
         data->cell_pixel_dim = 20; // Default from engine schema
+        data->frame_duration = 100;
     }
     return data;
 }

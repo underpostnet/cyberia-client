@@ -155,7 +155,7 @@ Texture2D get_atlas_texture(ObjectLayersManager* manager, const char* item_key);
  * @brief Parse and cache an ObjectLayer from a JSON object (from WS metadata message).
  *
  * The JSON object has the same shape as a single OL item:
- *   { "sha256": "...", "data": { "stats": {...}, "item": {...}, ... }, "frame_duration": N }
+ *   { "sha256": "...", "data": { "stats": {...}, "item": {...}, ... } }
  *
  * @param manager The object layers manager instance
  * @param item_id The item ID key for this ObjectLayer
@@ -181,7 +181,7 @@ void populate_atlas_from_json(ObjectLayersManager* manager, const char* item_key
  *
  * Triggers: GET {API_BASE_URL}/api/atlas-sprite-sheet/metadata/{item_key}
  * Response: { status, data: { metadata: { itemKey, atlasWidth, atlasHeight,
- *                                         cellPixelDim, frames }, cid } }
+ *                                         cellPixelDim, frame_duration, frames }, cid } }
  *
  * After metadata is received, get_atlas_texture() automatically fetches
  * and caches the PNG blob on the next call.

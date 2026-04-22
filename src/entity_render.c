@@ -339,7 +339,6 @@ void draw_entity_layers(
     Rectangle layer_source_rects[MAX_LAYERS_PER_ENTITY] = { 0 };
 
     for (int i = 0; i < render_count; i++) {
-        ObjectLayer* layer = layers_to_render[i].layer;
         ObjectLayerState* state = layers_to_render[i].state;
         AtlasSpriteSheetData* atlas = layers_to_render[i].atlas;
 
@@ -369,15 +368,11 @@ void draw_entity_layers(
             }
         }
 
-        // Determine frame duration.
-        // This no longer lives on ObjectLayer.data.render (which now holds
-        // IPFS CIDs). It is parsed from the populated
-        // objectLayerRenderFramesId reference and stored directly on the
-        // ObjectLayer struct.
+        // Determine frame duration from atlas metadata fetched from the engine.
         int frame_duration_ms = DEFAULT_FRAME_DURATION_MS;
 
-        if (layer) {
-            frame_duration_ms = layer->frame_duration;
+        if (atlas) {
+            frame_duration_ms = atlas->frame_duration;
             if (frame_duration_ms <= 0) frame_duration_ms = DEFAULT_FRAME_DURATION_MS;
         }
 

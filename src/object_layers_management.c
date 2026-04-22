@@ -525,7 +525,7 @@ Texture2D get_atlas_texture(ObjectLayersManager* manager, const char* item_key) 
         unsigned char* data = (unsigned char*)js_get_fetch_result(meta->request_id, &size);
         if (data && size > 0) {
             // Parse REST response: { "data": { "metadata": { itemKey, atlasWidth, atlasHeight,
-            //                                               cellPixelDim, frames }, cid } }
+            //                                               cellPixelDim, frame_duration, frames }, cid } }
             cJSON* root = cJSON_ParseWithLength((const char*)data, (size_t)size);
             free(data);
             if (root) {
@@ -538,6 +538,7 @@ Texture2D get_atlas_texture(ObjectLayersManager* manager, const char* item_key) 
                         atlas->atlas_width    = json_get_int_safe(rmeta, "atlasWidth",  0);
                         atlas->atlas_height   = json_get_int_safe(rmeta, "atlasHeight", 0);
                         atlas->cell_pixel_dim = json_get_int_safe(rmeta, "cellPixelDim", 20);
+                        atlas->frame_duration = json_get_int_safe(rmeta, "frame_duration", 100);
                         cJSON* frames = cJSON_GetObjectItem(rmeta, "frames");
                         if (frames) parse_ws_direction_frames(frames, atlas);
                         cache_atlas_data(manager, item_key, atlas);
@@ -597,7 +598,7 @@ void populate_object_layer_from_json(ObjectLayersManager* manager, const char* i
     assert(manager && item_id && ol_json);
 
     // Parse OL metadata from the WS metadata JSON shape
-    // (sha256, data.{stats,item,ledger,render}, frame_duration)
+    // (sha256, data.{stats,item,ledger,render})
     ObjectLayer* layer = create_object_layer();
     if (!layer) return;
 
@@ -607,8 +608,6 @@ void populate_object_layer_from_json(ObjectLayersManager* manager, const char* i
 
     cJSON* data = cJSON_GetObjectItem((cJSON*)ol_json, "data");
     parse_object_layer_data(data, &layer->data);
-
-    layer->frame_duration = json_get_int_safe((cJSON*)ol_json, "frame_duration", 250);
 
     // Ensure item ID is set
     if (strlen(layer->data.item.id) == 0) {
@@ -660,6 +659,7 @@ void populate_atlas_from_json(ObjectLayersManager* manager, const char* item_key
     atlas->atlas_width = json_get_int_safe((cJSON*)atlas_json, "atlasWidth", 0);
     atlas->atlas_height = json_get_int_safe((cJSON*)atlas_json, "atlasHeight", 0);
     atlas->cell_pixel_dim = json_get_int_safe((cJSON*)atlas_json, "cellPixelDim", 20);
+    atlas->frame_duration = json_get_int_safe((cJSON*)atlas_json, "frame_duration", 100);
 
     cJSON* frames = cJSON_GetObjectItem((cJSON*)atlas_json, "frames");
     if (frames) {

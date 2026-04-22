@@ -110,6 +110,7 @@ typedef struct {
     int atlas_width;                        /**< Total atlas width in pixels */
     int atlas_height;                       /**< Total atlas height in pixels */
     int cell_pixel_dim;                     /**< Pixel dimension of each cell */
+    int frame_duration;                     /**< ms per frame (from atlas metadata) */
 
     /* Per-direction frame metadata arrays (DirectionFramesSchema) */
     DirectionFrameData up_idle;
@@ -144,10 +145,8 @@ typedef struct {
  *   - metadataCid: IPFS CID for the atlas sprite sheet metadata JSON
  *
  * These replace the legacy RenderFrames fields that previously lived directly
- * on the ObjectLayer. Frame-level data (frame_duration and per-direction
- * frame counts) now
- * lives exclusively on the ObjectLayerRenderFrames collection and on
- * the AtlasSpriteSheetData metadata fetched at runtime.
+ * on the ObjectLayer. Frame-level animation data now lives on the
+ * AtlasSpriteSheetData metadata fetched at runtime.
  */
 typedef struct {
     char cid[MAX_CID_LENGTH];              /**< IPFS CID for the atlas PNG */
@@ -207,24 +206,10 @@ typedef struct {
  * @brief Top-level ObjectLayer document.
  *
  * The C client only needs a subset of the full Mongoose document.
- *
- * frame_duration is NOT part of the ObjectLayer Mongoose
- * schema (data.render now holds IPFS CIDs only).  They live on the separate
- * ObjectLayerRenderFrames collection, but the engine API populates them
- * into the response via:
- *
- *   .populate('objectLayerRenderFramesId', { _id:1, frame_duration:1 })
- *
- * The C parser extracts frame_duration from the populated reference and stores
- * it here as first-class animation metadata so the render loop can use it
- * without an extra fetch.
  */
 typedef struct {
     ObjectLayerData data;
     char sha256[65];    // 64 hex chars + null terminator
-
-    /* Animation metadata – from populated objectLayerRenderFramesId */
-    int  frame_duration; /**< ms per frame (from ObjectLayerRenderFrames) */
 } ObjectLayer;
 
 // ============================================================================
