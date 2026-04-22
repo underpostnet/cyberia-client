@@ -155,7 +155,7 @@ Texture2D get_atlas_texture(ObjectLayersManager* manager, const char* item_key);
  * @brief Parse and cache an ObjectLayer from a JSON object (from WS metadata message).
  *
  * The JSON object has the same shape as a single OL item:
- *   { "sha256": "...", "data": { "stats": {...}, "item": {...}, ... }, "frame_duration": N, "is_stateless": bool }
+ *   { "sha256": "...", "data": { "stats": {...}, "item": {...}, ... }, "frame_duration": N }
  *
  * @param manager The object layers manager instance
  * @param item_id The item ID key for this ObjectLayer

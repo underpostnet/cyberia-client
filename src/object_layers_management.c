@@ -597,7 +597,7 @@ void populate_object_layer_from_json(ObjectLayersManager* manager, const char* i
     assert(manager && item_id && ol_json);
 
     // Parse OL metadata from the WS metadata JSON shape
-    // (sha256, data.{stats,item,ledger,render}, frame_duration, is_stateless)
+    // (sha256, data.{stats,item,ledger,render}, frame_duration)
     ObjectLayer* layer = create_object_layer();
     if (!layer) return;
 
@@ -609,7 +609,6 @@ void populate_object_layer_from_json(ObjectLayersManager* manager, const char* i
     parse_object_layer_data(data, &layer->data);
 
     layer->frame_duration = json_get_int_safe((cJSON*)ol_json, "frame_duration", 250);
-    layer->is_stateless = json_get_bool_safe((cJSON*)ol_json, "is_stateless", false);
 
     // Ensure item ID is set
     if (strlen(layer->data.item.id) == 0) {

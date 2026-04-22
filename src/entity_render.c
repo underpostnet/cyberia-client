@@ -96,42 +96,60 @@ static int compare_layer_priority(const void* a, const void* b) {
  * @brief Determine the direction string and frame count for the current animation state.
  *
  * Frame counts are resolved exclusively from AtlasSpriteSheetData metadata.
- * The legacy RenderFrames fallback has been removed — frame_duration and
- * is_stateless no longer live on ObjectLayer.data.render; they are resolved
- * at runtime from the ObjectLayerRenderFrames population or inferred from
- * atlas metadata.
+ * The render path picks the first available animation in a small fallback
+ * chain.
  */
+static int pick_available_direction(
+    const AtlasSpriteSheetData* atlas,
+    const char* requested_dir,
+    const char* secondary_dir,
+    const char** out_dir_string
+) {
+    const char* candidates[5] = {
+        requested_dir,
+        secondary_dir,
+        "down_idle",
+        "none_idle",
+        "default_idle"
+    };
+
+    for (int i = 0; i < 5; i++) {
+        const char* dir_str = candidates[i];
+        if (!dir_str || dir_str[0] == '\0') {
+            continue;
+        }
+        const DirectionFrameData* dfd = atlas_get_direction_frames(atlas, dir_str);
+        if (dfd && dfd->count > 0) {
+            *out_dir_string = dir_str;
+            return dfd->count;
+        }
+    }
+
+    *out_dir_string = requested_dir && requested_dir[0] != '\0' ? requested_dir : "down_idle";
+    return 0;
+}
+
 static int get_frame_count_and_direction(
     const AtlasSpriteSheetData* atlas,
     Direction dir,
     ObjectLayerMode mode,
-    bool is_stateless,
     const char** out_dir_string
 ) {
-    if (is_stateless) {
-        *out_dir_string = "default_idle";
-        if (atlas) {
-            const DirectionFrameData* dfd = atlas_get_direction_frames(atlas, "default_idle");
-            return dfd ? dfd->count : 0;
-        }
-        return 0;
-    }
-
     // Build the direction string based on direction + mode
     const char* dir_str = "down_idle";
-    int count = 0;
+    const char* fallback_dir = NULL;
 
     if (mode == MODE_WALKING) {
         switch (dir) {
-            case DIRECTION_UP:         dir_str = "up_walking"; break;
-            case DIRECTION_DOWN:       dir_str = "down_walking"; break;
-            case DIRECTION_LEFT:       dir_str = "left_walking"; break;
-            case DIRECTION_RIGHT:      dir_str = "right_walking"; break;
-            case DIRECTION_UP_RIGHT:   dir_str = "up_right_walking"; break;
-            case DIRECTION_UP_LEFT:    dir_str = "up_left_walking"; break;
-            case DIRECTION_DOWN_RIGHT: dir_str = "down_right_walking"; break;
-            case DIRECTION_DOWN_LEFT:  dir_str = "down_left_walking"; break;
-            default:                   dir_str = "down_walking"; break;
+            case DIRECTION_UP:         dir_str = "up_walking"; fallback_dir = "up_idle"; break;
+            case DIRECTION_DOWN:       dir_str = "down_walking"; fallback_dir = "down_idle"; break;
+            case DIRECTION_LEFT:       dir_str = "left_walking"; fallback_dir = "left_idle"; break;
+            case DIRECTION_RIGHT:      dir_str = "right_walking"; fallback_dir = "right_idle"; break;
+            case DIRECTION_UP_RIGHT:   dir_str = "up_right_walking"; fallback_dir = "up_right_idle"; break;
+            case DIRECTION_UP_LEFT:    dir_str = "up_left_walking"; fallback_dir = "up_left_idle"; break;
+            case DIRECTION_DOWN_RIGHT: dir_str = "down_right_walking"; fallback_dir = "down_right_idle"; break;
+            case DIRECTION_DOWN_LEFT:  dir_str = "down_left_walking"; fallback_dir = "down_left_idle"; break;
+            default:                   dir_str = "down_walking"; fallback_dir = "down_idle"; break;
         }
     } else {
         switch (dir) {
@@ -148,15 +166,12 @@ static int get_frame_count_and_direction(
         }
     }
 
-    *out_dir_string = dir_str;
-
-    // Get frame count exclusively from atlas metadata
-    if (atlas) {
-        const DirectionFrameData* dfd = atlas_get_direction_frames(atlas, dir_str);
-        count = dfd ? dfd->count : 0;
+    if (!atlas) {
+        *out_dir_string = dir_str;
+        return 0;
     }
 
-    return count;
+    return pick_available_direction(atlas, dir_str, fallback_dir, out_dir_string);
 }
 
 static void draw_dev_ui_box(Rectangle dest_rec, const char* entity_type) {
@@ -354,22 +369,16 @@ void draw_entity_layers(
             }
         }
 
-        // Determine is_stateless and frame_duration.
-        // These no longer live on ObjectLayer.data.render (which now holds
-        // IPFS CIDs).  They are parsed from the populated
+        // Determine frame duration.
+        // This no longer lives on ObjectLayer.data.render (which now holds
+        // IPFS CIDs). It is parsed from the populated
         // objectLayerRenderFramesId reference and stored directly on the
-        // ObjectLayer struct.  Fall back to atlas inference if ObjectLayer
-        // metadata hasn't loaded yet.
-        bool is_stateless = false;
+        // ObjectLayer struct.
         int frame_duration_ms = DEFAULT_FRAME_DURATION_MS;
 
         if (layer) {
-            is_stateless = layer->is_stateless;
             frame_duration_ms = layer->frame_duration;
             if (frame_duration_ms <= 0) frame_duration_ms = DEFAULT_FRAME_DURATION_MS;
-        } else if (atlas) {
-            // ObjectLayer not loaded yet — infer from atlas metadata
-            is_stateless = (atlas->default_idle.count > 0);
         }
 
         // Frame Selection — resolved exclusively from atlas metadata
@@ -378,7 +387,6 @@ void draw_entity_layers(
             atlas,
             render_direction,
             render_mode,
-            is_stateless,
             &dir_string
         );
 

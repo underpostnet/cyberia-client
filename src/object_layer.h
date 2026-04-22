@@ -143,9 +143,9 @@ typedef struct {
  *   - cid:         IPFS CID for the consolidated atlas sprite sheet PNG
  *   - metadataCid: IPFS CID for the atlas sprite sheet metadata JSON
  *
- * These replace the legacy RenderFrames / frame_duration / is_stateless
- * fields that previously lived directly on the ObjectLayer. Frame-level
- * data (frame_duration, is_stateless, per-direction frame counts) now
+ * These replace the legacy RenderFrames fields that previously lived directly
+ * on the ObjectLayer. Frame-level data (frame_duration and per-direction
+ * frame counts) now
  * lives exclusively on the ObjectLayerRenderFrames collection and on
  * the AtlasSpriteSheetData metadata fetched at runtime.
  */
@@ -208,15 +208,15 @@ typedef struct {
  *
  * The C client only needs a subset of the full Mongoose document.
  *
- * frame_duration and is_stateless are NOT part of the ObjectLayer Mongoose
+ * frame_duration is NOT part of the ObjectLayer Mongoose
  * schema (data.render now holds IPFS CIDs only).  They live on the separate
  * ObjectLayerRenderFrames collection, but the engine API populates them
  * into the response via:
  *
- *   .populate('objectLayerRenderFramesId', { _id:1, frame_duration:1, is_stateless:1 })
+ *   .populate('objectLayerRenderFramesId', { _id:1, frame_duration:1 })
  *
- * The C parser extracts them from the populated reference and stores them
- * here as first-class animation metadata so the render loop can use them
+ * The C parser extracts frame_duration from the populated reference and stores
+ * it here as first-class animation metadata so the render loop can use it
  * without an extra fetch.
  */
 typedef struct {
@@ -225,7 +225,6 @@ typedef struct {
 
     /* Animation metadata – from populated objectLayerRenderFramesId */
     int  frame_duration; /**< ms per frame (from ObjectLayerRenderFrames) */
-    bool is_stateless;   /**< true ⇒ always use default_idle direction  */
 } ObjectLayer;
 
 // ============================================================================
