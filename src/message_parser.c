@@ -303,6 +303,21 @@ static int message_parser_parse_init_data(const cJSON* json_root) {
                 }
             }
 
+            // Parse dropItemIds array
+            cJSON* drop_arr = cJSON_GetObjectItem(etd, "dropItemIds");
+            if (drop_arr && cJSON_IsArray(drop_arr)) {
+                cJSON* item = NULL;
+                cJSON_ArrayForEach(item, drop_arr) {
+                    if (d->drop_item_id_count >= MAX_DEFAULT_ITEM_IDS) break;
+                    if (cJSON_IsString(item)) {
+                        strncpy(d->drop_item_ids[d->drop_item_id_count],
+                                cJSON_GetStringValue(item), 127);
+                        d->drop_item_ids[d->drop_item_id_count][127] = '\0';
+                        d->drop_item_id_count++;
+                    }
+                }
+            }
+
             if (d->entity_type[0] != '\0') g_game_state.entity_defaults_count++;
         }
     }

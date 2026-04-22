@@ -150,6 +150,8 @@ typedef struct {
     int  live_item_id_count;
     char dead_item_ids[MAX_DEFAULT_ITEM_IDS][128];
     int  dead_item_id_count;
+    char drop_item_ids[MAX_DEFAULT_ITEM_IDS][128];
+    int  drop_item_id_count;
     char color_key[32];
 } EntityTypeDefault;
 
