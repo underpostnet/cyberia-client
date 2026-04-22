@@ -288,6 +288,8 @@ static void decode_obstacle_entity(BinReader* r, uint8_t flags) {
     o->dims = (Vector2){ dw, dh };
     strncpy(o->type, "obstacle", MAX_TYPE_LENGTH - 1);
     o->color = obs_color;
+    o->object_layer_count = read_item_ids(
+        r, o->object_layers, MAX_OBJECT_LAYERS);
 }
 
 static void decode_portal_entity(BinReader* r, uint8_t flags) {
@@ -356,6 +358,8 @@ static void decode_foreground_entity(BinReader* r, uint8_t flags) {
     fg->dims = (Vector2){ dw, dh };
     strncpy(fg->type, "foreground", MAX_TYPE_LENGTH - 1);
     fg->color = fg_color;
+    fg->object_layer_count = read_item_ids(
+        r, fg->object_layers, MAX_OBJECT_LAYERS);
 }
 
 /* ── Resource entity decoder ───────────────────────────────────── */

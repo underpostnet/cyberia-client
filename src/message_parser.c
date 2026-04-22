@@ -642,6 +642,7 @@ static int message_parser_parse_aoi_update(const cJSON* json_root) {
                     cJSON* pos = cJSON_GetObjectItemCaseSensitive(obj, "Pos");
                     cJSON* dims = cJSON_GetObjectItemCaseSensitive(obj, "Dims");
                     cJSON* id = cJSON_GetObjectItemCaseSensitive(obj, "id");
+                    cJSON* obj_layers = cJSON_GetObjectItemCaseSensitive(obj, "objectLayers");
 
                     if (pos && dims && id && cJSON_IsString(id)) {
                         WorldObject* obstacle = &g_game_state.obstacles[g_game_state.obstacle_count];
@@ -650,6 +651,32 @@ static int message_parser_parse_aoi_update(const cJSON* json_root) {
                         obstacle->pos.y = serial_get_float_default(pos, "Y", 0.0f);
                         obstacle->dims.x = serial_get_float_default(dims, "Width", 1.0f);
                         obstacle->dims.y = serial_get_float_default(dims, "Height", 1.0f);
+
+                        obstacle->object_layer_count = 0;
+                        if (obj_layers && cJSON_IsArray(obj_layers)) {
+                            cJSON* layer = NULL;
+                            cJSON_ArrayForEach(layer, obj_layers) {
+                                if (obstacle->object_layer_count >= MAX_OBJECT_LAYERS) break;
+
+                                ObjectLayerState* layer_state = &obstacle->object_layers[obstacle->object_layer_count];
+
+                                cJSON* item_id = cJSON_GetObjectItemCaseSensitive(layer, "itemId");
+                                cJSON* active = cJSON_GetObjectItemCaseSensitive(layer, "active");
+                                cJSON* quantity = cJSON_GetObjectItemCaseSensitive(layer, "quantity");
+
+                                if (item_id && cJSON_IsString(item_id)) {
+                                    strncpy(layer_state->item_id, item_id->valuestring, sizeof(layer_state->item_id) - 1);
+                                }
+                                if (active && cJSON_IsBool(active)) {
+                                    layer_state->active = cJSON_IsTrue(active);
+                                }
+                                if (quantity && cJSON_IsNumber(quantity)) {
+                                    layer_state->quantity = quantity->valueint;
+                                }
+
+                                obstacle->object_layer_count++;
+                            }
+                        }
                         g_game_state.obstacle_count++;
                     }
                 }
@@ -660,6 +687,7 @@ static int message_parser_parse_aoi_update(const cJSON* json_root) {
                     cJSON* pos = cJSON_GetObjectItemCaseSensitive(obj, "Pos");
                     cJSON* dims = cJSON_GetObjectItemCaseSensitive(obj, "Dims");
                     cJSON* id = cJSON_GetObjectItemCaseSensitive(obj, "id");
+                    cJSON* obj_layers = cJSON_GetObjectItemCaseSensitive(obj, "objectLayers");
 
                     if (pos && dims && id && cJSON_IsString(id)) {
                         WorldObject* foreground = &g_game_state.foregrounds[g_game_state.foreground_count];
@@ -668,6 +696,32 @@ static int message_parser_parse_aoi_update(const cJSON* json_root) {
                         foreground->pos.y = serial_get_float_default(pos, "Y", 0.0f);
                         foreground->dims.x = serial_get_float_default(dims, "Width", 1.0f);
                         foreground->dims.y = serial_get_float_default(dims, "Height", 1.0f);
+
+                        foreground->object_layer_count = 0;
+                        if (obj_layers && cJSON_IsArray(obj_layers)) {
+                            cJSON* layer = NULL;
+                            cJSON_ArrayForEach(layer, obj_layers) {
+                                if (foreground->object_layer_count >= MAX_OBJECT_LAYERS) break;
+
+                                ObjectLayerState* layer_state = &foreground->object_layers[foreground->object_layer_count];
+
+                                cJSON* item_id = cJSON_GetObjectItemCaseSensitive(layer, "itemId");
+                                cJSON* active = cJSON_GetObjectItemCaseSensitive(layer, "active");
+                                cJSON* quantity = cJSON_GetObjectItemCaseSensitive(layer, "quantity");
+
+                                if (item_id && cJSON_IsString(item_id)) {
+                                    strncpy(layer_state->item_id, item_id->valuestring, sizeof(layer_state->item_id) - 1);
+                                }
+                                if (active && cJSON_IsBool(active)) {
+                                    layer_state->active = cJSON_IsTrue(active);
+                                }
+                                if (quantity && cJSON_IsNumber(quantity)) {
+                                    layer_state->quantity = quantity->valueint;
+                                }
+
+                                foreground->object_layer_count++;
+                            }
+                        }
                         g_game_state.foreground_count++;
                     }
                 }
