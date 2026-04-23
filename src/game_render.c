@@ -366,44 +366,6 @@ void game_render_floors(void) {
 void game_render_world_objects(void) {
     float cell_size = g_game_state.cell_size > 0 ? g_game_state.cell_size : 12.0f;
 
-    // Render obstacles
-    for (int i = 0; i < g_game_state.obstacle_count; i++) {
-        WorldObject* obj = &g_game_state.obstacles[i];
-        Color obs_color = obj->color.a > 0 ? obj->color : g_game_state.colors.obstacle;
-
-        if (obj->object_layer_count > 0) {
-            ObjectLayerState* layers[MAX_OBJECT_LAYERS];
-            for (int j = 0; j < obj->object_layer_count; j++) {
-                layers[j] = &obj->object_layers[j];
-            }
-
-            draw_entity_layers(
-                g_entity_render,
-                obj->id,
-                obj->pos.x,
-                obj->pos.y,
-                obj->dims.x,
-                obj->dims.y,
-                DIRECTION_NONE,
-                MODE_IDLE,
-                layers,
-                obj->object_layer_count,
-                "obstacle",
-                g_game_state.dev_ui,
-                cell_size,
-                obs_color
-            );
-        } else {
-            Rectangle rect = {
-                obj->pos.x * cell_size,
-                obj->pos.y * cell_size,
-                obj->dims.x * cell_size,
-                obj->dims.y * cell_size
-            };
-            DrawRectangleRec(rect, obs_color);
-        }
-    }
-
     // Render portals
     for (int i = 0; i < g_game_state.portal_count; i++) {
         WorldObject* portal = &g_game_state.portals[i];
@@ -486,10 +448,15 @@ void game_render_foregrounds(void) {
 }
 
 // Helper structure for depth sorting entities
+#define MAX_DEPTH_SORT_ENTRIES (MAX_OBJECTS + (MAX_ENTITIES * 3) + 1)
+
 typedef struct {
-    enum { ENTITY_TYPE_PLAYER, ENTITY_TYPE_OTHER_PLAYER, ENTITY_TYPE_BOT, ENTITY_TYPE_RESOURCE } type;
+    enum { ENTITY_TYPE_OBSTACLE, ENTITY_TYPE_PLAYER, ENTITY_TYPE_OTHER_PLAYER, ENTITY_TYPE_BOT, ENTITY_TYPE_RESOURCE } type;
     float bottom_y;  // Y position of entity's bottom edge (for depth sorting)
+    const char* sort_id;
+    int source_order;
     union {
+        WorldObject* object;
         PlayerState* player;
         BotState* bot;
     } data;
@@ -497,13 +464,26 @@ typedef struct {
 } EntitySortEntry;
 
 // Comparison function for qsort - entities with lower Y render first (appear behind)
+#define ENTITY_DEPTH_EPSILON 0.001f
+
 static int compare_entities_by_depth(const void* a, const void* b) {
     const EntitySortEntry* ea = (const EntitySortEntry*)a;
     const EntitySortEntry* eb = (const EntitySortEntry*)b;
+    float depth_delta = ea->bottom_y - eb->bottom_y;
 
-    if (ea->bottom_y < eb->bottom_y) return -1;
-    if (ea->bottom_y > eb->bottom_y) return 1;
-    return 0;
+    if (depth_delta < -ENTITY_DEPTH_EPSILON) return -1;
+    if (depth_delta > ENTITY_DEPTH_EPSILON) return 1;
+
+    if (ea->sort_id && eb->sort_id) {
+        int id_cmp = strcmp(ea->sort_id, eb->sort_id);
+        if (id_cmp != 0) return id_cmp;
+    }
+
+    if (ea->type != eb->type) {
+        return (int)ea->type - (int)eb->type;
+    }
+
+    return ea->source_order - eb->source_order;
 }
 
 void game_render_entities(void) {
@@ -550,14 +530,30 @@ void game_render_entities(void) {
     float cell_size = g_game_state.cell_size > 0 ? g_game_state.cell_size : 12.0f;
     bool dev_ui = g_game_state.dev_ui;
 
-    // Create array to hold all entities for sorting
-    static EntitySortEntry sort_entries[MAX_ENTITIES * 3 + 1];  // players + bots + resources + main player
+    // Create array to hold all depth-sorted actors
+    static EntitySortEntry sort_entries[MAX_DEPTH_SORT_ENTRIES];
     int entry_count = 0;
+
+    // Add obstacles to sort list so they share the same depth rules as entities.
+    for (int i = 0; i < g_game_state.obstacle_count; i++) {
+        WorldObject* obj = &g_game_state.obstacles[i];
+        float bottom_y = obj->pos.y + obj->dims.y;
+
+        sort_entries[entry_count].type = ENTITY_TYPE_OBSTACLE;
+        sort_entries[entry_count].bottom_y = bottom_y;
+        sort_entries[entry_count].sort_id = obj->id;
+        sort_entries[entry_count].source_order = entry_count;
+        sort_entries[entry_count].data.object = obj;
+        sort_entries[entry_count].is_main_player = false;
+        entry_count++;
+    }
 
     // Add main player to sort list
     float player_bottom_y = g_game_state.player.base.interp_pos.y + g_game_state.player.base.dims.y;
     sort_entries[entry_count].type = ENTITY_TYPE_PLAYER;
     sort_entries[entry_count].bottom_y = player_bottom_y;
+    sort_entries[entry_count].sort_id = g_game_state.player.base.id;
+    sort_entries[entry_count].source_order = entry_count;
     sort_entries[entry_count].data.player = &g_game_state.player;
     sort_entries[entry_count].is_main_player = true;
     entry_count++;
@@ -569,6 +565,8 @@ void game_render_entities(void) {
 
         sort_entries[entry_count].type = ENTITY_TYPE_OTHER_PLAYER;
         sort_entries[entry_count].bottom_y = bottom_y;
+        sort_entries[entry_count].sort_id = player->base.id;
+        sort_entries[entry_count].source_order = entry_count;
         sort_entries[entry_count].data.player = player;
         sort_entries[entry_count].is_main_player = false;
         entry_count++;
@@ -581,6 +579,8 @@ void game_render_entities(void) {
 
         sort_entries[entry_count].type = ENTITY_TYPE_BOT;
         sort_entries[entry_count].bottom_y = bottom_y;
+        sort_entries[entry_count].sort_id = bot->base.id;
+        sort_entries[entry_count].source_order = entry_count;
         sort_entries[entry_count].data.bot = bot;
         sort_entries[entry_count].is_main_player = false;
         entry_count++;
@@ -593,6 +593,8 @@ void game_render_entities(void) {
 
         sort_entries[entry_count].type = ENTITY_TYPE_RESOURCE;
         sort_entries[entry_count].bottom_y = bottom_y;
+        sort_entries[entry_count].sort_id = res->base.id;
+        sort_entries[entry_count].source_order = entry_count;
         sort_entries[entry_count].data.bot = res;
         sort_entries[entry_count].is_main_player = false;
         entry_count++;
@@ -612,9 +614,17 @@ void game_render_entities(void) {
         const char* entity_type_str = NULL;
         const char* entity_id = NULL;
         EntityState* entity_base = NULL;
+        WorldObject* obstacle = NULL;
         int layers_count = 0;
 
         switch (entry->type) {
+            case ENTITY_TYPE_OBSTACLE:
+                obstacle = entry->data.object;
+                entity_type_str = "obstacle";
+                entity_id = obstacle->id;
+                layers_count = obstacle->object_layer_count;
+                break;
+
             case ENTITY_TYPE_PLAYER:
                 entity_base = &entry->data.player->base;
                 entity_type_str = entry->is_main_player ? "self" : "other";
@@ -650,6 +660,43 @@ void game_render_entities(void) {
                 entity_id = entity_base->id;
                 layers_count = entity_base->object_layer_count;
                 break;
+        }
+
+        if (obstacle && entity_id) {
+            Color obstacle_color = obstacle->color.a > 0 ? obstacle->color : g_game_state.colors.obstacle;
+
+            if (layers_count == 0) {
+                Rectangle rect = {
+                    obstacle->pos.x * cell_size,
+                    obstacle->pos.y * cell_size,
+                    obstacle->dims.x * cell_size,
+                    obstacle->dims.y * cell_size
+                };
+                DrawRectangleRec(rect, obstacle_color);
+            } else {
+                for (int j = 0; j < layers_count && j < MAX_OBJECT_LAYERS; j++) {
+                    temp_layers[j] = &obstacle->object_layers[j];
+                }
+
+                draw_entity_layers(
+                    g_entity_render,
+                    entity_id,
+                    obstacle->pos.x,
+                    obstacle->pos.y,
+                    obstacle->dims.x,
+                    obstacle->dims.y,
+                    DIRECTION_NONE,
+                    MODE_IDLE,
+                    temp_layers,
+                    layers_count,
+                    entity_type_str,
+                    dev_ui,
+                    cell_size,
+                    obstacle_color
+                );
+            }
+
+            continue;
         }
 
         if (entity_base && entity_id) {
