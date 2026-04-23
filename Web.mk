@@ -10,8 +10,6 @@ target_output_dir	:= $(call lc,$(OUTPUT_DIR)/web/$(BUILD_MODE))
 
 #---------------------------------------------------------------------------------------------
 # Specific compiler flags
-CFLAGS	+= -DPLATFORM_WEB
-CFLAGS	+= -DGRAPHICS_API_OPENGL_ES2
 CFLAGS	+= -flto
 CFLAGS	+= -Wno-unused-parameter
 
@@ -85,14 +83,8 @@ $(target_build_dir)/libraylib.web.a:
 		PLATFORM=PLATFORM_WEB \
 		RAYLIB_BUILD_MODE=$(BUILD_MODE) \
 		RAYLIB_LIBTYPE=STATIC \
-		RAYLIB_RELEASE_PATH=$(CURDIR)/$(target_build_dir) \
-		CFLAGS_EXTRA="-Wno-deprecated-pragma -Wno-tautological-compare -D__EMSCRIPTEN_major__=__EMSCRIPTEN_MAJOR__ -D__EMSCRIPTEN_minor__=__EMSCRIPTEN_MINOR__ -D__EMSCRIPTEN_tiny__=__EMSCRIPTEN_TINY__"
+		RAYLIB_RELEASE_PATH=$(CURDIR)/$(target_build_dir)
 	make -C $(RAYLIB_PATH)/src clean
 
 clean:
 	-rm -rf $(BUILD_DIR) $(OUTPUT_DIR)
-
-
-# Remove these when safe to - Callers should be calling all instead of web and libraylib is for internal use only
-# libraylib: $(target_build_dir)/libraylib.web.a
-# web: all

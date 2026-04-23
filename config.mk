@@ -4,7 +4,7 @@ BUILD_MODE      ?= DEBUG
 # -- Master folders
 ASSETS_DIR      ?= assets
 BUILD_DIR       ?= build
-LIBS_DIR		?= lib
+LIBS_DIR		?= libs
 OUTPUT_DIR      ?= bin
 SRC_DIR         ?= src
 

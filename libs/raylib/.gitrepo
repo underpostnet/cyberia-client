@@ -1,0 +1,12 @@
+; DO NOT EDIT (unless you know what you are doing)
+;
+; This subdirectory is a git "subrepo", and this file is maintained by the
+; git-subrepo command. See https://github.com/ingydotnet/git-subrepo#readme
+;
+[subrepo]
+	remote = https://github.com/raysan5/raylib
+	branch = master
+	commit = dbc56a87da87d973a9c5baa4e7438a9d20121d28
+	parent = d1eb33a5a85c935a3881fc06ef44db506ea555a1
+	method = merge
+	cmdver = 0.4.9
