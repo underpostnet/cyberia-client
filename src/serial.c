@@ -559,18 +559,27 @@ int serial_deserialize_world_object(const cJSON* json, WorldObject* out) {
 
     // Position
     cJSON* pos_obj = serial_get_object(json, "Pos");
-    if (pos_obj) {
-        serial_deserialize_point(pos_obj, &out->pos);
+    if (!pos_obj || serial_deserialize_point(pos_obj, &out->pos) != 0) {
+        return -1;
     }
 
     // Dimensions
     cJSON* dims_obj = serial_get_object(json, "Dims");
-    if (dims_obj) {
-        serial_deserialize_dimensions(dims_obj, &out->dims);
+    if (!dims_obj || serial_deserialize_dimensions(dims_obj, &out->dims) != 0) {
+        return -1;
     }
 
     // Portal label (optional)
     serial_get_string_default(json, "PortalLabel", out->portal_label, sizeof(out->portal_label), "");
+
+    // Per-object fallback color (optional)
+    cJSON* color_obj = serial_get_object(json, "color");
+    if (color_obj) {
+        ColorRGBA rgba = {0};
+        if (serial_deserialize_color_rgba(color_obj, &rgba) == 0) {
+            out->color = (Color){rgba.r, rgba.g, rgba.b, rgba.a};
+        }
+    }
 
     // Object layers
     cJSON* layers_obj = serial_get_array(json, "objectLayers");

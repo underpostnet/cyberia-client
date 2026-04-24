@@ -638,161 +638,42 @@ static int message_parser_parse_aoi_update(const cJSON* json_root) {
             // Dispatch based on type
             if (strcmp(obj_type, "obstacle") == 0) {
                 if (g_game_state.obstacle_count < MAX_OBJECTS) {
-                    // Parse obstacle
-                    cJSON* pos = cJSON_GetObjectItemCaseSensitive(obj, "Pos");
-                    cJSON* dims = cJSON_GetObjectItemCaseSensitive(obj, "Dims");
-                    cJSON* id = cJSON_GetObjectItemCaseSensitive(obj, "id");
-                    cJSON* obj_layers = cJSON_GetObjectItemCaseSensitive(obj, "objectLayers");
-
-                    if (pos && dims && id && cJSON_IsString(id)) {
-                        WorldObject* obstacle = &g_game_state.obstacles[g_game_state.obstacle_count];
-                        strncpy(obstacle->id, id->valuestring, sizeof(obstacle->id) - 1);
-                        obstacle->pos.x = serial_get_float_default(pos, "X", 0.0f);
-                        obstacle->pos.y = serial_get_float_default(pos, "Y", 0.0f);
-                        obstacle->dims.x = serial_get_float_default(dims, "Width", 1.0f);
-                        obstacle->dims.y = serial_get_float_default(dims, "Height", 1.0f);
-
-                        obstacle->object_layer_count = 0;
-                        if (obj_layers && cJSON_IsArray(obj_layers)) {
-                            cJSON* layer = NULL;
-                            cJSON_ArrayForEach(layer, obj_layers) {
-                                if (obstacle->object_layer_count >= MAX_OBJECT_LAYERS) break;
-
-                                ObjectLayerState* layer_state = &obstacle->object_layers[obstacle->object_layer_count];
-
-                                cJSON* item_id = cJSON_GetObjectItemCaseSensitive(layer, "itemId");
-                                cJSON* active = cJSON_GetObjectItemCaseSensitive(layer, "active");
-                                cJSON* quantity = cJSON_GetObjectItemCaseSensitive(layer, "quantity");
-
-                                if (item_id && cJSON_IsString(item_id)) {
-                                    strncpy(layer_state->item_id, item_id->valuestring, sizeof(layer_state->item_id) - 1);
-                                }
-                                if (active && cJSON_IsBool(active)) {
-                                    layer_state->active = cJSON_IsTrue(active);
-                                }
-                                if (quantity && cJSON_IsNumber(quantity)) {
-                                    layer_state->quantity = quantity->valueint;
-                                }
-
-                                obstacle->object_layer_count++;
-                            }
-                        }
-                        g_game_state.obstacle_count++;
+                    WorldObject* obstacle = &g_game_state.obstacles[g_game_state.obstacle_count];
+                    if (serial_deserialize_world_object(obj, obstacle) != 0) {
+                        obj = obj->next;
+                        continue;
                     }
+                        g_game_state.obstacle_count++;
                 }
             }
             else if (strcmp(obj_type, "foreground") == 0) {
                 if (g_game_state.foreground_count < MAX_OBJECTS) {
-                    // Parse foreground
-                    cJSON* pos = cJSON_GetObjectItemCaseSensitive(obj, "Pos");
-                    cJSON* dims = cJSON_GetObjectItemCaseSensitive(obj, "Dims");
-                    cJSON* id = cJSON_GetObjectItemCaseSensitive(obj, "id");
-                    cJSON* obj_layers = cJSON_GetObjectItemCaseSensitive(obj, "objectLayers");
-
-                    if (pos && dims && id && cJSON_IsString(id)) {
-                        WorldObject* foreground = &g_game_state.foregrounds[g_game_state.foreground_count];
-                        strncpy(foreground->id, id->valuestring, sizeof(foreground->id) - 1);
-                        foreground->pos.x = serial_get_float_default(pos, "X", 0.0f);
-                        foreground->pos.y = serial_get_float_default(pos, "Y", 0.0f);
-                        foreground->dims.x = serial_get_float_default(dims, "Width", 1.0f);
-                        foreground->dims.y = serial_get_float_default(dims, "Height", 1.0f);
-
-                        foreground->object_layer_count = 0;
-                        if (obj_layers && cJSON_IsArray(obj_layers)) {
-                            cJSON* layer = NULL;
-                            cJSON_ArrayForEach(layer, obj_layers) {
-                                if (foreground->object_layer_count >= MAX_OBJECT_LAYERS) break;
-
-                                ObjectLayerState* layer_state = &foreground->object_layers[foreground->object_layer_count];
-
-                                cJSON* item_id = cJSON_GetObjectItemCaseSensitive(layer, "itemId");
-                                cJSON* active = cJSON_GetObjectItemCaseSensitive(layer, "active");
-                                cJSON* quantity = cJSON_GetObjectItemCaseSensitive(layer, "quantity");
-
-                                if (item_id && cJSON_IsString(item_id)) {
-                                    strncpy(layer_state->item_id, item_id->valuestring, sizeof(layer_state->item_id) - 1);
-                                }
-                                if (active && cJSON_IsBool(active)) {
-                                    layer_state->active = cJSON_IsTrue(active);
-                                }
-                                if (quantity && cJSON_IsNumber(quantity)) {
-                                    layer_state->quantity = quantity->valueint;
-                                }
-
-                                foreground->object_layer_count++;
-                            }
-                        }
-                        g_game_state.foreground_count++;
+                    WorldObject* foreground = &g_game_state.foregrounds[g_game_state.foreground_count];
+                    if (serial_deserialize_world_object(obj, foreground) != 0) {
+                        obj = obj->next;
+                        continue;
                     }
+                        g_game_state.foreground_count++;
                 }
             }
             else if (strcmp(obj_type, "portal") == 0) {
                 if (g_game_state.portal_count < MAX_OBJECTS) {
-                    // Parse portal
-                    cJSON* pos = cJSON_GetObjectItemCaseSensitive(obj, "Pos");
-                    cJSON* dims = cJSON_GetObjectItemCaseSensitive(obj, "Dims");
-                    cJSON* id = cJSON_GetObjectItemCaseSensitive(obj, "id");
-                    cJSON* label = cJSON_GetObjectItemCaseSensitive(obj, "PortalLabel");
-
-                    if (pos && dims && id && cJSON_IsString(id)) {
-                        WorldObject* portal = &g_game_state.portals[g_game_state.portal_count];
-                        strncpy(portal->id, id->valuestring, sizeof(portal->id) - 1);
-                        portal->pos.x = serial_get_float_default(pos, "X", 0.0f);
-                        portal->pos.y = serial_get_float_default(pos, "Y", 0.0f);
-                        portal->dims.x = serial_get_float_default(dims, "Width", 1.0f);
-                        portal->dims.y = serial_get_float_default(dims, "Height", 1.0f);
-                        if (label && cJSON_IsString(label)) {
-                            strncpy(portal->portal_label, label->valuestring, sizeof(portal->portal_label) - 1);
-                        }
-                        g_game_state.portal_count++;
+                    WorldObject* portal = &g_game_state.portals[g_game_state.portal_count];
+                    if (serial_deserialize_world_object(obj, portal) != 0) {
+                        obj = obj->next;
+                        continue;
                     }
+                        g_game_state.portal_count++;
                 }
             }
             else if (strcmp(obj_type, "floor") == 0) {
                 if (g_game_state.floor_count < MAX_OBJECTS) {
-                    // Parse floor
-                    cJSON* pos = cJSON_GetObjectItemCaseSensitive(obj, "Pos");
-                    cJSON* dims = cJSON_GetObjectItemCaseSensitive(obj, "Dims");
-                    cJSON* id = cJSON_GetObjectItemCaseSensitive(obj, "id");
-                    cJSON* obj_layers = cJSON_GetObjectItemCaseSensitive(obj, "objectLayers");
-
-                    if (pos && dims && id && cJSON_IsString(id)) {
-                        WorldObject* floor = &g_game_state.floors[g_game_state.floor_count];
-                        strncpy(floor->id, id->valuestring, sizeof(floor->id) - 1);
-                        floor->pos.x = serial_get_float_default(pos, "X", 0.0f);
-                        floor->pos.y = serial_get_float_default(pos, "Y", 0.0f);
-                        floor->dims.x = serial_get_float_default(dims, "Width", 1.0f);
-                        floor->dims.y = serial_get_float_default(dims, "Height", 1.0f);
-
-                        // Parse object layers if present
-                        floor->object_layer_count = 0;
-                        if (obj_layers && cJSON_IsArray(obj_layers)) {
-                            cJSON* layer = NULL;
-                            cJSON_ArrayForEach(layer, obj_layers) {
-                                if (floor->object_layer_count >= MAX_OBJECT_LAYERS) break;
-
-                                ObjectLayerState* layer_state = &floor->object_layers[floor->object_layer_count];
-
-                                cJSON* item_id = cJSON_GetObjectItemCaseSensitive(layer, "itemId");
-                                cJSON* active = cJSON_GetObjectItemCaseSensitive(layer, "active");
-                                cJSON* quantity = cJSON_GetObjectItemCaseSensitive(layer, "quantity");
-
-                                if (item_id && cJSON_IsString(item_id)) {
-                                    strncpy(layer_state->item_id, item_id->valuestring, sizeof(layer_state->item_id) - 1);
-                                }
-                                if (active && cJSON_IsBool(active)) {
-                                    layer_state->active = cJSON_IsTrue(active);
-                                }
-                                if (quantity && cJSON_IsNumber(quantity)) {
-                                    layer_state->quantity = quantity->valueint;
-                                }
-
-                                floor->object_layer_count++;
-                            }
-                        }
-
-                        g_game_state.floor_count++;
+                    WorldObject* floor = &g_game_state.floors[g_game_state.floor_count];
+                    if (serial_deserialize_world_object(obj, floor) != 0) {
+                        obj = obj->next;
+                        continue;
                     }
+                        g_game_state.floor_count++;
                 }
             }
             else if (strcmp(obj_type, "bot") == 0) {

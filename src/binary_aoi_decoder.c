@@ -327,6 +327,8 @@ static void decode_portal_entity(BinReader* r, uint8_t flags) {
     strncpy(p->type, "portal", MAX_TYPE_LENGTH - 1);
     strncpy(p->portal_label, label, MAX_ID_LENGTH - 1);
     p->color = portal_color;
+    p->object_layer_count = read_item_ids(
+        r, p->object_layers, MAX_OBJECT_LAYERS);
 }
 
 static void decode_foreground_entity(BinReader* r, uint8_t flags) {
