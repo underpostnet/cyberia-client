@@ -26,8 +26,8 @@
  *   - Local development: "ws://localhost:8080/ws"
  *   - Production: "wss://server.cyberiaonline.com/ws"
  */
-// static const char* WS_URL = "wss://server.cyberiaonline.com/ws";
-static const char* WS_URL = "ws://localhost:8081/ws";
+static const char* WS_URL = "wss://server.cyberiaonline.com/ws";
+// static const char* WS_URL = "ws://localhost:8081/ws";
 
 // ============================================================================
 // Engine API Configuration
@@ -45,8 +45,8 @@ static const char* WS_URL = "ws://localhost:8081/ws";
  *   - Local development: "http://localhost:4005"
  *   - Production: "https://www.cyberiaonline.com"
  */
-// static const char* API_BASE_URL = "https://www.cyberiaonline.com";
-static const char* API_BASE_URL = "http://localhost:4005";
+static const char* API_BASE_URL = "https://www.cyberiaonline.com";
+// static const char* API_BASE_URL = "http://localhost:4005";
 
 // ============================================================================
 // Game Configuration
