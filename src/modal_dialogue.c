@@ -234,23 +234,32 @@ void modal_dialogue_draw(void) {
              (int)(card.x + card.width), (int)card.y, C_CARD_BORD);
 
     int pad       = dlg_pad(sw);
-    int sprite_sz = dlg_sprite_size(card.width);
 
     /* ── Layout: sprite left-aligned (half width), text to the right ── */
     float x0 = card.x;
     float y0 = card.y;
 
-    /* Item sprite — left half of the card, no border */
+    /* Left-column width is always half the card; the drawn icon is
+     * capped to the available card height so it never overflows the
+     * bottom edge.  The icon is then centred inside its column.       */
+    int col_w    = dlg_sprite_size(card.width);           /* column = half card width */
+    int avail_h  = (int)card.height - 2 * pad;
+    if (avail_h < 4) avail_h = 4;
+    int icon_sz  = col_w < avail_h ? col_w : avail_h;    /* cap to available height  */
+    int icon_x   = (int)(x0 + (col_w - icon_sz) * 0.5f); /* centre horizontally      */
+    int icon_y   = (int)(y0 + (card.height - icon_sz) * 0.5f); /* centre vertically  */
+
+    /* Item sprite — left column, centred, no border */
     if (s_item_id[0] != '\0' && s_ol_manager) {
         ol_as_ico_draw(s_ol_manager, s_item_id,
-                       (int)x0, (int)y0, sprite_sz,
+                       icon_x, icon_y, icon_sz,
                        "down_idle", 0, WHITE);
     }
 
-    /* Speaker name + progress — right of sprite */
+    /* Speaker name + progress — right of sprite column */
     const DialogueLine* line = &s_lines[s_current];
     int fs_speaker = DLG_FONT_SPEAKER;
-    float txt_x    = x0 + sprite_sz + pad;
+    float txt_x    = x0 + col_w + pad;
     float txt_max  = card.x + card.width - txt_x - pad;
     float ty       = y0 + pad;
 
