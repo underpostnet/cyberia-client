@@ -12,10 +12,6 @@
 
 #include "js/services.h"
 
-// Application configuration
-#define WINDOW_WIDTH 600
-#define WINDOW_HEIGHT 800
-
 // Main event loop (called every frame)
 void main_loop(void) {
     const float dt = GetFrameTime();
@@ -38,12 +34,17 @@ int main(void) {
     // Initialize engine API base URL for public API access
     js_init_engine_api(API_BASE_URL);
 
+    // Read the browser viewport size so the canvas fills the full screen.
+    // Subsequent browser resizes are handled by IsWindowResized() in render_update.
+    int vp_w = EM_ASM_INT({ return window.innerWidth; });
+    int vp_h = EM_ASM_INT({ return window.innerHeight; });
+
     // Initialize window with raylib
-    InitWindow(WINDOW_WIDTH, WINDOW_HEIGHT, NULL);
+    InitWindow(vp_w, vp_h, NULL);
     SetTargetFPS(60);
 
     // Post Raylib init, init
-    render_init(WINDOW_WIDTH, WINDOW_HEIGHT);
+    render_init(vp_w, vp_h);
 
     // post window init - init ws
     if (0 != client_init())

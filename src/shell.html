@@ -31,6 +31,9 @@
 
             #canvas {
                 display: block;
+                position: absolute;
+                top: 0;
+                left: 0;
                 image-rendering: optimizeSpeed;
                 image-rendering: -moz-crisp-edges;
                 image-rendering: -webkit-optimize-contrast;
@@ -95,65 +98,34 @@
 
                 const canvas = document.getElementById("canvas");
 
-                // Canvas internal resolution (will be set by the C code)
-                let canvasInternalWidth = 600;
-                let canvasInternalHeight = 800;
-                const aspectRatio = canvasInternalWidth / canvasInternalHeight;
+                // Canvas internal resolution — tracks actual viewport size
+                let canvasInternalWidth = window.innerWidth;
+                let canvasInternalHeight = window.innerHeight;
 
-                console.log("[CANVAS] Initializing aspect ratio manager");
-                console.log(
-                    "[CANVAS] Internal resolution:",
-                    canvasInternalWidth,
-                    "x",
-                    canvasInternalHeight,
-                );
-                console.log("[CANVAS] Aspect ratio:", aspectRatio.toFixed(4));
+                console.log("[CANVAS] Initializing full-viewport canvas manager");
 
                 /**
-                 * Scale canvas CSS to fit window while maintaining aspect ratio
-                 * This prevents stretching or squashing of the canvas content
+                 * Resize canvas to fill the entire viewport.
+                 * Updates both the canvas pixel dimensions (so raylib detects
+                 * IsWindowResized()) and the CSS dimensions (no scaling offset).
+                 * AOI rendering is never distorted — the camera zoom handles scale.
                  */
-                function scaleCanvasToFitWindow() {
-                    const windowWidth = window.innerWidth;
-                    const windowHeight = window.innerHeight;
-                    const windowAspectRatio = windowWidth / windowHeight;
+                function resizeCanvasToViewport() {
+                    const w = window.innerWidth;
+                    const h = window.innerHeight;
 
-                    let cssWidth, cssHeight;
-                    let offsetX = 0,
-                        offsetY = 0;
+                    canvasInternalWidth = w;
+                    canvasInternalHeight = h;
 
-                    if (windowAspectRatio > aspectRatio) {
-                        // Window is wider than canvas aspect ratio
-                        // Fit to height, center horizontally
-                        cssHeight = windowHeight;
-                        cssWidth = cssHeight * aspectRatio;
-                        offsetX = (windowWidth - cssWidth) / 2;
-                    } else {
-                        // Window is taller than canvas aspect ratio
-                        // Fit to width, center vertically
-                        cssWidth = windowWidth;
-                        cssHeight = cssWidth / aspectRatio;
-                        offsetY = (windowHeight - cssHeight) / 2;
-                    }
+                    // Update pixel buffer so raylib sees the new dimensions
+                    canvas.width = w;
+                    canvas.height = h;
 
-                    // Apply CSS dimensions (this scales the canvas visually)
-                    canvas.style.width = cssWidth + "px";
-                    canvas.style.height = cssHeight + "px";
-                    canvas.style.position = "absolute";
-                    canvas.style.left = offsetX + "px";
-                    canvas.style.top = offsetY + "px";
+                    // CSS = exact viewport size, no letterbox offset
+                    canvas.style.width = w + "px";
+                    canvas.style.height = h + "px";
 
-                    console.log(
-                        "[CANVAS] Scaled to fit:",
-                        "CSS=" +
-                            cssWidth.toFixed(0) +
-                            "x" +
-                            cssHeight.toFixed(0),
-                        "Offset=" +
-                            offsetX.toFixed(0) +
-                            "," +
-                            offsetY.toFixed(0),
-                    );
+                    console.log("[CANVAS] Resized to viewport:", w, "x", h);
                 }
 
                 /**
@@ -253,23 +225,17 @@
                         "x",
                         window.innerHeight,
                     );
-                    scaleCanvasToFitWindow();
+                    resizeCanvasToViewport();
                 }
 
                 /**
-                 * Update internal canvas dimensions when they change
-                 * This should be called from C code when the canvas internal size changes
+                 * Called from C postRun — canvas already matches viewport so
+                 * no additional scaling is required.
                  */
                 window.updateCanvasInternalSize = function (width, height) {
-                    canvasInternalWidth = width;
-                    canvasInternalHeight = height;
-                    console.log(
-                        "[CANVAS] Internal size updated:",
-                        width,
-                        "x",
-                        height,
-                    );
-                    scaleCanvasToFitWindow();
+                    // No-op: canvas is always sized to the viewport.
+                    // The C side initialises with window.innerWidth/Height, and
+                    // subsequent resizes are handled by resizeCanvasToViewport().
                 };
 
                 /**
@@ -297,18 +263,18 @@
                     passive: false,
                 });
 
-                // Initial scale on load
+                // Fill viewport on first paint and whenever the page fully loads
                 window.addEventListener("load", function () {
                     console.log(
-                        "[CANVAS] Page loaded, performing initial scale",
+                        "[CANVAS] Page loaded, sizing canvas to full viewport",
                     );
-                    scaleCanvasToFitWindow();
+                    resizeCanvasToViewport();
                 });
 
-                // Also scale immediately
-                scaleCanvasToFitWindow();
+                // Size immediately (before WASM loads) so there is no blank frame
+                resizeCanvasToViewport();
 
-                console.log("[CANVAS] Aspect ratio manager initialized");
+                console.log("[CANVAS] Full-viewport canvas manager initialized");
                 console.log(
                     "[CANVAS] Event listeners registered: resize, mousedown, touchstart",
                 );
