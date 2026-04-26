@@ -19,7 +19,7 @@ RUN dnf install -y epel-release && \
     dnf install -y \
         cmake git wget unzip \
         python3 python3.11 \
-        nodejs npm \
+        nodejs \
         alsa-lib-devel \
         mesa-libGL-devel \
         mesa-libGLU-devel \
