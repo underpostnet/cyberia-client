@@ -9,6 +9,7 @@
 #include "modal_dialogue.h"
 #include "dialogue_data.h"
 #include "interaction_bubble.h"
+#include "tap_effect.h"
 #include "ui_icon.h"
 #include "raylib.h"
 #include <stdio.h>
@@ -41,6 +42,8 @@ void render_init(int width, int height) {
     if (0 != modal_player_init()) {
         printf("[RENDER] Failed to initialize player modal component\n");
     }
+
+    tap_effect_init();
 }
 
 // Main rendering loop iteration
@@ -66,6 +69,7 @@ void render_update(float delta_time) {
     // Update effects (click effects, floating texts, FCT pop-ups)
     game_render_update_effects(delta_time);
     fct_update(delta_time);
+    tap_effect_update(delta_time);
 
     // Update inventory UI
     inventory_bar_update(delta_time);
@@ -126,6 +130,8 @@ void render_fallback(int width, int height) {
 void render_cleanup(void) {
     // Unload splash texture
     UnloadTexture(render_state.splash_texture);
+
+    tap_effect_reset();
 
     // Cleanup game renderer
     game_render_cleanup();

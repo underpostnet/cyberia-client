@@ -12,6 +12,7 @@
 #include "inventory_bar.h"
 #include "inventory_modal.h"
 #include "modal_dialogue.h"
+#include "tap_effect.h"
 #include "ui_icon.h"
 #include "nameplate.h"
 #include <stdio.h>
@@ -216,6 +217,10 @@ void game_render_frame(void) {
 
     // Render UI (screen space)
     game_render_ui();
+
+    // Tap effects are rendered in screen space so input systems can spawn
+    // them directly from screen coordinates without camera conversions.
+    tap_effect_draw();
 
     // Update performance tracking
     g_renderer.frames_rendered++;

@@ -13,6 +13,7 @@
 #include "interaction_bubble.h"
 #include "js/interact_bridge.h"
 #include "game_render.h"
+#include "tap_effect.h"
 
 static void input_handle_tap(InputEvent event);
 static int input_add_event(InputEvent event);
@@ -113,6 +114,13 @@ static void input_handle_tap(InputEvent event) {
     Vector2 screen_pos = event.screen_position;
     int mx = (int)screen_pos.x;
     int my = (int)screen_pos.y;
+
+    TapEffectParams tap_fx = tap_effect_default_params();
+    tap_fx.scale = 1.15f;
+    tap_fx.duration = 0.42f;
+    tap_fx.intensity = 1.25f;
+    tap_fx.style_mask = TAP_EFFECT_STYLE_PREMIUM;
+    tap_effect_spawn(screen_pos, &tap_fx);
 
     printf("[INPUT] Mouse click: button=%d, pos=(%.1f, %.1f)\n",
            MOUSE_BUTTON_LEFT, screen_pos.x, screen_pos.y);
