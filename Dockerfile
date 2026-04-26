@@ -13,8 +13,8 @@
 FROM rockylinux:9
 
 # ── System packages (build tools + raylib web dependencies) ───────────────────
-RUN dnf install -y epel-release && \
-    dnf module enable -y nodejs:20 && \
+RUN dnf install -y epel-release curl && \
+    curl -fsSL https://rpm.nodesource.com/setup_24.x | bash - && \
     dnf groupinstall -y "Development Tools" && \
     dnf install -y \
         cmake git wget unzip \
