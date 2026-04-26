@@ -39,6 +39,11 @@ ASSETS := $(ASSETS_DIR)/splash.png@splash.png
 #---------------------------------------------------------------------------------------------
 # Util variables
 OBJS	:= $(src_files:$(SRC_DIR)/%=$(target_build_dir)/%.o)
+
+# Auto-generated header dependency files produced by -MMD -MP.
+# Must be included AFTER OBJS is defined so Make tracks .h changes.
+DEPS	:= $(OBJS:%.o=%.d)
+-include $(DEPS)
 OBJS	+= $(target_build_dir)/cJSON.o
 OBJS	+= $(target_build_dir)/libraylib.web.a
 

@@ -130,6 +130,16 @@ log "EMSDK activated — emcc: $(command -v emcc)"
 # ── 4. Build ───────────────────────────────────────────────────────────────────
 section "Building Cyberia Client (DEBUG)"
 cd "$PROJECT_ROOT"
+
+# If config.h is newer than any existing object file the .d dependency files
+# haven't been generated yet (first build) or the user edited config.h before
+# a prior build completed.  Wipe the build cache so Make rebuilds everything.
+FIRST_OBJ="$(find build/web/debug -name '*.o' -print -quit 2>/dev/null || true)"
+if [[ -f src/config.h && ( -z "$FIRST_OBJ" || src/config.h -nt "$FIRST_OBJ" ) ]]; then
+  log "src/config.h is newer than cached objects — cleaning build cache"
+  make -f Web.mk clean BUILD_MODE=DEBUG
+fi
+
 make -j"$MAKE_JOBS" -f Web.mk all BUILD_MODE=DEBUG
 
 # ── 5. Serve ───────────────────────────────────────────────────────────────────
