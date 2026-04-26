@@ -1,0 +1,54 @@
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: dd-cyberia-mmo-client-development-blue
+  namespace: default
+  labels:
+    app: dd-cyberia-mmo-client-development-blue
+    deploy-id: dd-cyberia-mmo-client-development
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: dd-cyberia-mmo-client-development-blue
+  template:
+    metadata:
+      labels:
+        app: dd-cyberia-mmo-client-development-blue
+        deploy-id: dd-cyberia-mmo-client-development
+    spec:
+      containers:
+        - name: dd-cyberia-mmo-client-development-blue
+          image: underpostnet/cyberia-client:latest
+          envFrom:
+            - secretRef:
+                name: underpost-config
+
+          command:
+            - /bin/sh
+            - -c
+            - >
+              underpost config set container-status dd-cyberia-mmo-client-development-running-deployment &&
+              make -j$(nproc) -f /app/Web.mk all BUILD_MODE=DEBUG &&
+              python3 /app/server.py 8082 /app/bin/web/debug development
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: dd-cyberia-mmo-client-development-blue-service
+  namespace: default
+spec:
+  selector:
+    app: dd-cyberia-mmo-client-development-blue
+  ports:
+    - name: 'tcp-8082'
+      protocol: TCP
+      port: 8082
+      targetPort: 8082
+    - name: 'udp-8082'
+      protocol: UDP
+      port: 8082
+      targetPort: 8082
+  type: LoadBalancer

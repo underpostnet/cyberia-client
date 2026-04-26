@@ -20,3 +20,9 @@
 !src/shell.html
 !src/public/**
 !src/js/**
+
+!Dockerfile
+!deployment.yaml
+!dev-server.sh
+!server.py
+!deploy.sh
