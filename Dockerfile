@@ -13,7 +13,7 @@
 FROM rockylinux:9
 
 # ── System packages (build tools + raylib web dependencies) ───────────────────
-RUN dnf install -y epel-release curl && \
+RUN dnf install -y epel-release && \
     curl -fsSL https://rpm.nodesource.com/setup_24.x | bash - && \
     dnf groupinstall -y "Development Tools" && \
     dnf install -y \
