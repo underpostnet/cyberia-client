@@ -20,7 +20,8 @@ spec:
     spec:
       containers:
         - name: dd-cyberia-mmo-client-development-blue
-          image: underpostnet/cyberia-client:latest
+          image: localhost/cyberia-client:latest
+          imagePullPolicy: Never
           envFrom:
             - secretRef:
                 name: underpost-config
@@ -29,9 +30,10 @@ spec:
             - /bin/sh
             - -c
             - >
-              underpost config set container-status dd-cyberia-mmo-client-development-running-deployment &&
+              underpost config set container-status dd-cyberia-mmo-client-development-build-deployment &&
               make -j$(nproc) -f /app/Web.mk all BUILD_MODE=DEBUG &&
-              python3 /app/server.py 8082 /app/bin/web/debug development
+              underpost config set container-status dd-cyberia-mmo-client-development-initializing-deployment &&
+              python3 /app/server.py 8082 /app/bin/web/debug development 'underpost config set container-status dd-cyberia-mmo-client-development-running-deployment'
 
 ---
 apiVersion: v1

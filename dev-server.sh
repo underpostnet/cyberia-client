@@ -29,7 +29,7 @@ section() { printf '\n[%s] ══ %s ══\n' "$(ts)" "$*"; }
 have()    { command -v "$1" >/dev/null 2>&1; }
 
 # ── Config ─────────────────────────────────────────────────────────────────────
-PROJECT_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+PROJECT_ROOT="$(cd "$(dirname "$0")" && pwd)"
 EMSDK_ROOT="${EMSDK_ROOT:-$HOME/.emsdk}"
 MAKE_JOBS="${MAKE_JOBS:-$(nproc)}"
 DEV_PORT="${1:-${DEV_PORT:-8082}}"
@@ -39,7 +39,7 @@ export EMSDK_QUIET=1
 section "Checking host packages"
 
 RHEL_PKGS=(
-  epel-release cmake make gcc-c++ pkgconfig git wget unzip
+  epel-release cmake make gcc-c++ pkgconf-pkg-config git wget unzip
   python3 python3.11
   alsa-lib-devel mesa-libGL-devel mesa-libGLU-devel
   libX11-devel libXrandr-devel libXi-devel libXcursor-devel
