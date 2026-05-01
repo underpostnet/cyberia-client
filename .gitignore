@@ -3,7 +3,7 @@
 !lib/**
 !assets/**
 !scripts/**
-!github/**
+!.github/**
 
 !*/
 !*.h
