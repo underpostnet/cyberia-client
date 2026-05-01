@@ -10,7 +10,6 @@ target_output_dir	:= $(call lc,$(OUTPUT_DIR)/web/$(BUILD_MODE))
 
 #---------------------------------------------------------------------------------------------
 # Specific compiler flags
-CFLAGS	+= -flto
 CFLAGS	+= -Wno-unused-parameter
 
 ifneq ($(BUILD_MODE),RELEASE)
@@ -21,9 +20,9 @@ endif
 #---------------------------------------------------------------------------------------------
 # Linking flags
 LDFLAGS = -lidbfs.js
+LDFLAGS += -lwebsocket.js
 LDFLAGS += -s 'EXPORTED_RUNTIME_METHODS=["writeArrayToMemory","setValue","allocateUTF8"]'
 LDFLAGS += -sASYNCIFY
-LDFLAGS += -lwebsocket.js
 LDFLAGS += --js-library $(SRC_DIR)/js/services.js
 LDFLAGS += --js-library $(SRC_DIR)/js/interact_overlay.js
 LDFLAGS += --js-library $(SRC_DIR)/js/notify_badge.js
