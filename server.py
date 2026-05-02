@@ -67,8 +67,7 @@ def _run_ready_cmd(cmd: str) -> None:
     except Exception as exc:
         print(f"[server] ready_cmd error: {exc}", flush=True)
 
-
-def main():
+if __name__ == "__main__":
     port      = int(sys.argv[1])            if len(sys.argv) > 1 else 8082
     directory = sys.argv[2]                 if len(sys.argv) > 2 else "."
     mode      = (sys.argv[3] or "").lower() if len(sys.argv) > 3 else "production"
@@ -84,7 +83,3 @@ def main():
         threading.Thread(target=_run_ready_cmd, args=(ready_cmd,), daemon=True).start()
 
     server.serve_forever()
-
-
-if __name__ == "__main__":
-    main()

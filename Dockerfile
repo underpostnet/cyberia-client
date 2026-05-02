@@ -1,3 +1,6 @@
+# BUILD_MODE: RELEASE | DEBUG
+ARG BUILD_MODE=RELEASE
+
 # --- Build Image
 FROM rockylinux/rockylinux:10 AS builder
 
@@ -43,10 +46,8 @@ RUN ./emsdk install latest && \
 WORKDIR /
 COPY . /cyberia-client/
 
-# Compile both build modes at image build-time to minimize service startup time.
 WORKDIR /cyberia-client
-RUN make -f Web.mk all BUILD_MODE=RELEASE
-RUN make -f Web.mk all BUILD_MODE=DEBUG
+RUN make -f Web.mk all BUILD_MODE=${BUILD_MODE} OUTPUT_DIR=bin/
 
 # --- Runtime Image
 FROM rockylinux/rockylinux:9-minimal AS runtime
@@ -55,14 +56,12 @@ RUN microdnf -y install python3 && microdnf clean all
 
 WORKDIR /home/dd/engine/cyberia-client
 
-COPY --from=builder /cyberia-client/server.py          ./server.py
-COPY --from=builder /cyberia-client/bin/web/release    ./bin/web/release
-COPY --from=builder /cyberia-client/bin/web/debug      ./bin/web/debug
+COPY --from=builder /cyberia-client/server.py           ./server.py
+COPY --from=builder /cyberia-client/bin                 .
 
 ENV CYBERIA_PORT=8081
-ENV CYBERIA_WEB_ROOT=/home/dd/engine/cyberia-client/bin/web/release
 ENV CYBERIA_MODE=production
 
 EXPOSE 8081 8082
 
-CMD ["sh", "-c", "python3 /home/dd/engine/cyberia-client/server.py ${CYBERIA_PORT} ${CYBERIA_WEB_ROOT} ${CYBERIA_MODE}"]
+CMD ["sh", "-c", "python3 server.py ${CYBERIA_PORT} . ${CYBERIA_MODE}"]

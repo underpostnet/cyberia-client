@@ -5,8 +5,7 @@ DEV_PORT		?= 8082
 PROD_PORT		?= 8081
 
 #---------------------------------------------------------------------------------------------
-target_build_dir	:= $(call lc,$(BUILD_DIR)/web/$(BUILD_MODE))
-target_output_dir	:= $(call lc,$(OUTPUT_DIR)/web/$(BUILD_MODE))
+target_build_dir	:= $(BUILD_DIR)/web/$(BUILD_MODE)
 
 #---------------------------------------------------------------------------------------------
 # EMSCRIPTEN needed flags that I hate
@@ -32,7 +31,7 @@ LDFLAGS += -sEXPORTED_FUNCTIONS='["_main","_c_send_ws_message","_c_open_dialogue
 # Web target html container
 WEB_SHELL := $(SRC_DIR)/shell.html
 
-OUTPUT := $(target_output_dir)/index.html
+OUTPUT := $(OUTPUT_DIR)/index.html
 ASSETS := $(ASSETS_DIR)/splash.png@splash.png
 
 #---------------------------------------------------------------------------------------------
@@ -55,14 +54,14 @@ all: link
 
 serve-development: all
 	-fuser -k $(DEV_PORT)/tcp 2>/dev/null; sleep 0.3
-	python3 server.py $(DEV_PORT) $(target_output_dir)
+	python3 server.py $(DEV_PORT) $(OUTPUT_DIR)
 
 serve-production:
 	make -f Web.mk serve-development BUILD_MODE=RELEASE DEV_PORT=$(PROD_PORT)
 
 link: $(OBJS)
-	@mkdir -p $(target_output_dir)
-	@cp $(ASSETS_DIR)/favicon.ico $(target_output_dir)/favicon.ico
+	@mkdir -p $(OUTPUT_DIR)
+	@cp $(ASSETS_DIR)/favicon.ico $(OUTPUT_DIR)/favicon.ico
 	$(CC) -o $(OUTPUT) $(OBJS) $(LDFLAGS) \
 		-s USE_GLFW=3 \
 		--shell-file $(WEB_SHELL) \
