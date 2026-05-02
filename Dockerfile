@@ -49,7 +49,9 @@ RUN make -f Web.mk all BUILD_MODE=RELEASE
 RUN make -f Web.mk all BUILD_MODE=DEBUG
 
 # --- Runtime Image
-FROM python:3-slim AS runtime
+FROM rockylinux/rockylinux:9-minimal AS runtime
+
+RUN microdnf -y install python3 && microdnf clean all
 
 WORKDIR /home/dd/engine/cyberia-client
 
