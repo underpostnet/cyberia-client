@@ -14,17 +14,21 @@ SRC_DIR         ?= src
 CFLAGS = -I$(SRC_DIR)
 CFLAGS += -Wextra
 CFLAGS += -Wunused-result
-CFLAGS += -Wunused-variable
+CFLAGS += -Wunused-variable -Wunused-const-variable
 CFLAGS += -Wpointer-arith
 CFLAGS += -fdiagnostics-color=always
+
+# emscripten prefers gnu extensions, but let's try to reduce their usage
+CFLAGS += -std=gnu11
+CFLAGS += -pedantic
 
 ifeq ($(BUILD_MODE),RELEASE)
 CFLAGS += -DNDEBUG
 CFLAGS += -O3
-CFLAGS += -pedantic
 # CFLAGS += -Werror
 else
 CFLAGS += -D_DEBUG -g
+CFLAGS += -Wno-unused-parameter
 endif
 
 #------------------------------------------------

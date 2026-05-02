@@ -9,8 +9,8 @@ target_build_dir	:= $(call lc,$(BUILD_DIR)/web/$(BUILD_MODE))
 target_output_dir	:= $(call lc,$(OUTPUT_DIR)/web/$(BUILD_MODE))
 
 #---------------------------------------------------------------------------------------------
-# Specific compiler flags
-CFLAGS	+= -Wno-unused-parameter
+# EMSCRIPTEN needed flags that I hate
+CFLAGS += -Wno-gnu-zero-variadic-macro-arguments
 
 ifneq ($(BUILD_MODE),RELEASE)
 CFLAGS	+= --profiling
@@ -55,7 +55,7 @@ all: link
 
 serve-development: all
 	-fuser -k $(DEV_PORT)/tcp 2>/dev/null; sleep 0.3
-	python3 scripts/serve.py $(DEV_PORT) $(target_output_dir)
+	python3 server.py $(DEV_PORT) $(target_output_dir)
 
 serve-production:
 	make -f Web.mk serve-development BUILD_MODE=RELEASE DEV_PORT=$(PROD_PORT)

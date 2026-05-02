@@ -45,9 +45,11 @@ typedef struct {
 // --- Helper Functions ---
 
 static AnimationEntry* create_animation_entry(const char* key) {
+    assert(key && strlen(key) > 0);
     AnimationEntry* entry = (AnimationEntry*)malloc(sizeof(AnimationEntry));
     if (entry) {
-        entry->key = strdup(key);
+        entry->key = malloc(strlen(key) + 1);
+        strcpy(entry->key, key);
         entry->state.last_state_string = NULL;
         entry->state.last_update_time = 0;
         entry->state.frame_index = 0;
@@ -397,7 +399,8 @@ void draw_entity_layers(
             strcmp(anim->last_state_string, dir_string) != 0) {
 
             if (anim->last_state_string) free(anim->last_state_string);
-            anim->last_state_string = strdup(dir_string);
+            anim->last_state_string = malloc(strlen(dir_string) + 1);
+            strcpy(anim->last_state_string, dir_string);
             anim->frame_index = 0;
             anim->last_update_time = now;
         }
