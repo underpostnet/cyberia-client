@@ -22,6 +22,7 @@
 !src/js/**
 
 !Dockerfile
+!.dockerignore
 !deployment.yaml
 !dev-server.sh
 !server.py

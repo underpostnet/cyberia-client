@@ -1,37 +1,23 @@
-FROM rockylinux:9
+# --- Build Image
+FROM rockylinux/rockylinux:10 AS builder
 
-# System packages 
+# System packages (build prerequisites)
 RUN dnf -y update && \
     dnf -y install epel-release && \
     dnf -y install --allowerasing \
-    bzip2 \
-    sudo \
-    curl \
-    net-tools \
-    openssh-server \
-    nano \
-    vim-enhanced \
-    less \
-    openssl-devel \
-    wget \
-    git \
-    gnupg2 \
-    libnsl \
-    perl && \
-    dnf clean all
-
-# System packages (Node.js)
-RUN curl -fsSL https://rpm.nodesource.com/setup_24.x | bash - && \
-    dnf install -y nodejs && \
-    dnf clean all
+        bzip2 \
+        curl \
+        git \
+        wget \
+        openssl-devel \
+        perl \
+        unzip
 
 # System packages (raylib gfx + build dependencies)
 RUN dnf groupinstall -y "Development Tools" && \
     dnf install -y \
         cmake \
-        unzip \
         python3 \
-        python3.11 \
         alsa-lib-devel \
         mesa-libGL-devel \
         mesa-libGLU-devel \
@@ -43,33 +29,33 @@ RUN dnf groupinstall -y "Development Tools" && \
         libXfixes-devel \
         freeglut-devel \
         glfw-devel \
-        libatomic.x86_64 && \
-    dnf clean all
+        libatomic.x86_64
 
-# Install underpost CLI 
-RUN npm install -g underpost
-
-ENV EMSDK=/home/dd/.emsdk
-ENV EMSDK_QUIET=1
-ENV EMSDK_PYTHON=/usr/bin/python3.11
+ENV EMSDK=/opt/emsdk
 ENV PATH="${EMSDK}:${EMSDK}/upstream/emscripten:${PATH}"
 
-RUN git clone --depth=1 https://github.com/emscripten-core/emsdk.git ${EMSDK} && \
-    cd ${EMSDK} && \
-    ./emsdk install latest && \
+WORKDIR /
+RUN git clone https://github.com/emscripten-core/emsdk.git ${EMSDK}
+WORKDIR ${EMSDK}
+RUN ./emsdk install latest && \
     ./emsdk activate latest
 
-# Runtime root expected by startup/build scripts.
-WORKDIR /home/dd
-
-RUN mkdir -p /home/dd/engine/cyberia-client
-COPY cyberia-client/ /home/dd/engine/cyberia-client/
+WORKDIR /
+COPY . /cyberia-client/
 
 # Compile both build modes at image build-time to minimize service startup time.
-RUN bash -lc "source ${EMSDK}/emsdk_env.sh && \
-    cd /home/dd/engine/cyberia-client && \
-    make -j\"$(nproc)\" -f Web.mk all BUILD_MODE=RELEASE && \
-    make -j\"$(nproc)\" -f Web.mk all BUILD_MODE=DEBUG"
+WORKDIR /cyberia-client
+RUN make -f Web.mk all BUILD_MODE=RELEASE
+RUN make -f Web.mk all BUILD_MODE=DEBUG
+
+# --- Runtime Image
+FROM python:3-slim AS runtime
+
+WORKDIR /home/dd/engine/cyberia-client
+
+COPY --from=builder /cyberia-client/server.py          ./server.py
+COPY --from=builder /cyberia-client/bin/web/release    ./bin/web/release
+COPY --from=builder /cyberia-client/bin/web/debug      ./bin/web/debug
 
 ENV CYBERIA_PORT=8081
 ENV CYBERIA_WEB_ROOT=/home/dd/engine/cyberia-client/bin/web/release
