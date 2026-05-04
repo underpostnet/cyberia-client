@@ -143,7 +143,7 @@ static void decode_player_entity(BinReader* r, uint8_t flags) {
     p->base.dims = (Vector2){ dw, dh };
     p->base.direction = (Direction)dir;
     p->base.mode = (ObjectLayerMode)mode;
-    p->base.last_update = g_game_state.last_update_time;
+    p->base.last_update = gs->last_update_time;
 
     if (flags & BIN_FLAG_HAS_LIFE) {
         p->base.life = br_f32(r);
@@ -198,7 +198,7 @@ static void decode_bot_entity(BinReader* r, uint8_t flags) {
     b->base.dims = (Vector2){ dw, dh };
     b->base.direction = (Direction)dir;
     b->base.mode = (ObjectLayerMode)mode;
-    b->base.last_update = g_game_state.last_update_time;
+    b->base.last_update = gs->last_update_time;
 
     if (flags & BIN_FLAG_HAS_LIFE) {
         b->base.life = br_f32(r);

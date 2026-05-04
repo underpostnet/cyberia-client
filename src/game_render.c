@@ -124,7 +124,7 @@ int game_render_init(int screen_width, int screen_height) {
     return 0;
 }
 
-ObjectLayersManager* game_render_get_obj_layers_mgr(void) {
+ObjectLayersManager* obj_layers_mgr_get(void) {
     return g_object_layers_manager;
 }
 
@@ -317,7 +317,7 @@ void game_render_grid(void) {
 
 
 void game_render_floors(void) {
-    float cell_size = g_game_state.cell_size > 0 ? g_game_state.cell_size : 12.0f;
+    const float cell_size = g_game_state.cell_size > 0 ? g_game_state.cell_size : 12.0f;
 
     // If we have no floors, draw a default background to prevent black screen
     if (g_game_state.floor_count == 0) {
@@ -369,7 +369,7 @@ void game_render_floors(void) {
 }
 
 void game_render_world_objects(void) {
-    float cell_size = g_game_state.cell_size > 0 ? g_game_state.cell_size : 12.0f;
+    const float cell_size = g_game_state.cell_size > 0 ? g_game_state.cell_size : 12.0f;
 
     // Render portals
     for (int i = 0; i < g_game_state.portal_count; i++) {
@@ -411,7 +411,7 @@ void game_render_world_objects(void) {
 }
 
 void game_render_foregrounds(void) {
-    float cell_size = g_game_state.cell_size > 0 ? g_game_state.cell_size : 12.0f;
+    const float cell_size = g_game_state.cell_size > 0 ? g_game_state.cell_size : 12.0f;
 
     // Render foregrounds (always on top of entities)
     for (int i = 0; i < g_game_state.foreground_count; i++) {
@@ -495,7 +495,7 @@ void game_render_entities(void) {
     // Safety check - ensure entity render system is initialized
     if (!g_entity_render) {
         // Fallback to simple rendering if entity render system not initialized
-        float cell_size = g_game_state.cell_size > 0 ? g_game_state.cell_size : 12.0f;
+        const float cell_size = g_game_state.cell_size > 0 ? g_game_state.cell_size : 12.0f;
 
         // Draw simple rectangles as fallback to ensure entities are visible
         Rectangle rect ={
@@ -532,8 +532,8 @@ void game_render_entities(void) {
         return;
     }
 
-    float cell_size = g_game_state.cell_size > 0 ? g_game_state.cell_size : 12.0f;
-    bool dev_ui = g_game_state.dev_ui;
+    const float cell_size = g_game_state.cell_size > 0 ? g_game_state.cell_size : 12.0f;
+    const bool dev_ui = g_game_state.dev_ui;
 
     // Create array to hold all depth-sorted actors
     static EntitySortEntry sort_entries[MAX_DEPTH_SORT_ENTRIES];
@@ -817,7 +817,7 @@ void game_render_entities(void) {
 }
 
 void game_render_player_path(void) {
-    float cell_size = g_game_state.cell_size > 0 ? g_game_state.cell_size : 12.0f;
+    const float cell_size = g_game_state.cell_size > 0 ? g_game_state.cell_size : 12.0f;
 
     // Render target position
     if (g_game_state.player.target_pos.x >= 0 && g_game_state.player.target_pos.y >= 0) {

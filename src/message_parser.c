@@ -428,7 +428,7 @@ static int message_parser_parse_metadata(const cJSON* json_root) {
     cJSON* payload = serial_get_object(json_root, "payload");
     if (!payload) return -1;
 
-    ObjectLayersManager* mgr = game_render_get_obj_layers_mgr();
+    ObjectLayersManager* mgr = obj_layers_mgr_get();
     if (!mgr) {
         fprintf(stderr, "[METADATA] ObjectLayersManager not initialized yet\n");
         return -1;

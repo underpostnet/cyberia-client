@@ -229,9 +229,9 @@ void game_render_hud(void);
 void game_render_dev_ui(void);
 
 /** Render error messages */
-void game_render_error_messages();
+void game_render_error_messages(void);
 void game_render_set_error_message(const char* msg);
-const char* game_render_get_error_message();
+const char* game_render_get_error_message(void);
 
 /**
  * @brief Check if a screen point hits a zoom button.
@@ -342,15 +342,6 @@ Vector2 game_render_interpolate_position(Vector2 start_pos, Vector2 end_pos, flo
  * @return Animation frame index
  */
 int game_render_get_entity_frame(const EntityState* entity, double time);
-
-// Forward declaration for object layers manager
-typedef struct ObjectLayersManager ObjectLayersManager;
-
-/**
- * @brief Get the global object layers manager (for metadata caching from WS)
- * @return Pointer to the ObjectLayersManager, or NULL if not initialized
- */
-ObjectLayersManager* game_render_get_obj_layers_mgr(void);
 
 /**
  * @brief Draw an object-layer item as a small icon (frame 0, default_idle direction).

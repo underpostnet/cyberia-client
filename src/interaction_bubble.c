@@ -19,7 +19,6 @@
 #include "object_layers_management.h"
 #include "game_state.h"
 #include "entity_render.h"
-#include "game_render.h"
 #include "client.h"
 #include "ui_icon.h"
 #include "js/notify_badge.h"
@@ -216,7 +215,7 @@ static void scan_entity(const char* entity_id, const EntityState* base,
      * Players → "AnonPlayer<first 8 chars of ws id>".
      * Bots    → skin/body item_id (with manager lookup). */
     {
-        ObjectLayersManager* np_mgr = game_render_get_obj_layers_mgr();
+        ObjectLayersManager* np_mgr = obj_layers_mgr_get();
         const ObjectLayerState* np_layers = slot->alive_layer_count > 0
             ? slot->alive_layers : base->object_layers;
         int np_lc = slot->alive_layer_count > 0
@@ -278,7 +277,7 @@ void interaction_bubble_draw(void) {
 
     int mx = GetMouseX();
     int my = GetMouseY();
-    ObjectLayersManager* mgr = game_render_get_obj_layers_mgr();
+    ObjectLayersManager* mgr = obj_layers_mgr_get();
 
     for (int i = 0; i < s_slot_count; i++) {
         InteractionBubbleSlot* slot = &s_slots[i];
@@ -367,7 +366,7 @@ void interaction_bubble_draw(void) {
 bool interaction_bubble_handle_click(int mx, int my, bool clicked) {
     if (s_slot_count <= 0 || !clicked) return false;
 
-    ObjectLayersManager* mgr = game_render_get_obj_layers_mgr();
+    ObjectLayersManager* mgr = obj_layers_mgr_get();
 
     for (int i = 0; i < s_slot_count; i++) {
         Rectangle r = slot_rect(i);
@@ -478,7 +477,7 @@ void interaction_bubble_dead_equip(const char* item_id, bool active) {
         }
         /* One-per-type deactivation (mirrors server logic). */
         if (target >= 0 && g_game_state.equipment_rules.one_per_type) {
-            ObjectLayersManager* mgr = game_render_get_obj_layers_mgr();
+            ObjectLayersManager* mgr = obj_layers_mgr_get();
             const char* req_type = "";
             if (mgr) {
                 ObjectLayer* ol = get_or_fetch_object_layer(mgr, item_id);

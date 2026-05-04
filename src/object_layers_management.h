@@ -193,4 +193,6 @@ void populate_atlas_from_json(ObjectLayersManager* manager, const char* item_key
  */
 void obj_layers_mgr_schedule_atlas_fetch(ObjectLayersManager* manager, const char* item_key);
 
+ObjectLayersManager* obj_layers_mgr_get(void);
+
 #endif // OBJECT_LAYERS_MANAGEMENT_H
