@@ -13,8 +13,6 @@ SRC_DIR         ?= src
 #-------------------------------
 CFLAGS = -I$(SRC_DIR)
 CFLAGS += -Wextra
-CFLAGS += -Wunused-result
-CFLAGS += -Wunused-variable -Wunused-const-variable
 CFLAGS += -Wpointer-arith
 CFLAGS += -fdiagnostics-color=always
 
@@ -25,6 +23,8 @@ CFLAGS += -pedantic
 ifeq ($(BUILD_MODE),RELEASE)
 CFLAGS += -DNDEBUG
 CFLAGS += -O3
+CFLAGS += -Wunused-result
+CFLAGS += -Wunused-variable -Wunused-const-variable
 # CFLAGS += -Werror
 else
 CFLAGS += -D_DEBUG -g

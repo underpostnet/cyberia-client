@@ -73,15 +73,14 @@ struct EntityState {
 struct PlayerState {
     EntityState base; // Inheritance simulation
     char map_code[MAX_ID_LENGTH]; /* map code string, e.g. "fallback-map-0" */
-    Vector2 path[MAX_PATH_POINTS];
-    int path_count;
-    Vector2 target_pos;
+    Vector2 path[MAX_PATH_POINTS]; // debug only
+    int path_count; // debug only
+    Vector2 target_pos; // debug only
 
     // Local prediction & smoothing (main player only)
     Vector2 tap_target;      // grid-coords of last tap for local prediction
     bool has_tap_target;     // whether a prediction target is active
     float estimated_speed;   // grid-units/second derived from server deltas
-    Vector2 velocity;        // estimated velocity vector from server deltas
 };
 
 // Bot state structure
@@ -188,14 +187,9 @@ struct GameState {
     int fps;
     int interpolation_ms;
     float aoi_radius;
-    float default_obj_width;
-    float default_obj_height;
 
     // Graphics configuration
-    float camera_smoothing;
     float camera_zoom;
-    float default_width_screen_factor;
-    float default_height_screen_factor;
 
     // Game colors
     GameColors colors;
@@ -234,15 +228,11 @@ struct GameState {
     WorldObject floors[MAX_OBJECTS];
     int floor_count;
 
-    // UI state
+    // UI state // TODO: should NOT be in GameState
     char associated_item_ids[MAX_ENTITIES][MAX_ITEM_ID_LENGTH];
     int associated_item_count;
     SkillEntry skill_map[MAX_SKILL_ENTRIES];
     int skill_map_count;
-    char last_error_message[MAX_MESSAGE_SIZE];
-    double error_display_time;
-    size_t download_size_bytes;
-    size_t upload_size_bytes;
 
     // Stats
     int sum_stats_limit;
@@ -276,7 +266,7 @@ struct GameState {
     double last_update_time;
 
     // Camera
-    Camera2D camera;
+    Camera2D camera; // TODO: should NOT be in GameState
 };
 
 // Global game state instance

@@ -50,7 +50,8 @@ void game_state_update_interpolation(float delta_time) {
         float speed = p->estimated_speed > 0.1f ? p->estimated_speed : 3.0f;
 
         // Track frame movement for predicted direction
-        float frame_dx = 0.0f, frame_dy = 0.0f;
+        float frame_dx = 0.0f;
+        float frame_dy = 0.0f;
 
         // Local prediction: move interp_pos toward tap target
         if (p->has_tap_target) {
@@ -95,12 +96,19 @@ void game_state_update_interpolation(float delta_time) {
     }
 
     // === Other players and bots: linear interpolation (unchanged) ===
-    float interp_factor = g_game_state.interpolation_ms > 0 ?
-        (float)(current_time - g_game_state.last_update_time) * 1000.0f / g_game_state.interpolation_ms : 1.0f;
-    if (interp_factor > 1.0f) interp_factor = 1.0f;
+    float interp_factor = 1.0f;
+    if(g_game_state.interpolation_ms > 0)
+    {
+        interp_factor = (current_time - g_game_state.last_update_time) * 1000.0f / g_game_state.interpolation_ms;
+        if (interp_factor > 1.0f)
+        {
+            interp_factor = 1.0f;
+        }
+    }
 
     // Interpolate other players
-    for (int i = 0; i < g_game_state.other_player_count; i++) {
+    for (int i = 0; i < g_game_state.other_player_count; i++)
+    {
         PlayerState* player = &g_game_state.other_players[i];
         player->base.interp_pos.x = player->base.pos_prev.x +
             (player->base.pos_server.x - player->base.pos_prev.x) * interp_factor;
@@ -109,7 +117,8 @@ void game_state_update_interpolation(float delta_time) {
     }
 
     // Interpolate bots
-    for (int i = 0; i < g_game_state.bot_count; i++) {
+    for (int i = 0; i < g_game_state.bot_count; i++)
+    {
         BotState* bot = &g_game_state.bots[i];
         bot->base.interp_pos.x = bot->base.pos_prev.x +
             (bot->base.pos_server.x - bot->base.pos_prev.x) * interp_factor;

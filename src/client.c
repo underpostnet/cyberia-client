@@ -82,9 +82,6 @@ int client_send(const char* message) {
     int result = ws_send(&client_state.ws_client, message, length);
     if (result == 0) {
         client_state.bytes_uploaded += length;
-
-        // Update dev UI with network stats
-        g_game_state.upload_size_bytes = client_state.bytes_uploaded;
     }
 
     return result;
@@ -131,9 +128,6 @@ static void on_websocket_message(const char* data, int length, int is_binary, vo
 
     // Track downloaded bytes
     client_state.bytes_downloaded += length;
-
-    // Update dev UI with network stats
-    g_game_state.download_size_bytes = client_state.bytes_downloaded;
 
     if (is_binary) {
         // Binary message → binary AOI decoder

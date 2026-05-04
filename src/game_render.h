@@ -228,10 +228,10 @@ void game_render_hud(void);
  */
 void game_render_dev_ui(void);
 
-/**
- * @brief Render error messages
- */
-void game_render_error_messages(void);
+/** Render error messages */
+void game_render_error_messages();
+void game_render_set_error_message(const char* msg);
+const char* game_render_get_error_message();
 
 /**
  * @brief Check if a screen point hits a zoom button.

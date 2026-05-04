@@ -216,15 +216,8 @@ static int message_parser_parse_init_data(const cJSON* json_root) {
     g_game_state.interpolation_ms = serial_get_int_default(payload, "interpolationMs", 200);
     g_game_state.aoi_radius = serial_get_float_default(payload, "aoiRadius", 15.0f);
 
-    // Parse default object dimensions
-    g_game_state.default_obj_width = serial_get_float_default(payload, "defaultObjectWidth", 1.0f);
-    g_game_state.default_obj_height = serial_get_float_default(payload, "defaultObjectHeight", 1.0f);
-
     // Parse graphics settings
-    g_game_state.camera_smoothing = serial_get_float_default(payload, "cameraSmoothing", 0.15f);
     g_game_state.camera_zoom = serial_get_float_default(payload, "cameraZoom", 1.0f);
-    g_game_state.default_width_screen_factor = serial_get_float_default(payload, "defaultWidthScreenFactor", 0.5f);
-    g_game_state.default_height_screen_factor = serial_get_float_default(payload, "defaultHeightScreenFactor", 0.5f);
 
     // Parse UI settings
     // ENABLE_DEV_UI=true forces dev UI on regardless of server; false defers to server
@@ -559,7 +552,6 @@ static int message_parser_parse_aoi_update(const cJSON* json_root) {
             Vector2 tap_target = g_game_state.player.tap_target;
             bool has_tap_target = g_game_state.player.has_tap_target;
             float estimated_speed = g_game_state.player.estimated_speed;
-            Vector2 velocity = g_game_state.player.velocity;
 
             // Estimate velocity from server position delta
             if (!first_update) {
@@ -567,7 +559,6 @@ static int message_parser_parse_aoi_update(const cJSON* json_root) {
                 if (dt > 0.001) {
                     float dx = player.base.pos_server.x - prev_server_pos.x;
                     float dy = player.base.pos_server.y - prev_server_pos.y;
-                    velocity = (Vector2){dx / (float)dt, dy / (float)dt};
                     float speed = sqrtf(dx * dx + dy * dy) / (float)dt;
                     estimated_speed = estimated_speed > 0.1f ?
                         estimated_speed * 0.7f + speed * 0.3f : speed;
@@ -588,7 +579,6 @@ static int message_parser_parse_aoi_update(const cJSON* json_root) {
             g_game_state.player.tap_target = tap_target;
             g_game_state.player.has_tap_target = has_tap_target;
             g_game_state.player.estimated_speed = estimated_speed;
-            g_game_state.player.velocity = velocity;
 
             // For exponential blend: keep interp_pos where it was (no hard reset)
             if (!first_update) {
@@ -765,9 +755,8 @@ static int message_parser_parse_skill_item_ids(const cJSON* json_root) {
  * ============================================================================ */
 
 static int message_parser_parse_error(const cJSON* json_root) {
-    assert(json_root);
-
     printf("[MESSAGE_PARSER] Parsing error message\n");
+    assert(json_root);
 
     // Get payload object
     cJSON* payload = serial_get_object(json_root, "payload");
@@ -778,14 +767,14 @@ static int message_parser_parse_error(const cJSON* json_root) {
 
     // Get error message
     char error_msg[MAX_MESSAGE_SIZE] = {0};
-    if (serial_get_string(payload, "message", error_msg, sizeof(error_msg)) == 0) {
-        strncpy(g_game_state.last_error_message, error_msg, sizeof(g_game_state.last_error_message) - 1);
-        g_game_state.error_display_time = GetTime();
+    if (serial_get_string(payload, "message", error_msg, sizeof(error_msg)) == 0)
+    {
+        game_render_set_error_message(error_msg);
         printf("[MESSAGE_PARSER] Server error: %s\n", error_msg);
-    } else {
-        strncpy(g_game_state.last_error_message, "Unknown server error",
-                sizeof(g_game_state.last_error_message) - 1);
-        g_game_state.error_display_time = GetTime();
+    }
+    else
+    {
+        game_render_set_error_message("UNKNOWN SERVER ERROR");
     }
 
     return 0;

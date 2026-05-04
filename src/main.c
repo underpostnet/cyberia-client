@@ -25,7 +25,7 @@ void main_loop(void) {
     // update frame state
     game_state_update_interpolation(dt);
 
-    // render the frame/
+    // render the frame
     render_update(dt);
 }
 

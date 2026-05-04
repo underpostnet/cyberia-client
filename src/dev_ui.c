@@ -199,7 +199,7 @@ void dev_ui_draw(int screen_width, int screen_height, int hud_occupied) {
     Vector2 player_pos = g_game_state.player.base.interp_pos;
     Vector2 target_pos = g_game_state.player.target_pos;
     int sum_stats_limit = g_game_state.sum_stats_limit;
-    const char* error_msg = g_game_state.last_error_message;
+    const char* error_msg = game_render_get_error_message();
 
     // Get active stats and item count
     int active_stats_sum = dev_ui_get_active_stats_sum(player_id);

@@ -886,21 +886,41 @@ void game_render_ui(void) {
     if (modal_dialogue_is_open()) {
         modal_dialogue_draw();
     }
-
-
 }
 
+typedef struct {
+    char   text[MAX_MESSAGE_SIZE];
+    double display_time;
+} ErrorBanner;
+
+static ErrorBanner g_error_banner = {0};
+
+void game_render_set_error_message(const char* msg) {
+    assert(msg);
+    if (msg[0] == '\0') {
+        g_error_banner.text[0] = '\0';
+        g_error_banner.display_time = 0.0;
+        return;
+    }
+    strncpy(g_error_banner.text, msg, sizeof(g_error_banner.text) - 1);
+    g_error_banner.text[sizeof(g_error_banner.text) - 1] = '\0';
+    g_error_banner.display_time = GetTime();
+}
+
+const char* game_render_get_error_message(void) {
+    return g_error_banner.text;
+}
 
 void game_render_error_messages(void) {
-    if (g_game_state.last_error_message[0] != '\0') {
+    if (g_error_banner.text[0] != '\0') {
         double current_time = GetTime();
-        if (current_time - g_game_state.error_display_time < 5.0) {
+        if (current_time - g_error_banner.display_time < 5.0) {
             int font_size = 16;
-            int text_width = MeasureText(g_game_state.last_error_message, font_size);
+            int text_width = MeasureText(g_error_banner.text, font_size);
             int x = (g_renderer.screen_width - text_width) / 2;
             int y = 100;
 
-            DrawText(g_game_state.last_error_message, x, y, font_size, g_game_state.colors.error_text);
+            DrawText(g_error_banner.text, x, y, font_size, g_game_state.colors.error_text);
         }
     }
 }
