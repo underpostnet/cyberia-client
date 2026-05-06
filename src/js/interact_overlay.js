@@ -2,13 +2,25 @@
  * @file interact_overlay.js
  * @brief General-purpose interact overlay — non-intrusive, real-time MMORPG.
  *
- * Bottom-docked panel for entity interactions: Dialog, Chat, Party, etc.
+ * Bottom-docked panel for entity interactions: Profile, Chat.
  * Uses the browser DOM for keyboard input and text rendering — areas where
  * the web platform has clear advantages over Raylib.
  *
+ * Tabs:
+ *   Profile — OL stack composite preview + active item list + "Talk" button.
+ *             Always shown. "Talk" button only appears when interact_flags & 1.
+ *   Chat    — 1:1 chat input + history + quick-chat presets.
+ *
+ * Why no "Actions" tab:
+ *   Combat (attack, follow) is frame-precise — handled entirely in C/Raylib.
+ *   Social systems (party, trade, friend, block) are not yet implemented server-side.
+ *   Adding stub buttons that do nothing teaches players the features are broken.
+ *   When those systems land each one will get a dedicated modal, not a tab entry.
+ *   See ENTITY_PROFILE.md for the full design rationale.
+ *
  * Architecture:
  *   C interaction_bubble click  →  js_interact_overlay_open()    → JS panel
- *   JS "Dialog" button          →  c_open_dialogue_from_js()     → C freeze + modal
+ *   JS "Talk" button            →  c_open_dialogue_from_js()     → C freeze + modal
  *   JS chat send                →  c_send_ws_message()           → C client_send()
  *   JS panel close              →  c_interact_overlay_did_close()→ C cleanup
  *   C incoming chat             →  js_interact_overlay_receive_chat() → JS update
@@ -294,10 +306,8 @@ mergeInto(LibraryManager.library, {
     '$ipEl',
     '$ipBtn',
     '$ipRenderChat',
-    '$ipBuildDialogTab',
+    '$ipBuildProfileTab',
     '$ipBuildChatTab',
-    '$ipBuildActionsTab',
-    '$ipBuildOlStackPreview',
   ],
   $ipSwitchTab: function (tabId) {
     var P = IP,
@@ -330,14 +340,11 @@ mergeInto(LibraryManager.library, {
     D.tabBody.innerHTML = '';
 
     switch (tabId) {
-      case 'dialog':
-        ipBuildDialogTab(D.tabBody);
+      case 'profile':
+        ipBuildProfileTab(D.tabBody);
         break;
       case 'chat':
         ipBuildChatTab(D.tabBody);
-        break;
-      case 'actions':
-        ipBuildActionsTab(D.tabBody);
         break;
     }
   },
@@ -399,16 +406,21 @@ mergeInto(LibraryManager.library, {
   },
 
   /* ================================================================
-   * Dialog tab — 2-column layout:
-   *   Left:  full OL stack composite preview
-   *   Right: per-active-OL dialog entry buttons
+   * Profile tab — 2-column layout:
+   *   Left:  composited OL stack preview (all active layers stacked)
+   *   Right: active item list (read-only) + single "Talk" button when
+   *          the entity has dialogue (interact_flags & 1).
+   *
+   * Design rationale: one Talk button beats per-item dialog buttons.
+   * The C dialogue modal handles item-level branching internally.
    * ================================================================ */
 
-  $ipBuildDialogTab__deps: ['$IP', '$IPS', '$ipEl', '$ipBtn', '$ipBuildOlStackPreview', '$FetchState'],
-  $ipBuildDialogTab: function (container) {
+  $ipBuildProfileTab__deps: ['$IP', '$IPS', '$ipEl', '$ipBtn', '$ipBuildOlStackPreview', '$FetchState'],
+  $ipBuildProfileTab: function (container) {
     var P = IP,
       S = IPS;
     var stack = P.olStack;
+    var hasTalk = !!(P.interactFlags & 1);
 
     /* 2-column wrapper */
     var row = ipEl('div', { display: 'flex', gap: '10px', height: '100%' }, container);
@@ -416,7 +428,7 @@ mergeInto(LibraryManager.library, {
     /* Left column: composite OL stack preview */
     ipBuildOlStackPreview(row, 120);
 
-    /* Right column: per-item dialog buttons */
+    /* Right column: active item list + Talk button */
     var right = ipEl(
       'div',
       {
@@ -430,31 +442,38 @@ mergeInto(LibraryManager.library, {
       row,
     );
 
-    var anyDialogue = false;
     var base = typeof FetchState !== 'undefined' ? FetchState.api_base_url : '';
 
-    for (var i = 0; i < stack.length; i++) {
-      (function (ol) {
+    if (stack.length === 0) {
+      var hint = ipEl('div', { color: S.hintCol, fontSize: '13px', padding: '4px 0', flex: '1' }, right);
+      hint.textContent = 'No active layers.';
+    } else {
+      /* Item list — read-only: icon + label per active OL */
+      var list = ipEl(
+        'div',
+        { flex: '1', display: 'flex', flexDirection: 'column', gap: '3px', overflowY: 'auto' },
+        right,
+      );
+      for (var i = 0; i < stack.length; i++) {
+        var ol = stack[i];
         var itemRow = ipEl(
           'div',
           {
             display: 'flex',
             alignItems: 'center',
             gap: '6px',
-            padding: '4px',
+            padding: '3px 4px',
             background: 'rgba(20,22,40,0.5)',
             borderRadius: '4px',
           },
-          right,
+          list,
         );
-
-        /* Small OL icon preview (single item) */
         if (ol.type) {
           var ico = ipEl(
             'img',
             {
-              width: '28px',
-              height: '28px',
+              width: '24px',
+              height: '24px',
               imageRendering: 'pixelated',
               flexShrink: '0',
               borderRadius: '3px',
@@ -468,13 +487,11 @@ mergeInto(LibraryManager.library, {
             this.style.display = 'none';
           };
         }
-
-        /* Item label */
-        var label = ipEl(
+        var lbl = ipEl(
           'span',
           {
             flex: '1',
-            fontSize: '13px',
+            fontSize: '12px',
             color: S.textCol,
             overflow: 'hidden',
             textOverflow: 'ellipsis',
@@ -482,38 +499,36 @@ mergeInto(LibraryManager.library, {
           },
           itemRow,
         );
-        label.textContent = ol.itemId;
-
-        /* Dialog button — only if this OL has dialogue data */
-        if (ol.hasDialogue) {
-          anyDialogue = true;
-          ipBtn(
-            '\uD83D\uDCDC',
-            function () {
-              P.hidden = true;
-              P.el.style.display = 'none';
-              P.backdrop.style.display = 'none';
-              var ePtr = allocateUTF8(P.entityId);
-              var iPtr = allocateUTF8(ol.itemId);
-              Module._c_open_dialogue_from_js(ePtr, iPtr);
-              _free(ePtr);
-              _free(iPtr);
-            },
-            itemRow,
-            {
-              background: S.btnAccent,
-              fontSize: '14px',
-              padding: '4px 10px',
-              flexShrink: '0',
-            },
-          );
-        }
-      })(stack[i]);
+        lbl.textContent = ol.itemId;
+      }
     }
 
-    if (stack.length === 0 || (!anyDialogue && !P.dlgItemId)) {
-      var hint = ipEl('div', { color: S.hintCol, fontSize: '14px', padding: '8px 0' }, right);
-      hint.textContent = 'No dialog available for this entity.';
+    /* Talk button — only when entity has dialogue (interact_flags & 1) */
+    if (hasTalk) {
+      ipBtn(
+        'Talk',
+        function () {
+          P.hidden = true;
+          P.el.style.display = 'none';
+          P.backdrop.style.display = 'none';
+          var ePtr = allocateUTF8(P.entityId);
+          var iPtr = allocateUTF8(P.dlgItemId);
+          Module._c_open_dialogue_from_js(ePtr, iPtr);
+          _free(ePtr);
+          _free(iPtr);
+        },
+        right,
+        {
+          background: S.btnAccent,
+          marginTop: '6px',
+          flexShrink: '0',
+          padding: '8px 0',
+          fontSize: '15px',
+          fontWeight: 'bold',
+          width: '100%',
+          textAlign: 'center',
+        },
+      );
     }
   },
 
@@ -612,42 +627,6 @@ mergeInto(LibraryManager.library, {
   },
 
   /* ================================================================
-   * Actions tab — party, friend, etc.
-   * ================================================================ */
-
-  $ipBuildActionsTab__deps: ['$IP', '$IPS', '$ipEl', '$ipBtn'],
-  $ipBuildActionsTab: function (container) {
-    var P = IP,
-      S = IPS;
-
-    var row = ipEl('div', { display: 'flex', gap: '6px', flexWrap: 'wrap' }, container);
-
-    ipBtn(
-      '\uD83D\uDC65 Party',
-      function () {
-        console.log('[IP] Party invite \u2192 ' + P.entityId);
-      },
-      row,
-    );
-
-    ipBtn(
-      '\u2795 Friend',
-      function () {
-        console.log('[IP] Friend request \u2192 ' + P.entityId);
-      },
-      row,
-    );
-
-    ipBtn(
-      '\uD83D\uDCAC Whisper',
-      function () {
-        console.log('[IP] Whisper \u2192 ' + P.entityId);
-      },
-      row,
-    );
-  },
-
-  /* ================================================================
    * Render chat messages
    * ================================================================ */
 
@@ -706,10 +685,11 @@ mergeInto(LibraryManager.library, {
     /* Rebuild tab bar */
     D.tabBar.innerHTML = '';
 
-    var tabs = [];
-    if (flags & 1) tabs.push({ id: 'dialog', label: 'Dialog' });
-    tabs.push({ id: 'chat', label: 'Chat' });
-    tabs.push({ id: 'actions', label: 'Actions' });
+    /* Profile tab is always shown — Talk button inside it is gated on flags & 1. */
+    var tabs = [
+      { id: 'profile', label: 'Profile' },
+      { id: 'chat', label: 'Chat' },
+    ];
 
     tabs.forEach(function (tab) {
       var btn = ipEl(
