@@ -144,4 +144,7 @@ make -j"$MAKE_JOBS" -f Web.mk all BUILD_MODE=DEBUG
 
 # ── 5. Serve ───────────────────────────────────────────────────────────────────
 section "Starting development server on port $DEV_PORT"
-exec python3 "$PROJECT_ROOT/server.py" "$DEV_PORT" "$PROJECT_ROOT/bin/web/debug" development
+
+SERVE_DIR="$PROJECT_ROOT/bin"
+
+exec python3 "$PROJECT_ROOT/server.py" "$DEV_PORT" "$SERVE_DIR" development
