@@ -1,19 +1,37 @@
 /**
  * @file services.js
- * @brief JavaScript service layer for HTTP requests from WebAssembly
+ * @brief Channel 3 — C/WASM Client → Engine HTTP fetch bridge (non-authoritative data)
  *
- * This file provides JavaScript-based fetch functions that can be called
- * from C/C++ code via Emscripten. Uses the Cyberia engine API
- * for file blob retrieval (atlas PNG binaries).
+ * Provides the JS-side of the non-blocking binary fetch bridge used by all
+ * direct Engine REST calls from C code.  No auth headers, no credentials —
+ * all endpoints here serve publicly visible, read-only reference data.
  *
- * ObjectLayer metadata and AtlasSpriteSheet metadata are now delivered
- * via WebSocket from the Go game server (no REST calls needed).
+ * Engine REST endpoints fetched through this bridge (Channel 3):
  *
- * Public API endpoints (no auth required):
- *   - GET {api_base_url}/api/file/blob/{fileId}
+ *   Atlas sprite sheets (object_layers_management.c):
+ *     GET {api_base_url}/api/atlas-sprite-sheet/metadata/{itemKey}
+ *         → frame layout JSON (sprite sheet metadata)
+ *     GET {api_base_url}/api/atlas-sprite-sheet/blob/{itemKey}
+ *         → atlas PNG binary
  *
- * All requests use simple GET without credentials or custom auth headers,
- * avoiding CORS preflight OPTIONS requests entirely.
+ *   Dialogue / lore (dialogue_data.c):
+ *     GET {api_base_url}/api/cyberia-dialogue/code/default-{itemId}
+ *         → dialogue lines JSON for an NPC item ID
+ *
+ *   UI icons (ui_icon.c):
+ *     GET {api_base_url}/assets/ui-icons/{iconId}.png
+ *         → status-bar icon PNG
+ *
+ *   OL stack preview (interact_overlay.js — DOM <img> src, not this bridge):
+ *     GET {api_base_url}/assets/{type}/{itemId}/08/0.png
+ *
+ * ObjectLayer and AtlasSpriteSheet *metadata* for entities already in AOI are
+ * delivered via WebSocket from the Go game server (Channel 2) — no REST call.
+ *
+ * All requests are CORS simple GETs (no preflight) and can be freely cached
+ * by the browser or a CDN — the Engine is not authoritative for game state.
+ *
+ * See: ARCHITECTURE.md § "Channel 3" for the full design rationale.
  */
 
 mergeInto(LibraryManager.library, {
@@ -56,15 +74,16 @@ mergeInto(LibraryManager.library, {
   /**
    * @brief Start an asynchronous binary fetch (non-blocking)
    *
-   * Used to fetch atlas PNG blobs from the file API:
-   *   GET {api_base_url}/api/file/blob/{fileId}
+   * General-purpose non-blocking GET used for all Channel 3 requests:
+   * atlas PNG blobs, atlas metadata JSON, dialogue JSON, and UI icon PNGs.
    *
-   * The URL is constructed on the C side and passed in full.
-   * No credentials or auth headers are sent for binary blob
-   * requests to avoid CORS preflight.
+   * The full URL (including API_BASE_URL prefix) is constructed on the C side
+   * and passed in. No credentials or auth headers are sent — all responses
+   * are public read-only data, keeping every request a CORS simple request
+   * with no preflight round-trip.
    *
-   * @param url_ptr Pointer to URL string
-   * @param request_id Unique ID for this request
+   * @param url_ptr   Pointer to the full URL C string
+   * @param request_id Unique integer ID for polling via js_get_fetch_result
    */
   js_start_fetch_binary__deps: ['$FetchState'],
   js_start_fetch_binary: function (url_ptr, request_id) {
