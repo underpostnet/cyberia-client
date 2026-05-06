@@ -54,10 +54,12 @@ static DlgCacheEntry* lookup(const char* item_id) {
 /* ── URL builder ─────────────────────────────────────────────────────── */
 
 static void build_url(char* buf, size_t buf_size, const char* item_id) {
-    /* Direct lookup route: GET /api/cyberia-dialogue/item/:itemId
-     * Returns sorted dialogue array — same pattern as atlas /metadata/:itemKey.
-     * No filterModel percent-encoding needed.  */
-    snprintf(buf, buf_size, "%s/api/cyberia-dialogue/item/%s", API_BASE_URL, item_id);
+    /* Lookup route: GET /api/cyberia-dialogue/code/default-<item-id>
+     * Returns { status, data: [ { code, order, speaker, text, mood }, ... ] }
+     * sorted by order.  The "default-" prefix is the seeded dialogue default itemId group
+     * convention;
+     */
+      snprintf(buf, buf_size, "%s/api/cyberia-dialogue/code/default-%s", API_BASE_URL, item_id);
 }
 
 /* ── JSON parser ─────────────────────────────────────────────────────── */
@@ -76,14 +78,10 @@ static void parse_response(DlgCacheEntry* entry, const unsigned char* data, int 
         return;
     }
 
-    /* Navigate: data → data (the array) */
-    cJSON* data_obj = cJSON_GetObjectItemCaseSensitive(root, "data");
-    cJSON* arr = NULL;
-    if (cJSON_IsObject(data_obj)) {
-        arr = cJSON_GetObjectItemCaseSensitive(data_obj, "data");
-    } else if (cJSON_IsArray(data_obj)) {
-        arr = data_obj;
-    }
+    /* Response shape: { status, data: [ {...}, ... ] }
+     * data is a direct array of dialogue lines sorted by order. 
+     */
+    cJSON* arr = cJSON_GetObjectItemCaseSensitive(root, "data");
 
     if (!arr || !cJSON_IsArray(arr)) {
         entry->data.state = DLG_DATA_EMPTY;

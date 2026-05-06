@@ -7,14 +7,14 @@
  * js_get_fetch_result).
  *
  * API endpoint:
- *   GET {API_BASE_URL}/api/cyberia-dialogue?filterModel={"itemId":{"type":"equals","filter":"<itemId>"}}&sort=order&asc=1&limit=100
+ *   GET {API_BASE_URL}/api/cyberia-dialogue/code/default-<itemId>
  *
  * Response shape (success):
- *   { "status": "success", "data": { "data": [ { itemId, order, speaker, text, mood }, ... ] } }
+ *   { "status": "success", "data": [ { code, order, speaker, text, mood }, ... ] }
  *
  * Usage:
  *   dialogue_data_init();
- *   dialogue_data_request("lain");          // kick off async fetch
+ *   dialogue_data_request("lain");          // fetches /code/default-lain
  *   dialogue_data_poll();                   // call each frame
  *   const DialogueDataSet* d = dialogue_data_get("lain");
  *   if (d && d->state == DLG_DATA_READY) { ... use d->lines ... }
