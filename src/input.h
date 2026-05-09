@@ -45,7 +45,6 @@ typedef struct {
  * @brief Input manager state
  */
 typedef struct {
-    // Input event queue
     InputEvent event_queue[32];
     uint32_t event_count;
 } InputManager;

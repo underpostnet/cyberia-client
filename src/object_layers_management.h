@@ -3,7 +3,7 @@
 
 #include "object_layer.h"
 #include "texture_manager.h"
-#include "cJSON.h"
+#include <cJSON.h>
 #include <stddef.h>
 #include <stdbool.h>
 

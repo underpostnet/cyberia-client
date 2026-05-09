@@ -3,7 +3,7 @@
 
 #include <stdbool.h>
 #include <stddef.h>
-#include "cJSON.h"
+#include <cJSON.h>
 #include "game_state.h"
 
 /**

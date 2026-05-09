@@ -1,8 +1,8 @@
 #include "message_parser.h"
 #include "serial.h"
 #include "config.h"
-#include "cJSON.h"
-#include "game_render.h"
+#include <cJSON.h>
+#include "game_render.h" // TODO: Parser shouldn't render
 #include "object_layers_management.h"
 #include "js/interact_bridge.h"
 #include "js/notify_badge.h"

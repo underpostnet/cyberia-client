@@ -40,18 +40,6 @@ int serial_get_float(const cJSON* json, const char* key, float* out) {
     return 0;
 }
 
-/*
-int serial_get_double(const cJSON* json, const char* key, double* out) {
-    if (!json || !key || !out) return -1;
-
-    const cJSON* item = cJSON_GetObjectItemCaseSensitive(json, key);
-    if (!item || !cJSON_IsNumber(item)) return -1;
-
-    *out = item->valuedouble;
-    return 0;
-}
-*/
-
 int serial_get_bool(const cJSON* json, const char* key, bool* out) {
     assert(json && key && out);
 
@@ -134,22 +122,6 @@ int serial_deserialize_color_rgba(const cJSON* json, ColorRGBA* out) {
 
     return 0;
 }
-
-/*
-cJSON* serial_serialize_color_rgba(const ColorRGBA* color) {
-    if (!color) return NULL;
-
-    cJSON* json = cJSON_CreateObject();
-    if (!json) return NULL;
-
-    cJSON_AddNumberToObject(json, "r", color->r);
-    cJSON_AddNumberToObject(json, "g", color->g);
-    cJSON_AddNumberToObject(json, "b", color->b);
-    cJSON_AddNumberToObject(json, "a", color->a);
-
-    return json;
-}
-*/
 
 int serial_deserialize_point(const cJSON* json, Vector2* out) {
     assert(json && out);
@@ -488,27 +460,6 @@ int serial_deserialize_player_state(const cJSON* json, PlayerState* out) {
     return 0;
 }
 
-/*
-cJSON* serial_serialize_player_state(const PlayerState* player) {
-    if (!player) return NULL;
-
-    cJSON* json = serial_serialize_entity_state(&player->base);
-    if (!json) return NULL;
-
-    cJSON_AddStringToObject(json, "MapCode", player->map_code);
-
-    cJSON* target = serial_serialize_point(&player->target_pos);
-    if (target) cJSON_AddItemToObject(json, "targetPos", target);
-
-    if (player->path_count > 0) {
-        cJSON* path = serial_serialize_path(player->path, player->path_count);
-        if (path) cJSON_AddItemToObject(json, "path", path);
-    }
-
-    return json;
-}
-*/
-
 /* ============================================================================
  * BotState Serialization/Deserialization
  * ============================================================================ */
@@ -526,19 +477,6 @@ int serial_deserialize_bot_state(const cJSON* json, BotState* out) {
 
     return 0;
 }
-
-/*
-cJSON* serial_serialize_bot_state(const BotState* bot) {
-    if (!bot) return NULL;
-
-    cJSON* json = serial_serialize_entity_state(&bot->base);
-    if (!json) return NULL;
-
-    cJSON_AddStringToObject(json, "behavior", bot->behavior);
-
-    return json;
-}
-*/
 
 /* ============================================================================
  * WorldObject Serialization/Deserialization
@@ -595,37 +533,6 @@ int serial_deserialize_world_object(const cJSON* json, WorldObject* out) {
     return 0;
 }
 
-/*
-cJSON* serial_serialize_world_object(const WorldObject* obj) {
-    if (!obj) return NULL;
-
-    cJSON* json = cJSON_CreateObject();
-    if (!json) return NULL;
-
-    cJSON_AddStringToObject(json, "id", obj->id);
-    cJSON_AddStringToObject(json, "Type", obj->type);
-
-    cJSON* pos = serial_serialize_point(&obj->pos);
-    if (pos) cJSON_AddItemToObject(json, "Pos", pos);
-
-    cJSON* dims = serial_serialize_dimensions(&obj->dims);
-    if (dims) cJSON_AddItemToObject(json, "Dims", dims);
-
-    if (obj->portal_label[0] != '\0') {
-        cJSON_AddStringToObject(json, "PortalLabel", obj->portal_label);
-    }
-
-    if (obj->object_layer_count > 0) {
-        cJSON* layers = serial_serialize_object_layer_array(
-            obj->object_layers, obj->object_layer_count
-        );
-        if (layers) cJSON_AddItemToObject(json, "objectLayers", layers);
-    }
-
-    return json;
-}
-*/
-
 /* ============================================================================
  * Message Creation Functions
  * ============================================================================ */
@@ -662,50 +569,3 @@ char* serial_create_player_action(float target_x, float target_y) {
 
     return str;
 }
-
-/*
-char* serial_create_ping(void) {
-    cJSON* json = cJSON_CreateObject();
-    if (!json) return NULL;
-
-    cJSON_AddStringToObject(json, "type", "ping");
-
-    char* str = cJSON_PrintUnformatted(json);
-    cJSON_Delete(json);
-
-    return str;
-}
-
-char* serial_create_pong(void) {
-    cJSON* json = cJSON_CreateObject();
-    if (!json) return NULL;
-
-    cJSON_AddStringToObject(json, "type", "pong");
-
-    char* str = cJSON_PrintUnformatted(json);
-    cJSON_Delete(json);
-
-    return str;
-}
-
-char* serial_create_item_action(const char* item_id, bool activate) {
-    assert(item_id);
-
-    cJSON* json = cJSON_CreateObject();
-    if (!json) return NULL;
-
-    cJSON_AddStringToObject(json, "type", "item_action");
-
-    cJSON* payload = cJSON_CreateObject();
-    if (payload) {
-        cJSON_AddStringToObject(payload, "itemId", item_id);
-        cJSON_AddBoolToObject(payload, "activate", activate);
-        cJSON_AddItemToObject(json, "payload", payload);
-    }
-
-    char* str = cJSON_PrintUnformatted(json);
-    cJSON_Delete(json);
-
-    return str;
-}
-*/
