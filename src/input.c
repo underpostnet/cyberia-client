@@ -130,26 +130,16 @@ static void input_handle_tap(InputEvent event) {
 
     // Dialogue modal consumes all clicks when open (highest priority —
     // the JS interact panel hides itself while dialogue is active)
-    if (modal_dialogue_is_open()) {
-        modal_dialogue_handle_click(mx, my, true);
-        return;
-    }
+    if (modal_dialogue_handle_click(mx, my)) return;
 
     // JS interact panel consumes clicks when visible
-    if (js_interact_overlay_is_open()) {
-        return; /* JS DOM handles the click */
-    }
+    if (js_interact_overlay_is_open()) return; /* JS DOM handles the click */
 
     // Inventory modal consumes all clicks when open
-    if (inventory_modal_is_open()) {
-        inventory_modal_handle_click(mx, my, true);
-        return;
-    }
+    if (inventory_modal_handle_click(mx, my)) return;
 
     // Interaction bubble column: clicking opens the JS interact overlay
-    if (interaction_bubble_handle_click(mx, my, true)) {
-        return;
-    }
+    if (interaction_bubble_handle_click(mx, my)) return;
 
     // Inventory bar tap: open modal or scroll
     {

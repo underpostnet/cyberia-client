@@ -365,8 +365,8 @@ void interaction_bubble_draw(void) {
     }
 }
 
-bool interaction_bubble_handle_click(int mx, int my, bool clicked) {
-    if (s_slot_count <= 0 || !clicked) return false;
+bool interaction_bubble_handle_click(int mx, int my) {
+    if (s_slot_count <= 0) return false;
 
     ObjectLayersManager* mgr = obj_layers_mgr_get();
 

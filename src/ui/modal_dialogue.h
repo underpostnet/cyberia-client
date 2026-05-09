@@ -107,12 +107,7 @@ void modal_dialogue_draw(void);
 
 /**
  * @brief Process a pointer event.
- *
- * @param mx      Screen X.
- * @param my      Screen Y.
- * @param clicked True on the frame the tap/click was released.
- * @return        True if the event was consumed.
  */
-bool modal_dialogue_handle_click(int mx, int my, bool clicked);
+bool modal_dialogue_handle_click(int mx, int my);
 
 #endif /* MODAL_DIALOGUE_H */

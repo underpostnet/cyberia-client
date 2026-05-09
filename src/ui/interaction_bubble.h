@@ -66,7 +66,7 @@ typedef struct {
 void interaction_bubble_init(void);
 void interaction_bubble_update(void);
 void interaction_bubble_draw(void);
-bool interaction_bubble_handle_click(int mx, int my, bool clicked);
+bool interaction_bubble_handle_click(int mx, int my);
 int  interaction_bubble_slot_count(void);
 
 /**

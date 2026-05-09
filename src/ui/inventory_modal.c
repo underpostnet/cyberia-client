@@ -702,7 +702,7 @@ void inventory_modal_draw(void) {
     }
 }
 
-bool inventory_modal_handle_click(int mx, int my, bool clicked) {
+bool inventory_modal_handle_click(int mx, int my) {
     if (!s_open) return false;
 
     int screen_w = GetScreenWidth();
@@ -710,7 +710,6 @@ bool inventory_modal_handle_click(int mx, int my, bool clicked) {
     Rectangle card = card_rect(screen_w, screen_h, 1.0f);
 
     if (s_age < 0.15f) return true; /* block during pop-in */
-    if (!clicked)       return true; /* consume motion events */
 
     bool inside = hit_rect(mx, my, card);
     if (!inside) { inventory_modal_close(); return true; }

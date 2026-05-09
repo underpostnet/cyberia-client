@@ -337,10 +337,9 @@ void modal_dialogue_draw(void) {
              hfs, C_HINT);
 }
 
-bool modal_dialogue_handle_click(int mx, int my, bool clicked) {
+bool modal_dialogue_handle_click(int mx, int my) {
     if (!s_open) return false;
     if (s_age < 0.12f) return true;  /* block during pop-in */
-    if (!clicked)       return true;  /* consume motion */
 
     int sw = GetScreenWidth();
     int sh = GetScreenHeight();

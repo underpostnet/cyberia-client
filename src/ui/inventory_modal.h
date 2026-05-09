@@ -36,7 +36,7 @@
  * Call sequence (each frame while modal is open):
  *   inventory_modal_update(dt);    — advance animation
  *   inventory_modal_draw();        — render overlay
- *   inventory_modal_handle_click(mx, my, clicked);  — process input
+ *   inventory_modal_handle_click(mx, my);  — process input
  */
 
 #ifndef INVENTORY_MODAL_H
@@ -87,18 +87,6 @@ void inventory_modal_update(float dt);
  */
 void inventory_modal_draw(void);
 
-/**
- * @brief Process a pointer event.
- *
- * Pass the current mouse / touch position each frame.  When @p clicked
- * is true the function also checks for button / close hits.
- *
- * @param mx      Screen X in pixels.
- * @param my      Screen Y in pixels.
- * @param clicked True on the frame a tap/click was just released.
- * @return        True if the modal consumed the event (caller should not
- *                process this click further).
- */
-bool inventory_modal_handle_click(int mx, int my, bool clicked);
+bool inventory_modal_handle_click(int mx, int my);
 
 #endif /* INVENTORY_MODAL_H */
