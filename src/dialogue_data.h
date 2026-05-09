@@ -23,8 +23,9 @@
 #ifndef DIALOGUE_DATA_H
 #define DIALOGUE_DATA_H
 
+#include "ui/modal_dialogue.h"   /* DialogueLine */
+
 #include <stdbool.h>
-#include "modal_dialogue.h"   /* DialogueLine */
 
 /* ── Fetch state ─────────────────────────────────────────────────────── */
 

@@ -18,20 +18,22 @@
  */
 
 #include "inventory_modal.h"
-#include "inventory_bar.h"
-#include "interaction_bubble.h"
-#include "ol_as_animated_ico.h"
-#include "game_state.h"
+
 #include "client.h"
-#include "object_layers_management.h"
-#include "object_layer.h"
-#include "modal_dialogue.h"
 #include "dialogue_data.h"
+#include "game_state.h"
+#include "interaction_bubble.h"
+#include "inventory_bar.h"
+#include "modal_dialogue.h"
+#include "object_layer.h"
+#include "object_layers_management.h"
+#include "ol_as_animated_ico.h"
+
+#include <assert.h>
+#include <math.h>
 #include <raylib.h>
 #include <stdio.h>
 #include <string.h>
-#include <math.h>
-#include <assert.h>
 
 /* ── Module state ─────────────────────────────────────────────────────── */
 

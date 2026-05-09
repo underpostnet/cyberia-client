@@ -8,9 +8,11 @@
  */
 
 #include "interact_bridge.h"
+
 #include "client.h"
-#include "modal_dialogue.h"
 #include "dialogue_data.h"
+#include "ui/modal_dialogue.h"
+
 #include <emscripten.h>
 #include <stdio.h>
 #include <string.h>

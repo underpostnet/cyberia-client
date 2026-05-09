@@ -11,21 +11,23 @@
  */
 
 #include "interaction_bubble.h"
-#include "js/interact_bridge.h"
+
+#include "client.h"
 #include "dialogue_data.h"
-#include "ol_stack_ico.h"
+#include "entity_render.h"
+#include "game_state.h"
+#include "js/interact_bridge.h"
+#include "js/notify_badge.h"
 #include "layer_z_order.h"
 #include "nameplate.h"
 #include "object_layers_management.h"
-#include "game_state.h"
-#include "entity_render.h"
-#include "client.h"
+#include "ol_stack_ico.h"
 #include "ui_icon.h"
-#include "js/notify_badge.h"
-#include <raylib.h>
-#include <string.h>
-#include <stdio.h>
+
 #include <assert.h>
+#include <raylib.h>
+#include <stdio.h>
+#include <string.h>
 
 /* ── Module state ─────────────────────────────────────────────────────── */
 

@@ -21,8 +21,8 @@
 #ifndef TAP_EFFECT_H
 #define TAP_EFFECT_H
 
-#include <stdbool.h>
 #include <raylib.h>
+#include <stdbool.h>
 
 #define TAP_EFFECT_MAX_ENTRIES 32
 

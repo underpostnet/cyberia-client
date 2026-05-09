@@ -1,19 +1,21 @@
 #include "render.h"
-#include "game_render.h"
-#include "floating_combat_text.h"
-#include "input.h"
-#include "dev_ui.h"
-#include "modal_player.h"
-#include "inventory_bar.h"
-#include "inventory_modal.h"
-#include "modal_dialogue.h"
+
 #include "dialogue_data.h"
-#include "interaction_bubble.h"
-#include "tap_effect.h"
-#include "ui_icon.h"
-#include "raylib.h"
-#include <stdio.h>
+#include "game_render.h"
+#include "input.h"
+#include "ui/dev_ui.h"
+#include "ui/floating_combat_text.h"
+#include "ui/interaction_bubble.h"
+#include "ui/inventory_bar.h"
+#include "ui/inventory_modal.h"
+#include "ui/modal_dialogue.h"
+#include "ui/modal_player.h"
+#include "ui/tap_effect.h"
+#include "ui/ui_icon.h"
+
 #include <assert.h>
+#include <raylib.h>
+#include <stdio.h>
 
 
 // Default configuration for fallback rendering

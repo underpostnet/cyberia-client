@@ -19,12 +19,14 @@
  */
 
 #include "entity_overhead_ui.h"
+
 #include "game_state.h"
 #include "ui_icon.h"
+
+#include <assert.h>
 #include <raylib.h>
 #include <stdio.h>
 #include <string.h>
-#include <assert.h>
 
 /* ── Internal colours ────────────────────────────────────────────────── */
 

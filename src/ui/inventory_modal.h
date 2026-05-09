@@ -42,9 +42,10 @@
 #ifndef INVENTORY_MODAL_H
 #define INVENTORY_MODAL_H
 
-#include <stdbool.h>
-#include <raylib.h>
 #include "object_layers_management.h"
+
+#include <raylib.h>
+#include <stdbool.h>
 
 /* ── Public API ───────────────────────────────────────────────────────── */
 

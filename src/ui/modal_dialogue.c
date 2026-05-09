@@ -11,15 +11,17 @@
  */
 
 #include "modal_dialogue.h"
+
+#include "client.h"
+#include "game_state.h"
 #include "modal.h"
 #include "ol_as_animated_ico.h"
-#include "game_state.h"
-#include "client.h"
+
+#include <assert.h>
+#include <math.h>
 #include <raylib.h>
 #include <stdio.h>
 #include <string.h>
-#include <math.h>
-#include <assert.h>
 
 /* ── Module state ─────────────────────────────────────────────────────── */
 

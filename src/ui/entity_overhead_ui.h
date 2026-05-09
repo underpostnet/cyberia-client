@@ -34,9 +34,9 @@
 #ifndef ENTITY_OVERHEAD_UI_H
 #define ENTITY_OVERHEAD_UI_H
 
+#include <raylib.h>
 #include <stdbool.h>
 #include <stdint.h>
-#include <raylib.h>
 
 /* ── Layout constants (world-space, scaled by cell_size at draw time) ─── */
 

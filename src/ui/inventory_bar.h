@@ -35,9 +35,10 @@
 #ifndef INVENTORY_BAR_H
 #define INVENTORY_BAR_H
 
-#include <stdbool.h>
-#include <raylib.h>
 #include "object_layers_management.h"
+
+#include <raylib.h>
+#include <stdbool.h>
 
 /* ── Layout constants (screen pixels) ────────────────────────────────── */
 

@@ -16,9 +16,10 @@
 #ifndef NAMEPLATE_H
 #define NAMEPLATE_H
 
-#include <stdbool.h>
 #include "object_layer.h"
 #include "object_layers_management.h"
+
+#include <stdbool.h>
 
 /**
  * @brief Resolve a display name into @p out.

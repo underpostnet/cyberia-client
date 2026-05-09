@@ -10,14 +10,15 @@
  */
 
 #include "ui_icon.h"
+
 #include "config.h"
+#include "js/services.h"
+
+#include <assert.h>
 #include <math.h>
-#include <string.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include <assert.h>
-
-#include "js/services.h"
+#include <string.h>
 
 /* ── Icon texture cache ─────────────────────────────────────────────── */
 

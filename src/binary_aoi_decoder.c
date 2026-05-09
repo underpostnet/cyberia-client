@@ -7,12 +7,14 @@
  */
 
 #include "binary_aoi_decoder.h"
+
 #include "game_state.h"
-#include "floating_combat_text.h"
-#include <string.h>
-#include <stdio.h>
-#include <math.h>
+#include "ui/floating_combat_text.h" // TODO: AOI decoder shouldn't depend on UI
+
 #include <assert.h>
+#include <math.h>
+#include <stdio.h>
+#include <string.h>
 
 /* ── Little-endian readers ─────────────────────────────────────── */
 

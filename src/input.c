@@ -1,21 +1,22 @@
 #include "input.h"
+
+// TODO: URGENTLY remove dependencies
+#include "ui/interaction_bubble.h"
+#include "ui/inventory_bar.h"
+#include "ui/inventory_modal.h"
+#include "ui/modal_dialogue.h"
+#include "ui/tap_effect.h"
+
+// TODO: Remove deps
+#include "client.h"
+#include "game_render.h"
+#include "js/interact_bridge.h"
+#include "serial.h"
+
+#include <assert.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <assert.h>
-
-// TODO: URGENTLY remove dependencies
-#include "modal_dialogue.h"
-#include "interaction_bubble.h"
-#include "inventory_bar.h"
-#include "inventory_modal.h"
-#include "tap_effect.h"
-
-// TODO: Remove deps
-#include "serial.h"
-#include "client.h"
-#include "js/interact_bridge.h"
-#include "game_render.h"
 
 static void input_handle_tap(InputEvent event);
 static int input_add_event(InputEvent event);

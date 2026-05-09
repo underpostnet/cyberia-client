@@ -29,8 +29,9 @@
 #ifndef MODAL_DIALOGUE_H
 #define MODAL_DIALOGUE_H
 
-#include <stdbool.h>
 #include "object_layers_management.h"
+
+#include <stdbool.h>
 
 /* Maximum dialogue lines that can be loaded for a single interaction. */
 #define DIALOGUE_MAX_LINES 32

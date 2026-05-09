@@ -1,10 +1,12 @@
 #include "dev_ui.h"
+
+#include "client.h"
 #include "game_render.h"
 #include "game_state.h"
-#include "client.h"
+
+#include <assert.h>
 #include <stdio.h>
 #include <string.h>
-#include <assert.h>
 
 const char* direction_to_string(Direction dir) {
     switch (dir) {

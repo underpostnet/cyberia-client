@@ -37,8 +37,8 @@
 #ifndef FLOATING_COMBAT_TEXT_H
 #define FLOATING_COMBAT_TEXT_H
 
-#include <stdint.h>
 #include <stdbool.h>
+#include <stdint.h>
 
 /* ── FCT event types ─────────────────────────────────────────────────────
  * These values MUST stay in sync with Go constants in aoi_binary.go:

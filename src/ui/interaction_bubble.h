@@ -16,9 +16,10 @@
 #ifndef INTERACTION_BUBBLE_H
 #define INTERACTION_BUBBLE_H
 
-#include <stdbool.h>
-#include "object_layer.h"
 #include "game_state.h"
+#include "object_layer.h"
+
+#include <stdbool.h>
 
 /* ── Layout constants ──────────────────────────────────────────────────── */
 

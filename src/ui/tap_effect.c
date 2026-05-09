@@ -15,6 +15,7 @@
  */
 
 #include "tap_effect.h"
+
 #include <math.h>
 #include <string.h>
 

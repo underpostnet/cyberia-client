@@ -35,7 +35,8 @@ endif
 # Common sources to include
 src_files = \
 	$(wildcard $(SRC_DIR)/*.c) \
-	$(wildcard $(SRC_DIR)/js/*.c)
+	$(wildcard $(SRC_DIR)/js/*.c) \
+	$(wildcard $(SRC_DIR)/ui/*.c)
 
 #------------------------------------------------
 # Raylib Dependendy

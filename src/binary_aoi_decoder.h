@@ -12,8 +12,8 @@
 #ifndef BINARY_AOI_DECODER_H
 #define BINARY_AOI_DECODER_H
 
-#include <stdint.h>
 #include <stddef.h>
+#include <stdint.h>
 
 /* ── Message types ─────────────────────────────────────────────── */
 #define BIN_MSG_AOI_UPDATE 0x01
@@ -39,7 +39,7 @@
 /* FCT event type constants are defined in floating_combat_text.h — the
  * single source of truth for the FCT subsystem.  Include it directly
  * rather than duplicating the defines here.                              */
-#include "floating_combat_text.h"
+#include "ui/floating_combat_text.h"
 
 /* ── Entity type bits (lower 3 bits of flags byte) ────────────── */
 #define BIN_ENTITY_PLAYER      0

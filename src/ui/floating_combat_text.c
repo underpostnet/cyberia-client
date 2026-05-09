@@ -34,12 +34,14 @@
  */
 
 #include "floating_combat_text.h"
+
 #include "game_state.h"
-#include <raylib.h>
+
+#include <assert.h>
 #include <math.h>
+#include <raylib.h>
 #include <stdio.h>
 #include <string.h>
-#include <assert.h>
 
 /* ── Global timing ─────────────────────────────────────────────────────── */
 

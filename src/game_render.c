@@ -1,24 +1,26 @@
 #include "game_render.h"
-#include "game_state.h"
-#include "dev_ui.h"
-#include "modal_player.h"
-#include "floating_combat_text.h"
-#include "texture_manager.h"
-#include "object_layers_management.h"
-#include "entity_render.h"
-#include "entity_overhead_ui.h"
+
 #include "dialogue_data.h"
-#include "interaction_bubble.h"
-#include "inventory_bar.h"
-#include "inventory_modal.h"
-#include "modal_dialogue.h"
-#include "tap_effect.h"
-#include "ui_icon.h"
-#include "nameplate.h"
+#include "entity_render.h"
+#include "game_state.h"
+#include "object_layers_management.h"
+#include "texture_manager.h"
+#include "ui/dev_ui.h"
+#include "ui/entity_overhead_ui.h"
+#include "ui/floating_combat_text.h"
+#include "ui/interaction_bubble.h"
+#include "ui/inventory_bar.h"
+#include "ui/inventory_modal.h"
+#include "ui/modal_dialogue.h"
+#include "ui/modal_player.h"
+#include "ui/nameplate.h"
+#include "ui/tap_effect.h"
+#include "ui/ui_icon.h"
+
+#include <assert.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <assert.h>
 
 /* ── Zoom buttons ─────────────────────────────────────────────────────── */
 #define ZOOM_BTN_SIZE   44
