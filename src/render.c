@@ -56,14 +56,13 @@ void render_update(float delta_time) {
 
     // Update stored dimensions if canvas was resized
     if (IsWindowResized()) {
+        printf("[RENDER] Window resized to %dx%d\n", current_width, current_height);
+
         // Update game renderer screen size
         game_render_set_screen_size(current_width, current_height);
 
         // Update camera offset to keep it centered
         game_state_update_camera_offset(current_width, current_height);
-
-        // Handle input resize event
-        input_handle_window_resize(current_width, current_height);
     }
 
     game_state_update_camera(delta_time); // TODO: camera shouldn't be in the GameState

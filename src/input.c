@@ -19,37 +19,35 @@
 #include <string.h>
 
 static void input_handle_tap(InputEvent event);
-static int input_add_event(InputEvent event);
-static void input_clear_events(void);
-static Vector2 input_get_mouse_world_pos(void);
-static void input_handle_mouse_wheel(float wheel_move);
+static bool input_event_queue_push(InputEvent event);
 static void input_handle_key_press(int key);
 static int input_send_tap(Vector2 target_pos);
-static void input_toggle_debug_mode(void);
-static void input_set_camera_zoom(float zoom);
-static bool input_find_entity_at_position(Vector2 screen_pos, char* entity_id, size_t id_size);
 static bool input_is_over_ui(Vector2 screen_pos);
 
 InputManager g_input = {0};
 
 void input_update(void) {
-    g_input.mouse_screen_pos = GetMousePosition();
+    Vector2 mouse_screen_pos = GetMousePosition();
 
     // Handle mouse clicks
     if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) {
         InputEvent event = {
             .type = INPUT_EVENT_TAP,
-            .screen_position = g_input.mouse_screen_pos,
-            .world_position = GetScreenToWorld2D(g_input.mouse_screen_pos, g_game_state.camera),
+            .screen_position = mouse_screen_pos,
+            .world_position = GetScreenToWorld2D(mouse_screen_pos, g_game_state.camera),
             .timestamp = GetTime()
         };
-        input_add_event(event);
+        input_event_queue_push(event);
     }
 
     // Handle mouse wheel
     float wheel_move = GetMouseWheelMove();
     if (wheel_move != 0) {
-        input_handle_mouse_wheel(wheel_move);
+        InputEvent event = {
+            .type = wheel_move >= 0 ? INPUT_EVENT_ZOOM_IN : INPUT_EVENT_ZOOM_OUT,
+            .timestamp = GetTime()
+        };
+        input_event_queue_push(event);
     }
 
     // Handle keyboard input
@@ -59,12 +57,7 @@ void input_update(void) {
     }
 }
 
-void input_cleanup(void) {
-    // Note InputManager is Stack only, this could be skipped
-    memset(&g_input, 0, sizeof(InputManager));
-}
-
-void input_process_events(void) {
+void input_event_queue_handle(void) {
     for (uint32_t i = 0; i < g_input.event_count; i++) {
         InputEvent event = g_input.event_queue[i];
 
@@ -73,15 +66,15 @@ void input_process_events(void) {
                 input_handle_tap(event);
                 break;
             case INPUT_EVENT_TOGGLE_DEBUG:
-                input_toggle_debug_mode();
+                game_state_toggle_debug_mode();
                 break;
 
             case INPUT_EVENT_ZOOM_IN:
-                input_set_camera_zoom(g_game_state.camera_zoom * 1.1f);
+                game_state_set_camera_zoom(g_game_state.camera.zoom * 1.1f);
                 break;
 
             case INPUT_EVENT_ZOOM_OUT:
-                input_set_camera_zoom(g_game_state.camera_zoom * 0.9f);
+                game_state_set_camera_zoom(g_game_state.camera.zoom * 0.9f);
                 break;
 
             case INPUT_EVENT_NONE:
@@ -91,26 +84,19 @@ void input_process_events(void) {
     }
 
     // Clear processed events
-    input_clear_events();
+    g_input.event_count = 0;
 }
 
-static int input_add_event(InputEvent event) {
-    if (g_input.event_count >= 32) {
-        return -1; // Queue full
+static bool input_event_queue_push(InputEvent event) {
+    if (event.type == INPUT_EVENT_NONE || g_input.event_count >= 32 )
+    {
+        return false;
     }
 
     g_input.event_queue[g_input.event_count] = event;
     g_input.event_count++;
 
-    return 0;
-}
-
-static void input_clear_events(void) {
-    g_input.event_count = 0;
-}
-
-static Vector2 input_get_mouse_world_pos(void) {
-    return GetScreenToWorld2D(g_input.mouse_screen_pos, g_game_state.camera);
+    return true;
 }
 
 static void input_handle_tap(InputEvent event) {
@@ -155,7 +141,7 @@ static void input_handle_tap(InputEvent event) {
         int zh = game_render_zoom_btn_hit(mx, my);
         if (zh != 0) {
             float factor = (zh > 0) ? 1.1f : 0.9f;
-            input_set_camera_zoom(g_game_state.camera_zoom * factor);
+            game_state_set_camera_zoom(g_game_state.camera.zoom * factor);
             return;
         }
     }
@@ -169,14 +155,6 @@ static void input_handle_tap(InputEvent event) {
     input_send_tap(event.world_position);
 }
 
-static void input_handle_mouse_wheel(float wheel_move) {
-    InputEvent event = {
-        .timestamp = GetTime(),
-        .type = wheel_move >= 0 ? INPUT_EVENT_ZOOM_IN : INPUT_EVENT_ZOOM_OUT
-    };
-    input_add_event(event);
-}
-
 static void input_handle_key_press(int key) {
     printf("[INPUT] Key pressed: %d\n", key);
 
@@ -185,31 +163,23 @@ static void input_handle_key_press(int key) {
     switch (key) {
         case KEY_H:
             event.type = INPUT_EVENT_TOGGLE_HUD;
-            input_add_event(event);
+            input_event_queue_push(event);
             break;
 
         case KEY_F3:
             event.type = INPUT_EVENT_TOGGLE_DEBUG;
-            input_add_event(event);
+            input_event_queue_push(event);
             break;
 
         case KEY_ESCAPE:
             event.type = INPUT_EVENT_CANCEL_ACTION;
-            input_add_event(event);
+            input_event_queue_push(event);
             break;
 
         default:
             // Ignore other keys for now
             break;
     }
-}
-
-void input_handle_window_resize(int width, int height) {
-    printf("[INPUT] Window resized to %dx%d\n", width, height);
-
-    // Update camera offset to keep it centered
-    g_game_state.camera.offset.x = width / 2.0f;
-    g_game_state.camera.offset.y = height / 2.0f;
 }
 
 static int input_send_tap(Vector2 target_pos) {
@@ -236,77 +206,6 @@ static int input_send_tap(Vector2 target_pos) {
     return -1;
 }
 
-static void input_toggle_debug_mode(void) {
-    g_game_state.dev_ui = !g_game_state.dev_ui;
-    printf("[INPUT] Debug mode %s\n", g_game_state.dev_ui ? "enabled" : "disabled");
-}
-
-static void input_set_camera_zoom(float zoom) {
-    // Clamp zoom to reasonable range
-    if (zoom < 0.1f) zoom = 0.1f;
-    if (zoom > 5.0f) zoom = 5.0f;
-
-    g_game_state.camera_zoom = zoom;
-    g_game_state.camera.zoom = zoom;
-
-    printf("[INPUT] Camera zoom set to %.2f\n", zoom);
-}
-
-
-static bool input_find_entity_at_position(Vector2 screen_pos, char* entity_id, size_t id_size) {
-    Vector2 world_pos = GetScreenToWorld2D(screen_pos, g_game_state.camera);
-    float cell_size = g_game_state.cell_size > 0 ? g_game_state.cell_size : 12.0f;
-
-    // Check main player
-    Rectangle player_rect = {
-        g_game_state.player.base.interp_pos.x * cell_size,
-        g_game_state.player.base.interp_pos.y * cell_size,
-        g_game_state.player.base.dims.x * cell_size,
-        g_game_state.player.base.dims.y * cell_size
-    };
-
-    if (CheckCollisionPointRec(world_pos, player_rect)) {
-        strncpy(entity_id, g_game_state.player.base.id, id_size - 1);
-        entity_id[id_size - 1] = '\0';
-        return true;
-    }
-
-    // Check other players
-    for (int i = 0; i < g_game_state.other_player_count; i++) {
-        PlayerState* player = &g_game_state.other_players[i];
-        Rectangle rect = {
-            player->base.interp_pos.x * cell_size,
-            player->base.interp_pos.y * cell_size,
-            player->base.dims.x * cell_size,
-            player->base.dims.y * cell_size
-        };
-
-        if (CheckCollisionPointRec(world_pos, rect)) {
-            strncpy(entity_id, player->base.id, id_size - 1);
-            entity_id[id_size - 1] = '\0';
-            return true;
-        }
-    }
-
-    // Check bots
-    for (int i = 0; i < g_game_state.bot_count; i++) {
-        BotState* bot = &g_game_state.bots[i];
-        Rectangle rect = {
-            bot->base.interp_pos.x * cell_size,
-            bot->base.interp_pos.y * cell_size,
-            bot->base.dims.x * cell_size,
-            bot->base.dims.y * cell_size
-        };
-
-        if (CheckCollisionPointRec(world_pos, rect)) {
-            strncpy(entity_id, bot->base.id, id_size - 1);
-            entity_id[id_size - 1] = '\0';
-            return true;
-        }
-    }
-    return false;
-}
-
 static bool input_is_over_ui(Vector2 screen_pos) {
     // Dialogue modal blocks all world interaction when open
     if (modal_dialogue_is_open()) return true;
@@ -316,10 +215,13 @@ static bool input_is_over_ui(Vector2 screen_pos) {
     if (inventory_modal_is_open()) return true;
     // Interaction bubble column occupies left strip
     if (interaction_bubble_slot_count() > 0 &&
-        screen_pos.x < IBUBBLE_MARGIN_X + IBUBBLE_ICON_SIZE + IBUBBLE_MARGIN_X) return true;
+        screen_pos.x < IBUBBLE_MARGIN_X + IBUBBLE_ICON_SIZE + IBUBBLE_MARGIN_X)
+    {
+        return true;
+    }
     // Inventory bar occupies the bottom strip
     if (screen_pos.y > GetScreenHeight() - INV_BAR_HEIGHT) return true;
     // Zoom buttons above the inventory bar
-    if (game_render_zoom_btn_hit((int)screen_pos.x, (int)screen_pos.y) != 0) return true;
+    if (0 != game_render_zoom_btn_hit((int)screen_pos.x, (int)screen_pos.y)) return true;
     return false;
 }

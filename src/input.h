@@ -1,10 +1,10 @@
 #ifndef INPUT_H
 #define INPUT_H
 
-#include "game_state.h"
 #include <raylib.h>
 #include <stdbool.h>
 #include <stddef.h>
+#include <stdint.h>
 
 /**
  * @file input.h
@@ -38,8 +38,6 @@ typedef struct {
     InputEventType type;
     Vector2 world_position;     // World coordinates for position events
     Vector2 screen_position;    // Screen coordinates
-    char target_id[MAX_ID_LENGTH];  // ID of target object/entity
-    int skill_index;            // Skill/item index for skill events
     double timestamp;           // When the event occurred
 } InputEvent;
 
@@ -47,30 +45,12 @@ typedef struct {
  * @brief Input manager state
  */
 typedef struct {
-    // Current mouse state
-    Vector2 mouse_screen_pos;
-
     // Input event queue
     InputEvent event_queue[32];
     uint32_t event_count;
 } InputManager;
 
-
-/**
- * Processes all input events and updates input state.
- * Should be called before game logic update.
- */
 void input_update(void);
-
-/** Cleanup input system */
-void input_cleanup(void);
-
-/**
- * Handle window resize event
- * @param width New window width
- * @param height New window height
- */
-void input_handle_window_resize(int width, int height);
 
 /**
  * @brief Process input events and generate game actions
@@ -78,6 +58,6 @@ void input_handle_window_resize(int width, int height);
  * This function processes queued input events and converts them
  * into appropriate game actions (network messages, state changes, etc.)
  */
-void input_process_events(void);
+void input_event_queue_handle(void);
 
 #endif // INPUT_H

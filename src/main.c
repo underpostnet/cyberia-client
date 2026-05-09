@@ -20,7 +20,7 @@ void main_loop(void) {
     input_update();
 
     // Process queued events
-    input_process_events();
+    input_event_queue_handle();
 
     // update frame state
     game_state_update_interpolation(dt);
@@ -55,7 +55,6 @@ int main(void) {
     emscripten_set_main_loop(main_loop, 0, 1);
 
     client_cleanup();
-    input_cleanup();
     render_cleanup();
 
     CloseWindow();

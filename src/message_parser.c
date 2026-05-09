@@ -217,7 +217,7 @@ static int message_parser_parse_init_data(const cJSON* json_root) {
     g_game_state.aoi_radius = serial_get_float_default(payload, "aoiRadius", 15.0f);
 
     // Parse graphics settings
-    g_game_state.camera_zoom = serial_get_float_default(payload, "cameraZoom", 1.0f);
+    g_game_state.camera.zoom = serial_get_float_default(payload, "cameraZoom", 1.0f);
 
     // Parse UI settings
     // ENABLE_DEV_UI=true forces dev UI on regardless of server; false defers to server

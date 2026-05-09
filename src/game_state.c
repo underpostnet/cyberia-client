@@ -4,6 +4,7 @@
 #include <string.h>
 #include <math.h>
 #include <raylib.h>
+#include <raymath.h>
 #include <assert.h>
 
 // Global game state instance
@@ -242,10 +243,9 @@ void game_state_init_camera(int screen_width, int screen_height) {
     g_game_state.camera.offset = offset;
     g_game_state.camera.target = target;
     g_game_state.camera.rotation = 0.0f;
-    g_game_state.camera.zoom = g_game_state.camera_zoom;
 
     printf("[GAME_STATE] Camera initialized - Target: (%.1f, %.1f), Zoom: %.2f\n",
-           target.x, target.y, g_game_state.camera_zoom);
+           target.x, target.y, g_game_state.camera.zoom);
 }
 
 void game_state_update_camera(float delta_time) {
@@ -271,4 +271,17 @@ void game_state_update_camera_offset(int screen_width, int screen_height) {
     // Keep camera offset centered on screen (good practice for proper rendering)
     g_game_state.camera.offset.x = screen_width / 2.0f;
     g_game_state.camera.offset.y = screen_height / 2.0f;
+}
+
+void game_state_set_camera_zoom(float zoom) {
+    zoom = Clamp(zoom, 0.1f, 5.0f);
+
+    g_game_state.camera.zoom = zoom;
+
+    printf("[GAME_STATE] Camera zoom set to %.2f\n", zoom);
+}
+
+void game_state_toggle_debug_mode(void) {
+    g_game_state.dev_ui = !g_game_state.dev_ui;
+    printf("[GAME_STATE] Debug mode %s\n", g_game_state.dev_ui ? "enabled" : "disabled");
 }

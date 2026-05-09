@@ -188,9 +188,6 @@ struct GameState {
     int interpolation_ms;
     float aoi_radius;
 
-    // Graphics configuration
-    float camera_zoom;
-
     // Game colors
     GameColors colors;
 
@@ -337,6 +334,12 @@ void game_state_update_camera(float delta_time);
  * @param screen_height Current screen height
  */
 void game_state_update_camera_offset(int screen_width, int screen_height);
+
+// Set camera zoom, clamped to a sensible range.
+void game_state_set_camera_zoom(float zoom);
+
+// Toggle the dev UI overlay flag.
+void game_state_toggle_debug_mode(void);
 
 /**
  * @brief Look up entity type defaults by entity type string.
