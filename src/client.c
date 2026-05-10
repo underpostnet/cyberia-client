@@ -1,5 +1,5 @@
 #include "client.h"
-#include "network.h"
+#include "network/socket.h"
 #include "config.h"
 #include "game_state.h"
 #include "message_parser.h"
@@ -9,26 +9,25 @@
 #include <string.h>
 #include <assert.h>
 
-// Global client state
-static struct {
+typedef struct {
     WebSocketClient ws_client;
-    WebSocketHandlers handlers;
     int initialized;
     char last_message[MAX_MESSAGE_SIZE];
     int message_count;
     size_t bytes_downloaded;
     size_t bytes_uploaded;
-} client_state = {0};
+} client_ctx;
+
+static client_ctx client_state = {0};
 
 // Forward declarations of event callbacks
-static void on_websocket_open(void* user_data);
-static void on_websocket_message(const char* data, int length, int is_binary, void* user_data);
-static void on_websocket_error(void* user_data);
-static void on_websocket_close(int code, const char* reason, void* user_data);
+static void on_websocket_open(void* ctx);
+static void on_websocket_message(const char* data, uint32_t length, bool is_binary, void* ctx);
+static void on_websocket_error(void* ctx);
+static void on_websocket_close(int code, const char* reason, void* ctx);
 
 // Initialize the client subsystem
 int client_init(void) {
-    // Initialize client state
     memset(&client_state, 0, sizeof(client_state));
     strncpy(client_state.last_message, "No message received yet", MAX_MESSAGE_SIZE - 1);
     client_state.message_count = 0;
@@ -36,16 +35,16 @@ int client_init(void) {
     client_state.bytes_uploaded = 0;
 
     // Setup WebSocket event handlers
-    client_state.handlers.on_open = on_websocket_open;
-    client_state.handlers.on_message = on_websocket_message;
-    client_state.handlers.on_error = on_websocket_error;
-    client_state.handlers.on_close = on_websocket_close;
-    client_state.handlers.user_data = &client_state;
+    WebSocketHandlers callbacks = {
+        .on_open_cb = on_websocket_open,
+        .on_message_cb = on_websocket_message,
+        .on_error_cb = on_websocket_error,
+        .on_close_cb = on_websocket_close,
+    };
 
     // Initialize WebSocket connection
-    int result = ws_init(&client_state.ws_client, WS_URL, &client_state.handlers);
-
-    if (result != 0) {
+    bool result = ws_init(&client_state.ws_client, WS_URL, &client_state, callbacks);
+    if (!result) {
         fprintf(stderr, "[ERROR] Failed to initialize WebSocket connection\n");
         return -1;
     }
@@ -69,7 +68,7 @@ int client_is_connected(void) {
     if (!client_state.initialized) {
         return 0;
     }
-    return ws_is_connected(&client_state.ws_client);
+    return (int)ws_is_connected(&client_state.ws_client);
 }
 
 // Send a message to the server
@@ -78,13 +77,13 @@ int client_send(const char* message) {
         return -1;
     }
 
-    int length = strlen(message);
-    int result = ws_send(&client_state.ws_client, message, length);
-    if (result == 0) {
+    size_t length = strlen(message);
+    bool result = ws_send(&client_state.ws_client, message);
+    if (result) {
         client_state.bytes_uploaded += length;
     }
 
-    return result;
+    return result ? 0 : -1;
 }
 
 // Get network statistics
@@ -100,11 +99,9 @@ void client_get_network_stats(size_t* bytes_downloaded, size_t* bytes_uploaded) 
 // ============================================================================
 // WebSocket Event Callbacks (Event-Driven Architecture)
 // ============================================================================
-
-// Called when WebSocket connection is opened
-static void on_websocket_open(void* user_data) {
-    // Update connection status
-    client_state.ws_client.connected = 1;
+static void on_websocket_open(void* ctx) {
+    client_ctx* client_st = ctx;
+    client_st->ws_client.connected = true;  // Update connection status
 
     // Send initial handshake message
     char* handshake = serial_create_handshake("cyberia-mmo", "1.0.0");
@@ -118,16 +115,14 @@ static void on_websocket_open(void* user_data) {
     }
 }
 
-// Called when WebSocket message is received
-static void on_websocket_message(const char* data, int length, int is_binary, void* user_data) {
-    if (!data || length <= 0) {
+static void on_websocket_message(const char* data, uint32_t length, bool is_binary, void* ctx) {
+    if (!data) {
         return;
     }
 
-    client_state.message_count++;
-
-    // Track downloaded bytes
-    client_state.bytes_downloaded += length;
+    client_ctx* client_st = ctx;
+    client_st->message_count++;
+    client_st->bytes_downloaded += length;      // Track downloaded bytes
 
     if (is_binary) {
         // Binary message → binary AOI decoder
@@ -141,28 +136,22 @@ static void on_websocket_message(const char* data, int length, int is_binary, vo
             length = MAX_MESSAGE_SIZE - 1;
         }
 
-        memcpy(client_state.last_message, data, length);
-        client_state.last_message[length] = '\0';
+        memcpy(client_st->last_message, data, length);
+        client_st->last_message[length] = '\0';
 
-        if (message_parser_process(client_state.last_message) != 0) {
+        if (message_parser_process(client_st->last_message) != 0) {
             fprintf(stderr, "[ERROR] Failed to process message\n");
         }
     }
 }
 
-// Called when WebSocket error occurs
-static void on_websocket_error(void* user_data) {
+static void on_websocket_error(void* ctx) {
     fprintf(stderr, "[ERROR] WebSocket error occurred\n");
-    client_state.ws_client.connected = 0;
 }
 
-// Called when WebSocket connection is closed
-static void on_websocket_close(int code, const char* reason, void* user_data) {
+static void on_websocket_close(int code, const char* reason, void* ctx) {
     // Only log unexpected closures
     if (code != 1000) {
-        fprintf(stderr, "[WARN] WebSocket closed unexpectedly (code: %d, reason: %s)\n",
-                code, reason ? reason : "none");
+        fprintf(stderr, "[WARN] WebSocket closed unexpectedly (code: %d, reason: %s)\n", code, reason ? reason : "none");
     }
-
-    client_state.ws_client.connected = 0;
 }

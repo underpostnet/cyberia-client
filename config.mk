@@ -36,6 +36,7 @@ endif
 src_files = \
 	$(wildcard $(SRC_DIR)/*.c) \
 	$(wildcard $(SRC_DIR)/js/*.c) \
+	$(wildcard $(SRC_DIR)/network/*.c) \
 	$(wildcard $(SRC_DIR)/ui/*.c)
 
 #------------------------------------------------
