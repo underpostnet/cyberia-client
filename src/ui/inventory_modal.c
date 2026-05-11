@@ -28,11 +28,13 @@
 #include "object_layer.h"
 #include "object_layers_management.h"
 #include "ol_as_animated_ico.h"
+#include "serial.h"
 
 #include <assert.h>
 #include <math.h>
 #include <raylib.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 
 /* ── Module state ─────────────────────────────────────────────────────── */
@@ -145,12 +147,17 @@ static int modal_sprite_size(float card_w) {
 }
 
 static void send_activation(const char* item_id, bool active) {
-    char buf[256];
-    snprintf(buf, sizeof(buf),
-        "{\"type\":\"item_activation\","
-        "\"payload\":{\"itemId\":\"%s\",\"active\":%s}}",
-        item_id, active ? "true" : "false");
-    client_send(buf);
+    cJSON* json = cJSON_CreateObject();
+    serialize_item_activation(json, item_id, active);
+    client_send(json);
+    cJSON_Delete(json);
+}
+
+static void send_freeze(bool start) {
+    cJSON* json = cJSON_CreateObject();
+    serialize_freeze(json, start ? "freeze_start" : "freeze_end", "inventory", NULL, NULL);
+    client_send(json);
+    cJSON_Delete(json);
 }
 
 /* hit_rect returns true if (mx,my) is inside r. */
@@ -242,14 +249,14 @@ void inventory_modal_open(int inv_idx) {
     s_skill_total = 0;
     s_skill_arrows_visible = false;
     /* Notify server → FrozenInteractionState */
-    client_send("{\"type\":\"freeze_start\",\"payload\":{\"reason\":\"inventory\"}}");
+    send_freeze(true);
 }
 
 void inventory_modal_close(void) {
     s_open    = false;
     s_inv_idx = -1;
     /* Notify server → thaw */
-    client_send("{\"type\":\"freeze_end\",\"payload\":{\"reason\":\"inventory\"}}");
+    send_freeze(false);
 }
 
 bool inventory_modal_is_open(void) { return s_open; }
@@ -776,7 +783,7 @@ bool inventory_modal_handle_click(int mx, int my) {
                     d->lines, d->line_count);
 
                 /* Stale thaw — rejected by server's reason-match check */
-                client_send("{\"type\":\"freeze_end\",\"payload\":{\"reason\":\"inventory\"}}");
+                send_freeze(false);
                 return true;
             }
         }

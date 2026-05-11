@@ -711,12 +711,12 @@ void game_render_entities(void) {
             // and passed into draw_entity_layers so it can use the same colour when
             // a texture fails to load instead of a generic gray rectangle.
             // Priority: server-sent entity color (if alpha > 0) → entity_defaults colorKey → neutral gray.
-            ColorRGBA ec = (entry->type == ENTITY_TYPE_BOT)
+            Color ec = (entry->type == ENTITY_TYPE_BOT)
                 ? entry->data.bot->base.color
                 : entity_base->color;
             Color entity_fallback_color;
             if (ec.a > 0) {
-                entity_fallback_color = (Color){ ec.r, ec.g, ec.b, ec.a };
+                entity_fallback_color = ec;
             } else {
                 const EntityTypeDefault* etd = game_state_get_entity_default(entity_type_str);
                 entity_fallback_color = etd

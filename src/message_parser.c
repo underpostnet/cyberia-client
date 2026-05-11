@@ -13,94 +13,84 @@
 #include <math.h>
 #include <assert.h>
 
+static MessageType get_message_type(const cJSON* root);
 static int message_parser_parse_metadata(const cJSON* json_root);
 static int message_parser_parse_init_data(const cJSON* json_root);
 static int message_parser_parse_aoi_update(const cJSON* json_root);
 static int message_parser_parse_skill_item_ids(const cJSON* json_root);
 static int message_parser_parse_error(const cJSON* json_root);
-static int message_parser_parse_colors(const cJSON* colors_json);
+static void message_parser_parse_colors(const cJSON* colors_json);
 static int message_parser_parse_visible_players(const cJSON* players_json);
 
 /* ============================================================================
- * Main Message Processing Entry PointZ
+ * Main Message Processing Entry Point
  * ============================================================================ */
 
-int message_parser_process(const char* json_str) {
-    if (!json_str) {
-        return -1;
-    }
-
-    // Parse JSON
-    size_t msg_len = strlen(json_str);
+bool message_parser_parse(const char* json_str) {
+    assert(json_str);
     cJSON* root = cJSON_Parse(json_str);
     if (!root) {
-        printf("[MESSAGE_PARSER] Failed to parse JSON (length: %zu bytes)\n", msg_len);
-        return -1;
+        printf("[MESSAGE_PARSER] Failed to parse JSON (length: %zu bytes)\n", strlen(json_str));
+        return false;
     }
 
-    // Get message type
-    char type_str[64] = {0};
-    if (serial_get_string(root, "type", type_str, sizeof(type_str)) != 0) {
-        // Type field missing - try to infer from payload structure
-        cJSON* payload = serial_get_object(root, "payload");
-        if (payload) {
-            int result = -1;
+    MessageType msg_type = get_message_type(root);
 
-            // Check for init_data indicators
-            if (cJSON_HasObjectItem(payload, "gridW") && cJSON_HasObjectItem(payload, "gridH")) {
-                result = message_parser_parse_init_data(root);
+    bool result = false;
+    switch (msg_type) {
+        case MSG_TYPE_INIT_DATA:
+            result = 0 == message_parser_parse_init_data(root);
+            break;
+        case MSG_TYPE_METADATA:
+            result = 0 == message_parser_parse_metadata(root);
+            break;
+        case MSG_TYPE_AOI_UPDATE:
+            result = 0 == message_parser_parse_aoi_update(root);
+            break;
+        case MSG_TYPE_SKILL_ITEM_IDS:
+            result = 0 == message_parser_parse_skill_item_ids(root);
+            break;
+        case MSG_TYPE_ERROR:
+            result = 0 == message_parser_parse_error(root);
+            break;
+        case MSG_TYPE_PING:
+        case MSG_TYPE_PONG:
+            result = true;
+            break;
+        case MSG_TYPE_CHAT: {
+            cJSON* payload = serial_get_object(root, "payload");
+            if (payload) {
+                char from_id[64] = {0};
+                char text[256] = {0};
+                serial_get_string(payload, "from", from_id, sizeof(from_id));
+                serial_get_string(payload, "text", text, sizeof(text));
+                if (from_id[0] && text[0]) {
+                    js_notify_badge_push(from_id, from_id, text);
+                    js_interact_overlay_receive_chat(from_id, from_id, text);
+                }
             }
-            // Check for aoi_update indicators
-            else if (cJSON_HasObjectItem(payload, "player") && cJSON_HasObjectItem(payload, "playerID")) {
-                result = message_parser_parse_aoi_update(root);
-            }
-            // Check for skill_item_ids indicators
-            else if (cJSON_HasObjectItem(payload, "associatedItemIds")) {
-                result = message_parser_parse_skill_item_ids(root);
-            }
-
-            cJSON_Delete(root);
-            return result;
+            result = true;
+            break;
         }
-
-        cJSON_Delete(root);
-        return -1;
-    }
-
-    int result = 0;
-
-    // Dispatch to appropriate handler
-    if (strcmp(type_str, "init_data") == 0) {
-        result = message_parser_parse_init_data(root);
-    } else if (strcmp(type_str, "metadata") == 0) {
-        result = message_parser_parse_metadata(root);
-    } else if (strcmp(type_str, "aoi_update") == 0) {
-        result = message_parser_parse_aoi_update(root);
-    } else if (strcmp(type_str, "skill_item_ids") == 0) {
-        result = message_parser_parse_skill_item_ids(root);
-    } else if (strcmp(type_str, "error") == 0) {
-        result = message_parser_parse_error(root);
-    } else if (strcmp(type_str, "ping") == 0) {
-        result = 0;
-    } else if (strcmp(type_str, "pong") == 0) {
-        result = 0;
-    } else if (strcmp(type_str, "chat") == 0) {
-        cJSON* payload = serial_get_object(root, "payload");
-        if (payload) {
-            char from_id[64] = {0};
-            char text[256] = {0};
-            serial_get_string(payload, "from", from_id, sizeof(from_id));
-            serial_get_string(payload, "text", text, sizeof(text));
-            if (from_id[0] && text[0]) {
-                /* Always persist in the badge store (survives overlay close). */
-                js_notify_badge_push(from_id, from_id, text);
-                /* Live-update the overlay if it's showing this entity's chat. */
-                js_interact_overlay_receive_chat(from_id, from_id, text);
+        case MSG_TYPE_UNKNOWN:
+        default: {
+            cJSON* payload = serial_get_object(root, "payload");
+            if (payload) {
+                // Check for init_data indicators
+                if (cJSON_HasObjectItem(payload, "gridW") && cJSON_HasObjectItem(payload, "gridH")) {
+                    result = 0 == message_parser_parse_init_data(root);
+                }
+                // Check for aoi_update indicators
+                else if (cJSON_HasObjectItem(payload, "player") && cJSON_HasObjectItem(payload, "playerID")) {
+                    result = 0 == message_parser_parse_aoi_update(root);
+                }
+                // Check for skill_item_ids indicators
+                else if (cJSON_HasObjectItem(payload, "associatedItemIds")) {
+                    result = 0 == message_parser_parse_skill_item_ids(root);
+                }
             }
+            break;
         }
-        result = 0;
-    } else {
-        result = -1;
     }
 
     cJSON_Delete(root);
@@ -110,91 +100,6 @@ int message_parser_process(const char* json_str) {
 /* ============================================================================
  * Init Data Message Parser
  * ============================================================================ */
-
-static int message_parser_parse_colors(const cJSON* colors_json) {
-    assert(colors_json);
-
-    // Pre-initialise colours that may be absent from older DB documents
-    // so they still have a visible default when the server doesn't send them.
-    g_game_state.colors.self_border = (Color){ 220, 190, 60, 240 };
-
-    // Parse each color in the dictionary
-    cJSON* item = NULL;
-    cJSON_ArrayForEach(item, colors_json) {
-        const char* color_name = item->string;
-        if (!color_name) continue;
-
-        ColorRGBA rgba;
-        if (serial_deserialize_color_rgba(item, &rgba) != 0) {
-            continue;
-        }
-
-        // Map to game state colors
-        Color c = (Color){rgba.r, rgba.g, rgba.b, rgba.a};
-
-        if (strcmp(color_name, "BACKGROUND") == 0) {
-            g_game_state.colors.background = c;
-        } else if (strcmp(color_name, "GRID_BACKGROUND") == 0) {
-            g_game_state.colors.grid_background = c;
-        } else if (strcmp(color_name, "FLOOR_BACKGROUND") == 0) {
-            g_game_state.colors.floor_background = c;
-        } else if (strcmp(color_name, "OBSTACLE") == 0) {
-            g_game_state.colors.obstacle = c;
-        } else if (strcmp(color_name, "FOREGROUND") == 0) {
-            g_game_state.colors.foreground = c;
-        } else if (strcmp(color_name, "PLAYER") == 0) {
-            g_game_state.colors.player = c;
-        } else if (strcmp(color_name, "OTHER_PLAYER") == 0) {
-            g_game_state.colors.other_player = c;
-        } else if (strcmp(color_name, "PATH") == 0) {
-            g_game_state.colors.path = c;
-        } else if (strcmp(color_name, "TARGET") == 0) {
-            g_game_state.colors.target = c;
-        } else if (strcmp(color_name, "AOI") == 0) {
-            g_game_state.colors.aoi = c;
-        } else if (strcmp(color_name, "DEBUG_TEXT") == 0) {
-            g_game_state.colors.debug_text = c;
-        } else if (strcmp(color_name, "ERROR_TEXT") == 0) {
-            g_game_state.colors.error_text = c;
-        } else if (strcmp(color_name, "PORTAL") == 0) {
-            g_game_state.colors.portal = c;
-        } else if (strcmp(color_name, "PORTAL_INTER_PORTAL") == 0) {
-            g_game_state.colors.portal_inter_portal = c;
-        } else if (strcmp(color_name, "PORTAL_INTER_RANDOM") == 0) {
-            g_game_state.colors.portal_inter_random = c;
-        } else if (strcmp(color_name, "PORTAL_INTRA_RANDOM") == 0) {
-            g_game_state.colors.portal_intra_random = c;
-        } else if (strcmp(color_name, "PORTAL_INTRA_PORTAL") == 0) {
-            g_game_state.colors.portal_intra_portal = c;
-        } else if (strcmp(color_name, "PORTAL_LABEL") == 0) {
-            g_game_state.colors.portal_label = c;
-        } else if (strcmp(color_name, "UI_TEXT") == 0) {
-            g_game_state.colors.ui_text = c;
-        } else if (strcmp(color_name, "MAP_BOUNDARY") == 0) {
-            g_game_state.colors.map_boundary = c;
-        } else if (strcmp(color_name, "MAP_GRID") == 0) {
-            g_game_state.colors.grid = c;
-        } else if (strcmp(color_name, "GRID") == 0) {
-            g_game_state.colors.grid = c;
-        } else if (strcmp(color_name, "FLOOR") == 0) {
-            g_game_state.colors.floor = c;
-        } else if (strcmp(color_name, "BOT") == 0) {
-            g_game_state.colors.bot = c;
-        } else if (strcmp(color_name, "GHOST") == 0) {
-            g_game_state.colors.ghost = c;
-        } else if (strcmp(color_name, "COIN") == 0) {
-            g_game_state.colors.coin = c;
-        } else if (strcmp(color_name, "WEAPON") == 0) {
-            g_game_state.colors.weapon = c;
-        } else if (strcmp(color_name, "SKILL") == 0) {
-            g_game_state.colors.skill = c;
-        } else if (strcmp(color_name, "SELF_BORDER") == 0) {
-            g_game_state.colors.self_border = c;
-        }
-
-    }
-    return 0;
-}
 
 static int message_parser_parse_init_data(const cJSON* json_root) {
     assert(json_root);
@@ -750,10 +655,6 @@ static int message_parser_parse_skill_item_ids(const cJSON* json_root) {
     return 0;
 }
 
-/* ============================================================================
- * Error Message Parser
- * ============================================================================ */
-
 static int message_parser_parse_error(const cJSON* json_root) {
     printf("[MESSAGE_PARSER] Parsing error message\n");
     assert(json_root);
@@ -778,4 +679,105 @@ static int message_parser_parse_error(const cJSON* json_root) {
     }
 
     return 0;
+}
+
+static MessageType get_message_type(const cJSON* root) {
+    char type_str[64] = {0};
+    if (0 != serial_get_string(root, "type", type_str, sizeof(type_str))) {
+        printf("[MESSAGE_PARSER] error missing type\n");
+        return MSG_TYPE_UNKNOWN;
+    }
+
+    if (0 == strcmp(type_str, "init_data"))      return MSG_TYPE_INIT_DATA;
+    if (0 == strcmp(type_str, "metadata"))       return MSG_TYPE_METADATA;
+    if (0 == strcmp(type_str, "aoi_update"))     return MSG_TYPE_AOI_UPDATE;
+    if (0 == strcmp(type_str, "skill_item_ids")) return MSG_TYPE_SKILL_ITEM_IDS;
+    if (0 == strcmp(type_str, "error"))          return MSG_TYPE_ERROR;
+    if (0 == strcmp(type_str, "ping"))           return MSG_TYPE_PING;
+    if (0 == strcmp(type_str, "pong"))           return MSG_TYPE_PONG;
+    if (0 == strcmp(type_str, "chat"))           return MSG_TYPE_CHAT;
+
+    printf("[MESSAGE_PARSER] warning type unknown\n");
+    return MSG_TYPE_UNKNOWN;
+}
+
+static void message_parser_parse_colors(const cJSON* colors_json) {
+    assert(colors_json);
+
+    // Pre-initialise colours that may be absent from older DB documents
+    // so they still have a visible default when the server doesn't send them.
+    g_game_state.colors.self_border = (Color){ 220, 190, 60, 240 };
+
+    // Parse each color in the dictionary
+    cJSON* item = NULL;
+    cJSON_ArrayForEach(item, colors_json) {
+        const char* color_name = item->string;
+        if (!color_name) continue;
+
+        Color c;
+        if (serial_deserialize_color(item, &c) != 0) {
+            continue;
+        }
+
+        if (strcmp(color_name, "BACKGROUND") == 0) {
+            g_game_state.colors.background = c;
+        } else if (strcmp(color_name, "GRID_BACKGROUND") == 0) {
+            g_game_state.colors.grid_background = c;
+        } else if (strcmp(color_name, "FLOOR_BACKGROUND") == 0) {
+            g_game_state.colors.floor_background = c;
+        } else if (strcmp(color_name, "OBSTACLE") == 0) {
+            g_game_state.colors.obstacle = c;
+        } else if (strcmp(color_name, "FOREGROUND") == 0) {
+            g_game_state.colors.foreground = c;
+        } else if (strcmp(color_name, "PLAYER") == 0) {
+            g_game_state.colors.player = c;
+        } else if (strcmp(color_name, "OTHER_PLAYER") == 0) {
+            g_game_state.colors.other_player = c;
+        } else if (strcmp(color_name, "PATH") == 0) {
+            g_game_state.colors.path = c;
+        } else if (strcmp(color_name, "TARGET") == 0) {
+            g_game_state.colors.target = c;
+        } else if (strcmp(color_name, "AOI") == 0) {
+            g_game_state.colors.aoi = c;
+        } else if (strcmp(color_name, "DEBUG_TEXT") == 0) {
+            g_game_state.colors.debug_text = c;
+        } else if (strcmp(color_name, "ERROR_TEXT") == 0) {
+            g_game_state.colors.error_text = c;
+        } else if (strcmp(color_name, "PORTAL") == 0) {
+            g_game_state.colors.portal = c;
+        } else if (strcmp(color_name, "PORTAL_INTER_PORTAL") == 0) {
+            g_game_state.colors.portal_inter_portal = c;
+        } else if (strcmp(color_name, "PORTAL_INTER_RANDOM") == 0) {
+            g_game_state.colors.portal_inter_random = c;
+        } else if (strcmp(color_name, "PORTAL_INTRA_RANDOM") == 0) {
+            g_game_state.colors.portal_intra_random = c;
+        } else if (strcmp(color_name, "PORTAL_INTRA_PORTAL") == 0) {
+            g_game_state.colors.portal_intra_portal = c;
+        } else if (strcmp(color_name, "PORTAL_LABEL") == 0) {
+            g_game_state.colors.portal_label = c;
+        } else if (strcmp(color_name, "UI_TEXT") == 0) {
+            g_game_state.colors.ui_text = c;
+        } else if (strcmp(color_name, "MAP_BOUNDARY") == 0) {
+            g_game_state.colors.map_boundary = c;
+        } else if (strcmp(color_name, "MAP_GRID") == 0) {
+            g_game_state.colors.grid = c;
+        } else if (strcmp(color_name, "GRID") == 0) {
+            g_game_state.colors.grid = c;
+        } else if (strcmp(color_name, "FLOOR") == 0) {
+            g_game_state.colors.floor = c;
+        } else if (strcmp(color_name, "BOT") == 0) {
+            g_game_state.colors.bot = c;
+        } else if (strcmp(color_name, "GHOST") == 0) {
+            g_game_state.colors.ghost = c;
+        } else if (strcmp(color_name, "COIN") == 0) {
+            g_game_state.colors.coin = c;
+        } else if (strcmp(color_name, "WEAPON") == 0) {
+            g_game_state.colors.weapon = c;
+        } else if (strcmp(color_name, "SKILL") == 0) {
+            g_game_state.colors.skill = c;
+        } else if (strcmp(color_name, "SELF_BORDER") == 0) {
+            g_game_state.colors.self_border = c;
+        }
+
+    }
 }

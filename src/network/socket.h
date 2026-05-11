@@ -5,7 +5,7 @@
 #include <stdbool.h>
 
 typedef void (*onopen_callback)(void* user_data);
-typedef void (*onmessage_callback)(const char* data, uint32_t length, bool is_binary, void* user_data);
+typedef void (*onmessage_callback)(const uint8_t* data, uint32_t length, bool is_text, void* user_data);
 typedef void (*onerror_callback)(void* user_data);
 typedef void (*onclose_callback)(int code, const char* reason, void* user_data);
 

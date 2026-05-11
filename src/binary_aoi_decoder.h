@@ -61,7 +61,7 @@
  * @brief Process a binary AOI message from the server.
  *
  * Parses the binary buffer and updates the global game state,
- * mirroring the behavior of message_parser_process() for JSON.
+ * mirroring the behavior of message_parser_parse() for JSON.
  *
  * @param data    Pointer to the raw binary message.
  * @param length  Length of the message in bytes.

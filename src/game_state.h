@@ -2,6 +2,7 @@
 #define GAME_STATE_H
 
 #include <raylib.h>
+#include <limits.h>
 #include <stdbool.h>
 #include <stdint.h>
 #include <stddef.h>
@@ -22,7 +23,7 @@
 #define MAX_OBJECTS 5000
 #define MAX_OBJECT_LAYERS 20
 #define MAX_PATH_POINTS 100
-#define MAX_MESSAGE_SIZE 65536
+#define MAX_MESSAGE_SIZE USHRT_MAX // why?
 #define MAX_ID_LENGTH 64
 #define MAX_SKILL_ENTRIES 64
 
@@ -41,14 +42,6 @@ typedef struct PlayerState PlayerState;
 typedef struct BotState BotState;
 
 
-// Color structure (equivalent to Python ColorRGBA)
-typedef struct {
-    uint8_t r;
-    uint8_t g;
-    uint8_t b;
-    uint8_t a;
-} ColorRGBA;
-
 // Base entity state structure
 struct EntityState {
     char id[MAX_ID_LENGTH];
@@ -64,7 +57,7 @@ struct EntityState {
     float max_life;
     float respawn_in;
     double last_update;
-    ColorRGBA color; /* entity-specific color sent by server (0 = use palette default) */
+    Color color; /* entity-specific color sent by server (0 = use palette default) */
     int effective_level; /* clamped sum of all stat fields, sent by server for all entities */
     uint8_t status_icon; /* overhead status indicator ID — mapped via status_icons config */
 };

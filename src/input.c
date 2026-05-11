@@ -11,7 +11,6 @@
 #include "client.h"
 #include "game_render.h"
 #include "js/interact_bridge.h"
-#include "serial.h"
 
 #include <assert.h>
 #include <stdio.h>
@@ -196,14 +195,7 @@ static int input_send_tap(Vector2 target_pos) {
     g_game_state.player.tap_target = (Vector2){grid_x, grid_y};
     g_game_state.player.has_tap_target = true;
 
-    char* json_str = serial_create_player_action(grid_x, grid_y);
-    if (json_str) {
-        int result = client_send(json_str);
-        free(json_str);
-        return result;
-    }
-
-    return -1;
+    return client_send_tap(grid_x, grid_y);
 }
 
 static bool input_is_over_ui(Vector2 screen_pos) {

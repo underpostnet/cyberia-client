@@ -96,8 +96,8 @@ static EM_BOOL ws_onopen_internal(int eventType, const EmscriptenWebSocketOpenEv
 static EM_BOOL ws_onmessage_internal(int eventType, const EmscriptenWebSocketMessageEvent* event, void* userData) {
     WebSocketClient* socket_ctx = userData;
     if (socket_ctx && socket_ctx->callbacks.on_message_cb) {
-        bool is_binary = !(bool)event->isText;
-        socket_ctx->callbacks.on_message_cb((const char*)event->data, event->numBytes, is_binary, socket_ctx->user_ctx);
+        socket_ctx->callbacks.on_message_cb(event->data, event->numBytes, event->isText, socket_ctx->user_ctx);
+        return EM_TRUE;
     }
     return EM_FALSE;
 }

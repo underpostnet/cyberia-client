@@ -32,9 +32,9 @@ static void on_dialogue_close(void) {
 /* ── Exported C functions (called from JS via Module._xxx) ────────────── */
 
 EMSCRIPTEN_KEEPALIVE
-void c_send_ws_message(const char* json) {
-    if (!json || json[0] == '\0') return;
-    client_send(json);
+void c_send_ws_message(const char* json_str) {
+    if (!json_str || json_str[0] == '\0') return;
+    client_send_msg(json_str);
 }
 
 EMSCRIPTEN_KEEPALIVE

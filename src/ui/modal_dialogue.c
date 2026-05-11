@@ -16,11 +16,13 @@
 #include "game_state.h"
 #include "modal.h"
 #include "ol_as_animated_ico.h"
+#include "serial.h"
 
 #include <assert.h>
 #include <math.h>
 #include <raylib.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 
 /* ── Module state ─────────────────────────────────────────────────────── */
@@ -81,13 +83,11 @@ static const Color C_CARD_BORD = {  70,  70, 120, 200 };
 /* ── Helpers ──────────────────────────────────────────────────────────── */
 
 static void send_freeze_msg(const char* type, const char* reason) {
-    char buf[256];
-    snprintf(buf, sizeof(buf),
-        "{\"type\":\"%s\",\"payload\":{\"reason\":\"%s\",\"entityId\":\"%s\",\"itemId\":\"%s\"}}",
-        type, reason, s_entity_id, s_item_id);
-    int rc = client_send(buf);
-    printf("[MODAL_DIALOGUE] WS -> %s (reason=%s, entity=%s, item=%s) rc=%d\n",
-           type, reason, s_entity_id, s_item_id, rc);
+    cJSON* json = cJSON_CreateObject();
+    serialize_freeze(json, type, reason, s_entity_id, s_item_id);
+    int rc = client_send(json);
+    cJSON_Delete(json);
+    printf("[MODAL_DIALOGUE] WS -> %s (reason=%s, entity=%s, item=%s) rc=%d\n", type, reason, s_entity_id, s_item_id, rc);
 }
 
 static Rectangle panel_rect(int sw, int sh) {

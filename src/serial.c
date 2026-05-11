@@ -1,6 +1,7 @@
 #include "serial.h"
 #include <string.h>
 #include <assert.h>
+#include <raylib.h>
 
 /* ============================================================================
  * Helper Utilities Implementation
@@ -112,7 +113,7 @@ bool serial_get_bool_default(const cJSON* json, const char* key, bool default_va
  * Basic Type Serialization/Deserialization
  * ============================================================================ */
 
-int serial_deserialize_color_rgba(const cJSON* json, ColorRGBA* out) {
+int serial_deserialize_color(const cJSON* json, Color* out) {
     assert(json && out);
 
     out->r = serial_get_int_default(json, "r", 255);
@@ -132,18 +133,6 @@ int serial_deserialize_point(const cJSON* json, Vector2* out) {
     return 0;
 }
 
-cJSON* serial_serialize_point(const Vector2* point) {
-    assert(point);
-
-    cJSON* json = cJSON_CreateObject();
-    if (!json) return NULL;
-
-    cJSON_AddNumberToObject(json, "X", point->x);
-    cJSON_AddNumberToObject(json, "Y", point->y);
-
-    return json;
-}
-
 int serial_deserialize_dimensions(const cJSON* json, Vector2* out) {
     assert(json && out);
 
@@ -151,18 +140,6 @@ int serial_deserialize_dimensions(const cJSON* json, Vector2* out) {
     if (serial_get_float(json, "Height", &out->y) != 0) return -1;
 
     return 0;
-}
-
-cJSON* serial_serialize_dimensions(const Vector2* dims) {
-    assert(dims);
-
-    cJSON* json = cJSON_CreateObject();
-    if (!json) return NULL;
-
-    cJSON_AddNumberToObject(json, "Width", dims->x);
-    cJSON_AddNumberToObject(json, "Height", dims->y);
-
-    return json;
 }
 
 Direction serial_deserialize_direction(const cJSON* json) {
@@ -190,10 +167,6 @@ Direction serial_deserialize_direction(const cJSON* json) {
     return DIRECTION_NONE;
 }
 
-cJSON* serial_serialize_direction(Direction dir) {
-    return cJSON_CreateNumber((int)dir);
-}
-
 ObjectLayerMode serial_deserialize_mode(const cJSON* json) {
     assert(json);
 
@@ -214,10 +187,6 @@ ObjectLayerMode serial_deserialize_mode(const cJSON* json) {
     return MODE_IDLE;
 }
 
-cJSON* serial_serialize_mode(ObjectLayerMode mode) {
-    return cJSON_CreateNumber((int)mode);
-}
-
 /* ============================================================================
  * ObjectLayerState Serialization/Deserialization
  * ============================================================================ */
@@ -236,19 +205,6 @@ int serial_deserialize_object_layer_state(const cJSON* json, ObjectLayerState* o
     return 0;
 }
 
-cJSON* serial_serialize_object_layer_state(const ObjectLayerState* state) {
-    assert(state);
-
-    cJSON* json = cJSON_CreateObject();
-    if (!json) return NULL;
-
-    cJSON_AddStringToObject(json, "itemId", state->item_id);
-    cJSON_AddBoolToObject(json, "active", state->active);
-    cJSON_AddNumberToObject(json, "quantity", state->quantity);
-
-    return json;
-}
-
 int serial_deserialize_object_layer_array(const cJSON* json, ObjectLayerState* out, int max_count) {
     if (!json || !out || max_count <= 0) return -1;
     if (!cJSON_IsArray(json)) return -1;
@@ -265,22 +221,6 @@ int serial_deserialize_object_layer_array(const cJSON* json, ObjectLayerState* o
     }
 
     return count;
-}
-
-cJSON* serial_serialize_object_layer_array(const ObjectLayerState* states, int count) {
-    if (!states || count <= 0) return NULL;
-
-    cJSON* array = cJSON_CreateArray();
-    if (!array) return NULL;
-
-    for (int i = 0; i < count; i++) {
-        cJSON* item = serial_serialize_object_layer_state(&states[i]);
-        if (item) {
-            cJSON_AddItemToArray(array, item);
-        }
-    }
-
-    return array;
 }
 
 /* ============================================================================
@@ -304,22 +244,6 @@ int serial_deserialize_path(const cJSON* json, Vector2* out, int max_points) {
     }
 
     return count;
-}
-
-cJSON* serial_serialize_path(const Vector2* path, int count) {
-    if (!path || count <= 0) return NULL;
-
-    cJSON* array = cJSON_CreateArray();
-    if (!array) return NULL;
-
-    for (int i = 0; i < count; i++) {
-        cJSON* point = serial_serialize_point(&path[i]);
-        if (point) {
-            cJSON_AddItemToArray(array, point);
-        }
-    }
-
-    return array;
 }
 
 /* ============================================================================
@@ -388,42 +312,6 @@ int serial_deserialize_entity_state(const cJSON* json, EntityState* out) {
     out->last_update = GetTime();
 
     return 0;
-}
-
-cJSON* serial_serialize_entity_state(const EntityState* entity) {
-    assert(entity);
-
-    cJSON* json = cJSON_CreateObject();
-    if (!json) return NULL;
-
-    cJSON_AddStringToObject(json, "id", entity->id);
-
-    cJSON* pos = serial_serialize_point(&entity->pos_server);
-    if (pos) cJSON_AddItemToObject(json, "Pos", pos);
-
-    cJSON* dims = serial_serialize_dimensions(&entity->dims);
-    if (dims) cJSON_AddItemToObject(json, "Dims", dims);
-
-    cJSON_AddItemToObject(json, "direction", serial_serialize_direction(entity->direction));
-    cJSON_AddItemToObject(json, "mode", serial_serialize_mode(entity->mode));
-
-    cJSON_AddNumberToObject(json, "life", entity->life);
-    cJSON_AddNumberToObject(json, "maxLife", entity->max_life);
-
-    if (entity->respawn_in >= 0) {
-        cJSON_AddNumberToObject(json, "respawnIn", entity->respawn_in);
-    } else {
-        cJSON_AddNullToObject(json, "respawnIn");
-    }
-
-    if (entity->object_layer_count > 0) {
-        cJSON* layers = serial_serialize_object_layer_array(
-            entity->object_layers, entity->object_layer_count
-        );
-        if (layers) cJSON_AddItemToObject(json, "objectLayers", layers);
-    }
-
-    return json;
 }
 
 /* ============================================================================
@@ -513,10 +401,7 @@ int serial_deserialize_world_object(const cJSON* json, WorldObject* out) {
     // Per-object fallback color (optional)
     cJSON* color_obj = serial_get_object(json, "color");
     if (color_obj) {
-        ColorRGBA rgba = {0};
-        if (serial_deserialize_color_rgba(color_obj, &rgba) == 0) {
-            out->color = (Color){rgba.r, rgba.g, rgba.b, rgba.a};
-        }
+        serial_deserialize_color(color_obj, &out->color);
     }
 
     // Object layers
@@ -537,35 +422,47 @@ int serial_deserialize_world_object(const cJSON* json, WorldObject* out) {
  * Message Creation Functions
  * ============================================================================ */
 
-char* serial_create_handshake(const char* client_name, const char* version) {
-    cJSON* json = cJSON_CreateObject();
-    if (!json) return NULL;
+void serialize_handshake(cJSON* out, const char* client_name, const char* version) {
+    assert(out);
 
-    cJSON_AddStringToObject(json, "type", "handshake");
-    cJSON_AddStringToObject(json, "client", client_name ? client_name : "cyberia-mmo");
-    cJSON_AddStringToObject(json, "version", version ? version : "1.0.0");
-
-    char* str = cJSON_PrintUnformatted(json);
-    cJSON_Delete(json);
-
-    return str;
+    cJSON_AddStringToObject(out, "type", "handshake");
+    cJSON_AddStringToObject(out, "client", client_name ? client_name : "cyberia-mmo");
+    cJSON_AddStringToObject(out, "version", version ? version : "1.0.0");
 }
 
-char* serial_create_player_action(float target_x, float target_y) {
-    cJSON* json = cJSON_CreateObject();
-    if (!json) return NULL;
+void serialize_player_action(cJSON* out, float target_x, float target_y) {
+    assert(out);
 
-    cJSON_AddStringToObject(json, "type", "player_action");
+    cJSON_AddStringToObject(out, "type", "player_action");
 
-    cJSON* payload = cJSON_CreateObject();
+    cJSON* payload = cJSON_AddObjectToObject(out, "payload");
     if (payload) {
         cJSON_AddNumberToObject(payload, "targetX", target_x);
         cJSON_AddNumberToObject(payload, "targetY", target_y);
-        cJSON_AddItemToObject(json, "payload", payload);
     }
+}
 
-    char* str = cJSON_PrintUnformatted(json);
-    cJSON_Delete(json);
+void serialize_item_activation(cJSON* out, const char* item_id, bool active) {
+    assert(out && item_id);
 
-    return str;
+    cJSON_AddStringToObject(out, "type", "item_activation");
+
+    cJSON* payload = cJSON_AddObjectToObject(out, "payload");
+    if (payload) {
+        cJSON_AddStringToObject(payload, "itemId", item_id);
+        cJSON_AddBoolToObject(payload, "active", active);
+    }
+}
+
+void serialize_freeze(cJSON* out, const char* type, const char* reason, const char* entity_id, const char* item_id) {
+    assert(out && type && reason);
+
+    cJSON_AddStringToObject(out, "type", type);
+
+    cJSON* payload = cJSON_AddObjectToObject(out, "payload");
+    if (payload) {
+        cJSON_AddStringToObject(payload, "reason", reason);
+        if (entity_id && entity_id[0]) cJSON_AddStringToObject(payload, "entityId", entity_id);
+        if (item_id   && item_id[0])   cJSON_AddStringToObject(payload, "itemId",   item_id);
+    }
 }

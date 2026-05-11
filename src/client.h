@@ -2,6 +2,7 @@
 #define CLIENT_H
 
 #include <stddef.h>
+#include <cJSON.h>
 
 /**
  * @file client.h
@@ -40,12 +41,20 @@ void client_cleanup(void);
 int client_is_connected(void);
 
 /**
- * @brief Send a message to the server
+ * @brief Send a raw string message to the server
  *
  * @param message Null-terminated string to send
  * @return 0 on success, -1 on failure
  */
-int client_send(const char* message);
+int client_send_msg(const char* message);
+
+/**
+ * @brief Send a cJSON object to the server (serialised to text)
+ *
+ * @param json cJSON object; not freed by this function
+ * @return 0 on success, -1 on failure
+ */
+int client_send(cJSON* json_obj);
 
 /**
  * @brief Get network statistics (bytes uploaded and downloaded)
@@ -54,5 +63,7 @@ int client_send(const char* message);
  * @param bytes_uploaded Pointer to store uploaded bytes count
  */
 void client_get_network_stats(size_t* bytes_downloaded, size_t* bytes_uploaded);
+
+int client_send_tap(float grid_x, float grid_y);
 
 #endif // CLIENT_H
