@@ -12,7 +12,7 @@
 
 #include "modal_dialogue.h"
 
-#include "client.h"
+#include "network/client.h"
 #include "game_state.h"
 #include "modal.h"
 #include "ol_as_animated_ico.h"
@@ -85,7 +85,7 @@ static const Color C_CARD_BORD = {  70,  70, 120, 200 };
 static void send_freeze_msg(const char* type, const char* reason) {
     cJSON* json = cJSON_CreateObject();
     serialize_freeze(json, type, reason, s_entity_id, s_item_id);
-    int rc = client_send(json);
+    bool rc = network_send(json);
     cJSON_Delete(json);
     printf("[MODAL_DIALOGUE] WS -> %s (reason=%s, entity=%s, item=%s) rc=%d\n", type, reason, s_entity_id, s_item_id, rc);
 }

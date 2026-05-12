@@ -116,13 +116,11 @@ static int message_parser_parse_init_data(const cJSON* json_root) {
     g_game_state.cell_size = serial_get_float_default(payload, "cellSize", 12.0f);
 
     // Parse game settings
-    g_game_state.fps = serial_get_int_default(payload, "fps", 60);
-    if (g_game_state.fps > 0) SetTargetFPS(g_game_state.fps);
     g_game_state.interpolation_ms = serial_get_int_default(payload, "interpolationMs", 200);
     g_game_state.aoi_radius = serial_get_float_default(payload, "aoiRadius", 15.0f);
 
     // Parse graphics settings
-    g_game_state.camera.zoom = serial_get_float_default(payload, "cameraZoom", 1.0f);
+    g_game_state.camera.zoom = serial_get_float_default(payload, "cameraZoom", 1.0f); // TODO: This should not be set by the server!
 
     // Parse UI settings
     // ENABLE_DEV_UI=true forces dev UI on regardless of server; false defers to server
@@ -316,7 +314,7 @@ static int message_parser_parse_init_data(const cJSON* json_root) {
     // Mark as initialized
     g_game_state.init_received = true;
 
-    // Initialize camera if not already done
+    // Initialize camera if not already done // TODO: is client only, move to game_renser?
     game_state_init_camera(800, 600); // Default screen size
     printf("  AOI Radius: %.1f, Dev UI: %s\n", g_game_state.aoi_radius, g_game_state.dev_ui ? "true" : "false");
 

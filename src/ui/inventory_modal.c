@@ -6,7 +6,7 @@
  *   - The modal is purely a UI layer: it reads game state and sends intents.
  *   - Item metadata (description, stats) is fetched lazily via
  *     get_or_fetch_object_layer() which caches results in the OL manager.
- *   - Activation intent is sent via client_send() as a JSON string
+ *   - Activation intent is sent via network_send() as a JSON string
  *     matching the server's existing "item_activation" handler in
  *     handlers.go.  The server validates, swaps if needed, and pushes
  *     the updated state back in the next AOI frame.
@@ -19,7 +19,7 @@
 
 #include "inventory_modal.h"
 
-#include "client.h"
+#include "network/client.h"
 #include "dialogue_data.h"
 #include "game_state.h"
 #include "interaction_bubble.h"
@@ -149,14 +149,14 @@ static int modal_sprite_size(float card_w) {
 static void send_activation(const char* item_id, bool active) {
     cJSON* json = cJSON_CreateObject();
     serialize_item_activation(json, item_id, active);
-    client_send(json);
+    network_send(json);
     cJSON_Delete(json);
 }
 
 static void send_freeze(bool start) {
     cJSON* json = cJSON_CreateObject();
     serialize_freeze(json, start ? "freeze_start" : "freeze_end", "inventory", NULL, NULL);
-    client_send(json);
+    network_send(json);
     cJSON_Delete(json);
 }
 

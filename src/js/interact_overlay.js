@@ -21,7 +21,7 @@
  * Architecture:
  *   C interaction_bubble click  →  js_interact_overlay_open()    → JS panel
  *   JS "Talk" button            →  c_open_dialogue_from_js()     → C freeze + modal
- *   JS chat send                →  c_send_ws_message()           → C client_send()
+ *   JS chat send                →  c_send_ws_message()           → C network_send()
  *   JS panel close              →  c_interact_overlay_did_close()→ C cleanup
  *   C incoming chat             →  js_interact_overlay_receive_chat() → JS update
  *   C dialogue close callback   →  js_interact_overlay_restore()     → JS re-show

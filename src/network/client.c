@@ -10,13 +10,11 @@
 #include <stdlib.h>
 #include <string.h>
 #include <assert.h>
+#include <raylib.h>
 
 typedef struct {
     WebSocketClient ws_client;
-    int initialized;
-    int message_count;
-    size_t bytes_downloaded;
-    size_t bytes_uploaded;
+    conn_stats stats;
 } client_ctx;
 
 static client_ctx client_state = {0};
@@ -28,12 +26,7 @@ static void on_websocket_error(void* ctx);
 static void on_websocket_close(int code, const char* reason, void* ctx);
 
 // Initialize the client subsystem
-int client_init(void) {
-    memset(&client_state, 0, sizeof(client_state));
-    client_state.message_count = 0;
-    client_state.bytes_downloaded = 0;
-    client_state.bytes_uploaded = 0;
-
+bool connection_open(void) {
     // Setup WebSocket event handlers
     WebSocketHandlers callbacks = {
         .on_open_cb = on_websocket_open,
@@ -43,71 +36,55 @@ int client_init(void) {
     };
 
     // Initialize WebSocket connection
-    bool result = ws_init(&client_state.ws_client, WS_URL, &client_state, callbacks);
-    if (!result) {
+    bool is_open = ws_open(&client_state.ws_client, WS_URL, &client_state, callbacks);
+    if (!is_open) {
         fprintf(stderr, "[ERROR] Failed to initialize WebSocket connection\n");
-        return -1;
+        return false;
     }
 
-    client_state.initialized = 1;
-    return 0;
+    return true;
 }
 
-// Client cleanup
-void client_cleanup(void) {
-    if (!client_state.initialized) {
-        return;
-    }
-
+void connection_close(void) {
     ws_close(&client_state.ws_client);
-    client_state.initialized = 0;
 }
 
-// Check if client is connected
-int client_is_connected(void) {
-    if (!client_state.initialized) {
-        return 0;
-    }
-    return (int)ws_is_connected(&client_state.ws_client);
+bool connection_is_open(void) {
+    return ws_is_open(&client_state.ws_client);
 }
 
 // Send a raw string message to the server
-int client_send_msg(const char* msg) {
+bool network_send_text(const char* msg) {
     assert(msg);
-    if (!client_state.initialized || !client_is_connected()) {
-        return -1;
+    if (!connection_is_open()) {
+        return false;
     }
 
-    bool result = ws_send(&client_state.ws_client, msg);
-    if (result) {
-        client_state.bytes_uploaded += strlen(msg);
-    }
-
-    return result ? 0 : -1;
+    bool ok = ws_send_str(&client_state.ws_client, msg);
+    client_state.stats.bytes_up += ok ? strlen(msg) : 0;
+    return ok;
 }
 
-int client_send(cJSON* json_obj) {
+bool network_send(cJSON* json_obj) {
     assert(json_obj);
-    char* str = cJSON_PrintUnformatted(json_obj);
-    return client_send_msg(str);
+    // TODO: we should implement binary data transmission
+    char* msg = cJSON_PrintUnformatted(json_obj);
+    bool ok = ws_send_str(&client_state.ws_client, msg);
+    client_state.stats.bytes_up += ok ? strlen(msg) : 0;
+    free(msg);
+    return ok;
 }
 
-// Get network statistics
-void client_get_network_stats(size_t* bytes_downloaded, size_t* bytes_uploaded) {
-    if (bytes_downloaded) {
-        *bytes_downloaded = client_state.bytes_downloaded;
-    }
-    if (bytes_uploaded) {
-        *bytes_uploaded = client_state.bytes_uploaded;
-    }
+conn_stats connection_get_stats(void) {
+    return client_state.stats;
 }
 
-int client_send_tap(float grid_x, float grid_y) {
+bool network_send_event_tap(Vector2 grid) {
     cJSON* json = cJSON_CreateObject();
-    serialize_player_action(json, grid_x, grid_y);
-    int result = client_send(json);
+    serialize_player_action(json, grid.x, grid.y);
+    bool ok = network_send(json);
     cJSON_Delete(json);
-    return result;
+    return ok;
 }
 
 // ============================================================================
@@ -120,7 +97,7 @@ static void on_websocket_open(void* ctx) {
     // Send initial handshake message
     cJSON* handshake = cJSON_CreateObject();
     serialize_handshake(handshake, "cyberia-mmo", "1.0.0");
-    client_send(handshake);
+    network_send(handshake);
     cJSON_Delete(handshake);
 }
 
@@ -130,8 +107,7 @@ static void on_websocket_message(const uint8_t* data, uint32_t length, bool is_t
         return;
     }
 
-    client_st->message_count++;
-    client_st->bytes_downloaded += length;      // Track downloaded bytes
+    client_st->stats.bytes_down += length;      // Track downloaded bytes
 
     if (length >= MAX_MESSAGE_SIZE) {
         fprintf(stderr, "[WARN] Message too large (%d bytes), dropping\n", length);

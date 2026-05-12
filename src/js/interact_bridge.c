@@ -9,13 +9,14 @@
 
 #include "interact_bridge.h"
 
-#include "client.h"
+#include "network/client.h"
 #include "dialogue_data.h"
 #include "ui/modal_dialogue.h"
 
 #include <emscripten.h>
 #include <stdio.h>
 #include <string.h>
+#include <assert.h>
 
 /* ── Entity context (set when overlay opens) ──────────────────────────── */
 
@@ -33,8 +34,9 @@ static void on_dialogue_close(void) {
 
 EMSCRIPTEN_KEEPALIVE
 void c_send_ws_message(const char* json_str) {
+    assert(json_str);
     if (!json_str || json_str[0] == '\0') return;
-    client_send_msg(json_str);
+    network_send_text(json_str); // TODO: we want to remove string version, find a way to pass object
 }
 
 EMSCRIPTEN_KEEPALIVE

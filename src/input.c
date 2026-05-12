@@ -8,7 +8,7 @@
 #include "ui/tap_effect.h"
 
 // TODO: Remove deps
-#include "client.h"
+#include "network/client.h"
 #include "game_render.h"
 #include "js/interact_bridge.h"
 
@@ -20,7 +20,7 @@
 static void input_handle_tap(InputEvent event);
 static bool input_event_queue_push(InputEvent event);
 static void input_handle_key_press(int key);
-static int input_send_tap(Vector2 target_pos);
+static bool input_send_tap(Vector2 target_pos);
 static bool input_is_over_ui(Vector2 screen_pos);
 
 InputManager g_input = {0};
@@ -181,7 +181,7 @@ static void input_handle_key_press(int key) {
     }
 }
 
-static int input_send_tap(Vector2 target_pos) {
+static bool input_send_tap(Vector2 target_pos) {
     // FrozenInteractionState — server says we're frozen, drop the tap.
     if (g_game_state.frozen) return 0;
 
@@ -195,7 +195,7 @@ static int input_send_tap(Vector2 target_pos) {
     g_game_state.player.tap_target = (Vector2){grid_x, grid_y};
     g_game_state.player.has_tap_target = true;
 
-    return client_send_tap(grid_x, grid_y);
+    return network_send_event_tap((Vector2){grid_x, grid_y});
 }
 
 static bool input_is_over_ui(Vector2 screen_pos) {

@@ -10,7 +10,7 @@
  *   C interaction_bubble click  →  js_interact_overlay_open()    → JS builds DOM
  *   JS "Dialog" button          →  c_open_dialogue_from_js()     → C modal_dialogue
  *   JS overlay close            →  c_interact_overlay_did_close()→ C cleanup
- *   JS chat send                →  c_send_ws_message()           → C client_send()
+ *   JS chat send                →  c_send_ws_message()           → C network_send()
  *   C incoming chat WS msg      →  js_interact_overlay_receive_chat() → JS DOM
  *   C dialogue modal close cb   →  js_interact_overlay_restore() → JS restores DOM
  */

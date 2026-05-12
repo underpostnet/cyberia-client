@@ -177,7 +177,6 @@ struct GameState {
     int grid_w;
     int grid_h;
     float cell_size;
-    int fps;
     int interpolation_ms;
     float aoi_radius;
 
@@ -243,7 +242,7 @@ struct GameState {
     // FrozenInteractionState — authoritative flag from the Go server.
     // While true, the player is in a modal interaction: no outgoing taps,
     // no incoming damage.  Set by the binary AOI self-player payload.
-    bool frozen;
+    bool frozen; // TODO: client only
 
     // Entity Status Indicator for the local player (from AOI self-player).
     // Mirrors player.base.status_icon but decoded from a separate position
@@ -252,7 +251,7 @@ struct GameState {
 
     // Runtime flags
     bool init_received;
-    bool dev_ui;
+    bool dev_ui; // TODO: should be client only, is game_state meant to represent local state or server state?
     double last_update_time;
 
     // Camera

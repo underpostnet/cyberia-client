@@ -25,7 +25,7 @@
  *
  * Interaction model:
  *   1. Caller opens the modal by providing the full_inventory index.
- *   2. User taps Activate / Deactivate → modal calls client_send() with
+ *   2. User taps Activate / Deactivate → modal calls network_send() with
  *      a JSON "item_activation" message and closes itself.
  *   3. User taps X or outside the card → modal closes with no action.
  *   4. Server responds with the next AOI frame reflecting the change.

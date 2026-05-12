@@ -4,7 +4,7 @@
 #include "input.h"
 #include "game_state.h"
 #include "render.h"
-#include "client.h"
+#include "network/client.h"
 #include "config.h"
 
 #include <raylib.h>
@@ -47,16 +47,16 @@ int main(void) {
     render_init(vp_w, vp_h);
 
     // post window init - init ws
-    if (0 != client_init())
-    {
-        return EXIT_FAILURE;
+    if(!connection_open()) {
+        connection_close();
+        return -1;
     }
 
     emscripten_set_main_loop(main_loop, 0, 1);
 
-    client_cleanup();
+    connection_close();
     render_cleanup();
 
     CloseWindow();
-    return EXIT_SUCCESS;
+    return 0;
 }

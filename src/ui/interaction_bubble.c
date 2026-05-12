@@ -12,7 +12,7 @@
 
 #include "interaction_bubble.h"
 
-#include "client.h"
+#include "network/client.h"
 #include "dialogue_data.h"
 #include "entity_render.h"
 #include "game_state.h"

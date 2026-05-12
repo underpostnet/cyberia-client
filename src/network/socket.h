@@ -23,21 +23,15 @@ typedef struct {
     void* user_ctx;
 } WebSocketClient;
 
-/**
- * Creates a new WebSocket connection and registers event handlers.
- * This function is non-blocking; connection establishment is asynchronous.
- */
-bool ws_init(WebSocketClient* ws_client, const char* url, void* user_ctx, WebSocketHandlers handlers);
+
+bool ws_open(WebSocketClient* ws_client, const char* url, void* user_ctx, WebSocketHandlers handlers);
 void ws_close(WebSocketClient* ws_client);
-bool ws_is_connected(WebSocketClient* ws_client);
+bool ws_is_open(WebSocketClient* ws_client);
 
 /**
  * Sends a text message to the server. The function returns immediately
  * after queuing the message for transmission.
- *
- * @param client Pointer to initialized WebSocketClient
- * @param data Pointer to message data (null-terminated string)
  */
-bool ws_send(WebSocketClient* ws_client, const char* data);
+bool ws_send_str(WebSocketClient* ws_client, const char* data);
 
 #endif // SOCKET_H

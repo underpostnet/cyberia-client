@@ -11,7 +11,7 @@ static EM_BOOL ws_onerror_internal(int eventType, const EmscriptenWebSocketError
 static EM_BOOL ws_onclose_internal(int eventType, const EmscriptenWebSocketCloseEvent* event, void* userData);
 
 // Initialize WebSocket client with event handlers
-bool ws_init(WebSocketClient* ws_client, const char* url, void* user_ctx, WebSocketHandlers callbacks) {
+bool ws_open(WebSocketClient* ws_client, const char* url, void* user_ctx, WebSocketHandlers callbacks) {
     assert(ws_client && url && user_ctx);
 
     // Check if WebSocket is supported in this environment
@@ -48,7 +48,7 @@ bool ws_init(WebSocketClient* ws_client, const char* url, void* user_ctx, WebSoc
 }
 
 // Send message through WebSocket
-bool ws_send(WebSocketClient* ws_client, const char* data) {
+bool ws_send_str(WebSocketClient* ws_client, const char* data) {
     if (!ws_client || !ws_client->connected || !data) {
         return false;
     }
@@ -77,7 +77,7 @@ void ws_close(WebSocketClient* ws_client) {
     ws_client->connected = false;
 }
 
-bool ws_is_connected(WebSocketClient* ws_client) {
+bool ws_is_open(WebSocketClient* ws_client) {
     return ws_client && ws_client->connected;
 }
 

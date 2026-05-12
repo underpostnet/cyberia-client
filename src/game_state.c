@@ -233,6 +233,7 @@ void game_state_remove_bot(const char* id) {
 }
 
 void game_state_init_camera(int screen_width, int screen_height) {
+    // TODO: should be in game_render? move camera related code out of GameState
     // Calculate initial target position (player center in world coordinates)
     float player_center_x = (g_game_state.player.base.interp_pos.x + g_game_state.player.base.dims.x / 2.0f) * g_game_state.cell_size;
     float player_center_y = (g_game_state.player.base.interp_pos.y + g_game_state.player.base.dims.y / 2.0f) * g_game_state.cell_size;

@@ -1,6 +1,6 @@
 #include "dev_ui.h"
 
-#include "client.h"
+#include "network/client.h"
 #include "game_render.h"
 #include "game_state.h"
 
@@ -88,11 +88,8 @@ void dev_ui_update(float delta_time) {
     // Update network statistics from client and game_state
     // Only update every 0.5 seconds to avoid flickering
     if (current_time - g_dev_ui.last_network_update >= 0.5) {
-        size_t download_bytes = 0;
-        size_t upload_bytes = 0;
-
-        client_get_network_stats(&download_bytes, &upload_bytes);
-        dev_ui_update_network_stats(download_bytes, upload_bytes);
+        conn_stats stats = connection_get_stats();
+        dev_ui_update_network_stats(stats.bytes_down, stats.bytes_up);
     }
 }
 

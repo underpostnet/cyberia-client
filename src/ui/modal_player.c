@@ -13,7 +13,7 @@
 
 #include "modal_player.h"
 
-#include "client.h"
+#include "network/client.h"
 #include "game_state.h"
 
 #include <assert.h>
@@ -45,7 +45,6 @@ void modal_player_cleanup(void) {
 /* ── Update ───────────────────────────────────────────────────────────── */
 
 void modal_player_update(float delta_time) {
-    (void)delta_time;
     double t = GetTime();
     if (t - g_modal_player.last_fps_update >= 0.5) {
         g_modal_player.cached_fps      = (float)GetFPS();
@@ -64,11 +63,6 @@ static void shadow_text(const char* text, int x, int y, int fs, Color c) {
 /* ── Draw ─────────────────────────────────────────────────────────────── */
 
 void modal_player_draw(int screen_width, int screen_height) {
-    (void)screen_height;
-
-    /* Always draw — shows disconnected state too. */
-    bool connected = client_is_connected();
-
     const char* map = g_game_state.player.map_code;
     float px        = g_game_state.player.base.interp_pos.x;
     float py        = g_game_state.player.base.interp_pos.y;
@@ -107,6 +101,8 @@ void modal_player_draw(int screen_width, int screen_height) {
         0.35f, 8, (Color){ 0, 0, 0, 130 });
 
     /* ── Status dot (connection indicator) ───────────────────────────── */
+    /* Always draw — shows disconnected state too. */
+    bool connected = connection_is_open();
     Color dot_c = connected ? (Color){ 60, 220, 80, 255 }
                             : (Color){ 220, 60, 60, 255 };
     DrawCircle(bx + pad + 4, by + pad + fs / 2 + 1, 3.0f, dot_c);
