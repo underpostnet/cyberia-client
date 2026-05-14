@@ -37,6 +37,7 @@ bool ws_open(WebSocketClient* ws_client, const char* url, void* user_ctx, WebSoc
     ws_client->socket = socket;
     ws_client->connected = false;
     ws_client->user_ctx = user_ctx;
+    ws_client->callbacks = callbacks;
 
     // Register event callbacks; userData is forwarded verbatim to user callbacks
     emscripten_websocket_set_onopen_callback(socket, ws_client, ws_onopen_internal);
