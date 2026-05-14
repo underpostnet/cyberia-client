@@ -1,28 +1,22 @@
-FROM rockylinux:9
+# BUILD_MODE: RELEASE | DEBUG
+ARG BUILD_MODE=RELEASE
 
-# System packages 
+# --- Build Image
+FROM rockylinux/rockylinux:9 AS builder
+# Re-declare ARG after FROM so it is in scope for RUN
+ARG BUILD_MODE=RELEASE
+
 RUN dnf -y update && \
     dnf -y install epel-release && \
     dnf -y install --allowerasing \
-    bzip2 \
-    sudo \
-    curl \
-    net-tools \
-    openssh-server \
-    nano \
-    vim-enhanced \
-    less \
-    openssl-devel \
-    wget \
     git \
-    gnupg2 \
+    curl \
+    wget \
+    openssl-devel \
     libnsl \
-    perl && \
-    dnf clean all
-
-# System packages (Node.js)
-RUN curl -fsSL https://rpm.nodesource.com/setup_24.x | bash - && \
-    dnf install -y nodejs && \
+    perl \
+    gnupg2 \
+    bzip2 && \
     dnf clean all
 
 # System packages (raylib gfx + build dependencies)
@@ -44,37 +38,43 @@ RUN dnf groupinstall -y "Development Tools" && \
         freeglut-devel \
         glfw-devel \
         libatomic.x86_64 && \
-    dnf clean all
-
-# Install underpost CLI 
-RUN npm install -g underpost
-
-ENV EMSDK=/home/dd/.emsdk
-ENV EMSDK_QUIET=1
-ENV EMSDK_PYTHON=/usr/bin/python3.11
+    dnf clean all && \
+    alternatives --install /usr/bin/python3 python3 /usr/bin/python3.11 2 && \
+    alternatives --set python3 /usr/bin/python3.11
+ENV EMSDK=/opt/emsdk
 ENV PATH="${EMSDK}:${EMSDK}/upstream/emscripten:${PATH}"
 
-RUN git clone --depth=1 https://github.com/emscripten-core/emsdk.git ${EMSDK} && \
-    cd ${EMSDK} && \
-    ./emsdk install latest && \
-    ./emsdk activate latest
+# Pin emsdk version for reproducible builds
+ARG EMSDK_VERSION=5.0.6
+WORKDIR /opt
+RUN git clone https://github.com/emscripten-core/emsdk.git ${EMSDK}
+WORKDIR ${EMSDK}
+RUN ./emsdk install ${EMSDK_VERSION} && \
+    ./emsdk activate ${EMSDK_VERSION}
 
-# Runtime root expected by startup/build scripts.
-WORKDIR /home/dd
+WORKDIR /cyberia-client
+COPY cyberia-client/ .
 
-RUN mkdir -p /home/dd/engine/cyberia-client
-COPY cyberia-client/ /home/dd/engine/cyberia-client/
+RUN make -f Web.mk all BUILD_MODE=${BUILD_MODE} OUTPUT_DIR=bin/
 
-# Compile both build modes at image build-time to minimize service startup time.
-RUN bash -lc "source ${EMSDK}/emsdk_env.sh && \
-    cd /home/dd/engine/cyberia-client && \
-    make -j\"$(nproc)\" -f Web.mk all BUILD_MODE=RELEASE && \
-    make -j\"$(nproc)\" -f Web.mk all BUILD_MODE=DEBUG"
+# --- Runtime Image
+FROM rockylinux/rockylinux:9 AS runtime
+
+RUN dnf -y update && \
+    dnf -y install epel-release && \
+    dnf -y install --allowerasing curl git python3 && \
+    curl -fsSL https://rpm.nodesource.com/setup_24.x | bash - && \
+    dnf install -y nodejs && \
+    dnf clean all
+
+WORKDIR /home/dd/engine/cyberia-client
+
+COPY --from=builder /cyberia-client/server.py ./server.py
+COPY --from=builder /cyberia-client/bin       ./bin/
 
 ENV CYBERIA_PORT=8081
-ENV CYBERIA_WEB_ROOT=/home/dd/engine/cyberia-client/bin/web/release
 ENV CYBERIA_MODE=production
 
 EXPOSE 8081 8082
 
-CMD ["sh", "-c", "python3 /home/dd/engine/cyberia-client/server.py ${CYBERIA_PORT} ${CYBERIA_WEB_ROOT} ${CYBERIA_MODE}"]
+CMD ["sh", "-c", "exec python3 server.py ${CYBERIA_PORT} bin ${CYBERIA_MODE}"]
