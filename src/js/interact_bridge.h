@@ -7,12 +7,9 @@
  *   - `EMSCRIPTEN_KEEPALIVE` C functions callable from JS (Module._xxx)
  *
  * Data flow:
- *   C interaction_bubble click  →  js_interact_overlay_open()    → JS builds DOM
- *   JS "Dialog" button          →  c_open_dialogue_from_js()     → C modal_dialogue
- *   JS overlay close            →  c_interact_overlay_did_close()→ C cleanup
- *   JS chat send                →  c_send_ws_message()           → C network_send()
+ *   C interaction_bubble click  →  js_interact_overlay_open()         → JS builds DOM
+ *   JS chat send                →  c_send_chat_binary()               → C network_send_binary()
  *   C incoming chat WS msg      →  js_interact_overlay_receive_chat() → JS DOM
- *   C dialogue modal close cb   →  js_interact_overlay_restore() → JS restores DOM
  */
 
 #ifndef INTERACT_BRIDGE_H
@@ -43,6 +40,8 @@ extern void js_interact_overlay_receive_chat(const char* from_id,
                                              const char* from_name,
                                              const char* text);
 
-extern void js_interact_overlay_restore(void);
+/* ── C functions (EMSCRIPTEN_KEEPALIVE, called from JS as Module._xxx) ── */
+
+void c_send_chat_binary(const char* to_id, const char* text);
 
 #endif /* INTERACT_BRIDGE_H */

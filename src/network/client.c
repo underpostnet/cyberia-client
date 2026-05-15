@@ -5,7 +5,6 @@
 #include "message_parser.h"
 #include "binary_aoi_decoder.h"
 #include "serial.h"
-#include <cJSON.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -53,25 +52,12 @@ bool connection_is_open(void) {
     return ws_is_open(&client_state.ws_client);
 }
 
-// Send a raw string message to the server
-bool network_send_text(const char* msg) {
-    assert(msg);
-    if (!connection_is_open()) {
-        return false;
-    }
-
-    bool ok = ws_send_str(&client_state.ws_client, msg);
-    client_state.stats.bytes_up += ok ? strlen(msg) : 0;
-    return ok;
-}
-
-bool network_send(cJSON* json_obj) {
-    assert(json_obj);
-    // TODO: we should implement binary data transmission
-    char* msg = cJSON_PrintUnformatted(json_obj);
-    bool ok = ws_send_str(&client_state.ws_client, msg);
-    client_state.stats.bytes_up += ok ? strlen(msg) : 0;
-    free(msg);
+// Send a binary frame to the server
+bool network_send_binary(const uint8_t* data, uint16_t len) {
+    assert(data && len > 0);
+    if (!connection_is_open()) return false;
+    bool ok = ws_send_binary(&client_state.ws_client, data, len);
+    client_state.stats.bytes_up += ok ? len : 0;
     return ok;
 }
 
@@ -80,11 +66,16 @@ conn_stats connection_get_stats(void) {
 }
 
 bool network_send_event_tap(Vector2 grid) {
-    cJSON* json = cJSON_CreateObject();
-    serialize_player_action(json, grid.x, grid.y);
-    bool ok = network_send(json);
-    cJSON_Delete(json);
-    return ok;
+    BinWriter w;
+    uplink_player_action(&w, grid.x, grid.y);
+    return network_send_binary(w.buf, w.pos);
+}
+
+bool network_send_chat(const char* to_id, const char* text) {
+    assert(to_id && text);
+    BinWriter w;
+    uplink_chat(&w, to_id, text);
+    return network_send_binary(w.buf, w.pos);
 }
 
 // ============================================================================
@@ -94,11 +85,10 @@ static void on_websocket_open(void* ctx) {
     client_ctx* client_st = ctx;
     client_st->ws_client.connected = true;  // Update connection status
 
-    // Send initial handshake message
-    cJSON* handshake = cJSON_CreateObject();
-    serialize_handshake(handshake, "cyberia-mmo", "1.0.0");
-    network_send(handshake);
-    cJSON_Delete(handshake);
+    // Send binary handshake
+    BinWriter w;
+    uplink_handshake(&w, "cyberia-mmo", "1.0.0");
+    network_send_binary(w.buf, w.pos);
 }
 
 static void on_websocket_message(const uint8_t* data, uint32_t length, bool is_text, void* ctx) {

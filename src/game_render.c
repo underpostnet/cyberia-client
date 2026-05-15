@@ -194,6 +194,12 @@ void game_render_set_screen_size(int width, int height) {
 }
 
 void game_render_frame(void) {
+    /* Consume any error posted by message_parser via game_state.pending_error. */
+    if (g_game_state.pending_error[0] != '\0') {
+        game_render_set_error_message(g_game_state.pending_error);
+        g_game_state.pending_error[0] = '\0';
+    }
+
     // Atlas textures are loaded on-demand via get_atlas_texture() during rendering.
     // No pre-caching queue processing is needed.
 

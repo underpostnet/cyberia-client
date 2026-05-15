@@ -9,7 +9,6 @@
 #include "binary_aoi_decoder.h"
 
 #include "game_state.h"
-#include "ui/floating_combat_text.h" // TODO: AOI decoder shouldn't depend on UI
 
 #include <assert.h>
 #include <math.h>
@@ -544,7 +543,15 @@ int binary_aoi_process(const uint8_t* data, size_t length) {
         float    world_x  = br_f32(&r);
         float    world_y  = br_f32(&r);
         uint32_t value    = br_u32(&r);
-        fct_spawn(world_x, world_y, value, fct_type);
+        if (gs->fct_queue_count < MAX_FCT_PENDING) {
+            int qi = gs->fct_queue_count++;
+            gs->fct_queue[qi].world_x  = world_x;
+            gs->fct_queue[qi].world_y  = world_y;
+            gs->fct_queue[qi].value    = value;
+            gs->fct_queue[qi].type     = fct_type;
+            gs->fct_queue[qi].item_id[0] = '\0';
+            gs->fct_queue[qi].item_qty = 0;
+        }
         return 0;
     }
     /* ── Item FCT event — variable-length message (≥15 bytes) ─────────────── */
@@ -563,7 +570,15 @@ int binary_aoi_process(const uint8_t* data, size_t length) {
         if (id_len > 0 && id_len < MAX_ITEM_ID_LENGTH && r.pos + id_len <= r.len) {
             memcpy(item_id, r.data + r.pos, id_len);
         }
-        fct_spawn_item(world_x, world_y, qty, fct_type, item_id);
+        if (gs->fct_queue_count < MAX_FCT_PENDING) {
+            int qi = gs->fct_queue_count++;
+            gs->fct_queue[qi].world_x  = world_x;
+            gs->fct_queue[qi].world_y  = world_y;
+            gs->fct_queue[qi].value    = qty;
+            gs->fct_queue[qi].type     = fct_type;
+            strncpy(gs->fct_queue[qi].item_id, item_id, MAX_ITEM_ID_LENGTH - 1);
+            gs->fct_queue[qi].item_qty = qty;
+        }
         return 0;
     }
     /* ── AOI update / full AOI — standard entity-loop format ─────────── */

@@ -17,7 +17,7 @@
 #include "entity_render.h"
 #include "game_state.h"
 #include "js/interact_bridge.h"
-#include "js/notify_badge.h"
+#include "notify_store.h"
 #include "layer_z_order.h"
 #include "nameplate.h"
 #include "object_layers_management.h"
@@ -349,7 +349,7 @@ void interaction_bubble_draw(void) {
         }
 
         /* Notification badge — red circle with unread count, top-right */
-        int badge_n = js_notify_badge_count(slot->entity_id);
+        int badge_n = notify_store_unread_count(slot->entity_id);
         if (badge_n > 0) {
             float br = 8.0f;
             float bx = r.x + r.width - br;

@@ -26,6 +26,7 @@
 #define MAX_MESSAGE_SIZE USHRT_MAX // why?
 #define MAX_ID_LENGTH 64
 #define MAX_SKILL_ENTRIES 64
+#define MAX_FCT_PENDING 64     /* max queued FCT events per frame */
 
 
 
@@ -253,6 +254,20 @@ struct GameState {
     bool init_received;
     bool dev_ui; // TODO: should be client only, is game_state meant to represent local state or server state?
     double last_update_time;
+
+    /* Error message written by message_parser; consumed + cleared by game_render. */
+    char pending_error[256];
+
+    /* FCT events queued by binary_aoi_decoder; drained by floating_combat_text each frame. */
+    struct {
+        float    world_x;
+        float    world_y;
+        uint32_t value;
+        uint8_t  type;
+        char     item_id[MAX_ITEM_ID_LENGTH]; /* empty string → numeric FCT */
+        uint32_t item_qty;
+    } fct_queue[MAX_FCT_PENDING];
+    int fct_queue_count;
 
     // Camera
     Camera2D camera; // TODO: should NOT be in GameState

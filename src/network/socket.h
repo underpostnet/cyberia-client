@@ -34,4 +34,14 @@ bool ws_is_open(WebSocketClient* ws_client);
  */
 bool ws_send_str(WebSocketClient* ws_client, const char* data);
 
+/**
+ * Sends a binary message to the server.
+ */
+bool ws_send_binary(WebSocketClient* ws_client, const uint8_t* data, size_t len);
+
+/**
+ * Sends a binary message to the server.
+ */
+bool ws_send_binary(WebSocketClient* ws_client, const uint8_t* data, size_t len);
+
 #endif // SOCKET_H

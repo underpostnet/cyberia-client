@@ -64,6 +64,18 @@ bool ws_send_str(WebSocketClient* ws_client, const char* data) {
     return true;
 }
 
+bool ws_send_binary(WebSocketClient* ws_client, const uint8_t* data, size_t len) {
+    if (!ws_client || !ws_client->connected || !data || len == 0) {
+        return false;
+    }
+    EMSCRIPTEN_RESULT result = emscripten_websocket_send_binary(ws_client->socket, (void*)data, (uint32_t)len);
+    if (result != EMSCRIPTEN_RESULT_SUCCESS) {
+        fprintf(stderr, "[ERROR] WebSocket binary send failed: %d\n", result);
+        return false;
+    }
+    return true;
+}
+
 void ws_close(WebSocketClient* ws_client) {
     if (!ws_client) {
         return;

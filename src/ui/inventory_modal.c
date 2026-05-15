@@ -147,17 +147,16 @@ static int modal_sprite_size(float card_w) {
 }
 
 static void send_activation(const char* item_id, bool active) {
-    cJSON* json = cJSON_CreateObject();
-    serialize_item_activation(json, item_id, active);
-    network_send(json);
-    cJSON_Delete(json);
+    BinWriter w;
+    uplink_item_activation(&w, item_id, active);
+    network_send_binary(w.buf, w.pos);
 }
 
 static void send_freeze(bool start) {
-    cJSON* json = cJSON_CreateObject();
-    serialize_freeze(json, start ? "freeze_start" : "freeze_end", "inventory", NULL, NULL);
-    network_send(json);
-    cJSON_Delete(json);
+    BinWriter w;
+    if (start) uplink_freeze_start(&w, "inventory");
+    else       uplink_freeze_end(&w,   "inventory");
+    network_send_binary(w.buf, w.pos);
 }
 
 /* hit_rect returns true if (mx,my) is inside r. */

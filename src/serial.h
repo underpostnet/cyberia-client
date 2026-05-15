@@ -3,6 +3,7 @@
 
 #include <stdbool.h>
 #include <stddef.h>
+#include <stdint.h>
 #include <cJSON.h>
 #include <raylib.h>
 #include "game_state.h" // TODO: serializer shouldn't depend on game state, but only on structure
@@ -153,12 +154,47 @@ float serial_get_float_default(const cJSON* json, const char* key, float default
 bool serial_get_bool_default(const cJSON* json, const char* key, bool default_val);
 
 /* ============================================================================
- * Message Creation (Serialization for Outgoing Messages)
- * ============================================================================ */
+ * Uplink Binary Writer
+ * ============================================================================
+ *
+ * All client→server messages are little-endian binary frames.
+ * msgType byte 0 discriminates the message:
+ *
+ *   0x10  handshake       u8 nameLen + str name, u8 verLen + str version
+ *   0x11  player_action   f32 targetX, f32 targetY
+ *   0x12  item_activation u8 idLen + str itemId, u8 active (0|1)
+ *   0x13  freeze_start    u8 reasonLen + str reason
+ *   0x14  freeze_end      u8 reasonLen + str reason
+ *   0x15  chat            u8 toIdLen + str toId, u8 textLen + str text
+ *   0x16  get_items_ids   u8 idLen + str itemId
+ */
 
-void serialize_handshake(cJSON* out, const char* client_name, const char* version);
-void serialize_player_action(cJSON* out, float target_x, float target_y);
-void serialize_item_activation(cJSON* out, const char* item_id, bool active);
-void serialize_freeze(cJSON* out, const char* type, const char* reason, const char* entity_id, const char* item_id);
+#define UPLINK_HANDSHAKE       0x10
+#define UPLINK_PLAYER_ACTION   0x11
+#define UPLINK_ITEM_ACTIVATION 0x12
+#define UPLINK_FREEZE_START    0x13
+#define UPLINK_FREEZE_END      0x14
+#define UPLINK_CHAT            0x15
+#define UPLINK_GET_ITEMS_IDS   0x16
+
+typedef struct {
+    uint8_t  buf[256];
+    uint16_t pos;
+} BinWriter;
+
+void bw_init(BinWriter* w, uint8_t msg_type);
+void bw_u8(BinWriter* w, uint8_t v);
+void bw_f32(BinWriter* w, float v);
+/* Write a length-prefixed string (1-byte length prefix, max 255 chars). */
+void bw_str(BinWriter* w, const char* s);
+
+/* ── Message builders ── */
+void uplink_handshake(BinWriter* w, const char* client_name, const char* version);
+void uplink_player_action(BinWriter* w, float target_x, float target_y);
+void uplink_item_activation(BinWriter* w, const char* item_id, bool active);
+void uplink_freeze_start(BinWriter* w, const char* reason);
+void uplink_freeze_end(BinWriter* w, const char* reason);
+void uplink_chat(BinWriter* w, const char* to_id, const char* text);
+void uplink_get_items_ids(BinWriter* w, const char* item_id);
 
 #endif // SERIAL_H

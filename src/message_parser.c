@@ -2,10 +2,9 @@
 #include "serial.h"
 #include "config.h"
 #include <cJSON.h>
-#include "game_render.h" // TODO: Parser shouldn't render
 #include "object_layers_management.h"
 #include "js/interact_bridge.h"
-#include "js/notify_badge.h"
+#include "notify_store.h"
 #include "js/services.h"
 #include <stdio.h>
 #include <stdlib.h>
@@ -65,7 +64,7 @@ bool message_parser_parse(const char* json_str) {
                 serial_get_string(payload, "from", from_id, sizeof(from_id));
                 serial_get_string(payload, "text", text, sizeof(text));
                 if (from_id[0] && text[0]) {
-                    js_notify_badge_push(from_id, from_id, text);
+                    notify_store_push(from_id, from_id, text);
                     js_interact_overlay_receive_chat(from_id, from_id, text);
                 }
             }
@@ -668,12 +667,13 @@ static int message_parser_parse_error(const cJSON* json_root) {
     char error_msg[MAX_MESSAGE_SIZE] = {0};
     if (serial_get_string(payload, "message", error_msg, sizeof(error_msg)) == 0)
     {
-        game_render_set_error_message(error_msg);
+        strncpy(g_game_state.pending_error, error_msg, sizeof(g_game_state.pending_error) - 1);
+        g_game_state.pending_error[sizeof(g_game_state.pending_error) - 1] = '\0';
         printf("[MESSAGE_PARSER] Server error: %s\n", error_msg);
     }
     else
     {
-        game_render_set_error_message("UNKNOWN SERVER ERROR");
+        strncpy(g_game_state.pending_error, "UNKNOWN SERVER ERROR", sizeof(g_game_state.pending_error) - 1);
     }
 
     return 0;

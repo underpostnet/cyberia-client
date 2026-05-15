@@ -83,10 +83,13 @@ static const Color C_CARD_BORD = {  70,  70, 120, 200 };
 /* ── Helpers ──────────────────────────────────────────────────────────── */
 
 static void send_freeze_msg(const char* type, const char* reason) {
-    cJSON* json = cJSON_CreateObject();
-    serialize_freeze(json, type, reason, s_entity_id, s_item_id);
-    bool rc = network_send(json);
-    cJSON_Delete(json);
+    BinWriter w;
+    if (strcmp(type, "freeze_start") == 0) {
+        uplink_freeze_start(&w, reason);
+    } else {
+        uplink_freeze_end(&w, reason);
+    }
+    bool rc = network_send_binary(w.buf, w.pos);
     printf("[MODAL_DIALOGUE] WS -> %s (reason=%s, entity=%s, item=%s) rc=%d\n", type, reason, s_entity_id, s_item_id, rc);
 }
 

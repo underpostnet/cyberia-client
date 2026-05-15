@@ -1,6 +1,7 @@
 #include "serial.h"
 #include <string.h>
 #include <assert.h>
+#include <stdint.h>
 #include <raylib.h>
 
 /* ============================================================================
@@ -419,50 +420,76 @@ int serial_deserialize_world_object(const cJSON* json, WorldObject* out) {
 }
 
 /* ============================================================================
- * Message Creation Functions
+ * Uplink Binary Writer
  * ============================================================================ */
 
-void serialize_handshake(cJSON* out, const char* client_name, const char* version) {
-    assert(out);
-
-    cJSON_AddStringToObject(out, "type", "handshake");
-    cJSON_AddStringToObject(out, "client", client_name ? client_name : "cyberia-mmo");
-    cJSON_AddStringToObject(out, "version", version ? version : "1.0.0");
+void bw_init(BinWriter* w, uint8_t msg_type) {
+    w->pos = 0;
+    w->buf[w->pos++] = msg_type;
 }
 
-void serialize_player_action(cJSON* out, float target_x, float target_y) {
-    assert(out);
-
-    cJSON_AddStringToObject(out, "type", "player_action");
-
-    cJSON* payload = cJSON_AddObjectToObject(out, "payload");
-    if (payload) {
-        cJSON_AddNumberToObject(payload, "targetX", target_x);
-        cJSON_AddNumberToObject(payload, "targetY", target_y);
-    }
+void bw_u8(BinWriter* w, uint8_t v) {
+    if (w->pos >= sizeof(w->buf)) return;
+    w->buf[w->pos++] = v;
 }
 
-void serialize_item_activation(cJSON* out, const char* item_id, bool active) {
-    assert(out && item_id);
-
-    cJSON_AddStringToObject(out, "type", "item_activation");
-
-    cJSON* payload = cJSON_AddObjectToObject(out, "payload");
-    if (payload) {
-        cJSON_AddStringToObject(payload, "itemId", item_id);
-        cJSON_AddBoolToObject(payload, "active", active);
-    }
+void bw_f32(BinWriter* w, float v) {
+    if (w->pos + 4 > sizeof(w->buf)) return;
+    uint32_t bits;
+    memcpy(&bits, &v, 4);
+    w->buf[w->pos++] = (uint8_t)(bits);
+    w->buf[w->pos++] = (uint8_t)(bits >> 8);
+    w->buf[w->pos++] = (uint8_t)(bits >> 16);
+    w->buf[w->pos++] = (uint8_t)(bits >> 24);
 }
 
-void serialize_freeze(cJSON* out, const char* type, const char* reason, const char* entity_id, const char* item_id) {
-    assert(out && type && reason);
+void bw_str(BinWriter* w, const char* s) {
+    if (!s) s = "";
+    size_t len = strlen(s);
+    if (len > 255) len = 255;
+    bw_u8(w, (uint8_t)len);
+    if (w->pos + len > sizeof(w->buf)) return;
+    memcpy(w->buf + w->pos, s, len);
+    w->pos += (uint16_t)len;
+}
 
-    cJSON_AddStringToObject(out, "type", type);
+void uplink_handshake(BinWriter* w, const char* client_name, const char* version) {
+    bw_init(w, UPLINK_HANDSHAKE);
+    bw_str(w, client_name ? client_name : "cyberia-mmo");
+    bw_str(w, version     ? version     : "1.0.0");
+}
 
-    cJSON* payload = cJSON_AddObjectToObject(out, "payload");
-    if (payload) {
-        cJSON_AddStringToObject(payload, "reason", reason);
-        if (entity_id && entity_id[0]) cJSON_AddStringToObject(payload, "entityId", entity_id);
-        if (item_id   && item_id[0])   cJSON_AddStringToObject(payload, "itemId",   item_id);
-    }
+void uplink_player_action(BinWriter* w, float target_x, float target_y) {
+    bw_init(w, UPLINK_PLAYER_ACTION);
+    bw_f32(w, target_x);
+    bw_f32(w, target_y);
+}
+
+void uplink_item_activation(BinWriter* w, const char* item_id, bool active) {
+    assert(item_id);
+    bw_init(w, UPLINK_ITEM_ACTIVATION);
+    bw_str(w, item_id);
+    bw_u8(w, active ? 1 : 0);
+}
+
+void uplink_freeze_start(BinWriter* w, const char* reason) {
+    bw_init(w, UPLINK_FREEZE_START);
+    bw_str(w, reason ? reason : "");
+}
+
+void uplink_freeze_end(BinWriter* w, const char* reason) {
+    bw_init(w, UPLINK_FREEZE_END);
+    bw_str(w, reason ? reason : "");
+}
+
+void uplink_chat(BinWriter* w, const char* to_id, const char* text) {
+    bw_init(w, UPLINK_CHAT);
+    bw_str(w, to_id ? to_id : "");
+    bw_str(w, text  ? text  : "");
+}
+
+void uplink_get_items_ids(BinWriter* w, const char* item_id) {
+    assert(item_id);
+    bw_init(w, UPLINK_GET_ITEMS_IDS);
+    bw_str(w, item_id);
 }

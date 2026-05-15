@@ -19,12 +19,9 @@
  *   See ENTITY_PROFILE.md for the full design rationale.
  *
  * Architecture:
- *   C interaction_bubble click  →  js_interact_overlay_open()    → JS panel
- *   JS "Talk" button            →  c_open_dialogue_from_js()     → C freeze + modal
- *   JS chat send                →  c_send_ws_message()           → C network_send()
- *   JS panel close              →  c_interact_overlay_did_close()→ C cleanup
+ *   C interaction_bubble click  →  js_interact_overlay_open()         → JS panel
+ *   JS chat send                →  c_send_chat_binary()               → C binary uplink
  *   C incoming chat             →  js_interact_overlay_receive_chat() → JS update
- *   C dialogue close callback   →  js_interact_overlay_restore()     → JS re-show
  *
  * DOM is built once and reused (hide/show) to avoid expensive rebuilds.
  */
@@ -84,6 +81,23 @@ mergeInto(LibraryManager.library, {
   },
 
   $IP_QC: ['Hello!', 'GG', 'Help!', 'Trade?', 'Follow me', 'Thanks!'],
+
+  /* ================================================================
+   * Per-entity chat message store (replaces removed notify_badge.js)
+   * ================================================================ */
+
+  $IPStore: {
+    store: {},
+    MAX_MESSAGES: 100,
+  },
+
+  $ipStoreEnsure__deps: ['$IPStore'],
+  $ipStoreEnsure: function (entityId) {
+    if (!IPStore.store[entityId]) {
+      IPStore.store[entityId] = { messages: [], unread: 0 };
+    }
+    return IPStore.store[entityId];
+  },
 
   /* ================================================================
    * DOM helpers
@@ -302,7 +316,7 @@ mergeInto(LibraryManager.library, {
   $ipSwitchTab__deps: [
     '$IP',
     '$IPS',
-    '$NB',
+    '$IPStore',
     '$ipEl',
     '$ipBtn',
     '$ipRenderChat',
@@ -316,8 +330,8 @@ mergeInto(LibraryManager.library, {
     P.activeTab = tabId;
 
     /* Clear badge when user views the chat tab. */
-    if (tabId === 'chat' && NB.store[P.entityId]) {
-      NB.store[P.entityId].unread = 0;
+    if (tabId === 'chat' && IPStore.store[P.entityId]) {
+      IPStore.store[P.entityId].unread = 0;
     }
 
     /* Update tab button styles + remove badge dots when cleared */
@@ -420,7 +434,6 @@ mergeInto(LibraryManager.library, {
     var P = IP,
       S = IPS;
     var stack = P.olStack;
-    var hasTalk = !!(P.interactFlags & 1);
 
     /* 2-column wrapper */
     var row = ipEl('div', { display: 'flex', gap: '10px', height: '100%' }, container);
@@ -501,34 +514,6 @@ mergeInto(LibraryManager.library, {
         );
         lbl.textContent = ol.itemId;
       }
-    }
-
-    /* Talk button — only when entity has dialogue (interact_flags & 1) */
-    if (hasTalk) {
-      ipBtn(
-        'Talk',
-        function () {
-          P.hidden = true;
-          P.el.style.display = 'none';
-          P.backdrop.style.display = 'none';
-          var ePtr = allocateUTF8(P.entityId);
-          var iPtr = allocateUTF8(P.dlgItemId);
-          Module._c_open_dialogue_from_js(ePtr, iPtr);
-          _free(ePtr);
-          _free(iPtr);
-        },
-        right,
-        {
-          background: S.btnAccent,
-          marginTop: '6px',
-          flexShrink: '0',
-          padding: '8px 0',
-          fontSize: '15px',
-          fontWeight: 'bold',
-          width: '100%',
-          textAlign: 'center',
-        },
-      );
     }
   },
 
@@ -663,7 +648,7 @@ mergeInto(LibraryManager.library, {
    * Populate — rebuild tabs and content for the current entity
    * ================================================================ */
 
-  $ipPopulate__deps: ['$IP', '$IPS', '$ipEl', '$ipSwitchTab', '$NB'],
+  $ipPopulate__deps: ['$IP', '$IPS', '$ipEl', '$ipSwitchTab', '$IPStore'],
   $ipPopulate: function () {
     var P = IP,
       D = P.dom,
@@ -713,7 +698,7 @@ mergeInto(LibraryManager.library, {
       btn.textContent = tab.label;
 
       /* Badge transport: show unread dot on the Chat tab button */
-      if (tab.id === 'chat' && NB.store[P.entityId] && NB.store[P.entityId].unread > 0) {
+      if (tab.id === 'chat' && IPStore.store[P.entityId] && IPStore.store[P.entityId].unread > 0) {
         var dot = ipEl(
           'span',
           {
@@ -747,7 +732,7 @@ mergeInto(LibraryManager.library, {
    * Public API — called from C via extern declarations
    * ================================================================ */
 
-  js_interact_overlay_open__deps: ['$IP', '$NB', '$nbEnsure', '$ipBuild', '$ipPopulate'],
+  js_interact_overlay_open__deps: ['$IP', '$IPStore', '$ipStoreEnsure', '$ipBuild', '$ipPopulate'],
   js_interact_overlay_open: function (
     entity_id_ptr,
     display_name_ptr,
@@ -776,11 +761,11 @@ mergeInto(LibraryManager.library, {
     P.open = true;
     P.hidden = false;
 
-    /* Load persisted messages from the badge store so chat history
+    /* Load persisted messages from the store so chat history
      * survives across overlay open/close cycles. */
-    var entry = nbEnsure(P.entityId);
+    var entry = ipStoreEnsure(P.entityId);
     P.chatHistory = entry.messages.map(function (m) {
-      return { sender: m.sender, text: m.text, isMe: false, ts: m.ts };
+      return { sender: m.sender, text: m.text, isMe: m.isMe || false, ts: m.ts };
     });
     /* Badge is NOT cleared here — it transports to the chat tab button
      * and only clears when the user actually switches to the chat tab
@@ -815,8 +800,6 @@ mergeInto(LibraryManager.library, {
     P.hidden = false;
     if (P.el) P.el.style.display = 'none';
     if (P.backdrop) P.backdrop.style.display = 'none';
-
-    Module._c_interact_overlay_did_close();
   },
 
   js_interact_overlay_is_open__deps: ['$IP'],
@@ -824,7 +807,7 @@ mergeInto(LibraryManager.library, {
     return IP.open && !IP.hidden ? 1 : 0;
   },
 
-  js_interact_overlay_send_chat__deps: ['$IP', '$NB', '$nbEnsure', '$ipRenderChat'],
+  js_interact_overlay_send_chat__deps: ['$IP', '$IPStore', '$ipStoreEnsure', '$ipRenderChat'],
   js_interact_overlay_send_chat: function (text_ptr) {
     var P = IP;
     var text = UTF8ToString(text_ptr);
@@ -837,23 +820,29 @@ mergeInto(LibraryManager.library, {
     P.chatHistory.push(msg);
     if (P.activeTab === 'chat') ipRenderChat();
 
-    /* Persist in badge store so history survives overlay close. */
-    var entry = nbEnsure(P.entityId);
+    /* Persist in store so history survives overlay close. */
+    var entry = ipStoreEnsure(P.entityId);
     entry.messages.push({ sender: 'You', text: text, ts: Date.now() });
-    if (entry.messages.length > NB.MAX_MESSAGES) entry.messages = entry.messages.slice(-NB.MAX_MESSAGES);
+    if (entry.messages.length > IPStore.MAX_MESSAGES) entry.messages = entry.messages.slice(-IPStore.MAX_MESSAGES);
 
-    var json = JSON.stringify({ type: 'chat', payload: { to: P.entityId, text: text } });
-    var jPtr = allocateUTF8(json);
-    Module._c_send_ws_message(jPtr);
-    _free(jPtr);
+    var toPtr = allocateUTF8(P.entityId);
+    var textPtr = allocateUTF8(text);
+    Module._c_send_chat_binary(toPtr, textPtr);
+    _free(toPtr);
+    _free(textPtr);
   },
 
-  js_interact_overlay_receive_chat__deps: ['$IP', '$NB', '$ipRenderChat'],
+  js_interact_overlay_receive_chat__deps: ['$IP', '$IPStore', '$ipStoreEnsure', '$ipRenderChat'],
   js_interact_overlay_receive_chat: function (from_id_ptr, from_name_ptr, text_ptr) {
     var P = IP;
     var fromId = UTF8ToString(from_id_ptr);
     var fromName = UTF8ToString(from_name_ptr);
     var text = UTF8ToString(text_ptr);
+
+    /* Persist message and track unread count in store. */
+    var entry = ipStoreEnsure(fromId);
+    entry.messages.push({ sender: fromName || fromId.substring(0, 8), text: text, isMe: false, ts: Date.now() });
+    if (entry.messages.length > IPStore.MAX_MESSAGES) entry.messages = entry.messages.slice(-IPStore.MAX_MESSAGES);
 
     /* Only update the live overlay if it's open for THIS entity. */
     if (P.open && P.entityId === fromId) {
@@ -866,19 +855,15 @@ mergeInto(LibraryManager.library, {
 
       /* Clear badge only if the user is actually VIEWING the chat tab
        * right now — the abstract-context model. */
-      if (P.activeTab === 'chat' && NB.store[fromId]) NB.store[fromId].unread = 0;
+      if (P.activeTab === 'chat') {
+        entry.unread = 0;
+      } else {
+        entry.unread += 1;
+      }
 
       if (P.activeTab === 'chat') ipRenderChat();
+    } else {
+      entry.unread += 1;
     }
-  },
-
-  js_interact_overlay_restore__deps: ['$IP'],
-  js_interact_overlay_restore: function () {
-    var P = IP;
-    if (!P.el || !P.open) return;
-
-    P.hidden = false;
-    P.el.style.display = 'flex';
-    if (P.backdrop) P.backdrop.style.display = 'block';
   },
 });

@@ -278,6 +278,23 @@ void fct_spawn_item(float world_x, float world_y, uint32_t quantity,
 }
 
 void fct_update(float dt) {
+    /* Drain events queued by binary_aoi_decoder via game_state. */
+    for (int i = 0; i < g_game_state.fct_queue_count; i++) {
+        if (g_game_state.fct_queue[i].item_id[0] != '\0') {
+            fct_spawn_item(g_game_state.fct_queue[i].world_x,
+                           g_game_state.fct_queue[i].world_y,
+                           g_game_state.fct_queue[i].item_qty,
+                           g_game_state.fct_queue[i].type,
+                           g_game_state.fct_queue[i].item_id);
+        } else {
+            fct_spawn(g_game_state.fct_queue[i].world_x,
+                      g_game_state.fct_queue[i].world_y,
+                      g_game_state.fct_queue[i].value,
+                      g_game_state.fct_queue[i].type);
+        }
+    }
+    g_game_state.fct_queue_count = 0;
+
     /* Decay screen-space overlays. */
     if (s_damage_overlay > 0.0f) {
         s_damage_overlay -= dt * FCT_OVERLAY_DMG_DECAY;
