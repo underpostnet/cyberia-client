@@ -399,12 +399,6 @@ int serial_deserialize_world_object(const cJSON* json, WorldObject* out) {
     // Portal label (optional)
     serial_get_string_default(json, "PortalLabel", out->portal_label, sizeof(out->portal_label), "");
 
-    // Per-object fallback color (optional)
-    cJSON* color_obj = serial_get_object(json, "color");
-    if (color_obj) {
-        serial_deserialize_color(color_obj, &out->color);
-    }
-
     // Object layers
     cJSON* layers_obj = serial_get_array(json, "objectLayers");
     if (layers_obj) {
@@ -443,6 +437,14 @@ void bw_f32(BinWriter* w, float v) {
     w->buf[w->pos++] = (uint8_t)(bits >> 24);
 }
 
+void bw_u32(BinWriter* w, uint32_t v) {
+    if (w->pos + 4 > sizeof(w->buf)) return;
+    w->buf[w->pos++] = (uint8_t)(v);
+    w->buf[w->pos++] = (uint8_t)(v >> 8);
+    w->buf[w->pos++] = (uint8_t)(v >> 16);
+    w->buf[w->pos++] = (uint8_t)(v >> 24);
+}
+
 void bw_str(BinWriter* w, const char* s) {
     if (!s) s = "";
     size_t len = strlen(s);
@@ -459,10 +461,13 @@ void uplink_handshake(BinWriter* w, const char* client_name, const char* version
     bw_str(w, version     ? version     : "1.0.0");
 }
 
-void uplink_player_action(BinWriter* w, float target_x, float target_y) {
+void uplink_player_action(BinWriter* w, float target_x, float target_y,
+                          uint32_t client_tick, uint32_t sequence) {
     bw_init(w, UPLINK_PLAYER_ACTION);
     bw_f32(w, target_x);
     bw_f32(w, target_y);
+    bw_u32(w, client_tick);
+    bw_u32(w, sequence);
 }
 
 void uplink_item_activation(BinWriter* w, const char* item_id, bool active) {

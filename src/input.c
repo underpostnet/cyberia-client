@@ -12,6 +12,12 @@
 #include "game_render.h"
 #include "js/interact_bridge.h"
 
+// Tick-based input pipeline. input.c builds typed InputCommand instances
+// and pushes them to prediction; uplink uses network_send_event_tap with
+// tick+sequence headers for prediction reconciliation.
+#include "input/input_command.h"
+#include "prediction/prediction.h"
+
 #include <assert.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -184,6 +190,9 @@ static void input_handle_key_press(int key) {
 static bool input_send_tap(Vector2 target_pos) {
     // FrozenInteractionState — server says we're frozen, drop the tap.
     if (g_game_state.frozen) return 0;
+    // Ghost / respawning state — server rejects all movement while dead.
+    // Drop silently here to avoid filling the uplink with ignored commands.
+    if (g_game_state.player.base.respawn_in > 0.0f) return 0;
 
     printf("[INPUT] TAP at world (%.2f, %.2f)\n", target_pos.x, target_pos.y);
 
@@ -191,11 +200,21 @@ static bool input_send_tap(Vector2 target_pos) {
     float grid_x = target_pos.x / cell;
     float grid_y = target_pos.y / cell;
 
-    // Set local prediction target so the player starts moving immediately
+    // Canonical input pipeline:
+    //   1. Build a typed InputCommand stamped with client_tick + sequence.
+    //   2. Apply optimistically to prediction (local feedback + replay).
+    //   3. Send the *same* tick + sequence on the wire so the server's
+    //      snapshot echoes back lastAckedSequence and the client's replay
+    //      buffer drains.  Skipping this here was the cause of the
+    //      "tap → freeze / oscillation" symptom: the buffer grew unbounded
+    //      and prediction_reconcile replayed every tap on every snapshot.
+    input_command_t cmd = input_command_build_tap(grid_x, grid_y);
+    prediction_apply(&cmd);
+
     g_game_state.player.tap_target = (Vector2){grid_x, grid_y};
     g_game_state.player.has_tap_target = true;
 
-    return network_send_event_tap((Vector2){grid_x, grid_y});
+    return network_send_event_tap((Vector2){grid_x, grid_y}, cmd.client_tick, cmd.sequence);
 }
 
 static bool input_is_over_ui(Vector2 screen_pos) {

@@ -90,7 +90,54 @@ static inline void br_string(BinReader* r, char* dst, size_t dst_size) {
     r->pos += slen;
 }
 
+/* ── Previous-position snapshot — preserves interpolation across AOI resets ──
+ *
+ * binary_aoi_process() snapshots gs->bots / gs->other_players into these
+ * static buffers BEFORE resetting the gs counters, so each decoded entity
+ * can recover its prior server position for smooth interpolation.
+ *
+ * Reset on init_data so a server restart never carries a stale UUID into
+ * a new session (which would otherwise resolve to the sentinel and cause
+ * the entity to fly in from origin).
+ */
+
+typedef struct { char id[MAX_ID_LENGTH]; Vector2 pos_server; bool found; } PrevPos;
+
+static PrevPos s_prev_bots[MAX_ENTITIES];
+static int     s_prev_bot_count = 0;
+static PrevPos s_prev_players[MAX_ENTITIES];
+static int     s_prev_player_count = 0;
+
+/* lookup_prev_server_pos — return the previous server position for `id`
+ * if it appeared in the prior snapshot; otherwise return `fallback` so the
+ * caller can keep pos_prev == pos_server (no interpolation jump on first
+ * appearance / post-reconnect / AOI entry). */
+static Vector2 lookup_prev_server_pos(const PrevPos* arr, int n,
+                                      const char* id, Vector2 fallback) {
+    for (int k = 0; k < n; k++) {
+        if (strcmp(arr[k].id, id) == 0) return arr[k].pos_server;
+    }
+    return fallback;
+}
+
+/* Called from message_parser when init_data arrives (handshake or
+ * reconnect).  Ensures we never carry pre-restart entity UUIDs into the
+ * fresh session. */
+void binary_aoi_reset_prev_snapshots(void) {
+    s_prev_bot_count = 0;
+    s_prev_player_count = 0;
+}
+
 /* ── Item ID list reader (IDs only — no active/quantity) ───────── */
+
+static void skip_item_ids(BinReader* r) {
+    uint8_t count = br_u8(r);
+    for (int i = 0; i < (int)count; i++) {
+        uint8_t slen = br_u8(r);
+        r->pos += slen;
+        r->pos += 2; /* qty u16 */
+    }
+}
 
 static int read_item_ids(BinReader* r, ObjectLayerState* layers, int max_layers) {
     uint8_t count = br_u8(r);
@@ -139,8 +186,16 @@ static void decode_player_entity(BinReader* r, uint8_t flags) {
     }
 
     PlayerState* p = &gs->other_players[idx];
-    p->base.pos_prev = p->base.pos_server;
-    p->base.pos_server = (Vector2){ px, py };
+    /* Fall back to the *new* server position so first-seen / post-reconnect
+     * entities don't lerp from origin.  Also skip interpolation when the
+     * entity is TELEPORTING — that mode is a one-snapshot signal from the
+     * server that the entity just jumped position (portal), so lerping from
+     * the old position would produce a visible cross-map sweep. */
+    Vector2 incoming = (Vector2){ px, py };
+    p->base.pos_prev = (mode == MODE_TELEPORTING)
+        ? incoming
+        : lookup_prev_server_pos(s_prev_players, s_prev_player_count, id, incoming);
+    p->base.pos_server = incoming;
     p->base.dims = (Vector2){ dw, dh };
     p->base.direction = (Direction)dir;
     p->base.mode = (ObjectLayerMode)mode;
@@ -154,12 +209,6 @@ static void decode_player_entity(BinReader* r, uint8_t flags) {
         p->base.respawn_in = br_f32(r);
     } else {
         p->base.respawn_in = 0.0f;
-    }
-    if (flags & BIN_FLAG_HAS_COLOR) {
-        p->base.color.r = br_u8(r);
-        p->base.color.g = br_u8(r);
-        p->base.color.b = br_u8(r);
-        p->base.color.a = br_u8(r);
     }
     p->base.object_layer_count = read_item_ids(
         r, p->base.object_layers, MAX_OBJECT_LAYERS);
@@ -194,8 +243,13 @@ static void decode_bot_entity(BinReader* r, uint8_t flags) {
     }
 
     BotState* b = &gs->bots[idx];
-    b->base.pos_prev = b->base.pos_server;
-    b->base.pos_server = (Vector2){ px, py };
+    Vector2 incoming = (Vector2){ px, py };
+    /* Same TELEPORTING guard as decode_player_entity — bots don't use portals
+     * today but the protocol allows it, so handle it defensively. */
+    b->base.pos_prev = (mode == MODE_TELEPORTING)
+        ? incoming
+        : lookup_prev_server_pos(s_prev_bots, s_prev_bot_count, id, incoming);
+    b->base.pos_server = incoming;
     b->base.dims = (Vector2){ dw, dh };
     b->base.direction = (Direction)dir;
     b->base.mode = (ObjectLayerMode)mode;
@@ -212,12 +266,6 @@ static void decode_bot_entity(BinReader* r, uint8_t flags) {
     }
     if (flags & BIN_FLAG_HAS_BEHAVIOR) {
         br_string(r, b->behavior, MAX_BEHAVIOR_LENGTH);
-    }
-    if (flags & BIN_FLAG_HAS_COLOR) {
-        b->base.color.r = br_u8(r);
-        b->base.color.g = br_u8(r);
-        b->base.color.b = br_u8(r);
-        b->base.color.a = br_u8(r);
     }
     b->base.object_layer_count = read_item_ids(
         r, b->base.object_layers, MAX_OBJECT_LAYERS);
@@ -238,15 +286,8 @@ static void decode_floor_entity(BinReader* r, uint8_t flags) {
     br_u8(r); /* direction — unused for floors */
     br_u8(r); /* mode      — unused for floors */
 
-    Color floor_color = {0, 0, 0, 0};
-    if (flags & BIN_FLAG_HAS_COLOR) {
-        floor_color.r = br_u8(r);
-        floor_color.g = br_u8(r);
-        floor_color.b = br_u8(r);
-        floor_color.a = br_u8(r);
-    }
 
-    if (gs->floor_count >= MAX_OBJECTS) return;
+    if (gs->floor_count >= MAX_OBJECTS) { skip_item_ids(r); return; }
     int idx = gs->floor_count++;
     WorldObject* f = &gs->floors[idx];
     memset(f, 0, sizeof(WorldObject));
@@ -254,7 +295,6 @@ static void decode_floor_entity(BinReader* r, uint8_t flags) {
     f->pos  = (Vector2){ px, py };
     f->dims = (Vector2){ dw, dh };
     strncpy(f->type, "floor", MAX_TYPE_LENGTH - 1);
-    f->color = floor_color;
 
     f->object_layer_count = read_item_ids(
         r, f->object_layers, MAX_OBJECT_LAYERS);
@@ -272,15 +312,8 @@ static void decode_obstacle_entity(BinReader* r, uint8_t flags) {
     br_u8(r); /* direction */
     br_u8(r); /* mode */
 
-    Color obs_color = {0, 0, 0, 0};
-    if (flags & BIN_FLAG_HAS_COLOR) {
-        obs_color.r = br_u8(r);
-        obs_color.g = br_u8(r);
-        obs_color.b = br_u8(r);
-        obs_color.a = br_u8(r);
-    }
 
-    if (gs->obstacle_count >= MAX_OBJECTS) return;
+    if (gs->obstacle_count >= MAX_OBJECTS) { skip_item_ids(r); return; }
     int idx = gs->obstacle_count++;
     WorldObject* o = &gs->obstacles[idx];
     memset(o, 0, sizeof(WorldObject));
@@ -288,7 +321,6 @@ static void decode_obstacle_entity(BinReader* r, uint8_t flags) {
     o->pos  = (Vector2){ px, py };
     o->dims = (Vector2){ dw, dh };
     strncpy(o->type, "obstacle", MAX_TYPE_LENGTH - 1);
-    o->color = obs_color;
     o->object_layer_count = read_item_ids(
         r, o->object_layers, MAX_OBJECT_LAYERS);
 }
@@ -309,16 +341,8 @@ static void decode_portal_entity(BinReader* r, uint8_t flags) {
     char label[MAX_ID_LENGTH];
     br_string(r, label, sizeof(label));
 
-    /* per-portal color (RGBA) */
-    Color portal_color = gs->colors.portal; /* fallback */
-    if (flags & BIN_FLAG_HAS_COLOR) {
-        portal_color.r = br_u8(r);
-        portal_color.g = br_u8(r);
-        portal_color.b = br_u8(r);
-        portal_color.a = br_u8(r);
-    }
 
-    if (gs->portal_count >= MAX_OBJECTS) return;
+    if (gs->portal_count >= MAX_OBJECTS) { skip_item_ids(r); return; }
     int idx = gs->portal_count++;
     WorldObject* p = &gs->portals[idx];
     memset(p, 0, sizeof(WorldObject));
@@ -327,7 +351,6 @@ static void decode_portal_entity(BinReader* r, uint8_t flags) {
     p->dims = (Vector2){ dw, dh };
     strncpy(p->type, "portal", MAX_TYPE_LENGTH - 1);
     strncpy(p->portal_label, label, MAX_ID_LENGTH - 1);
-    p->color = portal_color;
     p->object_layer_count = read_item_ids(
         r, p->object_layers, MAX_OBJECT_LAYERS);
 }
@@ -344,15 +367,8 @@ static void decode_foreground_entity(BinReader* r, uint8_t flags) {
     br_u8(r); /* direction */
     br_u8(r); /* mode */
 
-    Color fg_color = {0, 0, 0, 0};
-    if (flags & BIN_FLAG_HAS_COLOR) {
-        fg_color.r = br_u8(r);
-        fg_color.g = br_u8(r);
-        fg_color.b = br_u8(r);
-        fg_color.a = br_u8(r);
-    }
 
-    if (gs->foreground_count >= MAX_OBJECTS) return;
+    if (gs->foreground_count >= MAX_OBJECTS) { skip_item_ids(r); return; }
     int idx = gs->foreground_count++;
     WorldObject* fg = &gs->foregrounds[idx];
     memset(fg, 0, sizeof(WorldObject));
@@ -360,7 +376,6 @@ static void decode_foreground_entity(BinReader* r, uint8_t flags) {
     fg->pos  = (Vector2){ px, py };
     fg->dims = (Vector2){ dw, dh };
     strncpy(fg->type, "foreground", MAX_TYPE_LENGTH - 1);
-    fg->color = fg_color;
     fg->object_layer_count = read_item_ids(
         r, fg->object_layers, MAX_OBJECT_LAYERS);
 }
@@ -401,12 +416,6 @@ static void decode_resource_entity(BinReader* r, uint8_t flags) {
         res->base.respawn_in = br_f32(r);
     } else {
         res->base.respawn_in = 0.0f;
-    }
-    if (flags & BIN_FLAG_HAS_COLOR) {
-        res->base.color.r = br_u8(r);
-        res->base.color.g = br_u8(r);
-        res->base.color.b = br_u8(r);
-        res->base.color.a = br_u8(r);
     }
     res->base.object_layer_count = read_item_ids(
         r, res->base.object_layers, MAX_OBJECT_LAYERS);
@@ -581,19 +590,53 @@ int binary_aoi_process(const uint8_t* data, size_t length) {
         }
         return 0;
     }
-    /* ── AOI update / full AOI — standard entity-loop format ─────────── */
-    if (length < 5) {
-        printf("[BINARY_AOI] AOI message too short (%zu bytes)\n", length);
+    /* ── AOI update / full AOI ─────────────────────────────────────────────
+     *
+     *   [0]      u8  msgType        (0x01 = aoi_update, 0x03 = full_aoi)
+     *   [1..4]   u32 tick           — simulation tick when produced
+     *   [5..8]   u32 lastAckSeq     — highest InputCommand.Sequence the server
+     *                                 has applied for this client; the
+     *                                 prediction module drops acknowledged
+     *                                 commands from its replay buffer using
+     *                                 this value.
+     *   [9..10]  u16 entityCount
+     */
+    if (length < 11) {
+        printf("[BINARY_AOI] AOI message too short (%zu bytes, need 11)\n", length);
         return -1;
     }
-
-    /* u16 reserved field — always 0, ignore */
-    br_u16(&r);
-    uint16_t entity_count = br_u16(&r);
-
     if (msg_type != BIN_MSG_AOI_UPDATE && msg_type != BIN_MSG_FULL_AOI) {
         printf("[BINARY_AOI] Unknown message type 0x%02x\n", msg_type);
         return -1;
+    }
+
+    uint32_t snapshot_tick      = br_u32(&r);
+    uint32_t last_acked_sequence = br_u32(&r);
+    uint16_t entity_count        = br_u16(&r);
+
+    /* Feed the session module so prediction/interpolation downstream can
+     * align to the authoritative tick stream. session_on_snapshot is
+     * declared in network/session.h. */
+    extern void session_on_snapshot(uint32_t tick, uint32_t last_acked_sequence);
+    session_on_snapshot(snapshot_tick, last_acked_sequence);
+
+    /* Stamp the wall-clock arrival time of this snapshot. The remote-entity
+     * interpolator computes `t = (now - last_update_time) * 1000 /
+     * interpolation_ms`; without this write t stays clamped at 1.0 and
+     * entities teleport between snapshots instead of lerping. */
+    gs->last_update_time = GetTime();
+
+    /* Snapshot current entity positions before reset so decoders can recover
+     * the previous server position for smooth interpolation (pos_prev). */
+    s_prev_bot_count = gs->bot_count;
+    for (int i = 0; i < s_prev_bot_count; i++) {
+        memcpy(s_prev_bots[i].id, gs->bots[i].base.id, MAX_ID_LENGTH);
+        s_prev_bots[i].pos_server = gs->bots[i].base.pos_server;
+    }
+    s_prev_player_count = gs->other_player_count;
+    for (int i = 0; i < s_prev_player_count; i++) {
+        memcpy(s_prev_players[i].id, gs->other_players[i].base.id, MAX_ID_LENGTH);
+        s_prev_players[i].pos_server = gs->other_players[i].base.pos_server;
     }
 
     /* Clear world objects (same as JSON parser does each AOI frame) */
@@ -637,6 +680,12 @@ int binary_aoi_process(const uint8_t* data, size_t length) {
         uint8_t self_flags = br_u8(&r);
         decode_self_player(&r, self_flags);
     }
+
+    /* Authoritative self position is now fresh — trigger prediction
+     * reconciliation. session_on_snapshot was already called at the top of
+     * this function so prediction sees the correct lastAckedSequence. */
+    extern void prediction_reconcile(void);
+    prediction_reconcile();
 
     return 0;
 }

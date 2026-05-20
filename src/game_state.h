@@ -58,7 +58,6 @@ struct EntityState {
     float max_life;
     float respawn_in;
     double last_update;
-    Color color; /* entity-specific color sent by server (0 = use palette default) */
     int effective_level; /* clamped sum of all stat fields, sent by server for all entities */
     uint8_t status_icon; /* overhead status indicator ID — mapped via status_icons config */
 };
@@ -93,40 +92,13 @@ typedef struct {
     char portal_label[MAX_ID_LENGTH]; // For portals
     ObjectLayerState object_layers[MAX_OBJECT_LAYERS];
     int object_layer_count;
-    Color color; // Per-entity color (portals use subtype-specific colors)
 } WorldObject;
 
-// Color palette for the game
-typedef struct {
-    Color background;
-    Color grid_background;
-    Color floor_background;
-    Color obstacle;
-    Color foreground;
-    Color player;
-    Color other_player;
-    Color path;
-    Color target;
-    Color aoi;
-    Color debug_text;
-    Color error_text;
-    Color portal;
-    Color portal_inter_portal;
-    Color portal_inter_random;
-    Color portal_intra_random;
-    Color portal_intra_portal;
-    Color portal_label;
-    Color ui_text;
-    Color map_boundary;
-    Color grid;
-    Color floor;
-    Color bot;
-    Color ghost;
-    Color coin;
-    Color weapon;
-    Color skill;
-    Color self_border;
-} GameColors;
+/* GameColors / palette removed. The client owns its palette via
+ * domain/presentation_defaults.{c,h}; per-instance overrides come from
+ * /api/cyberia-client-hints via domain/presentation_runtime.{c,h}.
+ * Render code calls presentation_runtime_palette("KEY") at each use site.
+ */
 
 // Equipment rules received from metadata message (mirrors Go EquipmentRulesConfig).
 typedef struct {
@@ -136,7 +108,9 @@ typedef struct {
     bool require_skin;   // require ≥ 1 active skin
 } EquipmentRules;
 
-// Per-entity-type visual defaults received in init_data payload.
+// Per-entity-type gameplay defaults received in init_data payload.
+// Presentation-only fields (color_key) are NOT part of this contract any
+// more; client resolves visual fallbacks via presentation_entity_fallback_color.
 typedef struct {
     char entity_type[32];
     char live_item_ids[MAX_DEFAULT_ITEM_IDS][128];
@@ -145,17 +119,13 @@ typedef struct {
     int  dead_item_id_count;
     char drop_item_ids[MAX_DEFAULT_ITEM_IDS][128];
     int  drop_item_id_count;
-    char color_key[32];
 } EntityTypeDefault;
 
-// Status icon config entry — maps a u8 ID to a ui-icon filename stem
-// and an interaction-bubble border colour.  All fields are server-driven
-// (received in init_data.statusIcons from the Go server via gRPC).
-typedef struct {
-    uint8_t id;
-    char icon_id[MAX_ID_LENGTH];
-    Color border_color;
-} StatusIconConfig;
+/* StatusIconConfig removed. The numeric status_icon u8 still rides on
+ * the AOI wire; presentation_runtime_status_icon(u8) and
+ * presentation_runtime_status_border(u8) resolve the icon stem and
+ * border colour client-side, falling back to the compile-time defaults
+ * in domain/presentation_defaults.{c,h}. */
 
 // Skill map entry received from init_data: one trigger item → N skill definitions.
 // Each entry represents a single logicEventId with its own description and summoned entity.
@@ -181,16 +151,11 @@ struct GameState {
     int interpolation_ms;
     float aoi_radius;
 
-    // Game colors
-    GameColors colors;
-
-    // Per-entity-type visual defaults (from init_data)
+    // Per-entity-type gameplay defaults from init_data.
+    // Visual fallbacks (palette, status-icon visuals) are resolved
+    // client-side via domain/presentation_runtime.
     EntityTypeDefault entity_defaults[MAX_ENTITY_TYPES];
     int entity_defaults_count;
-
-    // Status icon mapping (from init_data.statusIcons)
-    StatusIconConfig status_icons[MAX_STATUS_ICONS];
-    int status_icon_count;
 
     // Main player state
     PlayerState player;
@@ -360,42 +325,11 @@ static inline const EntityTypeDefault* game_state_get_entity_default(const char*
     return NULL;
 }
 
-/**
- * @brief Resolve a color palette key string to the matching GameColors field.
- * Falls back to a neutral gray when the key is unrecognised or NULL.
+/* Visual resolution is handled by domain/presentation_runtime.h.
+ * Call presentation_runtime_palette(), presentation_runtime_status_icon(),
+ * and presentation_runtime_status_border() directly; the game state module
+ * does not expose colour queries.
  */
-static inline Color game_state_get_color_by_key(const char* key) {
-    if (!key || key[0] == '\0') return (Color){ 100, 100, 100, 200 };
-    if (strcmp(key, "PLAYER")       == 0) return g_game_state.colors.player;
-    if (strcmp(key, "OTHER_PLAYER") == 0) return g_game_state.colors.other_player;
-    if (strcmp(key, "BOT")          == 0) return g_game_state.colors.bot;
-    if (strcmp(key, "SKILL")        == 0) return g_game_state.colors.skill;
-    if (strcmp(key, "COIN")         == 0) return g_game_state.colors.coin;
-    if (strcmp(key, "GHOST")        == 0) return g_game_state.colors.ghost;
-    if (strcmp(key, "FLOOR")        == 0) return g_game_state.colors.floor;
-    if (strcmp(key, "OBSTACLE")     == 0) return g_game_state.colors.obstacle;
-    if (strcmp(key, "PORTAL")              == 0) return g_game_state.colors.portal;
-    if (strcmp(key, "PORTAL_INTER_PORTAL") == 0) return g_game_state.colors.portal_inter_portal;
-    if (strcmp(key, "PORTAL_INTER_RANDOM") == 0) return g_game_state.colors.portal_inter_random;
-    if (strcmp(key, "PORTAL_INTRA_RANDOM") == 0) return g_game_state.colors.portal_intra_random;
-    if (strcmp(key, "PORTAL_INTRA_PORTAL") == 0) return g_game_state.colors.portal_intra_portal;
-    if (strcmp(key, "FOREGROUND")   == 0) return g_game_state.colors.foreground;
-    if (strcmp(key, "SELF_BORDER") == 0) return g_game_state.colors.self_border;
-    return (Color){ 100, 100, 100, 200 };
-}
-
-/**
- * @brief Return the interaction-bubble border colour for a status_icon u8.
- * Looks up the dynamically-loaded StatusIconConfig table from init_data.
- * Falls back to neutral grey when the ID is unknown.
- */
-static inline Color game_state_get_status_border_color(uint8_t status_icon) {
-    for (int i = 0; i < g_game_state.status_icon_count; i++) {
-        if (g_game_state.status_icons[i].id == status_icon)
-            return g_game_state.status_icons[i].border_color;
-    }
-    return (Color){ 70, 70, 120, 200 }; /* neutral fallback */
-}
 
 /**
  * @brief Return the player's current coin balance.

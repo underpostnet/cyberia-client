@@ -13,6 +13,8 @@
 #include "interaction_bubble.h"
 
 #include "network/client.h"
+#include "../domain/presentation_defaults.h"
+#include "../domain/presentation_runtime.h"
 #include "dialogue_data.h"
 #include "entity_render.h"
 #include "game_state.h"
@@ -42,18 +44,16 @@ static const Color C_SLOT_HOVER     = {  35,  45,  75, 230 };
 
 /**
  * @brief Return the border colour for a bubble slot.
- * Self-player uses the SELF_BORDER palette colour; everyone else
- * uses the per-status border colour from the StatusIconConfig table
- * (server-driven, received in init_data).
+ * Self-player uses the SELF_BORDER palette key (client-owned); everyone
+ * else uses the per-status border colour resolved against the client's
+ * presentation table. Neither path consults the server.
  */
 static Color status_border_color(const InteractionBubbleSlot* slot, bool is_self) {
-    if (is_self) return game_state_get_color_by_key("SELF_BORDER");
-    Color c = game_state_get_status_border_color(slot->status_icon);
+    if (is_self) return presentation_runtime_palette("SELF_BORDER");
+    Color c = presentation_runtime_status_border(slot->status_icon);
     if (s_border_color_dbg < 12) {
-        printf("[BORDER] entity=%s status_icon=%d border=(%d,%d,%d,%d) count=%d\n",
-               slot->entity_id, slot->status_icon,
-               c.r, c.g, c.b, c.a,
-               g_game_state.status_icon_count);
+        printf("[BORDER] entity=%s status_icon=%d border=(%d,%d,%d,%d)\n",
+               slot->entity_id, slot->status_icon, c.r, c.g, c.b, c.a);
         s_border_color_dbg++;
     }
     return c;
@@ -176,19 +176,10 @@ static void scan_entity(const char* entity_id, const EntityState* base,
     slot->status_icon = base->status_icon;
     slot->is_player = is_player;
 
-    /* Resolve the solid-colour fallback for the bubble icon:
-     * 1. Per-entity DB colour (server-sent, alpha > 0)
-     * 2. Palette colour via entity_defaults[].colorKey
-     * 3. Neutral gray (last resort) */
-    if (base->color.a > 0) {
-        slot->fallback_color = (Color){ base->color.r, base->color.g, base->color.b, base->color.a };
-    } else {
-        const char* etype = is_player ? "player" : "bot";
-        const EntityTypeDefault* etd = game_state_get_entity_default(etype);
-        slot->fallback_color = etd
-            ? game_state_get_color_by_key(etd->color_key)
-            : (Color){ 100, 100, 120, 180 };
-    }
+    /* Resolve the solid-colour fallback from the client-owned presentation
+     * table by entity_type. The server does not ship colour data. */
+    const char* etype = is_player ? "player" : "bot";
+    slot->fallback_color = presentation_entity_fallback_color(etype);
 
     /* Always snapshot current layers (dead or alive) into layers[]. */
     snapshot_layers(slot, base->object_layers, base->object_layer_count,
@@ -326,16 +317,12 @@ void interaction_bubble_draw(void) {
                      (Color){220, 220, 230, 240});
         }
 
-        /* Status icon — small icon in bottom-right corner of the bubble */
+        /* Status icon — small icon in bottom-right corner of the bubble.
+         * Resolved client-side from presentation_runtime; the server only
+         * ships the numeric status_icon u8 on the AOI wire. */
         if (slot->status_icon != 0) {
-            const char* icon_id = NULL;
-            for (int si = 0; si < g_game_state.status_icon_count; si++) {
-                if (g_game_state.status_icons[si].id == slot->status_icon) {
-                    icon_id = g_game_state.status_icons[si].icon_id;
-                    break;
-                }
-            }
-            if (icon_id) {
+            const char* icon_id = presentation_runtime_status_icon(slot->status_icon);
+            if (icon_id && icon_id[0] != '\0') {
                 int ico_sz = 16;
                 float ix = r.x + r.width - ico_sz * 0.5f - 2.0f;
                 float iy = r.y + r.height - ico_sz * 0.5f - 2.0f;

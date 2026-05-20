@@ -55,7 +55,6 @@
 #define BIN_FLAG_HAS_LIFE      0x10
 #define BIN_FLAG_HAS_RESPAWN   0x20
 #define BIN_FLAG_HAS_BEHAVIOR  0x40
-#define BIN_FLAG_HAS_COLOR     0x80
 
 /**
  * @brief Process a binary AOI message from the server.
@@ -68,5 +67,15 @@
  * @return 0 on success, -1 on error.
  */
 int binary_aoi_process(const uint8_t* data, size_t length);
+
+/**
+ * @brief Drop the prev-position snapshot used for interpolation.
+ *
+ * Must be called from message_parser when init_data arrives (initial
+ * handshake or reconnect after a server restart).  Without this, the
+ * decoder would resolve fresh-session UUIDs against the prior session's
+ * positions and interpolate everything from (0,0).
+ */
+void binary_aoi_reset_prev_snapshots(void);
 
 #endif /* BINARY_AOI_DECODER_H */

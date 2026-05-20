@@ -184,13 +184,26 @@ typedef struct {
 
 void bw_init(BinWriter* w, uint8_t msg_type);
 void bw_u8(BinWriter* w, uint8_t v);
+void bw_u32(BinWriter* w, uint32_t v);
 void bw_f32(BinWriter* w, float v);
 /* Write a length-prefixed string (1-byte length prefix, max 255 chars). */
 void bw_str(BinWriter* w, const char* s);
 
 /* ── Message builders ── */
 void uplink_handshake(BinWriter* w, const char* client_name, const char* version);
-void uplink_player_action(BinWriter* w, float target_x, float target_y);
+
+/* uplink_player_action — TAP event.
+ *
+ * Wire layout:  [u8 kind][f32 x][f32 y][u32 clientTick][u32 sequence]
+ *
+ * client_tick + sequence let the server echo back lastAckedSequence in
+ * every snapshot header, which the client's prediction module uses to
+ * drain its replay buffer.  Without them the buffer would grow unbounded
+ * and prediction_reconcile would replay every historical tap on every
+ * snapshot — the cause of the "tap → freeze / oscillation" symptom. */
+void uplink_player_action(BinWriter* w, float target_x, float target_y,
+                          uint32_t client_tick, uint32_t sequence);
+
 void uplink_item_activation(BinWriter* w, const char* item_id, bool active);
 void uplink_freeze_start(BinWriter* w, const char* reason);
 void uplink_freeze_end(BinWriter* w, const char* reason);

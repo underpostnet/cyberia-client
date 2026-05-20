@@ -26,8 +26,8 @@
  *   - Local development: "ws://localhost:8080/ws"
  *   - Production: "wss://server.cyberiaonline.com/ws"
  */
-static const char* WS_URL = "wss://server.cyberiaonline.com/ws";
-// static const char* WS_URL = "ws://localhost:8081/ws";
+// static const char* WS_URL = "wss://server.cyberiaonline.com/ws";
+static const char* WS_URL = "ws://localhost:8081/ws";
 
 // ============================================================================
 // Engine API Configuration
@@ -45,8 +45,8 @@ static const char* WS_URL = "wss://server.cyberiaonline.com/ws";
  *   - Local development: "http://localhost:4005"
  *   - Production: "https://www.cyberiaonline.com"
  */
-static const char* API_BASE_URL = "https://www.cyberiaonline.com";
-// static const char* API_BASE_URL = "http://localhost:4005";
+// static const char* API_BASE_URL = "https://www.cyberiaonline.com";
+static const char* API_BASE_URL = "http://localhost:4005";
 
 // ============================================================================
 // Game Configuration
@@ -129,9 +129,20 @@ static const int DEFAULT_FRAME_DURATION_MS = 100;
 /**
  * @brief Enable development UI overlay
  *
- * When true, forces the dev UI on regardless of the server's devUi setting.
- * When false, follows the server's devUi value from the init payload.
+ * Client-local toggle — the server has no authority over dev-UI state.
+ * When true, the dev overlay renders regardless of any presentation hint.
+ * When false, the optional engine ClientHints override (if any) is honored.
  */
 static const bool ENABLE_DEV_UI = false;
+
+/**
+ * @brief Default instance code used to scope client-hints fetches.
+ *
+ * The C client fires GET /api/cyberia-client-hints/:INSTANCE_CODE at startup
+ * to discover optional per-instance presentation overrides. If the endpoint
+ * 404s or returns defaults, the client uses its built-in
+ * domain/presentation_defaults table — gameplay is unaffected.
+ */
+static const char* INSTANCE_CODE = "cyberia-main";
 
 #endif // CONFIG_H

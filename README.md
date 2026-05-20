@@ -8,9 +8,32 @@
 
 </div>
 
-Web client for [Cyberia](https://www.cyberiaonline.com), built with C, Raylib, and Emscripten (WebAssembly).
+**`cyberia-client`** is the presentation runtime for the Cyberia MMO extension on [Underpost Platform](../src/client/public/cyberia-docs/UNDERPOST-PLATFORM.md). Written in C, compiled to WebAssembly via Emscripten, rendered with Raylib in the browser, and delivered as an installable Progressive Web App through the Underpost Platform static + Workbox pipeline.
 
-Connects to the Go game server via WebSocket using a binary AOI protocol. Receives entity positions, directions, modes, colors, and item stacks. Renders entities using atlas sprite sheets (fetched from the Engine REST API) or solid RGBA colors when no sprites are available.
+It owns rendering, UI, input capture, prediction, reconciliation, interpolation, and client-side presentation defaults. It is **not** a world-simulation authority: that role belongs to [`cyberia-server`](../cyberia-server/README.md). Persistent content (atlases, object layers, asset metadata) is fetched directly from [`engine-cyberia`](../src/client/public/cyberia-docs/UNDERPOST-PLATFORM.md#engine-cyberia-nodejs--content-authority) over REST.
+
+### Roles in the Cyberia stack
+
+| Process | Role |
+|---|---|
+| `engine-cyberia` | content authority — persistence, maps, object layers, atlas metadata, optional client hints |
+| `cyberia-server` | authoritative simulation — tick, AOI replication, input command processing |
+| `cyberia-client` (this repo) | presentation runtime — render, UI, prediction, reconciliation, interpolation |
+
+### Startup order — sequential
+
+Startup is strictly sequential. The client is the last process to come up:
+
+1. Persistent backend (databases, engine-cyberia, static asset backend).
+2. cyberia-server (authoritative simulation).
+3. cyberia-client (this repo) — connects to cyberia-server WebSocket; fetches optional presentation overrides from engine-cyberia REST.
+
+Do not orchestrate these in parallel.
+
+### Wire and REST surface
+
+- **WebSocket binary** to `cyberia-server`: AOI snapshots (carry `tick` and `lastAcked` for reconciliation), typed input commands.
+- **REST** to `engine-cyberia`: atlas sprite sheets, asset blobs, dialogue lines, UI icons, optional `/api/cyberia-client-hints/:code` for per-instance presentation overrides. The client runs correctly without ever calling the client-hints endpoint.
 
 ## Prerequisites
 
@@ -69,31 +92,39 @@ make -f Web.mk clean && make -f Web.mk web
 make -f Web.mk serve-development   # http://localhost:8082
 ```
 
-Requires the Go game server running on `:8081` (see [cyberia-server](../cyberia-server/README.md)).
+Requires `cyberia-server` running on `:8081` (see [`cyberia-server/README.md`](../cyberia-server/README.md)).
 
-### Full local stack
+### Full local stack — strictly sequential
+
+Bring the three processes up in this order. Each one assumes the previous is already accepting connections.
 
 ```bash
-# Terminal 1: Engine (gRPC :50051 + REST :4005)
+# Terminal 1 — engine-cyberia (content authority)
+#   gRPC :50051, REST :4005
 cd /home/dd/engine && npm run dev
 
-# Terminal 2: Go server (WS :8081)
+# Terminal 2 — cyberia-server (authoritative simulation)
+#   WebSocket + REST on :8081
+#   Dials engine-cyberia gRPC at boot; exits on dial failure.
 cd /home/dd/engine/cyberia-server && go run main.go
 
-# Terminal 3: C/WASM client (HTTP :8082)
+# Terminal 3 — cyberia-client (presentation runtime, this repo)
+#   HTTP :8082 for the Emscripten dev server.
 cd /home/dd/engine/cyberia-client
 source ~/.emsdk/emsdk_env.sh
 make -f Web.mk serve-development
 ```
 
+Do not launch these in parallel; the server will fail to dial engine-cyberia gRPC, and the client will fail to connect to the server.
+
 ### Dev port summary
 
-| Component      | Port  | Protocol  |
-| -------------- | ----- | --------- |
-| Engine Express | 4005  | HTTP      |
-| Engine gRPC    | 50051 | gRPC      |
-| Go server      | 8081  | HTTP + WS |
-| WASM client    | 8082  | HTTP      |
+| Process | Port | Protocol |
+|---|---|---|
+| engine-cyberia REST | 4005 | HTTP |
+| engine-cyberia gRPC | 50051 | gRPC |
+| cyberia-server | 8081 | HTTP + WebSocket |
+| cyberia-client (dev) | 8082 | HTTP |
 
 ## Production
 

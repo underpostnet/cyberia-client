@@ -74,6 +74,9 @@ struct ObjectLayersManager {
 
     // Request ID counter for async fetches
     int next_request_id;
+
+    // Per-frame texture load budget — reset each frame via obj_layers_mgr_reset_frame_budget()
+    int tex_loads_this_frame;
 };
 
 // --- JSON Parsing Helpers ---
@@ -337,6 +340,13 @@ static AtlasTextureEntry* create_tex_entry(ObjectLayersManager* manager, const c
  * Start or poll the async loading of an atlas texture by item_key.
  * Returns the loaded Texture2D (id > 0 when ready), or empty (id == 0) when still loading.
  */
+/* PNG decode + GPU upload budget per render frame.  Bumped from 2 to 8:
+ * a single atlas is ~50ms on modest hardware, and 2/frame meant a 22-atlas
+ * fallback world took ~11 frames to settle.  Higher values are safe because
+ * the budget is now consulted BEFORE js_get_fetch_result so no data is
+ * dropped on the floor. */
+#define MAX_TEX_LOADS_PER_FRAME 8
+
 static Texture2D load_or_poll_atlas_texture(ObjectLayersManager* manager, const char* item_key) {
     if (!manager || !item_key || item_key[0] == '\0') return (Texture2D){0};
 
@@ -366,14 +376,24 @@ static Texture2D load_or_poll_atlas_texture(ObjectLayersManager* manager, const 
         return (Texture2D){0};
     }
 
-    // ATLAS_TEX_LOADING — poll result
+    // ATLAS_TEX_LOADING — poll result.
+    //
+    // The per-frame texture-decode budget is checked BEFORE consuming the
+    // JS-side fetch result. js_get_fetch_result is destructive (it removes
+    // the entry from FetchState.completed on retrieval), so if we call it
+    // and then discard the data, the texture is permanently lost. By
+    // skipping the call entirely when over budget, the data stays parked
+    // on the JS side until a later frame can decode it.
     if (entry->state == ATLAS_TEX_LOADING) {
+        if (manager->tex_loads_this_frame >= MAX_TEX_LOADS_PER_FRAME) {
+            return (Texture2D){0};
+        }
         int size = 0;
         unsigned char* data = js_get_fetch_result(entry->request_id, &size);
 
         if (data && size > 0) {
+            manager->tex_loads_this_frame++;
             Image image = LoadImageFromMemory(".png", data, size);
-
             if (image.data != NULL) {
                 entry->texture = LoadTextureFromImage(image);
                 UnloadImage(image);
@@ -412,6 +432,7 @@ ObjectLayersManager* create_object_layers_manager(TextureManager* texture_manage
 
     manager->texture_manager = texture_manager;
     manager->next_request_id = 1;
+    manager->tex_loads_this_frame = 0;
 
     return manager;
 }
@@ -568,6 +589,10 @@ Texture2D get_atlas_texture(ObjectLayersManager* manager, const char* item_key) 
 // ============================================================================
 // Cache Population from WebSocket Metadata
 // ============================================================================
+
+void obj_layers_mgr_reset_frame_budget(ObjectLayersManager* manager) {
+    if (manager) manager->tex_loads_this_frame = 0;
+}
 
 void obj_layers_mgr_schedule_atlas_fetch(ObjectLayersManager* manager, const char* item_key) {
     if (!manager || !item_key || item_key[0] == '\0') return;

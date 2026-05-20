@@ -20,6 +20,7 @@
 
 #include "entity_overhead_ui.h"
 
+#include "../domain/presentation_runtime.h"
 #include "game_state.h"
 #include "ui_icon.h"
 
@@ -232,16 +233,13 @@ void entity_overhead_ui_draw(
         cursor_px -= (float)(EOHUD_NAME_FONT_SIZE + EOHUD_NAME_PAD_Y * 2);
     }
 
-    /* ── Status icon (above nameplate) ────────────────────────────────── */
+    /* ── Status icon (above nameplate) ──────────────────────────────────
+     * Resolved against the client-owned presentation table. The server
+     * only ships the numeric status_icon u8 on the AOI wire; the icon
+     * stem comes from presentation_defaults + optional engine override. */
     if (p->status_icon != 0) {
-        const char* icon_id = NULL;
-        for (int i = 0; i < g_game_state.status_icon_count; i++) {
-            if (g_game_state.status_icons[i].id == p->status_icon) {
-                icon_id = g_game_state.status_icons[i].icon_id;
-                break;
-            }
-        }
-        if (icon_id) {
+        const char* icon_id = presentation_runtime_status_icon(p->status_icon);
+        if (icon_id && icon_id[0] != '\0') {
             cursor_px -= EOHUD_ICON_SPACING * cell_size;
             /* Scale icon with zoom: roughly 55% of one cell, clamped. */
             int icon_sz = (int)(0.55f * world_w * cell_size);

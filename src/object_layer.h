@@ -140,13 +140,11 @@ typedef struct {
 /**
  * @brief IPFS content identifiers for the consolidated atlas sprite sheet.
  *
- * Corresponds to the RenderSchema in the new ObjectLayer model:
  *   - cid:         IPFS CID for the consolidated atlas sprite sheet PNG
  *   - metadataCid: IPFS CID for the atlas sprite sheet metadata JSON
  *
- * These replace the legacy RenderFrames fields that previously lived directly
- * on the ObjectLayer. Frame-level animation data now lives on the
- * AtlasSpriteSheetData metadata fetched at runtime.
+ * Frame-level animation data lives on the AtlasSpriteSheetData metadata
+ * fetched at runtime.
  */
 typedef struct {
     char cid[MAX_CID_LENGTH];              /**< IPFS CID for the atlas PNG */

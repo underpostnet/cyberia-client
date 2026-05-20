@@ -7,7 +7,9 @@
 #include <raymath.h>
 #include <assert.h>
 
-// Global game state instance
+/* Global game state — gameplay/world subset only. Palette and status-icon
+ * visuals no longer live on this struct; the client resolves them via
+ * domain/presentation_runtime.h at each call site. */
 GameState g_game_state = {0};
 
 /**
@@ -30,102 +32,21 @@ static Direction direction_from_delta(float dx, float dy) {
     return DIRECTION_LEFT;                                 // (+157.5°, +π)
 }
 
-/**
- * Update position interpolation for all entities.
+/* game_state_update_interpolation — convenience wrapper.
  *
- * Main player: local prediction toward tap target + exponential blend
- * toward server position. This provides:
- *   - Immediate visual feedback on TAP (no latency gap)
- *   - Smooth server correction (no backward snaps)
- *   - Frame-rate independent behavior via exponential decay
- *
- * Other players / bots: linear interpolation between pos_prev and
- * pos_server over the interpolation_ms window (unchanged).
+ * Runs one fixed-timestep prediction step plus one remote-entity
+ * interpolation pass. main_loop drives prediction_step and
+ * interpolation_compute_view directly; this helper exists for callers
+ * that want both in one call.
  */
+#include "prediction/prediction.h"
+#include "interpolation/interpolation.h"
+
 void game_state_update_interpolation(float delta_time) {
-    const double current_time = GetTime();
-
-    // === Main player: prediction + exponential server correction ===
-    {
-        PlayerState* p = &g_game_state.player;
-        float speed = p->estimated_speed > 0.1f ? p->estimated_speed : 3.0f;
-
-        // Track frame movement for predicted direction
-        float frame_dx = 0.0f;
-        float frame_dy = 0.0f;
-
-        // Local prediction: move interp_pos toward tap target
-        if (p->has_tap_target) {
-            float dx = p->tap_target.x - p->base.interp_pos.x;
-            float dy = p->tap_target.y - p->base.interp_pos.y;
-            float dist = sqrtf(dx * dx + dy * dy);
-            if (dist > 0.05f) {
-                float step = speed * delta_time;
-                if (step > dist) step = dist;
-                float mx = (dx / dist) * step;
-                float my = (dy / dist) * step;
-                p->base.interp_pos.x += mx;
-                p->base.interp_pos.y += my;
-                frame_dx += mx;
-                frame_dy += my;
-            } else {
-                p->has_tap_target = false;
-            }
-        }
-
-        // Exponential blend toward server position (smooth correction)
-        float correction_rate = 8.0f;
-        float blend = 1.0f - expf(-correction_rate * delta_time);
-        float cx = (p->base.pos_server.x - p->base.interp_pos.x) * blend;
-        float cy = (p->base.pos_server.y - p->base.interp_pos.y) * blend;
-        p->base.interp_pos.x += cx;
-        p->base.interp_pos.y += cy;
-        frame_dx += cx;
-        frame_dy += cy;
-
-        // Predicted direction & mode from the frame's actual movement vector.
-        // This keeps the sprite facing the direction it visually moves,
-        // regardless of whether the server update has arrived yet.
-        Direction predicted_dir = direction_from_delta(frame_dx, frame_dy);
-        if (predicted_dir != DIRECTION_NONE) {
-            p->base.direction = predicted_dir;
-            p->base.mode = MODE_WALKING;
-        } else if (!p->has_tap_target) {
-            // Stopped predicting — let server direction/mode take over.
-            // Don't force IDLE here; the server already sends the right state.
-        }
-    }
-
-    // === Other players and bots: linear interpolation (unchanged) ===
-    float interp_factor = 1.0f;
-    if(g_game_state.interpolation_ms > 0)
-    {
-        interp_factor = (current_time - g_game_state.last_update_time) * 1000.0f / g_game_state.interpolation_ms;
-        if (interp_factor > 1.0f)
-        {
-            interp_factor = 1.0f;
-        }
-    }
-
-    // Interpolate other players
-    for (int i = 0; i < g_game_state.other_player_count; i++)
-    {
-        PlayerState* player = &g_game_state.other_players[i];
-        player->base.interp_pos.x = player->base.pos_prev.x +
-            (player->base.pos_server.x - player->base.pos_prev.x) * interp_factor;
-        player->base.interp_pos.y = player->base.pos_prev.y +
-            (player->base.pos_server.y - player->base.pos_prev.y) * interp_factor;
-    }
-
-    // Interpolate bots
-    for (int i = 0; i < g_game_state.bot_count; i++)
-    {
-        BotState* bot = &g_game_state.bots[i];
-        bot->base.interp_pos.x = bot->base.pos_prev.x +
-            (bot->base.pos_server.x - bot->base.pos_prev.x) * interp_factor;
-        bot->base.interp_pos.y = bot->base.pos_prev.y +
-            (bot->base.pos_server.y - bot->base.pos_prev.y) * interp_factor;
-    }
+    (void)delta_time;
+    prediction_step(TICK_DURATION_S);
+    g_game_state.player.base.interp_pos = prediction_self_position();
+    interpolation_compute_view();
 }
 
 PlayerState* game_state_find_player(const char* id) {

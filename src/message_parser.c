@@ -1,4 +1,5 @@
 #include "message_parser.h"
+#include "binary_aoi_decoder.h"
 #include "serial.h"
 #include "config.h"
 #include <cJSON.h>
@@ -6,6 +7,7 @@
 #include "js/interact_bridge.h"
 #include "notify_store.h"
 #include "js/services.h"
+#include "domain/presentation_defaults.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -18,7 +20,6 @@ static int message_parser_parse_init_data(const cJSON* json_root);
 static int message_parser_parse_aoi_update(const cJSON* json_root);
 static int message_parser_parse_skill_item_ids(const cJSON* json_root);
 static int message_parser_parse_error(const cJSON* json_root);
-static void message_parser_parse_colors(const cJSON* colors_json);
 static int message_parser_parse_visible_players(const cJSON* players_json);
 
 /* ============================================================================
@@ -101,56 +102,37 @@ bool message_parser_parse(const char* json_str) {
  * ============================================================================ */
 
 static int message_parser_parse_init_data(const cJSON* json_root) {
+    printf("[INIT_DATA] message_parser_parse_init_data entered\n");
     assert(json_root);
 
     // Get payload object
     cJSON* payload = serial_get_object(json_root, "payload");
     if (!payload) {
+        printf("[INIT_DATA] ERROR: 'payload' object missing from init_data\n");
         return -1;
     }
+    printf("[INIT_DATA] payload found, parsing grid/world config\n");
+
+    /* New session boundary — drop any stale prev-position snapshot from a
+     * prior server lifetime so post-restart UUIDs don't interpolate from
+     * origin. Cheap; safe to call on every init_data. */
+    binary_aoi_reset_prev_snapshots();
 
     // Parse grid configuration
     g_game_state.grid_w = serial_get_int_default(payload, "gridW", 100);
     g_game_state.grid_h = serial_get_int_default(payload, "gridH", 100);
     g_game_state.cell_size = serial_get_float_default(payload, "cellSize", 12.0f);
 
-    // Parse game settings
-    g_game_state.interpolation_ms = serial_get_int_default(payload, "interpolationMs", 200);
+    // Interpolation window — client-owned. Server stopped shipping
+    // interpolationMs in init_data; we read from the compile-time
+    // presentation default so the value matches the canonical render
+    // policy. This is the time the renderer takes to lerp from
+    // pos_prev → pos_server; at server snapshotRate=20Hz (50ms cadence),
+    // 100ms gives a one-snapshot interpolation buffer.
+    g_game_state.interpolation_ms = PRESENTATION_INTERPOLATION_MS_DEFAULT;
     g_game_state.aoi_radius = serial_get_float_default(payload, "aoiRadius", 15.0f);
 
-    // Parse graphics settings
-    g_game_state.camera.zoom = serial_get_float_default(payload, "cameraZoom", 1.0f); // TODO: This should not be set by the server!
-
-    // Parse UI settings
-    // ENABLE_DEV_UI=true forces dev UI on regardless of server; false defers to server
-    g_game_state.dev_ui = ENABLE_DEV_UI ? true : serial_get_bool_default(payload, "devUi", false);
     g_game_state.sum_stats_limit = serial_get_int_default(payload, "sumStatsLimit", 9999);
-
-    // Parse colors
-    cJSON* colors = serial_get_object(payload, "colors");
-    if (colors) {
-        message_parser_parse_colors(colors);
-    } else {
-        // Set default colors if not provided
-        g_game_state.colors.background = (Color){30, 30, 30, 255};
-        g_game_state.colors.grid_background = (Color){20, 20, 20, 255};
-        g_game_state.colors.floor_background = (Color){25, 25, 25, 255};
-        g_game_state.colors.foreground = (Color){200, 200, 200, 255};
-        g_game_state.colors.target = (Color){255, 0, 0, 255};
-        g_game_state.colors.path = (Color){255, 255, 0, 255};
-        g_game_state.colors.aoi = (Color){0, 255, 255, 100};
-        g_game_state.colors.grid = (Color){255, 0, 0, 80};  // Red with low alpha for visibility
-        g_game_state.colors.map_boundary = (Color){255, 255, 255, 255};  // White boundary
-        g_game_state.colors.player = (Color){0, 255, 0, 255};
-        g_game_state.colors.bot = (Color){255, 128, 0, 255};
-        g_game_state.colors.obstacle = (Color){128, 128, 128, 255};
-        g_game_state.colors.portal = (Color){255, 0, 255, 255};
-        g_game_state.colors.portal_inter_portal = (Color){0, 200, 200, 255};
-        g_game_state.colors.portal_inter_random = (Color){80, 130, 255, 255};
-        g_game_state.colors.portal_intra_random = (Color){220, 200, 50, 255};
-        g_game_state.colors.portal_intra_portal = (Color){200, 80, 200, 255};
-        g_game_state.colors.floor = (Color){100, 100, 100, 255};
-    }
 
     // Parse skill map: { "triggerItemId": ["logicEventId1", ...], ... }
     g_game_state.skill_map_count = 0;
@@ -166,7 +148,6 @@ static int message_parser_parse_init_data(const cJSON* json_root) {
             EntityTypeDefault* d = &g_game_state.entity_defaults[g_game_state.entity_defaults_count];
             memset(d, 0, sizeof(EntityTypeDefault));
             serial_get_string(etd, "entityType", d->entity_type, sizeof(d->entity_type));
-            serial_get_string(etd, "colorKey",   d->color_key,    sizeof(d->color_key));
 
             // Parse liveItemIds array
             cJSON* live_arr = cJSON_GetObjectItem(etd, "liveItemIds");
@@ -215,47 +196,6 @@ static int message_parser_parse_init_data(const cJSON* json_root) {
 
             if (d->entity_type[0] != '\0') g_game_state.entity_defaults_count++;
         }
-    }
-
-    // Parse status icon mapping (id → icon filename + border colour)
-    g_game_state.status_icon_count = 0;
-    cJSON* status_icons_json = cJSON_GetObjectItem(payload, "statusIcons");
-    if (status_icons_json && cJSON_IsArray(status_icons_json)) {
-        cJSON* si = NULL;
-        cJSON_ArrayForEach(si, status_icons_json) {
-            if (g_game_state.status_icon_count >= MAX_STATUS_ICONS) break;
-            StatusIconConfig* sc = &g_game_state.status_icons[g_game_state.status_icon_count];
-            memset(sc, 0, sizeof(StatusIconConfig));
-            cJSON* id_json = cJSON_GetObjectItem(si, "id");
-            if (id_json && cJSON_IsNumber(id_json)) {
-                sc->id = (uint8_t)id_json->valueint;
-            }
-            serial_get_string(si, "iconId", sc->icon_id, sizeof(sc->icon_id));
-            /* Parse borderColor sub-object {r,g,b,a} — server-driven. */
-            cJSON* bc = cJSON_GetObjectItem(si, "borderColor");
-            if (bc && cJSON_IsObject(bc)) {
-                cJSON* cr = cJSON_GetObjectItem(bc, "r");
-                cJSON* cg = cJSON_GetObjectItem(bc, "g");
-                cJSON* cb = cJSON_GetObjectItem(bc, "b");
-                cJSON* ca = cJSON_GetObjectItem(bc, "a");
-                sc->border_color = (Color){
-                    (unsigned char)(cr && cJSON_IsNumber(cr) ? cr->valueint : 100),
-                    (unsigned char)(cg && cJSON_IsNumber(cg) ? cg->valueint : 100),
-                    (unsigned char)(cb && cJSON_IsNumber(cb) ? cb->valueint : 100),
-                    (unsigned char)(ca && cJSON_IsNumber(ca) ? ca->valueint : 200),
-                };
-            } else {
-                sc->border_color = (Color){ 100, 100, 100, 200 };
-            }
-            g_game_state.status_icon_count++;
-        }
-    }
-    printf("[MSG_PARSER] Parsed %d status icons\n", g_game_state.status_icon_count);
-    for (int dbg = 0; dbg < g_game_state.status_icon_count; dbg++) {
-        StatusIconConfig* d = &g_game_state.status_icons[dbg];
-        printf("[MSG_PARSER]   icon[%d] id=%d iconId=%s border=(%d,%d,%d,%d)\n",
-               dbg, d->id, d->icon_id,
-               d->border_color.r, d->border_color.g, d->border_color.b, d->border_color.a);
     }
 
     if (skill_map_json && cJSON_IsObject(skill_map_json)) {
@@ -311,10 +251,17 @@ static int message_parser_parse_init_data(const cJSON* json_root) {
     }
 
     // Mark as initialized
+    printf("[INIT_DATA] all fields parsed — gridW=%d gridH=%d cellSize=%.1f aoiRadius=%.1f entityDefaults=%d skillMap=%d\n",
+           g_game_state.grid_w, g_game_state.grid_h, g_game_state.cell_size,
+           g_game_state.aoi_radius, g_game_state.entity_defaults_count, g_game_state.skill_map_count);
     g_game_state.init_received = true;
 
-    // Initialize camera if not already done // TODO: is client only, move to game_renser?
-    game_state_init_camera(800, 600); // Default screen size
+    // Set default zoom before camera init so it logs the correct value.
+    if (g_game_state.camera.zoom == 0.0f) {
+        game_state_set_camera_zoom(PRESENTATION_CAMERA_ZOOM_DEFAULT);
+    }
+    // Initialize camera using the actual viewport size so the offset is correct.
+    game_state_init_camera(GetScreenWidth(), GetScreenHeight());
     printf("  AOI Radius: %.1f, Dev UI: %s\n", g_game_state.aoi_radius, g_game_state.dev_ui ? "true" : "false");
 
     return 0;
@@ -697,85 +644,4 @@ static MessageType get_message_type(const cJSON* root) {
 
     printf("[MESSAGE_PARSER] warning type unknown\n");
     return MSG_TYPE_UNKNOWN;
-}
-
-static void message_parser_parse_colors(const cJSON* colors_json) {
-    assert(colors_json);
-
-    // Pre-initialise colours that may be absent from older DB documents
-    // so they still have a visible default when the server doesn't send them.
-    g_game_state.colors.self_border = (Color){ 220, 190, 60, 240 };
-
-    // Parse each color in the dictionary
-    cJSON* item = NULL;
-    cJSON_ArrayForEach(item, colors_json) {
-        const char* color_name = item->string;
-        if (!color_name) continue;
-
-        Color c;
-        if (serial_deserialize_color(item, &c) != 0) {
-            continue;
-        }
-
-        if (strcmp(color_name, "BACKGROUND") == 0) {
-            g_game_state.colors.background = c;
-        } else if (strcmp(color_name, "GRID_BACKGROUND") == 0) {
-            g_game_state.colors.grid_background = c;
-        } else if (strcmp(color_name, "FLOOR_BACKGROUND") == 0) {
-            g_game_state.colors.floor_background = c;
-        } else if (strcmp(color_name, "OBSTACLE") == 0) {
-            g_game_state.colors.obstacle = c;
-        } else if (strcmp(color_name, "FOREGROUND") == 0) {
-            g_game_state.colors.foreground = c;
-        } else if (strcmp(color_name, "PLAYER") == 0) {
-            g_game_state.colors.player = c;
-        } else if (strcmp(color_name, "OTHER_PLAYER") == 0) {
-            g_game_state.colors.other_player = c;
-        } else if (strcmp(color_name, "PATH") == 0) {
-            g_game_state.colors.path = c;
-        } else if (strcmp(color_name, "TARGET") == 0) {
-            g_game_state.colors.target = c;
-        } else if (strcmp(color_name, "AOI") == 0) {
-            g_game_state.colors.aoi = c;
-        } else if (strcmp(color_name, "DEBUG_TEXT") == 0) {
-            g_game_state.colors.debug_text = c;
-        } else if (strcmp(color_name, "ERROR_TEXT") == 0) {
-            g_game_state.colors.error_text = c;
-        } else if (strcmp(color_name, "PORTAL") == 0) {
-            g_game_state.colors.portal = c;
-        } else if (strcmp(color_name, "PORTAL_INTER_PORTAL") == 0) {
-            g_game_state.colors.portal_inter_portal = c;
-        } else if (strcmp(color_name, "PORTAL_INTER_RANDOM") == 0) {
-            g_game_state.colors.portal_inter_random = c;
-        } else if (strcmp(color_name, "PORTAL_INTRA_RANDOM") == 0) {
-            g_game_state.colors.portal_intra_random = c;
-        } else if (strcmp(color_name, "PORTAL_INTRA_PORTAL") == 0) {
-            g_game_state.colors.portal_intra_portal = c;
-        } else if (strcmp(color_name, "PORTAL_LABEL") == 0) {
-            g_game_state.colors.portal_label = c;
-        } else if (strcmp(color_name, "UI_TEXT") == 0) {
-            g_game_state.colors.ui_text = c;
-        } else if (strcmp(color_name, "MAP_BOUNDARY") == 0) {
-            g_game_state.colors.map_boundary = c;
-        } else if (strcmp(color_name, "MAP_GRID") == 0) {
-            g_game_state.colors.grid = c;
-        } else if (strcmp(color_name, "GRID") == 0) {
-            g_game_state.colors.grid = c;
-        } else if (strcmp(color_name, "FLOOR") == 0) {
-            g_game_state.colors.floor = c;
-        } else if (strcmp(color_name, "BOT") == 0) {
-            g_game_state.colors.bot = c;
-        } else if (strcmp(color_name, "GHOST") == 0) {
-            g_game_state.colors.ghost = c;
-        } else if (strcmp(color_name, "COIN") == 0) {
-            g_game_state.colors.coin = c;
-        } else if (strcmp(color_name, "WEAPON") == 0) {
-            g_game_state.colors.weapon = c;
-        } else if (strcmp(color_name, "SKILL") == 0) {
-            g_game_state.colors.skill = c;
-        } else if (strcmp(color_name, "SELF_BORDER") == 0) {
-            g_game_state.colors.self_border = c;
-        }
-
-    }
 }

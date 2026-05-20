@@ -1,6 +1,8 @@
 #include "game_render.h"
 
 #include "dialogue_data.h"
+#include "domain/presentation_defaults.h"
+#include "domain/presentation_runtime.h"
 #include "entity_render.h"
 #include "game_state.h"
 #include "object_layers_management.h"
@@ -209,7 +211,7 @@ void game_render_frame(void) {
     BeginDrawing();
 
     // Clear background - this ensures we always have SOME color on screen
-    ClearBackground(g_game_state.colors.background);
+    ClearBackground(presentation_runtime_palette("BACKGROUND"));
 
     // Begin camera mode for world rendering
     // CRITICAL: Always update camera offset before BeginMode2D to prevent flickering
@@ -244,6 +246,9 @@ void game_render_frame(void) {
 }
 
 void game_render_world(void) {
+    // Budget reset is now done in render_update() every frame, including during
+    // the splash screen phase.  No reset needed here.
+
     // Render world components in correct z-order
     // Note: Order is critical - each layer builds on the previous
 
@@ -269,7 +274,7 @@ void game_render_world(void) {
     // 6. Foregrounds (always on top of entities) - creates depth
     game_render_foregrounds();
 
-    // 7. Effects — click effects, legacy floating text, FCT pop-ups
+    // 7. Effects — click effects, floating text, FCT pop-ups
     game_render_click_effects();
     game_render_floating_texts();
     fct_draw();
@@ -339,7 +344,7 @@ void game_render_floors(void) {
 
     for (int i = 0; i < g_game_state.floor_count; i++) {
         WorldObject* floor = &g_game_state.floors[i];
-        Color floor_color = floor->color.a > 0 ? floor->color : g_game_state.colors.floor;
+        Color floor_color = presentation_runtime_palette("FLOOR");
 
         if (floor->object_layer_count > 0) {
             ObjectLayerState* layers[MAX_OBJECT_LAYERS];
@@ -364,7 +369,7 @@ void game_render_floors(void) {
                 floor_color
             );
         } else {
-            Color fallback = floor->color.a > 0 ? floor->color : g_game_state.colors.floor_background;
+            Color fallback = presentation_runtime_palette("FLOOR_BACKGROUND");
             Rectangle rect = {
                 floor->pos.x * cell_size,
                 floor->pos.y * cell_size,
@@ -382,7 +387,7 @@ void game_render_world_objects(void) {
     // Render portals
     for (int i = 0; i < g_game_state.portal_count; i++) {
         WorldObject* portal = &g_game_state.portals[i];
-        Color portal_color = portal->color.a > 0 ? portal->color : g_game_state.colors.portal;
+        Color portal_color = presentation_runtime_palette("PORTAL");
 
         if (portal->object_layer_count > 0) {
             ObjectLayerState* layers[MAX_OBJECT_LAYERS];
@@ -424,7 +429,7 @@ void game_render_foregrounds(void) {
     // Render foregrounds (always on top of entities)
     for (int i = 0; i < g_game_state.foreground_count; i++) {
         WorldObject* fg = &g_game_state.foregrounds[i];
-        Color fg_color = fg->color.a > 0 ? fg->color : g_game_state.colors.foreground;
+        Color fg_color = presentation_runtime_palette("FOREGROUND");
 
         if (fg->object_layer_count > 0) {
             ObjectLayerState* layers[MAX_OBJECT_LAYERS];
@@ -512,7 +517,7 @@ void game_render_entities(void) {
             .width = g_game_state.player.base.dims.x * cell_size,
             .height = g_game_state.player.base.dims.y * cell_size
         };
-        DrawRectangleRec(rect, g_game_state.colors.player);
+        DrawRectangleRec(rect, presentation_runtime_palette("PLAYER"));
 
         // Also draw other players as rectangles
         for (int i = 0; i < g_game_state.other_player_count; i++) {
@@ -523,7 +528,7 @@ void game_render_entities(void) {
                 player->base.dims.x * cell_size,
                 player->base.dims.y * cell_size
             };
-            DrawRectangleRec(other_rect, g_game_state.colors.other_player);
+            DrawRectangleRec(other_rect, presentation_runtime_palette("OTHER_PLAYER"));
         }
 
         // Draw bots as rectangles
@@ -676,7 +681,7 @@ void game_render_entities(void) {
         }
 
         if (obstacle && entity_id) {
-            Color obstacle_color = obstacle->color.a > 0 ? obstacle->color : g_game_state.colors.obstacle;
+            Color obstacle_color = presentation_runtime_palette("OBSTACLE");
 
             if (layers_count == 0) {
                 Rectangle rect = {
@@ -716,24 +721,10 @@ void game_render_entities(void) {
             // Compute the solid-colour fallback once — used both when layers_count==0
             // and passed into draw_entity_layers so it can use the same colour when
             // a texture fails to load instead of a generic gray rectangle.
-            // Priority: server-sent entity color (if alpha > 0) → entity_defaults colorKey → neutral gray.
-            Color ec = (entry->type == ENTITY_TYPE_BOT)
-                ? entry->data.bot->base.color
-                : entity_base->color;
-            Color entity_fallback_color;
-            if (ec.a > 0) {
-                entity_fallback_color = ec;
-            } else {
-                const EntityTypeDefault* etd = game_state_get_entity_default(entity_type_str);
-                entity_fallback_color = etd
-                    ? game_state_get_color_by_key(etd->color_key)
-                    : (Color){ 100, 100, 100, 200 };
-            }
+            Color entity_fallback_color = presentation_entity_fallback_color(entity_type_str);
 
             if (layers_count == 0) {
-                /* No object layers — draw a solid colored rectangle as fallback.
-                 * Use the entity's own color if the server sent one (alpha > 0),
-                 * otherwise fall back to the matching palette color. */
+                /* No object layers — draw a solid colored rectangle as fallback. */
                 Rectangle rect = {
                     entity_base->interp_pos.x * cell_size,
                     entity_base->interp_pos.y * cell_size,
@@ -835,7 +826,9 @@ void game_render_player_path(void) {
             cell_size,
             cell_size
         };
-        DrawRectangleRec(target_rect, g_game_state.colors.target);
+        /* TARGET is a debug-overlay colour; not part of the engine palette
+         * contract. Use a stable constant so it can't be overridden. */
+        DrawRectangleRec(target_rect, (Color){ 220, 220, 80, 180 });
     }
 
     // Render path
@@ -849,7 +842,8 @@ void game_render_player_path(void) {
             cell_size
         };
 
-        DrawRectangleRec(path_rect, g_game_state.colors.path);
+        /* PATH is a debug-overlay colour, see note above on TARGET. */
+        DrawRectangleRec(path_rect, (Color){ 100, 200, 100, 120 });
     }
 }
 
@@ -862,7 +856,8 @@ void game_render_aoi_circle(void) {
         (g_game_state.player.base.interp_pos.y + g_game_state.player.base.dims.y / 2.0f) * cell_size
     };
 
-    DrawCircleLines(center.x, center.y, aoi_radius, g_game_state.colors.aoi);
+    /* AOI ring is a debug overlay; fixed constant. */
+    DrawCircleLines(center.x, center.y, aoi_radius, (Color){ 180, 180, 255, 120 });
 }
 
 void game_render_ui(void) {
@@ -890,7 +885,7 @@ void game_render_ui(void) {
         inventory_modal_draw();
     }
 
-    // Dialogue modal (text-only, legacy entry point)
+    // Dialogue modal
     if (modal_dialogue_is_open()) {
         modal_dialogue_draw();
     }
@@ -928,7 +923,7 @@ void game_render_error_messages(void) {
             int x = (g_renderer.screen_width - text_width) / 2;
             int y = 100;
 
-            DrawText(g_error_banner.text, x, y, font_size, g_game_state.colors.error_text);
+            DrawText(g_error_banner.text, x, y, font_size, (Color){ 220, 80, 80, 255 });
         }
     }
 }

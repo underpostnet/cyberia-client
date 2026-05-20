@@ -195,4 +195,14 @@ void obj_layers_mgr_schedule_atlas_fetch(ObjectLayersManager* manager, const cha
 
 ObjectLayersManager* obj_layers_mgr_get(void);
 
+/**
+ * @brief Reset per-frame texture load budget. Call once at the start of each render frame.
+ *
+ * Prevents freeze caused by decoding many PNG atlas textures in a single frame
+ * when multiple fetch results arrive simultaneously on first game load.
+ *
+ * @param manager The object layers manager instance (may be NULL)
+ */
+void obj_layers_mgr_reset_frame_budget(ObjectLayersManager* manager);
+
 #endif // OBJECT_LAYERS_MANAGEMENT_H
