@@ -136,13 +136,18 @@ static const int DEFAULT_FRAME_DURATION_MS = 100;
 static const bool ENABLE_DEV_UI = false;
 
 /**
- * @brief Default instance code used to scope client-hints fetches.
+ * @brief Lookup code for the presentation client-hints endpoint.
  *
- * The C client fires GET /api/cyberia-client-hints/:INSTANCE_CODE at startup
- * to discover optional per-instance presentation overrides. If the endpoint
- * 404s or returns defaults, the client uses its built-in
- * domain/presentation_defaults table — gameplay is unaffected.
+ * The C client fires GET /api/cyberia-client-hints/:CYBERIA_CLIENT_HINTS_CODE
+ * at startup to discover optional per-deployment presentation overrides
+ * (palette, status-icon visuals, camera tunings). If the endpoint 404s or
+ * returns defaults, the client uses its built-in domain/presentation_defaults
+ * table — gameplay is unaffected.
+ *
+ * NOTE: this code is purely a *presentation override key*. The C client
+ * never carries an instance / world / server identifier; everything that
+ * scopes the simulation arrives dynamically via the WebSocket handshake.
  */
-static const char* INSTANCE_CODE = "cyberia-main";
+static const char* CYBERIA_CLIENT_HINTS_CODE = "cyberia-main";
 
 #endif // CONFIG_H

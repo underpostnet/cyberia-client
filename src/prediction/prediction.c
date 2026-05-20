@@ -18,11 +18,19 @@ typedef struct {
 } input_ring_t;
 
 static struct {
-    Vector2       predicted_pos;     /* what we render for the local player */
+    Vector2       predicted_pos;     /* per-tick projection (discrete) */
     Vector2       authoritative_pos; /* latest server snapshot self position */
+    Vector2       display_pos;       /* render-frame smoothed value */
     input_ring_t  unacked;
     bool          initialised;
 } g_pred = {0};
+
+/* Exponential-smoothing time constant for display_pos chasing predicted_pos.
+ * blend = 1 - exp(-lambda * dt). At 60 FPS with lambda=18 the per-frame
+ * blend is ~0.26, so a 0.1-cell sim-tick step shows ~0.026 cells / frame
+ * — smooth enough to remove the per-tick stepping while still catching up
+ * within ~80 ms after a reconcile snap. */
+#define PREDICTION_DISPLAY_LAMBDA 18.0f
 
 static void ring_clear(input_ring_t* r) {
     r->head = 0;
@@ -79,6 +87,7 @@ void prediction_init(void) {
 void prediction_reset(Vector2 authoritative_pos) {
     g_pred.authoritative_pos = authoritative_pos;
     g_pred.predicted_pos     = authoritative_pos;
+    g_pred.display_pos       = authoritative_pos;
     ring_clear(&g_pred.unacked);
 }
 
@@ -113,6 +122,21 @@ void prediction_reconcile(void) {
     g_pred.predicted_pos = rebased;
 }
 
+void prediction_display_step(double frame_dt) {
+    if (frame_dt <= 0.0) return;
+    float blend = 1.0f - expf(-PREDICTION_DISPLAY_LAMBDA * (float)frame_dt);
+    if (blend < 0.0f) blend = 0.0f;
+    if (blend > 1.0f) blend = 1.0f;
+    g_pred.display_pos.x += (g_pred.predicted_pos.x - g_pred.display_pos.x) * blend;
+    g_pred.display_pos.y += (g_pred.predicted_pos.y - g_pred.display_pos.y) * blend;
+    /* Snap when the gap is sub-pixel — keeps idle position perfectly stable
+     * and avoids endless micro-blends from float noise. */
+    if (fabsf(g_pred.predicted_pos.x - g_pred.display_pos.x) < 0.001f)
+        g_pred.display_pos.x = g_pred.predicted_pos.x;
+    if (fabsf(g_pred.predicted_pos.y - g_pred.display_pos.y) < 0.001f)
+        g_pred.display_pos.y = g_pred.predicted_pos.y;
+}
+
 Vector2 prediction_self_position(void) {
-    return g_pred.predicted_pos;
+    return g_pred.display_pos;
 }

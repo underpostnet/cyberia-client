@@ -67,7 +67,20 @@ void prediction_step(double tick_dt);
  *  Called once per arriving snapshot. */
 void prediction_reconcile(void);
 
-/** Current predicted self position. Renderer-facing accessor. */
+/** Advance the render-time display position one render frame toward the
+ *  current predicted position using exponential smoothing. Decouples the
+ *  visible character from the discrete per-tick sim_step so reconcile
+ *  snaps and tick-boundary teleports never appear abruptly on screen.
+ *
+ *  Call once per render frame from main_loop, AFTER prediction_step has
+ *  finished draining the fixed-timestep accumulator. dt is the wall-clock
+ *  frame delta in seconds (GetFrameTime()). */
+void prediction_display_step(double frame_dt);
+
+/** Render-frame self position — exponentially smoothed display value.
+ *  Equivalent to the raw predicted position once the smoother has caught
+ *  up; differs only on the few frames following a reconcile or a fresh
+ *  tap, which is exactly where the abrupt snap used to be visible. */
 Vector2 prediction_self_position(void);
 
 #endif /* CYBERIA_PREDICTION_H */

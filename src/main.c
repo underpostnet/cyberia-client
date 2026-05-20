@@ -137,7 +137,12 @@ void main_loop(void) {
         g_sim_accumulator -= TICK_DURATION_S;
     }
 
-    /* Publish the predicted self position as the renderable view-model. */
+    /* Advance the render-frame smoothed display position and publish it as
+     * the main-player view-model. Without this step, the renderer reads
+     * the raw per-tick predicted position and the player jumps in discrete
+     * sim-tick increments — visible as abrupt animation, especially right
+     * after a reconcile rebases on a fresh snapshot. */
+    prediction_display_step((double)frame_dt);
     g_game_state.player.base.interp_pos = prediction_self_position();
 
     /* 4. Remote entity interpolation. */
@@ -168,7 +173,7 @@ int main(void) {
     // the client renders with built-in defaults from frame 0; if the engine
     // returns overrides, they apply once the fetch completes. The Go
     // simulation server never sees this request.
-    presentation_runtime_start_fetch(API_BASE_URL, INSTANCE_CODE);
+    presentation_runtime_start_fetch(API_BASE_URL, CYBERIA_CLIENT_HINTS_CODE);
 
     // Initialise prediction before the WS connects so the first snapshot
     // arriving on the callback has somewhere to land.

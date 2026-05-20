@@ -120,14 +120,6 @@ static void on_websocket_message(const uint8_t* data, uint32_t length, bool is_t
         free(msg);
     } else {
         /* Binary AOI snapshot. binary_aoi_process owns its own bounds. */
-        /* Diagnostic: heartbeat every 60 binary frames (~3 s at 20 Hz) so
-         * we can confirm AOI messages are arriving past the first one. */
-        static unsigned int bin_count = 0;
-        bin_count++;
-        if (bin_count <= 3 || (bin_count % 60) == 0) {
-            printf("[WS-BIN] frame #%u: %u bytes, type=0x%02x\n",
-                   bin_count, length, data[0]);
-        }
         if (0 != binary_aoi_process(data, (size_t)length)) {
             fprintf(stderr, "[ERROR] Failed to process binary AOI message\n");
         }
