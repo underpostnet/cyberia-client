@@ -139,10 +139,12 @@ static const bool ENABLE_DEV_UI = false;
  * @brief Lookup code for the presentation client-hints endpoint.
  *
  * The C client fires GET /api/cyberia-client-hints/:CYBERIA_CLIENT_HINTS_CODE
- * at startup to discover optional per-deployment presentation overrides
- * (palette, status-icon visuals, camera tunings). If the endpoint 404s or
- * returns defaults, the client uses its built-in domain/presentation_defaults
- * table — gameplay is unaffected.
+ * at startup to discover the full presentation surface (palette, entity
+ * colour keys, status-icon visuals, camera + cell tunings). The endpoint
+ * is the *only* source of those values — the client carries no compile-time
+ * palette. Until the fetch settles the runtime returns a tiny inline
+ * bootstrap fallback so the splash screen has something to draw. Gameplay
+ * is never affected by this fetch.
  *
  * NOTE: this code is purely a *presentation override key*. The C client
  * never carries an instance / world / server identifier; everything that

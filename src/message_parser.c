@@ -7,7 +7,7 @@
 #include "js/interact_bridge.h"
 #include "notify_store.h"
 #include "js/services.h"
-#include "domain/presentation_defaults.h"
+#include "domain/presentation_runtime.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -118,18 +118,12 @@ static int message_parser_parse_init_data(const cJSON* json_root) {
      * origin. Cheap; safe to call on every init_data. */
     binary_aoi_reset_prev_snapshots();
 
-    // Parse grid configuration
+    // Parse grid configuration — gameplay only (simulation contract).
+    // cellSize / interpolationMs / cameraZoom are NOT here; the cyberia-server
+    // never sends presentation. They are hydrated by presentation_runtime
+    // once the /api/cyberia-client-hints fetch settles.
     g_game_state.grid_w = serial_get_int_default(payload, "gridW", 100);
     g_game_state.grid_h = serial_get_int_default(payload, "gridH", 100);
-    g_game_state.cell_size = serial_get_float_default(payload, "cellSize", 12.0f);
-
-    // Interpolation window — client-owned. Server stopped shipping
-    // interpolationMs in init_data; we read from the compile-time
-    // presentation default so the value matches the canonical render
-    // policy. This is the time the renderer takes to lerp from
-    // pos_prev → pos_server; at server snapshotRate=20Hz (50ms cadence),
-    // 100ms gives a one-snapshot interpolation buffer.
-    g_game_state.interpolation_ms = PRESENTATION_INTERPOLATION_MS_DEFAULT;
     g_game_state.aoi_radius = serial_get_float_default(payload, "aoiRadius", 15.0f);
 
     g_game_state.sum_stats_limit = serial_get_int_default(payload, "sumStatsLimit", 9999);
@@ -251,18 +245,21 @@ static int message_parser_parse_init_data(const cJSON* json_root) {
     }
 
     // Mark as initialized
-    printf("[INIT_DATA] all fields parsed — gridW=%d gridH=%d cellSize=%.1f aoiRadius=%.1f entityDefaults=%d skillMap=%d\n",
-           g_game_state.grid_w, g_game_state.grid_h, g_game_state.cell_size,
+    printf("[INIT_DATA] all fields parsed — gridW=%d gridH=%d aoiRadius=%.1f entityDefaults=%d skillMap=%d\n",
+           g_game_state.grid_w, g_game_state.grid_h,
            g_game_state.aoi_radius, g_game_state.entity_defaults_count, g_game_state.skill_map_count);
     g_game_state.init_received = true;
 
-    // Set default zoom before camera init so it logs the correct value.
+    // Camera zoom comes from the presentation runtime — either the bootstrap
+    // 1.0 value or, when the /api/cyberia-client-hints fetch has already
+    // settled, the per-deployment override. Read once here so the camera
+    // initialises with the right zoom regardless of fetch order.
     if (g_game_state.camera.zoom == 0.0f) {
-        game_state_set_camera_zoom(PRESENTATION_CAMERA_ZOOM_DEFAULT);
+        game_state_set_camera_zoom(presentation_runtime_camera_zoom());
     }
     // Initialize camera using the actual viewport size so the offset is correct.
     game_state_init_camera(GetScreenWidth(), GetScreenHeight());
-    printf("  AOI Radius: %.1f, Dev UI: %s\n", g_game_state.aoi_radius, g_game_state.dev_ui ? "true" : "false");
+    printf("  AOI Radius: %.1f\n", g_game_state.aoi_radius);
 
     return 0;
 }

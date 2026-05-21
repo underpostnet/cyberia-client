@@ -94,10 +94,11 @@ typedef struct {
     int object_layer_count;
 } WorldObject;
 
-/* GameColors / palette removed. The client owns its palette via
- * domain/presentation_defaults.{c,h}; per-instance overrides come from
- * /api/cyberia-client-hints via domain/presentation_runtime.{c,h}.
- * Render code calls presentation_runtime_palette("KEY") at each use site.
+/* GameColors / palette removed. The C client carries no compile-time
+ * palette — every presentation value comes from the engine REST endpoint
+ * /api/cyberia-client-hints/:CYBERIA_CLIENT_HINTS_CODE and is hydrated by
+ * domain/presentation_runtime.{c,h}. Render code calls
+ * presentation_runtime_palette("KEY") at each use site.
  */
 
 // Equipment rules received from metadata message (mirrors Go EquipmentRulesConfig).
@@ -109,8 +110,9 @@ typedef struct {
 } EquipmentRules;
 
 // Per-entity-type gameplay defaults received in init_data payload.
-// Presentation-only fields (color_key) are NOT part of this contract any
-// more; client resolves visual fallbacks via presentation_entity_fallback_color.
+// Strictly simulation; presentation (colour keys, status-icon visuals)
+// arrives separately through /api/cyberia-client-hints and the helpers
+// in domain/presentation_runtime.
 typedef struct {
     char entity_type[32];
     char live_item_ids[MAX_DEFAULT_ITEM_IDS][128];
@@ -124,8 +126,7 @@ typedef struct {
 /* StatusIconConfig removed. The numeric status_icon u8 still rides on
  * the AOI wire; presentation_runtime_status_icon(u8) and
  * presentation_runtime_status_border(u8) resolve the icon stem and
- * border colour client-side, falling back to the compile-time defaults
- * in domain/presentation_defaults.{c,h}. */
+ * border colour from the engine hints fetch. */
 
 // Skill map entry received from init_data: one trigger item → N skill definitions.
 // Each entry represents a single logicEventId with its own description and summoned entity.

@@ -1,7 +1,7 @@
 #include "game_render.h"
 
 #include "dialogue_data.h"
-#include "domain/presentation_defaults.h"
+#include "domain/presentation_runtime.h"
 #include "domain/presentation_runtime.h"
 #include "entity_render.h"
 #include "game_state.h"
@@ -721,7 +721,7 @@ void game_render_entities(void) {
             // Compute the solid-colour fallback once — used both when layers_count==0
             // and passed into draw_entity_layers so it can use the same colour when
             // a texture fails to load instead of a generic gray rectangle.
-            Color entity_fallback_color = presentation_entity_fallback_color(entity_type_str);
+            Color entity_fallback_color = presentation_runtime_entity_fallback_color(entity_type_str);
 
             if (layers_count == 0) {
                 /* No object layers — draw a solid colored rectangle as fallback. */

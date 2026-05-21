@@ -236,7 +236,7 @@ void entity_overhead_ui_draw(
     /* ── Status icon (above nameplate) ──────────────────────────────────
      * Resolved against the client-owned presentation table. The server
      * only ships the numeric status_icon u8 on the AOI wire; the icon
-     * stem comes from presentation_defaults + optional engine override. */
+     * stem comes from the presentation runtime hints fetch. */
     if (p->status_icon != 0) {
         const char* icon_id = presentation_runtime_status_icon(p->status_icon);
         if (icon_id && icon_id[0] != '\0') {

@@ -13,7 +13,6 @@
 #include "interaction_bubble.h"
 
 #include "network/client.h"
-#include "domain/presentation_defaults.h"
 #include "domain/presentation_runtime.h"
 #include "dialogue_data.h"
 #include "entity_render.h"
@@ -179,7 +178,7 @@ static void scan_entity(const char* entity_id, const EntityState* base,
     /* Resolve the solid-colour fallback from the client-owned presentation
      * table by entity_type. The server does not ship colour data. */
     const char* etype = is_player ? "player" : "bot";
-    slot->fallback_color = presentation_entity_fallback_color(etype);
+    slot->fallback_color = presentation_runtime_entity_fallback_color(etype);
 
     /* Always snapshot current layers (dead or alive) into layers[]. */
     snapshot_layers(slot, base->object_layers, base->object_layer_count,
