@@ -8,6 +8,7 @@
 
 #include "dialogue_data.h"
 #include "config.h"
+#include "helper.h"
 #include <cJSON.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -31,18 +32,10 @@ typedef struct DlgCacheEntry {
 static DlgCacheEntry* s_buckets[DLG_HASH_SIZE];
 static int            s_next_req_id = 20000; /* offset to avoid collisions with atlas IDs */
 
-/* ── Hash helper ─────────────────────────────────────────────────────── */
-
-static unsigned long hash_str(const char* s) {
-    unsigned long h = 5381;
-    while (*s) h = ((h << 5) + h) + (unsigned char)*s++;
-    return h;
-}
-
 /* ── Lookup ──────────────────────────────────────────────────────────── */
 
 static DlgCacheEntry* lookup(const char* item_id) {
-    unsigned long idx = hash_str(item_id) % DLG_HASH_SIZE;
+    unsigned long idx = hash_string(item_id) % DLG_HASH_SIZE;
     DlgCacheEntry* e = s_buckets[idx];
     while (e) {
         if (strcmp(e->data.item_id, item_id) == 0) return e;
@@ -153,7 +146,7 @@ void dialogue_data_request(const char* item_id) {
     entry->data.state = DLG_DATA_FETCHING;
     entry->request_id = s_next_req_id++;
 
-    unsigned long idx = hash_str(item_id) % DLG_HASH_SIZE;
+    unsigned long idx = hash_string(item_id) % DLG_HASH_SIZE;
     entry->next = s_buckets[idx];
     s_buckets[idx] = entry;
 

@@ -12,6 +12,7 @@
 #include "ui_icon.h"
 
 #include "config.h"
+#include "helper.h"
 #include "js/services.h"
 
 #include <assert.h>
@@ -44,18 +45,10 @@ static int        s_next_req_id = 30000; /* offset to avoid collision with
                                             TextureManager (1+) and
                                             dialogue_data (20000+) */
 
-/* ── Hash helper ─────────────────────────────────────────────────────── */
-
-static unsigned long hash_str(const char* s) {
-    unsigned long h = 5381;
-    while (*s) h = ((h << 5) + h) + (unsigned char)*s++;
-    return h;
-}
-
 /* ── Internal lookup / create ────────────────────────────────────────── */
 
 static IconEntry* lookup(const char* icon_id) {
-    unsigned long idx = hash_str(icon_id) % ICON_HASH_SIZE;
+    unsigned long idx = hash_string(icon_id) % ICON_HASH_SIZE;
     IconEntry* e = s_buckets[idx];
     while (e) {
         if (strcmp(e->icon_id, icon_id) == 0) return e;
@@ -76,7 +69,7 @@ static IconEntry* create_and_fetch(const char* icon_id) {
     e->request_id = s_next_req_id++;
 
     /* Insert into hash table. */
-    unsigned long idx = hash_str(icon_id) % ICON_HASH_SIZE;
+    unsigned long idx = hash_string(icon_id) % ICON_HASH_SIZE;
     e->next        = s_buckets[idx];
     s_buckets[idx] = e;
 
