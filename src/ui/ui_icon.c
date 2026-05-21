@@ -14,6 +14,7 @@
 #include "config.h"
 #include "helper.h"
 #include "js/services.h"
+#include "network/engine_client.h"
 
 #include <assert.h>
 #include <math.h>
@@ -36,7 +37,7 @@ typedef struct IconEntry {
     char*             icon_id;   /* filename stem, e.g. "skull" */
     Texture2D         texture;
     IconState         state;
-    int               request_id;
+    uint32_t          request_id;
     struct IconEntry* next;
 } IconEntry;
 
@@ -45,7 +46,39 @@ static int        s_next_req_id = 30000; /* offset to avoid collision with
                                             TextureManager (1+) and
                                             dialogue_data (20000+) */
 
-/* ── Internal lookup / create ────────────────────────────────────────── */
+static void on_icon_fetched(uint32_t request_id, FetchState state, void* data, size_t size) {
+    /* Locate entry by request_id across all hash buckets. */
+    IconEntry* e = NULL;
+    for (int i = 0; NULL == e && i < ICON_HASH_SIZE; i++) {
+        for (IconEntry* it = s_buckets[i]; it; it = it->next) {
+            if (it->request_id == request_id) { e = it; break; }
+        }
+    }
+
+    if (NULL == e) { free(data); return; }
+
+    if (FETCH_STATE_READY != state) {
+        e->state = ICON_ERROR;
+        fprintf(stderr, "[UI_ICON] Fetch error for '%s'\n", e->icon_id);
+        free(data);
+        return;
+    }
+
+    Image img = LoadImageFromMemory(".png", (unsigned char*)data, (int)size);
+    free(data);
+
+    if (NULL == img.data) {
+        e->state = ICON_ERROR;
+        fprintf(stderr, "[UI_ICON] Image decode failed for '%s'\n", e->icon_id);
+        return;
+    }
+
+    e->texture = LoadTextureFromImage(img);
+    UnloadImage(img);
+    e->state = ICON_READY;
+    printf("[UI_ICON] Loaded '%s' (%dx%d)\n",
+           e->icon_id, e->texture.width, e->texture.height);
+}
 
 static IconEntry* lookup(const char* icon_id) {
     unsigned long idx = hash_string(icon_id) % ICON_HASH_SIZE;
@@ -59,14 +92,10 @@ static IconEntry* lookup(const char* icon_id) {
 
 /** Create a new entry and kick off the async HTTP fetch. */
 static IconEntry* create_and_fetch(const char* icon_id) {
+    assert(icon_id);
+
     IconEntry* e = (IconEntry*)calloc(1, sizeof(IconEntry));
-    if (!e) return NULL;
-
     e->icon_id = strdup(icon_id);
-    if (!e->icon_id) { free(e); return NULL; }
-
-    e->state      = ICON_LOADING;
-    e->request_id = s_next_req_id++;
 
     /* Insert into hash table. */
     unsigned long idx = hash_string(icon_id) % ICON_HASH_SIZE;
@@ -76,9 +105,10 @@ static IconEntry* create_and_fetch(const char* icon_id) {
     /* Start the async fetch:  {API_BASE_URL}/assets/ui-icons/{icon_id}.png */
     char url[512];
     snprintf(url, sizeof(url), "%s/assets/ui-icons/%s.png", API_BASE_URL, icon_id);
-    js_start_fetch_binary(url, e->request_id);
+    e->request_id = fetch_request_start(url, on_icon_fetched);
+    e->state      = ICON_LOADING;
 
-    printf("[UI_ICON] Fetch started for '%s' (req %d)\n", icon_id, e->request_id);
+    printf("[UI_ICON] Fetch started for '%s' (req %u)\n", icon_id, e->request_id);
     return e;
 }
 

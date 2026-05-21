@@ -13,6 +13,7 @@
 #include "ui/modal_player.h"
 #include "ui/tap_effect.h"
 #include "ui/ui_icon.h"
+#include "network/engine_client.h"
 
 #include <assert.h>
 #include <raylib.h>
@@ -91,8 +92,8 @@ void render_update(float delta_time) {
     }
 
     // Poll async dialogue data fetches and rebuild bubble column
+    fetch_request_update();
     dialogue_data_poll();
-    ui_icon_poll();
     interaction_bubble_update();
 
     // Update dev UI
