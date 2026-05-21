@@ -1,6 +1,6 @@
 #include "prediction.h"
-#include "../network/session.h"
-#include "../game_state.h"
+#include "network/session.h"
+#include "game_state.h"
 
 #include <math.h>
 #include <string.h>

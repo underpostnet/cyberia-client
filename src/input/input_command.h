@@ -27,7 +27,7 @@
 
 #include <stdbool.h>
 #include <stdint.h>
-#include "../domain/tick.h"
+#include "domain/tick.h"
 
 /** Kind values mirror the binary uplink opcodes used by the WS wire format,
  *  so log lines, traces, and uplink encoders can refer to one set of

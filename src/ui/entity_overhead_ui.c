@@ -20,7 +20,7 @@
 
 #include "entity_overhead_ui.h"
 
-#include "../domain/presentation_runtime.h"
+#include "domain/presentation_runtime.h"
 #include "game_state.h"
 #include "ui_icon.h"
 

@@ -41,8 +41,8 @@
 
 #include <stdbool.h>
 #include <raylib.h>
-#include "../domain/tick.h"
-#include "../input/input_command.h"
+#include "domain/tick.h"
+#include "input/input_command.h"
 
 /** Initialise the prediction state. Call once at startup, before the first
  *  snapshot. Idempotent. */

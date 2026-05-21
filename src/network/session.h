@@ -28,7 +28,7 @@
 #define CYBERIA_NETWORK_SESSION_H
 
 #include <stdint.h>
-#include "../domain/tick.h"
+#include "domain/tick.h"
 
 /** Called by binary_aoi_decoder.c whenever a v2 snapshot header is parsed.
  *  Updates last_server_tick and last_acked_input_sequence, and feeds the

@@ -1,5 +1,5 @@
 #include "interpolation.h"
-#include "../game_state.h"
+#include "game_state.h"
 
 #include <raylib.h>
 

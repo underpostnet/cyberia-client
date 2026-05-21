@@ -1,6 +1,6 @@
 #include "presentation_runtime.h"
 #include "presentation_defaults.h"
-#include "../js/services.h"
+#include "js/services.h"
 
 #include <cJSON.h>
 #include <raylib.h>
