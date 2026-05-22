@@ -323,6 +323,9 @@ void draw_entity_layers(
     }
 
     if (render_count == 0) {
+        // Entity has active item IDs but no atlas data loaded yet —
+        // draw the fallback color so the entity is visible while textures load.
+        DrawRectangleRec(dest_rec, fallback_color);
         return;
     }
 

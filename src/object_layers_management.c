@@ -14,6 +14,14 @@
 
 #define HASH_TABLE_SIZE 256
 
+// -----------------------------------------------------------------------
+// Singleton for metadata/PNG fetch callbacks
+// -----------------------------------------------------------------------
+// The engine_client callback signature doesn't carry user context, so
+// on_atlas_meta_fetched finds the manager via this module-global.
+// Defined at the top so every function can reference it.
+ObjectLayersManager* g_olm_singleton = NULL;
+
 // --- Data Structures ---
 
 typedef struct ObjectLayerEntry {
@@ -55,7 +63,6 @@ typedef enum {
 
 typedef struct AtlasMetaFetchEntry {
     char* item_key;
-    uint32_t request_id;
     AtlasMetaState state;
     struct AtlasMetaFetchEntry* next;
 } AtlasMetaFetchEntry;
@@ -72,9 +79,6 @@ struct ObjectLayersManager {
 
     // Atlas metadata REST fetch state (keyed by item_key)
     AtlasMetaFetchEntry* meta_buckets[HASH_TABLE_SIZE];
-
-    // Request ID counter for async fetches
-    uint32_t next_request_id;
 
     // Per-frame texture load budget — reset each frame via obj_layers_mgr_reset_frame_budget()
     int tex_loads_this_frame;
@@ -118,12 +122,6 @@ static void parse_stats(cJSON* stats_json, Stats* stats) {
     stats->utility = json_get_int_safe(stats_json, "utility", 0);
 }
 
-/**
- * Parse the new Render schema (IPFS CIDs for the atlas sprite sheet).
- *
- * Expected JSON:
- *   { "cid": "Qm...", "metadataCid": "Qm..." }
- */
 static void parse_render(cJSON* render_json, Render* render) {
     assert(render_json && render);
 
@@ -139,12 +137,6 @@ static void parse_render(cJSON* render_json, Render* render) {
     free(metadata_cid);
 }
 
-/**
- * Parse the Ledger schema (blockchain protocol metadata).
- *
- * Expected JSON:
- *   { "type": "ERC20" | "ERC721" | "OFF_CHAIN", "address": "0x..." }
- */
 static void parse_ledger(cJSON* ledger_json, Ledger* ledger) {
     assert(ledger_json && ledger);
 
@@ -186,12 +178,6 @@ static void parse_object_layer_data(cJSON* data_json, ObjectLayerData* data) {
 
 // --- Atlas Sprite Sheet JSON Parsing ---
 
-/**
- * Parse a single direction's frame metadata array from JSON into DirectionFrameData.
- *
- * Each element in the JSON array is a FrameMetadataSchema object:
- *   { "x": N, "y": N, "width": N, "height": N, "frameIndex": N }
- */
 static void parse_direction_frame_data(cJSON* array_json, DirectionFrameData* dfd) {
     assert(dfd);
     dfd->count = 0;
@@ -222,7 +208,6 @@ static void cache_object_layer(ObjectLayersManager* manager, const char* item_id
 
     unsigned long index = hash_string(item_id) % HASH_TABLE_SIZE;
 
-    // Check if exists
     ObjectLayerEntry* entry = manager->layer_buckets[index];
     while (entry) {
         if (strcmp(entry->key, item_id) == 0) {
@@ -233,7 +218,6 @@ static void cache_object_layer(ObjectLayersManager* manager, const char* item_id
         entry = entry->next;
     }
 
-    // Create new
     ObjectLayerEntry* new_entry = (ObjectLayerEntry*)malloc(sizeof(ObjectLayerEntry));
     if (!new_entry) return;
 
@@ -265,7 +249,6 @@ static void cache_atlas_data(ObjectLayersManager* manager, const char* item_key,
 
     unsigned long index = hash_string(item_key) % HASH_TABLE_SIZE;
 
-    // Check if exists
     AtlasEntry* entry = manager->atlas_buckets[index];
     while (entry) {
         if (strcmp(entry->key, item_key) == 0) {
@@ -276,7 +259,6 @@ static void cache_atlas_data(ObjectLayersManager* manager, const char* item_key,
         entry = entry->next;
     }
 
-    // Create new
     AtlasEntry* new_entry = (AtlasEntry*)malloc(sizeof(AtlasEntry));
     if (!new_entry) return;
 
@@ -337,16 +319,19 @@ static AtlasTextureEntry* create_tex_entry(ObjectLayersManager* manager, const c
     return entry;
 }
 
-/**
- * Start or poll the async loading of an atlas texture by item_key.
- * Returns the loaded Texture2D (id > 0 when ready), or empty (id == 0) when still loading.
+/*
+ * Texture (PNG blob) fetch — uses direct js_start_fetch_binary / js_get_fetch_result
+ * with a HIGH request ID offset (500000+) to avoid collisions with the
+ * engine_client callback pipeline (which uses IDs starting at 1).
+ *
+ * Per-frame budget is enforced via tex_loads_this_frame so PNG decode + GPU
+ * upload is spread across multiple frames.
  */
-/* PNG decode + GPU upload budget per render frame.  Bumped from 2 to 8:
- * a single atlas is ~50ms on modest hardware, and 2/frame meant a 22-atlas
- * fallback world took ~11 frames to settle.  Higher values are safe because
- * the budget is now consulted BEFORE js_get_fetch_result so no data is
- * dropped on the floor. */
 #define MAX_TEX_LOADS_PER_FRAME 8
+/* Offset for texture fetch request IDs — far above engine_client (~512 max) */
+#define OLM_REQUEST_ID_OFFSET 500000
+
+static uint32_t s_tex_req_counter = 0;
 
 static Texture2D load_or_poll_atlas_texture(ObjectLayersManager* manager, const char* item_key) {
     if (!manager || !item_key || item_key[0] == '\0') return (Texture2D){0};
@@ -354,14 +339,12 @@ static Texture2D load_or_poll_atlas_texture(ObjectLayersManager* manager, const 
     AtlasTextureEntry* entry = lookup_tex_entry(manager, item_key);
 
     if (!entry) {
-        // First request — start async fetch
         entry = create_tex_entry(manager, item_key);
         if (!entry) return (Texture2D){0};
 
-        entry->request_id = manager->next_request_id++;
+        entry->request_id = OLM_REQUEST_ID_OFFSET + (++s_tex_req_counter);
         entry->state = ATLAS_TEX_LOADING;
 
-        // Build blob URL: {API_BASE_URL}/api/atlas-sprite-sheet/blob/{item_key}
         char url[512];
         snprintf(url, sizeof(url), "%s/api/atlas-sprite-sheet/blob/%s", API_BASE_URL, item_key);
 
@@ -377,14 +360,6 @@ static Texture2D load_or_poll_atlas_texture(ObjectLayersManager* manager, const 
         return (Texture2D){0};
     }
 
-    // ATLAS_TEX_LOADING — poll result.
-    //
-    // The per-frame texture-decode budget is checked BEFORE consuming the
-    // JS-side fetch result. js_get_fetch_result is destructive (it removes
-    // the entry from FetchState.completed on retrieval), so if we call it
-    // and then discard the data, the texture is permanently lost. By
-    // skipping the call entirely when over budget, the data stays parked
-    // on the JS side until a later frame can decode it.
     if (entry->state == ATLAS_TEX_LOADING) {
         if (manager->tex_loads_this_frame >= MAX_TEX_LOADS_PER_FRAME) {
             return (Texture2D){0};
@@ -410,7 +385,6 @@ static Texture2D load_or_poll_atlas_texture(ObjectLayersManager* manager, const 
             entry->state = ATLAS_TEX_ERROR;
             fprintf(stderr, "[WARN] Async fetch failed for atlas item_key: %s\n", item_key);
         }
-        // else: size == 0 means still pending, keep polling
     }
 
     return entry->state == ATLAS_TEX_READY ? entry->texture : (Texture2D){0};
@@ -431,8 +405,10 @@ ObjectLayersManager* create_object_layers_manager(void) {
         manager->meta_buckets[i] = NULL;
     }
 
-    manager->next_request_id = 1;
     manager->tex_loads_this_frame = 0;
+
+    // Set singleton for atlas metadata fetch callback
+    g_olm_singleton = manager;
 
     return manager;
 }
@@ -440,7 +416,6 @@ ObjectLayersManager* create_object_layers_manager(void) {
 void destroy_object_layers_manager(ObjectLayersManager* manager) {
     if (!manager) return;
 
-    // Free object layer cache
     for (int i = 0; i < HASH_TABLE_SIZE; i++) {
         ObjectLayerEntry* entry = manager->layer_buckets[i];
         while (entry) {
@@ -453,7 +428,6 @@ void destroy_object_layers_manager(ObjectLayersManager* manager) {
         manager->layer_buckets[i] = NULL;
     }
 
-    // Free atlas data cache
     for (int i = 0; i < HASH_TABLE_SIZE; i++) {
         AtlasEntry* entry = manager->atlas_buckets[i];
         while (entry) {
@@ -466,7 +440,6 @@ void destroy_object_layers_manager(ObjectLayersManager* manager) {
         manager->atlas_buckets[i] = NULL;
     }
 
-    // Free atlas texture entries (unload GPU textures)
     for (int i = 0; i < HASH_TABLE_SIZE; i++) {
         AtlasTextureEntry* entry = manager->tex_buckets[i];
         while (entry) {
@@ -481,7 +454,6 @@ void destroy_object_layers_manager(ObjectLayersManager* manager) {
         manager->tex_buckets[i] = NULL;
     }
 
-    // Free atlas meta fetch entries
     for (int i = 0; i < HASH_TABLE_SIZE; i++) {
         AtlasMetaFetchEntry* entry = manager->meta_buckets[i];
         while (entry) {
@@ -498,31 +470,89 @@ void destroy_object_layers_manager(ObjectLayersManager* manager) {
 
 ObjectLayer* get_or_fetch_object_layer(ObjectLayersManager* manager, const char* item_id) {
     assert(manager && item_id);
-
-    // Cache-only lookup — metadata is populated from WebSocket "metadata" message.
     return lookup_cached_layer(manager, item_id);
+}
+
+/* forward declaration */
+static void parse_ws_direction_frames(cJSON* frames_json, AtlasSpriteSheetData* atlas);
+
+/* ── Callback for atlas metadata REST fetch (via engine_client pipeline) ─── */
+
+static void on_atlas_meta_fetched(uint32_t request_id, FetchState state, void* data, size_t size) {
+    (void)request_id;
+    if (FETCH_STATE_READY != state) { free(data); return; }
+
+    /* Retrieve the manager via the module-level singleton. */
+    ObjectLayersManager* manager = g_olm_singleton;
+    if (!manager) { free(data); return; }
+
+    /* Parse REST response: { "data": { "metadata": { itemKey, atlasWidth, ... } } } */
+    cJSON* root = cJSON_ParseWithLength((const char*)data, (size_t)size);
+    free(data);
+    if (!root) return;
+
+    cJSON* doc   = cJSON_GetObjectItem(root, "data");
+    cJSON* rmeta = doc ? cJSON_GetObjectItem(doc, "metadata") : NULL;
+    if (!rmeta) { cJSON_Delete(root); return; }
+
+    char item_key[MAX_ITEM_ID_LENGTH];
+    memset(item_key, 0, sizeof(item_key));
+    {
+        char* ik = json_get_string_safe(rmeta, "itemKey", "");
+        strncpy(item_key, ik, MAX_ITEM_ID_LENGTH - 1);
+        free(ik);
+    }
+    if (item_key[0] == '\0' || lookup_cached_atlas(manager, item_key)) {
+        cJSON_Delete(root);
+        return;
+    }
+
+    AtlasSpriteSheetData* atlas = create_atlas_sprite_sheet_data();
+    if (!atlas) { cJSON_Delete(root); return; }
+
+    strncpy(atlas->item_key, item_key, MAX_ITEM_ID_LENGTH - 1);
+    atlas->atlas_width    = json_get_int_safe(rmeta, "atlasWidth",  0);
+    atlas->atlas_height   = json_get_int_safe(rmeta, "atlasHeight", 0);
+    atlas->cell_pixel_dim = json_get_int_safe(rmeta, "cellPixelDim", 20);
+    atlas->frame_duration = json_get_int_safe(rmeta, "frame_duration", 100);
+    cJSON* frames = cJSON_GetObjectItem(rmeta, "frames");
+    if (frames) parse_ws_direction_frames(frames, atlas);
+
+    cache_atlas_data(manager, item_key, atlas);
+    printf("[ATLAS REST] Metadata cached via callback for: %s (%dx%d)\n",
+           item_key, atlas->atlas_width, atlas->atlas_height);
+
+    /* Update meta state */
+    unsigned long meta_idx = hash_string(item_key) % HASH_TABLE_SIZE;
+    for (AtlasMetaFetchEntry* e = manager->meta_buckets[meta_idx]; e; e = e->next) {
+        if (strcmp(e->item_key, item_key) == 0) { e->state = ATLAS_META_DONE; break; }
+    }
+
+    /* Kick off PNG blob fetch now that metadata is cached */
+    load_or_poll_atlas_texture(manager, item_key);
+
+    cJSON_Delete(root);
 }
 
 AtlasSpriteSheetData* get_or_fetch_atlas_data(ObjectLayersManager* manager, const char* item_key) {
     assert(manager && item_key);
 
-    // Cache-only lookup — metadata is populated from WebSocket "metadata" message.
-    // Atlas texture (PNG blob) is fetched asynchronously via REST when cache is populated.
-    return lookup_cached_atlas(manager, item_key);
+    AtlasSpriteSheetData* atlas = lookup_cached_atlas(manager, item_key);
+    if (!atlas) {
+        get_atlas_texture(manager, item_key);
+    }
+    return atlas;
 }
 
-/* forward declaration — defined later in "Cache Population from WebSocket Metadata" */
 static void parse_ws_direction_frames(cJSON* frames_json, AtlasSpriteSheetData* atlas);
 
 Texture2D get_atlas_texture(ObjectLayersManager* manager, const char* item_key) {
     if (!manager || !item_key || item_key[0] == '\0') return (Texture2D){0};
 
-    // Atlas metadata already cached → go straight to PNG loading
     if (lookup_cached_atlas(manager, item_key)) {
         return load_or_poll_atlas_texture(manager, item_key);
     }
 
-    // Atlas not yet cached → check / poll meta fetch
     unsigned long meta_idx = hash_string(item_key) % HASH_TABLE_SIZE;
     AtlasMetaFetchEntry* meta = NULL;
     {
@@ -534,53 +564,8 @@ Texture2D get_atlas_texture(ObjectLayersManager* manager, const char* item_key) 
     }
 
     if (!meta) {
-        // No fetch scheduled yet — auto-schedule as fallback
         obj_layers_mgr_schedule_atlas_fetch(manager, item_key);
         return (Texture2D){0};
-    }
-
-    if (meta->state == ATLAS_META_ERROR) return (Texture2D){0};
-
-    if (meta->state == ATLAS_META_FETCHING) {
-        int size = 0;
-        unsigned char* data = (unsigned char*)js_get_fetch_result(meta->request_id, &size);
-        if (data && size > 0) {
-            // Parse REST response: { "data": { "metadata": { itemKey, atlasWidth, atlasHeight,
-            //                                               cellPixelDim, frame_duration, frames }, cid } }
-            cJSON* root = cJSON_ParseWithLength((const char*)data, (size_t)size);
-            free(data);
-            if (root) {
-                cJSON* doc  = cJSON_GetObjectItem(root, "data");
-                cJSON* rmeta = doc ? cJSON_GetObjectItem(doc, "metadata") : NULL;
-                if (rmeta) {
-                    AtlasSpriteSheetData* atlas = create_atlas_sprite_sheet_data();
-                    if (atlas) {
-                        strncpy(atlas->item_key, item_key, MAX_ITEM_ID_LENGTH - 1);
-                        atlas->atlas_width    = json_get_int_safe(rmeta, "atlasWidth",  0);
-                        atlas->atlas_height   = json_get_int_safe(rmeta, "atlasHeight", 0);
-                        atlas->cell_pixel_dim = json_get_int_safe(rmeta, "cellPixelDim", 20);
-                        atlas->frame_duration = json_get_int_safe(rmeta, "frame_duration", 100);
-                        cJSON* frames = cJSON_GetObjectItem(rmeta, "frames");
-                        if (frames) parse_ws_direction_frames(frames, atlas);
-                        cache_atlas_data(manager, item_key, atlas);
-                        printf("[ATLAS REST] Metadata cached for: %s (%dx%d)\n",
-                               item_key, atlas->atlas_width, atlas->atlas_height);
-                    }
-                } else {
-                    fprintf(stderr, "[ATLAS REST] Unexpected response shape for: %s\n", item_key);
-                }
-                cJSON_Delete(root);
-            } else {
-                fprintf(stderr, "[ATLAS REST] JSON parse failed for: %s\n", item_key);
-            }
-            meta->state = ATLAS_META_DONE;
-            // Start PNG fetch now that metadata is cached
-            load_or_poll_atlas_texture(manager, item_key);
-        } else if (size == -1) {
-            meta->state = ATLAS_META_ERROR;
-            fprintf(stderr, "[ATLAS REST] Fetch failed for: %s\n", item_key);
-        }
-        // else size == 0: still in flight, keep polling next frame
     }
 
     return (Texture2D){0};
@@ -596,34 +581,36 @@ void obj_layers_mgr_reset_frame_budget(ObjectLayersManager* manager) {
 
 void obj_layers_mgr_schedule_atlas_fetch(ObjectLayersManager* manager, const char* item_key) {
     if (!manager || !item_key || item_key[0] == '\0') return;
-    // No-op if already scheduled or metadata already cached
+
     unsigned long index = hash_string(item_key) % HASH_TABLE_SIZE;
     AtlasMetaFetchEntry* e = manager->meta_buckets[index];
     while (e) {
-        if (strcmp(e->item_key, item_key) == 0) return; // already scheduled
+        if (strcmp(e->item_key, item_key) == 0) return;
         e = e->next;
     }
-    if (lookup_cached_atlas(manager, item_key)) return; // already cached
+    if (lookup_cached_atlas(manager, item_key)) return;
 
     AtlasMetaFetchEntry* entry = (AtlasMetaFetchEntry*)malloc(sizeof(AtlasMetaFetchEntry));
     if (!entry) return;
     entry->item_key = strdup(item_key);
     entry->state = ATLAS_META_FETCHING;
-    entry->request_id = manager->next_request_id++;
     entry->next = manager->meta_buckets[index];
     manager->meta_buckets[index] = entry;
 
     char url[512];
     snprintf(url, sizeof(url), "%s/api/atlas-sprite-sheet/metadata/%s", API_BASE_URL, item_key);
-    js_start_fetch_binary(url, entry->request_id);
-    printf("[ATLAS REST] Fetch scheduled: %s\n", item_key);
+    uint32_t req_id = fetch_request_start(url, on_atlas_meta_fetched);
+    if (req_id == 0) {
+        entry->state = ATLAS_META_ERROR;
+        fprintf(stderr, "[ATLAS REST] Failed to schedule fetch for: %s\n", item_key);
+        return;
+    }
+    printf("[ATLAS REST] Fetch scheduled via engine_client: %s\n", item_key);
 }
 
 void populate_object_layer_from_json(ObjectLayersManager* manager, const char* item_id, const cJSON* ol_json) {
     assert(manager && item_id && ol_json);
 
-    // Parse OL metadata from the WS metadata JSON shape
-    // (sha256, data.{stats,item,ledger,render})
     ObjectLayer* layer = create_object_layer();
     if (!layer) return;
 
@@ -634,7 +621,6 @@ void populate_object_layer_from_json(ObjectLayersManager* manager, const char* i
     cJSON* data = cJSON_GetObjectItem((cJSON*)ol_json, "data");
     parse_object_layer_data(data, &layer->data);
 
-    // Ensure item ID is set
     if (strlen(layer->data.item.id) == 0) {
         strncpy(layer->data.item.id, item_id, MAX_ITEM_ID_LENGTH - 1);
     }
@@ -642,11 +628,6 @@ void populate_object_layer_from_json(ObjectLayersManager* manager, const char* i
     cache_object_layer(manager, item_id, layer);
 }
 
-/**
- * @brief Parse direction frames from a JSON object used in WS metadata.
- *
- * The Go server sends frames with JSON keys like "up_idle", "down_walking", etc.
- */
 static void parse_ws_direction_frames(cJSON* frames_json, AtlasSpriteSheetData* atlas) {
     assert(frames_json && atlas);
     parse_direction_frame_data(cJSON_GetObjectItem(frames_json, "up_idle"), &atlas->up_idle);
@@ -680,20 +661,16 @@ void populate_atlas_from_json(ObjectLayersManager* manager, const char* item_key
     free(file_id);
 
     strncpy(atlas->item_key, item_key, MAX_ITEM_ID_LENGTH - 1);
-
     atlas->atlas_width = json_get_int_safe((cJSON*)atlas_json, "atlasWidth", 0);
     atlas->atlas_height = json_get_int_safe((cJSON*)atlas_json, "atlasHeight", 0);
     atlas->cell_pixel_dim = json_get_int_safe((cJSON*)atlas_json, "cellPixelDim", 20);
     atlas->frame_duration = json_get_int_safe((cJSON*)atlas_json, "frame_duration", 100);
 
     cJSON* frames = cJSON_GetObjectItem((cJSON*)atlas_json, "frames");
-    if (frames) {
-        parse_ws_direction_frames(frames, atlas);
-    }
+    if (frames) parse_ws_direction_frames(frames, atlas);
 
     cache_atlas_data(manager, item_key, atlas);
 
-    // Start async loading of the atlas texture by item_key
     if (item_key[0] != '\0') {
         load_or_poll_atlas_texture(manager, item_key);
     }
@@ -701,3 +678,4 @@ void populate_atlas_from_json(ObjectLayersManager* manager, const char* item_key
     printf("[INFO] Atlas populated from WS for: %s (%dx%d)\n",
            item_key, atlas->atlas_width, atlas->atlas_height);
 }
+
