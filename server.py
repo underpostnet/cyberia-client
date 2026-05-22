@@ -14,29 +14,23 @@ Modes
 
 Usage
 -----
-  python3 server.py <port> <directory> [development|production] [ready_cmd]
+  python3 server.py <port> <directory> [development|production]
 
 Arguments
 ---------
   port        TCP port to listen on.
   directory   Directory to serve files from.
   mode        "development" or "production" (default: production).
-  ready_cmd   Optional shell command executed once the server is listening.
-              Runs in a background thread so serving starts immediately.
-              Typical use: signal a container-status to the orchestrator.
 
-Examples
---------
-  python3 server.py 8081 bin/web/release
-  python3 server.py 8082 bin/web/debug development
-  python3 server.py 8081 bin/web/release production \\
-      "underpost config set container-status my-deployment-running"
+The runtime owns its own lifecycle. A successful socket bind is the
+canonical "ready" signal — Kubernetes observes it through the
+container's readinessProbe (TCP socket on `port`) and marks the pod
+Ready. Bind failures crash the process non-zero and the kubelet
+surfaces a CrashLoopBackOff. There is no shell-callback layer.
 """
 
 import sys
 import os
-import subprocess
-import threading
 from http.server import HTTPServer, SimpleHTTPRequestHandler
 
 
@@ -59,27 +53,14 @@ class DevelopmentHandler(_BaseHandler):
     pass  # log_message default prints to stderr
 
 
-def _run_ready_cmd(cmd: str) -> None:
-    """Execute *cmd* via the shell and print its exit code."""
-    try:
-        result = subprocess.run(cmd, shell=True, check=False)
-        print(f"[server] ready_cmd exited {result.returncode}: {cmd}", flush=True)
-    except Exception as exc:
-        print(f"[server] ready_cmd error: {exc}", flush=True)
-
 if __name__ == "__main__":
     port      = int(sys.argv[1])            if len(sys.argv) > 1 else 8082
     directory = sys.argv[2]                 if len(sys.argv) > 2 else "."
     mode      = (sys.argv[3] or "").lower() if len(sys.argv) > 3 else "production"
-    ready_cmd = sys.argv[4]                 if len(sys.argv) > 4 else None
 
     handler = DevelopmentHandler if mode == "development" else ProductionHandler
 
     os.chdir(directory)
     server = HTTPServer(("", port), handler)
     print(f"[server] http://0.0.0.0:{port}  mode={mode}  dir={directory}", flush=True)
-
-    if ready_cmd:
-        threading.Thread(target=_run_ready_cmd, args=(ready_cmd,), daemon=True).start()
-
     server.serve_forever()
