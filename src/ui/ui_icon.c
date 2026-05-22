@@ -13,7 +13,6 @@
 
 #include "config.h"
 #include "helper.h"
-#include "js/services.h"
 #include "network/engine_client.h"
 
 #include <assert.h>
@@ -42,9 +41,6 @@ typedef struct IconEntry {
 } IconEntry;
 
 static IconEntry* s_buckets[ICON_HASH_SIZE];
-static int        s_next_req_id = 30000; /* offset to avoid collision with
-                                            TextureManager (1+) and
-                                            dialogue_data (20000+) */
 
 static void on_icon_fetched(uint32_t request_id, FetchState state, void* data, size_t size) {
     /* Locate entry by request_id across all hash buckets. */
@@ -116,38 +112,6 @@ static IconEntry* create_and_fetch(const char* icon_id) {
 
 void ui_icon_init(void) {
     memset(s_buckets, 0, sizeof(s_buckets));
-    s_next_req_id = 30000;
-}
-
-void ui_icon_poll(void) {
-    for (int i = 0; i < ICON_HASH_SIZE; i++) {
-        IconEntry* e = s_buckets[i];
-        while (e) {
-            if (e->state == ICON_LOADING) {
-                int size = 0;
-                unsigned char* data = js_get_fetch_result(e->request_id, &size);
-                if (data && size > 0) {
-                    Image img = LoadImageFromMemory(".png", data, size);
-                    if (img.data) {
-                        e->texture = LoadTextureFromImage(img);
-                        UnloadImage(img);
-                        e->state = ICON_READY;
-                        printf("[UI_ICON] Loaded '%s' (%dx%d)\n",
-                               e->icon_id, e->texture.width, e->texture.height);
-                    } else {
-                        e->state = ICON_ERROR;
-                        fprintf(stderr, "[UI_ICON] Image decode failed for '%s'\n",
-                                e->icon_id);
-                    }
-                    free(data);
-                } else if (size < 0) {
-                    e->state = ICON_ERROR;
-                    fprintf(stderr, "[UI_ICON] Fetch error for '%s'\n", e->icon_id);
-                }
-            }
-            e = e->next;
-        }
-    }
 }
 
 void ui_icon_cleanup(void) {

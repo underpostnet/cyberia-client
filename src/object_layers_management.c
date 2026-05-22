@@ -1,9 +1,12 @@
 #include "object_layers_management.h"
 #include "config.h"
+#include "network/engine_client.h"
+#include <raylib.h>
 #include <cJSON.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <stdint.h>
 #include "helper.h"
 #include <assert.h>
 
@@ -37,7 +40,7 @@ typedef struct AtlasTextureEntry {
     char* item_key;
     Texture2D texture;
     AtlasTextureState state;
-    int request_id;
+    uint32_t request_id;
     struct AtlasTextureEntry* next;
 } AtlasTextureEntry;
 
@@ -52,7 +55,7 @@ typedef enum {
 
 typedef struct AtlasMetaFetchEntry {
     char* item_key;
-    int request_id;
+    uint32_t request_id;
     AtlasMetaState state;
     struct AtlasMetaFetchEntry* next;
 } AtlasMetaFetchEntry;
@@ -70,10 +73,8 @@ struct ObjectLayersManager {
     // Atlas metadata REST fetch state (keyed by item_key)
     AtlasMetaFetchEntry* meta_buckets[HASH_TABLE_SIZE];
 
-    TextureManager* texture_manager;
-
     // Request ID counter for async fetches
-    int next_request_id;
+    uint32_t next_request_id;
 
     // Per-frame texture load budget — reset each frame via obj_layers_mgr_reset_frame_budget()
     int tex_loads_this_frame;
@@ -419,7 +420,7 @@ static Texture2D load_or_poll_atlas_texture(ObjectLayersManager* manager, const 
 // Public API
 // ============================================================================
 
-ObjectLayersManager* create_object_layers_manager(TextureManager* texture_manager) {
+ObjectLayersManager* create_object_layers_manager(void) {
     ObjectLayersManager* manager = malloc(sizeof(ObjectLayersManager));
     if (!manager) return NULL;
 
@@ -430,7 +431,6 @@ ObjectLayersManager* create_object_layers_manager(TextureManager* texture_manage
         manager->meta_buckets[i] = NULL;
     }
 
-    manager->texture_manager = texture_manager;
     manager->next_request_id = 1;
     manager->tex_loads_this_frame = 0;
 

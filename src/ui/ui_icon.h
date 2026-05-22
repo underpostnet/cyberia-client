@@ -21,9 +21,9 @@
  * Icons live on the engine API under:
  *   {API_BASE_URL}/assets/ui-icons/{icon_id}.png
  *
- * Textures are loaded asynchronously via the WASM JS bridge
- * (js_start_fetch_binary / js_get_fetch_result).  Until loaded, a subtle
- * pulsing placeholder dot is drawn so layout stays stable.
+ * Textures are loaded asynchronously through the engine_client fetch
+ * queue; completion is delivered via a registered callback. Until loaded,
+ * a subtle pulsing placeholder dot is drawn so layout stays stable.
  *
  * ── Animation ───────────────────────────────────────────────────────────
  * Active icons use a smooth ease-in-out "hover float" animation (sine
@@ -68,14 +68,6 @@
  * Must be called once during game_render_init().
  */
 void ui_icon_init(void);
-
-/**
- * @brief Poll all in-flight icon texture fetches.
- *
- * Call once per frame (e.g. from game_render_frame or game_render_ui)
- * to convert completed WASM fetches into GPU textures.
- */
-void ui_icon_poll(void);
 
 /**
  * @brief Release all cached icon textures and free memory.

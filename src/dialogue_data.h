@@ -2,9 +2,9 @@
  * @file dialogue_data.h
  * @brief Async dialogue data fetcher and cache.
  *
- * Fetches dialogue records from the Engine API per item ID using the same
- * JS bridge mechanism as atlas sprite sheet metadata (js_start_fetch_binary /
- * js_get_fetch_result).
+ * Fetches dialogue records from the Engine API per item ID via the
+ * engine_client fetch queue; completion arrives through a registered
+ * callback (no per-frame poll required from the caller).
  *
  * API endpoint:
  *   GET {API_BASE_URL}/api/cyberia-dialogue/code/default-<itemId>
@@ -15,7 +15,6 @@
  * Usage:
  *   dialogue_data_init();
  *   dialogue_data_request("lain");          // fetches /code/default-lain
- *   dialogue_data_poll();                   // call each frame
  *   const DialogueDataSet* d = dialogue_data_get("lain");
  *   if (d && d->state == DLG_DATA_READY) { ... use d->lines ... }
  */
@@ -62,14 +61,6 @@ void dialogue_data_cleanup(void);
  * Otherwise kicks off an async HTTP fetch.
  */
 void dialogue_data_request(const char* item_id);
-
-/**
- * @brief Poll all pending fetches (call once per frame).
- *
- * Checks js_get_fetch_result for pending requests and parses completed
- * JSON responses into the cache.
- */
-void dialogue_data_poll(void);
 
 /**
  * @brief Look up cached dialogue data for an item ID.

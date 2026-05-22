@@ -93,7 +93,6 @@ void render_update(float delta_time) {
 
     // Poll async dialogue data fetches and rebuild bubble column
     fetch_request_update();
-    dialogue_data_poll();
     interaction_bubble_update();
 
     // Update dev UI

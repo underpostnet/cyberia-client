@@ -1,7 +1,7 @@
 #include "entity_render.h"
-#include "texture_manager.h"
 #include "object_layers_management.h"
 #include "layer_z_order.h"
+#include <raylib.h>
 #include <stdlib.h>
 #include <string.h>
 #include <stdio.h>
@@ -31,7 +31,6 @@ typedef struct AnimationEntry {
 
 struct EntityRender {
     ObjectLayersManager* obj_layers_mgr;
-    TextureManager* texture_manager;
     AnimationEntry* anim_buckets[HASH_TABLE_SIZE];
 };
 
@@ -190,15 +189,11 @@ static void draw_dev_ui_box(Rectangle dest_rec, const char* entity_type) {
 // Public API - Lifecycle Management
 // ============================================================================
 
-EntityRender* create_entity_render(
-    ObjectLayersManager* object_layers_manager,
-    TextureManager* texture_manager
-) {
+EntityRender* create_entity_render(ObjectLayersManager* object_layers_manager) {
     EntityRender* render = (EntityRender*)malloc(sizeof(EntityRender));
     if (!render) return NULL;
 
     render->obj_layers_mgr = object_layers_manager;
-    render->texture_manager = texture_manager;
 
     for (int i = 0; i < HASH_TABLE_SIZE; i++) {
         render->anim_buckets[i] = NULL;

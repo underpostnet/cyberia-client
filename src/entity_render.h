@@ -58,18 +58,13 @@ typedef struct EntityRender EntityRender;
  *
  * @param object_layers_manager Pointer to the ObjectLayersManager
  *                              (must remain valid for lifetime of EntityRender)
- * @param texture_manager Pointer to the TextureManager
- *                        (must remain valid for lifetime of EntityRender)
  * @return Pointer to new EntityRender system, or NULL on memory allocation failure
  *
- * @note The caller does NOT own the manager pointers - they must be freed
+ * @note The caller does NOT own the manager pointer - it must be freed
  *       separately and must outlive the EntityRender instance
  * @endcode
  */
-EntityRender* create_entity_render(
-    ObjectLayersManager* object_layers_manager,
-    TextureManager* texture_manager
-);
+EntityRender* create_entity_render(ObjectLayersManager* object_layers_manager);
 
 /**
  * @brief Destroys the EntityRender system and frees all resources
@@ -79,8 +74,8 @@ EntityRender* create_entity_render(
  *
  * @param render Pointer to EntityRender to destroy (may be NULL)
  *
- * @note This does NOT destroy the object layers manager or texture manager
- *       - those must be freed separately
+ * @note This does NOT destroy the object layers manager — it must be freed
+ *       separately.
  */
 void destroy_entity_render(EntityRender* render);
 
@@ -177,7 +172,7 @@ void destroy_entity_render(EntityRender* render);
  * - Direction memory persists so idle entities retain facing direction
  * - Frame index is automatically clamped to valid range
  * - Missing layers are silently skipped (no error messages)
- * - Textures are loaded through the TextureManager and cached there
+ * - Atlas textures are loaded and cached inside ObjectLayersManager
  * - All rendering uses raylib's DrawTexturePro for flexible positioning
  *
  * Performance Considerations:
@@ -189,7 +184,7 @@ void destroy_entity_render(EntityRender* render);
  * Thread Safety:
  * - NOT thread-safe! Call only from main render thread
  * - Animation state cache is not protected by locks
- * - ObjectLayersManager and TextureManager may have their own thread safety
+ * - ObjectLayersManager may have its own thread safety
  */
 void draw_entity_layers(
     EntityRender* render,

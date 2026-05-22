@@ -2,20 +2,20 @@
  * @file dialogue_data.c
  * @brief Async dialogue data fetcher — same pattern as atlas metadata REST fetch.
  *
- * Uses the shared JS bridge (js_start_fetch_binary / js_get_fetch_result)
- * to issue non-blocking GET requests to the Engine's cyberia-dialogue API.
+ * Issues non-blocking GET requests to the Engine's cyberia-dialogue API
+ * via the engine_client fetch queue; completion is delivered through
+ * on_dialogue_fetched.
  */
 
 #include "dialogue_data.h"
 #include "config.h"
 #include "helper.h"
+#include "network/engine_client.h"
 #include <cJSON.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <assert.h>
-
-#include "js/services.h"
 
 /* ── Internal types ──────────────────────────────────────────────────── */
 
@@ -23,14 +23,13 @@
 
 typedef struct DlgCacheEntry {
     DialogueDataSet     data;
-    int                 request_id;
+    uint32_t            request_id;
     struct DlgCacheEntry* next;
 } DlgCacheEntry;
 
 /* ── Module state ────────────────────────────────────────────────────── */
 
 static DlgCacheEntry* s_buckets[DLG_HASH_SIZE];
-static int            s_next_req_id = 20000; /* offset to avoid collisions with atlas IDs */
 
 /* ── Lookup ──────────────────────────────────────────────────────────── */
 
@@ -116,11 +115,34 @@ static void parse_response(DlgCacheEntry* entry, const unsigned char* data, int 
     printf("[DIALOGUE_DATA] Fetched %d lines for item '%s'\n", count, entry->data.item_id);
 }
 
+/* ── Fetch completion callback ──────────────────────────────────────── */
+
+static void on_dialogue_fetched(uint32_t request_id, FetchState state, void* data, size_t size) {
+    /* Locate entry by request_id across all hash buckets. */
+    DlgCacheEntry* e = NULL;
+    for (int i = 0; NULL == e && i < DLG_HASH_SIZE; i++) {
+        for (DlgCacheEntry* it = s_buckets[i]; it; it = it->next) {
+            if (it->request_id == request_id) { e = it; break; }
+        }
+    }
+
+    if (NULL == e) { free(data); return; }
+
+    if (FETCH_STATE_READY != state) {
+        e->data.state = DLG_DATA_ERROR;
+        fprintf(stderr, "[DIALOGUE_DATA] Fetch error for '%s'\n", e->data.item_id);
+        free(data);
+        return;
+    }
+
+    parse_response(e, (const unsigned char*)data, (int)size);
+    free(data);
+}
+
 /* ── Public API ──────────────────────────────────────────────────────── */
 
 void dialogue_data_init(void) {
     memset(s_buckets, 0, sizeof(s_buckets));
-    s_next_req_id = 20000;
 }
 
 void dialogue_data_cleanup(void) {
@@ -144,7 +166,6 @@ void dialogue_data_request(const char* item_id) {
 
     strncpy(entry->data.item_id, item_id, sizeof(entry->data.item_id) - 1);
     entry->data.state = DLG_DATA_FETCHING;
-    entry->request_id = s_next_req_id++;
 
     unsigned long idx = hash_string(item_id) % DLG_HASH_SIZE;
     entry->next = s_buckets[idx];
@@ -152,30 +173,8 @@ void dialogue_data_request(const char* item_id) {
 
     char url[1024];
     build_url(url, sizeof(url), item_id);
-    js_start_fetch_binary(url, entry->request_id);
-    printf("[DIALOGUE_DATA] Fetch started for '%s' (req %d)\n", item_id, entry->request_id);
-}
-
-void dialogue_data_poll(void) {
-    for (int i = 0; i < DLG_HASH_SIZE; i++) {
-        DlgCacheEntry* e = s_buckets[i];
-        while (e) {
-            if (e->data.state == DLG_DATA_FETCHING) {
-                int size = 0;
-                unsigned char* buf = js_get_fetch_result(e->request_id, &size);
-                if (buf && size > 0) {
-                    parse_response(e, buf, size);
-                    free(buf);
-                } else if (size < 0) {
-                    /* fetch error */
-                    e->data.state = DLG_DATA_ERROR;
-                    fprintf(stderr, "[DIALOGUE_DATA] Fetch error for '%s'\n", e->data.item_id);
-                }
-                /* size == 0 → still pending, keep polling */
-            }
-            e = e->next;
-        }
-    }
+    entry->request_id = fetch_request_start(url, on_dialogue_fetched);
+    printf("[DIALOGUE_DATA] Fetch started for '%s' (req %u)\n", item_id, entry->request_id);
 }
 
 const DialogueDataSet* dialogue_data_get(const char* item_id) {

@@ -2,7 +2,7 @@
 #define OBJECT_LAYERS_MANAGEMENT_H
 
 #include "object_layer.h"
-#include "texture_manager.h"
+#include <raylib.h>
 #include <cJSON.h>
 #include <stddef.h>
 #include <stdbool.h>
@@ -64,18 +64,15 @@ typedef struct ObjectLayersManager ObjectLayersManager;
  * Initializes empty caches for object layers, atlas sprite sheets,
  * and atlas textures. Triggers authentication to the engine API.
  *
- * @param texture_manager Pointer to TextureManager for atlas texture caching
- *                        (must remain valid, not owned)
  * @return Pointer to new manager, or NULL on allocation failure
  */
-ObjectLayersManager* create_object_layers_manager(TextureManager* texture_manager);
+ObjectLayersManager* create_object_layers_manager(void);
 
 /**
  * @brief Destroys an ObjectLayersManager and frees all resources
  *
- * Frees all cached object layers, atlas data, and the manager itself.
- * Atlas textures cached in the TextureManager are NOT freed here;
- * they are owned by the TextureManager.
+ * Frees all cached object layers, atlas data, atlas textures, and the
+ * manager itself.
  *
  * @param manager The manager to destroy (may be NULL)
  */

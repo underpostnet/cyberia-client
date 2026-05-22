@@ -6,7 +6,6 @@
 #include "entity_render.h"
 #include "game_state.h"
 #include "object_layers_management.h"
-#include "texture_manager.h"
 #include "ui/dev_ui.h"
 #include "ui/entity_overhead_ui.h"
 #include "ui/floating_combat_text.h"
@@ -73,7 +72,6 @@ int game_render_zoom_btn_hit(int mx, int my) {
 GameRenderer g_renderer = {0};
 
 // Global managers for entity rendering with object layers
-static TextureManager* g_texture_manager = NULL;
 static ObjectLayersManager* g_object_layers_manager = NULL;
 static EntityRender* g_entity_render = NULL;
 
@@ -102,20 +100,16 @@ int game_render_init(int screen_width, int screen_height) {
     g_renderer.current_fps = 60.0f;
 
     // Initialize object layer rendering system
-    g_texture_manager = create_texture_manager();
-
-    g_object_layers_manager = create_object_layers_manager(g_texture_manager);
+    g_object_layers_manager = create_object_layers_manager();
     if (!g_object_layers_manager) {
         fprintf(stderr, "[ERROR] Failed to create object layers manager\n");
-        destroy_texture_manager(g_texture_manager);
         return -1;
     }
 
-    g_entity_render = create_entity_render(g_object_layers_manager, g_texture_manager);
+    g_entity_render = create_entity_render(g_object_layers_manager);
     if (!g_entity_render) {
         fprintf(stderr, "[ERROR] Failed to create entity render system\n");
         destroy_object_layers_manager(g_object_layers_manager);
-        destroy_texture_manager(g_texture_manager);
         return -1;
     }
 
@@ -1070,10 +1064,6 @@ void game_render_cleanup(void) {
     // Cleanup object layers manager
     destroy_object_layers_manager(g_object_layers_manager);
     g_object_layers_manager = NULL;
-
-    // Cleanup texture manager
-    destroy_texture_manager(g_texture_manager);
-    g_texture_manager = NULL;
 
     // Unload font if loaded
     if (IsFontValid(g_renderer.game_font)) {
