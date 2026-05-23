@@ -25,14 +25,56 @@ spec:
           envFrom:
             - secretRef:
                 name: underpost-config
+          ports:
+            - containerPort: 8082
 
           command:
             - /bin/sh
             - -c
             - >
-              npm install -g underpost &&
-              underpost config set container-status dd-cyberia-mmo-client-development-initializing-deployment &&
-              python3 /home/dd/engine/cyberia-client/server.py 8082 /home/dd/engine/cyberia-client/bin development 'underpost config set container-status dd-cyberia-mmo-client-development-running-deployment'
+              exec python3 /home/dd/engine/cyberia-client/server.py 8082 /home/dd/engine/cyberia-client/bin development
+          readinessProbe:
+            {
+              "tcpSocket": {
+                "port": 8082
+              },
+              "initialDelaySeconds": 2,
+              "periodSeconds": 5,
+              "timeoutSeconds": 3,
+              "failureThreshold": 6
+            }
+          livenessProbe:
+            {
+              "tcpSocket": {
+                "port": 8082
+              },
+              "initialDelaySeconds": 30,
+              "periodSeconds": 20,
+              "timeoutSeconds": 5,
+              "failureThreshold": 3
+            }
+          lifecycle:
+            {
+              "postStart": {
+                "exec": {
+                  "command": [
+                    "sh",
+                    "-c",
+                    "underpost config set container-status dd-cyberia-mmo-client-development-initializing-deployment || true"
+                  ]
+                }
+              },
+              "preStop": {
+                "exec": {
+                  "command": [
+                    "sh",
+                    "-c",
+                    "underpost config set container-status dd-cyberia-mmo-client-development-stopping-deployment || true"
+                  ]
+                }
+              }
+            }
+
 
 
 ---
