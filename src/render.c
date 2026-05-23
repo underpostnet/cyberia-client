@@ -75,7 +75,7 @@ void render_update(float delta_time) {
     // never resets until game_render_world() is first called, which means
     // any atlas PNG fetches that complete during the initial load window are
     // permanently blocked and the world renders as solid rectangles.
-    obj_layers_mgr_reset_frame_budget(obj_layers_mgr_get());
+    obj_layers_mgr_reset_frame_budget();
 
     // Update effects (click effects, floating texts, FCT pop-ups)
     game_render_update_effects(delta_time);

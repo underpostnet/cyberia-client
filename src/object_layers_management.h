@@ -58,47 +58,15 @@ typedef struct ObjectLayersManager ObjectLayersManager;
 // Public API - Lifecycle Management
 // ============================================================================
 
-/**
- * @brief Creates a new ObjectLayersManager instance
- *
- * Initializes empty caches for object layers, atlas sprite sheets,
- * and atlas textures. Triggers authentication to the engine API.
- *
- * @return Pointer to new manager, or NULL on allocation failure
- */
-ObjectLayersManager* create_object_layers_manager(void);
-
-/**
- * @brief Destroys an ObjectLayersManager and frees all resources
- *
- * Frees all cached object layers, atlas data, atlas textures, and the
- * manager itself.
- *
- * @param manager The manager to destroy (may be NULL)
- */
-void destroy_object_layers_manager(ObjectLayersManager* manager);
+void create_object_layers_manager(void);
+void destroy_object_layers_manager(void);
+ObjectLayersManager* obj_layers_mgr_get(void);
 
 // ============================================================================
 // Public API - Object Layer Fetching and Caching
 // ============================================================================
 
-/**
- * @brief Retrieves an ObjectLayer by item ID, fetching from API if not cached
- *
- * Fetches object layer metadata from the engine API. This provides:
- * - Item type (skin, weapon, etc.) for rendering priority
- * - Stats (effect, resistance, etc.)
- * - Ledger (blockchain protocol metadata: type + contract address)
- * - Render CIDs (IPFS content identifiers for atlas sprite sheet)
- *
- * Uses the engine API: GET {API_BASE_URL}/api/object-layer/
- * with filterModel for data.item.id matching.
- *
- * @param manager The object layers manager instance
- * @param item_id The unique identifier for the item (e.g., "anon")
- * @return Pointer to ObjectLayer on success, NULL on failure
- */
-ObjectLayer* get_or_fetch_object_layer(ObjectLayersManager* manager, const char* item_id);
+ObjectLayer* lookup_cached_layer(const char* item_id);
 
 // ============================================================================
 // Public API - Atlas Sprite Sheet Fetching and Caching
@@ -120,7 +88,6 @@ ObjectLayer* get_or_fetch_object_layer(ObjectLayersManager* manager, const char*
  * - Atlas metadata: GET {API_BASE_URL}/api/atlas-sprite-sheet/?filterModel=...&limit=1
  * - Atlas PNG blob: GET {API_BASE_URL}/api/file/blob/{fileId}
  *
- * @param manager The object layers manager instance
  * @param item_key The item identifier key (e.g., "anon", "sword_basic")
  * @return Pointer to AtlasSpriteSheetData on success, NULL on failure
  *
@@ -129,7 +96,7 @@ ObjectLayer* get_or_fetch_object_layer(ObjectLayersManager* manager, const char*
  * - Cache miss: Two network requests + PNG decode (typically 100-1000ms)
  * - Single atlas texture per item replaces N individual frame textures
  */
-AtlasSpriteSheetData* get_or_fetch_atlas_data(ObjectLayersManager* manager, const char* item_key);
+AtlasSpriteSheetData* get_or_fetch_atlas_data(const char* item_key);
 
 /**
  * @brief Retrieves the cached atlas GPU texture for a given item key
@@ -138,11 +105,10 @@ AtlasSpriteSheetData* get_or_fetch_atlas_data(ObjectLayersManager* manager, cons
  * is fetched asynchronously from the atlas-sprite-sheet blob API
  * using the item key and cached for subsequent calls.
  *
- * @param manager The object layers manager instance
  * @param item_key The item identifier key (e.g., "anon", "lain")
  * @return The atlas Texture2D. Returns empty texture (id=0) if not found or not loaded.
  */
-Texture2D get_atlas_texture(ObjectLayersManager* manager, const char* item_key);
+Texture2D get_atlas_texture(const char* item_key);
 
 // ============================================================================
 // Public API - Cache Population from WebSocket Metadata
@@ -154,24 +120,16 @@ Texture2D get_atlas_texture(ObjectLayersManager* manager, const char* item_key);
  * The JSON object has the same shape as a single OL item:
  *   { "sha256": "...", "data": { "stats": {...}, "item": {...}, ... } }
  *
- * @param manager The object layers manager instance
  * @param item_id The item ID key for this ObjectLayer
  * @param ol_json cJSON object representing the ObjectLayer (caller retains ownership)
  */
-void populate_object_layer_from_json(ObjectLayersManager* manager, const char* item_id, const cJSON* ol_json);
+void populate_object_layer_from_json(const char* item_id, const cJSON* ol_json);
 
-/**
- * @brief Parse and cache an AtlasSpriteSheetData from a JSON object (from WS metadata message).
+/* Dead — no external callers. Atlas population flows through
+ * obj_layers_mgr_schedule_atlas_fetch + on_atlas_meta_fetched (REST path).
  *
- * The JSON object mirrors the Go server's AtlasData struct:
- *   { "fileId": "...", "itemKey": "...", "atlasWidth": N, "atlasHeight": N,
- *     "cellPixelDim": N, "frames": { "up_idle": [...], ... } }
- *
- * @param manager The object layers manager instance
- * @param item_key The item key for this atlas
- * @param atlas_json cJSON object representing the atlas data (caller retains ownership)
+ * void populate_atlas_from_json(ObjectLayersManager* manager, const char* item_key, const cJSON* atlas_json);
  */
-void populate_atlas_from_json(ObjectLayersManager* manager, const char* item_key, const cJSON* atlas_json);
 
 /**
  * @brief Schedule a REST fetch for atlas sprite sheet metadata by item_key.
@@ -185,21 +143,16 @@ void populate_atlas_from_json(ObjectLayersManager* manager, const char* item_key
  *
  * Safe to call multiple times — repeated calls for the same item_key are no-ops.
  *
- * @param manager  The object layers manager instance
  * @param item_key The item identifier key (= metadata.itemKey from the atlas doc)
  */
-void obj_layers_mgr_schedule_atlas_fetch(ObjectLayersManager* manager, const char* item_key);
-
-ObjectLayersManager* obj_layers_mgr_get(void);
+void obj_layers_mgr_schedule_atlas_fetch(const char* item_key);
 
 /**
  * @brief Reset per-frame texture load budget. Call once at the start of each render frame.
  *
  * Prevents freeze caused by decoding many PNG atlas textures in a single frame
  * when multiple fetch results arrive simultaneously on first game load.
- *
- * @param manager The object layers manager instance (may be NULL)
  */
-void obj_layers_mgr_reset_frame_budget(ObjectLayersManager* manager);
+void obj_layers_mgr_reset_frame_budget(void);
 
 #endif // OBJECT_LAYERS_MANAGEMENT_H

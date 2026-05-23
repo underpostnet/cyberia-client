@@ -44,11 +44,10 @@ typedef struct {
 /**
  * @brief Build a z-sorted index array for an ObjectLayerState array.
  *
- * Looks up each active layer's type via the ObjectLayersManager
- * and fills @p out with (index, priority) pairs sorted by ascending
- * priority.  Inactive / empty layers are skipped.
+ * Looks up each active layer's type via the OL singleton and fills
+ * @p out with (index, priority) pairs sorted by ascending priority.
+ * Inactive / empty layers are skipped.
  *
- * @param mgr        ObjectLayersManager for type lookups (may be NULL).
  * @param layers     Source ObjectLayerState array.
  * @param count      Number of entries in @p layers.
  * @param out        Caller-provided buffer for sorted entries.
@@ -56,8 +55,7 @@ typedef struct {
  * @param facing_up  When true, weapon renders behind skin.
  * @return           Number of entries written to @p out.
  */
-int layer_z_sort(ObjectLayersManager* mgr,
-                 const ObjectLayerState* layers, int count,
+int layer_z_sort(const ObjectLayerState* layers, int count,
                  LayerZEntry* out, int out_cap,
                  bool facing_up);
 

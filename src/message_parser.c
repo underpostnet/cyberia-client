@@ -274,8 +274,7 @@ static int message_parser_parse_metadata(const cJSON* json_root) {
     cJSON* payload = serial_get_object(json_root, "payload");
     if (!payload) return -1;
 
-    ObjectLayersManager* mgr = obj_layers_mgr_get();
-    if (!mgr) {
+    if (NULL == obj_layers_mgr_get()) {
         fprintf(stderr, "[METADATA] ObjectLayersManager not initialized yet\n");
         return -1;
     }
@@ -291,8 +290,8 @@ static int message_parser_parse_metadata(const cJSON* json_root) {
         cJSON_ArrayForEach(entry, ol_map) {
             const char* item_id = entry->string;
             if (item_id && cJSON_IsObject(entry)) {
-                populate_object_layer_from_json(mgr, item_id, entry);
-                obj_layers_mgr_schedule_atlas_fetch(mgr, item_id);
+                populate_object_layer_from_json(item_id, entry);
+                obj_layers_mgr_schedule_atlas_fetch(item_id);
                 ol_count++;
             }
         }

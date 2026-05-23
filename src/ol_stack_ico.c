@@ -26,7 +26,7 @@ void ol_stack_ico_draw(ObjectLayersManager* mgr,
     bool facing_up = (dir_str && (strcmp(dir_str, "up_idle") == 0 || strcmp(dir_str, "up_walking") == 0));
 
     LayerZEntry sorted[OL_STACK_ICO_MAX_LAYERS];
-    int n = layer_z_sort(mgr, layers, count, sorted, OL_STACK_ICO_MAX_LAYERS, facing_up);
+    int n = layer_z_sort(layers, count, sorted, OL_STACK_ICO_MAX_LAYERS, facing_up);
 
     for (int i = 0; i < n; i++) {
         const ObjectLayerState* s = &layers[sorted[i].index];

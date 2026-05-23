@@ -70,8 +70,8 @@ int game_render_zoom_btn_hit(int mx, int my) {
 // Global renderer instance
 GameRenderer g_renderer = {0};
 
-// Global managers for entity rendering with object layers
-static ObjectLayersManager* g_object_layers_manager = NULL;
+// Global manager for entity rendering with object layers
+// ObjectLayersManager is owned by its module — access via obj_layers_mgr_get().
 static EntityRender* g_entity_render = NULL;
 
 int game_render_init(int screen_width, int screen_height) {
@@ -99,37 +99,30 @@ int game_render_init(int screen_width, int screen_height) {
     g_renderer.current_fps = 60.0f;
 
     // Initialize object layer rendering system
-    g_object_layers_manager = create_object_layers_manager();
-    if (!g_object_layers_manager) {
-        fprintf(stderr, "[ERROR] Failed to create object layers manager\n");
-        return -1;
-    }
+    create_object_layers_manager();
+    ObjectLayersManager* olm = obj_layers_mgr_get();
 
-    g_entity_render = create_entity_render(g_object_layers_manager);
-    if (!g_entity_render) {
+    g_entity_render = create_entity_render(olm);
+    if (NULL == g_entity_render) {
         fprintf(stderr, "[ERROR] Failed to create entity render system\n");
-        destroy_object_layers_manager(g_object_layers_manager);
+        game_render_cleanup();
         return -1;
     }
 
-    inventory_bar_init(g_object_layers_manager);
-    inventory_modal_init(g_object_layers_manager);
-    modal_dialogue_init(g_object_layers_manager);
+    inventory_bar_init(olm);
+    inventory_modal_init(olm);
+    modal_dialogue_init(olm);
     dialogue_data_init();
     interaction_bubble_init();
     ui_icon_init();
     return 0;
 }
 
-ObjectLayersManager* obj_layers_mgr_get(void) {
-    return g_object_layers_manager;
-}
-
 void game_render_draw_object_layer_as_down_idle_ico(const char* item_key, int x, int y, int icon_size) {
-    if (item_key && g_object_layers_manager) {
-        AtlasSpriteSheetData* atlas = get_or_fetch_atlas_data(g_object_layers_manager, item_key);
+    if (item_key) {
+        AtlasSpriteSheetData* atlas = get_or_fetch_atlas_data(item_key);
         if (atlas) {
-            Texture2D tex = get_atlas_texture(g_object_layers_manager, atlas->item_key);
+            Texture2D tex = get_atlas_texture(atlas->item_key);
             if (tex.id > 0) {
                 const DirectionFrameData* dfd = atlas_get_direction_frames(atlas, "default_idle");
                 if (dfd && dfd->count > 0) {
@@ -152,10 +145,10 @@ void game_render_draw_object_layer_as_down_idle_ico(const char* item_key, int x,
 #define GAME_RENDER_FRAME_DURATION_MS 100
 
 void game_render_draw_object_layer_animated_ico(const char* item_key, int x, int y, int icon_size) {
-    if (item_key && g_object_layers_manager) {
-        AtlasSpriteSheetData* atlas = get_or_fetch_atlas_data(g_object_layers_manager, item_key);
+    if (item_key) {
+        AtlasSpriteSheetData* atlas = get_or_fetch_atlas_data(item_key);
         if (atlas) {
-            Texture2D tex = get_atlas_texture(g_object_layers_manager, atlas->item_key);
+            Texture2D tex = get_atlas_texture(atlas->item_key);
             if (tex.id > 0) {
                 const DirectionFrameData* dfd = atlas_get_direction_frames(atlas, "default_idle");
                 if (dfd && dfd->count > 0) {
@@ -778,7 +771,7 @@ void game_render_entities(void) {
                 }
                 nameplate_resolve(entity_base->id, np_is_player,
                                   np_layers, np_lc,
-                                  g_object_layers_manager,
+                                  obj_layers_mgr_get(),
                                   np_buf, (int)sizeof(np_buf));
                 EntityOverheadParams ohp = {
                     .name            = np_buf,
@@ -1061,8 +1054,7 @@ void game_render_cleanup(void) {
     g_entity_render = NULL;
 
     // Cleanup object layers manager
-    destroy_object_layers_manager(g_object_layers_manager);
-    g_object_layers_manager = NULL;
+    destroy_object_layers_manager();
 
     // Unload font if loaded
     if (IsFontValid(g_renderer.game_font)) {

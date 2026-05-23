@@ -5,7 +5,7 @@
  * Architecture notes:
  *   - The modal is purely a UI layer: it reads game state and sends intents.
  *   - Item metadata (description, stats) is fetched lazily via
- *     get_or_fetch_object_layer() which caches results in the OL manager.
+ *     lookup_cached_layer() which caches results in the OL manager.
  *   - Activation intent is sent via network_send() as a JSON string
  *     matching the server's existing "item_activation" handler in
  *     handlers.go.  The server validates, swaps if needed, and pushes
@@ -213,7 +213,7 @@ static const char* resolve_summoned_item_id(const char* raw_id) {
         const ObjectLayerState* ol = &g_game_state.full_inventory[i];
         if (!ol->active || ol->item_id[0] == '\0') continue;
         if (!s_ol_manager) continue;
-        ObjectLayer* data = get_or_fetch_object_layer(s_ol_manager, ol->item_id);
+        ObjectLayer* data = lookup_cached_layer(ol->item_id);
         if (data && strcmp(data->data.item.type, "skin") == 0) {
             strncpy(s_resolved, ol->item_id, MAX_ID_LENGTH - 1);
             s_resolved[MAX_ID_LENGTH - 1] = '\0';
@@ -306,7 +306,7 @@ void inventory_modal_draw(void) {
     /* ── Fetch atlas for direction button enable state ───────────────── */
     AtlasSpriteSheetData* atlas = NULL;
     if (s_ol_manager && ols->item_id[0] != '\0')
-        atlas = get_or_fetch_atlas_data(s_ol_manager, ols->item_id);
+        atlas = get_or_fetch_atlas_data(ols->item_id);
 
     /* 4. Animated sprite via ol_as_animated_ico */
     int sprite_sz = modal_sprite_size(cw);
@@ -370,7 +370,7 @@ void inventory_modal_draw(void) {
     bool activable = true;
 
     if (s_ol_manager) {
-        ObjectLayer* ol_data = get_or_fetch_object_layer(s_ol_manager, ols->item_id);
+        ObjectLayer* ol_data = lookup_cached_layer(ols->item_id);
         if (ol_data) {
             if (ol_data->data.item.id[0] != '\0') item_name = ol_data->data.item.id;
             item_type   = ol_data->data.item.type;
@@ -794,7 +794,7 @@ bool inventory_modal_handle_click(int mx, int my) {
         bool activable = true;
         const char* item_type = "";
         if (s_ol_manager) {
-            ObjectLayer* ol_data = get_or_fetch_object_layer(s_ol_manager, ols->item_id);
+            ObjectLayer* ol_data = lookup_cached_layer(ols->item_id);
             if (ol_data) {
                 activable = ol_data->data.item.activable;
                 item_type = ol_data->data.item.type;

@@ -282,16 +282,10 @@ void draw_entity_layers(
         has_associated_item_id = true;
 
         // Fetch object layer metadata (for item type, ledger, render CIDs)
-        ObjectLayer* layer = get_or_fetch_object_layer(
-            render->obj_layers_mgr,
-            state->item_id
-        );
+        ObjectLayer* layer = lookup_cached_layer(state->item_id);
 
         // Fetch atlas sprite sheet data (for frame metadata + atlas texture reference)
-        AtlasSpriteSheetData* atlas = get_or_fetch_atlas_data(
-            render->obj_layers_mgr,
-            state->item_id
-        );
+        AtlasSpriteSheetData* atlas = get_or_fetch_atlas_data(state->item_id);
 
         // If atlas metadata not yet cached, pump the async REST fetch state
         // machine each frame. On first call: schedules
@@ -299,7 +293,7 @@ void draw_entity_layers(
         // polls the in-flight request and caches the JSON when it arrives,
         // then automatically kicks off the PNG blob fetch.
         if (!atlas) {
-            get_atlas_texture(render->obj_layers_mgr, state->item_id);
+            get_atlas_texture(state->item_id);
         }
 
         if (!layer && !atlas) {
@@ -417,10 +411,7 @@ void draw_entity_layers(
 
         if (atlas && atlas->item_key[0] != '\0') {
             // Get or poll the atlas texture (async loading)
-            Texture2D atlas_texture = get_atlas_texture(
-                render->obj_layers_mgr,
-                atlas->item_key
-            );
+            Texture2D atlas_texture = get_atlas_texture(atlas->item_key);
 
             if (atlas_texture.id > 0) {
                 // Atlas texture is ready — look up the source rectangle

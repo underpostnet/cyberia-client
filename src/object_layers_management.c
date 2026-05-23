@@ -14,6 +14,9 @@
 
 #define HASH_TABLE_SIZE 256
 
+/* forward declaration */
+static void parse_ws_direction_frames(cJSON* frames_json, AtlasSpriteSheetData* atlas);
+
 // -----------------------------------------------------------------------
 // Singleton for metadata/PNG fetch callbacks
 // -----------------------------------------------------------------------
@@ -113,7 +116,8 @@ static bool json_get_bool_safe(cJSON* item, const char* key, bool default_val) {
 // --- ObjectLayer JSON Parsing ---
 
 static void parse_stats(cJSON* stats_json, Stats* stats) {
-    assert(stats_json && stats);
+    assert(stats_json);
+    assert(stats);
     stats->effect = json_get_int_safe(stats_json, "effect", 0);
     stats->resistance = json_get_int_safe(stats_json, "resistance", 0);
     stats->agility = json_get_int_safe(stats_json, "agility", 0);
@@ -123,7 +127,8 @@ static void parse_stats(cJSON* stats_json, Stats* stats) {
 }
 
 static void parse_render(cJSON* render_json, Render* render) {
-    assert(render_json && render);
+    assert(render_json);
+    assert(render);
 
     char* cid = json_get_string_safe(render_json, "cid", "");
     char* metadata_cid = json_get_string_safe(render_json, "metadataCid", "");
@@ -138,7 +143,8 @@ static void parse_render(cJSON* render_json, Render* render) {
 }
 
 static void parse_ledger(cJSON* ledger_json, Ledger* ledger) {
-    assert(ledger_json && ledger);
+    assert(ledger_json);
+    assert(ledger);
 
     char* type_str = json_get_string_safe(ledger_json, "type", "OFF_CHAIN");
     ledger->type = ledger_type_from_string(type_str);
@@ -168,7 +174,8 @@ static void parse_item(cJSON* item_json, Item* item) {
 }
 
 static void parse_object_layer_data(cJSON* data_json, ObjectLayerData* data) {
-    assert(data_json && data);
+    assert(data_json);
+    assert(data);
 
     parse_stats(cJSON_GetObjectItem(data_json, "stats"), &data->stats);
     parse_item(cJSON_GetObjectItem(data_json, "item"), &data->item);
@@ -180,9 +187,10 @@ static void parse_object_layer_data(cJSON* data_json, ObjectLayerData* data) {
 
 static void parse_direction_frame_data(cJSON* array_json, DirectionFrameData* dfd) {
     assert(dfd);
+    assert(array_json);
     dfd->count = 0;
 
-    if (!array_json || !cJSON_IsArray(array_json)) return;
+    if (!cJSON_IsArray(array_json)) return;
 
     int arr_size = cJSON_GetArraySize(array_json);
     if (arr_size > MAX_FRAMES_PER_DIRECTION) arr_size = MAX_FRAMES_PER_DIRECTION;
@@ -203,12 +211,13 @@ static void parse_direction_frame_data(cJSON* array_json, DirectionFrameData* df
 
 // --- ObjectLayer Cache Operations ---
 
-static void cache_object_layer(ObjectLayersManager* manager, const char* item_id, ObjectLayer* layer) {
-    assert(manager && item_id);
+static void cache_object_layer(const char* item_id, ObjectLayer* layer) {
+    assert(item_id);
+    assert(g_olm_singleton);
 
     unsigned long index = hash_string(item_id) % HASH_TABLE_SIZE;
 
-    ObjectLayerEntry* entry = manager->layer_buckets[index];
+    ObjectLayerEntry* entry = g_olm_singleton->layer_buckets[index];
     while (entry) {
         if (strcmp(entry->key, item_id) == 0) {
             if (entry->layer) free_object_layer(entry->layer);
@@ -223,15 +232,16 @@ static void cache_object_layer(ObjectLayersManager* manager, const char* item_id
 
     new_entry->key = strdup(item_id);
     new_entry->layer = layer;
-    new_entry->next = manager->layer_buckets[index];
-    manager->layer_buckets[index] = new_entry;
+    new_entry->next = g_olm_singleton->layer_buckets[index];
+    g_olm_singleton->layer_buckets[index] = new_entry;
 }
 
-static ObjectLayer* lookup_cached_layer(ObjectLayersManager* manager, const char* item_id) {
-    assert(manager && item_id);
+ObjectLayer* lookup_cached_layer(const char* item_id) {
+    assert(item_id);
+    assert(g_olm_singleton);
 
     unsigned long index = hash_string(item_id) % HASH_TABLE_SIZE;
-    ObjectLayerEntry* entry = manager->layer_buckets[index];
+    ObjectLayerEntry* entry = g_olm_singleton->layer_buckets[index];
 
     while (entry) {
         if (strcmp(entry->key, item_id) == 0) {
@@ -244,12 +254,13 @@ static ObjectLayer* lookup_cached_layer(ObjectLayersManager* manager, const char
 
 // --- Atlas Cache Operations ---
 
-static void cache_atlas_data(ObjectLayersManager* manager, const char* item_key, AtlasSpriteSheetData* atlas) {
-    assert(manager && item_key);
+static void cache_atlas_data(const char* item_key, AtlasSpriteSheetData* atlas) {
+    assert(item_key);
+    assert(g_olm_singleton);
 
     unsigned long index = hash_string(item_key) % HASH_TABLE_SIZE;
 
-    AtlasEntry* entry = manager->atlas_buckets[index];
+    AtlasEntry* entry = g_olm_singleton->atlas_buckets[index];
     while (entry) {
         if (strcmp(entry->key, item_key) == 0) {
             if (entry->atlas) free_atlas_sprite_sheet_data(entry->atlas);
@@ -264,15 +275,16 @@ static void cache_atlas_data(ObjectLayersManager* manager, const char* item_key,
 
     new_entry->key = strdup(item_key);
     new_entry->atlas = atlas;
-    new_entry->next = manager->atlas_buckets[index];
-    manager->atlas_buckets[index] = new_entry;
+    new_entry->next = g_olm_singleton->atlas_buckets[index];
+    g_olm_singleton->atlas_buckets[index] = new_entry;
 }
 
-static AtlasSpriteSheetData* lookup_cached_atlas(ObjectLayersManager* manager, const char* item_key) {
-    assert(manager && item_key);
+static AtlasSpriteSheetData* lookup_cached_atlas(const char* item_key) {
+    assert(item_key);
+    assert(g_olm_singleton);
 
     unsigned long index = hash_string(item_key) % HASH_TABLE_SIZE;
-    AtlasEntry* entry = manager->atlas_buckets[index];
+    AtlasEntry* entry = g_olm_singleton->atlas_buckets[index];
 
     while (entry) {
         if (strcmp(entry->key, item_key) == 0) {
@@ -285,11 +297,12 @@ static AtlasSpriteSheetData* lookup_cached_atlas(ObjectLayersManager* manager, c
 
 // --- Atlas Texture Cache Operations ---
 
-static AtlasTextureEntry* lookup_tex_entry(ObjectLayersManager* manager, const char* item_key) {
-    assert(manager && item_key);
+static AtlasTextureEntry* lookup_tex_entry(const char* item_key) {
+    assert(item_key);
+    assert(g_olm_singleton);
 
     unsigned long index = hash_string(item_key) % HASH_TABLE_SIZE;
-    AtlasTextureEntry* entry = manager->tex_buckets[index];
+    AtlasTextureEntry* entry = g_olm_singleton->tex_buckets[index];
 
     while (entry) {
         if (strcmp(entry->item_key, item_key) == 0) {
@@ -300,8 +313,9 @@ static AtlasTextureEntry* lookup_tex_entry(ObjectLayersManager* manager, const c
     return NULL;
 }
 
-static AtlasTextureEntry* create_tex_entry(ObjectLayersManager* manager, const char* item_key) {
-    assert(manager && item_key);
+static AtlasTextureEntry* create_tex_entry(const char* item_key) {
+    assert(item_key);
+    assert(g_olm_singleton);
 
     AtlasTextureEntry* entry = (AtlasTextureEntry*)malloc(sizeof(AtlasTextureEntry));
     if (!entry) return NULL;
@@ -313,8 +327,8 @@ static AtlasTextureEntry* create_tex_entry(ObjectLayersManager* manager, const c
     entry->next = NULL;
 
     unsigned long index = hash_string(item_key) % HASH_TABLE_SIZE;
-    entry->next = manager->tex_buckets[index];
-    manager->tex_buckets[index] = entry;
+    entry->next = g_olm_singleton->tex_buckets[index];
+    g_olm_singleton->tex_buckets[index] = entry;
 
     return entry;
 }
@@ -333,13 +347,14 @@ static AtlasTextureEntry* create_tex_entry(ObjectLayersManager* manager, const c
 
 static uint32_t s_tex_req_counter = 0;
 
-static Texture2D load_or_poll_atlas_texture(ObjectLayersManager* manager, const char* item_key) {
-    if (!manager || !item_key || item_key[0] == '\0') return (Texture2D){0};
+static Texture2D load_or_poll_atlas_texture(const char* item_key) {
+    assert(item_key);
+    assert(g_olm_singleton);
 
-    AtlasTextureEntry* entry = lookup_tex_entry(manager, item_key);
+    AtlasTextureEntry* entry = lookup_tex_entry(item_key);
 
     if (!entry) {
-        entry = create_tex_entry(manager, item_key);
+        entry = create_tex_entry(item_key);
         if (!entry) return (Texture2D){0};
 
         entry->request_id = OLM_REQUEST_ID_OFFSET + (++s_tex_req_counter);
@@ -361,14 +376,14 @@ static Texture2D load_or_poll_atlas_texture(ObjectLayersManager* manager, const 
     }
 
     if (entry->state == ATLAS_TEX_LOADING) {
-        if (manager->tex_loads_this_frame >= MAX_TEX_LOADS_PER_FRAME) {
+        if (g_olm_singleton->tex_loads_this_frame >= MAX_TEX_LOADS_PER_FRAME) {
             return (Texture2D){0};
         }
         int size = 0;
         unsigned char* data = js_get_fetch_result(entry->request_id, &size);
 
         if (data && size > 0) {
-            manager->tex_loads_this_frame++;
+            g_olm_singleton->tex_loads_this_frame++;
             Image image = LoadImageFromMemory(".png", data, size);
             if (image.data != NULL) {
                 entry->texture = LoadTextureFromImage(image);
@@ -394,9 +409,11 @@ static Texture2D load_or_poll_atlas_texture(ObjectLayersManager* manager, const 
 // Public API
 // ============================================================================
 
-ObjectLayersManager* create_object_layers_manager(void) {
+void create_object_layers_manager(void) {
+    assert(NULL == g_olm_singleton);
+
     ObjectLayersManager* manager = malloc(sizeof(ObjectLayersManager));
-    if (!manager) return NULL;
+    assert(manager);
 
     for (int i = 0; i < HASH_TABLE_SIZE; i++) {
         manager->layer_buckets[i] = NULL;
@@ -407,17 +424,19 @@ ObjectLayersManager* create_object_layers_manager(void) {
 
     manager->tex_loads_this_frame = 0;
 
-    // Set singleton for atlas metadata fetch callback
     g_olm_singleton = manager;
-
-    return manager;
 }
 
-void destroy_object_layers_manager(ObjectLayersManager* manager) {
-    if (!manager) return;
+ObjectLayersManager* obj_layers_mgr_get(void) {
+    return g_olm_singleton;
+}
+
+void destroy_object_layers_manager(void) {
+    if (NULL == g_olm_singleton) return;
+    ObjectLayersManager* mgr = g_olm_singleton;
 
     for (int i = 0; i < HASH_TABLE_SIZE; i++) {
-        ObjectLayerEntry* entry = manager->layer_buckets[i];
+        ObjectLayerEntry* entry = mgr->layer_buckets[i];
         while (entry) {
             ObjectLayerEntry* next = entry->next;
             if (entry->layer) free_object_layer(entry->layer);
@@ -425,11 +444,11 @@ void destroy_object_layers_manager(ObjectLayersManager* manager) {
             free(entry);
             entry = next;
         }
-        manager->layer_buckets[i] = NULL;
+        mgr->layer_buckets[i] = NULL;
     }
 
     for (int i = 0; i < HASH_TABLE_SIZE; i++) {
-        AtlasEntry* entry = manager->atlas_buckets[i];
+        AtlasEntry* entry = mgr->atlas_buckets[i];
         while (entry) {
             AtlasEntry* next = entry->next;
             if (entry->atlas) free_atlas_sprite_sheet_data(entry->atlas);
@@ -437,11 +456,11 @@ void destroy_object_layers_manager(ObjectLayersManager* manager) {
             free(entry);
             entry = next;
         }
-        manager->atlas_buckets[i] = NULL;
+        mgr->atlas_buckets[i] = NULL;
     }
 
     for (int i = 0; i < HASH_TABLE_SIZE; i++) {
-        AtlasTextureEntry* entry = manager->tex_buckets[i];
+        AtlasTextureEntry* entry = mgr->tex_buckets[i];
         while (entry) {
             AtlasTextureEntry* next = entry->next;
             if (entry->texture.id > 0) {
@@ -451,43 +470,33 @@ void destroy_object_layers_manager(ObjectLayersManager* manager) {
             free(entry);
             entry = next;
         }
-        manager->tex_buckets[i] = NULL;
+        mgr->tex_buckets[i] = NULL;
     }
 
     for (int i = 0; i < HASH_TABLE_SIZE; i++) {
-        AtlasMetaFetchEntry* entry = manager->meta_buckets[i];
+        AtlasMetaFetchEntry* entry = mgr->meta_buckets[i];
         while (entry) {
             AtlasMetaFetchEntry* next = entry->next;
             free(entry->item_key);
             free(entry);
             entry = next;
         }
-        manager->meta_buckets[i] = NULL;
+        mgr->meta_buckets[i] = NULL;
     }
 
-    free(manager);
+    free(g_olm_singleton);
+    g_olm_singleton = NULL;
 }
-
-ObjectLayer* get_or_fetch_object_layer(ObjectLayersManager* manager, const char* item_id) {
-    assert(manager && item_id);
-    return lookup_cached_layer(manager, item_id);
-}
-
-/* forward declaration */
-static void parse_ws_direction_frames(cJSON* frames_json, AtlasSpriteSheetData* atlas);
 
 /* ── Callback for atlas metadata REST fetch (via engine_client pipeline) ─── */
 
 static void on_atlas_meta_fetched(uint32_t request_id, FetchState state, void* data, size_t size) {
-    (void)request_id;
     if (FETCH_STATE_READY != state) { free(data); return; }
 
-    /* Retrieve the manager via the module-level singleton. */
-    ObjectLayersManager* manager = g_olm_singleton;
-    if (!manager) { free(data); return; }
+    assert(g_olm_singleton);
 
     /* Parse REST response: { "data": { "metadata": { itemKey, atlasWidth, ... } } } */
-    cJSON* root = cJSON_ParseWithLength((const char*)data, (size_t)size);
+    cJSON* root = cJSON_ParseWithLength((const char*)data, size);
     free(data);
     if (!root) return;
 
@@ -502,7 +511,7 @@ static void on_atlas_meta_fetched(uint32_t request_id, FetchState state, void* d
         strncpy(item_key, ik, MAX_ITEM_ID_LENGTH - 1);
         free(ik);
     }
-    if (item_key[0] == '\0' || lookup_cached_atlas(manager, item_key)) {
+    if (item_key[0] == '\0' || lookup_cached_atlas(item_key)) {
         cJSON_Delete(root);
         return;
     }
@@ -518,45 +527,45 @@ static void on_atlas_meta_fetched(uint32_t request_id, FetchState state, void* d
     cJSON* frames = cJSON_GetObjectItem(rmeta, "frames");
     if (frames) parse_ws_direction_frames(frames, atlas);
 
-    cache_atlas_data(manager, item_key, atlas);
+    cache_atlas_data(item_key, atlas);
     printf("[ATLAS REST] Metadata cached via callback for: %s (%dx%d)\n",
            item_key, atlas->atlas_width, atlas->atlas_height);
 
     /* Update meta state */
     unsigned long meta_idx = hash_string(item_key) % HASH_TABLE_SIZE;
-    for (AtlasMetaFetchEntry* e = manager->meta_buckets[meta_idx]; e; e = e->next) {
+    for (AtlasMetaFetchEntry* e = g_olm_singleton->meta_buckets[meta_idx]; e; e = e->next) {
         if (strcmp(e->item_key, item_key) == 0) { e->state = ATLAS_META_DONE; break; }
     }
 
     /* Kick off PNG blob fetch now that metadata is cached */
-    load_or_poll_atlas_texture(manager, item_key);
+    load_or_poll_atlas_texture(item_key);
 
     cJSON_Delete(root);
 }
 
-AtlasSpriteSheetData* get_or_fetch_atlas_data(ObjectLayersManager* manager, const char* item_key) {
-    assert(manager && item_key);
+AtlasSpriteSheetData* get_or_fetch_atlas_data(const char* item_key) {
+    assert(item_key);
+    assert(g_olm_singleton);
 
-    AtlasSpriteSheetData* atlas = lookup_cached_atlas(manager, item_key);
+    AtlasSpriteSheetData* atlas = lookup_cached_atlas(item_key);
     if (!atlas) {
-        get_atlas_texture(manager, item_key);
+        get_atlas_texture(item_key);
     }
     return atlas;
 }
 
-static void parse_ws_direction_frames(cJSON* frames_json, AtlasSpriteSheetData* atlas);
+Texture2D get_atlas_texture(const char* item_key) {
+    assert(item_key);
+    assert(g_olm_singleton);
 
-Texture2D get_atlas_texture(ObjectLayersManager* manager, const char* item_key) {
-    if (!manager || !item_key || item_key[0] == '\0') return (Texture2D){0};
-
-    if (lookup_cached_atlas(manager, item_key)) {
-        return load_or_poll_atlas_texture(manager, item_key);
+    if (lookup_cached_atlas(item_key)) {
+        return load_or_poll_atlas_texture(item_key);
     }
 
     unsigned long meta_idx = hash_string(item_key) % HASH_TABLE_SIZE;
     AtlasMetaFetchEntry* meta = NULL;
     {
-        AtlasMetaFetchEntry* e = manager->meta_buckets[meta_idx];
+        AtlasMetaFetchEntry* e = g_olm_singleton->meta_buckets[meta_idx];
         while (e) {
             if (strcmp(e->item_key, item_key) == 0) { meta = e; break; }
             e = e->next;
@@ -564,7 +573,7 @@ Texture2D get_atlas_texture(ObjectLayersManager* manager, const char* item_key) 
     }
 
     if (!meta) {
-        obj_layers_mgr_schedule_atlas_fetch(manager, item_key);
+        obj_layers_mgr_schedule_atlas_fetch(item_key);
         return (Texture2D){0};
     }
 
@@ -575,27 +584,28 @@ Texture2D get_atlas_texture(ObjectLayersManager* manager, const char* item_key) 
 // Cache Population from WebSocket Metadata
 // ============================================================================
 
-void obj_layers_mgr_reset_frame_budget(ObjectLayersManager* manager) {
-    if (manager) manager->tex_loads_this_frame = 0;
+void obj_layers_mgr_reset_frame_budget(void) {
+    if (g_olm_singleton) g_olm_singleton->tex_loads_this_frame = 0;
 }
 
-void obj_layers_mgr_schedule_atlas_fetch(ObjectLayersManager* manager, const char* item_key) {
-    if (!manager || !item_key || item_key[0] == '\0') return;
+void obj_layers_mgr_schedule_atlas_fetch(const char* item_key) {
+    assert(item_key);
+    assert(g_olm_singleton);
 
     unsigned long index = hash_string(item_key) % HASH_TABLE_SIZE;
-    AtlasMetaFetchEntry* e = manager->meta_buckets[index];
+    AtlasMetaFetchEntry* e = g_olm_singleton->meta_buckets[index];
     while (e) {
         if (strcmp(e->item_key, item_key) == 0) return;
         e = e->next;
     }
-    if (lookup_cached_atlas(manager, item_key)) return;
+    if (lookup_cached_atlas(item_key)) return;
 
-    AtlasMetaFetchEntry* entry = (AtlasMetaFetchEntry*)malloc(sizeof(AtlasMetaFetchEntry));
+    AtlasMetaFetchEntry* entry = malloc(sizeof(AtlasMetaFetchEntry));
     if (!entry) return;
     entry->item_key = strdup(item_key);
     entry->state = ATLAS_META_FETCHING;
-    entry->next = manager->meta_buckets[index];
-    manager->meta_buckets[index] = entry;
+    entry->next = g_olm_singleton->meta_buckets[index];
+    g_olm_singleton->meta_buckets[index] = entry;
 
     char url[512];
     snprintf(url, sizeof(url), "%s/api/atlas-sprite-sheet/metadata/%s", API_BASE_URL, item_key);
@@ -608,8 +618,10 @@ void obj_layers_mgr_schedule_atlas_fetch(ObjectLayersManager* manager, const cha
     printf("[ATLAS REST] Fetch scheduled via engine_client: %s\n", item_key);
 }
 
-void populate_object_layer_from_json(ObjectLayersManager* manager, const char* item_id, const cJSON* ol_json) {
-    assert(manager && item_id && ol_json);
+void populate_object_layer_from_json(const char* item_id, const cJSON* ol_json) {
+    assert(ol_json);
+    assert(item_id);
+    assert(g_olm_singleton);
 
     ObjectLayer* layer = create_object_layer();
     if (!layer) return;
@@ -625,11 +637,12 @@ void populate_object_layer_from_json(ObjectLayersManager* manager, const char* i
         strncpy(layer->data.item.id, item_id, MAX_ITEM_ID_LENGTH - 1);
     }
 
-    cache_object_layer(manager, item_id, layer);
+    cache_object_layer(item_id, layer);
 }
 
 static void parse_ws_direction_frames(cJSON* frames_json, AtlasSpriteSheetData* atlas) {
-    assert(frames_json && atlas);
+    assert(frames_json);
+    assert(atlas);
     parse_direction_frame_data(cJSON_GetObjectItem(frames_json, "up_idle"), &atlas->up_idle);
     parse_direction_frame_data(cJSON_GetObjectItem(frames_json, "down_idle"), &atlas->down_idle);
     parse_direction_frame_data(cJSON_GetObjectItem(frames_json, "right_idle"), &atlas->right_idle);
@@ -650,32 +663,37 @@ static void parse_ws_direction_frames(cJSON* frames_json, AtlasSpriteSheetData* 
     parse_direction_frame_data(cJSON_GetObjectItem(frames_json, "none_idle"), &atlas->none_idle);
 }
 
-void populate_atlas_from_json(ObjectLayersManager* manager, const char* item_key, const cJSON* atlas_json) {
-    assert(manager && item_key && atlas_json);
-
-    AtlasSpriteSheetData* atlas = create_atlas_sprite_sheet_data();
-    if (!atlas) return;
-
-    char* file_id = json_get_string_safe((cJSON*)atlas_json, "fileId", "");
-    strncpy(atlas->file_id, file_id, MAX_FILE_ID_LENGTH - 1);
-    free(file_id);
-
-    strncpy(atlas->item_key, item_key, MAX_ITEM_ID_LENGTH - 1);
-    atlas->atlas_width = json_get_int_safe((cJSON*)atlas_json, "atlasWidth", 0);
-    atlas->atlas_height = json_get_int_safe((cJSON*)atlas_json, "atlasHeight", 0);
-    atlas->cell_pixel_dim = json_get_int_safe((cJSON*)atlas_json, "cellPixelDim", 20);
-    atlas->frame_duration = json_get_int_safe((cJSON*)atlas_json, "frame_duration", 100);
-
-    cJSON* frames = cJSON_GetObjectItem((cJSON*)atlas_json, "frames");
-    if (frames) parse_ws_direction_frames(frames, atlas);
-
-    cache_atlas_data(manager, item_key, atlas);
-
-    if (item_key[0] != '\0') {
-        load_or_poll_atlas_texture(manager, item_key);
-    }
-
-    printf("[INFO] Atlas populated from WS for: %s (%dx%d)\n",
-           item_key, atlas->atlas_width, atlas->atlas_height);
-}
+/* Dead — no external callers. Kept commented for reference; the REST path
+ * (obj_layers_mgr_schedule_atlas_fetch → on_atlas_meta_fetched) supersedes
+ * the WS-driven population this function provided.
+ *
+ * void populate_atlas_from_json(ObjectLayersManager* manager, const char* item_key, const cJSON* atlas_json) {
+ *     assert(manager && item_key && atlas_json);
+ *
+ *     AtlasSpriteSheetData* atlas = create_atlas_sprite_sheet_data();
+ *     if (!atlas) return;
+ *
+ *     char* file_id = json_get_string_safe((cJSON*)atlas_json, "fileId", "");
+ *     strncpy(atlas->file_id, file_id, MAX_FILE_ID_LENGTH - 1);
+ *     free(file_id);
+ *
+ *     strncpy(atlas->item_key, item_key, MAX_ITEM_ID_LENGTH - 1);
+ *     atlas->atlas_width = json_get_int_safe((cJSON*)atlas_json, "atlasWidth", 0);
+ *     atlas->atlas_height = json_get_int_safe((cJSON*)atlas_json, "atlasHeight", 0);
+ *     atlas->cell_pixel_dim = json_get_int_safe((cJSON*)atlas_json, "cellPixelDim", 20);
+ *     atlas->frame_duration = json_get_int_safe((cJSON*)atlas_json, "frame_duration", 100);
+ *
+ *     cJSON* frames = cJSON_GetObjectItem((cJSON*)atlas_json, "frames");
+ *     if (frames) parse_ws_direction_frames(frames, atlas);
+ *
+ *     cache_atlas_data(manager, item_key, atlas);
+ *
+ *     if (item_key[0] != '\0') {
+ *         load_or_poll_atlas_texture(manager, item_key);
+ *     }
+ *
+ *     printf("[INFO] Atlas populated from WS for: %s (%dx%d)\n",
+ *            item_key, atlas->atlas_width, atlas->atlas_height);
+ * }
+ */
 

@@ -389,7 +389,7 @@ bool interaction_bubble_handle_click(int mx, int my) {
                 /* Z-sort layers so the JS overlay renders skin first,
                  * weapon on top — same order as the grid and bubble. */
                 LayerZEntry z_sorted[32];
-                int z_count = layer_z_sort(mgr, icon_layers, icon_lc,
+                int z_count = layer_z_sort(icon_layers, icon_lc,
                                            z_sorted, 32, false);
 
                 char json[4096];
@@ -400,12 +400,9 @@ bool interaction_bubble_handle_click(int mx, int my) {
                     const ObjectLayerState* ls = &icon_layers[z_sorted[j].index];
 
                     const char* item_type = "";
-                    if (mgr) {
-                        ObjectLayer* ol_data = get_or_fetch_object_layer(
-                            mgr, ls->item_id);
-                        if (ol_data && ol_data->data.item.type[0] != '\0')
-                            item_type = ol_data->data.item.type;
-                    }
+                    ObjectLayer* ol_data = lookup_cached_layer(ls->item_id);
+                    if (ol_data && ol_data->data.item.type[0] != '\0')
+                        item_type = ol_data->data.item.type;
 
                     bool has_dlg = dialogue_data_available(ls->item_id);
 
@@ -465,22 +462,16 @@ void interaction_bubble_dead_equip(const char* item_id, bool active) {
         }
         /* One-per-type deactivation (mirrors server logic). */
         if (target >= 0 && g_game_state.equipment_rules.one_per_type) {
-            ObjectLayersManager* mgr = obj_layers_mgr_get();
             const char* req_type = "";
-            if (mgr) {
-                ObjectLayer* ol = get_or_fetch_object_layer(mgr, item_id);
-                if (ol && ol->data.item.type[0] != '\0')
-                    req_type = ol->data.item.type;
-            }
+            ObjectLayer* ol = lookup_cached_layer(item_id);
+            if (ol && ol->data.item.type[0] != '\0')
+                req_type = ol->data.item.type;
             if (req_type[0] != '\0') {
                 for (int j = 0; j < slot->alive_layer_count; j++) {
                     if (j == target || !slot->alive_layers[j].active) continue;
-                    if (mgr) {
-                        ObjectLayer* other = get_or_fetch_object_layer(
-                            mgr, slot->alive_layers[j].item_id);
-                        if (other && strcmp(other->data.item.type, req_type) == 0)
-                            slot->alive_layers[j].active = false;
-                    }
+                    ObjectLayer* other = lookup_cached_layer(slot->alive_layers[j].item_id);
+                    if (other && strcmp(other->data.item.type, req_type) == 0)
+                        slot->alive_layers[j].active = false;
                 }
             }
         }

@@ -20,8 +20,7 @@ static int cmp_z_entry(const void* a, const void* b) {
     return ea->priority - eb->priority;
 }
 
-int layer_z_sort(ObjectLayersManager* mgr,
-                 const ObjectLayerState* layers, int count,
+int layer_z_sort(const ObjectLayerState* layers, int count,
                  LayerZEntry* out, int out_cap,
                  bool facing_up) {
     if (!layers || count <= 0 || !out || out_cap <= 0) return 0;
@@ -30,12 +29,9 @@ int layer_z_sort(ObjectLayersManager* mgr,
     for (int i = 0; i < count && n < out_cap; i++) {
         if (!layers[i].active || layers[i].item_id[0] == '\0') continue;
 
-        const char* type = NULL;
-        if (mgr) {
-            ObjectLayer* ol = get_or_fetch_object_layer(mgr, layers[i].item_id);
-            if (ol && ol->data.item.type[0] != '\0')
-                type = ol->data.item.type;
-        }
+        ObjectLayer* ol = lookup_cached_layer(layers[i].item_id);
+        const char* type = (ol && ol->data.item.type[0] != '\0')
+                           ? ol->data.item.type : NULL;
 
         out[n].index    = i;
         out[n].priority = layer_z_priority(type, facing_up);

@@ -49,7 +49,7 @@ void nameplate_resolve(const char *entity_id,
             if (!first_active_id)
                 first_active_id = layers[i].item_id;
 
-            ObjectLayer *ol = get_or_fetch_object_layer(mgr, layers[i].item_id);
+            ObjectLayer *ol = lookup_cached_layer(layers[i].item_id);
             if (ol && (strcmp(ol->data.item.type, "skin") == 0 ||
                        strcmp(ol->data.item.type, "body") == 0)) {
                 skin_id = layers[i].item_id;

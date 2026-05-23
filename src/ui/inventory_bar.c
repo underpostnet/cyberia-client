@@ -105,7 +105,7 @@ static void draw_slot(Rectangle r, const ObjectLayerState* ols, ObjectLayersMana
 
     bool activable = true;
     if (mgr && ols->item_id[0] != '\0') {
-        ObjectLayer* ol_data = get_or_fetch_object_layer(mgr, ols->item_id);
+        ObjectLayer* ol_data = lookup_cached_layer(ols->item_id);
         if (ol_data) activable = ol_data->data.item.activable;
     }
 
