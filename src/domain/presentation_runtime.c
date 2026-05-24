@@ -1,14 +1,10 @@
 #include "presentation_runtime.h"
-#include "js/services.h"
+#include "network/engine_client.h"
 #include "game_state.h"
 #include <cJSON.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-
-/* Reserve a request_id range for this module so it never collides with
- * other Channel-3 fetches (atlas, object-layer, dialogue, ui-icon). */
-#define PRESENTATION_REQUEST_ID 0x40000001
 
 #define MAX_PALETTE_ENTRIES     64
 #define MAX_STATUS_ENTRIES      32
@@ -184,6 +180,17 @@ static void hydrate_game_state(void) {
     }
 }
 
+static void on_hints_fetched(const FetchResponse* r) {
+    if (FETCH_STATE_READY == r->state && r->data && r->size > 0) {
+        parse_response((const char*)r->data, (int)r->size);
+    } else {
+        fprintf(stderr, "[presentation_runtime] fetch unavailable — using bootstrap fallback\n");
+    }
+    free(r->data);
+    g_rt.ready = true;
+    hydrate_game_state();
+}
+
 /* ── Public lifecycle ──────────────────────────────────────────────── */
 
 void presentation_runtime_start_fetch(const char* api_base_url, const char* client_hints_code) {
@@ -193,28 +200,8 @@ void presentation_runtime_start_fetch(const char* api_base_url, const char* clie
     int n = snprintf(url, sizeof(url), "%s/api/cyberia-client-hints/%s", api_base_url, client_hints_code);
     if (n <= 0 || n >= (int)sizeof(url)) return;
     g_rt.started = true;
-    js_start_fetch_binary(url, PRESENTATION_REQUEST_ID);
+    fetch_request_start("cyberia-client-hints", url, on_hints_fetched);
     printf("[presentation_runtime] fetching %s\n", url);
-}
-
-bool presentation_runtime_poll(void) {
-    if (!g_rt.started || g_rt.ready) return false;
-    int size = 0;
-    unsigned char* buf = js_get_fetch_result(PRESENTATION_REQUEST_ID, &size);
-    if (buf && size > 0) {
-        parse_response((const char*)buf, size);
-        free(buf);
-        g_rt.ready = true;
-        hydrate_game_state();
-        return true;
-    }
-    if (!buf && size < 0) {
-        g_rt.ready = true;
-        hydrate_game_state();
-        fprintf(stderr, "[presentation_runtime] fetch unavailable — using bootstrap fallback\n");
-        return true;
-    }
-    return false;
 }
 
 bool presentation_runtime_is_ready(void) {

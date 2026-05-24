@@ -108,12 +108,6 @@ void main_loop(void) {
         g_socket_attempt_time = 0.0;
     }
 
-    /* 0. Poll the optional engine-side presentation override fetch.
-     * Returns true exactly once — the frame the response settles. From
-     * that frame on, presentation_runtime_palette() and status-icon
-     * lookups reflect the engine's per-instance overrides. */
-    (void)presentation_runtime_poll();
-
     /* 1 + 2. Input capture and dispatch. */
     input_update();
     input_event_queue_handle();
@@ -173,6 +167,9 @@ int main(void) {
     // the client renders with built-in defaults from frame 0; if the engine
     // returns overrides, they apply once the fetch completes. The Go
     // simulation server never sees this request.
+
+    // TODO: Do not mix the start fetch loop with the running game loop
+    // if need to be non blocking then wait in a loading screen before starting main_loop
     presentation_runtime_start_fetch(API_BASE_URL, CYBERIA_CLIENT_HINTS_CODE);
 
     // Initialise prediction before the WS connects so the first snapshot

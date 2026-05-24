@@ -13,14 +13,12 @@
  * Lifecycle
  * ---------
  *   1. main() calls presentation_runtime_start_fetch() once after
- *      js_init_engine_api() — kicks off the async GET.
- *   2. main_loop() calls presentation_runtime_poll() every frame —
- *      advances the fetch state machine.
- *   3. When the response settles, the runtime parses palette, entity
- *      colour keys, status-icon visuals, and camera/cell tunings, then
- *      hydrates g_game_state.cell_size, g_game_state.interpolation_ms,
+ *      js_init_engine_api() — kicks off the async GET via engine_client.
+ *   2. When the response settles, the engine_client callback parses palette,
+ *      entity colour keys, status-icon visuals, and camera/cell tunings,
+ *      then hydrates g_game_state.cell_size, g_game_state.interpolation_ms,
  *      and g_game_state.camera.zoom (one-shot write).
- *   4. Renderers / UI code consult the runtime accessors below.
+ *   3. Renderers / UI code consult the runtime accessors below.
  *
  * Bootstrap fallback
  * ------------------
@@ -49,11 +47,6 @@ extern "C" {
 /** Kick off the asynchronous fetch. Safe to call exactly once at startup
  *  after js_init_engine_api has run. Subsequent calls are no-ops. */
 void presentation_runtime_start_fetch(const char* api_base_url, const char* client_hints_code);
-
-/** Advance the fetch state machine. Call once per render frame from the
- *  main loop. Returns true the first frame the response settles
- *  (succeeded, errored, or 404) — useful for one-shot hydration hooks. */
-bool presentation_runtime_poll(void);
 
 /** True once the fetch has settled (succeeded, errored, or 404). After
  *  this point, all accessors reflect the resolved table; before then they
