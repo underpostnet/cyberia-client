@@ -170,30 +170,16 @@ static void parse_direction_frame_data(cJSON* array_json, DirectionFrameData* df
     }
 }
 
-// --- Cache lookups (all backed by HashTable) ---
-
 ObjectLayer* lookup_cached_layer(const char* item_id) {
     assert(item_id);
     assert(g_olm_singleton);
     return (ObjectLayer*)hash_table_get(&g_olm_singleton->layers, item_id);
 }
 
-static AtlasSpriteSheetData* lookup_cached_atlas(const char* item_key) {
-    assert(item_key);
-    assert(g_olm_singleton);
-    return (AtlasSpriteSheetData*)hash_table_get(&g_olm_singleton->atlases, item_key);
-}
-
-static AtlasTextureEntry* lookup_tex_entry(const char* item_key) {
-    assert(item_key);
-    assert(g_olm_singleton);
-    return (AtlasTextureEntry*)hash_table_get(&g_olm_singleton->textures, item_key);
-}
-
 /* Atlas PNG blob fetch — routed through engine_client. Callback decodes
  * PNG and uploads to GPU on the frame the fetch completes. */
 static void on_atlas_blob_fetched(const FetchResponse* r) {
-    AtlasTextureEntry* entry = lookup_tex_entry(r->asset_id);
+    AtlasTextureEntry* entry = hash_table_get(&g_olm_singleton->textures, r->asset_id);
     if (!entry) { free(r->data); return; }
 
     if (FETCH_STATE_READY != r->state || !r->data || r->size == 0) {
@@ -223,7 +209,7 @@ static Texture2D load_or_poll_atlas_texture(const char* item_key) {
     assert(item_key);
     assert(g_olm_singleton);
 
-    AtlasTextureEntry* entry = lookup_tex_entry(item_key);
+    AtlasTextureEntry* entry = hash_table_get(&g_olm_singleton->textures, item_key);
     if (entry) {
         return entry->state == ATLAS_TEX_READY ? entry->texture : (Texture2D){0};
     }
@@ -299,7 +285,7 @@ static void on_atlas_meta_fetched(const FetchResponse* r) {
         strncpy(item_key, ik, MAX_ITEM_ID_LENGTH - 1);
         free(ik);
     }
-    if (item_key[0] == '\0' || lookup_cached_atlas(item_key)) {
+    if (item_key[0] == '\0' || hash_table_contains(&g_olm_singleton->atlases, item_key)) {
         cJSON_Delete(root);
         return;
     }
@@ -329,7 +315,7 @@ AtlasSpriteSheetData* get_or_fetch_atlas_data(const char* item_key) {
     assert(item_key);
     assert(g_olm_singleton);
 
-    AtlasSpriteSheetData* atlas = lookup_cached_atlas(item_key);
+    AtlasSpriteSheetData* atlas = hash_table_get(&g_olm_singleton->atlases, item_key);
     if (!atlas) {
         get_atlas_texture(item_key);
     }
@@ -340,7 +326,7 @@ Texture2D get_atlas_texture(const char* item_key) {
     assert(item_key);
     assert(g_olm_singleton);
 
-    if (lookup_cached_atlas(item_key)) {
+    if (hash_table_contains(&g_olm_singleton->atlases, item_key)) {
         return load_or_poll_atlas_texture(item_key);
     }
 
@@ -359,7 +345,7 @@ void obj_layers_mgr_schedule_atlas_fetch(const char* item_key) {
     assert(g_olm_singleton);
 
     if (hash_table_contains(&g_olm_singleton->meta, item_key)) return;
-    if (lookup_cached_atlas(item_key)) return;
+    if (hash_table_contains(&g_olm_singleton->atlases, item_key)) return;
 
     hash_table_put(&g_olm_singleton->meta, item_key, META_SENTINEL);
 

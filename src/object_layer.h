@@ -175,7 +175,7 @@ typedef struct {
 // Item structure
 typedef struct {
     char id[MAX_ITEM_ID_LENGTH];
-    char type[MAX_TYPE_LENGTH];
+    char type[MAX_TYPE_LENGTH]; // TODO: this could be an enum
     char description[MAX_DESCRIPTION_LENGTH];
     bool activable;
 } Item;
