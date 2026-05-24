@@ -93,7 +93,6 @@ void ui_icon_cleanup(void);
  * @param bounce    If true, apply the smooth hover-float animation.
  * @param phase     Phase offset in radians (use entity ID hash for desync).
  */
-void ui_icon_draw(const char* icon_id, float cx, float cy,
-                  int size, bool bounce, float phase);
+void ui_icon_draw(const char* icon_id, float cx, float cy, int size, bool bounce, float phase);
 
 #endif /* UI_ICON_H */

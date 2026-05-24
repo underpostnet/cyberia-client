@@ -3,8 +3,7 @@
  * @brief General-purpose UI Icon System — implementation.
  *
  * Self-contained async texture cache for small PNG icons served by the
- * engine API.  Uses the WASM JS fetch bridge directly (same pattern as
- * dialogue_data.c and the atlas system in object_layers_management.c).
+ * engine API.
  *
  * See ui_icon.h for full documentation.
  */
@@ -12,7 +11,7 @@
 #include "ui_icon.h"
 
 #include "config.h"
-#include "helper.h"
+#include "hash_table.h"
 #include "network/engine_client.h"
 
 #include <assert.h>
@@ -23,8 +22,6 @@
 
 /* ── Icon texture cache ─────────────────────────────────────────────── */
 
-#define ICON_HASH_SIZE 64
-
 typedef enum {
     ICON_NONE,
     ICON_LOADING,
@@ -32,40 +29,36 @@ typedef enum {
     ICON_ERROR
 } IconState;
 
-typedef struct IconEntry {
-    char*             icon_id;   /* filename stem, e.g. "skull" */
-    Texture2D         texture;
-    IconState         state;
-    uint32_t          request_id;
-    struct IconEntry* next;
+typedef struct {
+    Texture2D texture;
+    IconState state;
 } IconEntry;
 
-static IconEntry* s_buckets[ICON_HASH_SIZE];
+static HashTable ht;
 
-static void on_icon_fetched(uint32_t request_id, FetchState state, void* data, size_t size) {
-    /* Locate entry by request_id across all hash buckets. */
-    IconEntry* e = NULL;
-    for (int i = 0; NULL == e && i < ICON_HASH_SIZE; i++) {
-        for (IconEntry* it = s_buckets[i]; it; it = it->next) {
-            if (it->request_id == request_id) { e = it; break; }
-        }
-    }
+static void icon_entry_free(void* p) {
+    IconEntry* e = p;
+    UnloadTexture(e->texture);
+    free(e);
+}
 
-    if (NULL == e) { free(data); return; }
+static void on_icon_fetched(const FetchResponse* r) {
+    IconEntry* e = hash_table_get(&ht, r->asset_id);
+    if (NULL == e) { free(r->data); return; }
 
-    if (FETCH_STATE_READY != state) {
+    if (FETCH_STATE_READY != r->state) {
         e->state = ICON_ERROR;
-        fprintf(stderr, "[UI_ICON] Fetch error for '%s'\n", e->icon_id);
-        free(data);
+        fprintf(stderr, "[UI_ICON] Fetch error for '%s'\n", r->asset_id);
+        free(r->data);
         return;
     }
 
-    Image img = LoadImageFromMemory(".png", (unsigned char*)data, (int)size);
-    free(data);
+    Image img = LoadImageFromMemory(".png", (unsigned char*)r->data, (int)r->size);
+    free(r->data);
 
     if (NULL == img.data) {
         e->state = ICON_ERROR;
-        fprintf(stderr, "[UI_ICON] Image decode failed for '%s'\n", e->icon_id);
+        fprintf(stderr, "[UI_ICON] Image decode failed for '%s'\n", r->asset_id);
         return;
     }
 
@@ -73,64 +66,37 @@ static void on_icon_fetched(uint32_t request_id, FetchState state, void* data, s
     UnloadImage(img);
     e->state = ICON_READY;
     printf("[UI_ICON] Loaded '%s' (%dx%d)\n",
-           e->icon_id, e->texture.width, e->texture.height);
+           r->asset_id, e->texture.width, e->texture.height);
 }
 
-static IconEntry* lookup(const char* icon_id) {
-    unsigned long idx = hash_string(icon_id) % ICON_HASH_SIZE;
-    IconEntry* e = s_buckets[idx];
-    while (e) {
-        if (strcmp(e->icon_id, icon_id) == 0) return e;
-        e = e->next;
-    }
-    return NULL;
-}
-
-/** Create a new entry and kick off the async HTTP fetch. */
 static IconEntry* create_and_fetch(const char* icon_id) {
     assert(icon_id);
 
-    IconEntry* e = (IconEntry*)calloc(1, sizeof(IconEntry));
-    e->icon_id = strdup(icon_id);
+    IconEntry* e = calloc(1, sizeof(IconEntry));
+    e->state = ICON_LOADING;
+    hash_table_put(&ht, icon_id, e);
 
-    /* Insert into hash table. */
-    unsigned long idx = hash_string(icon_id) % ICON_HASH_SIZE;
-    e->next        = s_buckets[idx];
-    s_buckets[idx] = e;
-
-    /* Start the async fetch:  {API_BASE_URL}/assets/ui-icons/{icon_id}.png */
     char url[512];
     snprintf(url, sizeof(url), "%s/assets/ui-icons/%s.png", API_BASE_URL, icon_id);
-    e->request_id = fetch_request_start(url, on_icon_fetched);
-    e->state      = ICON_LOADING;
+    uint32_t req_id = fetch_request_start(icon_id, url, on_icon_fetched);
 
-    printf("[UI_ICON] Fetch started for '%s' (req %u)\n", icon_id, e->request_id);
+    printf("[UI_ICON] Fetch started for '%s' (req %u)\n", icon_id, req_id);
     return e;
 }
 
 /* ── Public API ─────────────────────────────────────────────────────── */
 
 void ui_icon_init(void) {
-    memset(s_buckets, 0, sizeof(s_buckets));
+    hash_table_init(&ht, 64, icon_entry_free);
 }
 
 void ui_icon_cleanup(void) {
-    for (int i = 0; i < ICON_HASH_SIZE; i++) {
-        IconEntry* e = s_buckets[i];
-        while (e) {
-            IconEntry* next = e->next;
-            if (e->texture.id > 0) UnloadTexture(e->texture);
-            free(e->icon_id);
-            free(e);
-            e = next;
-        }
-        s_buckets[i] = NULL;
-    }
+    hash_table_destroy(&ht);
 }
 
-void ui_icon_draw(const char* icon_id, float cx, float cy,
-                  int size, bool bounce, float phase) {
-    if (!icon_id || icon_id[0] == '\0') return;
+void ui_icon_draw(const char* icon_id, float cx, float cy, int size, bool bounce, float phase) {
+    assert(icon_id);
+    assert(strlen(icon_id));
 
     /* ── Bounce: smooth ease-in-out sine float ───────────────────────── */
     float offset_y = 0.0f;
@@ -143,17 +109,17 @@ void ui_icon_draw(const char* icon_id, float cx, float cy,
     float draw_cy = cy + offset_y;
 
     /* ── Look up (or create) the cached icon entry ───────────────────── */
-    IconEntry* e = lookup(icon_id);
+    IconEntry* e = hash_table_get(&ht, icon_id);
     if (!e) e = create_and_fetch(icon_id);
     if (!e) return;
 
-    if (e->state == ICON_READY && e->texture.id > 0) {
+    if (e->state == ICON_READY) {
         /* Texture loaded — draw centred at (cx, draw_cy). */
         Rectangle src = { 0, 0, (float)e->texture.width, (float)e->texture.height };
         Rectangle dst = { cx - size * 0.5f, draw_cy - size * 0.5f,
                           (float)size, (float)size };
         DrawTexturePro(e->texture, src, dst, (Vector2){0, 0}, 0.0f, WHITE);
-    } else if (e->state != ICON_ERROR) {
+    } else {
         /* Still loading — subtle pulsing placeholder dot. */
         float pulse = 0.5f + 0.5f * sinf((float)GetTime() * 4.0f);
         unsigned char alpha = (unsigned char)(40 + (int)(pulse * 60.0f));

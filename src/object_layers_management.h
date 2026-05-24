@@ -147,12 +147,4 @@ void populate_object_layer_from_json(const char* item_id, const cJSON* ol_json);
  */
 void obj_layers_mgr_schedule_atlas_fetch(const char* item_key);
 
-/**
- * @brief Reset per-frame texture load budget. Call once at the start of each render frame.
- *
- * Prevents freeze caused by decoding many PNG atlas textures in a single frame
- * when multiple fetch results arrive simultaneously on first game load.
- */
-void obj_layers_mgr_reset_frame_budget(void);
-
 #endif // OBJECT_LAYERS_MANAGEMENT_H

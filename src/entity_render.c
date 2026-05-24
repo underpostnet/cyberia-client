@@ -1,14 +1,14 @@
 #include "entity_render.h"
 #include "object_layers_management.h"
 #include "layer_z_order.h"
+#include "hash_table.h"
 #include <raylib.h>
 #include <stdlib.h>
 #include <string.h>
 #include <stdio.h>
 #include <assert.h>
-#include "helper.h"
 
-#define HASH_TABLE_SIZE 1024
+#define ANIM_TABLE_INITIAL_CAPACITY 1024
 #define MAX_LAYERS_PER_ENTITY 20
 #define DEFAULT_FRAME_DURATION_MS 100
 
@@ -23,15 +23,9 @@ typedef struct {
     int failed_texture_attempts;
 } AnimationState;
 
-typedef struct AnimationEntry {
-    char* key;
-    AnimationState state;
-    struct AnimationEntry* next;
-} AnimationEntry;
-
 struct EntityRender {
     ObjectLayersManager* obj_layers_mgr;
-    AnimationEntry* anim_buckets[HASH_TABLE_SIZE];
+    HashTable animations;  // "<entity_id>_<item_id>" → AnimationState*
 };
 
 typedef struct {
@@ -43,21 +37,10 @@ typedef struct {
 
 // --- Helper Functions ---
 
-static AnimationEntry* create_animation_entry(const char* key) {
-    assert(key && strlen(key) > 0);
-    AnimationEntry* entry = (AnimationEntry*)malloc(sizeof(AnimationEntry));
-    if (entry) {
-        entry->key = malloc(strlen(key) + 1);
-        strcpy(entry->key, key);
-        entry->state.last_state_string = NULL;
-        entry->state.last_update_time = 0;
-        entry->state.frame_index = 0;
-        entry->state.last_facing_direction = DIRECTION_DOWN;
-        entry->state.textures_ready = false;
-        entry->state.failed_texture_attempts = 0;
-        entry->next = NULL;
-    }
-    return entry;
+static void free_anim_state(void* p) {
+    AnimationState* s = (AnimationState*)p;
+    free(s->last_state_string);
+    free(s);
 }
 
 static AnimationState* get_animation_state(EntityRender* render, const char* entity_id, const char* item_id) {
@@ -66,25 +49,14 @@ static AnimationState* get_animation_state(EntityRender* render, const char* ent
     char key[256];
     snprintf(key, sizeof(key), "%s_%s", entity_id, item_id);
 
-    unsigned long index = hash_string(key) % HASH_TABLE_SIZE;
-    AnimationEntry* entry = render->anim_buckets[index];
+    AnimationState* anim = (AnimationState*)hash_table_get(&render->animations, key);
+    if (anim) return anim;
 
-    while (entry) {
-        if (strcmp(entry->key, key) == 0) {
-            return &entry->state;
-        }
-        entry = entry->next;
-    }
-
-    // Create new
-    entry = create_animation_entry(key);
-    if (entry) {
-        entry->next = render->anim_buckets[index];
-        render->anim_buckets[index] = entry;
-        return &entry->state;
-    }
-
-    return NULL;
+    anim = malloc(sizeof(AnimationState));
+    if (!anim) return NULL;
+    *anim = (AnimationState){ .last_facing_direction = DIRECTION_DOWN };
+    hash_table_put(&render->animations, key, anim);
+    return anim;
 }
 
 static int compare_layer_priority(const void* a, const void* b) {
@@ -194,29 +166,14 @@ EntityRender* create_entity_render(ObjectLayersManager* object_layers_manager) {
     if (!render) return NULL;
 
     render->obj_layers_mgr = object_layers_manager;
-
-    for (int i = 0; i < HASH_TABLE_SIZE; i++) {
-        render->anim_buckets[i] = NULL;
-    }
+    hash_table_init(&render->animations, ANIM_TABLE_INITIAL_CAPACITY, free_anim_state);
 
     return render;
 }
 
 void destroy_entity_render(EntityRender* render) {
     if (!render) return;
-
-    for (int i = 0; i < HASH_TABLE_SIZE; i++) {
-        AnimationEntry* entry = render->anim_buckets[i];
-        while (entry) {
-            AnimationEntry* next = entry->next;
-            if (entry->key) free(entry->key);
-            if (entry->state.last_state_string) free(entry->state.last_state_string);
-            free(entry);
-            entry = next;
-        }
-        render->anim_buckets[i] = NULL;
-    }
-
+    hash_table_destroy(&render->animations);
     free(render);
 }
 

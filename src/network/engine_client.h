@@ -12,10 +12,23 @@ typedef enum {
     FETCH_STATE_ERROR
 } FetchState;
 
-typedef void (*FetchCompletedCb)(uint32_t request_id, FetchState state, void* data, size_t size);
+/*
+ * Ownership:
+ *   data     — callback OWNS, must free()
+ *   asset_id — engine_client owns; valid only for callback duration.
+ *              Do not free. Do not stash the pointer past callback return.
+ */
+typedef struct {
+    uint32_t    request_id;
+    const char* asset_id;
+    FetchState  state;
+    void*       data;
+    size_t      size;
+} FetchResponse;
 
-// callback on success returns malloc, must free
-uint32_t fetch_request_start(const char* url, FetchCompletedCb on_completed);
-void fetch_request_update(void);
+typedef void (*FetchCompletedCb)(const FetchResponse* response);
+
+uint32_t fetch_request_start(const char* asset_id, const char* url, FetchCompletedCb on_completed);
+void     fetch_request_update(void);
 
 #endif

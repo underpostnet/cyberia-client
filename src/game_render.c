@@ -1062,5 +1062,6 @@ void game_render_cleanup(void) {
     }
 
     ui_icon_cleanup();
+    dialogue_data_cleanup();
 }
 

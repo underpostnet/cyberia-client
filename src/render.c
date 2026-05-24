@@ -69,14 +69,6 @@ void render_update(float delta_time) {
 
     game_state_update_camera(delta_time); // TODO: camera shouldn't be in the GameState
 
-    // Reset the per-frame atlas texture load budget unconditionally so that
-    // texture decoding can proceed even during the splash screen phase
-    // (before init_received becomes true).  Without this, the budget counter
-    // never resets until game_render_world() is first called, which means
-    // any atlas PNG fetches that complete during the initial load window are
-    // permanently blocked and the world renders as solid rectangles.
-    obj_layers_mgr_reset_frame_budget();
-
     // Update effects (click effects, floating texts, FCT pop-ups)
     game_render_update_effects(delta_time);
     fct_update(delta_time);

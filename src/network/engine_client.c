@@ -8,6 +8,7 @@
 
 typedef struct FetchRequest {
     uint32_t         id;
+    const char*      asset_id;
     const char*      url;
     FetchState       state;
     FetchCompletedCb on_completed;
@@ -21,7 +22,8 @@ static size_t       rq_count = 0;
 static uint32_t next_request_id = 1; // Zero is No Request
 uint32_t fetch_request_next_id(void) { return next_request_id++; }
 
-uint32_t fetch_request_start(const char* url, FetchCompletedCb on_completed) {
+uint32_t fetch_request_start(const char* asset_id, const char* url, FetchCompletedCb on_completed) {
+    assert(asset_id);
     assert(url);
     assert(on_completed);
 
@@ -29,6 +31,7 @@ uint32_t fetch_request_start(const char* url, FetchCompletedCb on_completed) {
 
     FetchRequest rq = (FetchRequest){
         .url          = strdup(url),
+        .asset_id     = strdup(asset_id),
         .id           = fetch_request_next_id(),
         .state        = FETCH_STATE_PENDING,
         .on_completed = on_completed,
@@ -50,18 +53,28 @@ void fetch_request_update(void) {
             if (NULL != buf && sz > 0) { rq->state = FETCH_STATE_READY; }
             if (sz < 0) { rq->state = FETCH_STATE_ERROR; sz = 0; }
 
-            if(rq->state == FETCH_STATE_READY || rq->state == FETCH_STATE_ERROR)
+            if (rq->state == FETCH_STATE_READY || rq->state == FETCH_STATE_ERROR)
             {
                 assert(rq->on_completed);
                 needs_compaction = true;
-                rq->on_completed(rq->id, rq->state, buf, (size_t)sz);
+
+                FetchResponse response = (FetchResponse){
+                    .request_id = rq->id,
+                    .state      = rq->state,
+                    .data       = buf,
+                    .size       = (size_t)sz,
+                    .asset_id   = rq->asset_id,
+                };
+                rq->on_completed(&response);
+
                 free((void*)rq->url);
+                free((void*)rq->asset_id);
                 *rq = (FetchRequest){0};
             }
         }
     }
 
-    if(needs_compaction)
+    if (needs_compaction)
     {
         size_t w = 0;
         for (size_t r = 0; r < rq_count; r++) {

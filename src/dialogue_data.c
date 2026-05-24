@@ -1,15 +1,6 @@
-/**
- * @file dialogue_data.c
- * @brief Async dialogue data fetcher — same pattern as atlas metadata REST fetch.
- *
- * Issues non-blocking GET requests to the Engine's cyberia-dialogue API
- * via the engine_client fetch queue; completion is delivered through
- * on_dialogue_fetched.
- */
-
 #include "dialogue_data.h"
 #include "config.h"
-#include "helper.h"
+#include "hash_table.h"
 #include "network/engine_client.h"
 #include <cJSON.h>
 #include <stdio.h>
@@ -17,67 +8,30 @@
 #include <string.h>
 #include <assert.h>
 
-/* ── Internal types ──────────────────────────────────────────────────── */
+static HashTable ht;
 
-#define DLG_HASH_SIZE 128
-
-typedef struct DlgCacheEntry {
-    DialogueDataSet     data;
-    uint32_t            request_id;
-    struct DlgCacheEntry* next;
-} DlgCacheEntry;
-
-/* ── Module state ────────────────────────────────────────────────────── */
-
-static DlgCacheEntry* s_buckets[DLG_HASH_SIZE];
-
-/* ── Lookup ──────────────────────────────────────────────────────────── */
-
-static DlgCacheEntry* lookup(const char* item_id) {
-    unsigned long idx = hash_string(item_id) % DLG_HASH_SIZE;
-    DlgCacheEntry* e = s_buckets[idx];
-    while (e) {
-        if (strcmp(e->data.item_id, item_id) == 0) return e;
-        e = e->next;
-    }
-    return NULL;
-}
-
-/* ── URL builder ─────────────────────────────────────────────────────── */
-
-static void build_url(char* buf, size_t buf_size, const char* item_id) {
-    /* Lookup route: GET /api/cyberia-dialogue/code/default-<item-id>
-     * Returns { status, data: [ { code, order, speaker, text, mood }, ... ] }
-     * sorted by order.  The "default-" prefix is the seeded dialogue default itemId group
-     * convention;
-     */
-      snprintf(buf, buf_size, "%s/api/cyberia-dialogue/code/default-%s", API_BASE_URL, item_id);
-}
-
-/* ── JSON parser ─────────────────────────────────────────────────────── */
-
-static void parse_response(DlgCacheEntry* entry, const unsigned char* data, int size) {
+static void parse_response(DialogueDataSet* d, const unsigned char* data, int size) {
     cJSON* root = cJSON_ParseWithLength((const char*)data, size);
     if (!root) {
-        entry->data.state = DLG_DATA_ERROR;
+        d->state = DLG_DATA_ERROR;
         return;
     }
 
     cJSON* status = cJSON_GetObjectItemCaseSensitive(root, "status");
     if (!cJSON_IsString(status) || strcmp(status->valuestring, "success") != 0) {
-        entry->data.state = DLG_DATA_ERROR;
+        d->state = DLG_DATA_ERROR;
         cJSON_Delete(root);
         return;
     }
 
     /* Response shape: { status, data: [ {...}, ... ] }
-     * data is a direct array of dialogue lines sorted by order. 
+     * data is a direct array of dialogue lines sorted by order.
      */
     cJSON* arr = cJSON_GetObjectItemCaseSensitive(root, "data");
 
     if (!arr || !cJSON_IsArray(arr)) {
-        entry->data.state = DLG_DATA_EMPTY;
-        entry->data.line_count = 0;
+        d->state = DLG_DATA_EMPTY;
+        d->line_count = 0;
         cJSON_Delete(root);
         return;
     }
@@ -87,7 +41,7 @@ static void parse_response(DlgCacheEntry* entry, const unsigned char* data, int 
     cJSON_ArrayForEach(item, arr) {
         if (count >= DIALOGUE_MAX_LINES) break;
 
-        DialogueLine* line = &entry->data.lines[count];
+        DialogueLine* line = &d->lines[count];
         memset(line, 0, sizeof(DialogueLine));
 
         cJSON* speaker = cJSON_GetObjectItemCaseSensitive(item, "speaker");
@@ -108,82 +62,58 @@ static void parse_response(DlgCacheEntry* entry, const unsigned char* data, int 
         count++;
     }
 
-    entry->data.line_count = count;
-    entry->data.state = (count > 0) ? DLG_DATA_READY : DLG_DATA_EMPTY;
+    d->line_count = count;
+    d->state = (count > 0) ? DLG_DATA_READY : DLG_DATA_EMPTY;
 
     cJSON_Delete(root);
-    printf("[DIALOGUE_DATA] Fetched %d lines for item '%s'\n", count, entry->data.item_id);
+    printf("[DIALOGUE_DATA] Fetched %d lines for item '%s'\n", count, d->item_id);
 }
 
-/* ── Fetch completion callback ──────────────────────────────────────── */
+static void on_dialogue_fetched(const FetchResponse* r) {
+    DialogueDataSet* d = hash_table_get(&ht, r->asset_id);
+    if (NULL == d) { free(r->data); return; }
 
-static void on_dialogue_fetched(uint32_t request_id, FetchState state, void* data, size_t size) {
-    /* Locate entry by request_id across all hash buckets. */
-    DlgCacheEntry* e = NULL;
-    for (int i = 0; NULL == e && i < DLG_HASH_SIZE; i++) {
-        for (DlgCacheEntry* it = s_buckets[i]; it; it = it->next) {
-            if (it->request_id == request_id) { e = it; break; }
-        }
-    }
-
-    if (NULL == e) { free(data); return; }
-
-    if (FETCH_STATE_READY != state) {
-        e->data.state = DLG_DATA_ERROR;
-        fprintf(stderr, "[DIALOGUE_DATA] Fetch error for '%s'\n", e->data.item_id);
-        free(data);
+    if (FETCH_STATE_READY != r->state) {
+        d->state = DLG_DATA_ERROR;
+        fprintf(stderr, "[DIALOGUE_DATA] Fetch error for '%s'\n", d->item_id);
+        free(r->data);
         return;
     }
 
-    parse_response(e, (const unsigned char*)data, (int)size);
-    free(data);
+    parse_response(d, (const unsigned char*)r->data, (int)r->size);
+    free(r->data);
 }
 
 /* ── Public API ──────────────────────────────────────────────────────── */
 
-void dialogue_data_init(void) {
-    memset(s_buckets, 0, sizeof(s_buckets));
-}
-
-void dialogue_data_cleanup(void) {
-    for (int i = 0; i < DLG_HASH_SIZE; i++) {
-        DlgCacheEntry* e = s_buckets[i];
-        while (e) {
-            DlgCacheEntry* next = e->next;
-            free(e);
-            e = next;
-        }
-        s_buckets[i] = NULL;
-    }
-}
+void dialogue_data_init(void) { hash_table_init(&ht, 128, free); }
+void dialogue_data_cleanup(void) { hash_table_destroy(&ht); }
 
 void dialogue_data_request(const char* item_id) {
-    if (!item_id || item_id[0] == '\0') return;
-    if (lookup(item_id)) return; /* already in cache or in-flight */
+    assert(item_id);
+    assert(strlen(item_id) > 0);
+    if (hash_table_get(&ht, item_id)) return; /* already in cache or in-flight */
 
-    DlgCacheEntry* entry = (DlgCacheEntry*)calloc(1, sizeof(DlgCacheEntry));
-    if (!entry) return;
+    DialogueDataSet* d = calloc(1, sizeof(DialogueDataSet));
 
-    strncpy(entry->data.item_id, item_id, sizeof(entry->data.item_id) - 1);
-    entry->data.state = DLG_DATA_FETCHING;
+    strncpy(d->item_id, item_id, sizeof(d->item_id) - 1);
+    d->state = DLG_DATA_FETCHING;
 
-    unsigned long idx = hash_string(item_id) % DLG_HASH_SIZE;
-    entry->next = s_buckets[idx];
-    s_buckets[idx] = entry;
+    hash_table_put(&ht, item_id, d);
 
     char url[1024];
-    build_url(url, sizeof(url), item_id);
-    entry->request_id = fetch_request_start(url, on_dialogue_fetched);
-    printf("[DIALOGUE_DATA] Fetch started for '%s' (req %u)\n", item_id, entry->request_id);
+    snprintf(url, sizeof(url), "%s/api/cyberia-dialogue/code/default-%s", API_BASE_URL, item_id);
+    uint32_t req_id = fetch_request_start(item_id, url, on_dialogue_fetched);
+    printf("[DIALOGUE_DATA] Fetch started for '%s' (req %u)\n", item_id, req_id);
 }
 
 const DialogueDataSet* dialogue_data_get(const char* item_id) {
     assert(item_id);
-    DlgCacheEntry* e = lookup(item_id);
-    return e ? &e->data : NULL;
+    return hash_table_get(&ht, item_id);
 }
 
 bool dialogue_data_available(const char* item_id) {
+    assert(item_id);
     const DialogueDataSet* d = dialogue_data_get(item_id);
     return d && d->state == DLG_DATA_READY && d->line_count > 0;
 }

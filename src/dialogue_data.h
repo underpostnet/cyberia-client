@@ -48,10 +48,7 @@ typedef struct {
 
 /* ── Public API ──────────────────────────────────────────────────────── */
 
-/** Initialise the dialogue data cache (call once at startup). */
 void dialogue_data_init(void);
-
-/** Destroy the cache and free memory. */
 void dialogue_data_cleanup(void);
 
 /**
