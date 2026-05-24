@@ -46,7 +46,7 @@ static void on_icon_fetched(const FetchResponse* r) {
     IconEntry* e = hash_table_get(&ht, r->asset_id);
     if (NULL == e) { free(r->data); return; }
 
-    if (FETCH_STATE_READY != r->state) {
+    if (!r->success) {
         e->state = ICON_ERROR;
         fprintf(stderr, "[UI_ICON] Fetch error for '%s'\n", r->asset_id);
         free(r->data);
@@ -78,9 +78,9 @@ static IconEntry* create_and_fetch(const char* icon_id) {
 
     char url[512];
     snprintf(url, sizeof(url), "%s/assets/ui-icons/%s.png", API_BASE_URL, icon_id);
-    uint32_t req_id = fetch_request_start(icon_id, url, on_icon_fetched);
+    fetch_request_start(icon_id, url, on_icon_fetched);
 
-    printf("[UI_ICON] Fetch started for '%s' (req %u)\n", icon_id, req_id);
+    printf("[UI_ICON] Fetch started for '%s'\n", icon_id);
     return e;
 }
 

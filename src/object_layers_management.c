@@ -182,7 +182,7 @@ static void on_atlas_blob_fetched(const FetchResponse* r) {
     AtlasTextureEntry* entry = hash_table_get(&g_olm_singleton->textures, r->asset_id);
     if (!entry) { free(r->data); return; }
 
-    if (FETCH_STATE_READY != r->state || !r->data || r->size == 0) {
+    if (!r->success || !r->data || r->size == 0) {
         entry->state = ATLAS_TEX_ERROR;
         fprintf(stderr, "[WARN] Async fetch failed for atlas item_key: %s\n", r->asset_id);
         free(r->data);
@@ -221,10 +221,7 @@ static Texture2D load_or_poll_atlas_texture(const char* item_key) {
 
     char url[512];
     snprintf(url, sizeof(url), "%s/api/atlas-sprite-sheet/blob/%s", API_BASE_URL, item_key);
-    if (0 == fetch_request_start(item_key, url, on_atlas_blob_fetched)) {
-        entry->state = ATLAS_TEX_ERROR;
-        fprintf(stderr, "[WARN] Failed to schedule atlas blob fetch for: %s\n", item_key);
-    }
+    fetch_request_start(item_key, url, on_atlas_blob_fetched);
     return (Texture2D){0};
 }
 
@@ -265,7 +262,7 @@ void destroy_object_layers_manager(void) {
 /* ── Callback for atlas metadata REST fetch (via engine_client pipeline) ─── */
 
 static void on_atlas_meta_fetched(const FetchResponse* r) {
-    if (FETCH_STATE_READY != r->state) { free(r->data); return; }
+    if (!r->success) { free(r->data); return; }
 
     assert(g_olm_singleton);
 
@@ -351,11 +348,7 @@ void obj_layers_mgr_schedule_atlas_fetch(const char* item_key) {
 
     char url[512];
     snprintf(url, sizeof(url), "%s/api/atlas-sprite-sheet/metadata/%s", API_BASE_URL, item_key);
-    uint32_t req_id = fetch_request_start(item_key, url, on_atlas_meta_fetched);
-    if (req_id == 0) {
-        fprintf(stderr, "[ATLAS REST] Failed to schedule fetch for: %s\n", item_key);
-        return;
-    }
+    fetch_request_start(item_key, url, on_atlas_meta_fetched);
     printf("[ATLAS REST] Fetch scheduled via engine_client: %s\n", item_key);
 }
 

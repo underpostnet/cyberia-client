@@ -73,7 +73,7 @@ static void on_dialogue_fetched(const FetchResponse* r) {
     DialogueDataSet* d = hash_table_get(&ht, r->asset_id);
     if (NULL == d) { free(r->data); return; }
 
-    if (FETCH_STATE_READY != r->state) {
+    if (!r->success) {
         d->state = DLG_DATA_ERROR;
         fprintf(stderr, "[DIALOGUE_DATA] Fetch error for '%s'\n", d->item_id);
         free(r->data);
@@ -103,8 +103,8 @@ void dialogue_data_request(const char* item_id) {
 
     char url[1024];
     snprintf(url, sizeof(url), "%s/api/cyberia-dialogue/code/default-%s", API_BASE_URL, item_id);
-    uint32_t req_id = fetch_request_start(item_id, url, on_dialogue_fetched);
-    printf("[DIALOGUE_DATA] Fetch started for '%s' (req %u)\n", item_id, req_id);
+    fetch_request_start(item_id, url, on_dialogue_fetched);
+    printf("[DIALOGUE_DATA] Fetch started for '%s'\n", item_id);
 }
 
 const DialogueDataSet* dialogue_data_get(const char* item_id) {

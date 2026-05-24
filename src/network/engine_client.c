@@ -1,88 +1,73 @@
 #include "engine_client.h"
 
-#include "js/services.h"
+#include <emscripten/fetch.h>
 
 #include <assert.h>
 #include <stdlib.h>
 #include <string.h>
 
-typedef struct FetchRequest {
-    uint32_t         id;
-    const char*      asset_id;
-    const char*      url;
-    FetchState       state;
+typedef struct {
+    char*            asset_id;
     FetchCompletedCb on_completed;
-} FetchRequest;
+} FetchContext;
 
+static void on_fetch_success(emscripten_fetch_t* f) {
+    FetchContext* ctx = f->userData;
 
-#define RQ_QUEUE_CAPACITY 512
-static FetchRequest rq_queue[RQ_QUEUE_CAPACITY];
-static size_t       rq_count = 0;
+    void*  buf = NULL;
+    size_t sz  = 0;
+    bool   ok  = f->numBytes > 0;
 
-static uint32_t next_request_id = 1; // Zero is No Request
-uint32_t fetch_request_next_id(void) { return next_request_id++; }
+    if (ok) {
+        sz = (size_t)f->numBytes;
+        buf = malloc(sz);
+        memcpy(buf, f->data, sz);
+    }
 
-uint32_t fetch_request_start(const char* asset_id, const char* url, FetchCompletedCb on_completed) {
+    FetchResponse response = (FetchResponse){
+        .success  = ok,
+        .data     = ok ? buf : NULL,
+        .size     = ok ? sz  : 0,
+        .asset_id = ctx->asset_id,
+    };
+    ctx->on_completed(&response);
+
+    free(ctx->asset_id);
+    free(ctx);
+    emscripten_fetch_close(f);
+}
+
+static void on_fetch_error(emscripten_fetch_t* f) {
+    FetchContext* ctx = f->userData;
+
+    FetchResponse response = (FetchResponse){
+        .success  = false,
+        .data     = NULL,
+        .size     = 0,
+        .asset_id = ctx->asset_id,
+    };
+    ctx->on_completed(&response);
+
+    free(ctx->asset_id);
+    free(ctx);
+    emscripten_fetch_close(f);
+}
+
+void fetch_request_start(const char* asset_id, const char* url, FetchCompletedCb on_completed) {
     assert(asset_id);
     assert(url);
     assert(on_completed);
 
-    if (rq_count >= RQ_QUEUE_CAPACITY) return 0;
+    FetchContext* ctx = malloc(sizeof(FetchContext));
+    ctx->asset_id     = strdup(asset_id);
+    ctx->on_completed = on_completed;
 
-    FetchRequest rq = (FetchRequest){
-        .url          = strdup(url),
-        .asset_id     = strdup(asset_id),
-        .id           = fetch_request_next_id(),
-        .state        = FETCH_STATE_PENDING,
-        .on_completed = on_completed,
-    };
-
-    js_start_fetch_binary(rq.url, rq.id);
-    rq_queue[rq_count++] = rq;
-    return rq.id;
-}
-
-void fetch_request_update(void) {
-    bool needs_compaction = false;
-    for (size_t i = 0; i < rq_count; i++) {
-        FetchRequest* rq = &rq_queue[i];
-        if (rq->id > 0) {
-            int sz = 0;
-            uint8_t* buf = js_get_fetch_result(rq->id, &sz);
-
-            if (NULL != buf && sz > 0) { rq->state = FETCH_STATE_READY; }
-            if (sz < 0) { rq->state = FETCH_STATE_ERROR; sz = 0; }
-
-            if (rq->state == FETCH_STATE_READY || rq->state == FETCH_STATE_ERROR)
-            {
-                assert(rq->on_completed);
-                needs_compaction = true;
-
-                FetchResponse response = (FetchResponse){
-                    .request_id = rq->id,
-                    .state      = rq->state,
-                    .data       = buf,
-                    .size       = (size_t)sz,
-                    .asset_id   = rq->asset_id,
-                };
-                rq->on_completed(&response);
-
-                free((void*)rq->url);
-                free((void*)rq->asset_id);
-                *rq = (FetchRequest){0};
-            }
-        }
-    }
-
-    if (needs_compaction)
-    {
-        size_t w = 0;
-        for (size_t r = 0; r < rq_count; r++) {
-            if (rq_queue[r].id > 0) {
-                if (w != r) rq_queue[w] = rq_queue[r];
-                w++;
-            }
-        }
-        rq_count = w;
-    }
+    emscripten_fetch_attr_t attr;
+    emscripten_fetch_attr_init(&attr);
+    strcpy(attr.requestMethod, "GET");
+    attr.attributes = EMSCRIPTEN_FETCH_LOAD_TO_MEMORY;
+    attr.onsuccess  = on_fetch_success;
+    attr.onerror    = on_fetch_error;
+    attr.userData   = ctx;
+    emscripten_fetch(&attr, url);
 }

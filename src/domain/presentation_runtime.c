@@ -181,7 +181,7 @@ static void hydrate_game_state(void) {
 }
 
 static void on_hints_fetched(const FetchResponse* r) {
-    if (FETCH_STATE_READY == r->state && r->data && r->size > 0) {
+    if (r->success && r->data && r->size > 0) {
         parse_response((const char*)r->data, (int)r->size);
     } else {
         fprintf(stderr, "[presentation_runtime] fetch unavailable — using bootstrap fallback\n");
