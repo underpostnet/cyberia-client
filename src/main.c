@@ -52,29 +52,23 @@
  * the prediction reconciliation downstream of the next prediction_step.
  */
 static double g_sim_accumulator = 0.0;
-static int g_frame_counter = 0;
-/* Last time a reconnect was attempted (GetTime seconds).
- * Initialised to 0 so the first attempt cannot fire until at least 3 s
- * after InitWindow(), giving the initial connection time to establish. */
-static double g_last_reconnect_time = 0.0;
-/* GetTime() when the current socket entered CONNECTING. Used to time-out
- * a hung handshake (connected, no init_data) so we don't sit on the
- * splash screen indefinitely when the server is in a degraded state. */
-static double g_socket_attempt_time = 0.0;
 
 #define INIT_DATA_TIMEOUT_S 15.0
 #define RECONNECT_INTERVAL_S 3.0
 
-void main_loop(void) {
-    const float frame_dt = GetFrameTime();
-
+// TODO: this should live in client, which should handle its own reconnection logic
+void reconnection_logic(bool init_received) {
+    // function local variables - temporry
+    static int frame_counter = 0;
+    static double last_reconnect_time = 0.0;
+    static double socket_attempt_time = 0.0;
     /* Periodic heartbeat so we know C is running even without WS callbacks. */
-    g_frame_counter++;
-    if (g_frame_counter % 300 == 0) {
+    frame_counter++;
+    if (frame_counter % 300 == 0) {
         printf("[LOOP] frame=%d t=%.1fs connected=%d init_received=%d\n",
-               g_frame_counter, (float)GetTime(),
+               frame_counter, (float)GetTime(),
                connection_is_active() ? 1 : 0,
-               g_game_state.init_received ? 1 : 0);
+               init_received ? 1 : 0);
     }
 
     /* Reconnect when the socket is dead. The guard intentionally does not
@@ -83,30 +77,36 @@ void main_loop(void) {
      * is simply "no socket → reconnect." */
     if (!connection_is_active()) {
         double now = GetTime();
-        if (now - g_last_reconnect_time >= RECONNECT_INTERVAL_S) {
-            g_last_reconnect_time = now;
-            g_socket_attempt_time = now;
+        if (now - last_reconnect_time >= RECONNECT_INTERVAL_S) {
+            last_reconnect_time = now;
+            socket_attempt_time = now;
             printf("[RECONNECT] Socket inactive — reconnecting...\n");
             connection_open();
         }
-    } else if (!g_game_state.init_received) {
+    } else if (!init_received) {
         /* Socket exists but init_data never landed. If we've been waiting
          * too long, drop the socket so the next iteration of the guard
          * above can reconnect. Covers the reload-stuck-on-splash case
          * where the server accepted the upgrade but never sent init_data
          * (e.g. degraded gRPC, empty maps). */
-        if (g_socket_attempt_time == 0.0) g_socket_attempt_time = GetTime();
-        if (GetTime() - g_socket_attempt_time >= INIT_DATA_TIMEOUT_S) {
+        if (socket_attempt_time == 0.0) socket_attempt_time = GetTime();
+        if (GetTime() - socket_attempt_time >= INIT_DATA_TIMEOUT_S) {
             printf("[RECONNECT] init_data did not arrive within %.0fs — closing socket to force reconnect.\n",
                    INIT_DATA_TIMEOUT_S);
             connection_close();
-            g_socket_attempt_time = 0.0;
+            socket_attempt_time = 0.0;
         }
     } else {
         /* Healthy connection — reset the handshake timer so a future
          * disconnect starts from a fresh budget. */
-        g_socket_attempt_time = 0.0;
+        socket_attempt_time = 0.0;
     }
+}
+
+void main_loop(void) {
+    const float frame_dt = GetFrameTime();
+
+    reconnection_logic(g_game_state.init_received); // TODO: remove from here
 
     /* 1 + 2. Input capture and dispatch. */
     input_update();
@@ -181,8 +181,6 @@ int main(void) {
         connection_close();
         return -1;
     }
-    g_socket_attempt_time = GetTime();
-    g_last_reconnect_time = GetTime();
 
     emscripten_set_main_loop(main_loop, 0, 1);
 
