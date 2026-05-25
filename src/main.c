@@ -33,35 +33,15 @@
 #include "interpolation/interpolation.h"
 #include "network/session.h"
 
-/* Main event loop (called every render frame).
- *
- * Update ordering — fixed by design, do not reorder:
- *
- *   1. INPUT CAPTURE     poll raw OS events.
- *   2. INPUT DISPATCH    drain queued events → UI hit-test → InputCommand
- *                        → prediction_apply (optimistic) → wire send.
- *   3. FIXED-TIMESTEP    accumulator drains TICK_DURATION_S chunks, each
- *                        calling prediction_step exactly once. This is
- *                        where simulation lives — decoupled from FPS.
- *   4. INTERPOLATION     remote entity view-models for the current render
- *                        tick.
- *   5. RENDER            read view-models only; never mutate world state.
- *
- * Snapshot ingestion happens asynchronously on the WS callback (see
- * network/client.c). The decoder calls session_on_snapshot which feeds
- * the prediction reconciliation downstream of the next prediction_step.
- */
-static double g_sim_accumulator = 0.0;
-
-#define INIT_DATA_TIMEOUT_S 15.0
-#define RECONNECT_INTERVAL_S 3.0
-
 // TODO: this should live in client, which should handle its own reconnection logic
 void reconnection_logic(bool init_received) {
     // function local variables - temporry
     static int frame_counter = 0;
     static double last_reconnect_time = 0.0;
     static double socket_attempt_time = 0.0;
+    // local consts
+    const double INIT_DATA_TIMEOUT_S = 15.0;
+    const double RECONNECT_INTERVAL_S = 3.0;
     /* Periodic heartbeat so we know C is running even without WS callbacks. */
     frame_counter++;
     if (frame_counter % 300 == 0) {
@@ -103,33 +83,28 @@ void reconnection_logic(bool init_received) {
     }
 }
 
+static const double fixed_step = TICK_DURATION_S;
+static double sim_acc = 0.0;
 void main_loop(void) {
     const float frame_dt = GetFrameTime();
+    // if ( frame_dt > 0.25 ) { frame_dt = 0.25; } // draft, prevents runaways, keep commented, ignore
+    sim_acc += (double)frame_dt;
 
     reconnection_logic(g_game_state.init_received); // TODO: remove from here
 
-    /* 1 + 2. Input capture and dispatch. */
+    // input capture in realtime
     input_update();
     input_event_queue_handle();
 
-    /* Reconciliation is event-driven — it fires from binary_aoi_decoder
-     * the moment a fresh snapshot is parsed.  Calling it again here every
-     * render frame would undo the prediction_step below by re-rebasing to
-     * the same authoritative_pos and replaying the same input buffer,
-     * which caused the post-tap "freeze / oscillation" symptom.
-     */
-
-    /* 3. Fixed-timestep simulation. The accumulator decouples sim from
-     *    render: at 144 FPS this fires zero times most frames; at 30 FPS
-     *    it fires once per frame; at 10 FPS it fires three times catching
-     *    up. */
-    g_sim_accumulator += (double)frame_dt;
-    /* Cap accumulator to one second to avoid runaway after a long pause. */
-    if (g_sim_accumulator > 1.0) g_sim_accumulator = 1.0;
-    while (g_sim_accumulator >= TICK_DURATION_S) {
-        prediction_step(TICK_DURATION_S);
-        g_sim_accumulator -= TICK_DURATION_S;
+    // fixed step simulation
+    while (sim_acc >= fixed_step)
+    {
+        // physics_update(fixed_step); -> prev = curr; integrate(curr, curr_frame, fixed_step)
+        prediction_step(fixed_step);
+        sim_acc -= fixed_step;
     }
+    const double alpha = sim_acc / fixed_step;
+    // state_interpolation(alpha) -> curr * alpha +  prev * ( 1.0 - alpha );
 
     /* Advance the render-frame smoothed display position and publish it as
      * the main-player view-model. Without this step, the renderer reads
@@ -142,7 +117,7 @@ void main_loop(void) {
     /* 4. Remote entity interpolation. */
     interpolation_compute_view();
 
-    /* 5. Render frame. */
+    // render interpolated state
     render_update(frame_dt);
 }
 

@@ -209,7 +209,7 @@ static bool input_send_tap(Vector2 target_pos) {
     //      "tap → freeze / oscillation" symptom: the buffer grew unbounded
     //      and prediction_reconcile replayed every tap on every snapshot.
     input_command_t cmd = input_command_build_tap(grid_x, grid_y);
-    prediction_apply(&cmd);
+    prediction_apply(&cmd); // TODO: input module shouldn't be modifiyng the state, but rather the state should be updating during integrate() reading the last input data
 
     g_game_state.player.tap_target = (Vector2){grid_x, grid_y};
     g_game_state.player.has_tap_target = true;
