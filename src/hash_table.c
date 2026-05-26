@@ -6,12 +6,12 @@
 #include <string.h>
 
 /* Resize when (count + tombstones) exceeds this fraction of capacity. */
-// #define HASH_LOAD_NUM 7
-// #define HASH_LOAD_DEN 10
+#define HASH_LOAD_NUM 7
+#define HASH_LOAD_DEN 10
 
 static size_t find_occupied(const HashTable* t, const char* key);
 static size_t find_insert_slot(const HashTable* t, const char* key);
-//static void   resize(HashTable* t, size_t new_capacity);
+static void   resize(HashTable* t, size_t new_capacity);
 static void   raw_insert(HashTable* t, char* key_owned, void* value);
 
 void hash_table_init(HashTable* t, size_t initial_capacity, HashFreeFn free_fn) {
@@ -61,9 +61,9 @@ void hash_table_put(HashTable* t, const char* key, void* value) {
     assert(value);
 
     /* Resize before insert if at/above load threshold. */
-    // if ((t->count + t->tombstones + 1) * HASH_LOAD_DEN > t->capacity * HASH_LOAD_NUM) {
-    //     resize(t, t->capacity * 2);
-    // }
+    if ((t->count + t->tombstones + 1) * HASH_LOAD_DEN > t->capacity * HASH_LOAD_NUM) {
+        resize(t, t->capacity * 2);
+    }
 
     size_t i = find_insert_slot(t, key);
     HashSlot* s = &t->slots[i];
@@ -181,23 +181,23 @@ static void raw_insert(HashTable* t, char* key_owned, void* value) {
     t->slots[i].state = SLOT_OCCUPIED;
 }
 
-// static void resize(HashTable* t, size_t new_capacity) {
-//     assert(new_capacity > t->count);
+static void resize(HashTable* t, size_t new_capacity) {
+    assert(new_capacity > t->count);
 
-//     HashSlot* old_slots    = t->slots;
-//     size_t    old_capacity = t->capacity;
+    HashSlot* old_slots    = t->slots;
+    size_t    old_capacity = t->capacity;
 
-//     t->slots      = calloc(new_capacity, sizeof(HashSlot));
-//     t->capacity   = new_capacity;
-//     t->tombstones = 0;
-//     /* t->count unchanged — same live entries, just rehomed */
+    t->slots      = calloc(new_capacity, sizeof(HashSlot));
+    t->capacity   = new_capacity;
+    t->tombstones = 0;
+    /* t->count unchanged — same live entries, just rehomed */
 
-//     for (size_t i = 0; i < old_capacity; i++) {
-//         HashSlot* s = &old_slots[i];
-//         if (SLOT_OCCUPIED == s->state) {
-//             raw_insert(t, s->key, s->value);
-//         }
-//         /* tombstones and empties dropped on the floor */
-//     }
-//     free(old_slots);
-// }
+    for (size_t i = 0; i < old_capacity; i++) {
+        HashSlot* s = &old_slots[i];
+        if (SLOT_OCCUPIED == s->state) {
+            raw_insert(t, s->key, s->value);
+        }
+        /* tombstones and empties dropped on the floor */
+    }
+    free(old_slots);
+}
