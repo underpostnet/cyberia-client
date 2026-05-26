@@ -63,3 +63,32 @@ LedgerType ledger_type_from_string(const char* type_str) {
     return LEDGER_TYPE_OFF_CHAIN;
 }
 
+ObjectLayerType object_layer_type_from_string(const char* s) {
+    if (!s || !s[0]) return OBJECT_LAYER_TYPE_UNKNOWN;
+    if (strcmp(s, "floor") == 0)      return OBJECT_LAYER_TYPE_FLOOR;
+    if (strcmp(s, "obstacle") == 0)   return OBJECT_LAYER_TYPE_OBSTACLE;
+    if (strcmp(s, "portal") == 0)     return OBJECT_LAYER_TYPE_PORTAL;
+    if (strcmp(s, "foreground") == 0) return OBJECT_LAYER_TYPE_FOREGROUND;
+    if (strcmp(s, "resource") == 0)   return OBJECT_LAYER_TYPE_RESOURCE;
+    if (strcmp(s, "skin") == 0)       return OBJECT_LAYER_TYPE_SKIN;
+    if (strcmp(s, "weapon") == 0)     return OBJECT_LAYER_TYPE_WEAPON;
+    if (strcmp(s, "icon") == 0)       return OBJECT_LAYER_TYPE_ICON;
+    return OBJECT_LAYER_TYPE_OTHER;
+}
+
+const char* object_layer_type_to_string(ObjectLayerType t) {
+    switch (t) {
+        case OBJECT_LAYER_TYPE_FLOOR:      return "floor";
+        case OBJECT_LAYER_TYPE_OBSTACLE:   return "obstacle";
+        case OBJECT_LAYER_TYPE_PORTAL:     return "portal";
+        case OBJECT_LAYER_TYPE_FOREGROUND: return "foreground";
+        case OBJECT_LAYER_TYPE_RESOURCE:   return "resource";
+        case OBJECT_LAYER_TYPE_SKIN:       return "skin";
+        case OBJECT_LAYER_TYPE_WEAPON:     return "weapon";
+        case OBJECT_LAYER_TYPE_ICON:       return "icon";
+        case OBJECT_LAYER_TYPE_OTHER:      return "other";
+        case OBJECT_LAYER_TYPE_UNKNOWN:
+        default:                            return "";
+    }
+}
+

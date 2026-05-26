@@ -10,8 +10,6 @@
 #include <stdint.h>
 #include <assert.h>
 
-#define HASH_TABLE_SIZE 256
-
 /* forward declaration */
 static void parse_ws_direction_frames(cJSON* frames_json, AtlasSpriteSheetData* atlas);
 
@@ -26,8 +24,9 @@ typedef enum {
 } AtlasTextureState;
 
 typedef struct {
-    Texture2D texture;
+    Texture2D         texture;
     AtlasTextureState state;
+    double            last_access_time; /* wall-clock seconds for LRU eviction */
 } AtlasTextureEntry;
 
 /* Atlas metadata fetch set — value is sentinel; only key presence matters. */
@@ -176,6 +175,35 @@ ObjectLayer* lookup_cached_layer(const char* item_id) {
     return (ObjectLayer*)hash_table_get(&g_olm_singleton->layers, item_id);
 }
 
+/* LRU eviction.
+ *
+ * When the textures table reaches MAX_TEXTURE_CACHE_SIZE entries, we walk
+ * the table once, find the entry with the oldest last_access_time, and
+ * remove it. The free_tex_value callback unloads the GPU texture; the
+ * hash_table machinery frees the key. This keeps texture memory bounded
+ * during long sessions across many maps without changing the cache hit
+ * rate observed during typical play (recent textures win). */
+static void evict_oldest_texture(void) {
+    HashTable* t = &g_olm_singleton->textures;
+    if (t->count < (size_t)MAX_TEXTURE_CACHE_SIZE) return;
+
+    const char* oldest_key = NULL;
+    double      oldest_at  = 1e18;
+    for (size_t i = 0; i < t->capacity; i++) {
+        HashSlot* s = &t->slots[i];
+        if (s->state != SLOT_OCCUPIED || !s->value) continue;
+        AtlasTextureEntry* e = (AtlasTextureEntry*)s->value;
+        /* Never evict an entry still mid-fetch — its slot is needed by the
+         * pending callback. */
+        if (e->state == ATLAS_TEX_LOADING) continue;
+        if (e->last_access_time < oldest_at) {
+            oldest_at  = e->last_access_time;
+            oldest_key = s->key;
+        }
+    }
+    if (oldest_key) hash_table_remove(t, oldest_key);
+}
+
 /* Atlas PNG blob fetch — routed through engine_client. Callback decodes
  * PNG and uploads to GPU on the frame the fetch completes. */
 static void on_atlas_blob_fetched(const FetchResponse* r) {
@@ -211,12 +239,18 @@ static Texture2D load_or_poll_atlas_texture(const char* item_key) {
 
     AtlasTextureEntry* entry = hash_table_get(&g_olm_singleton->textures, item_key);
     if (entry) {
+        entry->last_access_time = GetTime();
         return entry->state == ATLAS_TEX_READY ? entry->texture : (Texture2D){0};
     }
 
+    evict_oldest_texture();
+
     entry = malloc(sizeof(AtlasTextureEntry));
     if (!entry) return (Texture2D){0};
-    *entry = (AtlasTextureEntry){ .state = ATLAS_TEX_LOADING };
+    *entry = (AtlasTextureEntry){
+        .state            = ATLAS_TEX_LOADING,
+        .last_access_time = GetTime(),
+    };
     hash_table_put(&g_olm_singleton->textures, item_key, entry);
 
     char url[512];
@@ -235,10 +269,14 @@ void create_object_layers_manager(void) {
     ObjectLayersManager* mgr = malloc(sizeof(ObjectLayersManager));
     assert(mgr);
 
-    hash_table_init(&mgr->layers,   HASH_TABLE_SIZE, free_layer_value);
-    hash_table_init(&mgr->atlases,  HASH_TABLE_SIZE, free_atlas_value);
-    hash_table_init(&mgr->textures, HASH_TABLE_SIZE, free_tex_value);
-    hash_table_init(&mgr->meta,     HASH_TABLE_SIZE, noop_free);
+    /* Initial capacity aligned to the config caps so the typical session
+     * never triggers the first hash_table resize. The tables still grow if
+     * the cap is exceeded — load factor is maintained — but we avoid the
+     * predictable churn at ≈179 textures (256 × 0.7). */
+    hash_table_init(&mgr->layers,   (size_t)MAX_LAYER_CACHE_SIZE,   free_layer_value);
+    hash_table_init(&mgr->atlases,  (size_t)MAX_ATLAS_CACHE_SIZE,   free_atlas_value);
+    hash_table_init(&mgr->textures, (size_t)MAX_TEXTURE_CACHE_SIZE, free_tex_value);
+    hash_table_init(&mgr->meta,     (size_t)MAX_ATLAS_CACHE_SIZE,   noop_free);
 
     g_olm_singleton = mgr;
 }

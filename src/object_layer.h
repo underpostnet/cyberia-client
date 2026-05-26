@@ -31,6 +31,30 @@ typedef enum {
 } ObjectLayerMode;
 
 /**
+ * @brief Typed enum for ObjectLayer item type discriminator.
+ *
+ * Replaces the prior `char type[MAX_TYPE_LENGTH]` string field used in
+ * world-object containers. Strings still arrive on the JSON wire when
+ * present; object_layer_type_from_string maps them to this enum at decode
+ * time, so all hot-path comparisons are integer.
+ */
+typedef enum {
+    OBJECT_LAYER_TYPE_UNKNOWN    = 0,
+    OBJECT_LAYER_TYPE_FLOOR      = 1,
+    OBJECT_LAYER_TYPE_OBSTACLE   = 2,
+    OBJECT_LAYER_TYPE_PORTAL     = 3,
+    OBJECT_LAYER_TYPE_FOREGROUND = 4,
+    OBJECT_LAYER_TYPE_RESOURCE   = 5,
+    OBJECT_LAYER_TYPE_SKIN       = 6,
+    OBJECT_LAYER_TYPE_WEAPON     = 7,
+    OBJECT_LAYER_TYPE_ICON       = 8,
+    OBJECT_LAYER_TYPE_OTHER      = 9,
+} ObjectLayerType;
+
+ObjectLayerType object_layer_type_from_string(const char* s);
+const char*     object_layer_type_to_string(ObjectLayerType t);
+
+/**
  * @brief Blockchain ledger type for economic classification.
  *
  * Maps to the Mongoose enum: ['ERC20', 'ERC721', 'OFF_CHAIN']
@@ -172,12 +196,14 @@ typedef struct {
 // Item Structure
 // ============================================================================
 
-// Item structure
+/* Item.type is kept as a string for round-tripping arbitrary engine-side
+ * categories; type_kind is the parsed enum for hot-path comparisons. */
 typedef struct {
-    char id[MAX_ITEM_ID_LENGTH];
-    char type[MAX_TYPE_LENGTH]; // TODO: this could be an enum
-    char description[MAX_DESCRIPTION_LENGTH];
-    bool activable;
+    char            id[MAX_ITEM_ID_LENGTH];
+    char            type[MAX_TYPE_LENGTH];
+    ObjectLayerType type_kind;
+    char            description[MAX_DESCRIPTION_LENGTH];
+    bool            activable;
 } Item;
 
 // ============================================================================
