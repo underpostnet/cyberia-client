@@ -5,8 +5,9 @@
 
 #include "notify_store.h"
 
-#include <string.h>
+#include <raylib.h>
 #include <stdio.h>
+#include <string.h>
 #include <time.h>
 
 /* ── Module state ─────────────────────────────────────────────────────── */
@@ -54,7 +55,7 @@ void notify_store_push(const char* entity_id, const char* sender, const char* te
     NotifyMessage* m = &e->messages[e->count++];
     strncpy(m->sender, sender ? sender : "",  NS_SENDER_LEN - 1);
     strncpy(m->text,   text   ? text   : "",  NS_TEXT_LEN   - 1);
-    m->ts_ms = 0.0; /* TODO: wire up actual timestamp if needed */
+    m->ts_ms = GetTime() * 1000.0;
 
     e->unread++;
 }
