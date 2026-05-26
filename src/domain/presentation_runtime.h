@@ -15,9 +15,10 @@
  *   1. main() calls presentation_runtime_start_fetch() once after
  *      js_init_engine_api() — kicks off the async GET via engine_client.
  *   2. When the response settles, the engine_client callback parses palette,
- *      entity colour keys, status-icon visuals, and camera/cell tunings,
- *      then hydrates g_game_state.cell_size, g_game_state.interpolation_ms,
- *      and g_game_state.camera.zoom (one-shot write).
+ *      entity colour keys, status-icon visuals, and camera/cell tunings.
+ *      The simulation-relevant subset (cell_size, interpolation_ms) is
+ *      hydrated into GameState; camera zoom is read on demand by
+ *      domain/camera.c from the same runtime.
  *   3. Renderers / UI code consult the runtime accessors below.
  *
  * Bootstrap fallback
@@ -77,6 +78,8 @@ int      presentation_runtime_interpolation_ms(void);
 float    presentation_runtime_default_obj_width(void);
 float    presentation_runtime_default_obj_height(void);
 bool     presentation_runtime_dev_ui(void);
+void     presentation_runtime_set_dev_ui(bool enabled);
+void     presentation_runtime_toggle_dev_ui(void);
 
 #ifdef __cplusplus
 }

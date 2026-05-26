@@ -166,18 +166,12 @@ static void parse_response(const char* body, int len) {
            g_rt.cell_size, g_rt.interpolation_ms);
 }
 
-/* One-shot hydration of g_game_state with presentation values that the
- * renderer and game-state helpers consult directly. Called the frame the
- * fetch settles. */
+/* One-shot hydration of GameState with the simulation-relevant subset
+ * (cell-size, interpolation window). Camera and dev_ui live in their own
+ * modules and read straight off this runtime. */
 static void hydrate_game_state(void) {
-    g_game_state.cell_size       = g_rt.cell_size;
+    g_game_state.cell_size        = g_rt.cell_size;
     g_game_state.interpolation_ms = g_rt.interpolation_ms;
-    g_game_state.dev_ui          = g_rt.dev_ui;
-    /* Camera zoom: initialise only if untouched (0 by default). User zoom
-     * input via mouse wheel mustn't be clobbered if they zoomed early. */
-    if (g_game_state.camera.zoom == 0.0f) {
-        g_game_state.camera.zoom = g_rt.camera_zoom;
-    }
 }
 
 static void on_hints_fetched(const FetchResponse* r) {
@@ -255,3 +249,6 @@ int   presentation_runtime_interpolation_ms(void)  { return g_rt.interpolation_m
 float presentation_runtime_default_obj_width(void) { return g_rt.default_obj_width; }
 float presentation_runtime_default_obj_height(void){ return g_rt.default_obj_height; }
 bool  presentation_runtime_dev_ui(void)            { return g_rt.dev_ui; }
+
+void  presentation_runtime_set_dev_ui(bool enabled) { g_rt.dev_ui = enabled; }
+void  presentation_runtime_toggle_dev_ui(void)     { g_rt.dev_ui = !g_rt.dev_ui; }

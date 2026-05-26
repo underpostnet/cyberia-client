@@ -1,6 +1,7 @@
 #include "render.h"
 
 #include "dialogue_data.h"
+#include "domain/camera.h"
 #include "game_render.h"
 #include "input.h"
 #include "object_layers_management.h"
@@ -14,131 +15,92 @@
 #include "ui/tap_effect.h"
 #include "ui/ui_icon.h"
 #include "network/engine_client.h"
+#include "util/log.h"
 
 #include <assert.h>
 #include <raylib.h>
-#include <stdio.h>
 
+/* render.c — top-level frame orchestrator. Owns nothing; only sequences
+ * the camera update, effect timers, UI ticks, and the world-render pass.
+ * The Camera2D itself lives in domain/camera.{c,h}. */
 
-// Default configuration for fallback rendering
-// Forward declaration
-void render_fallback(int width, int height);
-
-// Global state for rendering
 struct {
     Texture2D splash_texture;
 } render_state = {0};
 
-// Initialize the rendering subsystem
+void render_fallback(int width, int height);
+
 void render_init(int width, int height) {
-    // Load splash texture
     render_state.splash_texture = LoadTexture("splash.png");
 
-    // Initialize game-specific rendering systems
     game_render_init(width, height);
 
-    // Initialize development UI
     if (0 != dev_ui_init()) {
-        printf("[RENDER] Failed to initialize development UI\n");
+        LOG_WARN("dev_ui_init failed");
     }
-
-    // Initialize player modal component
     if (0 != modal_player_init()) {
-        printf("[RENDER] Failed to initialize player modal component\n");
+        LOG_WARN("modal_player_init failed");
     }
 
     tap_effect_init();
+    camera_init(width, height);
 }
 
-// Main rendering loop iteration
 void render_update(float delta_time) {
-    // Get current canvas dimensions (handles browser resize)
-    int current_width = GetScreenWidth();
+    int current_width  = GetScreenWidth();
     int current_height = GetScreenHeight();
 
-    // Update stored dimensions if canvas was resized
     if (IsWindowResized()) {
-        printf("[RENDER] Window resized to %dx%d\n", current_width, current_height);
-
-        // Update game renderer screen size
+        LOG_INFO("window resized %dx%d", current_width, current_height);
         game_render_set_screen_size(current_width, current_height);
-
-        // Update camera offset to keep it centered
-        game_state_update_camera_offset(current_width, current_height);
+        camera_resize(current_width, current_height);
     }
 
-    game_state_update_camera(delta_time); // TODO: camera shouldn't be in the GameState
+    camera_update(delta_time);
 
-    // Update effects (click effects, floating texts, FCT pop-ups)
     game_render_update_effects(delta_time);
     fct_update(delta_time);
     tap_effect_update(delta_time);
 
-    // Update inventory UI
     inventory_bar_update(delta_time);
-    if (inventory_modal_is_open()) {
-        inventory_modal_update(delta_time);
-    }
-    if (modal_dialogue_is_open()) {
-        modal_dialogue_update(delta_time);
-    }
+    if (inventory_modal_is_open())  inventory_modal_update(delta_time);
+    if (modal_dialogue_is_open())   modal_dialogue_update(delta_time);
 
     interaction_bubble_update();
-
-    // Update dev UI
     dev_ui_update(delta_time);
-
-    // Update player modal
     modal_player_update(delta_time);
 
-    // Use game renderer if available and game state is initialized
     if (g_game_state.init_received) {
-        // Full game rendering
         game_render_frame();
     } else {
-        // Fallback rendering for when game isn't ready yet
         render_fallback(current_width, current_height);
     }
 }
 
-// Fallback rendering when game systems aren't ready
 void render_fallback(int width, int height) {
     BeginDrawing();
-    // Clear background to game background color (reduces flicker)
     ClearBackground(DARKGRAY);
 
-    // Calculate center position
-    float center_x = (float)width / 2.0f;
-    float center_y = (float)height / 2.0f;
+    float cx = (float)width  / 2.0f;
+    float cy = (float)height / 2.0f;
 
-    // Draw splash logo if loaded
     if (render_state.splash_texture.id != 0) {
         DrawTexture(render_state.splash_texture,
-            (int)(center_x - render_state.splash_texture.width / 2),
-            (int)(center_y - render_state.splash_texture.height / 2),
-            WHITE);
+                    (int)(cx - render_state.splash_texture.width  / 2),
+                    (int)(cy - render_state.splash_texture.height / 2),
+                    WHITE);
     }
 
-    // Draw connection status
     const char* status_text = "Connecting to server...";
     int text_width = MeasureText(status_text, 20);
     DrawText(status_text, (width - text_width) / 2, height - 40, 20, WHITE);
     EndDrawing();
 }
 
-// Cleanup rendering subsystem
 void render_cleanup(void) {
-    // Unload splash texture
     UnloadTexture(render_state.splash_texture);
-
     tap_effect_reset();
-
-    // Cleanup game renderer
     game_render_cleanup();
-
-    // Cleanup development UI
     dev_ui_cleanup();
-
-    // Cleanup player modal component
     modal_player_cleanup();
 }

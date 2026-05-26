@@ -1,4 +1,5 @@
 #include "game_render.h"
+#include "domain/camera.h"
 
 #include "dialogue_data.h"
 #include "domain/presentation_runtime.h"
@@ -202,9 +203,9 @@ void game_render_frame(void) {
     // Begin camera mode for world rendering
     // CRITICAL: Always update camera offset before BeginMode2D to prevent flickering
     // This ensures the camera is properly centered even if screen dimensions changed
-    game_state_update_camera_offset(g_renderer.screen_width, g_renderer.screen_height);
+    camera_resize(g_renderer.screen_width, g_renderer.screen_height);
 
-    BeginMode2D(g_game_state.camera);
+    BeginMode2D(camera_get());
         game_render_world();
     EndMode2D();
 
@@ -248,12 +249,12 @@ void game_render_world(void) {
     game_render_entities();
 
     // 4. Player path (if dev_ui enabled) - visual debug aid
-    if (g_game_state.dev_ui) {
+    if (presentation_runtime_dev_ui()) {
         game_render_player_path();
     }
 
     // 5. AOI circle (if dev_ui enabled) - visual debug aid
-    if (g_game_state.dev_ui) {
+    if (presentation_runtime_dev_ui()) {
         game_render_aoi_circle();
     }
 
@@ -266,7 +267,7 @@ void game_render_world(void) {
     fct_draw();
 
     // 8. Grid overlay (if dev_ui enabled - renders on top of everything)
-    if (g_game_state.dev_ui) {
+    if (presentation_runtime_dev_ui()) {
         game_render_grid();
     }
 }
@@ -321,7 +322,7 @@ void game_render_floors(void) {
     // If we have no floors, draw a default background to prevent black screen
     if (g_game_state.floor_count == 0) {
         // Draw a subtle grid background as fallback
-        if (g_game_state.dev_ui) {
+        if (presentation_runtime_dev_ui()) {
             // In dev mode, show that floors are missing with a darker background
             DrawRectangle(0, 0, g_renderer.screen_width * 2, g_renderer.screen_height * 2,
                          (Color){20, 20, 20, 255});
@@ -350,7 +351,7 @@ void game_render_floors(void) {
                 layers,
                 floor->object_layer_count,
                 "floor",
-                g_game_state.dev_ui,
+                presentation_runtime_dev_ui(),
                 cell_size,
                 floor_color
             );
@@ -393,7 +394,7 @@ void game_render_world_objects(void) {
                 layers,
                 portal->object_layer_count,
                 "portal",
-                g_game_state.dev_ui,
+                presentation_runtime_dev_ui(),
                 cell_size,
                 portal_color
             );
@@ -435,7 +436,7 @@ void game_render_foregrounds(void) {
                 layers,
                 fg->object_layer_count,
                 "foreground",
-                g_game_state.dev_ui,
+                presentation_runtime_dev_ui(),
                 cell_size,
                 fg_color
             );
@@ -532,7 +533,7 @@ void game_render_entities(void) {
     }
 
     const float cell_size = g_game_state.cell_size > 0 ? g_game_state.cell_size : 12.0f;
-    const bool dev_ui = g_game_state.dev_ui;
+    const bool dev_ui = presentation_runtime_dev_ui();
 
     // Create array to hold all depth-sorted actors
     static EntitySortEntry sort_entries[MAX_DEPTH_SORT_ENTRIES];
@@ -851,7 +852,7 @@ void game_render_ui(void) {
     // Render error messages (always visible)
     game_render_error_messages();
 
-    if (g_game_state.dev_ui) {
+    if (presentation_runtime_dev_ui()) {
         dev_ui_draw(g_renderer.screen_width, g_renderer.screen_height, 0);
     } else {
         modal_player_draw(g_renderer.screen_width, g_renderer.screen_height);
@@ -957,11 +958,11 @@ void game_render_floating_texts(void) {
 Vector2 game_render_world_to_screen(Vector2 world_pos) {
     float cell_size = g_game_state.cell_size > 0 ? g_game_state.cell_size : 12.0f;
     Vector2 scaled = {world_pos.x * cell_size, world_pos.y * cell_size};
-    return GetWorldToScreen2D(scaled, g_game_state.camera);
+    return GetWorldToScreen2D(scaled, camera_get());
 }
 
 Vector2 game_render_screen_to_world(Vector2 screen_pos) {
-    Vector2 world = GetScreenToWorld2D(screen_pos, g_game_state.camera);
+    Vector2 world = GetScreenToWorld2D(screen_pos, camera_get());
     float cell_size = g_game_state.cell_size > 0 ? g_game_state.cell_size : 12.0f;
     return (Vector2){world.x / cell_size, world.y / cell_size};
 }
