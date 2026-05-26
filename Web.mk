@@ -19,7 +19,18 @@ ifeq ($(BUILD_MODE),RELEASE)
 WS_URL       ?= wss://server.cyberiaonline.com/ws
 API_BASE_URL ?= https://www.cyberiaonline.com
 CFLAGS  += -DCYBERIA_LOG_LEVEL=3
-LDFLAGS_RELEASE := --closure 1
+# Closure Compiler (--closure 1) runs ADVANCED_OPTIMIZATIONS over the
+# Emscripten-emitted JS wrapper. With this project's surface — Asyncify,
+# FETCH, two --js-library files, EXPORTED_RUNTIME_METHODS, and the
+# Raylib EM_ASYNC_JS clipboard path — Closure renames the abort /
+# throwInternalError chain into infinite recursion that corrupts WASM
+# heap address zero on startup, producing the
+# "Aborted(Runtime error: corrupted heap memory area)" panic followed
+# by a runaway Je/Le/Ie stack in browser consoles. The WASM itself is
+# still fully optimised by `-O3 -DNDEBUG` from config.mk; skipping
+# Closure only stops minifying the JS wrapper. Do not re-enable
+# without verifying the production bundle in a real browser.
+LDFLAGS_RELEASE :=
 else
 WS_URL       ?= ws://localhost:8081/ws
 API_BASE_URL ?= http://localhost:4005
