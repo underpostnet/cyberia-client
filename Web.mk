@@ -35,9 +35,11 @@ CFLAGS += -DAPI_BASE_URL_LITERAL='"$(API_BASE_URL)"'
 LDFLAGS = -lidbfs.js
 LDFLAGS += -lwebsocket.js
 LDFLAGS += -s 'EXPORTED_RUNTIME_METHODS=["writeArrayToMemory","setValue","allocateUTF8"]'
-# ASYNCIFY removed — the main loop is driven by emscripten_set_main_loop and
-# nothing calls emscripten_sleep / coroutine helpers. Keeping the flag paid
-# the ~20% code-size and 10-30% runtime overhead for nothing.
+# Required by Raylib's EM_ASYNC_JS clipboard API (rcore_web.c::RequestClipboardData).
+# Without this flag, emcc still emits Asyncify.handleAsync into the JS output but
+# the symbol is not declared, so Closure ADVANCED_OPTIMIZATIONS fails with
+# "variable Asyncify is undeclared".
+LDFLAGS += -sASYNCIFY
 LDFLAGS += -sFETCH=1
 LDFLAGS += --js-library $(SRC_DIR)/js/services.js
 LDFLAGS += --js-library $(SRC_DIR)/js/interact_overlay.js
