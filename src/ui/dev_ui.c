@@ -3,6 +3,7 @@
 #include "network/client.h"
 #include "game_render.h"
 #include "game_state.h"
+#include "domain/presentation_runtime.h"
 
 #include <assert.h>
 #include <stdio.h>
@@ -158,10 +159,7 @@ int dev_ui_get_active_item_count(const char* player_id) {
 }
 
 void dev_ui_draw(int screen_width, int screen_height, int hud_occupied) {
-    // Only draw if dev_ui is enabled in game state
-    bool dev_ui_enabled = g_game_state.dev_ui;
-
-    if (!dev_ui_enabled) {
+    if (!presentation_runtime_dev_ui()) {
         return;
     }
 

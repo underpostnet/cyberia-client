@@ -19,6 +19,7 @@
 
 #include "inventory_modal.h"
 
+#include "domain/local_player.h"
 #include "network/client.h"
 #include "dialogue_data.h"
 #include "game_state.h"
@@ -29,6 +30,7 @@
 #include "object_layers_management.h"
 #include "ol_as_animated_ico.h"
 #include "serial.h"
+#include "ui_state.h"
 
 #include <assert.h>
 #include <math.h>
@@ -490,13 +492,14 @@ void inventory_modal_draw(void) {
     s_skill_total = 0;
     if (ols->item_id[0] != '\0') {
         /* First pass: count matching skills */
-        int match_indices[MAX_SKILL_ENTRIES];
+        int match_indices[UI_STATE_MAX_SKILL_ENTRIES];
         int match_count = 0;
-        for (int si = 0; si < g_game_state.skill_map_count; si++) {
-            const SkillEntry* se = &g_game_state.skill_map[si];
-            if (strcmp(se->trigger_item_id, ols->item_id) != 0) continue;
+        int total = ui_state_skill_count();
+        for (int si = 0; si < total; si++) {
+            const UiSkillEntry* se = ui_state_skill_at(si);
+            if (!se || strcmp(se->trigger_item_id, ols->item_id) != 0) continue;
             if (se->summoned_entity_item_id[0] == '\0') continue;
-            if (match_count < MAX_SKILL_ENTRIES)
+            if (match_count < UI_STATE_MAX_SKILL_ENTRIES)
                 match_indices[match_count++] = si;
         }
         s_skill_total = match_count;
@@ -506,7 +509,7 @@ void inventory_modal_draw(void) {
             if (s_skill_page >= match_count) s_skill_page = match_count - 1;
             if (s_skill_page < 0) s_skill_page = 0;
 
-            const SkillEntry* se = &g_game_state.skill_map[match_indices[s_skill_page]];
+            const UiSkillEntry* se = ui_state_skill_at(match_indices[s_skill_page]);
             const char* resolved_summon = resolve_summoned_item_id(se->summoned_entity_item_id);
 
             /* Separator line */
@@ -819,7 +822,7 @@ bool inventory_modal_handle_click(int mx, int my) {
                 /* Dead-equip: optimistically update the self-player bubble
                  * so it reflects what will render on revive (the server
                  * only mutates PreRespawnObjectLayers, never sent to us). */
-                if (g_game_state.self_status_icon == 5) /* StatusDead */
+                if (local_player_status_icon() == 5) /* StatusDead */
                     interaction_bubble_dead_equip(ols->item_id, new_active);
 
                 inventory_modal_close();

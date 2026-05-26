@@ -35,6 +35,7 @@
 
 #include "floating_combat_text.h"
 
+#include "domain/local_player.h"
 #include "game_state.h"
 
 #include <assert.h>
@@ -278,22 +279,19 @@ void fct_spawn_item(float world_x, float world_y, uint32_t quantity,
 }
 
 void fct_update(float dt) {
-    /* Drain events queued by binary_aoi_decoder via game_state. */
-    for (int i = 0; i < g_game_state.fct_queue_count; i++) {
-        if (g_game_state.fct_queue[i].item_id[0] != '\0') {
-            fct_spawn_item(g_game_state.fct_queue[i].world_x,
-                           g_game_state.fct_queue[i].world_y,
-                           g_game_state.fct_queue[i].item_qty,
-                           g_game_state.fct_queue[i].type,
-                           g_game_state.fct_queue[i].item_id);
+    /* Drain events queued by binary_aoi_decoder via the local-player module. */
+    int n = local_player_fct_count();
+    for (int i = 0; i < n; i++) {
+        const LocalFctEvent* ev = local_player_fct_at(i);
+        if (!ev) continue;
+        if (ev->item_id[0] != '\0') {
+            fct_spawn_item(ev->world_x, ev->world_y, ev->item_qty,
+                           ev->type, ev->item_id);
         } else {
-            fct_spawn(g_game_state.fct_queue[i].world_x,
-                      g_game_state.fct_queue[i].world_y,
-                      g_game_state.fct_queue[i].value,
-                      g_game_state.fct_queue[i].type);
+            fct_spawn(ev->world_x, ev->world_y, ev->value, ev->type);
         }
     }
-    g_game_state.fct_queue_count = 0;
+    local_player_fct_clear();
 
     /* Decay screen-space overlays. */
     if (s_damage_overlay > 0.0f) {
