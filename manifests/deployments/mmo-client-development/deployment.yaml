@@ -21,7 +21,7 @@ spec:
       containers:
         - name: dd-cyberia-mmo-client-development-blue
           image: underpost/cyberia-client:v3.2.9
-          imagePullPolicy: IfNotPresent
+          imagePullPolicy: Always
           envFrom:
             - secretRef:
                 name: underpost-config
@@ -32,7 +32,7 @@ spec:
             - /bin/sh
             - -c
             - >
-              exec python3 /home/dd/engine/cyberia-client/server.py 8082 /home/dd/engine/cyberia-client/bin development
+              set -a && . /home/dd/engine/engine-private/conf/dd-cyberia/instances/mmo-client/env/development.env && set +a && exec python3 /home/dd/engine/cyberia-client/server.py 8082 /home/dd/engine/cyberia-client/bin development
           readinessProbe:
             {
               "tcpSocket": {
@@ -76,7 +76,17 @@ spec:
             }
 
 
-
+    
+          volumeMounts:
+            - name: instance-cyberia-client-dd-cyberia-mmo-client-development-blue
+              mountPath: /home/dd/engine/engine-private/conf/dd-cyberia/instances/mmo-client/env
+    
+      volumes:
+        - name: instance-cyberia-client-dd-cyberia-mmo-client-development-blue
+          persistentVolumeClaim:
+            claimName: instance-cyberia-client-dd-cyberia-mmo-client-development-blue
+    
+      
 ---
 apiVersion: v1
 kind: Service

@@ -22,16 +22,52 @@ Arguments
   directory   Directory to serve files from.
   mode        "development" or "production" (default: production).
 
-The runtime owns its own lifecycle. A successful socket bind is the
-canonical "ready" signal — Kubernetes observes it through the
-container's readinessProbe (TCP socket on `port`) and marks the pod
-Ready. Bind failures crash the process non-zero and the kubelet
-surfaces a CrashLoopBackOff. There is no shell-callback layer.
+Container status reporting
+--------------------------
+  Set CONTAINER_DEPLOY_ID in the instance env file (e.g.
+  "dd-cyberia-mmo-client-development").  When set:
+    - after a successful socket bind: underpost config set container-status
+      <CONTAINER_DEPLOY_ID>-running-deployment
+    - on any startup error:           underpost config set container-status error
+  The call is fire-and-forget (background thread) and never blocks serving.
+  If CONTAINER_DEPLOY_ID is unset the feature is silently disabled.
 """
 
 import sys
 import os
+import subprocess
+import threading
 from http.server import HTTPServer, SimpleHTTPRequestHandler
+
+
+def _run_underpost_status(status: str) -> None:
+    """Call `underpost config set container-status <value>` in a background thread.
+
+    value is either "error" or CONTAINER_DEPLOY_ID+"-"+status.
+    Errors are only printed; they never propagate.
+    """
+    container_id = os.environ.get("CONTAINER_DEPLOY_ID", "")
+    if not container_id:
+        return
+    value = "error" if status == "error" else f"{container_id}-{status}"
+
+    def _run():
+        try:
+            result = subprocess.run(
+                ["underpost", "config", "set", "container-status", value],
+                capture_output=True,
+                text=True,
+            )
+            if result.returncode != 0:
+                print(
+                    f"[status] underpost config set container-status {value} "
+                    f"exited {result.returncode}: {result.stderr.strip()}",
+                    flush=True,
+                )
+        except Exception as exc:
+            print(f"[status] underpost config set container-status {value}: {exc}", flush=True)
+
+    threading.Thread(target=_run, daemon=True).start()
 
 
 class _BaseHandler(SimpleHTTPRequestHandler):
@@ -61,6 +97,20 @@ if __name__ == "__main__":
     handler = DevelopmentHandler if mode == "development" else ProductionHandler
 
     os.chdir(directory)
-    server = HTTPServer(("", port), handler)
+    try:
+        server = HTTPServer(("", port), handler)
+    except Exception as exc:
+        print(f"[server] bind failed on port {port}: {exc}", flush=True)
+        _run_underpost_status("error")
+        sys.exit(1)
+
     print(f"[server] http://0.0.0.0:{port}  mode={mode}  dir={directory}", flush=True)
-    server.serve_forever()
+    _run_underpost_status("running-deployment")
+
+    try:
+        server.serve_forever()
+    except Exception as exc:
+        print(f"[server] serve_forever error: {exc}", flush=True)
+        _run_underpost_status("error")
+        sys.exit(1)
+
