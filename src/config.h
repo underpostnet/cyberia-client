@@ -19,15 +19,15 @@
 /**
  * @brief WebSocket server URL
  *
- * The URL of the WebSocket server to connect to for real-time updates.
- * Format: ws://host:port/path or wss://host:port/path for secure connection
- *
- * Examples:
- *   - Local development: "ws://localhost:8080/ws"
- *   - Production: "wss://server.cyberiaonline.com/ws"
+ * Compile-time injection: pass `-DWS_URL_LITERAL='"wss://..."'` from the
+ * Makefile to override the localhost default. RELEASE builds always inject
+ * the production URL; DEBUG builds default to localhost for the same
+ * `npm run dev:client` workflow.
  */
-// static const char* WS_URL = "wss://server.cyberiaonline.com/ws";
-static const char* WS_URL = "ws://localhost:8081/ws";
+#ifndef WS_URL_LITERAL
+#  define WS_URL_LITERAL "ws://localhost:8081/ws"
+#endif
+static const char* WS_URL = WS_URL_LITERAL;
 
 // ============================================================================
 // Engine API Configuration
@@ -36,17 +36,12 @@ static const char* WS_URL = "ws://localhost:8081/ws";
 /**
  * @brief Engine API base URL
  *
- * The base URL for the Cyberia engine API. Used for:
- * - Atlas sprite sheet metadata (GET /api/atlas-sprite-sheet/)
- * - File blob retrieval (GET /api/file/blob/:id)
- * - Object layer metadata (GET /api/object-layer/)
- *
- * Examples:
- *   - Local development: "http://localhost:4005"
- *   - Production: "https://www.cyberiaonline.com"
+ * Compile-time injection same as WS_URL — pass `-DAPI_BASE_URL_LITERAL=...`.
  */
-// static const char* API_BASE_URL = "https://www.cyberiaonline.com";
-static const char* API_BASE_URL = "http://localhost:4005";
+#ifndef API_BASE_URL_LITERAL
+#  define API_BASE_URL_LITERAL "http://localhost:4005"
+#endif
+static const char* API_BASE_URL = API_BASE_URL_LITERAL;
 
 // ============================================================================
 // Game Configuration

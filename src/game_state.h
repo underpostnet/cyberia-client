@@ -12,38 +12,39 @@
 
 /**
  * @file game_state.h
- * @brief Core game state management structures
+ * @brief Authoritative world-state view.
  *
- * This module defines all the data structures needed to maintain
- * the game state, including entities, world objects, and configuration.
- * Migrated from Python GameState and related classes.
+ * GameState is the client's mirror of the simulation. It carries only
+ * gameplay-relevant fields: entities, their positions and life, the
+ * world configuration that the server pushed at boot, and the
+ * economy/inventory state that the simulation owns.
+ *
+ * Render-only data, per-frame UI bookkeeping, status indicators, and the
+ * camera live in dedicated modules:
+ *
+ *   - domain/camera.h           Camera2D + follow-smoothing
+ *   - domain/presentation_runtime.h  palette, status icon visuals, dev_ui
+ *   - domain/local_player.h     frozen flag, FCT queue, self status icon,
+ *                               authoritative move speed
+ *   - ui/ui_state.h             skill_map, associated_item_ids
  */
 
 #define MAX_ENTITIES 1000
 #define MAX_OBJECTS 5000
 #define MAX_OBJECT_LAYERS 20
 #define MAX_PATH_POINTS 100
-#define MAX_MESSAGE_SIZE USHRT_MAX // why?
+#define MAX_MESSAGE_SIZE USHRT_MAX
 #define MAX_ID_LENGTH 64
-#define MAX_SKILL_ENTRIES 64
-#define MAX_FCT_PENDING 64     /* max queued FCT events per frame */
-
-
-
 #define MAX_BEHAVIOR_LENGTH 32
 #define MAX_ENTITY_TYPES     16
 #define MAX_DEFAULT_ITEM_IDS  8
 #define MAX_ACTIVE_ITEM_TYPES 8
-#define MAX_STATUS_ICONS 16
 
-// Forward declarations
 typedef struct GameState GameState;
 typedef struct EntityState EntityState;
 typedef struct PlayerState PlayerState;
 typedef struct BotState BotState;
 
-
-// Base entity state structure
 struct EntityState {
     char id[MAX_ID_LENGTH];
     Vector2 pos_server;
@@ -57,62 +58,49 @@ struct EntityState {
     float life;
     float max_life;
     float respawn_in;
-    double last_update;
-    int effective_level; /* clamped sum of all stat fields, sent by server for all entities */
-    uint8_t status_icon; /* overhead status indicator ID — mapped via status_icons config */
+    double last_update;     /* wall-clock time the entity was last touched */
+    double snapshot_time;   /* wall-clock time of the snapshot that produced
+                             * pos_server. Used by interpolation to compute
+                             * a per-entity alpha instead of a global one. */
+    int effective_level;
+    uint8_t status_icon;
 };
 
-// Player state structure
 struct PlayerState {
-    EntityState base; // Inheritance simulation
-    char map_code[MAX_ID_LENGTH]; /* map code string, e.g. "fallback-map-0" */
-    Vector2 path[MAX_PATH_POINTS]; // debug only
-    int path_count; // debug only
-    Vector2 target_pos; // debug only
+    EntityState base;
+    char map_code[MAX_ID_LENGTH];
+    Vector2 path[MAX_PATH_POINTS]; /* debug only */
+    int path_count;                /* debug only */
+    Vector2 target_pos;            /* debug only */
 
-    // Local prediction & smoothing (main player only)
-    Vector2 tap_target;      // grid-coords of last tap for local prediction
-    bool has_tap_target;     // whether a prediction target is active
-    float estimated_speed;   // grid-units/second derived from server deltas
+    Vector2 tap_target;
+    bool    has_tap_target;
 };
 
-// Bot state structure
 struct BotState {
-    EntityState base; // Inheritance simulation
+    EntityState base;
     char behavior[MAX_BEHAVIOR_LENGTH];
     char caster_id[MAX_ID_LENGTH];
 };
 
-// World object structure (for obstacles, portals, etc.)
-typedef struct {
-    char id[MAX_ID_LENGTH];
-    Vector2 pos;
-    Vector2 dims;
-    char type[MAX_TYPE_LENGTH];
-    char portal_label[MAX_ID_LENGTH]; // For portals
+typedef struct WorldObject {
+    char             id[MAX_ID_LENGTH];
+    Vector2          pos;
+    Vector2          dims;
+    ObjectLayerType  type_kind;
+    char             type[MAX_TYPE_LENGTH];
+    char             portal_label[MAX_ID_LENGTH];
     ObjectLayerState object_layers[MAX_OBJECT_LAYERS];
-    int object_layer_count;
+    int              object_layer_count;
 } WorldObject;
 
-/* GameColors / palette removed. The C client carries no compile-time
- * palette — every presentation value comes from the engine REST endpoint
- * /api/cyberia-client-hints/:CYBERIA_CLIENT_HINTS_CODE and is hydrated by
- * domain/presentation_runtime.{c,h}. Render code calls
- * presentation_runtime_palette("KEY") at each use site.
- */
-
-// Equipment rules received from metadata message (mirrors Go EquipmentRulesConfig).
 typedef struct {
-    char active_item_types[MAX_ACTIVE_ITEM_TYPES][32]; // set of activable item types
+    char active_item_types[MAX_ACTIVE_ITEM_TYPES][32];
     int  active_item_type_count;
-    bool one_per_type;   // enforce one active per type
-    bool require_skin;   // require ≥ 1 active skin
+    bool one_per_type;
+    bool require_skin;
 } EquipmentRules;
 
-// Per-entity-type gameplay defaults received in init_data payload.
-// Strictly simulation; presentation (colour keys, status-icon visuals)
-// arrives separately through /api/cyberia-client-hints and the helpers
-// in domain/presentation_runtime.
 typedef struct {
     char entity_type[32];
     char live_item_ids[MAX_DEFAULT_ITEM_IDS][128];
@@ -123,52 +111,26 @@ typedef struct {
     int  drop_item_id_count;
 } EntityTypeDefault;
 
-/* StatusIconConfig removed. The numeric status_icon u8 still rides on
- * the AOI wire; presentation_runtime_status_icon(u8) and
- * presentation_runtime_status_border(u8) resolve the icon stem and
- * border colour from the engine hints fetch. */
-
-// Skill map entry received from init_data: one trigger item → N skill definitions.
-// Each entry represents a single logicEventId with its own description and summoned entity.
-// If summoned_entity_item_id equals "$active_skin", the client resolves it dynamically
-// to the player's currently active skin item at render time.
-typedef struct {
-    char trigger_item_id[MAX_ID_LENGTH];
-    char logic_event_id[MAX_ID_LENGTH];
-    char name[MAX_ID_LENGTH];
-    char description[256];
-    char summoned_entity_item_id[MAX_ID_LENGTH];
-} SkillEntry;
-
-// Main game state structure
 struct GameState {
-    // Player identification
     char player_id[MAX_ID_LENGTH];
 
-    // Game configuration (from init_data)
     int grid_w;
     int grid_h;
     float cell_size;
     int interpolation_ms;
     float aoi_radius;
 
-    // Per-entity-type gameplay defaults from init_data.
-    // Visual fallbacks (palette, status-icon visuals) are resolved
-    // client-side via domain/presentation_runtime.
     EntityTypeDefault entity_defaults[MAX_ENTITY_TYPES];
     int entity_defaults_count;
 
-    // Main player state
     PlayerState player;
 
-    // Other entities
     PlayerState other_players[MAX_ENTITIES];
     int other_player_count;
 
     BotState bots[MAX_ENTITIES];
     int bot_count;
 
-    // World objects
     WorldObject obstacles[MAX_OBJECTS];
     int obstacle_count;
 
@@ -184,140 +146,36 @@ struct GameState {
     WorldObject floors[MAX_OBJECTS];
     int floor_count;
 
-    // UI state // TODO: should NOT be in GameState
-    char associated_item_ids[MAX_ENTITIES][MAX_ITEM_ID_LENGTH];
-    int associated_item_count;
-    SkillEntry skill_map[MAX_SKILL_ENTRIES];
-    int skill_map_count;
-
-    // Stats
     int sum_stats_limit;
     int active_stats_sum;
 
-    // Economy
-    int player_coins; /* coin balance pushed by server each AOI frame */
+    int player_coins;
 
-    // Equipment rules (from metadata message)
     EquipmentRules equipment_rules;
 
-    // Full inventory (all OLs including inactive) \u2014 self-player only.
-    // Decoded from WriteSelfPlayer's writeFullInventory section.
-    // Powers the inventory bottom bar and modal UI.
     ObjectLayerState full_inventory[MAX_OBJECT_LAYERS];
     int full_inventory_count;
 
-    // FrozenInteractionState — authoritative flag from the Go server.
-    // While true, the player is in a modal interaction: no outgoing taps,
-    // no incoming damage.  Set by the binary AOI self-player payload.
-    bool frozen; // TODO: client only
-
-    // Entity Status Indicator for the local player (from AOI self-player).
-    // Mirrors player.base.status_icon but decoded from a separate position
-    // in the self-player payload.  Used by overhead UI for self-entity.
-    uint8_t self_status_icon;
-
-    // Runtime flags
     bool init_received;
-    bool dev_ui; // TODO: should be client only, is game_state meant to represent local state or server state?
-    double last_update_time;
+    double last_update_time;       /* wall-clock arrival of the latest snapshot */
+    uint32_t last_snapshot_tick;   /* mirror of session_server_tick_estimate() */
 
-    /* Error message written by message_parser; consumed + cleared by game_render. */
     char pending_error[256];
-
-    /* FCT events queued by binary_aoi_decoder; drained by floating_combat_text each frame. */
-    struct {
-        float    world_x;
-        float    world_y;
-        uint32_t value;
-        uint8_t  type;
-        char     item_id[MAX_ITEM_ID_LENGTH]; /* empty string → numeric FCT */
-        uint32_t item_qty;
-    } fct_queue[MAX_FCT_PENDING];
-    int fct_queue_count;
-
-    // Camera
-    Camera2D camera; // TODO: should NOT be in GameState
 };
 
-// Global game state instance
 extern GameState g_game_state;
 
-/**
- * @brief Update entity position interpolation
- * @param delta_time Time elapsed since last update
- */
-void game_state_update_interpolation(float delta_time);
-
-/**
- * @brief Find player by ID in other_players array
- * @param id Player ID to search for
- * @return Pointer to PlayerState or NULL if not found
- */
 PlayerState* game_state_find_player(const char* id);
+BotState*    game_state_find_bot(const char* id);
+int          game_state_update_player(const PlayerState* player);
+int          game_state_update_bot(const BotState* bot);
+void         game_state_remove_player(const char* id);
+void         game_state_remove_bot(const char* id);
 
-/**
- * @brief Find bot by ID in bots array
- * @param id Bot ID to search for
- * @return Pointer to BotState or NULL if not found
- */
-BotState* game_state_find_bot(const char* id);
+/** Toggle the client-owned dev-overlay flag. The toggle delegates to
+ *  presentation_runtime so the value stays a single source of truth. */
+void game_state_toggle_dev_ui(void);
 
-/**
- * @brief Add or update a player in other_players array
- * @param player Player data to add/update
- * @return 0 on success, -1 on failure
- */
-int game_state_update_player(const PlayerState* player);
-
-/**
- * @brief Add or update a bot in bots array
- * @param bot Bot data to add/update
- * @return 0 on success, -1 on failure
- */
-int game_state_update_bot(const BotState* bot);
-
-/**
- * @brief Remove player from other_players array
- * @param id Player ID to remove
- */
-void game_state_remove_player(const char* id);
-
-/**
- * @brief Remove bot from bots array
- * @param id Bot ID to remove
- */
-void game_state_remove_bot(const char* id);
-
-/**
- * @brief Initialize camera based on current game state
- * @param screen_width Current screen width
- * @param screen_height Current screen height
- */
-void game_state_init_camera(int screen_width, int screen_height);
-
-/**
- * @brief Update camera position to follow player
- * @param delta_time Time elapsed since last frame (for frame-rate independent smoothing)
- */
-void game_state_update_camera(float delta_time);
-
-/**
- * @brief Update camera offset when screen size changes
- * @param screen_width Current screen width
- * @param screen_height Current screen height
- */
-void game_state_update_camera_offset(int screen_width, int screen_height);
-
-// Set camera zoom, clamped to a sensible range.
-void game_state_set_camera_zoom(float zoom);
-
-// Toggle the dev UI overlay flag.
-void game_state_toggle_debug_mode(void);
-
-/**
- * @brief Look up entity type defaults by entity type string.
- * @return Pointer to matching EntityTypeDefault, or NULL if not found.
- */
 static inline const EntityTypeDefault* game_state_get_entity_default(const char* entity_type) {
     for (int i = 0; i < g_game_state.entity_defaults_count; i++) {
         if (strcmp(g_game_state.entity_defaults[i].entity_type, entity_type) == 0)
@@ -326,26 +184,10 @@ static inline const EntityTypeDefault* game_state_get_entity_default(const char*
     return NULL;
 }
 
-/* Visual resolution is handled by domain/presentation_runtime.h.
- * Call presentation_runtime_palette(), presentation_runtime_status_icon(),
- * and presentation_runtime_status_border() directly; the game state module
- * does not expose colour queries.
- */
-
-/**
- * @brief Return the player's current coin balance.
- *
- * The value is pushed by the server in every AOI frame as a dedicated u32
- * field at the end of the self-player section.  It is stored directly in
- * GameState.player_coins so no object-layer scanning is needed.
- */
 static inline int game_state_get_player_coins(void) {
     return g_game_state.player_coins;
 }
 
-/**
- * @brief Check if an item type is in the activeItemTypes equipment rule set.
- */
 static inline bool game_state_is_active_item_type(const char* item_type) {
     if (!item_type || item_type[0] == '\0') return false;
     for (int i = 0; i < g_game_state.equipment_rules.active_item_type_count; i++) {
@@ -355,4 +197,4 @@ static inline bool game_state_is_active_item_type(const char* item_type) {
     return false;
 }
 
-#endif // GAME_STATE_H
+#endif /* GAME_STATE_H */

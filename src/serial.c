@@ -1,4 +1,5 @@
 #include "serial.h"
+#include "game_state.h"
 #include <string.h>
 #include <assert.h>
 #include <stdint.h>

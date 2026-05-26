@@ -6,7 +6,20 @@
 #include <stdint.h>
 #include <cJSON.h>
 #include <raylib.h>
-#include "game_state.h" // TODO: serializer shouldn't depend on game state, but only on structure
+
+#include "object_layer.h"
+
+/* Forward declarations only — serial.{c,h} works on the structs it
+ * (de)serialises, not on the GameState container. game_state.h does NOT
+ * need to be included here; callers that need it include it themselves. */
+struct EntityState;
+struct PlayerState;
+struct BotState;
+struct WorldObject;
+typedef struct EntityState EntityState;
+typedef struct PlayerState PlayerState;
+typedef struct BotState BotState;
+typedef struct WorldObject WorldObject;
 
 /* ============================================================================
  * Core Serialization/Deserialization Functions

@@ -1,13 +1,18 @@
 #include "message_parser.h"
 #include "binary_aoi_decoder.h"
-#include "serial.h"
 #include "config.h"
+#include "game_state.h"
+#include "serial.h"
 #include <cJSON.h>
 #include "object_layers_management.h"
 #include "js/interact_bridge.h"
 #include "notify_store.h"
 #include "js/services.h"
+#include "domain/camera.h"
 #include "domain/presentation_runtime.h"
+#include "network/client.h"
+#include "ui/ui_state.h"
+#include "util/log.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -128,8 +133,8 @@ static int message_parser_parse_init_data(const cJSON* json_root) {
 
     g_game_state.sum_stats_limit = serial_get_int_default(payload, "sumStatsLimit", 9999);
 
-    // Parse skill map: { "triggerItemId": ["logicEventId1", ...], ... }
-    g_game_state.skill_map_count = 0;
+    /* Skill map lives in ui_state — pure presentation lookup. */
+    ui_state_clear_skills();
     cJSON* skill_map_json = cJSON_GetObjectItem(payload, "skillMap");
 
     // Parse entity type defaults
@@ -195,72 +200,51 @@ static int message_parser_parse_init_data(const cJSON* json_root) {
     if (skill_map_json && cJSON_IsObject(skill_map_json)) {
         cJSON* entry = NULL;
         cJSON_ArrayForEach(entry, skill_map_json) {
-            if (g_game_state.skill_map_count >= MAX_SKILL_ENTRIES) break;
             if (!entry->string || !cJSON_IsArray(entry)) continue;
 
-            /* Each value is an array of skill-definition objects:
-             * [ { logicEventId: "...", description: "...", summonedEntityItemId: "..." }, ... ]
-             * We flatten into one SkillEntry per (triggerItemId, definition). */
             cJSON* def_obj = NULL;
             cJSON_ArrayForEach(def_obj, entry) {
-                if (g_game_state.skill_map_count >= MAX_SKILL_ENTRIES) break;
                 if (!cJSON_IsObject(def_obj)) continue;
 
-                SkillEntry* se = &g_game_state.skill_map[g_game_state.skill_map_count];
-                memset(se, 0, sizeof(*se));
-                strncpy(se->trigger_item_id, entry->string, MAX_ID_LENGTH - 1);
-                se->trigger_item_id[MAX_ID_LENGTH - 1] = '\0';
+                UiSkillEntry se = {0};
+                strncpy(se.trigger_item_id, entry->string, MAX_ITEM_ID_LENGTH - 1);
 
-                /* logicEventId (singular) */
                 cJSON* id_json = cJSON_GetObjectItem(def_obj, "logicEventId");
-                if (id_json && cJSON_IsString(id_json)) {
-                    strncpy(se->logic_event_id, cJSON_GetStringValue(id_json), MAX_ID_LENGTH - 1);
-                    se->logic_event_id[MAX_ID_LENGTH - 1] = '\0';
-                }
+                if (id_json && cJSON_IsString(id_json))
+                    strncpy(se.logic_event_id, cJSON_GetStringValue(id_json), MAX_ITEM_ID_LENGTH - 1);
 
-                /* name */
                 cJSON* name_json = cJSON_GetObjectItem(def_obj, "name");
-                if (name_json && cJSON_IsString(name_json)) {
-                    strncpy(se->name, cJSON_GetStringValue(name_json), MAX_ID_LENGTH - 1);
-                    se->name[MAX_ID_LENGTH - 1] = '\0';
-                }
+                if (name_json && cJSON_IsString(name_json))
+                    strncpy(se.name, cJSON_GetStringValue(name_json), MAX_ITEM_ID_LENGTH - 1);
 
-                /* description */
                 cJSON* desc_json = cJSON_GetObjectItem(def_obj, "description");
-                if (desc_json && cJSON_IsString(desc_json)) {
-                    strncpy(se->description, cJSON_GetStringValue(desc_json), sizeof(se->description) - 1);
-                    se->description[sizeof(se->description) - 1] = '\0';
-                }
+                if (desc_json && cJSON_IsString(desc_json))
+                    strncpy(se.description, cJSON_GetStringValue(desc_json), sizeof(se.description) - 1);
 
-                /* summonedEntityItemId */
                 cJSON* summon_json = cJSON_GetObjectItem(def_obj, "summonedEntityItemId");
-                if (summon_json && cJSON_IsString(summon_json)) {
-                    strncpy(se->summoned_entity_item_id, cJSON_GetStringValue(summon_json), MAX_ID_LENGTH - 1);
-                    se->summoned_entity_item_id[MAX_ID_LENGTH - 1] = '\0';
-                }
+                if (summon_json && cJSON_IsString(summon_json))
+                    strncpy(se.summoned_entity_item_id, cJSON_GetStringValue(summon_json), MAX_ITEM_ID_LENGTH - 1);
 
-                g_game_state.skill_map_count++;
+                ui_state_push_skill(&se);
             }
         }
     }
 
-    // Mark as initialized
-    printf("[INIT_DATA] all fields parsed — gridW=%d gridH=%d aoiRadius=%.1f entityDefaults=%d skillMap=%d\n",
-           g_game_state.grid_w, g_game_state.grid_h,
-           g_game_state.aoi_radius, g_game_state.entity_defaults_count, g_game_state.skill_map_count);
+    LOG_INFO("init_data parsed gridW=%d gridH=%d aoiRadius=%.1f entityDefaults=%d skills=%d",
+             g_game_state.grid_w, g_game_state.grid_h, g_game_state.aoi_radius,
+             g_game_state.entity_defaults_count, ui_state_skill_count());
     g_game_state.init_received = true;
 
-    // Camera zoom comes from the presentation runtime — either the bootstrap
-    // 1.0 value or, when the /api/cyberia-client-hints fetch has already
-    // settled, the per-deployment override. Read once here so the camera
-    // initialises with the right zoom regardless of fetch order.
-    if (g_game_state.camera.zoom == 0.0f) {
-        game_state_set_camera_zoom(presentation_runtime_camera_zoom());
+    /* Camera follows the presentation runtime's zoom; the underlying value
+     * lives in domain/camera.c. Re-initialise with the viewport size so the
+     * offset is correct when the player position lands. */
+    if (camera_zoom() <= 0.0f) {
+        camera_set_zoom(presentation_runtime_camera_zoom());
     }
-    // Initialize camera using the actual viewport size so the offset is correct.
-    game_state_init_camera(GetScreenWidth(), GetScreenHeight());
-    printf("  AOI Radius: %.1f\n", g_game_state.aoi_radius);
+    camera_init(GetScreenWidth(), GetScreenHeight());
 
+    /* Tell the network FSM the handshake is complete. */
+    client_on_init_received();
     return 0;
 }
 
@@ -391,25 +375,14 @@ static int message_parser_parse_aoi_update(const cJSON* json_root) {
         if (serial_deserialize_player_state(player_obj, &player) == 0) {
             bool first_update = (g_game_state.player_id[0] == '\0');
 
-            // Save prediction state and current interp_pos before overwrite
             Vector2 prev_interp_pos = g_game_state.player.base.interp_pos;
             Vector2 prev_server_pos = g_game_state.player.base.pos_server;
-            Vector2 tap_target = g_game_state.player.tap_target;
-            bool has_tap_target = g_game_state.player.has_tap_target;
-            float estimated_speed = g_game_state.player.estimated_speed;
+            Vector2 tap_target      = g_game_state.player.tap_target;
+            bool    has_tap_target  = g_game_state.player.has_tap_target;
 
-            // Estimate velocity from server position delta
+            /* Clear the local tap target as soon as the server reports the
+             * player stopped — drives the on-tap arrow off when motion ends. */
             if (!first_update) {
-                double dt = GetTime() - g_game_state.last_update_time;
-                if (dt > 0.001) {
-                    float dx = player.base.pos_server.x - prev_server_pos.x;
-                    float dy = player.base.pos_server.y - prev_server_pos.y;
-                    float speed = sqrtf(dx * dx + dy * dy) / (float)dt;
-                    estimated_speed = estimated_speed > 0.1f ?
-                        estimated_speed * 0.7f + speed * 0.3f : speed;
-                }
-
-                // Clear tap target if server shows player stopped
                 float sdx = player.base.pos_server.x - prev_server_pos.x;
                 float sdy = player.base.pos_server.y - prev_server_pos.y;
                 if (sdx * sdx + sdy * sdy < 0.0001f) {
@@ -417,15 +390,11 @@ static int message_parser_parse_aoi_update(const cJSON* json_root) {
                 }
             }
 
-            // Update main player state
             memcpy(&g_game_state.player, &player, sizeof(PlayerState));
 
-            // Restore prediction state (memcpy zeroed them)
-            g_game_state.player.tap_target = tap_target;
+            g_game_state.player.tap_target     = tap_target;
             g_game_state.player.has_tap_target = has_tap_target;
-            g_game_state.player.estimated_speed = estimated_speed;
 
-            // For exponential blend: keep interp_pos where it was (no hard reset)
             if (!first_update) {
                 g_game_state.player.base.interp_pos = prev_interp_pos;
             }
@@ -563,35 +532,20 @@ static int message_parser_parse_skill_item_ids(const cJSON* json_root) {
         return -1;
     }
 
-    // Clear existing associations
-    g_game_state.associated_item_count = 0;
+    ui_state_clear_associated_items();
 
-    // Get associated item IDs array
     cJSON* associated_ids = serial_get_array(payload, "associatedItemIds");
     if (associated_ids) {
         cJSON* item = NULL;
         cJSON_ArrayForEach(item, associated_ids) {
-            if (g_game_state.associated_item_count >= MAX_ENTITIES) {
-                break;
-            }
-
             if (cJSON_IsString(item)) {
                 const char* item_id = cJSON_GetStringValue(item);
-                if (item_id) {
-                    strncpy(
-                        g_game_state.associated_item_ids[g_game_state.associated_item_count],
-                        item_id,
-                        MAX_ITEM_ID_LENGTH - 1
-                    );
-                    g_game_state.associated_item_count++;
-                }
+                if (item_id) ui_state_push_associated_item(item_id);
             }
         }
     }
 
-    printf("[MESSAGE_PARSER] Skill/Item IDs processed: %d associations\n",
-           g_game_state.associated_item_count);
-
+    LOG_INFO("skill_item_ids parsed: %d associations", ui_state_associated_item_count());
     return 0;
 }
 

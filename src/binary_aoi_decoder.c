@@ -8,10 +8,14 @@
 
 #include "binary_aoi_decoder.h"
 
+#include "domain/local_player.h"
 #include "game_state.h"
+#include "network/client.h"
+#include "util/log.h"
 
 #include <assert.h>
 #include <math.h>
+#include <raylib.h>
 #include <stdio.h>
 #include <string.h>
 
@@ -200,6 +204,7 @@ static void decode_player_entity(BinReader* r, uint8_t flags) {
     p->base.direction = (Direction)dir;
     p->base.mode = (ObjectLayerMode)mode;
     p->base.last_update = gs->last_update_time;
+    p->base.snapshot_time = gs->last_update_time;
 
     if (flags & BIN_FLAG_HAS_LIFE) {
         p->base.life = br_f32(r);
@@ -253,7 +258,8 @@ static void decode_bot_entity(BinReader* r, uint8_t flags) {
     b->base.dims = (Vector2){ dw, dh };
     b->base.direction = (Direction)dir;
     b->base.mode = (ObjectLayerMode)mode;
-    b->base.last_update = gs->last_update_time;
+    b->base.last_update   = gs->last_update_time;
+    b->base.snapshot_time = gs->last_update_time;
 
     if (flags & BIN_FLAG_HAS_LIFE) {
         b->base.life = br_f32(r);
@@ -294,6 +300,7 @@ static void decode_floor_entity(BinReader* r, uint8_t flags) {
     strncpy(f->id, id, MAX_ID_LENGTH - 1);
     f->pos  = (Vector2){ px, py };
     f->dims = (Vector2){ dw, dh };
+    f->type_kind = OBJECT_LAYER_TYPE_FLOOR;
     strncpy(f->type, "floor", MAX_TYPE_LENGTH - 1);
 
     f->object_layer_count = read_item_ids(
@@ -320,6 +327,7 @@ static void decode_obstacle_entity(BinReader* r, uint8_t flags) {
     strncpy(o->id, id, MAX_ID_LENGTH - 1);
     o->pos  = (Vector2){ px, py };
     o->dims = (Vector2){ dw, dh };
+    o->type_kind = OBJECT_LAYER_TYPE_OBSTACLE;
     strncpy(o->type, "obstacle", MAX_TYPE_LENGTH - 1);
     o->object_layer_count = read_item_ids(
         r, o->object_layers, MAX_OBJECT_LAYERS);
@@ -349,6 +357,7 @@ static void decode_portal_entity(BinReader* r, uint8_t flags) {
     strncpy(p->id, id, MAX_ID_LENGTH - 1);
     p->pos  = (Vector2){ px, py };
     p->dims = (Vector2){ dw, dh };
+    p->type_kind = OBJECT_LAYER_TYPE_PORTAL;
     strncpy(p->type, "portal", MAX_TYPE_LENGTH - 1);
     strncpy(p->portal_label, label, MAX_ID_LENGTH - 1);
     p->object_layer_count = read_item_ids(
@@ -375,6 +384,7 @@ static void decode_foreground_entity(BinReader* r, uint8_t flags) {
     strncpy(fg->id, id, MAX_ID_LENGTH - 1);
     fg->pos  = (Vector2){ px, py };
     fg->dims = (Vector2){ dw, dh };
+    fg->type_kind = OBJECT_LAYER_TYPE_FOREGROUND;
     strncpy(fg->type, "foreground", MAX_TYPE_LENGTH - 1);
     fg->object_layer_count = read_item_ids(
         r, fg->object_layers, MAX_OBJECT_LAYERS);
@@ -406,7 +416,8 @@ static void decode_resource_entity(BinReader* r, uint8_t flags) {
     res->base.dims = (Vector2){ dw, dh };
     res->base.direction = (Direction)dir;
     res->base.mode = (ObjectLayerMode)mode;
-    res->base.last_update = gs->last_update_time;
+    res->base.last_update   = gs->last_update_time;
+    res->base.snapshot_time = gs->last_update_time;
 
     if (flags & BIN_FLAG_HAS_LIFE) {
         res->base.life = br_f32(r);
@@ -439,7 +450,8 @@ static void decode_self_player(BinReader* r, uint8_t flags) {
     p->base.dims.y = br_f32(r);
     p->base.direction = (Direction)br_u8(r);
     p->base.mode = (ObjectLayerMode)br_u8(r);
-    p->base.last_update = gs->last_update_time;
+    p->base.last_update   = gs->last_update_time;
+    p->base.snapshot_time = gs->last_update_time;
 
     if (flags & BIN_FLAG_HAS_LIFE) {
         p->base.life = br_f32(r);
@@ -520,13 +532,19 @@ static void decode_self_player(BinReader* r, uint8_t flags) {
     }
 
     /* FrozenInteractionState — u8 (0 = normal, 1 = frozen).
-     * Authoritative flag from the Go server; drives visual feedback
-     * and client-side action blocking. */
-    gs->frozen = (br_u8(r) != 0);
+     * Authoritative flag from the Go server. */
+    local_player_set_frozen(br_u8(r) != 0);
 
     /* Entity Status Indicator — u8 overhead icon ID for self-player. */
-    gs->self_status_icon = br_u8(r);
-    gs->player.base.status_icon = gs->self_status_icon;
+    uint8_t self_icon = br_u8(r);
+    local_player_set_status_icon(self_icon);
+    gs->player.base.status_icon = self_icon;
+
+    /* Authoritative move speed — f32 grid-units/second. The server pushes
+     * this every snapshot so prediction stays in lock-step with
+     * phaseMovement on every change (Agility, buffs, debuffs). */
+    float ms = br_f32(r);
+    if (ms > 0.0f) local_player_set_move_speed(ms);
 }
 
 /* ── Main entry point ──────────────────────────────────────────── */
@@ -552,15 +570,15 @@ int binary_aoi_process(const uint8_t* data, size_t length) {
         float    world_x  = br_f32(&r);
         float    world_y  = br_f32(&r);
         uint32_t value    = br_u32(&r);
-        if (gs->fct_queue_count < MAX_FCT_PENDING) {
-            int qi = gs->fct_queue_count++;
-            gs->fct_queue[qi].world_x  = world_x;
-            gs->fct_queue[qi].world_y  = world_y;
-            gs->fct_queue[qi].value    = value;
-            gs->fct_queue[qi].type     = fct_type;
-            gs->fct_queue[qi].item_id[0] = '\0';
-            gs->fct_queue[qi].item_qty = 0;
-        }
+        LocalFctEvent ev = {
+            .world_x  = world_x,
+            .world_y  = world_y,
+            .value    = value,
+            .type     = fct_type,
+            .item_qty = 0,
+        };
+        ev.item_id[0] = '\0';
+        local_player_fct_push(&ev);
         return 0;
     }
     /* ── Item FCT event — variable-length message (≥15 bytes) ─────────────── */
@@ -579,15 +597,15 @@ int binary_aoi_process(const uint8_t* data, size_t length) {
         if (id_len > 0 && id_len < MAX_ITEM_ID_LENGTH && r.pos + id_len <= r.len) {
             memcpy(item_id, r.data + r.pos, id_len);
         }
-        if (gs->fct_queue_count < MAX_FCT_PENDING) {
-            int qi = gs->fct_queue_count++;
-            gs->fct_queue[qi].world_x  = world_x;
-            gs->fct_queue[qi].world_y  = world_y;
-            gs->fct_queue[qi].value    = qty;
-            gs->fct_queue[qi].type     = fct_type;
-            strncpy(gs->fct_queue[qi].item_id, item_id, MAX_ITEM_ID_LENGTH - 1);
-            gs->fct_queue[qi].item_qty = qty;
-        }
+        LocalFctEvent ev = {
+            .world_x  = world_x,
+            .world_y  = world_y,
+            .value    = qty,
+            .type     = fct_type,
+            .item_qty = qty,
+        };
+        strncpy(ev.item_id, item_id, MAX_ITEM_ID_LENGTH - 1);
+        local_player_fct_push(&ev);
         return 0;
     }
     /* ── AOI update / full AOI ─────────────────────────────────────────────
