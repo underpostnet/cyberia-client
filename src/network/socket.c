@@ -82,10 +82,14 @@ void ws_close(WebSocketClient* ws_client) {
     }
 
     if (ws_client->socket > 0) {
+        /* close() schedules the WS state machine; delete() releases the slot.
+         * Both API calls are best-effort on Emscripten — return codes only
+         * surface configuration bugs, not transient runtime failures — so we
+         * unconditionally clear the local handle and let onclose drive any
+         * post-close reset via the higher-level reconnection FSM. */
         emscripten_websocket_close(ws_client->socket, 1000, "Client initiated closure");
         emscripten_websocket_delete(ws_client->socket);
     }
-    // NOTE: maybe we should check close and delete results before clearing
     ws_client->socket = 0;
     ws_client->connected = false;
 }
