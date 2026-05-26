@@ -6,6 +6,8 @@
 #include <stddef.h>
 #include <stdint.h>
 
+#include "input/input_command.h"
+
 /**
  * @file input.h
  * @brief Input handling system for player controls
@@ -50,13 +52,20 @@ typedef struct {
 } InputManager;
 
 void input_update(void);
-
-/**
- * @brief Process input events and generate game actions
- *
- * This function processes queued input events and converts them
- * into appropriate game actions (network messages, state changes, etc.)
- */
 void input_event_queue_handle(void);
+
+/* ── Typed input-command queue ───────────────────────────────────────
+ *
+ * input_update + input_event_queue_handle convert raw events into typed
+ * input commands and push them onto a small ring. Prediction drains the
+ * ring inside its own fixed-timestep step.
+ *
+ *   input_command_pop          retrieve the oldest pending command
+ *   input_command_queue_count  how many commands are waiting
+ *   input_command_queue_clear  drop everything (used on reconnect)
+ */
+bool input_command_pop(input_command_t* out);
+int  input_command_queue_count(void);
+void input_command_queue_clear(void);
 
 #endif // INPUT_H

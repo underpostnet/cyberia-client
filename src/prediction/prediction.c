@@ -1,15 +1,23 @@
 #include "prediction.h"
+
 #include "network/session.h"
 #include "game_state.h"
+#include "domain/local_player.h"
+#include "../input.h"
+#include "../util/log.h"
 
 #include <math.h>
 #include <string.h>
 
-/* The replay buffer is a fixed-size ring of unacked InputCommand entries.
- * Sizing: at 30 Hz tick + 100 ms RTT we expect ≤ 3 unacked taps at any
- * moment under normal taps; a power of two of 64 leaves head-room for
- * burst-tap scenarios and slow networks. */
-#define PREDICTION_RING_CAP 64
+/* Client-side prediction & reconciliation.
+ *
+ * Determinism with the Go server is preserved by using double-precision
+ * arithmetic everywhere (the Go integrator in cyberia-server/game/server.go
+ * runs on float64) and by reading the authoritative move speed pushed in
+ * every AOI self-player block via local_player_set_move_speed().
+ */
+
+#define PREDICTION_RING_CAP 128
 
 typedef struct {
     input_command_t items[PREDICTION_RING_CAP];
@@ -18,19 +26,16 @@ typedef struct {
 } input_ring_t;
 
 static struct {
-    Vector2       predicted_pos;     /* per-tick projection (discrete) */
-    Vector2       authoritative_pos; /* latest server snapshot self position */
-    Vector2       display_pos;       /* render-frame smoothed value */
+    Vector2       predicted_pos;
+    Vector2       authoritative_pos;
+    Vector2       display_pos;
     input_ring_t  unacked;
     bool          initialised;
 } g_pred = {0};
 
-/* Exponential-smoothing time constant for display_pos chasing predicted_pos.
- * blend = 1 - exp(-lambda * dt). At 60 FPS with lambda=18 the per-frame
- * blend is ~0.26, so a 0.1-cell sim-tick step shows ~0.026 cells / frame
- * — smooth enough to remove the per-tick stepping while still catching up
- * within ~80 ms after a reconcile snap. */
-#define PREDICTION_DISPLAY_LAMBDA 18.0f
+/* Exponential-smoothing constant. Same value as before; tuned for 60 FPS
+ * to converge a sim-tick step within ~80 ms. */
+#define PREDICTION_DISPLAY_LAMBDA 18.0
 
 static void ring_clear(input_ring_t* r) {
     r->head = 0;
@@ -39,7 +44,8 @@ static void ring_clear(input_ring_t* r) {
 
 static void ring_push(input_ring_t* r, const input_command_t* cmd) {
     if (r->count == PREDICTION_RING_CAP) {
-        /* Overflow: drop oldest by advancing head. */
+        LOG_WARN("prediction replay buffer overflow at %u — dropping oldest",
+                 (unsigned)PREDICTION_RING_CAP);
         r->head = (r->head + 1) % PREDICTION_RING_CAP;
         r->count--;
     }
@@ -48,8 +54,6 @@ static void ring_push(input_ring_t* r, const input_command_t* cmd) {
     r->count++;
 }
 
-/* Drop every entry whose sequence ≤ ack. The buffer is monotonic by
- * sequence so we can simply pop from the head until the condition is met. */
 static void ring_drop_acked(input_ring_t* r, cyberia_input_seq_t ack) {
     while (r->count > 0) {
         if (r->items[r->head].sequence > ack) break;
@@ -58,23 +62,24 @@ static void ring_drop_acked(input_ring_t* r, cyberia_input_seq_t ack) {
     }
 }
 
-/* Apply a single command to a working position. The integrator used here
- * mirrors the server's phaseMovement: walk one tick toward the tap target
- * at the player's estimated speed. Determinism note: this *should* match
- * the server byte-for-byte; a follow-up commit will share the integrator
- * across both languages. */
+/* Step one tick toward the command target. Mirrors server's phaseMovement:
+ *
+ *   step = move_speed * tickDuration            (cells per tick)
+ *   if dist < step: snap; else: walk along direction
+ *
+ * Both client and server use double-precision sqrt so identical inputs
+ * produce byte-identical positions. */
 static Vector2 sim_step_one(Vector2 pos, const input_command_t* cmd, double dt) {
     if (cmd->kind != INPUT_KIND_PLAYER_ACTION) return pos;
-    float dx = cmd->target_x - pos.x;
-    float dy = cmd->target_y - pos.y;
-    float dist = sqrtf(dx * dx + dy * dy);
-    if (dist < 0.0001f) return pos;
-    float speed = g_game_state.player.estimated_speed > 0.1f
-                    ? g_game_state.player.estimated_speed : 3.0f;
-    float step = (float)(speed * dt);
+    double dx = (double)cmd->target_x - (double)pos.x;
+    double dy = (double)cmd->target_y - (double)pos.y;
+    double dist = sqrt(dx * dx + dy * dy);
+    if (dist < 1e-4) return pos;
+    double speed = (double)local_player_move_speed();
+    double step  = speed * dt;
     if (step > dist) step = dist;
-    pos.x += (dx / dist) * step;
-    pos.y += (dy / dist) * step;
+    pos.x = (float)((double)pos.x + (dx / dist) * step);
+    pos.y = (float)((double)pos.y + (dy / dist) * step);
     return pos;
 }
 
@@ -89,29 +94,33 @@ void prediction_reset(Vector2 authoritative_pos) {
     g_pred.predicted_pos     = authoritative_pos;
     g_pred.display_pos       = authoritative_pos;
     ring_clear(&g_pred.unacked);
+    input_command_queue_clear();
 }
 
 bool prediction_apply(const input_command_t* cmd) {
     if (!cmd) return false;
     ring_push(&g_pred.unacked, cmd);
-    /* Optimistic mutation: walk one tick toward target so the player sees
-     * movement immediately. Subsequent prediction_step calls keep walking. */
     g_pred.predicted_pos = sim_step_one(g_pred.predicted_pos, cmd, TICK_DURATION_S);
     return true;
 }
 
 void prediction_step(double tick_dt) {
+    /* Drain newly produced input commands from the input queue. This is the
+     * single point where the prediction module consumes input — input.c
+     * no longer calls prediction_apply directly. */
+    input_command_t cmd;
+    while (input_command_pop(&cmd)) {
+        ring_push(&g_pred.unacked, &cmd);
+        g_pred.predicted_pos = sim_step_one(g_pred.predicted_pos, &cmd, TICK_DURATION_S);
+    }
+
     if (g_pred.unacked.count == 0) return;
-    /* Apply the latest target (most recent tap wins, just like the server). */
     int latest = (g_pred.unacked.head + g_pred.unacked.count - 1) % PREDICTION_RING_CAP;
     g_pred.predicted_pos = sim_step_one(g_pred.predicted_pos, &g_pred.unacked.items[latest], tick_dt);
 }
 
 void prediction_reconcile(void) {
-    /* Pull the latest authoritative self-position from game_state. The
-     * decoder writes player.base.pos_server in the self-player block. */
     g_pred.authoritative_pos = g_game_state.player.base.pos_server;
-    /* Drop everything ≤ ack and rewind+replay. */
     ring_drop_acked(&g_pred.unacked, session_last_acked_input_sequence());
 
     Vector2 rebased = g_pred.authoritative_pos;
@@ -124,19 +133,17 @@ void prediction_reconcile(void) {
 
 void prediction_display_step(double frame_dt) {
     if (frame_dt <= 0.0) return;
-    float blend = 1.0f - expf(-PREDICTION_DISPLAY_LAMBDA * (float)frame_dt);
-    if (blend < 0.0f) blend = 0.0f;
-    if (blend > 1.0f) blend = 1.0f;
-    g_pred.display_pos.x += (g_pred.predicted_pos.x - g_pred.display_pos.x) * blend;
-    g_pred.display_pos.y += (g_pred.predicted_pos.y - g_pred.display_pos.y) * blend;
-    /* Snap when the gap is sub-pixel — keeps idle position perfectly stable
-     * and avoids endless micro-blends from float noise. */
+    double blend = 1.0 - exp(-PREDICTION_DISPLAY_LAMBDA * frame_dt);
+    if (blend < 0.0) blend = 0.0;
+    if (blend > 1.0) blend = 1.0;
+    g_pred.display_pos.x = (float)((double)g_pred.display_pos.x +
+                                   ((double)g_pred.predicted_pos.x - (double)g_pred.display_pos.x) * blend);
+    g_pred.display_pos.y = (float)((double)g_pred.display_pos.y +
+                                   ((double)g_pred.predicted_pos.y - (double)g_pred.display_pos.y) * blend);
     if (fabsf(g_pred.predicted_pos.x - g_pred.display_pos.x) < 0.001f)
         g_pred.display_pos.x = g_pred.predicted_pos.x;
     if (fabsf(g_pred.predicted_pos.y - g_pred.display_pos.y) < 0.001f)
         g_pred.display_pos.y = g_pred.predicted_pos.y;
 }
 
-Vector2 prediction_self_position(void) {
-    return g_pred.display_pos;
-}
+Vector2 prediction_self_position(void) { return g_pred.display_pos; }
