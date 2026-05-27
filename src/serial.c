@@ -1,5 +1,5 @@
 #include "serial.h"
-#include "game_state.h"
+#include "game_state.h" // TODO: serializer shouldn't depend on game state, but only on structure
 #include <string.h>
 #include <assert.h>
 #include <stdint.h>
