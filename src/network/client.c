@@ -113,7 +113,7 @@ void client_on_init_received(void) {
     }
 }
 
-void client_tick(void) {
+void game_client_tick(void) {
     g_client.heartbeat_frames++;
     if ((g_client.heartbeat_frames % 1800) == 0) { /* ~30 s @ 60 fps */
         LOG_DEBUG("heartbeat frame=%d t=%.1fs status=%d active=%d init=%d",

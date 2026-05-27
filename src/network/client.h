@@ -33,7 +33,7 @@ ClientStatus client_status(void);
 
 /* Drive the connection state machine forward by one render frame.
  * Idempotent — call once per main_loop iteration. */
-void client_tick(void);
+void game_client_tick(void);
 
 /* Signal that the authoritative init_data payload has arrived; the FSM
  * graduates from AWAITING_INIT to RUNNING. */

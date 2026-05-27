@@ -89,218 +89,26 @@
         ></canvas>
 
         <script type="text/javascript">
-            // ====================================================================
-            // Canvas Aspect Ratio Management & Input Handling
-            // ====================================================================
-
             (function () {
                 "use strict";
 
                 const canvas = document.getElementById("canvas");
 
-                // Canvas internal resolution — tracks actual viewport size
-                let canvasInternalWidth = window.innerWidth;
-                let canvasInternalHeight = window.innerHeight;
-
-                console.log("[CANVAS] Initializing full-viewport canvas manager");
-
-                /**
-                 * Resize canvas to fill the entire viewport.
-                 * Updates both the canvas pixel dimensions (so raylib detects
-                 * IsWindowResized()) and the CSS dimensions (no scaling offset).
-                 * AOI rendering is never distorted — the camera zoom handles scale.
-                 */
-                function resizeCanvasToViewport() {
-                    const w = window.innerWidth;
-                    const h = window.innerHeight;
-
-                    canvasInternalWidth = w;
-                    canvasInternalHeight = h;
-
-                    // Update pixel buffer so raylib sees the new dimensions
-                    canvas.width = w;
-                    canvas.height = h;
-
-                    // CSS = exact viewport size, no letterbox offset
-                    canvas.style.width = w + "px";
-                    canvas.style.height = h + "px";
-
-                    console.log("[CANVAS] Resized to viewport:", w, "x", h);
-                }
-
-                /**
-                 * Map screen/client coordinates to internal canvas coordinates
-                 * Accounts for CSS scaling and canvas positioning
-                 *
-                 * @param {number} clientX - Screen X coordinate (from mouse/touch event)
-                 * @param {number} clientY - Screen Y coordinate (from mouse/touch event)
-                 * @returns {object} Object with x and y properties in canvas coordinates
-                 */
-                function mapClientToCanvasCoordinates(clientX, clientY) {
-                    const rect = canvas.getBoundingClientRect();
-
-                    // Calculate relative position within the canvas CSS bounds (0 to 1)
-                    const relativeX = (clientX - rect.left) / rect.width;
-                    const relativeY = (clientY - rect.top) / rect.height;
-
-                    // Map to internal canvas coordinates
-                    const canvasX = relativeX * canvasInternalWidth;
-                    const canvasY = relativeY * canvasInternalHeight;
-
-                    return {
-                        x: Math.round(canvasX),
-                        y: Math.round(canvasY),
-                        // Also include normalized coordinates (0 to 1)
-                        normalizedX: relativeX,
-                        normalizedY: relativeY,
-                        // Include original client coordinates for reference
-                        clientX: clientX,
-                        clientY: clientY,
-                    };
-                }
-
-                /**
-                 * Handle mouse down events
-                 */
-                function handleMouseDown(event) {
-                    const coords = mapClientToCanvasCoordinates(
-                        event.clientX,
-                        event.clientY,
-                    );
-
-                    console.log(
-                        "[INPUT] Mouse down:",
-                        "Client(" + coords.clientX + "," + coords.clientY + ")",
-                        "Canvas(" + coords.x + "," + coords.y + ")",
-                        "Normalized(" +
-                            coords.normalizedX.toFixed(3) +
-                            "," +
-                            coords.normalizedY.toFixed(3) +
-                            ")",
-                    );
-
-                    // You can pass these coordinates to the C code via EM_ASM or Module.ccall
-                    // For now, just log them
-                }
-
-                /**
-                 * Handle touch start events
-                 */
-                function handleTouchStart(event) {
-                    event.preventDefault(); // Prevent default touch behavior
-
-                    for (let i = 0; i < event.touches.length; i++) {
-                        const touch = event.touches[i];
-                        const coords = mapClientToCanvasCoordinates(
-                            touch.clientX,
-                            touch.clientY,
-                        );
-
-                        console.log(
-                            "[INPUT] Touch start [" + i + "]:",
-                            "Client(" +
-                                coords.clientX +
-                                "," +
-                                coords.clientY +
-                                ")",
-                            "Canvas(" + coords.x + "," + coords.y + ")",
-                            "Normalized(" +
-                                coords.normalizedX.toFixed(3) +
-                                "," +
-                                coords.normalizedY.toFixed(3) +
-                                ")",
-                        );
-                    }
-
-                    // You can pass these coordinates to the C code
-                }
-
-                /**
-                 * Handle window resize events
-                 */
-                function handleResize() {
-                    console.log(
-                        "[CANVAS] Window resized to:",
-                        window.innerWidth,
-                        "x",
-                        window.innerHeight,
-                    );
-                    resizeCanvasToViewport();
-                }
-
-                /**
-                 * Called from C postRun — canvas already matches viewport so
-                 * no additional scaling is required.
-                 */
-                window.updateCanvasInternalSize = function (width, height) {
-                    // No-op: canvas is always sized to the viewport.
-                    // The C side initialises with window.innerWidth/Height, and
-                    // subsequent resizes are handled by resizeCanvasToViewport().
-                };
-
-                /**
-                 * Expose coordinate mapping function globally
-                 * So it can be called from C code or other scripts
-                 */
-                window.mapClientToCanvas = mapClientToCanvasCoordinates;
-
-                // ================================================================
-                // Event Listener Registration
-                // ================================================================
-
-                // Resize event (with debouncing)
-                let resizeTimeout;
-                window.addEventListener("resize", function () {
-                    clearTimeout(resizeTimeout);
-                    resizeTimeout = setTimeout(handleResize, 100);
-                });
-
-                // Mouse events
-                canvas.addEventListener("mousedown", handleMouseDown);
-
-                // Touch events
-                canvas.addEventListener("touchstart", handleTouchStart, {
-                    passive: false,
-                });
-
-                // Fill viewport on first paint and whenever the page fully loads
-                window.addEventListener("load", function () {
-                    console.log(
-                        "[CANVAS] Page loaded, sizing canvas to full viewport",
-                    );
-                    resizeCanvasToViewport();
-                });
-
-                // Size immediately (before WASM loads) so there is no blank frame
-                resizeCanvasToViewport();
-
-                console.log("[CANVAS] Full-viewport canvas manager initialized");
-                console.log(
-                    "[CANVAS] Event listeners registered: resize, mousedown, touchstart",
+                // preventDefault blocks browser pinch-zoom / scroll on touch.
+                canvas.addEventListener(
+                    "touchstart",
+                    function (event) {
+                        event.preventDefault();
+                    },
+                    { passive: false },
                 );
             })();
-
-            // ====================================================================
-            // Emscripten Module Configuration
-            // ====================================================================
 
             var Module = {
                 preRun: [],
                 postRun: [
                     function () {
-                        console.log(
-                            "[MODULE] Application started successfully",
-                        );
                         document.body.classList.add("emscripten-loaded");
-
-                        // Update canvas size when module starts
-                        const canvas = document.getElementById("canvas");
-                        if (canvas.width && canvas.height) {
-                            window.updateCanvasInternalSize(
-                                canvas.width,
-                                canvas.height,
-                            );
-                        }
                     },
                 ],
 
@@ -319,28 +127,6 @@
                 },
 
                 canvas: document.getElementById("canvas"),
-
-                setStatus: function (text) {
-                    if (!Module.setStatus.last) {
-                        Module.setStatus.last = { time: Date.now(), text: "" };
-                    }
-
-                    if (text === Module.setStatus.last.text) return;
-
-                    var m = text.match(/([^(]+)\((\d+(\.\d+)?)\/(\d+)\)/);
-                    var now = Date.now();
-
-                    if (m && now - Module.setStatus.last.time < 30) return;
-
-                    Module.setStatus.last.time = now;
-                    Module.setStatus.last.text = text;
-
-                    if (m) {
-                        text = m[1];
-                    }
-
-                    console.log("[STATUS]", text);
-                },
             };
         </script>
         {{{ SCRIPT }}}

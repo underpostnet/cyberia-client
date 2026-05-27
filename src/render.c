@@ -50,6 +50,7 @@ void render_update(float delta_time) {
     int current_width  = GetScreenWidth();
     int current_height = GetScreenHeight();
 
+    // TODO: window should be resized via emscripten callback, no js, raylib does not work
     if (IsWindowResized()) {
         LOG_INFO("window resized %dx%d", current_width, current_height);
         game_render_set_screen_size(current_width, current_height);

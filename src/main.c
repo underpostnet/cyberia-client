@@ -20,108 +20,88 @@
 #include "prediction/prediction.h"
 #include "util/log.h"
 
-/* Maximum render-frame delta accepted by the fixed-timestep accumulator.
- *
- * Gaffer-on-Games "Fix Your Timestep" guards against the spiral-of-death:
- * a single very-long render frame would otherwise pile up dozens of
- * simulation steps and freeze the next frame. Clamp the delta at
- * 0.25 s so we run at most ~8 sim steps per render at TICK_RATE_HZ=30. */
-#define MAIN_LOOP_MAX_FRAME_DT 0.25f
+static bool is_loading = true;
+static void loading(void) {
+    const float frame_dt = GetFrameTime();
+    game_client_tick();
 
-typedef enum {
-    MAIN_STATE_LOADING = 0, /* presentation fetch + initial server handshake */
-    MAIN_STATE_RUNNING,
-} MainState;
+    // will fall into render fallback... those should be here and not there(?)
+    render_update(frame_dt);
 
-static MainState s_state    = MAIN_STATE_LOADING;
-static double    s_sim_acc  = 0.0;
-
-static void main_loop_loading(float frame_dt) {
-    (void)frame_dt;
-    /* Drive the network FSM so reconnect attempts still happen during
-     * startup; this is what gets us out of LOADING once init_data lands. */
-    client_tick();
-
-    /* Render a splash frame. game_state.init_received drives the renderer's
-     * fallback path. */
-    render_update(GetFrameTime());
-
-    bool hints_ready = presentation_runtime_is_ready();
+    bool hints_ready = presentation_runtime_is_ready(); // TODO: Turn this into a fetch request
     bool world_ready = g_game_state.init_received;
     if (hints_ready && world_ready) {
-        s_state   = MAIN_STATE_RUNNING;
-        s_sim_acc = 0.0; /* avoid catch-up burst on entry */
-        LOG_INFO("LOADING → RUNNING");
+        is_loading   = true;
     }
 }
 
-static void main_loop_running(float frame_dt) {
-    if (frame_dt > MAIN_LOOP_MAX_FRAME_DT) frame_dt = MAIN_LOOP_MAX_FRAME_DT;
-    s_sim_acc += (double)frame_dt;
+static const double fixed_step = TICK_DURATION_S;
+static double sim_acc = 0.0;
+static void gameloop(void) {
+    const float frame_dt = GetFrameTime();
+    // if ( frame_dt > 0.25 ) { frame_dt = 0.25; } // draft, prevents runaways, keep commented, ignore
+    sim_acc += (double)frame_dt;
 
-    client_tick();
+    game_client_tick();
 
-    /* Sample raw input, then convert queued events into commands. The
-     * dependency direction is now: input → input_command queue → prediction
-     * (consumed inside prediction_step) + uplink. */
+    // input capture in realtime
     input_update();
     input_event_queue_handle();
 
-    /* Fixed-timestep simulation. The accumulator drains at TICK_DURATION_S
-     * per step regardless of frame rate, matching the server's tick. */
-    while (s_sim_acc >= TICK_DURATION_S) {
-        prediction_step(TICK_DURATION_S);
-        s_sim_acc -= TICK_DURATION_S;
+    // fixed step simulation
+    while (sim_acc >= fixed_step)
+    {
+        // physics_update(fixed_step); -> prev = curr; integrate(curr, curr_frame, fixed_step)
+        prediction_step(fixed_step);
+        sim_acc -= fixed_step;
     }
-
-    /* Render-frame smoothed display position decouples the visible main
-     * player from per-tick stepping. */
+    const double alpha = sim_acc / fixed_step;
+    // state_interpolation(alpha) -> curr * alpha +  prev * ( 1.0 - alpha );
     prediction_display_step((double)frame_dt);
     g_game_state.player.base.interp_pos = prediction_self_position();
 
     /* Remote-entity render-time interpolation. */
     interpolation_compute_view();
 
+    // render interpolated state
     render_update(frame_dt);
 }
 
 void main_loop(void) {
-    const float frame_dt = GetFrameTime();
-
     /* If we lost the connection at runtime, drop back to LOADING so the
      * splash screen renders while the reconnect FSM works. */
-    if (s_state == MAIN_STATE_RUNNING && !g_game_state.init_received) {
-        s_state = MAIN_STATE_LOADING;
+    if (!is_loading && !g_game_state.init_received) {
+        is_loading = true; // TODO: a connection lost while in game should be a different loading screen, not the initial
         LOG_INFO("RUNNING → LOADING (init lost)");
     }
 
-    if (s_state == MAIN_STATE_LOADING) {
-        main_loop_loading(frame_dt);
+    if (is_loading) {
+        loading();
     } else {
-        main_loop_running(frame_dt);
+        gameloop();
     }
 }
 
 int main(void) {
     js_init_engine_api(API_BASE_URL);
 
-    int vp_w = EM_ASM_INT({ return window.innerWidth; });
-    int vp_h = EM_ASM_INT({ return window.innerHeight; });
+    const int vp_w = EM_ASM_INT({ return window.innerWidth; });
+    const int vp_h = EM_ASM_INT({ return window.innerHeight; });
     InitWindow(vp_w, vp_h, NULL);
     SetTargetFPS(60);
 
-    render_init(vp_w, vp_h);
+    render_init(vp_w, vp_h); // NOTE: if render is the window, then combine with it
 
-    /* Optional per-instance presentation overrides. Non-blocking. The
-     * client renders the bootstrap splash until the response settles or
-     * times out. */
+    // NOTE: Do not mix the start fetch loop with the running game loop
+    // if need to be non blocking then wait in a loading screen before starting main_loop
+    // all the initializations should be consolidated in related modules
     presentation_runtime_start_fetch(API_BASE_URL, CYBERIA_CLIENT_HINTS_CODE);
-
     prediction_init();
+    ///
 
     if (!connection_open()) {
         connection_close();
-        return -1;
+        return -1; // UNIX returns don't make sense for a webapp
     }
 
     emscripten_set_main_loop(main_loop, 0, 1);
