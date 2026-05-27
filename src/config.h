@@ -3,62 +3,25 @@
 
 #include <stdbool.h>
 
-/**
- * @file config.h
- * @brief Configuration file for the Cyberia client
- *
- * This file contains all configuration constants and settings
- * for the client application including network URLs, cache sizes,
- * and animation parameters.
- */
+#define STRINGIFY(x) #x
 
-// ============================================================================
-// WebSocket Configuration
-// ============================================================================
-
-/**
- * @brief WebSocket server URL
- *
- * Compile-time injection: pass `-DWS_URL_LITERAL='"wss://..."'` from the
- * Makefile to override the localhost default. RELEASE builds always inject
- * the production URL; DEBUG builds default to localhost for the same
- * `npm run dev:client` workflow.
- */
-#ifndef WS_URL_LITERAL
-#  define WS_URL_LITERAL "ws://localhost:8081/ws"
+static const char* WS_URL =
+#if defined(WS_URL_OVERRIDE)
+    STRINGIFY(WS_URL_OVERRIDE);
+#elif defined(CYBERIA_DEBUG)
+    "ws://localhost:8081/ws";
+#else
+    "ws://server.cyberiaonline.com/ws";
 #endif
-static const char* WS_URL = WS_URL_LITERAL;
 
-// ============================================================================
-// Engine API Configuration
-// ============================================================================
-
-/**
- * @brief Engine API base URL
- *
- * Compile-time injection same as WS_URL — pass `-DAPI_BASE_URL_LITERAL=...`.
- */
-#ifndef API_BASE_URL_LITERAL
-#  define API_BASE_URL_LITERAL "http://localhost:4005"
+static const char* API_BASE_URL =
+#if defined(API_BASE_URL_OVERRIDE)
+    STRINGIFY(API_BASE_URL_OVERRIDE);
+#elif defined(CYBERIA_DEBUG)
+    "http://localhost:4005";
+#else
+    "https://www.cyberiaonline.com";
 #endif
-static const char* API_BASE_URL = API_BASE_URL_LITERAL;
-
-// ============================================================================
-// Game Configuration
-// ============================================================================
-
-// ============================================================================
-// Network Configuration
-// ============================================================================
-
-/**
- * @brief HTTP request timeout in seconds
- *
- * Timeout for HTTP requests made to fetch assets and API data.
- * Set to a reasonable value to handle slow connections and prevent
- * indefinite hangs.
- */
-static const long HTTP_TIMEOUT_SECONDS = 10L;
 
 // ============================================================================
 // Cache Configuration
@@ -103,32 +66,10 @@ static const int MAX_ATLAS_CACHE_SIZE = 256;
  */
 static const int DEFAULT_FRAME_DURATION_MS = 100;
 
-// ============================================================================
-// Application Configuration
-// ============================================================================
-
-/**
- * @brief Application version
- */
-#define APP_VERSION "1.0.0"
-
-/**
- * @brief Application name
- */
-#define APP_NAME "CYBERIA | MMO"
 
 // ============================================================================
 // Development Configuration
 // ============================================================================
-
-/**
- * @brief Enable development UI overlay
- *
- * Client-local toggle — the server has no authority over dev-UI state.
- * When true, the dev overlay renders regardless of any presentation hint.
- * When false, the optional engine ClientHints override (if any) is honored.
- */
-static const bool ENABLE_DEV_UI = false;
 
 /**
  * @brief Lookup code for the presentation client-hints endpoint.

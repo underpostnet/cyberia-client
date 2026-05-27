@@ -1,8 +1,6 @@
 include config.mk
 
 CC				:= emcc
-DEV_PORT		?= 8082
-PROD_PORT		?= 8081
 
 #---------------------------------------------------------------------------------------------
 target_build_dir	:= $(BUILD_DIR)/web/$(BUILD_MODE)
@@ -11,45 +9,17 @@ target_build_dir	:= $(BUILD_DIR)/web/$(BUILD_MODE)
 # EMSCRIPTEN needed flags that I hate
 CFLAGS += -Wno-gnu-zero-variadic-macro-arguments
 
-# Endpoint injection — override on the command line:
-#   make -f Web.mk all WS_URL='wss://server.example.com/ws' \
-#                      API_BASE_URL='https://www.example.com'
-# RELEASE picks the production URLs by default; DEBUG keeps localhost.
-ifeq ($(BUILD_MODE),RELEASE)
-WS_URL       ?= wss://server.cyberiaonline.com/ws
-API_BASE_URL ?= https://www.cyberiaonline.com
-CFLAGS  += -DCYBERIA_LOG_LEVEL=3
-# Closure Compiler (--closure 1) runs ADVANCED_OPTIMIZATIONS over the
-# Emscripten-emitted JS wrapper. With this project's surface — Asyncify,
-# FETCH, two --js-library files, EXPORTED_RUNTIME_METHODS, and the
-# Raylib EM_ASYNC_JS clipboard path — Closure renames the abort /
-# throwInternalError chain into infinite recursion that corrupts WASM
-# heap address zero on startup, producing the
-# "Aborted(Runtime error: corrupted heap memory area)" panic followed
-# by a runaway Je/Le/Ie stack in browser consoles. The WASM itself is
-# still fully optimised by `-O3 -DNDEBUG` from config.mk; skipping
-# Closure only stops minifying the JS wrapper. Do not re-enable
-# without verifying the production bundle in a real browser.
-LDFLAGS_RELEASE :=
-else
-WS_URL       ?= ws://localhost:8081/ws
-API_BASE_URL ?= http://localhost:4005
+ifneq ($(BUILD_MODE),RELEASE)
 CFLAGS += --profiling
 CFLAGS += -O0 # -Og does not work in emcc
 CFLAGS += -DCYBERIA_LOG_LEVEL=4
 endif
-CFLAGS += -DWS_URL_LITERAL='"$(WS_URL)"'
-CFLAGS += -DAPI_BASE_URL_LITERAL='"$(API_BASE_URL)"'
 
 #---------------------------------------------------------------------------------------------
 # Linking flags
 LDFLAGS = -lidbfs.js
 LDFLAGS += -lwebsocket.js
 LDFLAGS += -s 'EXPORTED_RUNTIME_METHODS=["writeArrayToMemory","setValue","allocateUTF8"]'
-# Required by Raylib's EM_ASYNC_JS clipboard API (rcore_web.c::RequestClipboardData).
-# Without this flag, emcc still emits Asyncify.handleAsync into the JS output but
-# the symbol is not declared, so Closure ADVANCED_OPTIMIZATIONS fails with
-# "variable Asyncify is undeclared".
 LDFLAGS += -sASYNCIFY
 LDFLAGS += -sFETCH=1
 LDFLAGS += --js-library $(SRC_DIR)/js/services.js
@@ -67,6 +37,7 @@ ASSETS := $(ASSETS_DIR)/splash.png@splash.png
 # Util variables
 OBJS	:= $(src_files:$(SRC_DIR)/%=$(target_build_dir)/%.o)
 
+# TODO: confirm if DEPS is really working, if not, remove it
 # Auto-generated header dependency files produced by -MMD -MP.
 # Must be included AFTER OBJS is defined so Make tracks .h changes.
 DEPS	:= $(OBJS:%.o=%.d)

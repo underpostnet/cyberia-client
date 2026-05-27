@@ -27,7 +27,7 @@ CFLAGS += -Wunused-result
 CFLAGS += -Wunused-variable -Wunused-const-variable
 # CFLAGS += -Werror
 else
-CFLAGS += -D_DEBUG -g
+CFLAGS += -DCYBERIA_DEBUG -g
 CFLAGS += -Wno-unused-parameter
 endif
 
@@ -53,6 +53,12 @@ CFLAGS += -I$(RAYLIB_PATH)/src -isystem$(RAYLIB_PATH)/src
 CJSON_PATH := $(LIBS_DIR)/cJSON
 CFLAGS += -I$(CJSON_PATH)
 
-#---------------------------------------------------------------------------------------------
-# Util functions
-lc = $(subst A,a,$(subst B,b,$(subst C,c,$(subst D,d,$(subst E,e,$(subst F,f,$(subst G,g,$(subst H,h,$(subst I,i,$(subst J,j,$(subst K,k,$(subst L,l,$(subst M,m,$(subst N,n,$(subst O,o,$(subst P,p,$(subst Q,q,$(subst R,r,$(subst S,s,$(subst T,t,$(subst U,u,$(subst V,v,$(subst W,w,$(subst X,x,$(subst Y,y,$(subst Z,z,$1))))))))))))))))))))))))))
+#------------------------------------------------
+# CYBERIA config
+DEV_PORT		?= 8082
+PROD_PORT		?= 8081
+ifeq ($(BUILD_MODE),RELEASE)
+CFLAGS  += -DCYBERIA_LOG_LEVEL=3
+else
+CFLAGS += -DCYBERIA_LOG_LEVEL=4
+endif
