@@ -28,7 +28,10 @@
 #define CYBERIA_NETWORK_SESSION_H
 
 #include <stdint.h>
-#include "domain/tick.h"
+
+// TODO: the usage of sequence counting is inconsistent - Input should be using it, not Session
+typedef uint32_t cyberia_tick_t;
+typedef uint32_t cyberia_input_seq_t;
 
 /** Called by binary_aoi_decoder.c whenever a v2 snapshot header is parsed.
  *  Updates last_server_tick and last_acked_input_sequence, and feeds the

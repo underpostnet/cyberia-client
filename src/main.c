@@ -14,7 +14,6 @@
 
 #include "domain/camera.h"
 #include "domain/presentation_runtime.h"
-#include "domain/tick.h"
 #include "interpolation/interpolation.h"
 #include "network/session.h"
 #include "prediction/prediction.h"
@@ -35,7 +34,7 @@ static void loading(void) {
     }
 }
 
-static const double fixed_step = TICK_DURATION_S;
+static const double fixed_step = 1.0/(double)TICK_RATE_HZ;
 static double sim_acc = 0.0;
 static void gameloop(void) {
     const float frame_dt = GetFrameTime();
@@ -88,7 +87,7 @@ int main(void) {
     const int vp_w = EM_ASM_INT({ return window.innerWidth; });
     const int vp_h = EM_ASM_INT({ return window.innerHeight; });
     InitWindow(vp_w, vp_h, NULL);
-    SetTargetFPS(60);
+    SetTargetFPS(TICK_RATE_HZ);
 
     render_init(vp_w, vp_h); // NOTE: if render is the window, then combine with it
 

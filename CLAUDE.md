@@ -18,7 +18,8 @@ strcmp(s, "x") == 0    // no
 ```
 
 ## 4. Root-relative includes
-- Project: `#include "js/services.h"` — never `"../js/services.h"`.
+- Project cross-directory: path from `src/`. `#include "js/services.h"` — never `"../js/services.h"`.
+- Same-directory siblings: bare name is fine. From `src/ui/inventory_modal.c`, `#include "inventory_bar.h"` is OK — no need to prefix with `ui/`. Build adds `-Isrc` only; gcc's `"..."` auto-search of the includer's directory handles siblings.
 - Third-party: `<>` brackets — `<raylib.h>`, `<raymath.h>`, `<cJSON.h>`.
 
 ## 5. No `(void)param;` for unused args

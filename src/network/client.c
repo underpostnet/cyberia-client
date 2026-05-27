@@ -211,12 +211,10 @@ static void on_websocket_message(const uint8_t* data, uint32_t length, bool is_t
 }
 
 static void on_websocket_error(void* ctx) {
-    (void)ctx;
     LOG_ERROR("WebSocket error");
 }
 
 static void on_websocket_close(int code, const char* reason, void* ctx) {
-    (void)ctx;
     if (code != 1000) {
         LOG_WARN("WebSocket closed unexpectedly code=%d reason='%s'",
                  code, reason ? reason : "none");

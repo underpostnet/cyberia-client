@@ -1,5 +1,6 @@
 #include "session.h"
 #include <raylib.h>
+#include "config.h"
 
 /* Singleton session state. Owned by this translation unit; readers go
  * through the accessor functions in session.h. */

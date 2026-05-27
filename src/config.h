@@ -5,6 +5,9 @@
 
 #define STRINGIFY(x) #x
 
+// --------------------------------------------------------
+// URLs
+
 static const char* WS_URL =
 #if defined(WS_URL_OVERRIDE)
     STRINGIFY(WS_URL_OVERRIDE);
@@ -22,6 +25,14 @@ static const char* API_BASE_URL =
 #else
     "https://www.cyberiaonline.com";
 #endif
+
+// --------------------------------------------------------
+// Simulation
+#define TICK_RATE_HZ          30
+#define TICK_DURATION_S       (1.0 / (double)TICK_RATE_HZ)
+
+// TODO: Sequence counting is inconsitent through whole system
+#define INTERP_TICKS          2
 
 // ============================================================================
 // Cache Configuration

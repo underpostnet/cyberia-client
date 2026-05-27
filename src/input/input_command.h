@@ -27,7 +27,6 @@
 
 #include <stdbool.h>
 #include <stdint.h>
-#include "domain/tick.h"
 
 /** Kind values mirror the binary uplink opcodes used by the WS wire format,
  *  so log lines, traces, and uplink encoders can refer to one set of
@@ -46,6 +45,10 @@ typedef enum {
 #define INPUT_MAX_ITEM_ID_LEN 64
 #define INPUT_MAX_REASON_LEN  32
 #define INPUT_MAX_CHAT_LEN    256
+
+// TODO: Sequence counting is inconsistent - Server should do something with it, if is not then useless
+typedef uint32_t cyberia_tick_t;
+typedef uint32_t cyberia_input_seq_t;
 
 typedef struct {
     input_kind_t           kind;

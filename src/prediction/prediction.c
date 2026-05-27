@@ -3,8 +3,9 @@
 #include "network/session.h"
 #include "game_state.h"
 #include "domain/local_player.h"
-#include "../input.h"
-#include "../util/log.h"
+#include "input.h"
+#include "util/log.h"
+#include "config.h"
 
 #include <math.h>
 #include <string.h>

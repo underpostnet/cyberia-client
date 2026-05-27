@@ -82,11 +82,6 @@ void ws_close(WebSocketClient* ws_client) {
     }
 
     if (ws_client->socket > 0) {
-        /* close() schedules the WS state machine; delete() releases the slot.
-         * Both API calls are best-effort on Emscripten — return codes only
-         * surface configuration bugs, not transient runtime failures — so we
-         * unconditionally clear the local handle and let onclose drive any
-         * post-close reset via the higher-level reconnection FSM. */
         emscripten_websocket_close(ws_client->socket, 1000, "Client initiated closure");
         emscripten_websocket_delete(ws_client->socket);
     }
@@ -102,7 +97,6 @@ bool ws_is_open(WebSocketClient* ws_client) {
 // Internal Event Handlers (Emscripten WebSocket Callbacks)
 // ============================================================================
 static EM_BOOL ws_onopen_internal(int eventType, const EmscriptenWebSocketOpenEvent* event, void* userData) {
-    (void)eventType; (void)event;
     printf("[WS] onopen fired — socket=%d\n", event ? event->socket : -1);
     WebSocketClient* socket_ctx = userData;
     if (socket_ctx && socket_ctx->callbacks.on_open_cb) {

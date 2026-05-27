@@ -187,8 +187,6 @@ void entity_overhead_ui_draw(
     float world_h,
     float cell_size)
 {
-    (void)world_h; /* height not used for anchor; bars sit above top edge */
-
     /* Convert entity top edge and horizontal centre to screen pixels. */
     float entity_top_px = world_y * cell_size;
     float entity_cx_px  = (world_x + world_w * 0.5f) * cell_size;

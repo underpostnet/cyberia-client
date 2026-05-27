@@ -39,9 +39,4 @@ bool ws_send_str(WebSocketClient* ws_client, const char* data);
  */
 bool ws_send_binary(WebSocketClient* ws_client, const uint8_t* data, size_t len);
 
-/**
- * Sends a binary message to the server.
- */
-bool ws_send_binary(WebSocketClient* ws_client, const uint8_t* data, size_t len);
-
 #endif // SOCKET_H

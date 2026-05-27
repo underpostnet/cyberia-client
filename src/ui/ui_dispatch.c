@@ -6,8 +6,8 @@
 #include "inventory_bar.h"
 #include "inventory_modal.h"
 #include "modal_dialogue.h"
-#include "../game_render.h"
-#include "../js/interact_bridge.h"
+#include "game_render.h"
+#include "js/interact_bridge.h"
 
 bool ui_dispatch_tap(int x, int y) {
     /* Highest priority: dialogue modal claims everything while open. */

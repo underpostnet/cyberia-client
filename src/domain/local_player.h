@@ -4,7 +4,7 @@
 #include <stdbool.h>
 #include <stdint.h>
 
-#include "../object_layer.h"
+#include "object_layer.h"
 
 /* Local-player state.
  *

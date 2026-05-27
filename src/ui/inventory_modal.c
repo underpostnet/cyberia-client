@@ -293,8 +293,6 @@ void inventory_modal_draw(void) {
     if (pad < 14) pad = 14;
     if (pad > 28) pad = 28;
 
-    (void)cy; /* used below */
-
     /* 3. Close button */
     Rectangle close_r = { cx + cw - MODAL_CLOSE_SIZE - 6, cy + 6,
                            MODAL_CLOSE_SIZE, MODAL_CLOSE_SIZE };
@@ -647,8 +645,6 @@ void inventory_modal_draw(void) {
             }
         }
     }
-
-    (void)y_cursor; /* remaining space above bottom buttons */
 
     /* ── Bottom-anchored buttons ────────────────────────────────────── */
 

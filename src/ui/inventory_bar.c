@@ -196,8 +196,6 @@ static void draw_coin_slot(Rectangle r, int coin_idx, ObjectLayersManager* mgr) 
     int lfs = INV_QTY_FONT_SIZE - 1;
     DrawRectangle((int)r.x + 2, (int)r.y + 2, lfs + 2, lfs + 2, (Color){0, 0, 0, 140});
     DrawText("-", (int)r.x + 3, (int)r.y + 2, lfs, (Color){255, 165, 0, 200});
-
-    (void)coin_idx; /* reserved for modal open logic */
 }
 
 /* draw_arrow draws a scroll arrow button. */
