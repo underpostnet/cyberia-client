@@ -10,7 +10,7 @@
 #include "js/services.h"
 #include "domain/camera.h"
 #include "domain/presentation_runtime.h"
-#include "network/client.h"
+#include "network/game_client.h"
 #include "ui/ui_state.h"
 #include "util/log.h"
 #include <stdio.h>
@@ -244,6 +244,7 @@ static int message_parser_parse_init_data(const cJSON* json_root) {
     camera_init(GetScreenWidth(), GetScreenHeight());
 
     /* Tell the network FSM the handshake is complete. */
+    // TODO: parser shouldn't be calling client, but the other way around
     client_on_init_received();
     return 0;
 }

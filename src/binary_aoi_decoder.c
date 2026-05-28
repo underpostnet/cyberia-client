@@ -10,7 +10,7 @@
 
 #include "domain/local_player.h"
 #include "game_state.h"
-#include "network/client.h"
+#include "network/game_client.h"
 #include "util/log.h"
 
 #include <assert.h>

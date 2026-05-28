@@ -5,7 +5,7 @@
 #include "input.h"
 #include "game_state.h"
 #include "render.h"
-#include "network/client.h"
+#include "network/game_client.h"
 #include "config.h"
 
 #include <raylib.h>

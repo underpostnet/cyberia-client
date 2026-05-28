@@ -5,7 +5,7 @@
 #include "domain/local_player.h"
 #include "game_state.h"
 #include "input/input_command.h"
-#include "network/client.h"
+#include "network/game_client.h"
 #include "ui/tap_effect.h"
 #include "ui/ui_dispatch.h"
 #include "util/log.h"

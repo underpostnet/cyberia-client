@@ -20,7 +20,7 @@
 #include "inventory_modal.h"
 
 #include "domain/local_player.h"
-#include "network/client.h"
+#include "network/game_client.h"
 #include "dialogue_data.h"
 #include "game_state.h"
 #include "interaction_bubble.h"

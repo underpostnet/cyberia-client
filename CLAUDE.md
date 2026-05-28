@@ -40,7 +40,18 @@ One call site → keep inline. Extract only if ≥2 sites or inline obscures con
 - If a change seems to require a Makefile edit: STOP, explain what flag/line you want to change and why, ask the user to confirm they understand the implication. Wait for explicit approval.
 - Adding a new source file does NOT count as auto-edit if the Makefile globs `src/**/*.c`. Verify it globs before assuming.
 
-## 9. One theme per commit
+## 9. Asserts over defensive checks
+- Prefer `assert(x);` over `if (!x) { LOG_ERROR(...); return; }` for invariant violations.
+- Applies to callback ctx/data params, malloc OOM, and any value that's a bug if null/invalid, not a recoverable runtime condition.
+- Keep defensive checks only at true external boundaries where the value can legitimately be null (e.g. emscripten WS close `reason` field).
+
+```c
+char* msg = malloc(n);
+assert(msg);                                       // yes
+if (!msg) { LOG_ERROR("OOM"); return; }            // no
+```
+
+## 10. One theme per commit
 - One commit = one logical theme. No bundling unrelated changes.
 - Before `git commit`: scan staged diff. ≥2 themes → unstage, commit each theme separately.
 - Each commit stages the minimum file set needed for that theme. No drive-by edits, no "while I'm here" cleanups.

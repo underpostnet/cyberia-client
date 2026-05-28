@@ -12,7 +12,7 @@
 
 #include "modal_dialogue.h"
 
-#include "network/client.h"
+#include "network/game_client.h"
 #include "game_state.h"
 #include "modal.h"
 #include "ol_as_animated_ico.h"

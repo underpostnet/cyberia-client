@@ -6,19 +6,6 @@
 #include <stdbool.h>
 #include <raylib.h>
 
-/* Network client — owns the WebSocket lifecycle, retries, and the
- * authoritative tap uplink. Implements a small reconnection state machine
- * driven entirely from `client_tick()` so the main loop never needs to
- * inspect socket internals. */
-
-typedef enum {
-    CLIENT_DISCONNECTED = 0,
-    CLIENT_CONNECTING,
-    CLIENT_CONNECTED,
-    CLIENT_AWAITING_INIT,
-    CLIENT_RUNNING,
-} ClientStatus;
-
 typedef struct {
     size_t bytes_down;
     size_t bytes_up;
@@ -28,7 +15,6 @@ bool         connection_open(void);
 void         connection_close(void);
 bool         connection_is_open(void);
 conn_stats   connection_get_stats(void);
-ClientStatus client_status(void);
 
 /* Drive the connection state machine forward by one render frame.
  * Idempotent — call once per main_loop iteration. */

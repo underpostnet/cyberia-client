@@ -1,4 +1,4 @@
-#include "client.h"
+#include "game_client.h"
 #include "network/socket.h"
 #include "config.h"
 #include "game_state.h"
@@ -15,25 +15,9 @@
 #include <stdlib.h>
 #include <string.h>
 
-/* ── State machine ──────────────────────────────────────────────────────
- *
- *   DISCONNECTED ───open()──▶ CONNECTING
- *   CONNECTING   ──onopen──▶  CONNECTED → AWAITING_INIT
- *   AWAITING_INIT─init_data─▶ RUNNING
- *   * ───onclose──▶ DISCONNECTED  (full state reset)
- *
- * The reconnection guard runs in CLIENT_DISCONNECTED only. AWAITING_INIT
- * has its own timeout that forces a close → reconnect when the server
- * accepted the upgrade but never sent init_data.
- */
-
-#define CLIENT_RECONNECT_INTERVAL_S  3.0
-#define CLIENT_AWAITING_INIT_TIMEOUT 15.0
-
 typedef struct {
     WebSocketClient ws_client;
     conn_stats      stats;
-    ClientStatus    status;
     double          status_entered_at;
     double          last_reconnect_at;
     int             heartbeat_frames;
@@ -46,14 +30,8 @@ static void on_websocket_message(const uint8_t* data, uint32_t length, bool is_t
 static void on_websocket_error(void* ctx);
 static void on_websocket_close(int code, const char* reason, void* ctx);
 
-static void client_set_status(ClientStatus next) {
-    if (g_client.status == next) return;
-    g_client.status = next;
-    g_client.status_entered_at = GetTime();
-}
-
-/* Consolidated post-disconnect reset. Single function so every reset path
- * lands the same set of fields back at their fresh-session defaults. */
+// TODO: Client module shouldn't be modifying game state directly
+// After refactoring GameState this should go
 static void client_reset_state(void) {
     g_game_state.init_received        = false;
     g_game_state.player_id[0]         = '\0';
@@ -82,7 +60,6 @@ bool connection_open(void) {
         LOG_ERROR("WebSocket open failed");
         return false;
     }
-    client_set_status(CLIENT_CONNECTING);
     return true;
 }
 
@@ -98,53 +75,31 @@ conn_stats connection_get_stats(void) {
     return g_client.stats;
 }
 
-ClientStatus client_status(void) {
-    return g_client.status;
-}
-
 void client_on_init_received(void) {
-    if (g_client.status == CLIENT_AWAITING_INIT || g_client.status == CLIENT_CONNECTED) {
-        client_set_status(CLIENT_RUNNING);
-        LOG_INFO("init_data received — entering RUNNING");
-    }
+    LOG_INFO("init_data received");
 }
 
 void game_client_tick(void) {
+    const double now = GetTime();
     g_client.heartbeat_frames++;
     if ((g_client.heartbeat_frames % 1800) == 0) { /* ~30 s @ 60 fps */
-        LOG_DEBUG("heartbeat frame=%d t=%.1fs status=%d active=%d init=%d",
-                  g_client.heartbeat_frames, GetTime(),
-                  (int)g_client.status, connection_is_open() ? 1 : 0,
+        LOG_DEBUG("heartbeat frame=%d t=%.1fs connected=%d init=%d",
+                  g_client.heartbeat_frames, now,
+                  connection_is_open() ? 1 : 0,
                   g_game_state.init_received ? 1 : 0);
     }
 
-    const double now = GetTime();
-
-    switch (g_client.status) {
-        case CLIENT_DISCONNECTED: {
-            if (now - g_client.last_reconnect_at >= CLIENT_RECONNECT_INTERVAL_S) {
-                g_client.last_reconnect_at = now;
-                LOG_INFO("reconnecting...");
-                if (!connection_open()) {
-                    /* connection_open already logs the failure; stay
-                     * DISCONNECTED, retry on the next interval. */
-                }
+    // This is a draft for a reconnection feature... there are better ways to handle this
+    if(!connection_is_open()) {
+        static const double retry_interval = 3.0;
+        if (now - g_client.last_reconnect_at >= retry_interval) {
+            g_client.last_reconnect_at = now;
+            LOG_INFO("reconnecting...");
+            if (!connection_open()) {
+                /* connection_open already logs the failure; stay
+                    * DISCONNECTED, retry on the next interval. */
             }
-            break;
         }
-        case CLIENT_AWAITING_INIT: {
-            if (now - g_client.status_entered_at >= CLIENT_AWAITING_INIT_TIMEOUT) {
-                LOG_WARN("init_data did not arrive within %.0fs — closing socket",
-                         CLIENT_AWAITING_INIT_TIMEOUT);
-                connection_close();
-                /* on_websocket_close drives us back to DISCONNECTED. */
-            }
-            break;
-        }
-        case CLIENT_CONNECTING:
-        case CLIENT_CONNECTED:
-        case CLIENT_RUNNING:
-            break;
     }
 }
 
@@ -177,23 +132,20 @@ static void on_websocket_open(void* ctx) {
     BinWriter w;
     uplink_handshake(&w, "cyberia-mmo", "1.0.0");
     network_send_binary(w.buf, w.pos);
-
-    client_set_status(CLIENT_AWAITING_INIT);
-    LOG_INFO("WebSocket open — awaiting init_data");
+    LOG_INFO("WebSocket open");
 }
 
 static void on_websocket_message(const uint8_t* data, uint32_t length, bool is_text, void* ctx) {
+    assert(data);
+    assert(length > 0);
+    assert(ctx);
     ClientCtx* st = ctx;
-    if (!data || length == 0 || !st) return;
 
     st->stats.bytes_down += length;
 
     if (is_text) {
-        char* msg = (char*)malloc((size_t)length + 1);
-        if (!msg) {
-            LOG_ERROR("OOM allocating %u-byte WS text buffer", length);
-            return;
-        }
+        char* msg = malloc(length + 1);
+        assert(msg);
         memcpy(msg, data, length);
         msg[length] = '\0';
         if (!message_parser_parse(msg)) {
@@ -215,5 +167,4 @@ static void on_websocket_close(int code, const char* reason, void* ctx) {
                  code, reason ? reason : "none");
     }
     client_reset_state();
-    client_set_status(CLIENT_DISCONNECTED);
 }

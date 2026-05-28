@@ -13,7 +13,7 @@
 
 #include "modal_player.h"
 
-#include "network/client.h"
+#include "network/game_client.h"
 #include "game_state.h"
 
 #include <assert.h>
