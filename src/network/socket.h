@@ -26,17 +26,17 @@ typedef struct {
 
 bool ws_open(WebSocketClient* ws_client, const char* url, void* user_ctx, WebSocketHandlers handlers);
 void ws_close(WebSocketClient* ws_client);
-bool ws_is_open(WebSocketClient* ws_client);
+bool ws_is_open(const WebSocketClient* ws_client);
 
 /**
  * Sends a text message to the server. The function returns immediately
  * after queuing the message for transmission.
  */
-bool ws_send_str(WebSocketClient* ws_client, const char* data);
+bool ws_send_str(const WebSocketClient* ws_client, const char* data);
 
 /**
  * Sends a binary message to the server.
  */
-bool ws_send_binary(WebSocketClient* ws_client, const uint8_t* data, size_t len);
+bool ws_send_binary(const WebSocketClient* ws_client, const void* data, size_t len);
 
 #endif // SOCKET_H

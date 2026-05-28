@@ -12,7 +12,9 @@ static EM_BOOL ws_onclose_internal(int eventType, const EmscriptenWebSocketClose
 
 // Initialize WebSocket client with event handlers
 bool ws_open(WebSocketClient* ws_client, const char* url, void* user_ctx, WebSocketHandlers callbacks) {
-    assert(ws_client && url && user_ctx);
+    assert(ws_client);
+    assert(url);
+    assert(user_ctx);
 
     // Check if WebSocket is supported in this environment
     if (!emscripten_websocket_is_supported()) {
@@ -49,8 +51,11 @@ bool ws_open(WebSocketClient* ws_client, const char* url, void* user_ctx, WebSoc
 }
 
 // Send message through WebSocket
-bool ws_send_str(WebSocketClient* ws_client, const char* data) {
-    if (!ws_client || !ws_client->connected || !data) {
+bool ws_send_str(const WebSocketClient* ws_client, const char* data) {
+    assert(ws_client);
+    assert(data);
+    assert(strlen(data) > 0);
+    if (!ws_is_open(ws_client)) {
         return false;
     }
 
@@ -64,8 +69,11 @@ bool ws_send_str(WebSocketClient* ws_client, const char* data) {
     return true;
 }
 
-bool ws_send_binary(WebSocketClient* ws_client, const uint8_t* data, size_t len) {
-    if (!ws_client || !ws_client->connected || !data || len == 0) {
+bool ws_send_binary(const WebSocketClient* ws_client, const void* data, size_t len) {
+    assert(ws_client);
+    assert(data);
+    assert(len > 0);
+    if (!ws_is_open(ws_client)) {
         return false;
     }
     EMSCRIPTEN_RESULT result = emscripten_websocket_send_binary(ws_client->socket, (void*)data, (uint32_t)len);
@@ -77,10 +85,7 @@ bool ws_send_binary(WebSocketClient* ws_client, const uint8_t* data, size_t len)
 }
 
 void ws_close(WebSocketClient* ws_client) {
-    if (!ws_client) {
-        return;
-    }
-
+    assert(ws_client);
     if (ws_client->socket > 0) {
         emscripten_websocket_close(ws_client->socket, 1000, "Client initiated closure");
         emscripten_websocket_delete(ws_client->socket);
@@ -89,7 +94,8 @@ void ws_close(WebSocketClient* ws_client) {
     ws_client->connected = false;
 }
 
-bool ws_is_open(WebSocketClient* ws_client) {
+bool ws_is_open(const WebSocketClient* ws_client) {
+    assert(ws_client);
     return ws_client && ws_client->connected;
 }
 
@@ -100,6 +106,7 @@ static EM_BOOL ws_onopen_internal(int eventType, const EmscriptenWebSocketOpenEv
     printf("[WS] onopen fired — socket=%d\n", event ? event->socket : -1);
     WebSocketClient* socket_ctx = userData;
     if (socket_ctx && socket_ctx->callbacks.on_open_cb) {
+        socket_ctx->connected = true;
         socket_ctx->callbacks.on_open_cb(socket_ctx->user_ctx);
         return EM_TRUE;
     }

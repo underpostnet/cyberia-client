@@ -94,10 +94,6 @@ bool connection_is_open(void) {
     return ws_is_open(&g_client.ws_client);
 }
 
-bool connection_is_active(void) {
-    return g_client.ws_client.socket > 0;
-}
-
 conn_stats connection_get_stats(void) {
     return g_client.stats;
 }
@@ -118,7 +114,7 @@ void game_client_tick(void) {
     if ((g_client.heartbeat_frames % 1800) == 0) { /* ~30 s @ 60 fps */
         LOG_DEBUG("heartbeat frame=%d t=%.1fs status=%d active=%d init=%d",
                   g_client.heartbeat_frames, GetTime(),
-                  (int)g_client.status, connection_is_active() ? 1 : 0,
+                  (int)g_client.status, connection_is_open() ? 1 : 0,
                   g_game_state.init_received ? 1 : 0);
     }
 
@@ -153,7 +149,8 @@ void game_client_tick(void) {
 }
 
 bool network_send_binary(const uint8_t* data, uint16_t len) {
-    assert(data && len > 0);
+    assert(data);
+    assert(len > 0);
     if (!connection_is_open()) return false;
     bool ok = ws_send_binary(&g_client.ws_client, data, len);
     g_client.stats.bytes_up += ok ? len : 0;
@@ -167,7 +164,8 @@ bool network_send_event_tap(Vector2 grid, uint32_t client_tick_v, uint32_t seque
 }
 
 bool network_send_chat(const char* to_id, const char* text) {
-    assert(to_id && text);
+    assert(to_id);
+    assert(text);
     BinWriter w;
     uplink_chat(&w, to_id, text);
     return network_send_binary(w.buf, w.pos);
@@ -176,9 +174,6 @@ bool network_send_chat(const char* to_id, const char* text) {
 /* ── WebSocket callbacks ─────────────────────────────────────────────── */
 
 static void on_websocket_open(void* ctx) {
-    ClientCtx* st = ctx;
-    st->ws_client.connected = true;
-
     BinWriter w;
     uplink_handshake(&w, "cyberia-mmo", "1.0.0");
     network_send_binary(w.buf, w.pos);

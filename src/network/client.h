@@ -27,7 +27,6 @@ typedef struct {
 bool         connection_open(void);
 void         connection_close(void);
 bool         connection_is_open(void);
-bool         connection_is_active(void);
 conn_stats   connection_get_stats(void);
 ClientStatus client_status(void);
 
