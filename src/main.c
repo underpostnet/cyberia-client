@@ -31,7 +31,7 @@ static void loading(void) {
     bool hints_ready = presentation_runtime_is_ready(); // TODO: Turn this into a fetch request
     bool world_ready = g_game_state.init_received;
     if (hints_ready && world_ready) {
-        is_loading   = true;
+        is_loading   = false;
     }
 }
 
