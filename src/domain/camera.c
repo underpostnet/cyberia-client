@@ -51,7 +51,7 @@ void camera_zoom_by(float factor) {
     camera_set_zoom(g_camera.zoom * factor);
 }
 
-void camera_update(float frame_dt) {
+void camera_on_tick(float frame_dt) {
     float cell = g_game_state.cell_size > 0.0f ? g_game_state.cell_size : 12.0f;
     Vector2 self = g_game_state.player.base.interp_pos;
     float dx = self.x + g_game_state.player.base.dims.x / 2.0f;

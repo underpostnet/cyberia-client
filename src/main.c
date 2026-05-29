@@ -27,7 +27,7 @@ static void gameloop(void) {
     // if ( frame_dt > 0.25 ) { frame_dt = 0.25; } // prevents runaways, but we are not using it, keep commented
     sim_acc += (double)frame_dt;
 
-    game_client_tick();
+    game_client_on_tick();
 
     // input capture in realtime
     input_update();
@@ -49,15 +49,15 @@ static void gameloop(void) {
     interpolation_compute_view();
 
     // render interpolated state
-    render_update(frame_dt);
+    render_on_tick(frame_dt);
 }
 
 static void preloading_loop(void) {
     const float frame_dt = GetFrameTime();
-    game_client_tick();
+    game_client_on_tick();
 
     // will fall into render fallback... those should be here and not there(?)
-    render_update(frame_dt);
+    render_on_tick(frame_dt);
 
     bool hints_ready = presentation_runtime_is_ready(); // TODO: Turn this into a fetch request
     bool world_ready = g_game_state.init_received;

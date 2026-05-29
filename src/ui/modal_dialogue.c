@@ -178,6 +178,7 @@ void modal_dialogue_close(void) {
     if (cb) cb();
 
     /* Notify server → thaw (ignored by server if reason was overridden) */
+    // TODO: Freeze is not a system property, is a client property, UI shouldn't know about it
     send_freeze_msg("freeze_end", "dialogue");
     s_line_count = 0;
     s_current    = 0;

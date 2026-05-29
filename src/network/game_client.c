@@ -79,7 +79,7 @@ void client_on_init_received(void) {
     LOG_INFO("init_data received");
 }
 
-void game_client_tick(void) {
+void game_client_on_tick(void) {
     const double now = GetTime();
     g_client.heartbeat_frames++;
     if ((g_client.heartbeat_frames % 1800) == 0) { /* ~30 s @ 60 fps */

@@ -70,7 +70,7 @@ void dev_ui_cleanup(void);
  * This should be called each frame to update dynamic statistics
  * like network throughput calculations.
  */
-void dev_ui_update(float delta_time);
+void dev_ui_on_tick(float delta_time);
 
 /**
  * @brief Render the development UI

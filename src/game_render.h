@@ -99,12 +99,6 @@ int game_render_init(int screen_width, int screen_height);
  */
 void game_render_set_screen_size(int width, int height);
 
-/**
- * @brief Main game rendering function (called each frame)
- *
- * This is the main entry point for rendering the entire game.
- * Called from the render_update() function in render.c.
- */
 void game_render_frame(void);
 
 /**

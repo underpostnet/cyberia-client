@@ -78,7 +78,7 @@ void dev_ui_cleanup(void) {
     memset(&g_dev_ui, 0, sizeof(DevUI));
 }
 
-void dev_ui_update(float delta_time) {
+void dev_ui_on_tick(float delta_time) {
     // Update FPS tracking
     double current_time = GetTime();
     if (current_time - g_dev_ui.last_fps_update >= 0.1) {

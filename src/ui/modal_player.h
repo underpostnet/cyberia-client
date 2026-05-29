@@ -64,23 +64,4 @@ void modal_player_update(float delta_time);
  * - FPS (frames per second)
  */
 void modal_player_draw(int screen_width, int screen_height);
-
-// /**
-//  * @brief Set which information to display in the player modal
-//  * @param show_connection Show connection status
-//  * @param show_map Show map ID
-//  * @param show_position Show player position
-//  * @param show_fps Show FPS counter
-//  */
-// void modal_player_set_display_options(bool show_connection, bool show_map,
-//                                       bool show_position, bool show_fps);
-
-// /**
-//  * @brief Set player modal position and style
-//  * @param position_mode Position mode (e.g., MODAL_POS_TOP_RIGHT)
-//  * @param margin_top Top margin
-//  * @param margin_right Right margin
-//  */
-// void modal_player_set_position(int position_mode, int margin_top, int margin_right);
-
 #endif // MODAL_PLAYER_H

@@ -46,7 +46,7 @@ void render_init(int width, int height) {
     camera_init(width, height);
 }
 
-void render_update(float delta_time) {
+void render_on_tick(float delta_time) {
     int current_width  = GetScreenWidth();
     int current_height = GetScreenHeight();
 
@@ -57,7 +57,7 @@ void render_update(float delta_time) {
         camera_resize(current_width, current_height);
     }
 
-    camera_update(delta_time);
+    camera_on_tick(delta_time);
 
     game_render_update_effects(delta_time);
     fct_update(delta_time);
@@ -68,7 +68,7 @@ void render_update(float delta_time) {
     if (modal_dialogue_is_open())   modal_dialogue_update(delta_time);
 
     interaction_bubble_update();
-    dev_ui_update(delta_time);
+    dev_ui_on_tick(delta_time);
     modal_player_update(delta_time);
 
     if (g_game_state.init_received) {

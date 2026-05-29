@@ -22,7 +22,7 @@
  * positions follow the world camera automatically.
  *
  * Typical integration:
- *   render_update():   fct_update(delta_time);
+ *   render_on_tick():   fct_update(delta_time);
  *   game_render_world()  (inside BeginMode2D): fct_draw();
  *   on server event:   fct_spawn(world_x, world_y, value, type);
  *

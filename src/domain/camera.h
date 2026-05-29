@@ -16,7 +16,7 @@ void     camera_resize(int screen_width, int screen_height);
 void     camera_set_zoom(float zoom);
 float    camera_zoom(void);
 void     camera_zoom_by(float factor);
-void     camera_update(float frame_dt);
+void     camera_on_tick(float frame_dt);
 Camera2D camera_get(void);
 
 #endif /* CYBERIA_DOMAIN_CAMERA_H */

@@ -233,8 +233,6 @@ void game_render_frame(void) {
 }
 
 void game_render_world(void) {
-    // Budget reset is now done in render_update() every frame, including during
-    // the splash screen phase.  No reset needed here.
 
     // Render world components in correct z-order
     // Note: Order is critical - each layer builds on the previous
