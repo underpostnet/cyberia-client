@@ -1,4 +1,5 @@
 #include "socket.h"
+#include "util/log.h"
 #include <stdio.h>
 #include <assert.h>
 
@@ -18,7 +19,7 @@ bool ws_open(WebSocketClient* ws_client, const char* url, void* user_ctx, WebSoc
 
     // Check if WebSocket is supported in this environment
     if (!emscripten_websocket_is_supported()) {
-        fprintf(stderr, "[ERROR] WebSocket is not supported in this environment\n");
+        LOG_ERROR("WebSocket is not supported in this environment");
         return false;
     }
 
@@ -32,7 +33,7 @@ bool ws_open(WebSocketClient* ws_client, const char* url, void* user_ctx, WebSoc
     // Create WebSocket
     EMSCRIPTEN_WEBSOCKET_T socket = emscripten_websocket_new(&attrs);
     if (socket <= 0) {
-        fprintf(stderr, "[ERROR] Failed to create WebSocket\n");
+        LOG_ERROR("Failed to create WebSocket");
         return false;
     }
 
@@ -62,7 +63,7 @@ bool ws_send_str(const WebSocketClient* ws_client, const char* data) {
     // Send as text message
     EMSCRIPTEN_RESULT result = emscripten_websocket_send_utf8_text(ws_client->socket, data);
     if (result != EMSCRIPTEN_RESULT_SUCCESS) {
-        fprintf(stderr, "[ERROR] WebSocket send failed with error code: %d\n", result);
+        LOG_ERROR("WebSocket send failed with error code: %d", result);
         return false;
     }
 
@@ -78,7 +79,7 @@ bool ws_send_binary(const WebSocketClient* ws_client, const void* data, size_t l
     }
     EMSCRIPTEN_RESULT result = emscripten_websocket_send_binary(ws_client->socket, (void*)data, (uint32_t)len);
     if (result != EMSCRIPTEN_RESULT_SUCCESS) {
-        fprintf(stderr, "[ERROR] WebSocket binary send failed: %d\n", result);
+        LOG_ERROR("WebSocket binary send failed: %d", result);
         return false;
     }
     return true;
@@ -123,7 +124,7 @@ static EM_BOOL ws_onmessage_internal(int eventType, const EmscriptenWebSocketMes
 }
 
 static EM_BOOL ws_onerror_internal(int eventType, const EmscriptenWebSocketErrorEvent* event, void* userData) {
-    fprintf(stderr, "[ERROR] WebSocket error occurred\n");
+    LOG_ERROR("WebSocket error occurred");
     WebSocketClient* socket_ctx = userData;
     if(socket_ctx) {
         if (socket_ctx->callbacks.on_error_cb) {
@@ -138,7 +139,7 @@ static EM_BOOL ws_onclose_internal(int eventType, const EmscriptenWebSocketClose
     WebSocketClient* socket_ctx = userData;
     // Only log unexpected closures
     if (!(bool)event->wasClean || event->code != 1000) {
-        fprintf(stderr, "[WARN] WebSocket closed unexpectedly: code=%d, reason='%s'\n", event->code, event->reason);
+        LOG_ERROR("WebSocket closed unexpectedly: code=%d, reason='%s'", event->code, event->reason);
     }
     if(socket_ctx) {
         if (socket_ctx->callbacks.on_close_cb) {

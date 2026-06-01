@@ -99,15 +99,6 @@ int modal_init_struct(Modal* modal);
 void modal_clear_lines(Modal* modal);
 
 /**
- * @brief Add a text line to the modal
- * @param modal Pointer to modal
- * @param text Text content
- * @param color Text color
- * @return 0 on success, -1 if modal is full
- */
-int modal_add_line(Modal* modal, const char* text, Color color);
-
-/**
  * @brief Render the modal
  * @param modal Pointer to modal
  * @param screen_width Current screen width
@@ -115,41 +106,5 @@ int modal_add_line(Modal* modal, const char* text, Color color);
  */
 void modal_draw_struct(const Modal* modal, int screen_width, int screen_height);
 
-/**
- * @brief Set modal styling
- * @param modal Pointer to modal
- * @param bg_color Background color
- * @param border_color Border color
- * @param alpha Background transparency (0.0 to 1.0)
- */
-void modal_set_style(Modal* modal, Color bg_color, Color border_color, float alpha);
-
-/**
- * @brief Set modal position mode and margins
- * @param modal Pointer to modal
- * @param position_mode Position mode (e.g., MODAL_POS_TOP_RIGHT)
- * @param margin_top Top margin in pixels
- * @param margin_right Right margin in pixels
- * @param margin_bottom Bottom margin in pixels
- * @param margin_left Left margin in pixels
- */
-void modal_set_position(Modal* modal, int position_mode,
-                       int margin_top, int margin_right,
-                       int margin_bottom, int margin_left);
-
-/**
- * @brief Set text alignment within the modal
- * @param modal Pointer to modal
- * @param align Alignment mode (MODAL_ALIGN_LEFT, MODAL_ALIGN_CENTER, MODAL_ALIGN_RIGHT)
- */
-void modal_set_text_alignment(Modal* modal, int align);
-
-/**
- * @brief Set font settings
- * @param modal Pointer to modal
- * @param font_size Font size in pixels
- * @param line_spacing Spacing between lines in pixels
- */
-void modal_set_font(Modal* modal, int font_size, int line_spacing);
 
 #endif // MODAL_H

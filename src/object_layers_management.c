@@ -2,6 +2,7 @@
 #include "config.h"
 #include "hash_table.h"
 #include "network/engine_client.h"
+#include "util/log.h"
 #include <raylib.h>
 #include <cJSON.h>
 #include <stdio.h>
@@ -212,7 +213,7 @@ static void on_atlas_blob_fetched(const FetchResponse* r) {
 
     if (!r->success || !r->data || r->size == 0) {
         entry->state = ATLAS_TEX_ERROR;
-        fprintf(stderr, "[WARN] Async fetch failed for atlas item_key: %s\n", r->asset_id);
+        LOG_ERROR("Async fetch failed for atlas item_key: %s", r->asset_id);
         free(r->data);
         return;
     }
@@ -222,15 +223,14 @@ static void on_atlas_blob_fetched(const FetchResponse* r) {
 
     if (image.data == NULL) {
         entry->state = ATLAS_TEX_ERROR;
-        fprintf(stderr, "[WARN] Failed to decode atlas PNG for item_key: %s\n", r->asset_id);
+        LOG_ERROR("Failed to decode atlas PNG for item_key: %s", r->asset_id);
         return;
     }
 
     entry->texture = LoadTextureFromImage(image);
     UnloadImage(image);
     entry->state = ATLAS_TEX_READY;
-    printf("[INFO] Atlas texture loaded for item_key: %s (%dx%d)\n",
-           r->asset_id, entry->texture.width, entry->texture.height);
+    LOG_INFO("Atlas texture loaded for item_key: %s (%dx%d)", r->asset_id, entry->texture.width, entry->texture.height);
 }
 
 static Texture2D load_or_poll_atlas_texture(const char* item_key) {
@@ -337,8 +337,7 @@ static void on_atlas_meta_fetched(const FetchResponse* r) {
     if (frames) parse_ws_direction_frames(frames, atlas);
 
     hash_table_put(&g_olm_singleton->atlases, item_key, atlas);
-    printf("[ATLAS REST] Metadata cached via callback for: %s (%dx%d)\n",
-           item_key, atlas->atlas_width, atlas->atlas_height);
+    LOG_INFO("[ATLAS REST] Metadata cached via callback for: %s (%dx%d)", item_key, atlas->atlas_width, atlas->atlas_height);
 
     /* Kick off PNG blob fetch now that metadata is cached */
     load_or_poll_atlas_texture(item_key);
@@ -387,7 +386,7 @@ void obj_layers_mgr_schedule_atlas_fetch(const char* item_key) {
     char url[512];
     snprintf(url, sizeof(url), "%s/api/atlas-sprite-sheet/metadata/%s", API_BASE_URL, item_key);
     fetch_request_start(item_key, url, on_atlas_meta_fetched);
-    printf("[ATLAS REST] Fetch scheduled via engine_client: %s\n", item_key);
+    LOG_INFO("[ATLAS REST] Fetch scheduled via engine_client: %s", item_key);
 }
 
 void populate_object_layer_from_json(const char* item_id, const cJSON* ol_json) {
@@ -434,38 +433,3 @@ static void parse_ws_direction_frames(cJSON* frames_json, AtlasSpriteSheetData* 
     parse_direction_frame_data(cJSON_GetObjectItem(frames_json, "down_left_walking"), &atlas->down_left_walking);
     parse_direction_frame_data(cJSON_GetObjectItem(frames_json, "none_idle"), &atlas->none_idle);
 }
-
-/* Dead — no external callers. Kept commented for reference; the REST path
- * (obj_layers_mgr_schedule_atlas_fetch → on_atlas_meta_fetched) supersedes
- * the WS-driven population this function provided.
- *
- * void populate_atlas_from_json(ObjectLayersManager* manager, const char* item_key, const cJSON* atlas_json) {
- *     assert(manager && item_key && atlas_json);
- *
- *     AtlasSpriteSheetData* atlas = create_atlas_sprite_sheet_data();
- *     if (!atlas) return;
- *
- *     char* file_id = json_get_string_safe((cJSON*)atlas_json, "fileId", "");
- *     strncpy(atlas->file_id, file_id, MAX_FILE_ID_LENGTH - 1);
- *     free(file_id);
- *
- *     strncpy(atlas->item_key, item_key, MAX_ITEM_ID_LENGTH - 1);
- *     atlas->atlas_width = json_get_int_safe((cJSON*)atlas_json, "atlasWidth", 0);
- *     atlas->atlas_height = json_get_int_safe((cJSON*)atlas_json, "atlasHeight", 0);
- *     atlas->cell_pixel_dim = json_get_int_safe((cJSON*)atlas_json, "cellPixelDim", 20);
- *     atlas->frame_duration = json_get_int_safe((cJSON*)atlas_json, "frame_duration", 100);
- *
- *     cJSON* frames = cJSON_GetObjectItem((cJSON*)atlas_json, "frames");
- *     if (frames) parse_ws_direction_frames(frames, atlas);
- *
- *     cache_atlas_data(manager, item_key, atlas);
- *
- *     if (item_key[0] != '\0') {
- *         load_or_poll_atlas_texture(manager, item_key);
- *     }
- *
- *     printf("[INFO] Atlas populated from WS for: %s (%dx%d)\n",
- *            item_key, atlas->atlas_width, atlas->atlas_height);
- * }
- */
-

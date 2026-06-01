@@ -35,7 +35,7 @@ bool message_parser_parse(const char* json_str) {
     assert(json_str);
     cJSON* root = cJSON_Parse(json_str);
     if (!root) {
-        printf("[MESSAGE_PARSER] Failed to parse JSON (length: %zu bytes)\n", strlen(json_str));
+        LOG_ERROR("[MESSAGE_PARSER] Failed to parse JSON (length: %zu bytes)\n", strlen(json_str));
         return false;
     }
 
@@ -107,16 +107,16 @@ bool message_parser_parse(const char* json_str) {
  * ============================================================================ */
 
 static int message_parser_parse_init_data(const cJSON* json_root) {
-    printf("[INIT_DATA] message_parser_parse_init_data entered\n");
+    LOG_INFO("[INIT_DATA] message_parser_parse_init_data entered\n");
     assert(json_root);
 
     // Get payload object
     cJSON* payload = serial_get_object(json_root, "payload");
     if (!payload) {
-        printf("[INIT_DATA] ERROR: 'payload' object missing from init_data\n");
+        LOG_ERROR("[INIT_DATA] ERROR: 'payload' object missing from init_data\n");
         return -1;
     }
-    printf("[INIT_DATA] payload found, parsing grid/world config\n");
+    LOG_INFO("[INIT_DATA] payload found, parsing grid/world config\n");
 
     /* New session boundary — drop any stale prev-position snapshot from a
      * prior server lifetime so post-restart UUIDs don't interpolate from
@@ -260,7 +260,7 @@ static int message_parser_parse_metadata(const cJSON* json_root) {
     if (!payload) return -1;
 
     if (NULL == obj_layers_mgr_get()) {
-        fprintf(stderr, "[METADATA] ObjectLayersManager not initialized yet\n");
+        LOG_ERROR("[METADATA] ObjectLayersManager not initialized yet\n");
         return -1;
     }
 
@@ -309,13 +309,13 @@ static int message_parser_parse_metadata(const cJSON* json_root) {
         g_game_state.equipment_rules.one_per_type = (opt && cJSON_IsTrue(opt));
         cJSON* rs = cJSON_GetObjectItem(eq_rules, "requireSkin");
         g_game_state.equipment_rules.require_skin = (rs && cJSON_IsTrue(rs));
-        printf("[METADATA] Equipment rules: %d activeItemTypes, onePerType=%d, requireSkin=%d\n",
+        LOG_INFO("[METADATA] Equipment rules: %d activeItemTypes, onePerType=%d, requireSkin=%d\n",
                g_game_state.equipment_rules.active_item_type_count,
                g_game_state.equipment_rules.one_per_type,
                g_game_state.equipment_rules.require_skin);
     }
 
-    printf("[METADATA] Cached %d ObjectLayers, scheduled %d atlas REST fetches\n", ol_count, ol_count);
+    LOG_INFO("[METADATA] Cached %d ObjectLayers, scheduled %d atlas REST fetches\n", ol_count, ol_count);
     return 0;
 }
 
@@ -551,13 +551,13 @@ static int message_parser_parse_skill_item_ids(const cJSON* json_root) {
 }
 
 static int message_parser_parse_error(const cJSON* json_root) {
-    printf("[MESSAGE_PARSER] Parsing error message\n");
+    LOG_INFO("[MESSAGE_PARSER] Parsing error message\n");
     assert(json_root);
 
     // Get payload object
     cJSON* payload = serial_get_object(json_root, "payload");
     if (!payload) {
-        printf("[MESSAGE_PARSER] error missing payload\n");
+        LOG_ERROR("[MESSAGE_PARSER] error missing payload\n");
         return -1;
     }
 
@@ -567,7 +567,7 @@ static int message_parser_parse_error(const cJSON* json_root) {
     {
         strncpy(g_game_state.pending_error, error_msg, sizeof(g_game_state.pending_error) - 1);
         g_game_state.pending_error[sizeof(g_game_state.pending_error) - 1] = '\0';
-        printf("[MESSAGE_PARSER] Server error: %s\n", error_msg);
+        LOG_INFO("[MESSAGE_PARSER] Server error: %s\n", error_msg);
     }
     else
     {
@@ -580,7 +580,7 @@ static int message_parser_parse_error(const cJSON* json_root) {
 static MessageType get_message_type(const cJSON* root) {
     char type_str[64] = {0};
     if (0 != serial_get_string(root, "type", type_str, sizeof(type_str))) {
-        printf("[MESSAGE_PARSER] error missing type\n");
+        LOG_ERROR("[MESSAGE_PARSER] error missing type\n");
         return MSG_TYPE_UNKNOWN;
     }
 
@@ -593,6 +593,6 @@ static MessageType get_message_type(const cJSON* root) {
     if (0 == strcmp(type_str, "pong"))           return MSG_TYPE_PONG;
     if (0 == strcmp(type_str, "chat"))           return MSG_TYPE_CHAT;
 
-    printf("[MESSAGE_PARSER] warning type unknown\n");
+    LOG_ERROR("[MESSAGE_PARSER] warning type unknown\n");
     return MSG_TYPE_UNKNOWN;
 }

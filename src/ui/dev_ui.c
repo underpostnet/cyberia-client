@@ -4,6 +4,7 @@
 #include "game_render.h"
 #include "game_state.h"
 #include "domain/presentation_runtime.h"
+#include "util/log.h"
 
 #include <assert.h>
 #include <stdio.h>
@@ -37,7 +38,7 @@ const char* mode_to_string(ObjectLayerMode mode) {
 DevUI g_dev_ui = {0};
 
 int dev_ui_init(void) {
-    printf("[DEV_UI] Initializing development UI...\n");
+    LOG_INFO("[DEV_UI] Initializing development UI...\n");
 
     memset(&g_dev_ui, 0, sizeof(DevUI));
 
@@ -69,12 +70,12 @@ int dev_ui_init(void) {
     g_dev_ui.show_game_stats = true;
     g_dev_ui.show_error_section = true;
 
-    printf("[DEV_UI] Development UI initialized\n");
+    LOG_INFO("[DEV_UI] Development UI initialized\n");
     return 0;
 }
 
 void dev_ui_cleanup(void) {
-    printf("[DEV_UI] Cleaning up development UI...\n");
+    LOG_INFO("[DEV_UI] Cleaning up development UI...\n");
     memset(&g_dev_ui, 0, sizeof(DevUI));
 }
 

@@ -1,21 +1,15 @@
 #include "input.h"
 
-#include "config.h"
-#include "domain/camera.h"
-#include "domain/local_player.h"
-#include "game_state.h"
-#include "input/input_command.h"
-#include "network/game_client.h"
-#include "ui/tap_effect.h"
-#include "ui/ui_dispatch.h"
 #include "util/log.h"
 
 #include <assert.h>
 #include <stdint.h>
-#include <stdio.h>
-#include <stdlib.h>
 #include <raymath.h>
-#include <string.h>
+
+// TODO: should remove
+#include "domain/camera.h"
+#include "input/input_command.h"
+
 
 void input_push(struct input_event_queue* q, struct input_event e) {
     assert(q);
@@ -94,4 +88,9 @@ bool input_command_pop(input_command_t* out) {
     s_cmd_q.head = (s_cmd_q.head + 1) % COMMAND_QUEUE_CAP;
     s_cmd_q.count--;
     return true;
+}
+
+void input_command_queue_clear(void) {
+    s_cmd_q.head = 0;
+    s_cmd_q.count = 0;
 }

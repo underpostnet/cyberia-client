@@ -53,7 +53,13 @@ assert(msg);                                       // yes
 if (!msg) { LOG_ERROR("OOM"); return; }            // no
 ```
 
-## 10. One theme per commit
+## 10. Explicit includes — no transitive reliance
+- Every symbol used in a .c/.h file must come from a header that file directly `#include`s.
+- Don't lean on transitive inclusion. If `input.c` uses `Vector2`, it must `#include <raylib.h>` itself, even if `input.h` already does.
+- Reason: transitive chains break silently when an upstream header drops a now-unused include. Self-contained include lists keep each TU independently compilable.
+- Conversely: drop includes whose symbols are not referenced in the file. Unused includes inflate compile time and hide real dependencies.
+
+## 11. One theme per commit
 - One commit = one logical theme. No bundling unrelated changes.
 - Before `git commit`: scan staged diff. ≥2 themes → unstage, commit each theme separately.
 - Each commit stages the minimum file set needed for that theme. No drive-by edits, no "while I'm here" cleanups.

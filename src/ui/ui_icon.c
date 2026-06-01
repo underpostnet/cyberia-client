@@ -13,6 +13,7 @@
 #include "config.h"
 #include "hash_table.h"
 #include "network/engine_client.h"
+#include "util/log.h"
 
 #include <assert.h>
 #include <math.h>
@@ -48,7 +49,7 @@ static void on_icon_fetched(const FetchResponse* r) {
 
     if (!r->success) {
         e->state = ICON_ERROR;
-        fprintf(stderr, "[UI_ICON] Fetch error for '%s'\n", r->asset_id);
+        LOG_ERROR("[UI_ICON] Fetch error for '%s'", r->asset_id);
         free(r->data);
         return;
     }
@@ -58,14 +59,14 @@ static void on_icon_fetched(const FetchResponse* r) {
 
     if (NULL == img.data) {
         e->state = ICON_ERROR;
-        fprintf(stderr, "[UI_ICON] Image decode failed for '%s'\n", r->asset_id);
+        LOG_ERROR("[UI_ICON] Image decode failed for '%s'", r->asset_id);
         return;
     }
 
     e->texture = LoadTextureFromImage(img);
     UnloadImage(img);
     e->state = ICON_READY;
-    printf("[UI_ICON] Loaded '%s' (%dx%d)\n",
+    LOG_INFO("[UI_ICON] Loaded '%s' (%dx%d)",
            r->asset_id, e->texture.width, e->texture.height);
 }
 
@@ -80,7 +81,7 @@ static IconEntry* create_and_fetch(const char* icon_id) {
     snprintf(url, sizeof(url), "%s/assets/ui-icons/%s.png", API_BASE_URL, icon_id);
     fetch_request_start(icon_id, url, on_icon_fetched);
 
-    printf("[UI_ICON] Fetch started for '%s'\n", icon_id);
+    LOG_INFO("[UI_ICON] Fetch started for '%s'", icon_id);
     return e;
 }
 

@@ -17,6 +17,7 @@
 #include "modal.h"
 #include "ol_as_animated_ico.h"
 #include "serial.h"
+#include "util/log.h"
 
 #include <assert.h>
 #include <math.h>
@@ -90,7 +91,7 @@ static void send_freeze_msg(const char* type, const char* reason) {
         uplink_freeze_end(&w, reason);
     }
     bool rc = network_send_binary(w.buf, w.pos);
-    printf("[MODAL_DIALOGUE] WS -> %s (reason=%s, entity=%s, item=%s) rc=%d\n", type, reason, s_entity_id, s_item_id, rc);
+    LOG_INFO("[MODAL_DIALOGUE] WS -> %s (reason=%s, entity=%s, item=%s) rc=%d\n", type, reason, s_entity_id, s_item_id, rc);
 }
 
 static Rectangle panel_rect(int sw, int sh) {
@@ -149,8 +150,7 @@ void modal_dialogue_open(const char* entity_id, const char* item_id,
     s_line_complete = false;
     s_open          = true;
 
-    printf("[MODAL_DIALOGUE] Open: entity=%s item=%s lines=%d\n",
-           s_entity_id, s_item_id, s_line_count);
+    LOG_INFO("[MODAL_DIALOGUE] Open: entity=%s item=%s lines=%d\n", s_entity_id, s_item_id, s_line_count);
 
     /* Notify server → FrozenInteractionState */
     send_freeze_msg("freeze_start", "dialogue");
@@ -160,7 +160,7 @@ void modal_dialogue_close(void) {
     if (!s_open) return;
     s_open = false;
 
-    printf("[MODAL_DIALOGUE] Close: entity=%s item=%s\n", s_entity_id, s_item_id);
+    LOG_INFO("[MODAL_DIALOGUE] Close: entity=%s item=%s\n", s_entity_id, s_item_id);
 
     /* ── Bridge-safe ordering ──────────────────────────────────────────
      * Fire the on_close callback BEFORE sending freeze_end.

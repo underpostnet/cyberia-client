@@ -5,6 +5,8 @@
 
 #include "notify_store.h"
 
+#include "util/log.h"
+
 #include <raylib.h>
 #include <stdio.h>
 #include <string.h>
@@ -29,7 +31,7 @@ static NotifyEntry* find_or_create(const char* entity_id) {
 
     /* Create new entry if space available */
     if (s_count >= NS_MAX_ENTITIES) {
-        fprintf(stderr, "[NOTIFY_STORE] Max entity slots reached, dropping entry for %s\n", entity_id);
+        LOG_ERROR("[NOTIFY_STORE] Max entity slots reached, dropping entry for %s", entity_id);
         return NULL;
     }
 

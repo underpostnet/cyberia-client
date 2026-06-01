@@ -551,7 +551,7 @@ static void decode_self_player(BinReader* r, uint8_t flags) {
 
 int binary_aoi_process(const uint8_t* data, size_t length) {
     if (!data || length < 2) {
-        printf("[BINARY_AOI] Message too short (%zu bytes)\n", length);
+        LOG_ERROR("[BINARY_AOI] Message too short (%zu bytes)", length);
         return -1;
     }
 
@@ -563,7 +563,7 @@ int binary_aoi_process(const uint8_t* data, size_t length) {
     /* ── Floating Combat Text event — compact 14-byte message ──────────── */
     if (msg_type == BIN_MSG_FCT) {
         if (length < 14) {
-            printf("[BINARY_AOI] FCT message too short (%zu bytes, need 14)\n", length);
+            LOG_ERROR("[BINARY_AOI] FCT message too short (%zu bytes, need 14)", length);
             return -1;
         }
         uint8_t  fct_type = br_u8(&r);
@@ -584,7 +584,7 @@ int binary_aoi_process(const uint8_t* data, size_t length) {
     /* ── Item FCT event — variable-length message (≥15 bytes) ─────────────── */
     if (msg_type == BIN_MSG_ITEM_FCT) {
         if (length < 15) {
-            printf("[BINARY_AOI] ItemFCT message too short (%zu bytes)\n", length);
+            LOG_ERROR("[BINARY_AOI] ItemFCT message too short (%zu bytes)", length);
             return -1;
         }
         uint8_t  fct_type = br_u8(&r);
@@ -620,11 +620,11 @@ int binary_aoi_process(const uint8_t* data, size_t length) {
      *   [9..10]  u16 entityCount
      */
     if (length < 11) {
-        printf("[BINARY_AOI] AOI message too short (%zu bytes, need 11)\n", length);
+        LOG_ERROR("[BINARY_AOI] AOI message too short (%zu bytes, need 11)", length);
         return -1;
     }
     if (msg_type != BIN_MSG_AOI_UPDATE && msg_type != BIN_MSG_FULL_AOI) {
-        printf("[BINARY_AOI] Unknown message type 0x%02x\n", msg_type);
+        LOG_ERROR("[BINARY_AOI] Unknown message type 0x%02x", msg_type);
         return -1;
     }
 
@@ -688,7 +688,7 @@ int binary_aoi_process(const uint8_t* data, size_t length) {
             case BIN_ENTITY_FOREGROUND: decode_foreground_entity(&r, flags); break;
             case BIN_ENTITY_RESOURCE:   decode_resource_entity(&r, flags);   break;
             default:
-                printf("[BINARY_AOI] Unknown entity type %d at offset %zu\n", etype, r.pos);
+                LOG_ERROR("[BINARY_AOI] Unknown entity type %d at offset %zu", etype, r.pos);
                 return -1;
         }
     }

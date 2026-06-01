@@ -32,11 +32,6 @@ typedef enum {
 
 /**
  * @brief Typed enum for ObjectLayer item type discriminator.
- *
- * Replaces the prior `char type[MAX_TYPE_LENGTH]` string field used in
- * world-object containers. Strings still arrive on the JSON wire when
- * present; object_layer_type_from_string maps them to this enum at decode
- * time, so all hot-path comparisons are integer.
  */
 typedef enum {
     OBJECT_LAYER_TYPE_UNKNOWN    = 0,
@@ -50,9 +45,6 @@ typedef enum {
     OBJECT_LAYER_TYPE_ICON       = 8,
     OBJECT_LAYER_TYPE_OTHER      = 9,
 } ObjectLayerType;
-
-ObjectLayerType object_layer_type_from_string(const char* s);
-const char*     object_layer_type_to_string(ObjectLayerType t);
 
 /**
  * @brief Blockchain ledger type for economic classification.

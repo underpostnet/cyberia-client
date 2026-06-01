@@ -24,6 +24,7 @@
 #include "object_layers_management.h"
 #include "ol_stack_ico.h"
 #include "ui_icon.h"
+#include "util/log.h"
 
 #include <assert.h>
 #include <raylib.h>
@@ -51,7 +52,7 @@ static Color status_border_color(const InteractionBubbleSlot* slot, bool is_self
     if (is_self) return presentation_runtime_palette("SELF_BORDER");
     Color c = presentation_runtime_status_border(slot->status_icon);
     if (s_border_color_dbg < 12) {
-        printf("[BORDER] entity=%s status_icon=%d border=(%d,%d,%d,%d)\n",
+        LOG_INFO("[BORDER] entity=%s status_icon=%d border=(%d,%d,%d,%d)\n",
                slot->entity_id, slot->status_icon, c.r, c.g, c.b, c.a);
         s_border_color_dbg++;
     }
@@ -360,7 +361,7 @@ bool interaction_bubble_handle_click(int mx, int my) {
         Rectangle r = slot_rect(i);
         if (hit_rect(mx, my, r)) {
             InteractionBubbleSlot* slot = &s_slots[i];
-            printf("[INTERACTION_BUBBLE] Slot %d clicked: entity=%s flags=0x%x\n",
+            LOG_INFO("[INTERACTION_BUBBLE] Slot %d clicked: entity=%s flags=0x%x\n",
                    i, slot->entity_id, slot->interact_flags);
 
             /* Open the JS interact panel — NO freeze, player stays active
@@ -484,7 +485,7 @@ void interaction_bubble_dead_equip(const char* item_id, bool active) {
             }
         }
     }
-    printf("[INTERACTION_BUBBLE] Dead-equip: item=%s active=%d\n", item_id, active);
+    LOG_INFO("[INTERACTION_BUBBLE] Dead-equip: item=%s active=%d\n", item_id, active);
 }
 
 const ObjectLayerState* interaction_bubble_get_alive_layers(

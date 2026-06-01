@@ -3,9 +3,9 @@
 
 #include <raylib.h>
 #include <stdbool.h>
-#include <stddef.h>
 #include <stdint.h>
 
+// TODO: should remove
 #include "input/input_command.h"
 
 typedef enum input_type {

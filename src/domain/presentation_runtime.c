@@ -1,6 +1,7 @@
 #include "presentation_runtime.h"
 #include "network/engine_client.h"
 #include "game_state.h"
+#include "util/log.h"
 #include <cJSON.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -161,7 +162,7 @@ static void parse_response(const char* body, int len) {
     if ((n = cJSON_GetObjectItem(data, "devUi")) && cJSON_IsBool(n))                g_rt.dev_ui = cJSON_IsTrue(n);
 
     cJSON_Delete(root);
-    printf("[presentation_runtime] hydrated %d palette / %d entity-keys / %d status-icons; cellSize=%.1f interp=%dms\n",
+    LOG_INFO("[presentation_runtime] hydrated %d palette / %d entity-keys / %d status-icons; cellSize=%.1f interp=%dms",
            g_rt.palette_count, g_rt.entity_key_count, g_rt.status_count,
            g_rt.cell_size, g_rt.interpolation_ms);
 }
@@ -178,7 +179,7 @@ static void on_hints_fetched(const FetchResponse* r) {
     if (r->success && r->data && r->size > 0) {
         parse_response((const char*)r->data, (int)r->size);
     } else {
-        fprintf(stderr, "[presentation_runtime] fetch unavailable — using bootstrap fallback\n");
+        LOG_ERROR("[presentation_runtime] fetch unavailable — using bootstrap fallback");
     }
     free(r->data);
     g_rt.ready = true;
@@ -195,7 +196,7 @@ void presentation_runtime_start_fetch(const char* api_base_url, const char* clie
     if (n <= 0 || n >= (int)sizeof(url)) return;
     g_rt.started = true;
     fetch_request_start("cyberia-client-hints", url, on_hints_fetched);
-    printf("[presentation_runtime] fetching %s\n", url);
+    LOG_INFO("[presentation_runtime] fetching %s", url);
 }
 
 bool presentation_runtime_is_ready(void) {

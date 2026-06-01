@@ -2,6 +2,7 @@
 #include "config.h"
 #include "hash_table.h"
 #include "network/engine_client.h"
+#include "util/log.h"
 #include <cJSON.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -66,7 +67,7 @@ static void parse_response(DialogueDataSet* d, const unsigned char* data, int si
     d->state = (count > 0) ? DLG_DATA_READY : DLG_DATA_EMPTY;
 
     cJSON_Delete(root);
-    printf("[DIALOGUE_DATA] Fetched %d lines for item '%s'\n", count, d->item_id);
+    LOG_INFO("[DIALOGUE_DATA] Fetched %d lines for item '%s'", count, d->item_id);
 }
 
 static void on_dialogue_fetched(const FetchResponse* r) {
@@ -75,7 +76,7 @@ static void on_dialogue_fetched(const FetchResponse* r) {
 
     if (!r->success) {
         d->state = DLG_DATA_ERROR;
-        fprintf(stderr, "[DIALOGUE_DATA] Fetch error for '%s'\n", d->item_id);
+        LOG_ERROR("[DIALOGUE_DATA] Fetch error for '%s'", d->item_id);
         free(r->data);
         return;
     }
@@ -104,7 +105,7 @@ void dialogue_data_request(const char* item_id) {
     char url[1024];
     snprintf(url, sizeof(url), "%s/api/cyberia-dialogue/code/default-%s", API_BASE_URL, item_id);
     fetch_request_start(item_id, url, on_dialogue_fetched);
-    printf("[DIALOGUE_DATA] Fetch started for '%s'\n", item_id);
+    LOG_INFO("[DIALOGUE_DATA] Fetch started for '%s'", item_id);
 }
 
 const DialogueDataSet* dialogue_data_get(const char* item_id) {
