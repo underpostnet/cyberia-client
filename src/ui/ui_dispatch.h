@@ -2,6 +2,10 @@
 #define CYBERIA_UI_DISPATCH_H
 
 #include <stdbool.h>
+#include "input.h"
+#include "domain/presentation_runtime.h"
+#include "domain/camera.h"
+
 
 /* UI tap dispatcher.
  *
@@ -17,5 +21,39 @@
 
 bool ui_dispatch_tap(int screen_x, int screen_y);
 bool ui_dispatch_covers_point(int screen_x, int screen_y);
+
+static void ui_on_tick(input_queue_t* input_queue, double dt) {
+    input_queue_t bkp_queue = { 0 };
+
+    input_event_t evt = { 0 };
+    while (input_pop(input_queue, &evt)) {
+        bool consumed = false;
+        if(!consumed && INPUT_TAP == evt.type) {
+            int mx = (int)evt.screen_position.x;
+            int my = (int)evt.screen_position.y;
+            if (!consumed && ui_dispatch_tap(mx, my)) { consumed = true; }
+            if (!consumed && ui_dispatch_covers_point(mx, my)) { consumed = true; }
+        }
+        if(!consumed && INPUT_KEY_DEBUG == evt.type) {
+            presentation_runtime_toggle_dev_ui();
+            consumed = true;
+        }
+
+        if(!consumed && INPUT_ZOOM == evt.type) {
+            if(evt.zoom_in) { camera_zoom_by(1.1); } else { camera_zoom_by(0.9); }
+            consumed = true;
+        }
+
+        // unconsumed event back to the queue
+        if(!consumed) {
+            input_push(&bkp_queue, evt );
+            continue;
+        }
+    }
+
+    // return unconsummed events to the original queue
+    input_event_t bkp_evt = { 0 };
+    while (input_pop(&bkp_queue, &bkp_evt)) { input_push(input_queue, bkp_evt ); }
+}
 
 #endif /* CYBERIA_UI_DISPATCH_H */

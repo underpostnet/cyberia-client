@@ -19,6 +19,9 @@
 #include "network/session.h"
 #include "prediction/prediction.h"
 #include "util/log.h"
+#include "ui/ui_dispatch.h"
+#include "ui/tap_effect.h"
+#include "domain/local_player.h"
 
 static const double fixed_step = 1.0/(double)TICK_RATE_HZ;
 static double sim_acc = 0.0;
@@ -30,13 +33,117 @@ static void gameloop(void) {
     game_client_on_tick();
 
     // input capture in realtime
-    input_update();
-    input_event_queue_handle();
+    input_queue_t frame_input = {0};
+    input_queue_on_tick(&frame_input, frame_dt);
+
+    ui_on_tick(&frame_input, frame_dt);
+
+    // TODO: collapse this into a function, this is temporary to remove input.c dependency
+    {
+        input_queue_t bkp_queue = { 0 };
+        input_event_t evt = { 0 };
+        while (input_pop(&frame_input, &evt)) {
+            bool consumed = false;
+            if(!consumed && INPUT_TAP == evt.type) {
+                /* FrozenInteractionState — server says we're frozen, drop the tap. */
+                if (local_player_is_frozen()) { consumed = true; }
+                if (g_game_state.player.base.respawn_in > 0.0f) { consumed = true; }
+            }
+            // unconsumed event back to the queue
+            if(!consumed) {
+                input_push(&bkp_queue, evt);
+                continue;
+            }
+        }
+        // return unconsummed events to the original queue
+        input_event_t bkp_evt = { 0 };
+        while (input_pop(&bkp_queue, &bkp_evt)) { input_push(&frame_input, bkp_evt ); }
+    }
+
+    // TODO: collapse this into a function, this is temporary to remove input.c dependency
+    {
+        //game_client_replicate_input(frame_input);
+        input_queue_t bkp_queue = { 0 };
+        input_event_t evt = { 0 };
+        while (input_pop(&frame_input, &evt)) {
+            bool consumed = false;
+            if(!consumed && INPUT_TAP == evt.type) {
+                float cell = g_game_state.cell_size > 0.0f ? g_game_state.cell_size : 12.0f;
+                float gx = evt.world_position.x / cell;
+                float gy = evt.world_position.y / cell;
+                input_command_t cmd = input_command_build_tap(gx, gy);
+                command_queue_push(&cmd);
+                network_send_event_tap((Vector2){gx, gy}, cmd.client_tick, cmd.sequence);
+                consumed = false; // REPLICATION DOESN'T CONSUME THE INPUT
+            }
+             // unconsumed event back to the queue
+            if(!consumed) {
+                input_push(&bkp_queue, evt);
+                continue;
+            }
+        }
+        // return unconsummed events to the original queue
+        input_event_t bkp_evt = { 0 };
+        while (input_pop(&bkp_queue, &bkp_evt)) { input_push(&frame_input, bkp_evt ); }
+    }
+
+    // TODO: collapse this into a function, this is temporary to remove input.c dependency
+    {
+        // Tap Effect
+        input_queue_t bkp_queue = { 0 };
+        input_event_t evt = { 0 };
+        while (input_pop(&frame_input, &evt)) {
+            bool consumed = false;
+            if(!consumed && INPUT_TAP == evt.type) {
+                TapEffectParams fx = tap_effect_default_params();
+                fx.scale = 1.15f;
+                fx.duration = 0.42f;
+                fx.intensity = 1.25f;
+                fx.style_mask = TAP_EFFECT_STYLE_PREMIUM;
+                tap_effect_spawn(evt.screen_position, &fx);
+                consumed = false; // TAP EFFECTS DON'T CONSUME THE INPUT, BUT ALSO SHOULDN'T HAPPEN BEFORE PROCESS
+            }
+             // unconsumed event back to the queue
+            if(!consumed) {
+                input_push(&bkp_queue, evt);
+                continue;
+            }
+        }
+         // return unconsummed events to the original queue
+        input_event_t bkp_evt = { 0 };
+        while (input_pop(&bkp_queue, &bkp_evt)) { input_push(&frame_input, bkp_evt ); }
+    }
+
+    // TODO: collapse this into a function, this is temporary to remove input.c dependency
+    {
+        // IDK what this is but it was on the handle_tap_event, I think it should dissapear with a GameState refactor
+        input_queue_t bkp_queue = { 0 };
+        input_event_t evt = { 0 };
+        while (input_pop(&frame_input, &evt)) {
+            bool consumed = false;
+            if(!consumed && INPUT_TAP == evt.type) {
+                float cell = g_game_state.cell_size > 0.0f ? g_game_state.cell_size : 12.0f;
+                float gx = evt.world_position.x / cell;
+                float gy = evt.world_position.y / cell;
+                g_game_state.player.tap_target     = (Vector2){gx, gy};
+                g_game_state.player.has_tap_target = true;
+                consumed = false; // This does something I'm not sure what
+            }
+             // unconsumed event back to the queue
+            if(!consumed) {
+                input_push(&bkp_queue, evt);
+                continue;
+            }
+        }
+         // return unconsummed events to the original queue
+        input_event_t bkp_evt = { 0 };
+        while (input_pop(&bkp_queue, &bkp_evt)) { input_push(&frame_input, bkp_evt ); }
+    }
 
     // fixed step simulation
     while (sim_acc >= fixed_step)
     {
-        // physics_update(fixed_step); -> prev = curr; integrate(curr, curr_frame, fixed_step)
+        // physics_update(frame_input, fixed_step); -> prev = curr; integrate(curr, curr_frame, fixed_step)
         prediction_step(fixed_step);
         sim_acc -= fixed_step;
     }

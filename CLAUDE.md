@@ -10,11 +10,13 @@ f.a = 1; f.b = 2;             // no
 No `/** @param */`, `@return`, `@brief`. Even if surrounding code has them.
 
 ## 3. Yoda comparisons
-Constant left.
+Constant left. Applies to all comparisons — strings, pointers, integers, enums.
 ```c
 0 == strcmp(s, "x")    // yes
 NULL != ptr            // yes
+0 == queue.count       // yes
 strcmp(s, "x") == 0    // no
+queue.count == 0       // no
 ```
 
 ## 4. Root-relative includes
