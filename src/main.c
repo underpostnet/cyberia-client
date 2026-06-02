@@ -60,32 +60,7 @@ static void gameloop(void) {
         while (input_pop(&bkp_queue, &bkp_evt)) { input_push(&frame_input, bkp_evt ); }
     }
 
-    // TODO: collapse this into a function, this is temporary to remove input.c dependency
-    {
-        //game_client_replicate_input(frame_input);
-        input_queue_t bkp_queue = { 0 };
-        input_event_t evt = { 0 };
-        while (input_pop(&frame_input, &evt)) {
-            bool consumed = false;
-            if(!consumed && INPUT_TAP == evt.type) {
-                float cell = g_game_state.cell_size > 0.0f ? g_game_state.cell_size : 12.0f;
-                float gx = evt.world_position.x / cell;
-                float gy = evt.world_position.y / cell;
-                input_command_t cmd = input_command_build_tap(gx, gy);
-                command_queue_push(&cmd);
-                network_send_event_tap((Vector2){gx, gy}, cmd.client_tick, cmd.sequence);
-                consumed = false; // REPLICATION DOESN'T CONSUME THE INPUT
-            }
-             // unconsumed event back to the queue
-            if(!consumed) {
-                input_push(&bkp_queue, evt);
-                continue;
-            }
-        }
-        // return unconsummed events to the original queue
-        input_event_t bkp_evt = { 0 };
-        while (input_pop(&bkp_queue, &bkp_evt)) { input_push(&frame_input, bkp_evt ); }
-    }
+    replication_prepare_input(frame_input);
 
     // TODO: collapse this into a function, this is temporary to remove input.c dependency
     {
