@@ -19,13 +19,14 @@
 // --- Data Structures ---
 
 typedef struct {
-    char* last_state_string;
-    double last_update_time;
-    double last_access_time;
-    int frame_index;
+    int   last_direction_enum;   /* Direction cast to int; -1 = unset */
+    int   last_mode_enum;        /* ObjectLayerMode cast to int; -1 = unset */
+    float time_acc;              /* delta accumulator in seconds */
+    double last_access_time;     /* GC sentinel — set on every get/create */
+    int   frame_index;
     Direction last_facing_direction;
-    bool textures_ready;
-    int failed_texture_attempts;
+    bool  textures_ready;
+    int   failed_texture_attempts;
 } AnimationState;
 
 struct EntityRender {
@@ -42,10 +43,49 @@ typedef struct {
 
 // --- Helper Functions ---
 
+/* Pool allocator for AnimationState. With 200+ entities × up to 20 layers,
+ * per-entry malloc/free churns the WASM heap; a block free-list keeps the
+ * fixed-size records contiguous and recycles them on eviction. Blocks live
+ * for the process lifetime (single EntityRender instance). */
+#define ANIM_POOL_BLOCK 512
+
+typedef union AnimNode {
+    AnimationState   anim;        /* live entry (union first member) */
+    union AnimNode*  next_free;   /* free-list link when recycled */
+} AnimNode;
+
+typedef struct AnimBlock {
+    struct AnimBlock* next;
+    AnimNode          nodes[ANIM_POOL_BLOCK];
+} AnimBlock;
+
+static AnimBlock* s_anim_blocks = NULL;
+static AnimNode*  s_anim_free   = NULL;
+
+static AnimationState* anim_pool_alloc(void) {
+    if (!s_anim_free) {
+        AnimBlock* b = malloc(sizeof(AnimBlock));
+        assert(b);
+        b->next = s_anim_blocks;
+        s_anim_blocks = b;
+        for (int i = 0; i < ANIM_POOL_BLOCK; i++) {
+            b->nodes[i].next_free = s_anim_free;
+            s_anim_free = &b->nodes[i];
+        }
+    }
+    AnimNode* n = s_anim_free;
+    s_anim_free = n->next_free;
+    return &n->anim;
+}
+
+static void anim_pool_free(AnimationState* a) {
+    AnimNode* n = (AnimNode*)a;   /* anim is the first union member */
+    n->next_free = s_anim_free;
+    s_anim_free  = n;
+}
+
 static void free_anim_state(void* p) {
-    AnimationState* s = (AnimationState*)p;
-    free(s->last_state_string);
-    free(s);
+    anim_pool_free((AnimationState*)p);
 }
 
 static AnimationState* get_animation_state(EntityRender* render, const char* entity_id, const char* item_id) {
@@ -60,9 +100,14 @@ static AnimationState* get_animation_state(EntityRender* render, const char* ent
         return anim;
     }
 
-    anim = malloc(sizeof(AnimationState));
-    if (!anim) return NULL;
-    *anim = (AnimationState){ .last_facing_direction = DIRECTION_DOWN, .last_access_time = GetTime() };
+    anim = anim_pool_alloc();
+    *anim = (AnimationState){
+        .last_direction_enum  = -1,
+        .last_mode_enum       = -1,
+        .time_acc             = 0.0f,
+        .last_facing_direction = DIRECTION_DOWN,
+        .last_access_time     = GetTime(),
+    };
     hash_table_put(&render->animations, key, anim);
     return anim;
 }
@@ -71,6 +116,11 @@ static bool anim_is_stale(const char* key, void* value, void* user_data) {
     const AnimationState* anim = value;
     double now = *(const double*)user_data;
     return (now - anim->last_access_time) > ANIM_IDLE_EVICT_SECONDS;
+}
+
+static bool anim_key_has_prefix(const char* key, void* value, void* user_data) {
+    const char* prefix = user_data;
+    return 0 == strncmp(key, prefix, strlen(prefix));
 }
 
 static int compare_layer_priority(const void* a, const void* b) {
@@ -197,6 +247,13 @@ void entity_render_gc(EntityRender* render) {
     hash_table_remove_if(&render->animations, anim_is_stale, &now);
 }
 
+void entity_render_forget_entity(EntityRender* render, const char* entity_id) {
+    assert(render && entity_id);
+    char prefix[256];
+    snprintf(prefix, sizeof(prefix), "%s_", entity_id);
+    hash_table_remove_if(&render->animations, anim_key_has_prefix, prefix);
+}
+
 // ============================================================================
 // Public API - Rendering
 // ============================================================================
@@ -307,7 +364,7 @@ void draw_entity_layers(
     // Texture Availability Check & Animation Update
     // ========================================================================
 
-    double now = GetTime();
+    float frame_dt = GetFrameTime();
     // Per-layer rendering data
     Texture2D layer_textures[MAX_LAYERS_PER_ENTITY] = { 0 };
     Rectangle layer_source_rects[MAX_LAYERS_PER_ENTITY] = { 0 };
@@ -363,22 +420,22 @@ void draw_entity_layers(
             continue;
         }
 
-        // State Change Detection
-        if (!anim->last_state_string ||
-            strcmp(anim->last_state_string, dir_string) != 0) {
-
-            if (anim->last_state_string) free(anim->last_state_string);
-            anim->last_state_string = malloc(strlen(dir_string) + 1);
-            strcpy(anim->last_state_string, dir_string);
-            anim->frame_index = 0;
-            anim->last_update_time = now;
+        // State Change Detection — two int compares, zero allocations
+        if ((int)render_direction != anim->last_direction_enum ||
+            (int)render_mode     != anim->last_mode_enum) {
+            anim->last_direction_enum = (int)render_direction;
+            anim->last_mode_enum      = (int)render_mode;
+            anim->frame_index         = 0;
+            anim->time_acc            = 0.0f;
         }
 
-        // Animation Advancement
-        double elapsed_ms = (now - anim->last_update_time) * 1000.0;
-        if (elapsed_ms >= frame_duration_ms) {
+        // Animation Advancement — delta accumulator; catches skipped frames
+        // under load (e.g. 300 ms frame at 125 ms/frame advances by 2).
+        float frame_sec = frame_duration_ms / 1000.0f;
+        anim->time_acc += frame_dt;
+        while (anim->time_acc >= frame_sec) {
+            anim->time_acc -= frame_sec;
             anim->frame_index = (anim->frame_index + 1) % num_frames;
-            anim->last_update_time = now;
         }
         if (anim->frame_index >= num_frames) anim->frame_index = 0;
 

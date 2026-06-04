@@ -83,6 +83,10 @@ void destroy_entity_render(EntityRender* render);
  * recently). Call periodically from the render loop to bound memory. */
 void entity_render_gc(EntityRender* render);
 
+/* Synchronously evict all animation states for a single entity (all its
+ * item layers). Call when an entity is removed from the world snapshot. */
+void entity_render_forget_entity(EntityRender* render, const char* entity_id);
+
 // ============================================================================
 // Public API - Rendering
 // ============================================================================
