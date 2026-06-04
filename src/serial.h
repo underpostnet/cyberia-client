@@ -7,7 +7,7 @@
 #include <cJSON.h>
 #include <raylib.h>
 
-#include "game_state.h" // TODO: serializer shouldn't depend on game state, but only on structure
+#include "world_types.h"
 
 #include "object_layer.h"
 

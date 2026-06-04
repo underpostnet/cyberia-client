@@ -9,6 +9,7 @@
 #include <string.h>
 
 #include "object_layer.h"
+#include "world_types.h"
 
 /**
  * @file game_state.h
@@ -31,68 +32,16 @@
 
 #define MAX_ENTITIES 1000
 #define MAX_OBJECTS 5000
-#define MAX_OBJECT_LAYERS 20
-#define MAX_PATH_POINTS 100
 #define MAX_MESSAGE_SIZE USHRT_MAX
-#define MAX_ID_LENGTH 64
-#define MAX_BEHAVIOR_LENGTH 32
 #define MAX_ENTITY_TYPES     16
 #define MAX_DEFAULT_ITEM_IDS  8
 #define MAX_ACTIVE_ITEM_TYPES 8
 
+/* EntityState / PlayerState / BotState / WorldObject + their MAX_* sizing
+ * macros live in world_types.h so the serializer can use them without
+ * depending on this header's global GameState. */
+
 typedef struct GameState GameState;
-typedef struct EntityState EntityState;
-typedef struct PlayerState PlayerState;
-typedef struct BotState BotState;
-
-struct EntityState {
-    char id[MAX_ID_LENGTH];
-    Vector2 pos_server;
-    Vector2 pos_prev;
-    Vector2 interp_pos;
-    Vector2 dims;
-    Direction direction;
-    ObjectLayerMode mode;
-    ObjectLayerState object_layers[MAX_OBJECT_LAYERS];
-    int object_layer_count;
-    float life;
-    float max_life;
-    float respawn_in;
-    double last_update;     /* wall-clock time the entity was last touched */
-    double snapshot_time;   /* wall-clock time of the snapshot that produced
-                             * pos_server. Used by interpolation to compute
-                             * a per-entity alpha instead of a global one. */
-    int effective_level;
-    uint8_t status_icon;
-};
-
-struct PlayerState {
-    EntityState base;
-    char map_code[MAX_ID_LENGTH];
-    Vector2 path[MAX_PATH_POINTS]; /* debug only */
-    int path_count;                /* debug only */
-    Vector2 target_pos;            /* debug only */
-
-    Vector2 tap_target;
-    bool    has_tap_target;
-};
-
-struct BotState {
-    EntityState base;
-    char behavior[MAX_BEHAVIOR_LENGTH];
-    char caster_id[MAX_ID_LENGTH];
-};
-
-typedef struct WorldObject {
-    char             id[MAX_ID_LENGTH];
-    Vector2          pos;
-    Vector2          dims;
-    ObjectLayerType  type_kind;
-    char             type[MAX_TYPE_LENGTH];
-    char             portal_label[MAX_ID_LENGTH];
-    ObjectLayerState object_layers[MAX_OBJECT_LAYERS];
-    int              object_layer_count;
-} WorldObject;
 
 typedef struct {
     char active_item_types[MAX_ACTIVE_ITEM_TYPES][32];
@@ -164,6 +113,12 @@ struct GameState {
 };
 
 extern GameState g_game_state;
+
+/** Clear the world mirror to its post-disconnect defaults: drops init flag,
+ *  player id, and all entity/object counts. The single entry point for
+ *  resetting world state; callers outside game_state.c must not poke the
+ *  count fields directly. */
+void         game_state_reset(void);
 
 PlayerState* game_state_find_player(const char* id);
 BotState*    game_state_find_bot(const char* id);
