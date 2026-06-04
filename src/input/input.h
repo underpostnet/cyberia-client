@@ -1,5 +1,5 @@
-#ifndef CYBERIA_INPUT_QUEUE_H
-#define CYBERIA_INPUT_QUEUE_H
+#ifndef CYBERIA_INPUT_H
+#define CYBERIA_INPUT_H
 
 #include <raylib.h>
 #include <stdbool.h>
@@ -34,4 +34,4 @@ void input_queue_on_tick(input_queue_t* q, double dt);
 bool input_pop(input_queue_t* q, input_event_t* out);
 void input_push(input_queue_t* q, input_event_t e);
 
-#endif /* CYBERIA_INPUT_QUEUE_H */
+#endif /* CYBERIA_INPUT_H */

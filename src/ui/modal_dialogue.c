@@ -166,6 +166,7 @@ void modal_dialogue_close(void) {
     if (cb) cb();
 
     /* Notify domain layer → thaw (ignored by server if reason was overridden) */
+    // TODO: Investigate why how to stop the server from handling freeze
     local_player_request_freeze(false, "dialogue");
     s_line_count = 0;
     s_current    = 0;

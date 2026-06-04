@@ -778,6 +778,7 @@ bool inventory_modal_handle_click(int mx, int my) {
                     d->lines, d->line_count);
 
                 /* Stale thaw — rejected by server's reason-match check */
+                // TODO: Investigate why how to stop the server from handling freeze
                 send_freeze(false);
                 return true;
             }

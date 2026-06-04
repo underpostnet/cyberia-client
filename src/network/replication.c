@@ -3,7 +3,7 @@
 #include "game_state.h"
 #include "serial.h"
 #include "input/input_command.h"
-#include "input/input_queue.h"
+#include "input/input.h"
 #include "prediction/prediction.h"
 #include "network/game_client.h"
 

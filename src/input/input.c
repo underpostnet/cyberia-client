@@ -1,5 +1,5 @@
 #include "input_command.h"
-#include "input_queue.h"
+#include "input.h"
 #include "network/session.h"
 #include "domain/camera.h"
 

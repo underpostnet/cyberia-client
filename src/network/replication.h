@@ -1,7 +1,7 @@
 #ifndef CYBERIA_NETWORK_REPLICATION_H
 #define CYBERIA_NETWORK_REPLICATION_H
 
-#include "input/input_queue.h"
+#include "input/input.h"
 
 /*
  * Client→server input replication.

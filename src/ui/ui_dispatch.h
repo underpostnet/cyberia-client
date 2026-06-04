@@ -2,7 +2,7 @@
 #define CYBERIA_UI_DISPATCH_H
 
 #include <stdbool.h>
-#include "input/input_queue.h"
+#include "input/input.h"
 #include "domain/presentation_runtime.h"
 #include "domain/camera.h"
 
