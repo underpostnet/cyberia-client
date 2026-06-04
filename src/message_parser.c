@@ -10,7 +10,6 @@
 #include "js/services.h"
 #include "domain/camera.h"
 #include "domain/presentation_runtime.h"
-#include "network/game_client.h"
 #include "ui/ui_state.h"
 #include "util/log.h"
 #include <stdio.h>
@@ -26,6 +25,12 @@ static int message_parser_parse_aoi_update(const cJSON* json_root);
 static int message_parser_parse_skill_item_ids(const cJSON* json_root);
 static int message_parser_parse_error(const cJSON* json_root);
 static int message_parser_parse_visible_players(const cJSON* players_json);
+
+static MessageParserInitHandler s_init_handler = NULL;
+
+void message_parser_set_init_handler(MessageParserInitHandler handler) {
+    s_init_handler = handler;
+}
 
 /* ============================================================================
  * Main Message Processing Entry Point
@@ -243,9 +248,8 @@ static int message_parser_parse_init_data(const cJSON* json_root) {
     }
     camera_init(GetScreenWidth(), GetScreenHeight());
 
-    /* Tell the network FSM the handshake is complete. */
-    // TODO: parser shouldn't be calling client, but the other way around
-    client_on_init_received();
+    /* Signal interested modules (network FSM) that the handshake completed. */
+    if (s_init_handler) { s_init_handler(); }
     return 0;
 }
 

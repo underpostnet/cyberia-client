@@ -30,4 +30,10 @@ typedef enum {
  */
 bool message_parser_parse(const char* json_str);
 
+/* Register a handler invoked when an init_data payload finishes parsing.
+ * Keeps data flow pointing outward: the parser signals interested modules
+ * instead of calling into the network/client layer directly. */
+typedef void (*MessageParserInitHandler)(void);
+void message_parser_set_init_handler(MessageParserInitHandler handler);
+
 #endif // MESSAGE_PARSER_H
