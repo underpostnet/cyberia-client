@@ -5,7 +5,8 @@
 #include <stddef.h>
 
 /*
- * Generic string-keyed hash table — open addressing with linear probing.
+ * Generic string-keyed hash table — open addressing with Robin Hood probing
+ * and backward-shift deletion (no tombstones).
  *
  * - Keys are duplicated on insert (strdup) and freed on remove/destroy.
  * - Values are opaque void*; ownership is controlled by `free_fn`.
@@ -14,6 +15,8 @@
  *     - If NULL, caller retains ownership.
  * - Capacity grows automatically; entries are rehashed on resize, so
  *   pointers to internal slots are NOT stable across put/remove.
+ * - Robin Hood keeps probe lengths balanced; backward-shift deletion keeps
+ *   the table tombstone-free so probe chains never degrade across removals.
  * - Not thread-safe.
  */
 
@@ -39,14 +42,15 @@ typedef enum {
 typedef struct {
     char*     key;
     void*     value;
+    hash_t    hash;           /* cached key hash for Robin Hood probe math */
     SlotState state;
 } HashSlot;
 
 typedef struct {
     HashSlot*   slots;
     size_t      capacity;
-    size_t      count;        /* occupied slots (excludes tombstones) */
-    size_t      tombstones;
+    size_t      count;        /* occupied slots */
+    size_t      tombstones;   /* always 0 (backward-shift deletion) */
     HashFreeFn  free_fn;
     const char* debug_name;   /* identifies table in error logs; not owned */
 } HashTable;
