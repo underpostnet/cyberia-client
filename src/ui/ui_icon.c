@@ -1,19 +1,7 @@
-/**
- * @file ui_icon.c
- * @brief General-purpose UI Icon System — implementation.
- *
- * Self-contained async texture cache for small PNG icons served by the
- * engine API.
- *
- * See ui_icon.h for full documentation.
- */
-
 #include "ui_icon.h"
 
 #include "config.h"
-#include "hash_table.h"
-#include "network/engine_client.h"
-#include "util/log.h"
+#include "texture_cache.h"
 
 #include <assert.h>
 #include <math.h>
@@ -21,85 +9,33 @@
 #include <stdlib.h>
 #include <string.h>
 
-/* ── Icon texture cache ─────────────────────────────────────────────── */
+/* ui_icon owns its own texture cache — decorative, presentation-only icons
+ * fetched from {API_BASE_URL}/assets/ui-icons/{id}.png. It is a peer of the
+ * object-layer atlas cache, not a tenant of it: zero dependency on
+ * object_layers_management. */
 
-typedef enum {
-    ICON_NONE,
-    ICON_LOADING,
-    ICON_READY,
-    ICON_ERROR
-} IconState;
+static TextureCache* s_icon_cache = NULL;
 
-typedef struct {
-    Texture2D texture;
-    IconState state;
-} IconEntry;
-
-static HashTable ht;
-
-static void icon_entry_free(void* p) {
-    IconEntry* e = p;
-    UnloadTexture(e->texture);
-    free(e);
+static void icon_blob_cb(const FetchResponse* r) {
+    if (s_icon_cache) { texture_cache_on_blob_fetched(s_icon_cache, r); }
+    else              { free(r->data); }
 }
 
-static void on_icon_fetched(const FetchResponse* r) {
-    IconEntry* e = hash_table_get(&ht, r->asset_id);
-    if (NULL == e) { free(r->data); return; }
-
-    if (!r->success) {
-        e->state = ICON_ERROR;
-        LOG_ERROR("[UI_ICON] Fetch error for '%s'", r->asset_id);
-        free(r->data);
-        return;
-    }
-
-    Image img = LoadImageFromMemory(".png", (unsigned char*)r->data, (int)r->size);
-    free(r->data);
-
-    if (NULL == img.data) {
-        e->state = ICON_ERROR;
-        LOG_ERROR("[UI_ICON] Image decode failed for '%s'", r->asset_id);
-        return;
-    }
-
-    e->texture = LoadTextureFromImage(img);
-    UnloadImage(img);
-    e->state = ICON_READY;
-    LOG_INFO("[UI_ICON] Loaded '%s' (%dx%d)",
-           r->asset_id, e->texture.width, e->texture.height);
-}
-
-static IconEntry* create_and_fetch(const char* icon_id) {
-    assert(icon_id);
-
-    IconEntry* e = calloc(1, sizeof(IconEntry));
-    e->state = ICON_LOADING;
-    hash_table_put(&ht, icon_id, e);
-
-    char url[512];
-    snprintf(url, sizeof(url), "%s/assets/ui-icons/%s.png", API_BASE_URL, icon_id);
-    fetch_request_start(icon_id, url, on_icon_fetched);
-
-    LOG_INFO("[UI_ICON] Fetch started for '%s'", icon_id);
-    return e;
-}
-
-/* ── Public API ─────────────────────────────────────────────────────── */
-
-void ui_icon_init(void) {
-    hash_table_init(&ht, 64, icon_entry_free, "ui_icon");
+void ui_icon_init(int capacity) {
+    if (s_icon_cache) { return; }
+    s_icon_cache = texture_cache_create(capacity, "ui_icon", icon_blob_cb);
 }
 
 void ui_icon_cleanup(void) {
-    hash_table_destroy(&ht);
+    texture_cache_destroy(s_icon_cache);
+    s_icon_cache = NULL;
 }
 
 void ui_icon_draw(const char* icon_id, float cx, float cy, int size, bool bounce, float phase) {
     assert(icon_id);
     assert(strlen(icon_id));
+    assert(s_icon_cache);
 
-    /* ── Bounce: smooth ease-in-out sine float ───────────────────────── */
     float offset_y = 0.0f;
     if (bounce) {
         float t = (float)GetTime();
@@ -109,17 +45,15 @@ void ui_icon_draw(const char* icon_id, float cx, float cy, int size, bool bounce
     }
     float draw_cy = cy + offset_y;
 
-    /* ── Look up (or create) the cached icon entry ───────────────────── */
-    IconEntry* e = hash_table_get(&ht, icon_id);
-    if (!e) e = create_and_fetch(icon_id);
-    if (!e) return;
+    char url[512];
+    snprintf(url, sizeof(url), "%s/assets/ui-icons/%s.png", API_BASE_URL, icon_id);
+    Texture2D tex = texture_cache_get(s_icon_cache, url);
 
-    if (e->state == ICON_READY) {
-        /* Texture loaded — draw centred at (cx, draw_cy). */
-        Rectangle src = { 0, 0, (float)e->texture.width, (float)e->texture.height };
+    if (tex.id > 0) {
+        Rectangle src = { 0, 0, (float)tex.width, (float)tex.height };
         Rectangle dst = { cx - size * 0.5f, draw_cy - size * 0.5f,
                           (float)size, (float)size };
-        DrawTexturePro(e->texture, src, dst, (Vector2){0, 0}, 0.0f, WHITE);
+        DrawTexturePro(tex, src, dst, (Vector2){0, 0}, 0.0f, WHITE);
     } else {
         /* Still loading — subtle pulsing placeholder dot. */
         float pulse = 0.5f + 0.5f * sinf((float)GetTime() * 4.0f);

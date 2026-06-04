@@ -60,20 +60,17 @@
  */
 #define UI_ICON_BOUNCE_FREQ     1.1f
 
+/* Capacity (entry count) of the module-local icon texture cache. */
+#define UI_ICON_CACHE_CAPACITY  64
+
 /* ── Public API ─────────────────────────────────────────────────────── */
 
-/**
- * @brief Initialise the UI icon system (internal cache + request IDs).
- *
- * Must be called once during game_render_init().
- */
-void ui_icon_init(void);
+/* Create the module-local icon TextureCache. Call once during
+ * game_render_init(). capacity sets the LRU ceiling. */
+void ui_icon_init(int capacity);
 
-/**
- * @brief Release all cached icon textures and free memory.
- *
- * Call during game_render_cleanup().
- */
+/* Destroy the icon cache (unloads all icon textures). Call during
+ * game_render_cleanup(). */
 void ui_icon_cleanup(void);
 
 /**

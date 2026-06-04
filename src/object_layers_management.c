@@ -1,6 +1,7 @@
 #include "object_layers_management.h"
 #include "config.h"
 #include "hash_table.h"
+#include "texture_cache.h"
 #include "network/engine_client.h"
 #include "util/log.h"
 #include <raylib.h>
@@ -16,37 +17,39 @@ static void parse_ws_direction_frames(cJSON* frames_json, AtlasSpriteSheetData* 
 
 ObjectLayersManager* g_olm_singleton = NULL;
 
-// Track async atlas texture loading state
-typedef enum {
-    ATLAS_TEX_NONE,
-    ATLAS_TEX_LOADING,
-    ATLAS_TEX_READY,
-    ATLAS_TEX_ERROR
-} AtlasTextureState;
-
-typedef struct {
-    Texture2D         texture;
-    AtlasTextureState state;
-    double            last_access_time; /* wall-clock seconds for LRU eviction */
-} AtlasTextureEntry;
-
 /* Atlas metadata fetch set — value is sentinel; only key presence matters. */
 #define META_SENTINEL ((void*)1)
 static void noop_free(void* p) {}
 static void free_layer_value(void* p) { free_object_layer((ObjectLayer*)p); }
 static void free_atlas_value(void* p) { free_atlas_sprite_sheet_data((AtlasSpriteSheetData*)p); }
-static void free_tex_value(void* p) {
-    AtlasTextureEntry* e = (AtlasTextureEntry*)p;
-    if (e->texture.id > 0) UnloadTexture(e->texture);
-    free(e);
+
+/* Atlas GPU textures are loaded/cached/LRU-evicted by a general-purpose
+ * TextureCache. The manager itself owns only authoritative content: object
+ * layer metadata, atlas frame metadata, and the in-flight metadata-fetch set. */
+struct ObjectLayersManager {
+    HashTable     layers;        // item_id  → ObjectLayer*
+    HashTable     atlases;       // item_key → AtlasSpriteSheetData*
+    HashTable     meta;          // item_key → META_SENTINEL
+    TextureCache* atlas_textures;
+};
+
+static void atlas_blob_url(const char* item_key, char* out, size_t out_sz) {
+    snprintf(out, out_sz, "%s/api/atlas-sprite-sheet/blob/%s", API_BASE_URL, item_key);
 }
 
-struct ObjectLayersManager {
-    HashTable layers;    // item_id  → ObjectLayer*
-    HashTable atlases;   // item_key → AtlasSpriteSheetData*
-    HashTable textures;  // item_key → AtlasTextureEntry*
-    HashTable meta;      // item_key → META_SENTINEL
-};
+/* engine_client fetch trampoline → routes blob completions into the atlas cache. */
+static void on_atlas_blob_fetched(const FetchResponse* r) {
+    assert(g_olm_singleton);
+    texture_cache_on_blob_fetched(g_olm_singleton->atlas_textures, r);
+}
+
+static Texture2D load_or_poll_atlas_texture(const char* item_key) {
+    assert(item_key);
+    assert(g_olm_singleton);
+    char url[512];
+    atlas_blob_url(item_key, url, sizeof(url));
+    return texture_cache_get(g_olm_singleton->atlas_textures, url);
+}
 
 // --- JSON Parsing Helpers ---
 
@@ -176,89 +179,6 @@ ObjectLayer* lookup_cached_layer(const char* item_id) {
     return (ObjectLayer*)hash_table_get(&g_olm_singleton->layers, item_id);
 }
 
-/* LRU eviction.
- *
- * When the textures table reaches MAX_TEXTURE_CACHE_SIZE entries, we walk
- * the table once, find the entry with the oldest last_access_time, and
- * remove it. The free_tex_value callback unloads the GPU texture; the
- * hash_table machinery frees the key. This keeps texture memory bounded
- * during long sessions across many maps without changing the cache hit
- * rate observed during typical play (recent textures win). */
-static void evict_oldest_texture(void) {
-    HashTable* t = &g_olm_singleton->textures;
-    if (t->count < (size_t)MAX_TEXTURE_CACHE_SIZE) return;
-
-    const char* oldest_key = NULL;
-    double      oldest_at  = 1e18;
-    for (size_t i = 0; i < t->capacity; i++) {
-        HashSlot* s = &t->slots[i];
-        if (s->state != SLOT_OCCUPIED || !s->value) continue;
-        AtlasTextureEntry* e = (AtlasTextureEntry*)s->value;
-        /* Never evict an entry still mid-fetch — its slot is needed by the
-         * pending callback. */
-        if (e->state == ATLAS_TEX_LOADING) continue;
-        if (e->last_access_time < oldest_at) {
-            oldest_at  = e->last_access_time;
-            oldest_key = s->key;
-        }
-    }
-    if (oldest_key) hash_table_remove(t, oldest_key);
-}
-
-/* Atlas PNG blob fetch — routed through engine_client. Callback decodes
- * PNG and uploads to GPU on the frame the fetch completes. */
-static void on_atlas_blob_fetched(const FetchResponse* r) {
-    AtlasTextureEntry* entry = hash_table_get(&g_olm_singleton->textures, r->asset_id);
-    if (!entry) { free(r->data); return; }
-
-    if (!r->success || !r->data || r->size == 0) {
-        entry->state = ATLAS_TEX_ERROR;
-        LOG_ERROR("Async fetch failed for atlas item_key: %s", r->asset_id);
-        free(r->data);
-        return;
-    }
-
-    Image image = LoadImageFromMemory(".png", r->data, (int)r->size);
-    free(r->data);
-
-    if (image.data == NULL) {
-        entry->state = ATLAS_TEX_ERROR;
-        LOG_ERROR("Failed to decode atlas PNG for item_key: %s", r->asset_id);
-        return;
-    }
-
-    entry->texture = LoadTextureFromImage(image);
-    UnloadImage(image);
-    entry->state = ATLAS_TEX_READY;
-    LOG_INFO("Atlas texture loaded for item_key: %s (%dx%d)", r->asset_id, entry->texture.width, entry->texture.height);
-}
-
-static Texture2D load_or_poll_atlas_texture(const char* item_key) {
-    assert(item_key);
-    assert(g_olm_singleton);
-
-    AtlasTextureEntry* entry = hash_table_get(&g_olm_singleton->textures, item_key);
-    if (entry) {
-        entry->last_access_time = GetTime();
-        return entry->state == ATLAS_TEX_READY ? entry->texture : (Texture2D){0};
-    }
-
-    evict_oldest_texture();
-
-    entry = malloc(sizeof(AtlasTextureEntry));
-    if (!entry) return (Texture2D){0};
-    *entry = (AtlasTextureEntry){
-        .state            = ATLAS_TEX_LOADING,
-        .last_access_time = GetTime(),
-    };
-    hash_table_put(&g_olm_singleton->textures, item_key, entry);
-
-    char url[512];
-    snprintf(url, sizeof(url), "%s/api/atlas-sprite-sheet/blob/%s", API_BASE_URL, item_key);
-    fetch_request_start(item_key, url, on_atlas_blob_fetched);
-    return (Texture2D){0};
-}
-
 // ============================================================================
 // Public API
 // ============================================================================
@@ -275,8 +195,8 @@ void create_object_layers_manager(void) {
      * predictable churn at ≈179 textures (256 × 0.7). */
     hash_table_init(&mgr->layers,   (size_t)MAX_LAYER_CACHE_SIZE,   free_layer_value, "ol_layers");
     hash_table_init(&mgr->atlases,  (size_t)MAX_ATLAS_CACHE_SIZE,   free_atlas_value, "ol_atlases");
-    hash_table_init(&mgr->textures, (size_t)MAX_TEXTURE_CACHE_SIZE, free_tex_value,   "ol_textures");
     hash_table_init(&mgr->meta,     (size_t)MAX_ATLAS_CACHE_SIZE,   noop_free,        "ol_meta");
+    mgr->atlas_textures = texture_cache_create((int)MAX_TEXTURE_CACHE_SIZE, "ol_atlas_tex", on_atlas_blob_fetched);
 
     g_olm_singleton = mgr;
 }
@@ -290,8 +210,8 @@ void destroy_object_layers_manager(void) {
 
     hash_table_destroy(&g_olm_singleton->layers);
     hash_table_destroy(&g_olm_singleton->atlases);
-    hash_table_destroy(&g_olm_singleton->textures);
     hash_table_destroy(&g_olm_singleton->meta);
+    texture_cache_destroy(g_olm_singleton->atlas_textures);
 
     free(g_olm_singleton);
     g_olm_singleton = NULL;
