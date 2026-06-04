@@ -8,15 +8,20 @@
 #include <stdio.h>
 #include <assert.h>
 
-#define ANIM_TABLE_INITIAL_CAPACITY 1024
+#define ANIM_TABLE_INITIAL_CAPACITY 4096
 #define MAX_LAYERS_PER_ENTITY 20
 #define DEFAULT_FRAME_DURATION_MS 100
+
+/* Animation states untouched for this long are assumed to belong to entities
+ * that left the AOI and are evicted by entity_render_gc(). */
+#define ANIM_IDLE_EVICT_SECONDS 4.0
 
 // --- Data Structures ---
 
 typedef struct {
     char* last_state_string;
     double last_update_time;
+    double last_access_time;
     int frame_index;
     Direction last_facing_direction;
     bool textures_ready;
@@ -50,13 +55,22 @@ static AnimationState* get_animation_state(EntityRender* render, const char* ent
     snprintf(key, sizeof(key), "%s_%s", entity_id, item_id);
 
     AnimationState* anim = (AnimationState*)hash_table_get(&render->animations, key);
-    if (anim) return anim;
+    if (anim) {
+        anim->last_access_time = GetTime();
+        return anim;
+    }
 
     anim = malloc(sizeof(AnimationState));
     if (!anim) return NULL;
-    *anim = (AnimationState){ .last_facing_direction = DIRECTION_DOWN };
+    *anim = (AnimationState){ .last_facing_direction = DIRECTION_DOWN, .last_access_time = GetTime() };
     hash_table_put(&render->animations, key, anim);
     return anim;
+}
+
+static bool anim_is_stale(const char* key, void* value, void* user_data) {
+    const AnimationState* anim = value;
+    double now = *(const double*)user_data;
+    return (now - anim->last_access_time) > ANIM_IDLE_EVICT_SECONDS;
 }
 
 static int compare_layer_priority(const void* a, const void* b) {
@@ -175,6 +189,12 @@ void destroy_entity_render(EntityRender* render) {
     if (!render) return;
     hash_table_destroy(&render->animations);
     free(render);
+}
+
+void entity_render_gc(EntityRender* render) {
+    assert(render);
+    double now = GetTime();
+    hash_table_remove_if(&render->animations, anim_is_stale, &now);
 }
 
 // ============================================================================

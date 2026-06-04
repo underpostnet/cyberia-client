@@ -79,6 +79,10 @@ EntityRender* create_entity_render(ObjectLayersManager* object_layers_manager);
  */
 void destroy_entity_render(EntityRender* render);
 
+/* Evict animation states for entities that have left the AOI (not drawn
+ * recently). Call periodically from the render loop to bound memory. */
+void entity_render_gc(EntityRender* render);
+
 // ============================================================================
 // Public API - Rendering
 // ============================================================================
