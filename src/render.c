@@ -18,6 +18,8 @@
 
 #include <assert.h>
 #include <raylib.h>
+#include <emscripten/emscripten.h>
+#include <emscripten/html5.h>
 
 /* render.c — top-level frame orchestrator. Owns nothing; only sequences
  * the camera update, effect timers, UI ticks, and the world-render pass.
@@ -29,8 +31,22 @@ struct {
 
 void render_fallback(int width, int height);
 
+/* Browser window resize → raylib viewport + camera. raylib's IsWindowResized
+ * does not fire reliably under Emscripten, so we drive it from the DOM event. */
+static EM_BOOL on_window_resize(int eventType, const EmscriptenUiEvent* uiEvent, void* userData) {
+    int w = EM_ASM_INT({ return window.innerWidth; });
+    int h = EM_ASM_INT({ return window.innerHeight; });
+    SetWindowSize(w, h);
+    game_render_set_screen_size(w, h);
+    camera_resize(w, h);
+    LOG_INFO("window resized %dx%d", w, h);
+    return EM_TRUE;
+}
+
 void render_init(int width, int height) {
     render_state.splash_texture = LoadTexture("splash.png");
+
+    emscripten_set_resize_callback(EMSCRIPTEN_EVENT_TARGET_WINDOW, NULL, EM_FALSE, on_window_resize);
 
     game_render_init(width, height);
 
@@ -48,13 +64,6 @@ void render_init(int width, int height) {
 void render_on_tick(float delta_time) {
     int current_width  = GetScreenWidth();
     int current_height = GetScreenHeight();
-
-    // TODO: window should be resized via emscripten callback, no js, raylib does not work
-    if (IsWindowResized()) {
-        LOG_INFO("window resized %dx%d", current_width, current_height);
-        game_render_set_screen_size(current_width, current_height);
-        camera_resize(current_width, current_height);
-    }
 
     camera_on_tick(delta_time);
 
