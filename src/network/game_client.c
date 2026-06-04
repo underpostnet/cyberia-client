@@ -6,11 +6,9 @@
 #include "binary_aoi_decoder.h"
 #include "serial.h"
 #include "prediction/prediction.h"
-#include "input/input_command.h"
 #include "domain/local_player.h"
 #include "ui/ui_state.h"
 #include "util/log.h"
-#include "input/input_queue.h"
 
 #include <assert.h>
 #include <raylib.h>
@@ -153,25 +151,4 @@ static void on_websocket_close(int code, const char* reason, void* ctx) {
                  code, reason ? reason : "none");
     }
     client_reset_state();
-}
-
-bool network_send_event_tap(Vector2 grid, uint32_t client_tick_v, uint32_t sequence) {
-    BinWriter w;
-    uplink_player_action(&w, grid.x, grid.y, client_tick_v, sequence);
-    return network_send_binary(w.buf, w.pos);
-}
-
-void replication_prepare_input(input_queue_t in_queue) {
-    // in_queue is deep copy, safe to overwrite
-    input_event_t evt = { 0 };
-    while (input_pop(&in_queue, &evt)) {
-        if(INPUT_TAP == evt.type) {
-            float cell = g_game_state.cell_size > 0.0f ? g_game_state.cell_size : 12.0f;
-            float gx = evt.world_position.x / cell;
-            float gy = evt.world_position.y / cell;
-            input_command_t cmd = input_command_build_tap(gx, gy);
-            prediction_enqueue_input(&cmd);
-            network_send_event_tap((Vector2){gx, gy}, cmd.client_tick, cmd.sequence);
-        }
-    }
 }

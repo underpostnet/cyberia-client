@@ -4,9 +4,6 @@
 #include <stddef.h>
 #include <stdint.h>
 #include <stdbool.h>
-#include <raylib.h>
-
-#include "input/input_queue.h"
 
 typedef struct {
     size_t bytes_down;
@@ -31,8 +28,5 @@ bool network_send_binary(const uint8_t* data, uint16_t len);
 
 /** Convenience: chat — builds and sends UPLINK_CHAT. */
 bool network_send_chat(const char* to_id, const char* text);
-
-// TODO: should this live in a different file?
-void replication_prepare_input(input_queue_t in_queue);
 
 #endif // CLIENT_H

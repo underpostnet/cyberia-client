@@ -6,6 +6,7 @@
 #include "game_state.h"
 #include "render.h"
 #include "network/game_client.h"
+#include "network/replication.h"
 #include "config.h"
 
 #include <raylib.h>
@@ -46,8 +47,9 @@ static bool drop_blocked_taps(const input_event_t* evt) {
     return false;
 }
 
-/* Post-replication: spawn the tap effect and set the on-tap world target.
- * Never consumes — these are presentation side effects on the same taps. */
+/* Post-replication: spawn the screen-space tap effect. The on-tap world
+ * target is set once in replication_prepare_input (single grid conversion).
+ * Never consumes — this is a presentation side effect on the same taps. */
 static bool apply_tap_presentation(const input_event_t* evt) {
     if (INPUT_TAP != evt->type) { return false; }
     TapEffectParams fx = tap_effect_default_params();
@@ -56,17 +58,14 @@ static bool apply_tap_presentation(const input_event_t* evt) {
     fx.intensity  = 1.25f;
     fx.style_mask = TAP_EFFECT_STYLE_PREMIUM;
     tap_effect_spawn(evt->screen_position, &fx);
-
-    float cell = g_game_state.cell_size > 0.0f ? g_game_state.cell_size : 12.0f;
-    g_game_state.player.tap_target     = (Vector2){ evt->world_position.x / cell,
-                                                    evt->world_position.y / cell };
-    g_game_state.player.has_tap_target = true;
     return false;
 }
 
 static void gameloop(void) {
-    const float frame_dt = GetFrameTime();
-    // if ( frame_dt > 0.25 ) { frame_dt = 0.25; } // prevents runaways, but we are not using it, keep commented
+    float frame_dt = GetFrameTime();
+    /* Clamp runaway frames (tab switch, GC pause) so the fixed-timestep
+     * accumulator can't spiral and replay a burst of catch-up ticks. */
+    if (frame_dt > 0.25f) { frame_dt = 0.25f; }
     sim_acc += (double)frame_dt;
 
     game_client_on_tick();
