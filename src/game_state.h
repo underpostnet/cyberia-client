@@ -127,6 +127,12 @@ int          game_state_update_bot(const BotState* bot);
 void         game_state_remove_player(const char* id);
 void         game_state_remove_bot(const char* id);
 
+/** Observer fired when an entity is removed from the world mirror (left AOI).
+ *  Lets the presentation layer release per-entity resources (e.g. animation
+ *  states) without game_state depending on render modules. */
+typedef void (*GameStateEntityRemovedFn)(const char* id);
+void         game_state_set_entity_removed_cb(GameStateEntityRemovedFn cb);
+
 /** Toggle the client-owned dev-overlay flag. The toggle delegates to
  *  presentation_runtime so the value stays a single source of truth. */
 void game_state_toggle_dev_ui(void);
