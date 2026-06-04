@@ -76,6 +76,10 @@ GameRenderer g_renderer = {0};
 // ObjectLayersManager is owned by its module — access via obj_layers_mgr_get().
 static EntityRender* g_entity_render = NULL;
 
+static void on_entity_removed(const char* id) {
+    if (g_entity_render) { entity_render_forget_entity(g_entity_render, id); }
+}
+
 int game_render_init(int screen_width, int screen_height) {
 
     // Initialize renderer state
@@ -110,13 +114,14 @@ int game_render_init(int screen_width, int screen_height) {
         game_render_cleanup();
         return -1;
     }
+    game_state_set_entity_removed_cb(on_entity_removed);
 
     inventory_bar_init(olm);
     inventory_modal_init(olm);
     modal_dialogue_init(olm);
     dialogue_data_init();
     interaction_bubble_init();
-    ui_icon_init();
+    ui_icon_init(UI_ICON_CACHE_CAPACITY);
     return 0;
 }
 
