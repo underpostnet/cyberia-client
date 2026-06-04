@@ -166,7 +166,7 @@ EntityRender* create_entity_render(ObjectLayersManager* object_layers_manager) {
     if (!render) return NULL;
 
     render->obj_layers_mgr = object_layers_manager;
-    hash_table_init(&render->animations, ANIM_TABLE_INITIAL_CAPACITY, free_anim_state);
+    hash_table_init(&render->animations, ANIM_TABLE_INITIAL_CAPACITY, free_anim_state, "entity_animations");
 
     return render;
 }

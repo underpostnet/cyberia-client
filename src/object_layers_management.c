@@ -273,10 +273,10 @@ void create_object_layers_manager(void) {
      * never triggers the first hash_table resize. The tables still grow if
      * the cap is exceeded — load factor is maintained — but we avoid the
      * predictable churn at ≈179 textures (256 × 0.7). */
-    hash_table_init(&mgr->layers,   (size_t)MAX_LAYER_CACHE_SIZE,   free_layer_value);
-    hash_table_init(&mgr->atlases,  (size_t)MAX_ATLAS_CACHE_SIZE,   free_atlas_value);
-    hash_table_init(&mgr->textures, (size_t)MAX_TEXTURE_CACHE_SIZE, free_tex_value);
-    hash_table_init(&mgr->meta,     (size_t)MAX_ATLAS_CACHE_SIZE,   noop_free);
+    hash_table_init(&mgr->layers,   (size_t)MAX_LAYER_CACHE_SIZE,   free_layer_value, "ol_layers");
+    hash_table_init(&mgr->atlases,  (size_t)MAX_ATLAS_CACHE_SIZE,   free_atlas_value, "ol_atlases");
+    hash_table_init(&mgr->textures, (size_t)MAX_TEXTURE_CACHE_SIZE, free_tex_value,   "ol_textures");
+    hash_table_init(&mgr->meta,     (size_t)MAX_ATLAS_CACHE_SIZE,   noop_free,        "ol_meta");
 
     g_olm_singleton = mgr;
 }

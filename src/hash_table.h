@@ -43,15 +43,16 @@ typedef struct {
 } HashSlot;
 
 typedef struct {
-    HashSlot*  slots;
-    size_t     capacity;
-    size_t     count;        /* occupied slots (excludes tombstones) */
-    size_t     tombstones;
-    HashFreeFn free_fn;
+    HashSlot*   slots;
+    size_t      capacity;
+    size_t      count;        /* occupied slots (excludes tombstones) */
+    size_t      tombstones;
+    HashFreeFn  free_fn;
+    const char* debug_name;   /* identifies table in error logs; not owned */
 } HashTable;
 
 /* Lifecycle */
-void hash_table_init(HashTable* t, size_t initial_capacity, HashFreeFn free_fn);
+void hash_table_init(HashTable* t, size_t initial_capacity, HashFreeFn free_fn, const char* debug_name);
 void hash_table_destroy(HashTable* t);
 
 /* Core ops */

@@ -15,15 +15,17 @@ static size_t find_insert_slot(const HashTable* t, const char* key);
 static void   resize(HashTable* t, size_t new_capacity);
 static void   raw_insert(HashTable* t, char* key_owned, void* value);
 
-void hash_table_init(HashTable* t, size_t initial_capacity, HashFreeFn free_fn) {
+void hash_table_init(HashTable* t, size_t initial_capacity, HashFreeFn free_fn, const char* debug_name) {
     assert(t);
     assert(initial_capacity > 0);
     assert(free_fn);
+    assert(debug_name);
     t->slots      = calloc(initial_capacity, sizeof(HashSlot));
     t->capacity   = initial_capacity;
     t->count      = 0;
     t->tombstones = 0;
     t->free_fn    = free_fn;
+    t->debug_name = debug_name;
 }
 
 void hash_table_destroy(HashTable* t) {
@@ -64,7 +66,7 @@ void hash_table_put(HashTable* t, const char* key, void* value) {
     /* Resize before insert if at/above load threshold. */
     // NOTE: before resizing increase initial capacity and see if that fixes the issue
     if (t->count + t->tombstones >= t->capacity) {
-        LOG_ERROR("Hash Table Maxed - Check who maxxed it!");
+        LOG_ERROR("Hash Table '%s' Maxed - Check who maxxed it!", t->debug_name);
     }
     // if ((t->count + t->tombstones + 1) * HASH_LOAD_DEN > t->capacity * HASH_LOAD_NUM) {
     //     resize(t, t->capacity * 2);
@@ -160,6 +162,7 @@ static size_t find_insert_slot(const HashTable* t, const char* key) {
         i = (i + 1) % t->capacity;
     }
     /* Unreachable when load factor maintained. */
+    LOG_ERROR("Hash Table '%s' full - no insert slot", t->debug_name);
     assert(0 && "hash table full");
     return SIZE_MAX;
 }

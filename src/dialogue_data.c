@@ -87,7 +87,7 @@ static void on_dialogue_fetched(const FetchResponse* r) {
 
 /* ── Public API ──────────────────────────────────────────────────────── */
 
-void dialogue_data_init(void) { hash_table_init(&ht, 128, free); }
+void dialogue_data_init(void) { hash_table_init(&ht, 128, free, "dialogue_data"); }
 void dialogue_data_cleanup(void) { hash_table_destroy(&ht); }
 
 void dialogue_data_request(const char* item_id) {

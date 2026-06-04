@@ -88,7 +88,7 @@ static IconEntry* create_and_fetch(const char* icon_id) {
 /* ── Public API ─────────────────────────────────────────────────────── */
 
 void ui_icon_init(void) {
-    hash_table_init(&ht, 64, icon_entry_free);
+    hash_table_init(&ht, 64, icon_entry_free, "ui_icon");
 }
 
 void ui_icon_cleanup(void) {
