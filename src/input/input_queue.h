@@ -1,12 +1,13 @@
-#ifndef INPUT_H
-#define INPUT_H
+#ifndef CYBERIA_INPUT_QUEUE_H
+#define CYBERIA_INPUT_QUEUE_H
 
 #include <raylib.h>
 #include <stdbool.h>
 #include <stdint.h>
 
-// TODO: should remove
-#include "input/input_command.h"
+/* Raw per-frame input event ring. Captures OS events (tap, debug key, zoom)
+ * and hands them to the UI dispatch and prediction/replication stages. The
+ * typed wire command lives separately in input/input_command.h. */
 
 typedef enum input_type {
     INPUT_NONE,
@@ -17,9 +18,9 @@ typedef enum input_type {
 
 typedef struct input_event {
     enum input_type type;
-    Vector2 screen_position; // For INPUT_TAP
-    bool zoom_in; // For INPUT_ZOOM
-    Vector2 world_position;  // For INPUT_TAP
+    Vector2 screen_position; /* For INPUT_TAP */
+    bool zoom_in;            /* For INPUT_ZOOM */
+    Vector2 world_position;  /* For INPUT_TAP */
 } input_event_t;
 
 #define Q_CAP 100
@@ -33,9 +34,4 @@ void input_queue_on_tick(input_queue_t* q, double dt);
 bool input_pop(input_queue_t* q, input_event_t* out);
 void input_push(input_queue_t* q, input_event_t e);
 
-//TODO: Remove
-bool command_queue_push(const input_command_t* cmd);
-bool input_command_pop(input_command_t* out);
-void input_command_queue_clear(void);
-
-#endif // INPUT_H
+#endif /* CYBERIA_INPUT_QUEUE_H */

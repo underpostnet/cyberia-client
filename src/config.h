@@ -31,7 +31,6 @@ static const char* API_BASE_URL =
 #define TICK_RATE_HZ          30
 #define TICK_DURATION_S       (1.0 / (double)TICK_RATE_HZ)
 
-// TODO: Sequence counting is inconsitent through whole system
 #define INTERP_TICKS          2
 
 // ============================================================================

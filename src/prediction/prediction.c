@@ -3,10 +3,10 @@
 #include "network/session.h"
 #include "game_state.h"
 #include "domain/local_player.h"
-#include "input.h"
 #include "util/log.h"
 #include "config.h"
 
+#include <assert.h>
 #include <math.h>
 #include <string.h>
 
@@ -20,11 +20,49 @@
 
 #define PREDICTION_RING_CAP 128
 
+/* Producer→consumer hand-off queue: replication enqueues commands as they are
+ * built each render frame; prediction_step drains them. Sized for high-latency
+ * play (>1 s RTT at the tick rate leaves many commands in flight). */
+#define COMMAND_QUEUE_CAP 256
+
 typedef struct {
     input_command_t items[PREDICTION_RING_CAP];
     int head;
     int count;
 } input_ring_t;
+
+typedef struct {
+    input_command_t items[COMMAND_QUEUE_CAP];
+    int head;
+    int count;
+} command_queue_t;
+
+static command_queue_t s_cmd_q = {0};
+
+void prediction_enqueue_input(const input_command_t* cmd) {
+    assert(cmd);
+    if (s_cmd_q.count == COMMAND_QUEUE_CAP) {
+        LOG_WARN("input command queue full, dropping oldest");
+        s_cmd_q.head = (s_cmd_q.head + 1) % COMMAND_QUEUE_CAP;
+        s_cmd_q.count--;
+    }
+    int idx = (s_cmd_q.head + s_cmd_q.count) % COMMAND_QUEUE_CAP;
+    s_cmd_q.items[idx] = *cmd;
+    s_cmd_q.count++;
+}
+
+static bool command_queue_pop(input_command_t* out) {
+    if (0 == s_cmd_q.count) { return false; }
+    *out = s_cmd_q.items[s_cmd_q.head];
+    s_cmd_q.head = (s_cmd_q.head + 1) % COMMAND_QUEUE_CAP;
+    s_cmd_q.count--;
+    return true;
+}
+
+static void command_queue_clear(void) {
+    s_cmd_q.head  = 0;
+    s_cmd_q.count = 0;
+}
 
 static struct {
     Vector2       predicted_pos;
@@ -95,7 +133,7 @@ void prediction_reset(Vector2 authoritative_pos) {
     g_pred.predicted_pos     = authoritative_pos;
     g_pred.display_pos       = authoritative_pos;
     ring_clear(&g_pred.unacked);
-    input_command_queue_clear();
+    command_queue_clear();
 }
 
 bool prediction_apply(const input_command_t* cmd) {
@@ -106,11 +144,11 @@ bool prediction_apply(const input_command_t* cmd) {
 }
 
 void prediction_step(double tick_dt) {
-    /* Drain newly produced input commands from the input queue. This is the
-     * single point where the prediction module consumes input — input.c
-     * no longer calls prediction_apply directly. */
+    /* Drain newly produced input commands. This is the single point where the
+     * prediction module consumes input; the replication layer is the producer
+     * via prediction_enqueue_input(). */
     input_command_t cmd;
-    while (input_command_pop(&cmd)) {
+    while (command_queue_pop(&cmd)) {
         ring_push(&g_pred.unacked, &cmd);
         g_pred.predicted_pos = sim_step_one(g_pred.predicted_pos, &cmd, TICK_DURATION_S);
     }

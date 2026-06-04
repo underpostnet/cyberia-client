@@ -56,6 +56,13 @@ void prediction_reset(Vector2 authoritative_pos);
  *  Returns false if the buffer is full (overflow drops oldest). */
 bool prediction_apply(const input_command_t* cmd);
 
+/** Enqueue a freshly built input command produced this render frame. The
+ *  command is drained and applied to the predicted position by the next
+ *  prediction_step(). This is the producer side of the prediction replay
+ *  pipeline; the network/replication layer calls it after sending the
+ *  command on the wire. */
+void prediction_enqueue_input(const input_command_t* cmd);
+
 /** Advance the predicted self position by one simulation tick. Called from
  *  the fixed-timestep accumulator in app_loop.c. dt is fixed at
  *  TICK_DURATION_S — do not pass a render dt here. */

@@ -29,7 +29,6 @@
 
 #include <stdint.h>
 
-// TODO: the usage of sequence counting is inconsistent - Input should be using it, not Session
 typedef uint32_t cyberia_tick_t;
 typedef uint32_t cyberia_input_seq_t;
 

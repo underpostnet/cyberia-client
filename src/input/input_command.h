@@ -34,7 +34,6 @@ typedef enum {
     INPUT_KIND_PLAYER_ACTION   = 0x11,
 } input_kind_t;
 
-// TODO: Sequence counting is inconsistent - Server should do something with it, if is not then useless
 typedef uint32_t cyberia_tick_t;
 typedef uint32_t cyberia_input_seq_t;
 
