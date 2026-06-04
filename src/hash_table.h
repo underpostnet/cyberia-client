@@ -69,4 +69,8 @@ bool  hash_table_contains(const HashTable* t, const char* key);
 typedef bool (*HashPredFn)(const char* key, void* value, void* user_data);
 void* hash_table_find(const HashTable* t, HashPredFn pred, void* user_data);
 
+/* Remove every occupied entry for which pred returns true; free_fn is applied
+ * to each removed value. Safe to call mid-session. Returns count removed. */
+size_t hash_table_remove_if(HashTable* t, HashPredFn pred, void* user_data);
+
 #endif

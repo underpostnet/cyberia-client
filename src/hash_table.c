@@ -7,8 +7,8 @@
 #include "util/log.h"
 
 /* Resize when (count + tombstones) exceeds this fraction of capacity. */
-// #define HASH_LOAD_NUM 7
-// #define HASH_LOAD_DEN 10
+#define HASH_LOAD_NUM 7
+#define HASH_LOAD_DEN 10
 
 static size_t find_occupied(const HashTable* t, const char* key);
 static size_t find_insert_slot(const HashTable* t, const char* key);
@@ -64,13 +64,11 @@ void hash_table_put(HashTable* t, const char* key, void* value) {
     assert(value);
 
     /* Resize before insert if at/above load threshold. */
-    // NOTE: before resizing increase initial capacity and see if that fixes the issue
-    if (t->count + t->tombstones >= t->capacity) {
-        LOG_ERROR("Hash Table '%s' Maxed - Check who maxxed it!", t->debug_name);
+    if ((t->count + t->tombstones + 1) * HASH_LOAD_DEN > t->capacity * HASH_LOAD_NUM) {
+        size_t new_cap = t->capacity * 2;
+        if (new_cap < t->capacity) { new_cap = t->capacity; } /* guard size_t overflow wrap */
+        resize(t, new_cap);
     }
-    // if ((t->count + t->tombstones + 1) * HASH_LOAD_DEN > t->capacity * HASH_LOAD_NUM) {
-    //     resize(t, t->capacity * 2);
-    // }
 
     size_t i = find_insert_slot(t, key);
     HashSlot* s = &t->slots[i];
@@ -122,6 +120,26 @@ void* hash_table_find(const HashTable* t, HashPredFn pred, void* user_data) {
         }
     }
     return NULL;
+}
+
+size_t hash_table_remove_if(HashTable* t, HashPredFn pred, void* user_data) {
+    assert(t);
+    assert(pred);
+    size_t removed = 0;
+    for (size_t i = 0; i < t->capacity; i++) {
+        HashSlot* s = &t->slots[i];
+        if (SLOT_OCCUPIED != s->state) { continue; }
+        if (!pred(s->key, s->value, user_data)) { continue; }
+        if (t->free_fn && s->value) { t->free_fn(s->value); }
+        free(s->key);
+        s->key   = NULL;
+        s->value = NULL;
+        s->state = SLOT_TOMBSTONE;
+        t->count--;
+        t->tombstones++;
+        removed++;
+    }
+    return removed;
 }
 
 /* ── Internals ──────────────────────────────────────────────────────── */
@@ -179,23 +197,24 @@ static void raw_insert(HashTable* t, char* key_owned, void* value) {
     t->slots[i].state = SLOT_OCCUPIED;
 }
 
-// static void resize(HashTable* t, size_t new_capacity) {
-//     assert(new_capacity > t->count);
+static void resize(HashTable* t, size_t new_capacity) {
+    assert(new_capacity > t->count);
 
-//     HashSlot* old_slots    = t->slots;
-//     size_t    old_capacity = t->capacity;
+    HashSlot* old_slots    = t->slots;
+    size_t    old_capacity = t->capacity;
 
-//     t->slots      = calloc(new_capacity, sizeof(HashSlot));
-//     t->capacity   = new_capacity;
-//     t->tombstones = 0;
-//     /* t->count unchanged — same live entries, just rehomed */
+    t->slots      = calloc(new_capacity, sizeof(HashSlot));
+    assert(t->slots);
+    t->capacity   = new_capacity;
+    t->tombstones = 0;
+    /* t->count unchanged — same live entries, just rehomed */
 
-//     for (size_t i = 0; i < old_capacity; i++) {
-//         HashSlot* s = &old_slots[i];
-//         if (SLOT_OCCUPIED == s->state) {
-//             raw_insert(t, s->key, s->value);
-//         }
-//         /* tombstones and empties dropped on the floor */
-//     }
-//     free(old_slots);
-// }
+    for (size_t i = 0; i < old_capacity; i++) {
+        HashSlot* s = &old_slots[i];
+        if (SLOT_OCCUPIED == s->state) {
+            raw_insert(t, s->key, s->value);
+        }
+        /* tombstones and empties dropped on the floor */
+    }
+    free(old_slots);
+}
