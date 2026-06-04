@@ -49,8 +49,9 @@ cyberia_input_seq_t session_last_acked_input_sequence(void);
  *  divided by TICK_DURATION_S. */
 cyberia_tick_t session_server_tick_estimate(void);
 
-/** The tick the interpolator should render at: server_tick_estimate -
- *  INTERP_TICKS. Returns 0 until first snapshot. */
+/** The tick the interpolator should render at: server_tick_estimate minus
+ *  the interpolation window (in ticks), derived from the runtime
+ *  presentation window. Returns 0 until first snapshot. */
 cyberia_tick_t session_render_tick(void);
 
 /** Allocate the next client InputCommand sequence number. Monotonic; never

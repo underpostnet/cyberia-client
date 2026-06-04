@@ -1,6 +1,7 @@
 #include "session.h"
 #include <raylib.h>
 #include "config.h"
+#include "game_state.h"
 
 /* Singleton session state. Owned by this translation unit; readers go
  * through the accessor functions in session.h. */
@@ -42,8 +43,17 @@ cyberia_tick_t session_server_tick_estimate(void) {
 
 cyberia_tick_t session_render_tick(void) {
     cyberia_tick_t est = session_server_tick_estimate();
-    if (est <= INTERP_TICKS) return 0;
-    return est - INTERP_TICKS;
+    /* Render-tick offset = the runtime interpolation window expressed in
+     * ticks. Single source of truth with interpolation.c, which reads the
+     * same window in ms. Falls back to the compile-time bootstrap default
+     * until the client-hints window is hydrated. */
+    int window_ms = g_game_state.interpolation_ms;
+    uint32_t offset = (window_ms > 0)
+        ? (uint32_t)((window_ms * TICK_RATE_HZ + 500) / 1000)
+        : INTERP_TICKS;
+    if (0 == offset) { offset = INTERP_TICKS; }
+    if (est <= offset) { return 0; }
+    return est - offset;
 }
 
 cyberia_input_seq_t session_next_input_sequence(void) {
