@@ -31,6 +31,10 @@ static const char* API_BASE_URL =
 #define TICK_RATE_HZ          30
 #define TICK_DURATION_S       (1.0 / (double)TICK_RATE_HZ)
 
+/* Bootstrap fallback for the render-tick interpolation offset, in ticks.
+ * The live value is derived from the runtime interpolation window
+ * (g_game_state.interpolation_ms, served by the client-hints endpoint); this
+ * constant only applies before that window is hydrated. */
 #define INTERP_TICKS          2
 
 // ============================================================================
