@@ -155,10 +155,7 @@ static void send_activation(const char* item_id, bool active) {
 }
 
 static void send_freeze(bool start) {
-    BinWriter w;
-    if (start) uplink_freeze_start(&w, "inventory");
-    else       uplink_freeze_end(&w,   "inventory");
-    network_send_binary(w.buf, w.pos);
+    local_player_request_freeze(start, "inventory");
 }
 
 /* hit_rect returns true if (mx,my) is inside r. */

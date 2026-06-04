@@ -12,11 +12,10 @@
 
 #include "modal_dialogue.h"
 
-#include "network/game_client.h"
+#include "domain/local_player.h"
 #include "game_state.h"
 #include "modal.h"
 #include "ol_as_animated_ico.h"
-#include "serial.h"
 #include "util/log.h"
 
 #include <assert.h>
@@ -83,17 +82,6 @@ static const Color C_CARD_BG   = {  12,  12,  24, 230 };
 static const Color C_CARD_BORD = {  70,  70, 120, 200 };
 /* ── Helpers ──────────────────────────────────────────────────────────── */
 
-static void send_freeze_msg(const char* type, const char* reason) {
-    BinWriter w;
-    if (strcmp(type, "freeze_start") == 0) {
-        uplink_freeze_start(&w, reason);
-    } else {
-        uplink_freeze_end(&w, reason);
-    }
-    bool rc = network_send_binary(w.buf, w.pos);
-    LOG_INFO("[MODAL_DIALOGUE] WS -> %s (reason=%s, entity=%s, item=%s) rc=%d\n", type, reason, s_entity_id, s_item_id, rc);
-}
-
 static Rectangle panel_rect(int sw, int sh) {
     float top = sh * DLG_TOP_FRAC;
     float bot = (float)(sh - DLG_BAR_OFFSET);
@@ -152,8 +140,8 @@ void modal_dialogue_open(const char* entity_id, const char* item_id,
 
     LOG_INFO("[MODAL_DIALOGUE] Open: entity=%s item=%s lines=%d\n", s_entity_id, s_item_id, s_line_count);
 
-    /* Notify server → FrozenInteractionState */
-    send_freeze_msg("freeze_start", "dialogue");
+    /* Notify domain layer → server FrozenInteractionState (+ watchdog). */
+    local_player_request_freeze(true, "dialogue");
 }
 
 void modal_dialogue_close(void) {
@@ -177,9 +165,8 @@ void modal_dialogue_close(void) {
     s_on_close = NULL;
     if (cb) cb();
 
-    /* Notify server → thaw (ignored by server if reason was overridden) */
-    // TODO: Freeze is not a system property, is a client property, UI shouldn't know about it
-    send_freeze_msg("freeze_end", "dialogue");
+    /* Notify domain layer → thaw (ignored by server if reason was overridden) */
+    local_player_request_freeze(false, "dialogue");
     s_line_count = 0;
     s_current    = 0;
 }

@@ -38,6 +38,16 @@ void  local_player_reset(void);
 void  local_player_set_frozen(bool frozen);
 bool  local_player_is_frozen(void);
 
+/* Request the server to freeze/unfreeze the local player for an interaction
+ * (dialogue, inventory, ...). Owns the uplink_freeze_* network dispatch so UI
+ * modules never drive the wire directly. A freeze_start arms a client-side
+ * watchdog that auto-sends freeze_end if the matching end never arrives
+ * (e.g. the UI closed via a path that skipped it, or a crash interrupted it). */
+void  local_player_request_freeze(bool start, const char* reason);
+
+/* Advance the freeze watchdog; call once per render frame. */
+void  local_player_on_tick(void);
+
 /* Status icon ID (mirrors entity status indicator for self). */
 void     local_player_set_status_icon(uint8_t id);
 uint8_t  local_player_status_icon(void);
