@@ -55,8 +55,10 @@ CFLAGS += -I$(CJSON_PATH)
 
 #------------------------------------------------
 # CYBERIA config
-DEV_PORT		?= 8082
-PROD_PORT		?= 8081
+WS_URL ?= ws://localhost:8081/ws
+API_BASE ?= http://localhost:4005
+
+CFLAGS  += -DWS_URL_OVERRIDE=$(WS_URL) -DAPI_BASE_URL_OVERRIDE=$(API_BASE)
 ifeq ($(BUILD_MODE),RELEASE)
 CFLAGS  += -DCYBERIA_LOG_LEVEL=3
 else

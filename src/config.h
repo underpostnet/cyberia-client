@@ -11,19 +11,15 @@
 static const char* WS_URL =
 #if defined(WS_URL_OVERRIDE)
     STRINGIFY(WS_URL_OVERRIDE);
-#elif defined(CYBERIA_DEBUG)
-    "ws://localhost:8081/ws";
 #else
-    "ws://server.cyberiaonline.com/ws";
+    "ws://";
 #endif
 
 static const char* API_BASE_URL =
 #if defined(API_BASE_URL_OVERRIDE)
     STRINGIFY(API_BASE_URL_OVERRIDE);
-#elif defined(CYBERIA_DEBUG)
-    "http://localhost:4005";
 #else
-    "https://www.cyberiaonline.com";
+    "https://";
 #endif
 
 // --------------------------------------------------------

@@ -48,16 +48,9 @@ OBJS	+= $(target_build_dir)/libraylib.web.a
 #---------------------------------------------------------------------------------------------
 # Platform Specific targets
 
-.PHONY: all clean serve-development serve-production
+.PHONY: all clean
 
 all: link
-
-serve-development: all
-	-fuser -k $(DEV_PORT)/tcp 2>/dev/null; sleep 0.3
-	python3 server.py $(DEV_PORT) $(OUTPUT_DIR)
-
-serve-production:
-	make -f Web.mk serve-development BUILD_MODE=RELEASE DEV_PORT=$(PROD_PORT)
 
 link: $(OBJS)
 	@mkdir -p $(OUTPUT_DIR)
