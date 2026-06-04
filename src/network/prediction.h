@@ -1,5 +1,5 @@
 /**
- * @file prediction/prediction.h
+ * @file network/prediction.h
  * @brief Client-side prediction + input replay for the self-entity.
  *
  * This module owns the predicted self position. It is the only writer of

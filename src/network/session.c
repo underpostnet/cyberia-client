@@ -1,4 +1,5 @@
 #include "session.h"
+#include <stdint.h>
 #include <raylib.h>
 #include "config.h"
 #include "game_state.h"

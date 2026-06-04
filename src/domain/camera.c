@@ -2,7 +2,7 @@
 
 #include "presentation_runtime.h"
 #include "game_state.h"
-#include "prediction/prediction.h"
+#include "network/prediction.h"
 #include "util/log.h"
 
 #include <math.h>

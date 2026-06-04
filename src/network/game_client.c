@@ -5,12 +5,14 @@
 #include "message_parser.h"
 #include "binary_aoi_decoder.h"
 #include "serial.h"
-#include "prediction/prediction.h"
+#include "prediction.h"
 #include "domain/local_player.h"
 #include "ui/ui_state.h"
 #include "util/log.h"
 
 #include <assert.h>
+#include <stdbool.h>
+#include <stdint.h>
 #include <raylib.h>
 #include <stdlib.h>
 #include <string.h>

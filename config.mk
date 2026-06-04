@@ -39,8 +39,6 @@ src_files = \
 	$(wildcard $(SRC_DIR)/network/*.c) \
 	$(wildcard $(SRC_DIR)/ui/*.c) \
 	$(wildcard $(SRC_DIR)/input/*.c) \
-	$(wildcard $(SRC_DIR)/prediction/*.c) \
-	$(wildcard $(SRC_DIR)/interpolation/*.c) \
 	$(wildcard $(SRC_DIR)/domain/*.c)
 
 #------------------------------------------------

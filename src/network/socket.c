@@ -2,6 +2,8 @@
 #include "util/log.h"
 #include <stdio.h>
 #include <assert.h>
+#include <string.h>
+#include <stdint.h>
 
 #include <emscripten/websocket.h>
 

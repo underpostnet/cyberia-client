@@ -4,10 +4,12 @@
 #include "serial.h"
 #include "input/input_command.h"
 #include "input/input.h"
-#include "prediction/prediction.h"
+#include "prediction.h"
 #include "network/game_client.h"
 
 #include <raylib.h>
+#include <stdint.h>
+#include <stdbool.h>
 
 static bool send_event_tap(Vector2 grid, uint32_t client_tick, uint32_t sequence) {
     BinWriter w;

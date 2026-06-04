@@ -3,6 +3,8 @@
 
 #include <emscripten/websocket.h>
 #include <stdbool.h>
+#include <stdint.h>
+#include <stddef.h>
 
 typedef void (*onopen_callback)(void* user_data);
 typedef void (*onmessage_callback)(const uint8_t* data, uint32_t length, bool is_text, void* user_data);

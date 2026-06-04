@@ -1,5 +1,5 @@
 /**
- * @file interpolation/interpolation.h
+ * @file network/interpolation.h
  * @brief Render-time interpolation of remote entities.
  *
  * Interpolation runs at render-frame cadence (vsync) and produces

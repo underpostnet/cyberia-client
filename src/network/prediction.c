@@ -3,12 +3,13 @@
 #include "network/session.h"
 #include "game_state.h"
 #include "domain/local_player.h"
+#include "input/input_command.h"
 #include "util/log.h"
 #include "config.h"
 
+#include <raylib.h>
 #include <assert.h>
 #include <math.h>
-#include <string.h>
 
 /* Client-side prediction & reconciliation.
  *
