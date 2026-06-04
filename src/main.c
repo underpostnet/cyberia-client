@@ -2,7 +2,7 @@
 #include <stdlib.h>
 #include <assert.h>
 
-#include "input.h"
+#include "input/input_queue.h"
 #include "game_state.h"
 #include "render.h"
 #include "network/game_client.h"
@@ -25,12 +25,52 @@
 
 static const double fixed_step = 1.0/(double)TICK_RATE_HZ;
 static double sim_acc = 0.0;
+
+/* Filter the per-frame input queue in place: the handler returns true to
+ * consume (drop) an event, false to keep it. Kept events preserve order. */
+typedef bool (*input_handler_fn)(const input_event_t* evt);
+static void process_input_queue(input_queue_t* q, input_handler_fn handler) {
+    input_queue_t kept = { 0 };
+    input_event_t evt  = { 0 };
+    while (input_pop(q, &evt)) {
+        if (!handler(&evt)) { input_push(&kept, evt); }
+    }
+    while (input_pop(&kept, &evt)) { input_push(q, evt); }
+}
+
+/* Pre-replication: swallow taps while the local player is frozen or dead. */
+static bool drop_blocked_taps(const input_event_t* evt) {
+    if (INPUT_TAP != evt->type) { return false; }
+    if (local_player_is_frozen()) { return true; }
+    if (g_game_state.player.base.respawn_in > 0.0f) { return true; }
+    return false;
+}
+
+/* Post-replication: spawn the tap effect and set the on-tap world target.
+ * Never consumes — these are presentation side effects on the same taps. */
+static bool apply_tap_presentation(const input_event_t* evt) {
+    if (INPUT_TAP != evt->type) { return false; }
+    TapEffectParams fx = tap_effect_default_params();
+    fx.scale      = 1.15f;
+    fx.duration   = 0.42f;
+    fx.intensity  = 1.25f;
+    fx.style_mask = TAP_EFFECT_STYLE_PREMIUM;
+    tap_effect_spawn(evt->screen_position, &fx);
+
+    float cell = g_game_state.cell_size > 0.0f ? g_game_state.cell_size : 12.0f;
+    g_game_state.player.tap_target     = (Vector2){ evt->world_position.x / cell,
+                                                    evt->world_position.y / cell };
+    g_game_state.player.has_tap_target = true;
+    return false;
+}
+
 static void gameloop(void) {
     const float frame_dt = GetFrameTime();
     // if ( frame_dt > 0.25 ) { frame_dt = 0.25; } // prevents runaways, but we are not using it, keep commented
     sim_acc += (double)frame_dt;
 
     game_client_on_tick();
+    local_player_on_tick();
 
     // input capture in realtime
     input_queue_t frame_input = {0};
@@ -38,82 +78,11 @@ static void gameloop(void) {
 
     ui_on_tick(&frame_input, frame_dt);
 
-    // TODO: collapse this into a function, this is temporary to remove input.c dependency
-    {
-        input_queue_t bkp_queue = { 0 };
-        input_event_t evt = { 0 };
-        while (input_pop(&frame_input, &evt)) {
-            bool consumed = false;
-            if(!consumed && INPUT_TAP == evt.type) {
-                /* FrozenInteractionState — server says we're frozen, drop the tap. */
-                if (local_player_is_frozen()) { consumed = true; }
-                if (g_game_state.player.base.respawn_in > 0.0f) { consumed = true; }
-            }
-            // unconsumed event back to the queue
-            if(!consumed) {
-                input_push(&bkp_queue, evt);
-                continue;
-            }
-        }
-        // return unconsummed events to the original queue
-        input_event_t bkp_evt = { 0 };
-        while (input_pop(&bkp_queue, &bkp_evt)) { input_push(&frame_input, bkp_evt ); }
-    }
+    process_input_queue(&frame_input, drop_blocked_taps);
 
     replication_prepare_input(frame_input);
 
-    // TODO: collapse this into a function, this is temporary to remove input.c dependency
-    {
-        // Tap Effect
-        input_queue_t bkp_queue = { 0 };
-        input_event_t evt = { 0 };
-        while (input_pop(&frame_input, &evt)) {
-            bool consumed = false;
-            if(!consumed && INPUT_TAP == evt.type) {
-                TapEffectParams fx = tap_effect_default_params();
-                fx.scale = 1.15f;
-                fx.duration = 0.42f;
-                fx.intensity = 1.25f;
-                fx.style_mask = TAP_EFFECT_STYLE_PREMIUM;
-                tap_effect_spawn(evt.screen_position, &fx);
-                consumed = false; // TAP EFFECTS DON'T CONSUME THE INPUT, BUT ALSO SHOULDN'T HAPPEN BEFORE PROCESS
-            }
-             // unconsumed event back to the queue
-            if(!consumed) {
-                input_push(&bkp_queue, evt);
-                continue;
-            }
-        }
-         // return unconsummed events to the original queue
-        input_event_t bkp_evt = { 0 };
-        while (input_pop(&bkp_queue, &bkp_evt)) { input_push(&frame_input, bkp_evt ); }
-    }
-
-    // TODO: collapse this into a function, this is temporary to remove input.c dependency
-    {
-        // IDK what this is but it was on the handle_tap_event, I think it should dissapear with a GameState refactor
-        input_queue_t bkp_queue = { 0 };
-        input_event_t evt = { 0 };
-        while (input_pop(&frame_input, &evt)) {
-            bool consumed = false;
-            if(!consumed && INPUT_TAP == evt.type) {
-                float cell = g_game_state.cell_size > 0.0f ? g_game_state.cell_size : 12.0f;
-                float gx = evt.world_position.x / cell;
-                float gy = evt.world_position.y / cell;
-                g_game_state.player.tap_target     = (Vector2){gx, gy};
-                g_game_state.player.has_tap_target = true;
-                consumed = false; // This does something I'm not sure what
-            }
-             // unconsumed event back to the queue
-            if(!consumed) {
-                input_push(&bkp_queue, evt);
-                continue;
-            }
-        }
-         // return unconsummed events to the original queue
-        input_event_t bkp_evt = { 0 };
-        while (input_pop(&bkp_queue, &bkp_evt)) { input_push(&frame_input, bkp_evt ); }
-    }
+    process_input_queue(&frame_input, apply_tap_presentation);
 
     // fixed step simulation
     while (sim_acc >= fixed_step)

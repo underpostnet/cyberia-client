@@ -6,7 +6,7 @@
 #include <stdbool.h>
 #include <raylib.h>
 
-#include "input.h"
+#include "input/input_queue.h"
 
 typedef struct {
     size_t bytes_down;

@@ -3,7 +3,6 @@
 #include "dialogue_data.h"
 #include "domain/camera.h"
 #include "game_render.h"
-#include "input.h"
 #include "object_layers_management.h"
 #include "ui/dev_ui.h"
 #include "ui/floating_combat_text.h"

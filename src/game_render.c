@@ -194,6 +194,7 @@ void game_render_world(void) {
 
     // 3. Entities (sorted by depth) - players and bots
     game_render_entities();
+    if (g_entity_render) { entity_render_gc(g_entity_render); }
 
     // 4. Player path (if dev_ui enabled) - visual debug aid
     if (presentation_runtime_dev_ui()) {

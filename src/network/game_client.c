@@ -6,10 +6,11 @@
 #include "binary_aoi_decoder.h"
 #include "serial.h"
 #include "prediction/prediction.h"
+#include "input/input_command.h"
 #include "domain/local_player.h"
 #include "ui/ui_state.h"
 #include "util/log.h"
-#include "input.h"
+#include "input/input_queue.h"
 
 #include <assert.h>
 #include <raylib.h>
@@ -31,19 +32,8 @@ static void on_websocket_message(const uint8_t* data, uint32_t length, bool is_t
 static void on_websocket_error(void* ctx);
 static void on_websocket_close(int code, const char* reason, void* ctx);
 
-// TODO: Client module shouldn't be modifying game state directly
-// After refactoring GameState this should go
 static void client_reset_state(void) {
-    g_game_state.init_received        = false;
-    g_game_state.player_id[0]         = '\0';
-    g_game_state.other_player_count   = 0;
-    g_game_state.bot_count            = 0;
-    g_game_state.resource_count       = 0;
-    g_game_state.obstacle_count       = 0;
-    g_game_state.foreground_count     = 0;
-    g_game_state.portal_count         = 0;
-    g_game_state.floor_count          = 0;
-    g_game_state.full_inventory_count = 0;
+    game_state_reset();
     local_player_reset();
     ui_state_reset();
     binary_aoi_reset_prev_snapshots();
@@ -51,6 +41,7 @@ static void client_reset_state(void) {
 }
 
 bool connection_open(void) {
+    message_parser_set_init_handler(client_on_init_received);
     WebSocketHandlers callbacks = {
         .on_open_cb    = on_websocket_open,
         .on_message_cb = on_websocket_message,
@@ -179,7 +170,7 @@ void replication_prepare_input(input_queue_t in_queue) {
             float gx = evt.world_position.x / cell;
             float gy = evt.world_position.y / cell;
             input_command_t cmd = input_command_build_tap(gx, gy);
-            command_queue_push(&cmd);
+            prediction_enqueue_input(&cmd);
             network_send_event_tap((Vector2){gx, gy}, cmd.client_tick, cmd.sequence);
         }
     }
