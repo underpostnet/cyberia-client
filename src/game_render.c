@@ -120,7 +120,7 @@ int game_render_init(int screen_width, int screen_height) {
 
     inventory_bar_init(olm);
     inventory_modal_init(olm);
-    modal_dialogue_init(olm);
+    modal_dialogue_init();
     modal_interact_init();
     dialogue_data_init();
     interaction_bubble_init();

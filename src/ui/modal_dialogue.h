@@ -15,7 +15,7 @@
  *   4. Tapping outside or pressing ESC also closes early.
  *
  * The modal uses modal.c's Modal struct for rendering the text box and
- * ol_as_animated_ico for displaying the associated item sprite.
+ * ol_stack_ico for displaying the entity's full active ObjectLayer stack.
  *
  *   ┌───────────────────────────────────────────┐
  *   │  [item sprite]   Speaker Name             │
@@ -28,8 +28,6 @@
 
 #ifndef MODAL_DIALOGUE_H
 #define MODAL_DIALOGUE_H
-
-#include "object_layers_management.h"
 
 #include <stdbool.h>
 
@@ -60,9 +58,8 @@ typedef void (*ModalDialogueOnClose)(void);
 
 /**
  * @brief Initialise the dialogue modal subsystem.
- * @param ol_manager Pointer to the shared ObjectLayersManager.
  */
-void modal_dialogue_init(ObjectLayersManager* ol_manager);
+void modal_dialogue_init(void);
 
 /**
  * @brief Open a dialogue interaction.

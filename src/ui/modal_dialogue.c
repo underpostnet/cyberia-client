@@ -7,15 +7,17 @@
  *   - Manages its own state for line progression and typewriter effect.
  *   - Sends "dialogue_start" / "dialogue_end" JSON messages to the Go
  *     server so it can grant / revoke damage immunity.
- *   - Item sprite is rendered via ol_as_animated_ico beside the speaker.
+ *   - Left column renders the entity's full alive OL stack via ol_stack_ico.
  */
 
 #include "modal_dialogue.h"
 
 #include "domain/local_player.h"
 #include "game_state.h"
+#include "interaction_bubble.h"
 #include "modal.h"
-#include "ol_as_animated_ico.h"
+#include "object_layers_management.h"
+#include "ol_stack_ico.h"
 #include "util/log.h"
 
 #include <assert.h>
@@ -27,7 +29,6 @@
 
 /* ── Module state ─────────────────────────────────────────────────────── */
 
-static ObjectLayersManager* s_ol_manager = NULL;
 static bool  s_open       = false;
 static float s_age        = 0.0f;
 
@@ -107,8 +108,7 @@ static bool hit_rect(int mx, int my, Rectangle r) {
 
 /* ── Public API ──────────────────────────────────────────────────────── */
 
-void modal_dialogue_init(ObjectLayersManager* ol_manager) {
-    s_ol_manager = ol_manager;
+void modal_dialogue_init(void) {
     s_open       = false;
     s_line_count = 0;
     s_current    = 0;
@@ -250,11 +250,18 @@ void modal_dialogue_draw(void) {
     int icon_x   = (int)(x0 + (col_w - icon_sz) * 0.5f); /* centre horizontally      */
     int icon_y   = (int)(y0 + (card.height - icon_sz) * 0.5f); /* centre vertically  */
 
-    /* Item sprite — left column, centred, no border */
-    if (s_item_id[0] != '\0' && s_ol_manager) {
-        ol_as_ico_draw(s_ol_manager, s_item_id,
-                       icon_x, icon_y, icon_sz,
-                       "down_idle", 0, WHITE);
+    /* Left column: full alive OL stack of the entity — same visual as the
+     * interaction bubble, so the player recognises who they are talking to. */
+    {
+        ObjectLayersManager* mgr = obj_layers_mgr_get();
+        int lc = 0;
+        const ObjectLayerState* layers =
+            interaction_bubble_get_alive_layers(s_entity_id, &lc);
+        if (mgr && layers && lc > 0) {
+            ol_stack_ico_draw(mgr, layers, lc,
+                              icon_x, icon_y, icon_sz,
+                              "down_idle", 0, WHITE);
+        }
     }
 
     /* Speaker name + progress — right of sprite column */
