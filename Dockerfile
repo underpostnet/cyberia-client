@@ -1,8 +1,9 @@
 # BUILD_MODE: RELEASE | DEBUG
 ARG BUILD_MODE=RELEASE
 
-# --- Build Image -------------------
+# --- Build Image ---
 FROM rockylinux/rockylinux:9 AS builder
+
 ARG BUILD_MODE=RELEASE
 
 RUN dnf -y update && \
@@ -51,19 +52,14 @@ RUN ./emsdk install ${EMSDK_VERSION} && \
     ./emsdk activate ${EMSDK_VERSION}
 
 WORKDIR /cyberia-client
+
 COPY . .
 
-RUN make -f Web.mk clean all BUILD_MODE=${BUILD_MODE} OUTPUT_DIR=bin/
+RUN make -f Web.mk clean && make -f Web.mk all BUILD_MODE=${BUILD_MODE} OUTPUT_DIR=bin/
 
-# --- Runtime Image -------------------
+# --- Runtime Image ---
 FROM rockylinux/rockylinux:9 AS runtime
 
-# Runtime needs:
-#   - python3 (serves the built /bin/ static files via server.py)
-#   - nodejs + the underpost CLI globally, for the container-status
-#     lifecycle hooks invoked from conf.instances.json before / after
-#     launching server.py. Installing it at build time avoids the slow
-#     `npm install -g` startup the K8S cmd would otherwise repeat.
 ARG UNDERPOST_VERSION=3.2.9
 RUN dnf -y update && \
     dnf -y install epel-release && \
