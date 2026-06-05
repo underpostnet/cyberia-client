@@ -179,6 +179,9 @@ bool serial_get_bool_default(const cJSON* json, const char* key, bool default_va
 #define UPLINK_FREEZE_END      0x14
 #define UPLINK_CHAT            0x15
 #define UPLINK_GET_ITEMS_IDS   0x16
+#define UPLINK_DLG_START       0x17
+#define UPLINK_DLG_COMPLETE    0x18
+#define UPLINK_DLG_CANCEL      0x19
 
 typedef struct {
     uint8_t  buf[256];
@@ -212,5 +215,13 @@ void uplink_freeze_start(BinWriter* w, const char* reason);
 void uplink_freeze_end(BinWriter* w, const char* reason);
 void uplink_chat(BinWriter* w, const char* to_id, const char* text);
 void uplink_get_items_ids(BinWriter* w, const char* item_id);
+
+/* Dialogue interaction frames. The server resolves the bound action and
+ * quest from its own cache; the client only reports which entity it talked
+ * to and (on complete) which dialogue group it finished reading. */
+void uplink_dlg_start(BinWriter* w, const char* entity_id, const char* item_id);
+void uplink_dlg_complete(BinWriter* w, const char* entity_id, const char* item_id,
+                         const char* dialog_code);
+void uplink_dlg_cancel(BinWriter* w, const char* entity_id, const char* item_id);
 
 #endif // SERIAL_H

@@ -45,6 +45,16 @@ bool  local_player_is_frozen(void);
  * (e.g. the UI closed via a path that skipped it, or a crash interrupted it). */
 void  local_player_request_freeze(bool start, const char* reason);
 
+/* Dialogue interaction frames. dlg_start freezes the player server-side
+ * (modal protection) and arms the same watchdog as a freeze with reason
+ * "dialogue"; dlg_complete / dlg_cancel release it. The server resolves the
+ * bound action and advances quest progress on dlg_complete — the client
+ * only reports the entity and the dialogue group it finished reading. */
+void  local_player_request_dialogue_start(const char* entity_id, const char* item_id);
+void  local_player_request_dialogue_complete(const char* entity_id, const char* item_id,
+                                             const char* dialog_code);
+void  local_player_request_dialogue_cancel(const char* entity_id, const char* item_id);
+
 /* Advance the freeze watchdog; call once per render frame. */
 void  local_player_on_tick(void);
 

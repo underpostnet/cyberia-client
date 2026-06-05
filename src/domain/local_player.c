@@ -59,6 +59,35 @@ void local_player_request_freeze(bool start, const char* reason) {
     }
 }
 
+static void arm_freeze_watchdog(const char* reason) {
+    strncpy(g_local.freeze_reason, reason ? reason : "", LOCAL_FREEZE_REASON_MAX - 1);
+    g_local.freeze_reason[LOCAL_FREEZE_REASON_MAX - 1] = '\0';
+    g_local.freeze_pending  = true;
+    g_local.freeze_deadline = GetTime() + LOCAL_FREEZE_TIMEOUT_S;
+}
+
+void local_player_request_dialogue_start(const char* entity_id, const char* item_id) {
+    BinWriter w;
+    uplink_dlg_start(&w, entity_id, item_id);
+    network_send_binary(w.buf, w.pos);
+    arm_freeze_watchdog("dialogue");
+}
+
+void local_player_request_dialogue_complete(const char* entity_id, const char* item_id,
+                                            const char* dialog_code) {
+    BinWriter w;
+    uplink_dlg_complete(&w, entity_id, item_id, dialog_code);
+    network_send_binary(w.buf, w.pos);
+    g_local.freeze_pending = false;
+}
+
+void local_player_request_dialogue_cancel(const char* entity_id, const char* item_id) {
+    BinWriter w;
+    uplink_dlg_cancel(&w, entity_id, item_id);
+    network_send_binary(w.buf, w.pos);
+    g_local.freeze_pending = false;
+}
+
 void local_player_on_tick(void) {
     if (!g_local.freeze_pending) { return; }
     if (GetTime() < g_local.freeze_deadline) { return; }

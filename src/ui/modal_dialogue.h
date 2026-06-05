@@ -73,6 +73,7 @@ void modal_dialogue_init(ObjectLayersManager* ol_manager);
  * @param line_count  Number of entries in @p lines.
  */
 void modal_dialogue_open(const char* entity_id, const char* item_id,
+                         const char* dialog_code,
                          const DialogueLine* lines, int line_count);
 
 /**

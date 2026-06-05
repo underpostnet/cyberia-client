@@ -37,8 +37,9 @@ static int          s_line_count  = 0;
 static int          s_current     = 0;   /* index of the line being displayed */
 
 /* Entity / item context */
-static char s_entity_id[64] = {0};
-static char s_item_id[128]  = {0};
+static char s_entity_id[64]   = {0};
+static char s_item_id[128]    = {0};
+static char s_dialog_code[96] = {0};
 
 /* Typewriter state */
 static float s_char_timer    = 0.0f;
@@ -78,7 +79,6 @@ static Modal s_modal;
 static const Color C_SPEAKER   = { 200, 220, 255, 255 };
 static const Color C_TEXT      = { 220, 220, 230, 240 };
 static const Color C_HINT      = { 140, 140, 160, 180 };
-static const Color C_CARD_BG   = {  12,  12,  24, 230 };
 static const Color C_CARD_BORD = {  70,  70, 120, 200 };
 /* ── Helpers ──────────────────────────────────────────────────────────── */
 
@@ -117,6 +117,7 @@ void modal_dialogue_init(ObjectLayersManager* ol_manager) {
 }
 
 void modal_dialogue_open(const char* entity_id, const char* item_id,
+                         const char* dialog_code,
                          const DialogueLine* lines, int line_count) {
     if (!lines || line_count <= 0) return;
 
@@ -131,6 +132,8 @@ void modal_dialogue_open(const char* entity_id, const char* item_id,
     s_entity_id[sizeof(s_entity_id) - 1] = '\0';
     strncpy(s_item_id, item_id ? item_id : "", sizeof(s_item_id) - 1);
     s_item_id[sizeof(s_item_id) - 1] = '\0';
+    strncpy(s_dialog_code, dialog_code ? dialog_code : "", sizeof(s_dialog_code) - 1);
+    s_dialog_code[sizeof(s_dialog_code) - 1] = '\0';
 
     s_age           = 0.0f;
     s_char_timer    = 0.0f;
@@ -138,38 +141,42 @@ void modal_dialogue_open(const char* entity_id, const char* item_id,
     s_line_complete = false;
     s_open          = true;
 
-    LOG_INFO("[MODAL_DIALOGUE] Open: entity=%s item=%s lines=%d\n", s_entity_id, s_item_id, s_line_count);
+    LOG_INFO("[MODAL_DIALOGUE] Open: entity=%s item=%s code=%s lines=%d\n",
+             s_entity_id, s_item_id, s_dialog_code, s_line_count);
 
-    /* Notify domain layer → server FrozenInteractionState (+ watchdog). */
-    local_player_request_freeze(true, "dialogue");
+    /* dlg_start freezes the player server-side (modal protection). */
+    local_player_request_dialogue_start(s_entity_id, s_item_id);
 }
 
-void modal_dialogue_close(void) {
+/* Finish the dialogue. `completed` true → all lines were read (dlg_complete,
+ * the only path that can satisfy a quest-talk objective); false → dismissed
+ * early (dlg_cancel, no progress). Both release the dialogue freeze. */
+static void modal_dialogue_finish(bool completed) {
     if (!s_open) return;
     s_open = false;
 
-    LOG_INFO("[MODAL_DIALOGUE] Close: entity=%s item=%s\n", s_entity_id, s_item_id);
+    LOG_INFO("[MODAL_DIALOGUE] %s: entity=%s item=%s\n",
+             completed ? "Complete" : "Cancel", s_entity_id, s_item_id);
 
-    /* ── Bridge-safe ordering ──────────────────────────────────────────
-     * Fire the on_close callback BEFORE sending freeze_end.
-     * If the callback opens another modal (e.g. inventory), that modal's
-     * freeze_start reaches the server first and overrides the freeze
-     * reason.  The stale freeze_end we send afterwards carries the old
-     * reason ("dialogue"), which the server's reason-matched ThawPlayer
-     * rejects — keeping the player frozen throughout the transition with
-     * zero gap.
-     * For the normal (non-bridge) case the callback is NULL, so the order
-     * change is invisible.
-     */
+    /* Bridge-safe ordering: fire on_close BEFORE the dlg frame so a callback
+     * that opens another modal (e.g. inventory) sends its freeze_start first
+     * and overrides the server freeze reason; the dialogue thaw is then
+     * rejected by the reason-match check — zero gap. */
     ModalDialogueOnClose cb = s_on_close;
     s_on_close = NULL;
     if (cb) cb();
 
-    /* Notify domain layer → thaw (ignored by server if reason was overridden) */
-    // TODO: Investigate why how to stop the server from handling freeze
-    local_player_request_freeze(false, "dialogue");
+    if (completed)
+        local_player_request_dialogue_complete(s_entity_id, s_item_id, s_dialog_code);
+    else
+        local_player_request_dialogue_cancel(s_entity_id, s_item_id);
+
     s_line_count = 0;
     s_current    = 0;
+}
+
+void modal_dialogue_close(void) {
+    modal_dialogue_finish(false);
 }
 
 void modal_dialogue_set_on_close(ModalDialogueOnClose cb) {
@@ -222,8 +229,8 @@ void modal_dialogue_draw(void) {
         panel.width, panel.height
     };
 
-    /* Card background with subtle top border */
-    DrawRectangleRec(card, C_CARD_BG);
+    /* Card background with subtle top border — standardized panel fill. */
+    DrawRectangleRec(card, MODAL_PANEL_BG);
     DrawLine((int)card.x, (int)card.y,
              (int)(card.x + card.width), (int)card.y, C_CARD_BORD);
 
@@ -340,8 +347,8 @@ bool modal_dialogue_handle_click(int mx, int my) {
     bool inside = hit_rect(mx, my, card);
 
     if (!inside) {
-        /* Tap outside → close early */
-        modal_dialogue_close();
+        /* Tap outside → dismiss early (dlg_cancel) */
+        modal_dialogue_finish(false);
         return true;
     }
 
@@ -357,8 +364,8 @@ bool modal_dialogue_handle_click(int mx, int my) {
         s_char_timer    = 0.0f;
         s_line_complete = false;
     } else {
-        /* All lines read → close */
-        modal_dialogue_close();
+        /* All lines read → complete (dlg_complete) */
+        modal_dialogue_finish(true);
     }
 
     return true;

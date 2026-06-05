@@ -15,7 +15,8 @@ typedef enum {
     MSG_TYPE_CHAT,
     MSG_TYPE_ERROR,
     MSG_TYPE_PING,
-    MSG_TYPE_PONG
+    MSG_TYPE_PONG,
+    MSG_TYPE_DLG_ACK
 } MessageType;
 
 /**

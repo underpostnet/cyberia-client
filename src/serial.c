@@ -499,3 +499,23 @@ void uplink_get_items_ids(BinWriter* w, const char* item_id) {
     bw_init(w, UPLINK_GET_ITEMS_IDS);
     bw_str(w, item_id);
 }
+
+void uplink_dlg_start(BinWriter* w, const char* entity_id, const char* item_id) {
+    bw_init(w, UPLINK_DLG_START);
+    bw_str(w, entity_id ? entity_id : "");
+    bw_str(w, item_id   ? item_id   : "");
+}
+
+void uplink_dlg_complete(BinWriter* w, const char* entity_id, const char* item_id,
+                         const char* dialog_code) {
+    bw_init(w, UPLINK_DLG_COMPLETE);
+    bw_str(w, entity_id   ? entity_id   : "");
+    bw_str(w, item_id     ? item_id     : "");
+    bw_str(w, dialog_code ? dialog_code : "");
+}
+
+void uplink_dlg_cancel(BinWriter* w, const char* entity_id, const char* item_id) {
+    bw_init(w, UPLINK_DLG_CANCEL);
+    bw_str(w, entity_id ? entity_id : "");
+    bw_str(w, item_id   ? item_id   : "");
+}

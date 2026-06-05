@@ -11,6 +11,7 @@
 #include "domain/camera.h"
 #include "domain/presentation_runtime.h"
 #include "ui/ui_state.h"
+#include "ui/quest_store.h"
 #include "util/log.h"
 #include <stdio.h>
 #include <stdlib.h>
@@ -25,6 +26,8 @@ static int message_parser_parse_aoi_update(const cJSON* json_root);
 static int message_parser_parse_skill_item_ids(const cJSON* json_root);
 static int message_parser_parse_error(const cJSON* json_root);
 static int message_parser_parse_visible_players(const cJSON* players_json);
+static int message_parser_parse_dlg_ack(const cJSON* json_root);
+static void message_parser_upsert_quest_array(const cJSON* quests_json);
 
 static MessageParserInitHandler s_init_handler = NULL;
 
@@ -66,6 +69,9 @@ bool message_parser_parse(const char* json_str) {
         case MSG_TYPE_PING:
         case MSG_TYPE_PONG:
             result = true;
+            break;
+        case MSG_TYPE_DLG_ACK:
+            result = 0 == message_parser_parse_dlg_ack(root);
             break;
         case MSG_TYPE_CHAT: {
             cJSON* payload = serial_get_object(root, "payload");
@@ -234,6 +240,11 @@ static int message_parser_parse_init_data(const cJSON* json_root) {
             }
         }
     }
+
+    /* Seed the Quest Journal store from the connect-time snapshot. Cleared
+     * first so a reconnect repopulates cleanly. */
+    quest_store_reset();
+    message_parser_upsert_quest_array(cJSON_GetObjectItem(payload, "quests"));
 
     LOG_INFO("init_data parsed gridW=%d gridH=%d aoiRadius=%.1f entityDefaults=%d skills=%d",
              g_game_state.grid_w, g_game_state.grid_h, g_game_state.aoi_radius,
@@ -596,7 +607,50 @@ static MessageType get_message_type(const cJSON* root) {
     if (0 == strcmp(type_str, "ping"))           return MSG_TYPE_PING;
     if (0 == strcmp(type_str, "pong"))           return MSG_TYPE_PONG;
     if (0 == strcmp(type_str, "chat"))           return MSG_TYPE_CHAT;
+    if (0 == strcmp(type_str, "dlg_ack"))        return MSG_TYPE_DLG_ACK;
 
     LOG_ERROR("[MESSAGE_PARSER] warning type unknown\n");
     return MSG_TYPE_UNKNOWN;
+}
+
+/* Upsert each entry of a server quest snapshot array into the local store.
+ * Shared by init_data (initial snapshot) and dlg_ack (live updates). */
+static void message_parser_upsert_quest_array(const cJSON* quests_json) {
+    if (!quests_json || !cJSON_IsArray(quests_json)) return;
+    const cJSON* q = NULL;
+    cJSON_ArrayForEach(q, quests_json) {
+        char code[64]        = {0};
+        char title[96]       = {0};
+        char description[256]= {0};
+        char status[32]      = {0};
+        char active_step[160]= {0};
+        char objectives[160] = {0};
+        serial_get_string(q, "code", code, sizeof(code));
+        serial_get_string(q, "title", title, sizeof(title));
+        serial_get_string(q, "description", description, sizeof(description));
+        serial_get_string(q, "status", status, sizeof(status));
+        serial_get_string(q, "activeStep", active_step, sizeof(active_step));
+        serial_get_string(q, "objectivesText", objectives, sizeof(objectives));
+        quest_store_upsert(code, title, description, status, active_step, objectives);
+    }
+}
+
+/* dlg_ack is notify-only: it updates the local quest_store from the affected
+ * quest entries the server attached. questGranted / objectivesDone gate an
+ * optional notification; no simulation state is touched here. */
+static int message_parser_parse_dlg_ack(const cJSON* json_root) {
+    cJSON* payload = serial_get_object(json_root, "payload");
+    if (!payload) return -1;
+
+    char quest_granted[64] = {0};
+    serial_get_string(payload, "questGranted", quest_granted, sizeof(quest_granted));
+    bool objectives_done = serial_get_bool_default(payload, "objectivesDone", false);
+
+    message_parser_upsert_quest_array(serial_get_array(payload, "quests"));
+
+    if (quest_granted[0] != '\0')
+        LOG_INFO("[DLG_ACK] quest granted: %s\n", quest_granted);
+    if (objectives_done)
+        LOG_INFO("[DLG_ACK] objective progressed\n");
+    return 0;
 }
