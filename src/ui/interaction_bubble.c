@@ -18,8 +18,10 @@
 #include "entity_render.h"
 #include "game_state.h"
 #include "js/interact_bridge.h"
+#include "modal_interact.h"
 #include "notify_store.h"
 #include "layer_z_order.h"
+#include "ui_toggle.h"
 #include "nameplate.h"
 #include "object_layers_management.h"
 #include "ol_stack_ico.h"
@@ -36,6 +38,38 @@
 static InteractionBubbleSlot s_slots[IBUBBLE_MAX_SLOTS];
 static int                   s_slot_count = 0;
 static int                   s_border_color_dbg = 0;
+
+/* Collapsible column: a left-edge toggle slides the bubbles in/out. Slots
+ * keep updating while collapsed (entities stay tracked). */
+#define IBUBBLE_SMALL_SCREEN_BREAKPOINT_PX 600
+/* Small square toggle matching the Quest Journal chevron size. */
+#define IBUBBLE_TOGGLE_SZ  32
+#define IBUBBLE_TOGGLE_PAD  6
+static UIToggle s_col_toggle;
+static bool     s_col_init = false;
+/* Horizontal slide: 0 when expanded, −column_width when fully collapsed. */
+static float    s_col_offset = 0.0f;
+
+static float column_width(void) {
+    return (float)(IBUBBLE_MARGIN_X + IBUBBLE_ICON_SIZE + IBUBBLE_GAP);
+}
+
+/* Fixed screen-space anchor: top-left corner with small padding.
+ * The toggle never moves — it is always at the same screen position. */
+static Rectangle toggle_anchor(void) {
+    return (Rectangle){ (float)IBUBBLE_TOGGLE_PAD, (float)IBUBBLE_TOGGLE_PAD,
+                        (float)IBUBBLE_TOGGLE_SZ,  (float)IBUBBLE_TOGGLE_SZ };
+}
+
+static void column_ensure_toggle(void) {
+    if (s_col_init) return;
+    bool expanded = GetScreenWidth() >= IBUBBLE_SMALL_SCREEN_BREAKPOINT_PX;
+    s_col_offset  = expanded ? 0.0f : -column_width();
+    /* Chevron points LEFT when expanded ("tap to collapse"); flips to RIGHT
+     * when collapsed via resolve_chevron so it means "tap to expand". */
+    ui_toggle_init(&s_col_toggle, toggle_anchor(), expanded, UI_TOGGLE_CHEVRON_LEFT);
+    s_col_init = true;
+}
 
 /* ── Colours ──────────────────────────────────────────────────────────── */
 
@@ -62,8 +96,9 @@ static Color status_border_color(const InteractionBubbleSlot* slot, bool is_self
 /* ── Helpers ──────────────────────────────────────────────────────────── */
 
 static Rectangle slot_rect(int index) {
-    float x = (float)IBUBBLE_MARGIN_X;
-    float y = (float)(IBUBBLE_MARGIN_Y + index * (IBUBBLE_ICON_SIZE + IBUBBLE_GAP));
+    float x = (float)IBUBBLE_MARGIN_X + s_col_offset;
+    /* Slots start one full slot-height below the top to clear the toggle. */
+    float y = (float)(IBUBBLE_MARGIN_Y + (index + 1) * (IBUBBLE_ICON_SIZE + IBUBBLE_GAP));
     return (Rectangle){ x, y, (float)IBUBBLE_ICON_SIZE, (float)IBUBBLE_ICON_SIZE };
 }
 
@@ -225,9 +260,15 @@ static void scan_entity(const char* entity_id, const EntityState* base,
 void interaction_bubble_init(void) {
     s_slot_count = 0;
     memset(s_slots, 0, sizeof(s_slots));
+    s_col_init = false;
 }
 
 void interaction_bubble_update(void) {
+    column_ensure_toggle();
+    /* Re-anchor not needed — the toggle is fixed in screen space. */
+    ui_toggle_update(&s_col_toggle, GetFrameTime());
+    s_col_offset = -column_width() * (1.0f - s_col_toggle.anim_t);
+
     for (int i = 0; i < s_slot_count; i++)
         s_slots[i].active = false;
 
@@ -266,6 +307,9 @@ void interaction_bubble_update(void) {
 }
 
 void interaction_bubble_draw(void) {
+    column_ensure_toggle();
+    ui_toggle_draw(&s_col_toggle);
+
     if (s_slot_count <= 0) return;
 
     int mx = GetMouseX();
@@ -353,9 +397,12 @@ void interaction_bubble_draw(void) {
 }
 
 bool interaction_bubble_handle_click(int mx, int my) {
-    if (s_slot_count <= 0) return false;
+    column_ensure_toggle();
+    if (ui_toggle_handle_click(&s_col_toggle, mx, my)) return true;
 
-    ObjectLayersManager* mgr = obj_layers_mgr_get();
+    /* When collapsed the bubbles are off-screen; ignore slot hit-tests. */
+    if (!s_col_toggle.expanded) return false;
+    if (s_slot_count <= 0) return false;
 
     for (int i = 0; i < s_slot_count; i++) {
         Rectangle r = slot_rect(i);
@@ -364,67 +411,91 @@ bool interaction_bubble_handle_click(int mx, int my) {
             LOG_INFO("[INTERACTION_BUBBLE] Slot %d clicked: entity=%s flags=0x%x\n",
                    i, slot->entity_id, slot->interact_flags);
 
-            /* Open the JS interact panel — NO freeze, player stays active
-             * in real-time PVP/PVE.  Only NPC dialogue freezes. */
-            bool is_self = (strcmp(slot->entity_id, g_game_state.player_id) == 0);
+            /* Bubble tap opens the intermediate modal_interact first — the
+             * general-purpose entry point. The JS overlay is only reachable
+             * via its Chat/Profile tab; the Talk tab gates dialogue. */
+            bool is_self  = (strcmp(slot->entity_id, g_game_state.player_id) == 0);
+            bool has_talk = (slot->interact_flags & INTERACT_DIALOGUE) != 0 &&
+                            slot->dialogue_item_id[0] != '\0';
             Color bc = status_border_color(slot, is_self);
-            js_interact_overlay_open(slot->entity_id,
-                                     slot->display_name,
-                                     slot->dialogue_item_id,
-                                     slot->interact_flags,
-                                     slot->is_player ? 1 : 0,
-                                     is_self ? 1 : 0,
-                                     (int)bc.r, (int)bc.g,
-                                     (int)bc.b, (int)bc.a);
-
-            /* Pass the entity's active OL stack to the JS overlay for
-             * preview rendering and per-item dialog buttons.  Each entry
-             * includes itemId, type (for static asset URL construction),
-             * and a hasDialogue flag. */
-            {
-                int icon_lc = slot->alive_layer_count > 0
-                    ? slot->alive_layer_count : slot->layer_count;
-                const ObjectLayerState* icon_layers = slot->alive_layer_count > 0
-                    ? slot->alive_layers : slot->layers;
-
-                /* Z-sort layers so the JS overlay renders skin first,
-                 * weapon on top — same order as the grid and bubble. */
-                LayerZEntry z_sorted[32];
-                int z_count = layer_z_sort(icon_layers, icon_lc,
-                                           z_sorted, 32, false);
-
-                char json[4096];
-                int off = 0;
-                json[off++] = '[';
-
-                for (int j = 0; j < z_count; j++) {
-                    const ObjectLayerState* ls = &icon_layers[z_sorted[j].index];
-
-                    const char* item_type = "";
-                    ObjectLayer* ol_data = lookup_cached_layer(ls->item_id);
-                    if (ol_data && ol_data->data.item.type[0] != '\0')
-                        item_type = ol_data->data.item.type;
-
-                    bool has_dlg = dialogue_data_available(ls->item_id);
-
-                    int wrote = snprintf(json + off, sizeof(json) - off,
-                        "%s{\"itemId\":\"%s\",\"type\":\"%s\",\"hasDialogue\":%s}",
-                        off > 1 ? "," : "",
-                        ls->item_id,
-                        item_type,
-                        has_dlg ? "true" : "false");
-                    if (wrote > 0 && off + wrote < (int)sizeof(json) - 2)
-                        off += wrote;
-                }
-
-                json[off++] = ']';
-                json[off] = '\0';
-                js_interact_overlay_set_ol_stack(json);
-            }
+            modal_interact_open(slot->entity_id, slot->display_name,
+                                slot->dialogue_item_id, has_talk,
+                                slot->is_player, is_self, bc);
             return true;
         }
     }
     return false;
+}
+
+/* Open the JS chat/profile overlay for one resolved slot, pushing its OL
+ * stack for preview rendering. NO freeze — chat/profile is real-time-safe. */
+static void open_js_overlay_for_slot(InteractionBubbleSlot* slot) {
+    bool is_self = (strcmp(slot->entity_id, g_game_state.player_id) == 0);
+    Color bc = status_border_color(slot, is_self);
+    js_interact_overlay_open(slot->entity_id,
+                             slot->display_name,
+                             slot->dialogue_item_id,
+                             slot->interact_flags,
+                             slot->is_player ? 1 : 0,
+                             is_self ? 1 : 0,
+                             (int)bc.r, (int)bc.g,
+                             (int)bc.b, (int)bc.a);
+
+    int icon_lc = slot->alive_layer_count > 0
+        ? slot->alive_layer_count : slot->layer_count;
+    const ObjectLayerState* icon_layers = slot->alive_layer_count > 0
+        ? slot->alive_layers : slot->layers;
+
+    LayerZEntry z_sorted[32];
+    int z_count = layer_z_sort(icon_layers, icon_lc, z_sorted, 32, false);
+
+    char json[4096];
+    int off = 0;
+    json[off++] = '[';
+
+    for (int j = 0; j < z_count; j++) {
+        const ObjectLayerState* ls = &icon_layers[z_sorted[j].index];
+
+        const char* item_type = "";
+        ObjectLayer* ol_data = lookup_cached_layer(ls->item_id);
+        if (ol_data && ol_data->data.item.type[0] != '\0')
+            item_type = ol_data->data.item.type;
+
+        bool has_dlg = dialogue_data_available(ls->item_id);
+
+        int wrote = snprintf(json + off, sizeof(json) - off,
+            "%s{\"itemId\":\"%s\",\"type\":\"%s\",\"hasDialogue\":%s}",
+            off > 1 ? "," : "",
+            ls->item_id,
+            item_type,
+            has_dlg ? "true" : "false");
+        if (wrote > 0 && off + wrote < (int)sizeof(json) - 2)
+            off += wrote;
+    }
+
+    json[off++] = ']';
+    json[off] = '\0';
+    js_interact_overlay_set_ol_stack(json);
+}
+
+void interaction_bubble_open_js_overlay(const char* entity_id) {
+    if (!entity_id || '\0' == entity_id[0]) return;
+    for (int i = 0; i < s_slot_count; i++) {
+        if (0 == strcmp(s_slots[i].entity_id, entity_id)) {
+            open_js_overlay_for_slot(&s_slots[i]);
+            return;
+        }
+    }
+}
+
+bool interaction_bubble_point_covered(int x, int y) {
+    column_ensure_toggle();
+    if (hit_rect(x, y, s_col_toggle.anchor)) return true; /* tab always blocks */
+    if (!s_col_toggle.expanded) return false;             /* collapsed → free for game */
+    if (s_slot_count <= 0) return false;
+    float right = (float)IBUBBLE_MARGIN_X + s_col_offset +
+                  (float)IBUBBLE_ICON_SIZE + (float)IBUBBLE_MARGIN_X;
+    return (float)x < right;
 }
 
 int interaction_bubble_slot_count(void) {

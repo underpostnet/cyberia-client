@@ -6,6 +6,8 @@
 #include "inventory_bar.h"
 #include "inventory_modal.h"
 #include "modal_dialogue.h"
+#include "modal_interact.h"
+#include "quest_journal.h"
 #include "game_render.h"
 #include "js/interact_bridge.h"
 
@@ -13,11 +15,18 @@ bool ui_dispatch_tap(int x, int y) {
     /* Highest priority: dialogue modal claims everything while open. */
     if (modal_dialogue_handle_click(x, y)) return true;
 
+    /* Intermediate interaction modal sits between dialogue and the JS
+     * overlay — the general-purpose entry point opened by a bubble tap. */
+    if (modal_interact_handle_click(x, y)) return true;
+
     /* JS interact overlay handles its own DOM clicks; while open the world
      * never receives the tap. */
     if (js_interact_overlay_is_open()) return true;
 
     if (inventory_modal_handle_click(x, y)) return true;
+
+    /* Quest Journal (right side) before the bubble column (left side). */
+    if (quest_journal_handle_click(x, y)) return true;
 
     if (interaction_bubble_handle_click(x, y)) return true;
 
@@ -39,12 +48,12 @@ bool ui_dispatch_tap(int x, int y) {
 
 bool ui_dispatch_covers_point(int x, int y) {
     if (modal_dialogue_is_open())   return true;
+    if (modal_interact_is_open())   return true;
     if (js_interact_overlay_is_open()) return true;
     if (inventory_modal_is_open())  return true;
-    if (interaction_bubble_slot_count() > 0 &&
-        x < IBUBBLE_MARGIN_X + IBUBBLE_ICON_SIZE + IBUBBLE_MARGIN_X) {
-        return true;
-    }
+    /* Bubble column only blocks taps while expanded (its own predicate
+     * accounts for collapse state and the always-present toggle tab). */
+    if (interaction_bubble_point_covered(x, y)) return true;
     if (y > GetScreenHeight() - INV_BAR_HEIGHT) return true;
     if (0 != game_render_zoom_btn_hit(x, y))    return true;
     return false;

@@ -13,8 +13,10 @@
 #include "ui/inventory_bar.h"
 #include "ui/inventory_modal.h"
 #include "ui/modal_dialogue.h"
+#include "ui/modal_interact.h"
 #include "ui/modal_player.h"
 #include "ui/nameplate.h"
+#include "ui/quest_journal.h"
 #include "ui/tap_effect.h"
 #include "ui/ui_icon.h"
 #include "util/log.h"
@@ -119,8 +121,10 @@ int game_render_init(int screen_width, int screen_height) {
     inventory_bar_init(olm);
     inventory_modal_init(olm);
     modal_dialogue_init(olm);
+    modal_interact_init();
     dialogue_data_init();
     interaction_bubble_init();
+    quest_journal_init();
     ui_icon_init(UI_ICON_CACHE_CAPACITY);
     return 0;
 }
@@ -811,8 +815,11 @@ void game_render_ui(void) {
         modal_player_draw(g_renderer.screen_width, g_renderer.screen_height);
     }
 
-    // Entity interaction bubbles (left side, always visible)
+    // Entity interaction bubbles (left side, collapsible column)
     interaction_bubble_draw();
+
+    // Quest Journal (right side, below map info, collapsible)
+    quest_journal_draw();
 
     // Inventory bar (always visible in screen space)
     inventory_bar_draw();
@@ -823,6 +830,11 @@ void game_render_ui(void) {
     // Inventory modal (shown on top of everything when open)
     if (inventory_modal_is_open()) {
         inventory_modal_draw();
+    }
+
+    // Intermediate interaction modal (below dialogue in the draw order)
+    if (modal_interact_is_open()) {
+        modal_interact_draw();
     }
 
     // Dialogue modal

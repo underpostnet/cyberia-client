@@ -89,4 +89,22 @@ void interaction_bubble_dead_equip(const char* item_id, bool active);
 const ObjectLayerState* interaction_bubble_get_alive_layers(
     const char *entity_id, int *out_count);
 
+/**
+ * @brief Open the JS chat/profile overlay for an entity's bubble slot.
+ *
+ * Invoked by modal_interact's Chat/Profile tab. Resolves the slot by
+ * entity ID, opens the JS overlay, and pushes the entity's OL stack for
+ * preview rendering. No-op if the entity has no bubble slot.
+ */
+void interaction_bubble_open_js_overlay(const char* entity_id);
+
+/**
+ * @brief Whether a screen point is occupied by the bubble column UI.
+ *
+ * The toggle tab always counts. The bubble band only counts while the
+ * column is expanded — when collapsed the left area is free for game-world
+ * taps (movement), so hiding the column actually reclaims that space.
+ */
+bool interaction_bubble_point_covered(int x, int y);
+
 #endif /* INTERACTION_BUBBLE_H */

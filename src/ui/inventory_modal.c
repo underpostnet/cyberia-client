@@ -25,6 +25,7 @@
 #include "game_state.h"
 #include "interaction_bubble.h"
 #include "inventory_bar.h"
+#include "modal.h"
 #include "modal_dialogue.h"
 #include "object_layer.h"
 #include "object_layers_management.h"
@@ -99,7 +100,6 @@ static bool      s_skill_arrows_visible = false;
 /* ── Colours ──────────────────────────────────────────────────────────── */
 
 static const Color C_OVERLAY_BG    = {   0,   0,   0, 170 };
-static const Color C_CARD_BG       = {  18,  18,  30, 240 };
 static const Color C_CARD_BORDER   = {  80,  80, 130, 220 };
 static const Color C_TITLE         = { 220, 220, 255, 255 };
 static const Color C_BODY          = { 180, 180, 200, 220 };
@@ -272,16 +272,9 @@ void inventory_modal_draw(void) {
     int screen_h = GetScreenHeight();
     const ObjectLayerState* ols = &g_game_state.full_inventory[s_inv_idx];
 
-    /* Pop-in animation */
-    float pop_dur = 0.15f;
-    float scale   = (s_age < pop_dur)
-        ? (0.80f + 0.20f * (1.0f - powf(1.0f - s_age / pop_dur, 3.0f)))
-        : 1.0f;
-
-    /* 2. Card */
-    Rectangle card = card_rect(screen_w, screen_h, scale);
-    DrawRectangleRec(card, C_CARD_BG);
-    DrawRectangleLinesEx(card, 2.0f, C_CARD_BORDER);
+    /* 2. Card — shared pop-in + standardized panel chrome. */
+    Rectangle card = card_rect(screen_w, screen_h, modal_pop_scale(s_age));
+    modal_draw_panel_ex(card, s_age, C_CARD_BORDER, 2.0f);
 
     float cx  = card.x;
     float cy  = card.y;
@@ -775,6 +768,7 @@ bool inventory_modal_handle_click(int mx, int my) {
                 modal_dialogue_open(
                     g_game_state.player_id,  /* self as entity context */
                     ols->item_id,
+                    "",                      /* lore preview — not a quest dialogue */
                     d->lines, d->line_count);
 
                 /* Stale thaw — rejected by server's reason-match check */

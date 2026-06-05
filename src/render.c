@@ -10,7 +10,9 @@
 #include "ui/inventory_bar.h"
 #include "ui/inventory_modal.h"
 #include "ui/modal_dialogue.h"
+#include "ui/modal_interact.h"
 #include "ui/modal_player.h"
+#include "ui/quest_journal.h"
 #include "ui/tap_effect.h"
 #include "ui/ui_icon.h"
 #include "network/engine_client.h"
@@ -74,6 +76,8 @@ void render_on_tick(float delta_time) {
     inventory_bar_update(delta_time);
     if (inventory_modal_is_open())  inventory_modal_update(delta_time);
     if (modal_dialogue_is_open())   modal_dialogue_update(delta_time);
+    if (modal_interact_is_open())   modal_interact_update(delta_time);
+    quest_journal_update(delta_time);
 
     interaction_bubble_update();
     dev_ui_on_tick(delta_time);
