@@ -1,7 +1,55 @@
 #include "modal.h"
+#include <math.h>
 #include <stdio.h>
 #include <string.h>
 #include <assert.h>
+
+/* ── Shared panel chrome ──────────────────────────────────────────────── */
+
+const Color MODAL_OVERLAY_BG   = {  0,  0,  0, 170 };
+const Color MODAL_PANEL_BG     = { 14, 14, 22, 245 };
+const Color MODAL_PANEL_BORDER = { 80, 80, 130, 220 };
+
+float modal_pop_scale(float age) {
+    if (age >= MODAL_POP_DURATION) return 1.0f;
+    float t = age / MODAL_POP_DURATION;
+    return 0.80f + 0.20f * (1.0f - powf(1.0f - t, 3.0f));
+}
+
+float modal_pop_alpha(float age) {
+    float t = age / MODAL_POP_DURATION;
+    if (t > 1.0f) t = 1.0f;
+    if (t < 0.0f) t = 0.0f;
+    return t;
+}
+
+Rectangle modal_scale_rect(Rectangle rect, float scale) {
+    float cx = rect.x + rect.width * 0.5f;
+    float cy = rect.y + rect.height * 0.5f;
+    float w  = rect.width * scale;
+    float h  = rect.height * scale;
+    return (Rectangle){ cx - w * 0.5f, cy - h * 0.5f, w, h };
+}
+
+void modal_draw_overlay(int screen_width, int screen_height, float age) {
+    Color c = MODAL_OVERLAY_BG;
+    c.a = (unsigned char)(c.a * modal_pop_alpha(age));
+    DrawRectangle(0, 0, screen_width, screen_height, c);
+}
+
+void modal_draw_panel_ex(Rectangle rect, float age, Color border, float border_width) {
+    float a = modal_pop_alpha(age);
+    Color bg = MODAL_PANEL_BG;
+    bg.a = (unsigned char)(bg.a * a);
+    DrawRectangleRec(rect, bg);
+    Color bc = border;
+    bc.a = (unsigned char)(bc.a * a);
+    DrawRectangleLinesEx(rect, border_width, bc);
+}
+
+void modal_draw_panel(Rectangle rect, float age) {
+    modal_draw_panel_ex(rect, age, MODAL_PANEL_BORDER, 1.5f);
+}
 
 int modal_init_struct(Modal* modal) {
     assert(modal);

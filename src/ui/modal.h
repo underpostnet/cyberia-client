@@ -107,4 +107,36 @@ void modal_clear_lines(Modal* modal);
 void modal_draw_struct(const Modal* modal, int screen_width, int screen_height);
 
 
+/* ── Shared panel chrome ──────────────────────────────────────────────────
+ *
+ * Standardized look-and-feel for every panel-style modal (inventory,
+ * interaction, dialogue, quest journal). One dark background, one border,
+ * one entrance animation — so modals never appear abruptly or diverge.
+ * Each modal tracks its own age (seconds since open) and passes it here.
+ */
+
+#define MODAL_POP_DURATION 0.15f
+
+extern const Color MODAL_OVERLAY_BG;   /* dim backdrop behind centred modals */
+extern const Color MODAL_PANEL_BG;     /* standardized dark panel fill        */
+extern const Color MODAL_PANEL_BORDER; /* standardized panel border           */
+
+/* Eased pop-in scale (0.80 → 1.0) over MODAL_POP_DURATION; 1.0 afterwards. */
+float modal_pop_scale(float age);
+
+/* Eased fade factor (0 → 1) over MODAL_POP_DURATION; multiply any colour
+ * alpha by this for a uniform fade-in. */
+float modal_pop_alpha(float age);
+
+/* Scale a rect about its centre — pairs with modal_pop_scale. */
+Rectangle modal_scale_rect(Rectangle rect, float scale);
+
+/* Dim the whole screen behind a centred modal (alpha eased by age). */
+void modal_draw_overlay(int screen_width, int screen_height, float age);
+
+/* Fill + border a panel rect with the standardized chrome (faded by age). */
+void modal_draw_panel(Rectangle rect, float age);
+void modal_draw_panel_ex(Rectangle rect, float age, Color border, float border_width);
+
+
 #endif // MODAL_H
