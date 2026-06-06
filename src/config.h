@@ -3,21 +3,22 @@
 
 #include <stdbool.h>
 
-#define STRINGIFY(x) #x
+#define STR(x) #x
+#define STRINGIFY(x) STR(x)
 
 // --------------------------------------------------------
 // URLs
 
 static const char* WS_URL =
 #if defined(WS_URL_OVERRIDE)
-    WS_URL_OVERRIDE;
+    STRINGIFY(WS_URL_OVERRIDE);
 #else
-    "ws://";
+    "wss://";
 #endif
 
 static const char* API_BASE_URL =
 #if defined(API_BASE_URL_OVERRIDE)
-    API_BASE_URL_OVERRIDE;
+    STRINGIFY(API_BASE_URL_OVERRIDE);
 #else
     "https://";
 #endif
