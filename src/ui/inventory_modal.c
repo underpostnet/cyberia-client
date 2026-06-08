@@ -31,6 +31,7 @@
 #include "object_layers_management.h"
 #include "ol_as_animated_ico.h"
 #include "serial.h"
+#include "ui_button.h"
 #include "ui_state.h"
 
 #include <assert.h>
@@ -164,29 +165,31 @@ static bool hit_rect(int mx, int my, Rectangle r) {
             (float)my >= r.y && (float)my < r.y + r.height);
 }
 
-/* draw_small_btn draws direction/mode buttons and returns true if clicked. */
-static bool draw_small_btn(Rectangle r, const char* label, Color bg, bool selected,
-                            bool enabled, int mx, int my) {
-    Color used_bg = !enabled ? C_DIR_BTN_DIS : (selected ? C_DIR_BTN_SEL : bg);
-    bool hovered  = enabled && hit_rect(mx, my, r);
-    if (hovered) {
-        used_bg = (Color){ (uint8_t)((int)used_bg.r + 18),
-                           (uint8_t)((int)used_bg.g + 18),
-                           (uint8_t)((int)used_bg.b + 18), used_bg.a };
-    }
-    DrawRectangleRec(r, used_bg);
-    if (selected)
-        DrawRectangleLinesEx(r, 1.5f, (Color){ 120, 160, 255, 200 });
-    else
-        DrawRectangleLinesEx(r, 1.0f, (Color){ 60, 65, 90, 160 });
+static Color lighten(Color c, int d) {
+    int r = (int)c.r + d, g = (int)c.g + d, b = (int)c.b + d;
+    return (Color){ (uint8_t)(r > 255 ? 255 : r), (uint8_t)(g > 255 ? 255 : g),
+                    (uint8_t)(b > 255 ? 255 : b), c.a };
+}
 
-    int fs = MODAL_FONT_STAT;
-    int tw = MeasureText(label, fs);
-    Color text_c = enabled ? (selected ? (Color){220,230,255,255} : (Color){160,170,190,220})
-                           : (Color){60,65,75,140};
-    DrawText(label, (int)(r.x + (r.width - tw) * 0.5f),
-             (int)(r.y + (r.height - fs) * 0.5f), fs, text_c);
-    return false; /* click handled in handle_click */
+/* draw_small_btn draws direction/mode buttons. */
+static void draw_small_btn(Rectangle r, const char* label, Color bg, bool selected,
+                           bool enabled, int mx, int my) {
+    Color base_bg = selected ? C_DIR_BTN_SEL : bg;
+    if (enabled && hit_rect(mx, my, r)) base_bg = lighten(base_bg, 18);
+    UIButtonStyle style = {
+        .text            = label,
+        .font_size       = MODAL_FONT_STAT,
+        .bg              = base_bg,
+        .bg_selected     = base_bg,
+        .bg_disabled     = C_DIR_BTN_DIS,
+        .border          = { 60, 65, 90, 160 },
+        .border_selected = { 120, 160, 255, 200 },
+        .border_width    = 1.0f,
+        .text_color      = { 160, 170, 190, 220 },
+        .text_selected   = { 220, 230, 255, 255 },
+        .text_disabled   = { 60, 65, 75, 140 },
+    };
+    ui_button_draw(r, &style, ui_button_resolve_state(enabled, selected, false));
 }
 
 /* dir_has_frames checks if the atlas has any frames for dir+mode combo. */
@@ -286,12 +289,14 @@ void inventory_modal_draw(void) {
     /* 3. Close button */
     Rectangle close_r = { cx + cw - MODAL_CLOSE_SIZE - 6, cy + 6,
                            MODAL_CLOSE_SIZE, MODAL_CLOSE_SIZE };
-    DrawRectangleRec(close_r, C_CLOSE_BTN);
-    DrawRectangleLinesEx(close_r, 1.0f, C_CARD_BORDER);
-    int xfs = MODAL_FONT_BODY;
-    int xtw = MeasureText("X", xfs);
-    DrawText("X", (int)(close_r.x + (close_r.width  - xtw) * 0.5f),
-                  (int)(close_r.y + (close_r.height - xfs) * 0.5f), xfs, C_CLOSE_X);
+    {
+        int mx = GetMouseX(), my = GetMouseY();
+        UIButtonStyle close_btn = { .text = "X", .font_size = MODAL_FONT_BODY,
+                                    .bg = C_CLOSE_BTN, .border = C_CARD_BORDER,
+                                    .text_color = C_CLOSE_X };
+        ui_button_draw(close_r, &close_btn,
+                       ui_button_resolve_state(true, false, hit_rect(mx, my, close_r)));
+    }
 
     /* ── Fetch atlas for direction button enable state ───────────────── */
     AtlasSpriteSheetData* atlas = NULL;
@@ -534,39 +539,23 @@ void inventory_modal_draw(void) {
 
                     int mx = GetMouseX(), my = GetMouseY();
 
-                    /* Prev arrow */
-                    Color prev_bg = s_skill_page > 0
-                        ? (hit_rect(mx, my, s_skill_prev_rect)
-                            ? (Color){ 60, 60, 100, 240 } : (Color){ 40, 42, 68, 220 })
-                        : C_DIR_BTN_DIS;
-                    DrawRectangleRec(s_skill_prev_rect, prev_bg);
-                    DrawRectangleLinesEx(s_skill_prev_rect, 1.0f, (Color){ 60, 65, 90, 160 });
-                    {
-                        const char* pl = "<";
-                        int ptw = MeasureText(pl, MODAL_FONT_STAT);
-                        Color ptc = s_skill_page > 0
-                            ? (Color){ 200, 210, 230, 240 } : (Color){ 60, 65, 75, 140 };
-                        DrawText(pl, (int)(prev_x + (arrow_w - ptw) * 0.5f),
-                                 (int)(arrow_y + (arrow_h - MODAL_FONT_STAT) * 0.5f),
-                                 MODAL_FONT_STAT, ptc);
-                    }
-
-                    /* Next arrow */
-                    Color next_bg = s_skill_page < match_count - 1
-                        ? (hit_rect(mx, my, s_skill_next_rect)
-                            ? (Color){ 60, 60, 100, 240 } : (Color){ 40, 42, 68, 220 })
-                        : C_DIR_BTN_DIS;
-                    DrawRectangleRec(s_skill_next_rect, next_bg);
-                    DrawRectangleLinesEx(s_skill_next_rect, 1.0f, (Color){ 60, 65, 90, 160 });
-                    {
-                        const char* nl = ">";
-                        int ntw = MeasureText(nl, MODAL_FONT_STAT);
-                        Color ntc = s_skill_page < match_count - 1
-                            ? (Color){ 200, 210, 230, 240 } : (Color){ 60, 65, 75, 140 };
-                        DrawText(nl, (int)(next_x + (arrow_w - ntw) * 0.5f),
-                                 (int)(arrow_y + (arrow_h - MODAL_FONT_STAT) * 0.5f),
-                                 MODAL_FONT_STAT, ntc);
-                    }
+                    UIButtonStyle arrow = {
+                        .font_size     = MODAL_FONT_STAT,
+                        .bg            = { 40, 42, 68, 220 },
+                        .bg_hover      = { 60, 60, 100, 240 },
+                        .bg_disabled   = C_DIR_BTN_DIS,
+                        .border        = { 60, 65, 90, 160 },
+                        .text_color    = { 200, 210, 230, 240 },
+                        .text_disabled = { 60, 65, 75, 140 },
+                    };
+                    bool can_prev = s_skill_page > 0;
+                    bool can_next = s_skill_page < match_count - 1;
+                    arrow.text = "<";
+                    ui_button_draw(s_skill_prev_rect, &arrow,
+                        ui_button_resolve_state(can_prev, false, hit_rect(mx, my, s_skill_prev_rect)));
+                    arrow.text = ">";
+                    ui_button_draw(s_skill_next_rect, &arrow,
+                        ui_button_resolve_state(can_next, false, hit_rect(mx, my, s_skill_next_rect)));
                 }
 
                 y_cursor += MODAL_FONT_STAT + 6;

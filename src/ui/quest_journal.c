@@ -2,6 +2,7 @@
 
 #include "modal.h"
 #include "quest_store.h"
+#include "ui_button.h"
 #include "ui_toggle.h"
 
 #include <raylib.h>
@@ -187,14 +188,16 @@ static bool journal_walk(int mode, int mx, int my) {
             bool can_prev = s_page[sec] > 0;
             bool can_next = s_page[sec] < pages - 1;
             if (JW_DRAW == mode) {
-                DrawText("Prev", (int)prev.x, (int)(prev.y + 2), QJ_FONT_SMALL,
-                         can_prev ? C_TEXT : C_DIS);
+                UIButtonStyle pager = { .font_size = QJ_FONT_SMALL, .no_fill = true,
+                                        .text_color = C_TEXT, .text_disabled = C_DIS };
+                pager.text = "Prev";
+                ui_button_draw(prev, &pager, ui_button_resolve_state(can_prev, false, false));
+                pager.text = "Next";
+                ui_button_draw(next, &pager, ui_button_resolve_state(can_next, false, false));
                 char ctr[24];
                 snprintf(ctr, sizeof(ctr), "Page %d / %d", s_page[sec] + 1, pages);
                 int cw = MeasureText(ctr, QJ_FONT_SMALL);
                 DrawText(ctr, (int)(x + (w - cw) / 2), (int)(y + 4), QJ_FONT_SMALL, C_DIM);
-                DrawText("Next", (int)next.x, (int)(next.y + 2), QJ_FONT_SMALL,
-                         can_next ? C_TEXT : C_DIS);
             } else if (JW_CLICK == mode && can_prev && hit(mx, my, prev)) {
                 s_page[sec]--;
                 s_detail[sec] = -1;

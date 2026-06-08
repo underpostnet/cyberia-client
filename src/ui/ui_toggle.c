@@ -1,12 +1,7 @@
 #include "ui_toggle.h"
-#include "ui_icon.h"
-
-#include <math.h>
+#include "ui_button.h"
 
 #define UI_TOGGLE_ANIM_SPEED 6.667f /* ~150 ms 0..1 */
-
-static const Color C_TOGGLE_BG     = {  20,  24,  40, 220 };
-static const Color C_TOGGLE_BORDER = {  80, 160, 220, 240 };
 
 void ui_toggle_init(UIToggle* t, Rectangle anchor, bool initial_expanded,
                     UIToggleChevron chevron) {
@@ -56,15 +51,8 @@ static const char* chevron_icon_id(UIToggleChevron ch) {
 }
 
 void ui_toggle_draw(const UIToggle* t) {
-    DrawRectangleRec(t->anchor, C_TOGGLE_BG);
-    DrawRectangleLinesEx(t->anchor, 1.0f, C_TOGGLE_BORDER);
-
-    float cx = t->anchor.x + t->anchor.width  * 0.5f;
-    float cy = t->anchor.y + t->anchor.height * 0.5f;
-    int   sz = (int)((t->anchor.width < t->anchor.height
-                      ? t->anchor.width : t->anchor.height) * 0.75f);
-    if (sz < 6) sz = 6;
-    ui_icon_draw(chevron_icon_id(resolve_chevron(t)), cx, cy, sz, false, 0.0f);
+    UIButtonStyle style = { .icon_id = chevron_icon_id(resolve_chevron(t)) };
+    ui_button_draw(t->anchor, &style, UI_BUTTON_NORMAL);
 }
 
 bool ui_toggle_handle_click(UIToggle* t, int mx, int my) {

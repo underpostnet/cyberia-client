@@ -19,6 +19,7 @@
 #include "game_state.h"
 #include "object_layers_management.h"
 #include "ol_as_animated_ico.h"
+#include "ui_button.h"
 
 #include <assert.h>
 #include <math.h>
@@ -200,12 +201,16 @@ static void draw_coin_slot(Rectangle r, int coin_idx, ObjectLayersManager* mgr) 
 
 /* draw_arrow draws a scroll arrow button. */
 static void draw_arrow(int x, int y, int w, int h, bool left, bool enabled) {
-    Color c = enabled ? C_SCROLL_ARROW : (Color){60, 60, 80, 100};
-    DrawRectangle(x, y, w, h, (Color){20, 20, 35, 180});
-    const char* label = left ? "<" : ">";
-    int fs = 18;
-    int tw = MeasureText(label, fs);
-    DrawText(label, x + (w - tw) / 2, y + (h - fs) / 2, fs, c);
+    UIButtonStyle style = {
+        .text          = left ? "<" : ">",
+        .font_size     = 18,
+        .bg            = { 20, 20, 35, 180 },
+        .bg_disabled   = { 20, 20, 35, 180 },
+        .text_color    = C_SCROLL_ARROW,
+        .text_disabled = { 60, 60, 80, 100 },
+    };
+    ui_button_draw((Rectangle){ (float)x, (float)y, (float)w, (float)h }, &style,
+                   ui_button_resolve_state(enabled, false, false));
 }
 
 /* ── Public API ─────────────────────────────────────────────────────────── */

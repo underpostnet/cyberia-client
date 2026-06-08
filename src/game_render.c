@@ -18,6 +18,7 @@
 #include "ui/nameplate.h"
 #include "ui/quest_journal.h"
 #include "ui/tap_effect.h"
+#include "ui/ui_button.h"
 #include "ui/ui_icon.h"
 #include "util/log.h"
 
@@ -44,18 +45,15 @@ static void draw_zoom_buttons(int sw, int sh) {
     int mx = GetMouseX(), my = GetMouseY();
     for (int i = 0; i < 2; i++) {
         Rectangle r = zoom_btn_rect(i, sw, sh);
-        bool hov = ((float)mx >= r.x && (float)mx < r.x + r.width &&
-                    (float)my >= r.y && (float)my < r.y + r.height);
-        Color bg = hov ? (Color){ 50, 50, 70, 220 }
-                       : (Color){ 20, 20, 35, 200 };
-        DrawRectangleRec(r, bg);
-        DrawRectangleLinesEx(r, 1.0f, (Color){ 80, 80, 120, 180 });
-        int fs  = 24;
-        int tw  = MeasureText(labels[i], fs);
-        DrawText(labels[i],
-                 (int)(r.x + (r.width  - tw) * 0.5f),
-                 (int)(r.y + (r.height - fs) * 0.5f),
-                 fs, (Color){ 200, 210, 230, 240 });
+        UIButtonStyle style = {
+            .text       = labels[i],
+            .font_size  = 24,
+            .bg         = { 20, 20, 35, 200 },
+            .bg_hover   = { 50, 50, 70, 220 },
+            .border     = { 80, 80, 120, 180 },
+        };
+        UIButtonState st = ui_button_resolve_state(true, false, ui_button_hit(r, mx, my));
+        ui_button_draw(r, &style, st);
     }
 }
 

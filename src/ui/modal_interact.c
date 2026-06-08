@@ -4,6 +4,7 @@
 #include "interaction_bubble.h"
 #include "modal.h"
 #include "modal_dialogue.h"
+#include "ui_button.h"
 #include "util/log.h"
 
 #include <raylib.h>
@@ -172,28 +173,30 @@ void modal_interact_draw(void) {
         DrawText(s_display_name, (int)(card.x + MI_PAD),
                  (int)(card.y + (MI_HEADER_H - MI_FONT_NAME) / 2), MI_FONT_NAME, C_TEXT);
     }
+    int mx = GetMouseX(), my = GetMouseY();
+
     Rectangle xr = close_rect(card);
-    DrawText("X", (int)(xr.x + 6), (int)(xr.y + 4), 18, C_X);
+    UIButtonStyle close_btn = { .text = "X", .font_size = 18,
+                                .text_color = C_X, .no_fill = true };
+    ui_button_draw(xr, &close_btn,
+                   ui_button_resolve_state(true, false, ui_button_hit(xr, mx, my)));
 
     /* Tabs */
-    if (s_has_talk) {
-        Rectangle tr = talk_tab_rect(card);
-        DrawRectangleRec(tr, C_TAB);
-        const char* label = "Talk";
-        int tw = MeasureText(label, MI_FONT_TAB);
-        DrawText(label, (int)(tr.x + (tr.width - tw) / 2),
-                 (int)(tr.y + (tr.height - MI_FONT_TAB) / 2), MI_FONT_TAB, C_TEXT);
-    } else {
-        Rectangle tr = talk_tab_rect(card);
-        DrawRectangleRec(tr, C_TAB_DIS);
-    }
+    Rectangle tr = talk_tab_rect(card);
+    UIButtonStyle talk_btn = { .text = s_has_talk ? "Talk" : NULL,
+                               .font_size = MI_FONT_TAB,
+                               .bg = C_TAB, .bg_disabled = C_TAB_DIS,
+                               .text_color = C_TEXT };
+    ui_button_draw(tr, &talk_btn,
+                   s_has_talk ? ui_button_resolve_state(true, false, ui_button_hit(tr, mx, my))
+                              : UI_BUTTON_DISABLED);
 
     Rectangle cr = chat_tab_rect(card);
-    DrawRectangleRec(cr, C_TAB);
-    const char* clabel = s_is_self ? "Profile" : "Chat / Profile";
-    int cw = MeasureText(clabel, MI_FONT_TAB);
-    DrawText(clabel, (int)(cr.x + (cr.width - cw) / 2),
-             (int)(cr.y + (cr.height - MI_FONT_TAB) / 2), MI_FONT_TAB, C_TEXT);
+    UIButtonStyle chat_btn = { .text = s_is_self ? "Profile" : "Chat / Profile",
+                               .font_size = MI_FONT_TAB,
+                               .bg = C_TAB, .text_color = C_TEXT };
+    ui_button_draw(cr, &chat_btn,
+                   ui_button_resolve_state(true, false, ui_button_hit(cr, mx, my)));
 
     /* Content hint */
     const char* hint = s_talk_pending ? "Loading dialogue..."
