@@ -99,7 +99,8 @@ static bool try_open_dialogue(void) {
     item[sizeof(item) - 1] = '\0';
 
     modal_interact_close();
-    modal_dialogue_open(entity, item, code, d->lines, d->line_count);
+    modal_dialogue_open(entity, item, code, MODAL_DIALOGUE_RENDER_ENTITY,
+                        d->lines, d->line_count);
     return true;
 }
 

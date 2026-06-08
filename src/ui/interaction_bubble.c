@@ -145,6 +145,17 @@ static InteractionBubbleSlot* upsert_slot(const char* entity_id) {
     return slot;
 }
 
+/* Item id of the entity's active skin, or NULL. Talk dialogue is keyed to
+ * the skin only — the displayed dialogue is the one associated with it. */
+static const char* active_skin_item_id(const ObjectLayerState* layers, int count) {
+    for (int i = 0; i < count; i++) {
+        if (!layers[i].active || '\0' == layers[i].item_id[0]) continue;
+        ObjectLayer* ol = lookup_cached_layer(layers[i].item_id);
+        if (ol && 0 == strcmp(ol->data.item.type, "skin")) return layers[i].item_id;
+    }
+    return NULL;
+}
+
 static void scan_entity(const char* entity_id, const EntityState* base,
                         bool is_player, const char* behavior) {
     if (!base || !entity_id || entity_id[0] == '\0') return;
@@ -166,32 +177,26 @@ static void scan_entity(const char* entity_id, const EntityState* base,
     uint32_t flags = 0;
     char dlg_item[128] = {0};
 
+    /* Talk is available only when the entity's ACTIVE SKIN has dialogue —
+     * the shown dialogue is the skin's. Alive entities use their current
+     * OLs; dead ones reuse the cached alive snapshot. */
+    const ObjectLayerState* scan_layers = NULL;
+    int scan_count = 0;
     if (!is_dead) {
-        /* Entity is alive — scan its current active OLs normally. */
-        for (int i = 0; i < base->object_layer_count; i++) {
-            const ObjectLayerState* ol = &base->object_layers[i];
-            if (!ol->active || ol->item_id[0] == '\0') continue;
-
-            dialogue_data_request(ol->item_id);
-
-            if (dialogue_data_available(ol->item_id)) {
-                flags |= INTERACT_DIALOGUE;
-                if (dlg_item[0] == '\0')
-                    strncpy(dlg_item, ol->item_id, sizeof(dlg_item) - 1);
-            }
-        }
+        scan_layers = base->object_layers;
+        scan_count  = base->object_layer_count;
     } else if (existing && existing->alive_layer_count > 0) {
-        /* Entity is dead — reuse cached alive layers for dialogue check. */
-        for (int i = 0; i < existing->alive_layer_count; i++) {
-            const ObjectLayerState* ol = &existing->alive_layers[i];
-            if (!ol->active || ol->item_id[0] == '\0') continue;
+        scan_layers = existing->alive_layers;
+        scan_count  = existing->alive_layer_count;
+    }
 
-            dialogue_data_request(ol->item_id);
-
-            if (dialogue_data_available(ol->item_id)) {
+    if (scan_layers) {
+        const char* skin = active_skin_item_id(scan_layers, scan_count);
+        if (skin) {
+            dialogue_data_request(skin);
+            if (dialogue_data_available(skin)) {
                 flags |= INTERACT_DIALOGUE;
-                if (dlg_item[0] == '\0')
-                    strncpy(dlg_item, ol->item_id, sizeof(dlg_item) - 1);
+                strncpy(dlg_item, skin, sizeof(dlg_item) - 1);
             }
         }
     }

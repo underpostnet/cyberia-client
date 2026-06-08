@@ -16,7 +16,9 @@
 #include "game_state.h"
 #include "interaction_bubble.h"
 #include "modal.h"
+#include "object_layer.h"
 #include "object_layers_management.h"
+#include "ol_as_animated_ico.h"
 #include "ol_stack_ico.h"
 #include "util/log.h"
 
@@ -41,6 +43,7 @@ static int          s_current     = 0;   /* index of the line being displayed */
 static char s_entity_id[64]   = {0};
 static char s_item_id[128]    = {0};
 static char s_dialog_code[96] = {0};
+static ModalDialogueRender s_render = MODAL_DIALOGUE_RENDER_ITEM;
 
 /* Typewriter state */
 static float s_char_timer    = 0.0f;
@@ -106,6 +109,46 @@ static bool hit_rect(int mx, int my, Rectangle r) {
             (float)my >= r.y && (float)my < r.y + r.height);
 }
 
+/* True if any active layer in the stack is a skin — the entity is renderable
+ * as a coherent character only when it has one. */
+static bool layers_have_active_skin(const ObjectLayerState* layers, int count) {
+    for (int i = 0; i < count; i++) {
+        if (!layers[i].active || '\0' == layers[i].item_id[0]) continue;
+        ObjectLayer* ol = lookup_cached_layer(layers[i].item_id);
+        if (ol && 0 == strcmp(ol->data.item.type, "skin")) return true;
+    }
+    return false;
+}
+
+/* Draw the left-column sprite for the current dialogue context. */
+static void draw_dialogue_sprite(int icon_x, int icon_y, int icon_sz) {
+    ObjectLayersManager* mgr = obj_layers_mgr_get();
+    if (!mgr) return;
+
+    if (MODAL_DIALOGUE_RENDER_ITEM == s_render) {
+        if (s_item_id[0] != '\0') {
+            ol_as_ico_draw(mgr, s_item_id, icon_x, icon_y, icon_sz,
+                           "down_idle", 0, WHITE);
+        }
+        return;
+    }
+
+    /* ENTITY: full active stack, gated on an active skin. */
+    int lc = 0;
+    const ObjectLayerState* layers = interaction_bubble_get_alive_layers(s_entity_id, &lc);
+    if (layers && lc > 0 && layers_have_active_skin(layers, lc)) {
+        ol_stack_ico_draw(mgr, layers, lc, icon_x, icon_y, icon_sz,
+                          "down_idle", 0, WHITE);
+        return;
+    }
+
+    /* No active skin → "Not Available" placeholder centred in the column. */
+    const char* na = "Not Available";
+    int fs = DLG_FONT_TEXT;
+    int tw = MeasureText(na, fs);
+    DrawText(na, icon_x + (icon_sz - tw) / 2, icon_y + (icon_sz - fs) / 2, fs, C_HINT);
+}
+
 /* ── Public API ──────────────────────────────────────────────────────── */
 
 void modal_dialogue_init(void) {
@@ -117,7 +160,7 @@ void modal_dialogue_init(void) {
 }
 
 void modal_dialogue_open(const char* entity_id, const char* item_id,
-                         const char* dialog_code,
+                         const char* dialog_code, ModalDialogueRender render,
                          const DialogueLine* lines, int line_count) {
     if (!lines || line_count <= 0) return;
 
@@ -127,6 +170,7 @@ void modal_dialogue_open(const char* entity_id, const char* item_id,
     memcpy(s_lines, lines, sizeof(DialogueLine) * n);
     s_line_count = n;
     s_current    = 0;
+    s_render     = render;
 
     strncpy(s_entity_id, entity_id ? entity_id : "", sizeof(s_entity_id) - 1);
     s_entity_id[sizeof(s_entity_id) - 1] = '\0';
@@ -250,19 +294,11 @@ void modal_dialogue_draw(void) {
     int icon_x   = (int)(x0 + (col_w - icon_sz) * 0.5f); /* centre horizontally      */
     int icon_y   = (int)(y0 + (card.height - icon_sz) * 0.5f); /* centre vertically  */
 
-    /* Left column: full alive OL stack of the entity — same visual as the
-     * interaction bubble, so the player recognises who they are talking to. */
-    {
-        ObjectLayersManager* mgr = obj_layers_mgr_get();
-        int lc = 0;
-        const ObjectLayerState* layers =
-            interaction_bubble_get_alive_layers(s_entity_id, &lc);
-        if (mgr && layers && lc > 0) {
-            ol_stack_ico_draw(mgr, layers, lc,
-                              icon_x, icon_y, icon_sz,
-                              "down_idle", 0, WHITE);
-        }
-    }
+    /* Left column sprite — context-dependent (see ModalDialogueRender):
+     *   ITEM   → just the single item_id (inventory lore).
+     *   ENTITY → the entity's full active stack, but only when it has an
+     *            active skin; otherwise a "Not Available" placeholder. */
+    draw_dialogue_sprite(icon_x, icon_y, icon_sz);
 
     /* Speaker name + progress — right of sprite column */
     const DialogueLine* line = &s_lines[s_current];

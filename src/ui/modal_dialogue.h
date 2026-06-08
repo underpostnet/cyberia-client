@@ -61,16 +61,27 @@ typedef void (*ModalDialogueOnClose)(void);
  */
 void modal_dialogue_init(void);
 
+/* Selects what sprite the dialogue renders in its left column:
+ *   ITEM   — the single item_id only (inventory lore button).
+ *   ENTITY — the entity's full active ObjectLayer stack (NPC talk). The
+ *            stack is shown only if the entity has an active skin; otherwise
+ *            the column renders a "Not Available" state. */
+typedef enum {
+    MODAL_DIALOGUE_RENDER_ITEM,
+    MODAL_DIALOGUE_RENDER_ENTITY,
+} ModalDialogueRender;
+
 /**
  * @brief Open a dialogue interaction.
  *
  * @param entity_id   ID of the entity the player is speaking with.
  * @param item_id     Item ID whose dialogue data to display.
+ * @param render      How to render the left-column sprite (see above).
  * @param lines       Array of dialogue lines (copied internally).
  * @param line_count  Number of entries in @p lines.
  */
 void modal_dialogue_open(const char* entity_id, const char* item_id,
-                         const char* dialog_code,
+                         const char* dialog_code, ModalDialogueRender render,
                          const DialogueLine* lines, int line_count);
 
 /**

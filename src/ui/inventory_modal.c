@@ -769,6 +769,7 @@ bool inventory_modal_handle_click(int mx, int my) {
                     g_game_state.player_id,  /* self as entity context */
                     ols->item_id,
                     "",                      /* lore preview — not a quest dialogue */
+                    MODAL_DIALOGUE_RENDER_ITEM,
                     d->lines, d->line_count);
 
                 /* Stale thaw — rejected by server's reason-match check */
