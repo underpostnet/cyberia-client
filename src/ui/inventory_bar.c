@@ -17,6 +17,7 @@
 #include "inventory_bar.h"
 
 #include "game_state.h"
+#include "item_slot.h"
 #include "object_layers_management.h"
 #include "ol_as_animated_ico.h"
 #include "ui_button.h"
@@ -37,12 +38,7 @@ static float s_scroll_anim   = 0.0f;
 /* ── Internal colours ──────────────────────────────────────────────────── */
 
 static const Color C_BAR_BG        = {  10,  10,  20, INV_BAR_ALPHA };
-static const Color C_SLOT_BG       = {  25,  25,  40, 200 };
-static const Color C_SLOT_BORDER   = {  70,  70, 100, 180 };
-static const Color C_ACTIVE_GLOW   = { 100, 200, 255, 240 };
 static const Color C_COIN_BORDER   = { 230, 190,  60, 200 };  /* gold border for coin slot */
-static const Color C_QTY_BG        = {   0,   0,   0, 190 };
-static const Color C_QTY_TEXT      = { 255, 230,  80, 255 };
 static const Color C_COIN_QTY_TEXT = { 255, 215,   0, 255 };
 static const Color C_SCROLL_ARROW  = { 180, 180, 200, 220 };
 
@@ -96,66 +92,6 @@ static Rectangle coin_slot_rect(int screen_w, int screen_h) {
     float slot_top = bar_top + (INV_BAR_HEIGHT - INV_SLOT_SIZE) * 0.5f;
     float cx       = (float)(screen_w - arrow_w - INV_SLOT_SIZE - INV_SLOT_GAP + INV_SLOT_GAP / 2);
     return (Rectangle){ cx, slot_top, (float)INV_SLOT_SIZE, (float)INV_SLOT_SIZE };
-}
-
-/* draw_slot renders a single scrollable inventory slot. */
-static void draw_slot(Rectangle r, const ObjectLayerState* ols, ObjectLayersManager* mgr) {
-    DrawRectangleRec(r, C_SLOT_BG);
-
-    bool active = ols->active;
-
-    bool activable = true;
-    if (mgr && ols->item_id[0] != '\0') {
-        ObjectLayer* ol_data = lookup_cached_layer(ols->item_id);
-        if (ol_data) activable = ol_data->data.item.activable;
-    }
-
-    /* Border: always consistent 2px thickness — color varies by state */
-    if (active && activable) {
-        DrawRectangleLinesEx(r, 2.0f, C_ACTIVE_GLOW);
-    } else if (!activable) {
-        DrawRectangleLinesEx(r, 2.0f, C_SLOT_BORDER);
-    } else {
-        DrawRectangleLinesEx(r, 2.0f, C_SLOT_BORDER);
-    }
-
-    /* Sprite via ol_as_animated_ico */
-    if (ols->item_id[0] != '\0') {
-        Color tint = (active && activable) ? WHITE : (Color){180, 180, 180, 160};
-        int inner  = INV_SLOT_SIZE - INV_SLOT_PADDING * 2;
-        ol_as_ico_draw(mgr, ols->item_id,
-                       (int)(r.x + INV_SLOT_PADDING),
-                       (int)(r.y + INV_SLOT_PADDING),
-                       inner, OL_ICO_DEFAULT_DIR, 0, tint);
-
-        /* Quantity badge (bottom-right, only if > 1) */
-        if (ols->quantity > 1) {
-            char buf[16];
-            if (ols->quantity >= 1000)
-                snprintf(buf, sizeof(buf), "%dk", ols->quantity / 1000);
-            else
-                snprintf(buf, sizeof(buf), "%d", ols->quantity);
-            int fs = INV_QTY_FONT_SIZE;
-            int tw = MeasureText(buf, fs);
-            int bx = (int)(r.x + r.width - tw - 3);
-            int by = (int)(r.y + r.height - fs - 2);
-            DrawRectangle(bx - 1, by - 1, tw + 2, fs + 2, C_QTY_BG);
-            DrawText(buf, bx, by, fs, C_QTY_TEXT);
-        }
-
-        /* Lock badge (top-left) for non-activable items */
-        if (!activable) {
-            int lfs = INV_QTY_FONT_SIZE;
-            int lx  = (int)(r.x + 3);
-            int ly  = (int)(r.y + 3);
-            DrawRectangle(lx - 1, ly - 1, lfs + 2, lfs + 2, (Color){0, 0, 0, 160});
-            DrawText("-", lx + 1, ly, lfs, (Color){255, 165, 0, 220});
-        }
-    } else {
-        /* Empty placeholder */
-        DrawCircle((int)(r.x + r.width * 0.5f), (int)(r.y + r.height * 0.5f),
-                   3.0f, (Color){80, 80, 100, 120});
-    }
 }
 
 /* draw_coin_slot renders the pinned right coin slot. */
@@ -270,7 +206,7 @@ void inventory_bar_draw(void) {
         if (r.x + r.width <= (float)arrow_w) continue;
         if (r.x >= coin_left)                continue;
 
-        draw_slot(r, &g_game_state.full_inventory[inv_idx], s_ol_manager);
+        item_slot_draw(r, &g_game_state.full_inventory[inv_idx], s_ol_manager);
     }
 
     /* Pinned coin slot — right side, just inside the right arrow */

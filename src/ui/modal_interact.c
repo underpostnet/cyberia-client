@@ -2,11 +2,13 @@
 
 #include "dialogue_data.h"
 #include "interaction_bubble.h"
+#include "inventory_modal.h"
+#include "item_slot.h"
 #include "modal.h"
 #include "modal_dialogue.h"
-#include "ui_button.h"
+#include "object_layer.h"
 #include "object_layers_management.h"
-#include "ol_stack_ico.h"
+#include "ui_button.h"
 #include "util/log.h"
 
 #include <raylib.h>
@@ -38,16 +40,23 @@ static bool  s_overlay_open = false;
 
 /* ── Layout ───────────────────────────────────────────────────────────── */
 
-#define MI_PAD        14
-#define MI_HEADER_H   44
-#define MI_FONT_NAME  20
+#define MI_PAD        22
+#define MI_HEADER_H   48
+#define MI_CLOSE_SZ   40
+#define MI_BTN_H      52
+#define MI_SLOT_SZ    56
+#define MI_SLOT_GAP   8
+#define MI_FONT_NAME  22
 #define MI_FONT_BTN   18
+#define MI_FONT_LABEL 14
+#define MI_FONT_STAT  14
 
-static const Color C_BTN  = {  24,  30,  48, 255 };
-static const Color C_TEXT = { 220, 220, 230, 240 };
-static const Color C_X    = { 210, 120, 120, 240 };
+static const Color C_BTN   = {  24,  30,  48, 255 };
+static const Color C_TEXT  = { 220, 220, 230, 240 };
+static const Color C_LABEL = { 150, 160, 190, 220 };
+static const Color C_STAT  = { 120, 220, 140, 255 };
 
-/* Top half of the screen with padding all round. */
+/* Top half of the screen with generous padding all round. */
 static Rectangle card_rect(void) {
     int sw = GetScreenWidth();
     int sh = GetScreenHeight();
@@ -59,18 +68,48 @@ static Rectangle card_rect(void) {
 }
 
 static Rectangle close_rect(Rectangle card) {
-    float s = 28.0f;
-    return (Rectangle){ card.x + card.width - s - 8.0f, card.y + 8.0f, s, s };
+    return (Rectangle){ card.x + card.width - MI_CLOSE_SZ - 10.0f, card.y + 4.0f,
+                        (float)MI_CLOSE_SZ, (float)MI_CLOSE_SZ };
 }
 
-/* Two equal action buttons filling the body below the header. */
+/* Two equal action buttons in a row below the header. */
 static void button_rects(Rectangle card, Rectangle* chat, Rectangle* integration) {
     float bx = card.x + MI_PAD;
     float by = card.y + MI_HEADER_H + MI_PAD;
     float bw = (card.width - 3 * MI_PAD) * 0.5f;
-    float bh = card.height - MI_HEADER_H - 2 * MI_PAD;
-    *chat        = (Rectangle){ bx, by, bw, bh };
-    *integration = (Rectangle){ bx + bw + MI_PAD, by, bw, bh };
+    *chat        = (Rectangle){ bx, by, bw, MI_BTN_H };
+    *integration = (Rectangle){ bx + bw + MI_PAD, by, bw, MI_BTN_H };
+}
+
+/* The active-item slot row sits below the buttons (after a section label). */
+static float items_row_y(Rectangle card) {
+    return card.y + MI_HEADER_H + MI_PAD + MI_BTN_H + MI_PAD + MI_FONT_LABEL + 6.0f;
+}
+
+static Rectangle item_slot_rect(Rectangle card, int i) {
+    return (Rectangle){ card.x + MI_PAD + (float)i * (MI_SLOT_SZ + MI_SLOT_GAP),
+                        items_row_y(card), (float)MI_SLOT_SZ, (float)MI_SLOT_SZ };
+}
+
+/* Baseline y of the stat-name row (the "Stack stats" label sits just above). */
+static float stats_y(Rectangle card) {
+    return items_row_y(card) + MI_SLOT_SZ + MI_PAD + MI_FONT_LABEL + 6.0f;
+}
+
+/* Sum of each of the six stats across the entity's active stack. */
+static Stats stack_stats(void) {
+    Stats t = { 0 };
+    for (int i = 0; i < s_cached_layer_count; i++) {
+        ObjectLayer* ol = lookup_cached_layer(s_cached_layers[i].item_id);
+        if (!ol) continue;
+        t.effect       += ol->data.stats.effect;
+        t.resistance   += ol->data.stats.resistance;
+        t.agility      += ol->data.stats.agility;
+        t.range        += ol->data.stats.range;
+        t.intelligence += ol->data.stats.intelligence;
+        t.utility      += ol->data.stats.utility;
+    }
+    return t;
 }
 
 /* ── Snapshot alive layers ───────────────────────────────────────────── */
@@ -108,13 +147,18 @@ static void open_overlay(int tab) {
     interaction_bubble_open_js_overlay(entity, tab);
 }
 
+/* Reopen the interaction modal with the cached entity context — used to
+ * return here after a child modal (JS overlay, item detail) closes. */
+static void modal_interact_reopen(void) {
+    modal_interact_open(s_entity_id, s_display_name, s_dlg_item,
+                        s_has_dialogue, s_border);
+}
+
 /* Called when the JS overlay closes — reopen the modal. */
 void modal_interact_overlay_closed(void) {
     if (!s_overlay_open) return;
     s_overlay_open = false;
-    /* Reopen the interaction modal with the cached data. */
-    modal_interact_open(s_entity_id, s_display_name, s_dlg_item,
-                        s_has_dialogue, s_border);
+    modal_interact_reopen();
 }
 
 /* ── Public API ───────────────────────────────────────────────────────── */
@@ -176,14 +220,43 @@ void modal_interact_update(float dt) {
     }
 }
 
+/* Draw the six-stat stack totals as a labelled row. */
+static void draw_stat_totals(Rectangle card) {
+    Stats t = stack_stats();
+    const char* names[6] = { "EFF", "RES", "AGI", "RNG", "INT", "UTL" };
+    int values[6] = { t.effect, t.resistance, t.agility, t.range, t.intelligence, t.utility };
+
+    float y = stats_y(card);
+    DrawText("Stack stats", (int)(card.x + MI_PAD), (int)(y - MI_FONT_LABEL - 4),
+             MI_FONT_LABEL, C_LABEL);
+
+    float cell = (card.width - 2 * MI_PAD) / 6.0f;
+    for (int i = 0; i < 6; i++) {
+        float cx = card.x + MI_PAD + cell * i;
+        DrawText(names[i], (int)cx, (int)y, MI_FONT_STAT, C_LABEL);
+        char val[16];
+        snprintf(val, sizeof(val), "%d", values[i]);
+        DrawText(val, (int)cx, (int)(y + MI_FONT_STAT + 2), MI_FONT_STAT, C_STAT);
+    }
+}
+
 void modal_interact_draw(void) {
     if (!s_open) return;
     int sw = GetScreenWidth();
     int sh = GetScreenHeight();
+    int mx = GetMouseX(), my = GetMouseY();
 
+    /* Dim backdrop + a more transparent panel than the shared default, so the
+     * world stays visible behind the upper-half modal. */
     modal_draw_overlay(sw, sh, s_age);
     Rectangle card = modal_scale_rect(card_rect(), modal_pop_scale(s_age));
-    modal_draw_panel_ex(card, s_age, s_border, 1.0f);
+    float a = modal_pop_alpha(s_age);
+    Color bg = MODAL_PANEL_BG;
+    bg.a = (unsigned char)(150 * a);
+    DrawRectangleRec(card, bg);
+    Color bc = s_border;
+    bc.a = (unsigned char)(bc.a * a);
+    DrawRectangleLinesEx(card, 1.0f, bc);
 
     /* Header: status-tinted strip + display name + close button. */
     DrawRectangle((int)card.x, (int)card.y, (int)card.width, MI_HEADER_H,
@@ -193,26 +266,31 @@ void modal_interact_draw(void) {
                  (int)(card.y + (MI_HEADER_H - MI_FONT_NAME) / 2), MI_FONT_NAME, C_TEXT);
     }
 
-    int mx = GetMouseX(), my = GetMouseY();
-
     Rectangle xr = close_rect(card);
-    UIButtonStyle close_btn = { .text = "X", .font_size = 18,
-                                .text_color = C_X, .no_fill = true };
+    UIButtonStyle close_btn = { .icon_id = "close-yellow", .no_fill = true };
     ui_button_draw(xr, &close_btn,
                    ui_button_resolve_state(true, false, ui_button_hit(xr, mx, my)));
 
     Rectangle chat, integration;
     button_rects(card, &chat, &integration);
-
     UIButtonStyle chat_btn = { .text = "Chat", .icon_id = "chat",
                                .font_size = MI_FONT_BTN, .bg = C_BTN, .text_color = C_TEXT };
     ui_button_draw(chat, &chat_btn,
                    ui_button_resolve_state(true, false, ui_button_hit(chat, mx, my)));
-
     UIButtonStyle integration_btn = { .text = "Integration", .icon_id = "reload",
                                       .font_size = MI_FONT_BTN, .bg = C_BTN, .text_color = C_TEXT };
     ui_button_draw(integration, &integration_btn,
                    ui_button_resolve_state(true, false, ui_button_hit(integration, mx, my)));
+
+    /* Active items — reuse the shared inventory slot primitive. */
+    DrawText("Active items", (int)(card.x + MI_PAD),
+             (int)(items_row_y(card) - MI_FONT_LABEL - 6), MI_FONT_LABEL, C_LABEL);
+    ObjectLayersManager* olm = obj_layers_mgr_get();
+    for (int i = 0; i < s_cached_layer_count; i++) {
+        item_slot_draw(item_slot_rect(card, i), &s_cached_layers[i], olm);
+    }
+
+    draw_stat_totals(card);
 }
 
 bool modal_interact_handle_click(int mx, int my) {
@@ -235,6 +313,19 @@ bool modal_interact_handle_click(int mx, int my) {
     if (ui_button_hit(integration, mx, my)) {
         open_overlay(INTERACT_OVERLAY_TAB_INTEGRATION);
         return true;
+    }
+
+    /* Active-item slot → open that item's detail; closing it returns here. */
+    for (int i = 0; i < s_cached_layer_count; i++) {
+        if (item_slot_hit(item_slot_rect(card, i), mx, my)) {
+            char item[MAX_ITEM_ID_LENGTH];
+            strncpy(item, s_cached_layers[i].item_id, sizeof(item) - 1);
+            item[sizeof(item) - 1] = '\0';
+            modal_interact_close();
+            if (inventory_modal_open_item(item))
+                inventory_modal_set_on_close(modal_interact_reopen);
+            return true;
+        }
     }
 
     if (!ui_button_hit(card, mx, my)) {

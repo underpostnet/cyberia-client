@@ -442,9 +442,23 @@ mergeInto(LibraryManager.library, {
             padding: '3px 4px',
             background: 'rgba(20,22,40,0.5)',
             borderRadius: '4px',
+            cursor: 'pointer',
           },
           list,
         );
+        /* Open the item in the Object Layer Engine Viewer (external page). */
+        itemRow.dataset.itemId = ol.itemId;
+        itemRow.onclick = function (ev) {
+          ev.stopPropagation();
+          var filter = JSON.stringify({
+            'data.item.id': { filterType: 'text', type: 'contains', filter: this.dataset.itemId },
+          });
+          window.open(
+            'https://www.cyberiaonline.com/object-layer-engine-viewer?page=1&limit=10&id=&filterModel=' +
+              encodeURIComponent(filter),
+            '_blank',
+          );
+        };
         if (ol.type) {
           var ico = ipEl(
             'img',

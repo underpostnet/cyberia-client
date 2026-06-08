@@ -48,6 +48,9 @@ static bool  s_open       = false;
 static int   s_inv_idx    = -1;
 static float s_age        = 0.0f;
 
+/* One-shot: fired when the modal closes so the opener can restore context. */
+static InventoryModalOnClose s_on_close = NULL;
+
 /* Direction / mode viewer state */
 static char  s_dir[16]     = "down";
 static char  s_mode[16]    = "idle";
@@ -109,8 +112,6 @@ static const Color C_STAT_VAL      = { 100, 220, 140, 255 };
 static const Color C_BTN_ACTIVATE  = {  30, 120,  60, 240 };
 static const Color C_BTN_DEACT     = { 120,  40,  40, 240 };
 static const Color C_BTN_TEXT      = { 230, 230, 230, 255 };
-static const Color C_CLOSE_BTN     = {  80,  80, 110, 220 };
-static const Color C_CLOSE_X       = { 210, 210, 230, 255 };
 static const Color C_QTY           = { 255, 215,   0, 255 };
 static const Color C_DIR_BTN_SEL   = {  50,  80, 160, 240 };   /* selected dir */
 static const Color C_DIR_BTN_DEF   = {  35,  38,  60, 220 };   /* unselected  */
@@ -171,13 +172,14 @@ static Color lighten(Color c, int d) {
                     (uint8_t)(b > 255 ? 255 : b), c.a };
 }
 
-/* draw_small_btn draws direction/mode buttons. */
-static void draw_small_btn(Rectangle r, const char* label, Color bg, bool selected,
-                           bool enabled, int mx, int my) {
+/* draw_small_btn draws direction/mode buttons (icon, label, or both). */
+static void draw_small_btn(Rectangle r, const char* label, const char* icon_id,
+                           Color bg, bool selected, bool enabled, int mx, int my) {
     Color base_bg = selected ? C_DIR_BTN_SEL : bg;
     if (enabled && hit_rect(mx, my, r)) base_bg = lighten(base_bg, 18);
     UIButtonStyle style = {
         .text            = label,
+        .icon_id         = icon_id,
         .font_size       = MODAL_FONT_STAT,
         .bg              = base_bg,
         .bg_selected     = base_bg,
@@ -253,9 +255,32 @@ void inventory_modal_open(int inv_idx) {
     send_freeze(true);
 }
 
+bool inventory_modal_open_item(const char* item_id) {
+    if (!item_id || '\0' == item_id[0]) return false;
+    for (int i = 0; i < g_game_state.full_inventory_count; i++) {
+        if (0 == strcmp(g_game_state.full_inventory[i].item_id, item_id)) {
+            inventory_modal_open(i);
+            return true;
+        }
+    }
+    return false;
+}
+
+void inventory_modal_set_on_close(InventoryModalOnClose cb) {
+    s_on_close = cb;
+}
+
 void inventory_modal_close(void) {
     s_open    = false;
     s_inv_idx = -1;
+
+    /* Bridge-safe ordering: fire on_close before the thaw so a callback that
+     * reopens another modal (e.g. the interaction modal) can override the
+     * freeze reason first; the stale "inventory" thaw is then rejected. */
+    InventoryModalOnClose cb = s_on_close;
+    s_on_close = NULL;
+    if (cb) cb();
+
     /* Notify server → thaw */
     send_freeze(false);
 }
@@ -291,9 +316,7 @@ void inventory_modal_draw(void) {
                            MODAL_CLOSE_SIZE, MODAL_CLOSE_SIZE };
     {
         int mx = GetMouseX(), my = GetMouseY();
-        UIButtonStyle close_btn = { .text = "X", .font_size = MODAL_FONT_BODY,
-                                    .bg = C_CLOSE_BTN, .border = C_CARD_BORDER,
-                                    .text_color = C_CLOSE_X };
+        UIButtonStyle close_btn = { .icon_id = "close-yellow", .no_fill = true };
         ui_button_draw(close_r, &close_btn,
                        ui_button_resolve_state(true, false, hit_rect(mx, my, close_r)));
     }
@@ -330,16 +353,16 @@ void inventory_modal_draw(void) {
         /* mouse position (for hover, not click) */
         int mx = GetMouseX(), my = GetMouseY();
 
-        const char* dirs[4]   = { "up",  "down",  "left",  "right" };
-        const char* labels[4] = { "^Up", "vDn",   "<Lf",   "Rt>"  };
+        const char* dirs[4]  = { "up",         "down",         "left",         "right"       };
+        const char* icons[4] = { "arrow-up",   "arrow-down",   "arrow-left",   "arrow-right" };
 
         for (int i = 0; i < 4; i++) {
             Rectangle r = { row_x + i * (DIR_BTN_W + DIR_BTN_GAP),
                             row_y, DIR_BTN_W, DIR_BTN_H };
             s_dir_btn_rects[i]   = r;
             s_dir_btn_enabled[i] = dir_has_frames(atlas, dirs[i], s_mode);
-            bool sel = (strcmp(s_dir, dirs[i]) == 0);
-            draw_small_btn(r, labels[i], C_DIR_BTN_DEF, sel,
+            bool sel = (0 == strcmp(s_dir, dirs[i]));
+            draw_small_btn(r, NULL, icons[i], C_DIR_BTN_DEF, sel,
                            s_dir_btn_enabled[i], mx, my);
         }
 
@@ -348,9 +371,9 @@ void inventory_modal_draw(void) {
         Rectangle mr = { mode_x, row_y, MODE_BTN_W, DIR_BTN_H };
         s_dir_btn_rects[4]   = mr;
         s_dir_btn_enabled[4] = true;
-        bool walk_mode = (strcmp(s_mode, "walking") == 0);
+        bool walk_mode = (0 == strcmp(s_mode, "walking"));
         Color mode_bg  = walk_mode ? C_MODE_WALK : C_MODE_IDLE;
-        draw_small_btn(mr, walk_mode ? "Walking" : "Idle",
+        draw_small_btn(mr, walk_mode ? "Walking" : "Idle", NULL,
                        mode_bg, true, true, mx, my);
     }
 

@@ -64,6 +64,21 @@ void inventory_modal_init(ObjectLayersManager* ol_manager);
 void inventory_modal_open(int inv_idx);
 
 /**
+ * @brief Open the modal for the first inventory slot matching an item id.
+ *
+ * Returns true when a matching slot was opened, false when the player owns
+ * no such item. Lets other UI (e.g. the interaction modal) reuse the
+ * item-detail view by item rather than index.
+ */
+bool inventory_modal_open_item(const char* item_id);
+
+/* One-shot callback fired when the modal closes — lets the opener restore
+ * its own context (e.g. the interaction modal reopening itself). Cleared
+ * after it fires. */
+typedef void (*InventoryModalOnClose)(void);
+void inventory_modal_set_on_close(InventoryModalOnClose cb);
+
+/**
  * @brief Close (hide) the modal without any action.
  */
 void inventory_modal_close(void);
