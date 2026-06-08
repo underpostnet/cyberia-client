@@ -287,13 +287,13 @@ switch — both default to `localhost` regardless of `BUILD_MODE`:
 
 ### Constants (`src/config.h`)
 
-| Constant                    | Default        | Description                                                                                                       |
+| Constant                    | Default        | Description                                                                                                      |
 | --------------------------- | -------------- | ---------------------------------------------------------------------------------------------------------------- |
 | `CYBERIA_CLIENT_HINTS_CODE` | `cyberia-main` | Lookup key for the optional client-hints fetch (presentation override key — never an instance/server identifier) |
-| `MAX_TEXTURE_CACHE_SIZE`    | `512`          | Atlas texture LRU cap                                                                                             |
-| `MAX_LAYER_CACHE_SIZE`      | `256`          | ObjectLayer metadata LRU cap                                                                                      |
-| `MAX_ATLAS_CACHE_SIZE`      | `256`          | Atlas metadata LRU cap                                                                                            |
-| `DEFAULT_FRAME_DURATION_MS` | `100`          | Default animation frame duration                                                                                  |
+| `MAX_TEXTURE_CACHE_SIZE`    | `512`          | Atlas texture LRU cap                                                                                            |
+| `MAX_LAYER_CACHE_SIZE`      | `256`          | ObjectLayer metadata LRU cap                                                                                     |
+| `MAX_ATLAS_CACHE_SIZE`      | `256`          | Atlas metadata LRU cap                                                                                           |
+| `DEFAULT_FRAME_DURATION_MS` | `100`          | Default animation frame duration                                                                                 |
 
 ---
 
