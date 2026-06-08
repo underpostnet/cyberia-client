@@ -89,14 +89,18 @@ void interaction_bubble_dead_equip(const char* item_id, bool active);
 const ObjectLayerState* interaction_bubble_get_alive_layers(
     const char *entity_id, int *out_count);
 
+/* Initial JS overlay tab, selected by modal_interact's action buttons. */
+#define INTERACT_OVERLAY_TAB_CHAT         0
+#define INTERACT_OVERLAY_TAB_INTEGRATION  1
+
 /**
- * @brief Open the JS chat/profile overlay for an entity's bubble slot.
+ * @brief Open the JS overlay for an entity's bubble slot on a given tab.
  *
- * Invoked by modal_interact's Chat/Profile tab. Resolves the slot by
- * entity ID, opens the JS overlay, and pushes the entity's OL stack for
- * preview rendering. No-op if the entity has no bubble slot.
+ * Resolves the slot by entity ID, opens the JS overlay on @p initial_tab
+ * (INTERACT_OVERLAY_TAB_*), and pushes the entity's OL stack for preview
+ * rendering. No-op if the entity has no bubble slot.
  */
-void interaction_bubble_open_js_overlay(const char* entity_id);
+void interaction_bubble_open_js_overlay(const char* entity_id, int initial_tab);
 
 /**
  * @brief Whether a screen point is occupied by the bubble column UI.

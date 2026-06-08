@@ -2,21 +2,16 @@
  * @file interact_overlay.js
  * @brief General-purpose interact overlay — non-intrusive, real-time MMORPG.
  *
- * Bottom-docked panel for entity interactions: Profile, Chat.
+ * Bottom-docked panel for entity interactions: Chat, Integration.
  * Uses the browser DOM for keyboard input and text rendering — areas where
  * the web platform has clear advantages over Raylib.
  *
  * Tabs:
- *   Profile — OL stack composite preview + active item list + "Talk" button.
- *             Always shown. "Talk" button only appears when interact_flags & 1.
- *   Chat    — 1:1 chat input + history + quick-chat presets.
+ *   Chat        — 1:1 chat input + history + quick-chat presets.
+ *   Integration — OL stack composite preview + active item list; surface for
+ *                 external integrations.
  *
- * Why no "Actions" tab:
- *   Combat (attack, follow) is frame-precise — handled entirely in C/Raylib.
- *   Social systems (party, trade, friend, block) are not yet implemented server-side.
- *   Adding stub buttons that do nothing teaches players the features are broken.
- *   When those systems land each one will get a dedicated modal, not a tab entry.
- *   See ENTITY_PROFILE.md for the full design rationale.
+ * The C interaction modal opens this overlay directly on the requested tab.
  *
  * Architecture:
  *   C interaction_bubble click  →  js_interact_overlay_open()         → JS panel
@@ -45,6 +40,7 @@ mergeInto(LibraryManager.library, {
     olStack: [],
     borderColor: 'rgba(70,70,120,0.78)',
     activeTab: 'chat',
+    initialTab: 'chat',
     chatHistory: [],
     dom: {},
   },
@@ -187,30 +183,15 @@ mergeInto(LibraryManager.library, {
       document.head.appendChild(sheet);
     }
 
-    /* ── Backdrop (tap outside = close) ── */
-    P.backdrop = ipEl(
-      'div',
-      {
-        position: 'fixed',
-        top: '0',
-        left: '0',
-        right: '0',
-        bottom: '0',
-        background: 'rgba(0,0,0,0.18)',
-        zIndex: '9998',
-        display: 'none',
-      },
-      document.body,
-    );
-    P.backdrop.onclick = function () {
-      _js_interact_overlay_close();
-    };
+    /* No backdrop — panel fills the whole screen so there's no
+     * "outside" area to tap. Only the X button closes the overlay. */
 
-    /* ── Root panel (bottom-docked) ── */
+    /* ── Root panel (full-screen overlay) ── */
     P.el = ipEl(
       'div',
       {
         position: 'fixed',
+        top: '0',
         left: '0',
         right: '0',
         bottom: '0',
@@ -219,12 +200,16 @@ mergeInto(LibraryManager.library, {
         display: 'none',
         flexDirection: 'column',
         animation: 'ipSlide 0.14s ease-out',
-        maxHeight: '42vh',
         pointerEvents: 'auto',
-        borderTop: '2px solid ' + S.border,
+        background: S.panelBg,
       },
       document.body,
     );
+
+    /* Panel is full-screen — backdrop isn't needed. */
+    if (P.backdrop) {
+      P.backdrop.style.display = 'none';
+    }
 
     /* ── Header with entity name + close ── */
     var hdr = ipEl(
@@ -232,10 +217,10 @@ mergeInto(LibraryManager.library, {
       {
         display: 'flex',
         alignItems: 'center',
-        padding: '6px 12px',
+        padding: '10px 14px',
         background: S.headerBg,
-        borderTop: '1px solid ' + S.border,
-        minHeight: '36px',
+        borderBottom: '1px solid ' + S.border,
+        minHeight: '40px',
         flexShrink: '0',
       },
       P.el,
@@ -255,62 +240,61 @@ mergeInto(LibraryManager.library, {
       hdr,
     );
 
-    var xBtn = ipEl(
+    var backBtn = ipEl(
       'button',
       {
-        background: 'none',
-        border: 'none',
-        color: S.closeBg,
-        fontSize: '18px',
+        background: 'rgba(40,50,90,0.85)',
+        border: '1px solid ' + S.border,
+        borderRadius: '6px',
+        color: S.tabTextActive,
+        fontSize: '14px',
         cursor: 'pointer',
-        padding: '2px 8px',
-        lineHeight: '1',
+        padding: '6px 14px',
         fontFamily: 'monospace',
+        fontWeight: 'bold',
         touchAction: 'manipulation',
+        transition: 'background 0.1s',
+        display: 'flex',
+        alignItems: 'center',
+        gap: '6px',
       },
       hdr,
     );
-    xBtn.textContent = '\u2715';
-    xBtn.onpointerenter = function () {
-      xBtn.style.color = S.closeHover;
+    backBtn.innerHTML = '\u2190 Back';
+    backBtn.onpointerenter = function () {
+      backBtn.style.background = 'rgba(60,75,140,0.95)';
     };
-    xBtn.onpointerleave = function () {
-      xBtn.style.color = S.closeBg;
+    backBtn.onpointerleave = function () {
+      backBtn.style.background = 'rgba(40,50,90,0.85)';
     };
-    xBtn.onclick = function (ev) {
+    backBtn.onclick = function (ev) {
       ev.stopPropagation();
       _js_interact_overlay_close();
     };
 
-    /* ── Tab bar ── */
-    D.tabBar = ipEl(
-      'div',
-      {
-        display: 'flex',
-        background: S.tabBg,
-        flexShrink: '0',
-        borderBottom: 'none',
-      },
-      P.el,
-    );
+    /* Tab bar is not needed — only the requested tab is shown. */
+    D.tabBar = null;
 
-    /* ── Tab body — seamless with active tab, consistent height ── */
+    /* ── Tab body — flex-fill, seamless with active tab ── */
     D.tabBody = ipEl(
       'div',
       {
-        height: '180px',
+        flex: '1',
         background: S.tabActive,
-        padding: '10px 12px',
+        padding: '12px 14px',
         overflowY: 'auto',
         overflowX: 'hidden',
         WebkitOverflowScrolling: 'touch',
+        display: 'flex',
+        flexDirection: 'column',
       },
       P.el,
     );
   },
 
   /* ================================================================
-   * Tab switching — no minimize, always shows content
+   * Tab switching — single-tab mode, no tab bar shown
+   * Only the tab requested by the C modal is rendered.
    * ================================================================ */
 
   $ipSwitchTab__deps: [
@@ -320,13 +304,13 @@ mergeInto(LibraryManager.library, {
     '$ipEl',
     '$ipBtn',
     '$ipRenderChat',
-    '$ipBuildProfileTab',
+    '$ipBuildIntegrationTab',
     '$ipBuildChatTab',
   ],
   $ipSwitchTab: function (tabId) {
     var P = IP,
-      S = IPS,
       D = P.dom;
+
     P.activeTab = tabId;
 
     /* Clear badge when user views the chat tab. */
@@ -334,28 +318,12 @@ mergeInto(LibraryManager.library, {
       IPStore.store[P.entityId].unread = 0;
     }
 
-    /* Update tab button styles + remove badge dots when cleared */
-    var btns = D.tabBar.querySelectorAll('button');
-    for (var i = 0; i < btns.length; i++) {
-      var b = btns[i];
-      var isActive = b.dataset.tabId === tabId;
-      b.style.background = isActive ? S.tabActive : S.tabInactive;
-      b.style.color = isActive ? S.tabTextActive : S.tabTextInactive;
-      b.style.borderBottom = isActive ? 'none' : '1px solid ' + S.border;
-      b.style.fontWeight = isActive ? 'bold' : 'normal';
-      /* Remove transported badge dot if chat was opened */
-      if (b.dataset.tabId === 'chat' && tabId === 'chat') {
-        var dots = b.querySelectorAll('span');
-        for (var d = 0; d < dots.length; d++) dots[d].remove();
-      }
-    }
-
     /* Rebuild body for the selected tab */
     D.tabBody.innerHTML = '';
 
     switch (tabId) {
-      case 'profile':
-        ipBuildProfileTab(D.tabBody);
+      case 'integration':
+        ipBuildIntegrationTab(D.tabBody);
         break;
       case 'chat':
         ipBuildChatTab(D.tabBody);
@@ -420,17 +388,13 @@ mergeInto(LibraryManager.library, {
   },
 
   /* ================================================================
-   * Profile tab — 2-column layout:
+   * Integration tab — external integrations surface. Two columns:
    *   Left:  composited OL stack preview (all active layers stacked)
-   *   Right: active item list (read-only) + single "Talk" button when
-   *          the entity has dialogue (interact_flags & 1).
-   *
-   * Design rationale: one Talk button beats per-item dialog buttons.
-   * The C dialogue modal handles item-level branching internally.
+   *   Right: active item list (read-only)
    * ================================================================ */
 
-  $ipBuildProfileTab__deps: ['$IP', '$IPS', '$ipEl', '$ipBtn', '$ipBuildOlStackPreview', '$FetchState'],
-  $ipBuildProfileTab: function (container) {
+  $ipBuildIntegrationTab__deps: ['$IP', '$IPS', '$ipEl', '$ipBtn', '$ipBuildOlStackPreview', '$FetchState'],
+  $ipBuildIntegrationTab: function (container) {
     var P = IP,
       S = IPS;
     var stack = P.olStack;
@@ -441,7 +405,7 @@ mergeInto(LibraryManager.library, {
     /* Left column: composite OL stack preview */
     ipBuildOlStackPreview(row, 120);
 
-    /* Right column: active item list + Talk button */
+    /* Right column: active item list */
     var right = ipEl(
       'div',
       {
@@ -527,14 +491,15 @@ mergeInto(LibraryManager.library, {
       S = IPS,
       D = P.dom;
 
-    /* message list */
+    /* message list — flex-fill to use available height */
     D.chatList = ipEl(
       'div',
       {
+        flex: '1',
         background: S.chatBg,
         borderRadius: '4px',
         padding: '6px',
-        height: '90px',
+        minHeight: '60px',
         overflowY: 'auto',
         fontSize: '13px',
         lineHeight: '1.35',
@@ -655,10 +620,8 @@ mergeInto(LibraryManager.library, {
       S = IPS;
     var flags = P.interactFlags;
 
-    /* Border colour resolved by C from server-driven config — already a
-     * CSS rgba() string on P.borderColor. */
+    /* Border colour resolved by C from server-driven config. */
     var statusCol = P.borderColor;
-    if (P.el) P.el.style.borderTopColor = statusCol;
 
     /* Header: use the display name resolved by the C nameplate module
      * for both players and bots — consistent with overhead UI and bubbles. */
@@ -667,63 +630,9 @@ mergeInto(LibraryManager.library, {
     D.nameEl.textContent = headerText;
     D.nameEl.style.color = statusCol;
 
-    /* Rebuild tab bar */
-    D.tabBar.innerHTML = '';
-
-    /* Profile tab is always shown — Talk button inside it is gated on flags & 1. */
-    var tabs = [
-      { id: 'profile', label: 'Profile' },
-      { id: 'chat', label: 'Chat' },
-    ];
-
-    tabs.forEach(function (tab) {
-      var btn = ipEl(
-        'button',
-        {
-          flex: '1',
-          background: S.tabInactive,
-          color: S.tabTextInactive,
-          border: 'none',
-          borderBottom: '1px solid ' + S.border,
-          fontSize: '14px',
-          fontFamily: 'monospace',
-          padding: '8px 0',
-          cursor: 'pointer',
-          touchAction: 'manipulation',
-          transition: 'background 0.1s, color 0.1s',
-          position: 'relative',
-        },
-        D.tabBar,
-      );
-      btn.textContent = tab.label;
-
-      /* Badge transport: show unread dot on the Chat tab button */
-      if (tab.id === 'chat' && IPStore.store[P.entityId] && IPStore.store[P.entityId].unread > 0) {
-        var dot = ipEl(
-          'span',
-          {
-            position: 'absolute',
-            top: '4px',
-            right: '8px',
-            width: '8px',
-            height: '8px',
-            borderRadius: '50%',
-            background: 'rgba(210,50,50,0.95)',
-            display: 'inline-block',
-          },
-          btn,
-        );
-      }
-
-      btn.dataset.tabId = tab.id;
-      btn.onclick = function (ev) {
-        ev.stopPropagation();
-        ipSwitchTab(tab.id);
-      };
-    });
-
-    /* Default to first tab */
-    var defaultTab = tabs[0].id;
+    /* No tab bar to build — single tab only. Open on the tab requested
+     * by the C interaction modal. */
+    var defaultTab = P.initialTab === 'integration' ? 'integration' : 'chat';
     P.activeTab = defaultTab;
     ipSwitchTab(defaultTab);
   },
@@ -744,6 +653,7 @@ mergeInto(LibraryManager.library, {
     border_g,
     border_b,
     border_a,
+    initial_tab,
   ) {
     var P = IP;
 
@@ -753,6 +663,7 @@ mergeInto(LibraryManager.library, {
     P.interactFlags = interact_flags;
     P.isPlayer = !!is_player;
     P.isSelf = !!is_self;
+    P.initialTab = initial_tab === 1 ? 'integration' : 'chat';
     /* Border colour resolved by C from server-driven StatusIconConfig.
      * Convert to CSS rgba string for DOM styling. */
     var a = ((border_a & 0xff) / 255).toFixed(2);
@@ -775,7 +686,6 @@ mergeInto(LibraryManager.library, {
     ipPopulate();
 
     P.el.style.display = 'flex';
-    P.backdrop.style.display = 'block';
   },
 
   js_interact_overlay_set_ol_stack__deps: ['$IP', '$ipPopulate'],
@@ -799,7 +709,9 @@ mergeInto(LibraryManager.library, {
     P.open = false;
     P.hidden = false;
     if (P.el) P.el.style.display = 'none';
-    if (P.backdrop) P.backdrop.style.display = 'none';
+
+    /* Notify C to reopen the interaction modal. */
+    _c_interact_overlay_closed();
   },
 
   js_interact_overlay_is_open__deps: ['$IP'],

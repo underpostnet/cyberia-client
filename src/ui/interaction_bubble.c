@@ -416,25 +416,23 @@ bool interaction_bubble_handle_click(int mx, int my) {
             LOG_INFO("[INTERACTION_BUBBLE] Slot %d clicked: entity=%s flags=0x%x\n",
                    i, slot->entity_id, slot->interact_flags);
 
-            /* Bubble tap opens the intermediate modal_interact first — the
-             * general-purpose entry point. The JS overlay is only reachable
-             * via its Chat/Profile tab; the Talk tab gates dialogue. */
-            bool is_self  = (strcmp(slot->entity_id, g_game_state.player_id) == 0);
-            bool has_talk = (slot->interact_flags & INTERACT_DIALOGUE) != 0 &&
-                            slot->dialogue_item_id[0] != '\0';
+            /* Bubble tap opens modal_interact, which auto-opens the paired
+             * dialogue. has_dialogue is true when the active skin has one. */
+            bool is_self      = (strcmp(slot->entity_id, g_game_state.player_id) == 0);
+            bool has_dialogue = (slot->interact_flags & INTERACT_DIALOGUE) != 0 &&
+                                slot->dialogue_item_id[0] != '\0';
             Color bc = status_border_color(slot, is_self);
             modal_interact_open(slot->entity_id, slot->display_name,
-                                slot->dialogue_item_id, has_talk,
-                                slot->is_player, is_self, bc);
+                                slot->dialogue_item_id, has_dialogue, bc);
             return true;
         }
     }
     return false;
 }
 
-/* Open the JS chat/profile overlay for one resolved slot, pushing its OL
- * stack for preview rendering. NO freeze — chat/profile is real-time-safe. */
-static void open_js_overlay_for_slot(InteractionBubbleSlot* slot) {
+/* Open the JS overlay for one resolved slot on a given tab, pushing its OL
+ * stack for preview rendering. NO freeze — the overlay is real-time-safe. */
+static void open_js_overlay_for_slot(InteractionBubbleSlot* slot, int initial_tab) {
     bool is_self = (strcmp(slot->entity_id, g_game_state.player_id) == 0);
     Color bc = status_border_color(slot, is_self);
     js_interact_overlay_open(slot->entity_id,
@@ -444,7 +442,8 @@ static void open_js_overlay_for_slot(InteractionBubbleSlot* slot) {
                              slot->is_player ? 1 : 0,
                              is_self ? 1 : 0,
                              (int)bc.r, (int)bc.g,
-                             (int)bc.b, (int)bc.a);
+                             (int)bc.b, (int)bc.a,
+                             initial_tab);
 
     int icon_lc = slot->alive_layer_count > 0
         ? slot->alive_layer_count : slot->layer_count;
@@ -483,11 +482,11 @@ static void open_js_overlay_for_slot(InteractionBubbleSlot* slot) {
     js_interact_overlay_set_ol_stack(json);
 }
 
-void interaction_bubble_open_js_overlay(const char* entity_id) {
+void interaction_bubble_open_js_overlay(const char* entity_id, int initial_tab) {
     if (!entity_id || '\0' == entity_id[0]) return;
     for (int i = 0; i < s_slot_count; i++) {
         if (0 == strcmp(s_slots[i].entity_id, entity_id)) {
-            open_js_overlay_for_slot(&s_slots[i]);
+            open_js_overlay_for_slot(&s_slots[i], initial_tab);
             return;
         }
     }

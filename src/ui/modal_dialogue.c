@@ -15,6 +15,7 @@
 #include "domain/local_player.h"
 #include "game_state.h"
 #include "interaction_bubble.h"
+#include "modal_interact.h"
 #include "modal.h"
 #include "object_layer.h"
 #include "object_layers_management.h"
@@ -44,6 +45,11 @@ static char s_entity_id[64]   = {0};
 static char s_item_id[128]    = {0};
 static char s_dialog_code[96] = {0};
 static ModalDialogueRender s_render = MODAL_DIALOGUE_RENDER_ITEM;
+/* ITEM (inventory lore) owns its own dismissal; ENTITY is paired with
+ * modal_interact, which owns dismissal. dlg_* server frames are sent only
+ * when the dialogue actually has lines. */
+static bool s_auto_dismiss = true;
+static bool s_dlg_started  = false;
 
 /* Typewriter state */
 static float s_char_timer    = 0.0f;
@@ -109,18 +115,8 @@ static bool hit_rect(int mx, int my, Rectangle r) {
             (float)my >= r.y && (float)my < r.y + r.height);
 }
 
-/* True if any active layer in the stack is a skin — the entity is renderable
- * as a coherent character only when it has one. */
-static bool layers_have_active_skin(const ObjectLayerState* layers, int count) {
-    for (int i = 0; i < count; i++) {
-        if (!layers[i].active || '\0' == layers[i].item_id[0]) continue;
-        ObjectLayer* ol = lookup_cached_layer(layers[i].item_id);
-        if (ol && 0 == strcmp(ol->data.item.type, "skin")) return true;
-    }
-    return false;
-}
-
-/* Draw the left-column sprite for the current dialogue context. */
+/* Draw the left-column sprite: a single item (inventory lore) or the
+ * entity's full active stack (interaction). */
 static void draw_dialogue_sprite(int icon_x, int icon_y, int icon_sz) {
     ObjectLayersManager* mgr = obj_layers_mgr_get();
     if (!mgr) return;
@@ -133,20 +129,23 @@ static void draw_dialogue_sprite(int icon_x, int icon_y, int icon_sz) {
         return;
     }
 
-    /* ENTITY: full active stack, gated on an active skin. */
     int lc = 0;
-    const ObjectLayerState* layers = interaction_bubble_get_alive_layers(s_entity_id, &lc);
-    if (layers && lc > 0 && layers_have_active_skin(layers, lc)) {
-        ol_stack_ico_draw(mgr, layers, lc, icon_x, icon_y, icon_sz,
-                          "down_idle", 0, WHITE);
-        return;
+    const ObjectLayerState* layers = NULL;
+
+    if (MODAL_DIALOGUE_RENDER_ENTITY == s_render) {
+        /* Try the cached snapshot first (persists across AOI changes). */
+        layers = modal_interact_get_cached_layers(&lc);
     }
 
-    /* No active skin → "Not Available" placeholder centred in the column. */
-    const char* na = "Not Available";
-    int fs = DLG_FONT_TEXT;
-    int tw = MeasureText(na, fs);
-    DrawText(na, icon_x + (icon_sz - tw) / 2, icon_y + (icon_sz - fs) / 2, fs, C_HINT);
+    /* Fall back to the live bubble data. */
+    if (!layers || lc <= 0) {
+        layers = interaction_bubble_get_alive_layers(s_entity_id, &lc);
+    }
+
+    if (layers && lc > 0) {
+        ol_stack_ico_draw(mgr, layers, lc, icon_x, icon_y, icon_sz,
+                          "down_idle", 0, WHITE);
+    }
 }
 
 /* ── Public API ──────────────────────────────────────────────────────── */
@@ -162,15 +161,14 @@ void modal_dialogue_init(void) {
 void modal_dialogue_open(const char* entity_id, const char* item_id,
                          const char* dialog_code, ModalDialogueRender render,
                          const DialogueLine* lines, int line_count) {
-    if (!lines || line_count <= 0) return;
-
-    int n = line_count;
+    int n = (lines && line_count > 0) ? line_count : 0;
     if (n > DIALOGUE_MAX_LINES) n = DIALOGUE_MAX_LINES;
+    if (n > 0) memcpy(s_lines, lines, sizeof(DialogueLine) * n);
 
-    memcpy(s_lines, lines, sizeof(DialogueLine) * n);
     s_line_count = n;
     s_current    = 0;
     s_render     = render;
+    s_auto_dismiss = (MODAL_DIALOGUE_RENDER_ITEM == render);
 
     strncpy(s_entity_id, entity_id ? entity_id : "", sizeof(s_entity_id) - 1);
     s_entity_id[sizeof(s_entity_id) - 1] = '\0';
@@ -188,8 +186,11 @@ void modal_dialogue_open(const char* entity_id, const char* item_id,
     LOG_INFO("[MODAL_DIALOGUE] Open: entity=%s item=%s code=%s lines=%d\n",
              s_entity_id, s_item_id, s_dialog_code, s_line_count);
 
-    /* dlg_start freezes the player server-side (modal protection). */
-    local_player_request_dialogue_start(s_entity_id, s_item_id);
+    /* Only a dialogue with lines freezes the player (modal protection) and
+     * participates in the dlg_* / quest-talk handshake. Render-only stays
+     * passive. */
+    s_dlg_started = (s_line_count > 0);
+    if (s_dlg_started) local_player_request_dialogue_start(s_entity_id, s_item_id);
 }
 
 /* Finish the dialogue. `completed` true → all lines were read (dlg_complete,
@@ -210,13 +211,16 @@ static void modal_dialogue_finish(bool completed) {
     s_on_close = NULL;
     if (cb) cb();
 
-    if (completed)
-        local_player_request_dialogue_complete(s_entity_id, s_item_id, s_dialog_code);
-    else
-        local_player_request_dialogue_cancel(s_entity_id, s_item_id);
+    if (s_dlg_started) {
+        if (completed)
+            local_player_request_dialogue_complete(s_entity_id, s_item_id, s_dialog_code);
+        else
+            local_player_request_dialogue_cancel(s_entity_id, s_item_id);
+    }
 
-    s_line_count = 0;
-    s_current    = 0;
+    s_dlg_started = false;
+    s_line_count  = 0;
+    s_current     = 0;
 }
 
 void modal_dialogue_close(void) {
@@ -248,7 +252,7 @@ void modal_dialogue_update(float dt) {
 }
 
 void modal_dialogue_draw(void) {
-    if (!s_open || s_current >= s_line_count) return;
+    if (!s_open) return;
 
     int sw = GetScreenWidth();
     int sh = GetScreenHeight();
@@ -294,11 +298,12 @@ void modal_dialogue_draw(void) {
     int icon_x   = (int)(x0 + (col_w - icon_sz) * 0.5f); /* centre horizontally      */
     int icon_y   = (int)(y0 + (card.height - icon_sz) * 0.5f); /* centre vertically  */
 
-    /* Left column sprite — context-dependent (see ModalDialogueRender):
-     *   ITEM   → just the single item_id (inventory lore).
-     *   ENTITY → the entity's full active stack, but only when it has an
-     *            active skin; otherwise a "Not Available" placeholder. */
+    /* Left column sprite: single item (inventory lore) or the entity's
+     * full active stack (interaction). Always drawn. */
     draw_dialogue_sprite(icon_x, icon_y, icon_sz);
+
+    /* Render-only: no dialogue lines → show the entity, no text. */
+    if (s_line_count == 0) return;
 
     /* Speaker name + progress — right of sprite column */
     const DialogueLine* line = &s_lines[s_current];
@@ -368,6 +373,8 @@ void modal_dialogue_draw(void) {
         hint = "...";
     else if (s_current + 1 < s_line_count)
         hint = "[Tap to continue]";
+    else if (!s_auto_dismiss)
+        hint = "[Tap to repeat]";
     else
         hint = "[Tap to close]";
 
@@ -390,12 +397,17 @@ bool modal_dialogue_handle_click(int mx, int my) {
     bool inside = hit_rect(mx, my, card);
 
     if (!inside) {
-        /* Tap outside → dismiss early (dlg_cancel) */
+        /* Inventory lore dismisses itself; the paired interaction view lets
+         * modal_interact own dismissal, so let the tap fall through. */
+        if (!s_auto_dismiss) return false;
         modal_dialogue_finish(false);
         return true;
     }
 
-    /* Inside card → advance */
+    /* Render-only: nothing to advance, just swallow the tap. */
+    if (s_line_count == 0) return true;
+
+    /* Inside card → advance or repeat */
     if (!s_line_complete) {
         /* Reveal full line immediately */
         s_chars_visible = (int)strlen(s_lines[s_current].text);
@@ -403,6 +415,12 @@ bool modal_dialogue_handle_click(int mx, int my) {
     } else if (s_current + 1 < s_line_count) {
         /* Next line */
         s_current++;
+        s_chars_visible = 0;
+        s_char_timer    = 0.0f;
+        s_line_complete = false;
+    } else if (!s_auto_dismiss) {
+        /* Interaction mode: restart dialogue from the beginning. */
+        s_current       = 0;
         s_chars_visible = 0;
         s_char_timer    = 0.0f;
         s_line_complete = false;

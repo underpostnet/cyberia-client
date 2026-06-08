@@ -28,7 +28,8 @@ extern void js_interact_overlay_open(const char* entity_id,
                                      int border_r,
                                      int border_g,
                                      int border_b,
-                                     int border_a);
+                                     int border_a,
+                                     int initial_tab);
 
 extern void js_interact_overlay_close(void);
 
@@ -43,5 +44,8 @@ extern void js_interact_overlay_receive_chat(const char* from_id,
 /* ── C functions (EMSCRIPTEN_KEEPALIVE, called from JS as Module._xxx) ── */
 
 void c_send_chat_binary(const char* to_id, const char* text);
+
+/* Called from JS when the interact overlay closes — reopens modal_interact. */
+void c_interact_overlay_closed(void);
 
 #endif /* INTERACT_BRIDGE_H */

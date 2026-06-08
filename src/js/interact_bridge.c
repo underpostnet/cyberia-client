@@ -24,3 +24,9 @@ void c_send_chat_binary(const char* to_id, const char* text) {
     if (!to_id || !text) return;
     network_send_chat(to_id, text);
 }
+
+EMSCRIPTEN_KEEPALIVE
+void c_interact_overlay_closed(void) {
+    extern void modal_interact_overlay_closed(void);
+    modal_interact_overlay_closed();
+}
