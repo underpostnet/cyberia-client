@@ -694,23 +694,20 @@ void inventory_modal_draw(void) {
             float lore_y = card.y + card.height - MODAL_BTN_H - MODAL_LORE_BTN_H - 24;
             s_lore_btn_rect = (Rectangle){ lore_x, lore_y,
                                             MODAL_LORE_BTN_W, MODAL_LORE_BTN_H };
-            DrawRectangleRec(s_lore_btn_rect, C_LORE_BTN);
-            DrawRectangleLinesEx(s_lore_btn_rect, 1.5f,
-                                 (Color){ 120, 120, 200, 160 });
-            const char* lore_label = "Dialog";
-            int lfs = MODAL_FONT_BODY;
-            int ltw = MeasureText(lore_label, lfs);
-            DrawText(lore_label,
-                     (int)(lore_x + (MODAL_LORE_BTN_W - ltw) * 0.5f),
-                     (int)(lore_y + (MODAL_LORE_BTN_H - lfs) * 0.5f),
-                     lfs, C_BTN_TEXT);
+            int mx = GetMouseX(), my = GetMouseY();
+            UIButtonStyle lore_btn = { .text = "Dialog", .icon_id = "chat",
+                                       .font_size = MODAL_FONT_BODY, .bg = C_LORE_BTN,
+                                       .text_color = C_BTN_TEXT, .rounded = true, .roundness = 0.12f };
+            ui_button_draw(s_lore_btn_rect, &lore_btn,
+                           ui_button_resolve_state(true, false, hit_rect(mx, my, s_lore_btn_rect)));
         }
     }
 
     /* 12. Activate / Deactivate button — only for the player's own items. */
     if (!s_is_external) {
         bool currently_active = ols->active;
-        const char* btn_label = currently_active ? "Deactivate" : "Activate";
+        const char* btn_label  = currently_active ? "Deactivate" : "Activate";
+        const char* btn_icon   = currently_active ? "unequip" : "equip";
 
         /* Determine whether the button should be enabled */
         bool btn_enabled = activable;
@@ -730,16 +727,13 @@ void inventory_modal_draw(void) {
 
         float btn_x = cx + (cw - MODAL_BTN_W) * 0.5f;
         float btn_y = card.y + card.height - MODAL_BTN_H - 14;
-        DrawRectangleRec((Rectangle){ btn_x, btn_y, MODAL_BTN_W, MODAL_BTN_H }, btn_color);
-        DrawRectangleLinesEx((Rectangle){ btn_x, btn_y, MODAL_BTN_W, MODAL_BTN_H },
-                             1.5f, btn_enabled ? (Color){ 220, 220, 220, 120 }
-                                               : (Color){ 60, 60, 70, 100 });
-        int bfs = MODAL_FONT_BODY + 2;
-        int btw = MeasureText(btn_label, bfs);
-        DrawText(btn_label,
-                 (int)(btn_x + (MODAL_BTN_W - btw) * 0.5f),
-                 (int)(btn_y + (MODAL_BTN_H - bfs) * 0.5f),
-                 bfs, txt_color);
+        Rectangle btn_r = (Rectangle){ btn_x, btn_y, MODAL_BTN_W, MODAL_BTN_H };
+        int mx = GetMouseX(), my = GetMouseY();
+        UIButtonStyle act_btn = { .text = btn_label, .icon_id = btn_icon,
+                                  .font_size = MODAL_FONT_BODY + 2, .bg = btn_color,
+                                  .text_color = txt_color, .rounded = true, .roundness = 0.12f };
+        ui_button_draw(btn_r, &act_btn,
+                       ui_button_resolve_state(btn_enabled, false, hit_rect(mx, my, btn_r)));
     }
 }
 
