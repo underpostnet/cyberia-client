@@ -546,6 +546,13 @@ mergeInto(LibraryManager.library, {
 
     D.chatInput.addEventListener('keydown', function (ev) {
       ev.stopPropagation();
+      if (ev.key === 'Backspace') {
+        /* C engine consumes keyboard events — manually remove last char. */
+        if (D.chatInput.value.length > 0) {
+          D.chatInput.value = D.chatInput.value.slice(0, -1);
+        }
+        return;
+      }
       if (ev.key === 'Enter' && D.chatInput.value.trim()) {
         var ptr = allocateUTF8(D.chatInput.value.trim());
         _js_interact_overlay_send_chat(ptr);
