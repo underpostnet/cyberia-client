@@ -1,14 +1,10 @@
 /**
  * @file notify_store.h
- * @brief Per-entity message store and unread-badge counter — pure C, no JS round-trip.
+ * @brief Per-entity chat message store + unread-badge counter — pure C.
  *
- * Replaces the JS-side notify_badge module so that interaction_bubble_draw()
- * can read unread counts without crossing the C↔JS boundary every frame.
- *
- * Drop-in replacement API (same semantics as js_notify_badge_*):
- *   notify_store_push()           ← was js_notify_badge_push()
- *   notify_store_unread_count()   ← was js_notify_badge_count()
- *   notify_store_mark_read()      ← was js_notify_badge_read()
+ * Single source of truth for chat unread state. The interaction bubble reads
+ * the last message for its informational chat bubble; the interaction modal's
+ * Chat button reads/clears the unread count.
  */
 
 #ifndef NOTIFY_STORE_H
@@ -32,17 +28,11 @@ typedef struct {
     char          entity_id[NS_ENTITY_ID_LEN];
     NotifyMessage messages[NS_MAX_MESSAGES];
     int           count;
-    int           unread;
 } NotifyEntry;
 
-/** Push a chat message and increment unread counter for entity_id. */
+/** Append a chat message for entity_id. Counts live in the notification
+ *  dispatcher (notification.h), not here. */
 void notify_store_push(const char* entity_id, const char* sender, const char* text);
-
-/** Return unread message count for entity_id (0 if unknown). */
-int  notify_store_unread_count(const char* entity_id);
-
-/** Mark all messages as read for entity_id. */
-void notify_store_mark_read(const char* entity_id);
 
 /** Return the NotifyEntry for entity_id, or NULL if not found. */
 const NotifyEntry* notify_store_get(const char* entity_id);

@@ -79,7 +79,8 @@ mergeInto(LibraryManager.library, {
   $IP_QC: ['Hello!', 'GG', 'Help!', 'Trade?', 'Follow me', 'Thanks!'],
 
   /* ================================================================
-   * Per-entity chat message store (replaces removed notify_badge.js)
+   * Per-entity chat history for the overlay's Chat tab (display only;
+   * the unread badge is owned by the C interaction modal).
    * ================================================================ */
 
   $IPStore: {
@@ -90,7 +91,7 @@ mergeInto(LibraryManager.library, {
   $ipStoreEnsure__deps: ['$IPStore'],
   $ipStoreEnsure: function (entityId) {
     if (!IPStore.store[entityId]) {
-      IPStore.store[entityId] = { messages: [], unread: 0 };
+      IPStore.store[entityId] = { messages: [] };
     }
     return IPStore.store[entityId];
   },
@@ -312,11 +313,6 @@ mergeInto(LibraryManager.library, {
       D = P.dom;
 
     P.activeTab = tabId;
-
-    /* Clear badge when user views the chat tab. */
-    if (tabId === 'chat' && IPStore.store[P.entityId]) {
-      IPStore.store[P.entityId].unread = 0;
-    }
 
     /* Rebuild body for the selected tab */
     D.tabBody.innerHTML = '';
@@ -692,9 +688,6 @@ mergeInto(LibraryManager.library, {
     P.chatHistory = entry.messages.map(function (m) {
       return { sender: m.sender, text: m.text, isMe: m.isMe || false, ts: m.ts };
     });
-    /* Badge is NOT cleared here — it transports to the chat tab button
-     * and only clears when the user actually switches to the chat tab
-     * (see $ipSwitchTab).  This is the "abstract context" model. */
 
     ipBuild();
     ipPopulate();
@@ -765,31 +758,15 @@ mergeInto(LibraryManager.library, {
     var fromName = UTF8ToString(from_name_ptr);
     var text = UTF8ToString(text_ptr);
 
-    /* Persist message and track unread count in store. */
+    /* Persist history so the chat tab survives overlay open/close. The
+     * unread badge is owned by the C interaction modal's Chat button. */
     var entry = ipStoreEnsure(fromId);
     entry.messages.push({ sender: fromName || fromId.substring(0, 8), text: text, isMe: false, ts: Date.now() });
     if (entry.messages.length > IPStore.MAX_MESSAGES) entry.messages = entry.messages.slice(-IPStore.MAX_MESSAGES);
 
-    /* Only update the live overlay if it's open for THIS entity. */
     if (P.open && P.entityId === fromId) {
-      P.chatHistory.push({
-        sender: fromName || fromId.substring(0, 8),
-        text: text,
-        isMe: false,
-        ts: Date.now(),
-      });
-
-      /* Clear badge only if the user is actually VIEWING the chat tab
-       * right now — the abstract-context model. */
-      if (P.activeTab === 'chat') {
-        entry.unread = 0;
-      } else {
-        entry.unread += 1;
-      }
-
+      P.chatHistory.push({ sender: fromName || fromId.substring(0, 8), text: text, isMe: false, ts: Date.now() });
       if (P.activeTab === 'chat') ipRenderChat();
-    } else {
-      entry.unread += 1;
     }
   },
 });

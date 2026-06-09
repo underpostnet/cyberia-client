@@ -6,6 +6,7 @@
 #include "item_slot.h"
 #include "modal.h"
 #include "modal_dialogue.h"
+#include "notification.h"
 #include "object_layer.h"
 #include "object_layers_management.h"
 #include "ui_button.h"
@@ -277,6 +278,21 @@ void modal_interact_draw(void) {
                                .font_size = MI_FONT_BTN, .bg = C_BTN, .text_color = C_TEXT };
     ui_button_draw(chat, &chat_btn,
                    ui_button_resolve_state(true, false, ui_button_hit(chat, mx, my)));
+
+    /* Unread-chat badge on the Chat button — accumulates until clicked. */
+    int unread = notification_count(NOTIF_CHAT, s_entity_id);
+    if (unread > 0) {
+        float br = 11.0f;
+        float bx = chat.x + chat.width - br - 4.0f;
+        float by = chat.y + br + 4.0f;
+        DrawCircle((int)bx, (int)by, br, (Color){ 210, 60, 60, 240 });
+        char txt[8];
+        snprintf(txt, sizeof(txt), "%d", unread > 99 ? 99 : unread);
+        int bfs = 11;
+        int tw = MeasureText(txt, bfs);
+        DrawText(txt, (int)(bx - tw * 0.5f), (int)(by - bfs * 0.5f), bfs,
+                 (Color){ 255, 255, 255, 245 });
+    }
     UIButtonStyle integration_btn = { .text = "Integration", .icon_id = "reload",
                                       .font_size = MI_FONT_BTN, .bg = C_BTN, .text_color = C_TEXT };
     ui_button_draw(integration, &integration_btn,
@@ -307,6 +323,7 @@ bool modal_interact_handle_click(int mx, int my) {
     Rectangle chat, integration;
     button_rects(card, &chat, &integration);
     if (ui_button_hit(chat, mx, my)) {
+        notification_clear(NOTIF_CHAT, s_entity_id); /* reset badge on view */
         open_overlay(INTERACT_OVERLAY_TAB_CHAT);
         return true;
     }
@@ -315,15 +332,14 @@ bool modal_interact_handle_click(int mx, int my) {
         return true;
     }
 
-    /* Active-item slot → open that item's detail; closing it returns here. */
+    /* Active-item slot → inspect that item (read-only, no activate); closing
+     * it returns here. Inspection context regardless of ownership. */
     for (int i = 0; i < s_cached_layer_count; i++) {
         if (item_slot_hit(item_slot_rect(card, i), mx, my)) {
-            char item[MAX_ITEM_ID_LENGTH];
-            strncpy(item, s_cached_layers[i].item_id, sizeof(item) - 1);
-            item[sizeof(item) - 1] = '\0';
+            ObjectLayerState ols = s_cached_layers[i];
             modal_interact_close();
-            if (inventory_modal_open_item(item))
-                inventory_modal_set_on_close(modal_interact_reopen);
+            inventory_modal_open_external(&ols);
+            inventory_modal_set_on_close(modal_interact_reopen);
             return true;
         }
     }

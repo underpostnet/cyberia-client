@@ -12,6 +12,7 @@
 #include "domain/presentation_runtime.h"
 #include "ui/ui_state.h"
 #include "ui/quest_store.h"
+#include "notification.h"
 #include "util/log.h"
 #include <stdio.h>
 #include <stdlib.h>
@@ -82,6 +83,7 @@ bool message_parser_parse(const char* json_str) {
                 serial_get_string(payload, "text", text, sizeof(text));
                 if (from_id[0] && text[0]) {
                     notify_store_push(from_id, from_id, text);
+                    notification_push(NOTIF_CHAT, from_id);
                     js_interact_overlay_receive_chat(from_id, from_id, text);
                 }
             }

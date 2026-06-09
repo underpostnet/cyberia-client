@@ -19,6 +19,7 @@
 #include "game_state.h"
 #include "js/interact_bridge.h"
 #include "modal_interact.h"
+#include "notification.h"
 #include "notify_store.h"
 #include "layer_z_order.h"
 #include "ui_toggle.h"
@@ -356,10 +357,10 @@ void interaction_bubble_draw(void) {
         }
 
         /* Nameplate label — top-left, just to the right of the icon */
+        int np_fs = 9;
+        int np_x  = (int)(r.x + r.width + 4);
+        int np_y  = (int)(r.y + 2);
         if (slot->display_name[0] != '\0') {
-            int np_fs = 9;
-            int np_x = (int)(r.x + r.width + 4);
-            int np_y = (int)(r.y + 2);
             DrawText(slot->display_name, np_x + 1, np_y + 1, np_fs,
                      (Color){0, 0, 0, 180});
             DrawText(slot->display_name, np_x, np_y, np_fs,
@@ -384,19 +385,56 @@ void interaction_bubble_draw(void) {
             }
         }
 
-        /* Notification badge — red circle with unread count, top-right */
-        int badge_n = notify_store_unread_count(slot->entity_id);
-        if (badge_n > 0) {
-            float br = 8.0f;
-            float bx = r.x + r.width - br;
-            float by = r.y + br;
-            DrawCircle((int)bx, (int)by, br, (Color){200, 50, 50, 230});
-            char badge_txt[8];
-            snprintf(badge_txt, sizeof(badge_txt), "%d", badge_n > 99 ? 99 : badge_n);
-            int bfs = 10;
-            int btw = MeasureText(badge_txt, bfs);
-            DrawText(badge_txt, (int)(bx - btw * 0.5f), (int)(by - bfs * 0.5f),
-                     bfs, (Color){255, 255, 255, 240});
+        /* Last chat message — informational bubble below the name, prefixed
+         * with a red badge of the target's total notification count. Shown
+         * only while there are unread notifications; reading the chat (Chat
+         * button) clears the count and hides this. Never intercepts taps. */
+        const NotifyEntry* ne = notify_store_get(slot->entity_id);
+        int notif = notification_target_total(slot->entity_id);
+        if (notif > 0 && ne && ne->count > 0 && ne->messages[ne->count - 1].text[0] != '\0') {
+            const NotifyMessage* last = &ne->messages[ne->count - 1];
+            int mfs = 11;
+            char buf[48];
+            strncpy(buf, last->text, sizeof(buf) - 1);
+            buf[sizeof(buf) - 1] = '\0';
+            if (strlen(last->text) > sizeof(buf) - 1) {
+                buf[sizeof(buf) - 2] = '.';
+                buf[sizeof(buf) - 3] = '.';
+            }
+            /* Fade in on arrival for a subtle "new message" pop. */
+            double age  = GetTime() * 1000.0 - last->ts_ms;
+            float  fade = age < 220.0 ? (float)(age / 220.0) : 1.0f;
+
+            int count   = notif;
+            int padx    = 6, pady = 4;
+            int br      = count > 0 ? (int)(mfs * 0.72f) : 0;
+            int badge_w = count > 0 ? br * 2 + 5 : 0;
+            int tw      = MeasureText(buf, mfs);
+
+            float bubx = (float)np_x - padx;
+            float buby = (float)(np_y + np_fs + 5);
+            float bubw = (float)(padx * 2 + badge_w + tw);
+            float bubh = (float)(mfs + pady * 2);
+            Rectangle bub = { bubx, buby, bubw, bubh };
+            DrawRectangleRounded(bub, 0.5f, 6, (Color){ 18, 22, 38, (unsigned char)(225 * fade) });
+            DrawRectangleRoundedLinesEx(bub, 0.5f, 6, 1.0f,
+                                        (Color){ border.r, border.g, border.b,
+                                                 (unsigned char)(150 * fade) });
+
+            if (count > 0) {
+                float bcx = bubx + padx + br;
+                float bcy = buby + bubh * 0.5f;
+                DrawCircle((int)bcx, (int)bcy, (float)br, (Color){ 210, 60, 60, (unsigned char)(245 * fade) });
+                char cbuf[8];
+                snprintf(cbuf, sizeof(cbuf), "%d", count > 99 ? 99 : count);
+                int cfs = mfs - 1;
+                int ctw = MeasureText(cbuf, cfs);
+                DrawText(cbuf, (int)(bcx - ctw * 0.5f), (int)(bcy - cfs * 0.5f), cfs,
+                         (Color){ 255, 255, 255, (unsigned char)(245 * fade) });
+            }
+
+            DrawText(buf, (int)(bubx + padx + badge_w), (int)(buby + pady), mfs,
+                     (Color){ 210, 220, 240, (unsigned char)(245 * fade) });
         }
     }
 }

@@ -58,28 +58,6 @@ void notify_store_push(const char* entity_id, const char* sender, const char* te
     strncpy(m->sender, sender ? sender : "",  NS_SENDER_LEN - 1);
     strncpy(m->text,   text   ? text   : "",  NS_TEXT_LEN   - 1);
     m->ts_ms = GetTime() * 1000.0;
-
-    e->unread++;
-}
-
-int notify_store_unread_count(const char* entity_id) {
-    if (!entity_id) return 0;
-    for (int i = 0; i < s_count; i++) {
-        if (strncmp(s_entries[i].entity_id, entity_id, NS_ENTITY_ID_LEN - 1) == 0) {
-            return s_entries[i].unread;
-        }
-    }
-    return 0;
-}
-
-void notify_store_mark_read(const char* entity_id) {
-    if (!entity_id) return;
-    for (int i = 0; i < s_count; i++) {
-        if (strncmp(s_entries[i].entity_id, entity_id, NS_ENTITY_ID_LEN - 1) == 0) {
-            s_entries[i].unread = 0;
-            return;
-        }
-    }
 }
 
 const NotifyEntry* notify_store_get(const char* entity_id) {

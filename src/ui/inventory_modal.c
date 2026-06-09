@@ -48,6 +48,12 @@ static bool  s_open       = false;
 static int   s_inv_idx    = -1;
 static float s_age        = 0.0f;
 
+/* External item: a read-only detail view for an item the player does not own
+ * (e.g. another entity's active layer). When set, the modal renders from
+ * s_external instead of the player inventory and hides activate/lore. */
+static ObjectLayerState s_external = { 0 };
+static bool             s_is_external = false;
+
 /* One-shot: fired when the modal closes so the opener can restore context. */
 static InventoryModalOnClose s_on_close = NULL;
 
@@ -239,31 +245,44 @@ void inventory_modal_init(ObjectLayersManager* ol_manager) {
     s_age        = 0.0f;
 }
 
-void inventory_modal_open(int inv_idx) {
-    if (inv_idx < 0 || inv_idx >= g_game_state.full_inventory_count) return;
-    s_inv_idx = inv_idx;
-    s_age     = 0.0f;
-    s_open    = true;
-    /* Reset to default direction/mode on every open */
+/* The item currently shown: an external read-only item, or a player slot. */
+static const ObjectLayerState* current_ols(void) {
+    if (s_is_external) return &s_external;
+    if (s_inv_idx >= 0 && s_inv_idx < g_game_state.full_inventory_count)
+        return &g_game_state.full_inventory[s_inv_idx];
+    return NULL;
+}
+
+static void reset_view_state(void) {
+    s_age = 0.0f;
     strncpy(s_dir,  "down", sizeof(s_dir)  - 1);
     strncpy(s_mode, "idle", sizeof(s_mode) - 1);
     rebuild_dir_str();
     s_skill_page = 0;
     s_skill_total = 0;
     s_skill_arrows_visible = false;
+}
+
+void inventory_modal_open(int inv_idx) {
+    if (inv_idx < 0 || inv_idx >= g_game_state.full_inventory_count) return;
+    s_inv_idx     = inv_idx;
+    s_is_external = false;
+    s_open        = true;
+    reset_view_state();
     /* Notify server → FrozenInteractionState */
     send_freeze(true);
 }
 
-bool inventory_modal_open_item(const char* item_id) {
-    if (!item_id || '\0' == item_id[0]) return false;
-    for (int i = 0; i < g_game_state.full_inventory_count; i++) {
-        if (0 == strcmp(g_game_state.full_inventory[i].item_id, item_id)) {
-            inventory_modal_open(i);
-            return true;
-        }
-    }
-    return false;
+void inventory_modal_open_external(const ObjectLayerState* ols) {
+    if (!ols || '\0' == ols->item_id[0]) return;
+    s_external    = *ols;
+    s_is_external = true;
+    s_inv_idx     = -1;
+    s_open        = true;
+    reset_view_state();
+    /* Kick the sprite atlas fetch so the preview is ready promptly. */
+    if (s_ol_manager) get_or_fetch_atlas_data(ols->item_id);
+    /* Read-only view — no FrozenInteractionState. */
 }
 
 void inventory_modal_set_on_close(InventoryModalOnClose cb) {
@@ -293,12 +312,12 @@ void inventory_modal_update(float dt) {
 }
 
 void inventory_modal_draw(void) {
-    if (!s_open || s_inv_idx < 0) return;
-    if (s_inv_idx >= g_game_state.full_inventory_count) { s_open = false; return; }
+    if (!s_open) return;
+    const ObjectLayerState* ols = current_ols();
+    if (!ols) { s_open = false; return; }
 
     int screen_w = GetScreenWidth();
     int screen_h = GetScreenHeight();
-    const ObjectLayerState* ols = &g_game_state.full_inventory[s_inv_idx];
 
     /* 2. Card — shared pop-in + standardized panel chrome. */
     Rectangle card = card_rect(screen_w, screen_h, modal_pop_scale(s_age));
@@ -340,34 +359,39 @@ void inventory_modal_draw(void) {
     }
     DrawRectangleLinesEx(sprite_dst, 1.0f, C_CARD_BORDER);
 
-    /* 5. Direction / mode buttons — placed right below the sprite ────── */
+    /* 5. Direction / mode buttons — placed right below the sprite ──────
+     * Only directions with atlas frames for the current mode are rendered.
+     * With a single available direction there is nothing to choose, so no
+     * buttons render: the preview is locked to that direction. */
     float dir_row_y = sprite_y + sprite_sz + 8.0f;
-    {
-        /* Compute total row width to centre it */
-        int n_dir   = 4;
-        int total_w = n_dir * DIR_BTN_W + (n_dir - 1) * DIR_BTN_GAP
+    const char* dirs[4]  = { "up",         "down",         "left",         "right"       };
+    const char* icons[4] = { "arrow-up",   "arrow-down",   "arrow-left",   "arrow-right" };
+
+    int present[4], n_present = 0;
+    for (int i = 0; i < 4; i++) {
+        s_dir_btn_enabled[i] = dir_has_frames(atlas, dirs[i], s_mode);
+        if (s_dir_btn_enabled[i]) present[n_present++] = i;
+    }
+    bool show_dir_buttons = n_present > 1;
+
+    if (show_dir_buttons) {
+        int total_w = n_present * DIR_BTN_W + (n_present - 1) * DIR_BTN_GAP
                       + DIR_BTN_GAP * 2 + MODE_BTN_W;
         float row_x = cx + (cw - total_w) * 0.5f;
         float row_y = dir_row_y;
-
-        /* mouse position (for hover, not click) */
         int mx = GetMouseX(), my = GetMouseY();
 
-        const char* dirs[4]  = { "up",         "down",         "left",         "right"       };
-        const char* icons[4] = { "arrow-up",   "arrow-down",   "arrow-left",   "arrow-right" };
-
-        for (int i = 0; i < 4; i++) {
-            Rectangle r = { row_x + i * (DIR_BTN_W + DIR_BTN_GAP),
+        for (int k = 0; k < n_present; k++) {
+            int i = present[k];
+            Rectangle r = { row_x + k * (DIR_BTN_W + DIR_BTN_GAP),
                             row_y, DIR_BTN_W, DIR_BTN_H };
-            s_dir_btn_rects[i]   = r;
-            s_dir_btn_enabled[i] = dir_has_frames(atlas, dirs[i], s_mode);
+            s_dir_btn_rects[i] = r;
             bool sel = (0 == strcmp(s_dir, dirs[i]));
-            draw_small_btn(r, NULL, icons[i], C_DIR_BTN_DEF, sel,
-                           s_dir_btn_enabled[i], mx, my);
+            draw_small_btn(r, NULL, icons[i], C_DIR_BTN_DEF, sel, true, mx, my);
         }
 
         /* Mode toggle button */
-        float mode_x = row_x + 4 * (DIR_BTN_W + DIR_BTN_GAP) + DIR_BTN_GAP;
+        float mode_x = row_x + n_present * (DIR_BTN_W + DIR_BTN_GAP) + DIR_BTN_GAP;
         Rectangle mr = { mode_x, row_y, MODE_BTN_W, DIR_BTN_H };
         s_dir_btn_rects[4]   = mr;
         s_dir_btn_enabled[4] = true;
@@ -375,9 +399,18 @@ void inventory_modal_draw(void) {
         Color mode_bg  = walk_mode ? C_MODE_WALK : C_MODE_IDLE;
         draw_small_btn(mr, walk_mode ? "Walking" : "Idle", NULL,
                        mode_bg, true, true, mx, my);
+    } else {
+        /* No controls; ignore stale rects and lock the preview to the one
+         * available direction. */
+        for (int i = 0; i < DIR_BTN_COUNT; i++) s_dir_btn_enabled[i] = false;
+        if (n_present == 1 && 0 != strcmp(s_dir, dirs[present[0]])) {
+            strncpy(s_dir, dirs[present[0]], sizeof(s_dir) - 1);
+            s_dir[sizeof(s_dir) - 1] = '\0';
+            rebuild_dir_str();
+        }
     }
 
-    float y_cursor = dir_row_y + DIR_BTN_H + 10.0f;
+    float y_cursor = show_dir_buttons ? dir_row_y + DIR_BTN_H + 10.0f : dir_row_y;
 
     /* 6. Fetch item metadata */
     const char* item_name = ols->item_id;
@@ -650,9 +683,10 @@ void inventory_modal_draw(void) {
 
     /* ── Bottom-anchored buttons ────────────────────────────────────── */
 
-    /* 11. Lore button — visible only when dialogue data exists for item */
+    /* 11. Lore button — visible only when dialogue data exists for item.
+     * Hidden for external read-only items (no player-owned dialogue flow). */
     s_lore_btn_visible = false;
-    if (ols->item_id[0] != '\0') {
+    if (!s_is_external && ols->item_id[0] != '\0') {
         dialogue_data_request(ols->item_id);
         if (dialogue_data_available(ols->item_id)) {
             s_lore_btn_visible = true;
@@ -673,8 +707,8 @@ void inventory_modal_draw(void) {
         }
     }
 
-    /* 12. Activate / Deactivate button (anchored to card bottom) */
-    {
+    /* 12. Activate / Deactivate button — only for the player's own items. */
+    if (!s_is_external) {
         bool currently_active = ols->active;
         const char* btn_label = currently_active ? "Deactivate" : "Activate";
 

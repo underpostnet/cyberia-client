@@ -42,6 +42,7 @@
 #ifndef INVENTORY_MODAL_H
 #define INVENTORY_MODAL_H
 
+#include "object_layer.h"
 #include "object_layers_management.h"
 
 #include <raylib.h>
@@ -64,13 +65,11 @@ void inventory_modal_init(ObjectLayersManager* ol_manager);
 void inventory_modal_open(int inv_idx);
 
 /**
- * @brief Open the modal for the first inventory slot matching an item id.
- *
- * Returns true when a matching slot was opened, false when the player owns
- * no such item. Lets other UI (e.g. the interaction modal) reuse the
- * item-detail view by item rather than index.
+ * @brief Open a read-only inspection view for an item (another entity's or
+ *        the player's own layer seen from the interaction modal). No
+ *        activate/lore controls; no freeze.
  */
-bool inventory_modal_open_item(const char* item_id);
+void inventory_modal_open_external(const ObjectLayerState* ols);
 
 /* One-shot callback fired when the modal closes — lets the opener restore
  * its own context (e.g. the interaction modal reopening itself). Cleared
