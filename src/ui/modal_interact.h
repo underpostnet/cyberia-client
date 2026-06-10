@@ -1,14 +1,16 @@
 /**
  * modal_interact — top-half entity interaction modal.
  *
- * Tapping an interaction bubble opens this modal and auto-opens the paired
- * modal_dialogue (bottom half), which renders the entity and, when the skin
- * has a default dialogue, its text. This modal offers two actions:
+ * A tab strip over a fixed bottom bar of integration buttons:
  *
- *   [ Chat ]         opens the JS overlay directly on the Chat tab.
- *   [ Integration ]  opens the JS overlay directly on the Integration tab.
+ *   Tabs:   [stack]  active item slots
+ *           [stats]  six-stat stack totals
+ *           [action] mission interface — only for action-provider entities
+ *   Bottom: [ Chat ]        opens the JS overlay on the Chat tab
+ *           [ Integration ] opens the JS overlay on the Integration tab
  *
- * Dismisses (close button or tap outside) close both modals.
+ * The action tab's "Talk" opens the paired modal_dialogue (bottom half);
+ * server validation drives quest grant/advance. Dismiss closes both.
  */
 
 #ifndef MODAL_INTERACT_H
@@ -21,11 +23,12 @@
 void modal_interact_init(void);
 
 /* dialogue_item_id is the entity's active skin; has_dialogue is true when
- * that skin has a default dialogue. border tints the header to match the
- * entity's status indicator. */
+ * that skin has a default dialogue. is_action_provider gates the action tab
+ * (true for entities bound to a CyberiaAction). border tints the header to
+ * match the entity's status indicator. */
 void modal_interact_open(const char* entity_id, const char* display_name,
                          const char* dialogue_item_id, bool has_dialogue,
-                         Color border);
+                         bool is_action_provider, Color border);
 
 void modal_interact_close(void);
 bool modal_interact_is_open(void);
