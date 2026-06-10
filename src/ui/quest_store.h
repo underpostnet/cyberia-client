@@ -3,7 +3,12 @@
  *
  * The Go server's init_data snapshot seeds the store on connect; subsequent
  * dlg_ack events keep it live (granted quests appear, completed quests move
- * sections). No extra REST calls. Cleared and repopulated on reconnect.
+ * sections).  Only AUTHORITATIVE data travels over AOI — code, status, and
+ * progress counters.  Metadata (title, description, steps, rewards) is
+ * fetched by quest_metadata_cache from the engine REST endpoint
+ * GET /api/cyberia-quest/:code.
+ *
+ * Cleared and repopulated on reconnect.
  */
 
 #ifndef QUEST_STORE_H
@@ -49,5 +54,16 @@ int quest_store_count(QuestStatus status);
 
 /* index is 0-based within the section filter; NULL if out of range. */
 const QuestEntry* quest_store_get(QuestStatus status, int index);
+
+/* True if a quest with this code is already tracked as completed. */
+bool quest_store_is_completed(const char* code);
+
+/* Look up an entry by code (any status), or NULL. */
+const QuestEntry* quest_store_find(const char* code);
+
+/* Update title + description on an existing quest entry (from metadata cache).
+ * Returns true if the entry existed.  No-op when code is unknown. */
+bool quest_store_set_meta(const char* code, const char* title,
+                          const char* description);
 
 #endif /* QUEST_STORE_H */

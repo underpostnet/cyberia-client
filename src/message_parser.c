@@ -12,6 +12,8 @@
 #include "domain/presentation_runtime.h"
 #include "ui/ui_state.h"
 #include "ui/quest_store.h"
+#include "ui/modal_notification.h"
+#include "ui/quest_metadata_cache.h"
 #include "notification.h"
 #include "util/log.h"
 #include <stdio.h>
@@ -616,24 +618,30 @@ static MessageType get_message_type(const cJSON* root) {
 }
 
 /* Upsert each entry of a server quest snapshot array into the local store.
- * Shared by init_data (initial snapshot) and dlg_ack (live updates). */
+ * Shared by init_data (initial snapshot) and dlg_ack (live updates).
+ * The server only sends authoritative data (code, status, progress);
+ * metadata (title, description, rewards) is fetched asynchronously from
+ * the engine REST endpoint /api/cyberia-quest/:code via quest_metadata_cache. */
 static void message_parser_upsert_quest_array(const cJSON* quests_json) {
     if (!quests_json || !cJSON_IsArray(quests_json)) return;
     const cJSON* q = NULL;
     cJSON_ArrayForEach(q, quests_json) {
         char code[64]        = {0};
-        char title[96]       = {0};
-        char description[256]= {0};
         char status[32]      = {0};
         char active_step[160]= {0};
         char objectives[160] = {0};
         serial_get_string(q, "code", code, sizeof(code));
-        serial_get_string(q, "title", title, sizeof(title));
-        serial_get_string(q, "description", description, sizeof(description));
         serial_get_string(q, "status", status, sizeof(status));
         serial_get_string(q, "activeStep", active_step, sizeof(active_step));
         serial_get_string(q, "objectivesText", objectives, sizeof(objectives));
-        quest_store_upsert(code, title, description, status, active_step, objectives);
+
+        /* Store authoritative data — title/description will be populated
+         * lazily by quest_metadata_cache when its REST fetch completes.
+         * Use an empty title as placeholder for the quest_store upsert. */
+        quest_store_upsert(code, "", "", status, active_step, objectives);
+
+        /* Kick off async metadata fetch from engine REST. */
+        quest_metadata_cache_fetch(code);
     }
 }
 
@@ -648,7 +656,48 @@ static int message_parser_parse_dlg_ack(const cJSON* json_root) {
     serial_get_string(payload, "questGranted", quest_granted, sizeof(quest_granted));
     bool objectives_done = serial_get_bool_default(payload, "objectivesDone", false);
 
-    message_parser_upsert_quest_array(serial_get_array(payload, "quests"));
+    cJSON* quests = serial_get_array(payload, "quests");
+
+    /* Notifications must read the prior state, so compute them BEFORE the store
+     * upsert flips statuses. Titles/rewards come from the REST metadata cache
+     * (the authoritative snapshot carries only codes + progress). */
+    if (quests) {
+        const cJSON* q = NULL;
+        cJSON_ArrayForEach(q, quests) {
+            char code[64] = {0}, status[32] = {0}, active_step[160] = {0};
+            serial_get_string(q, "code", code, sizeof(code));
+            serial_get_string(q, "status", status, sizeof(status));
+            serial_get_string(q, "activeStep", active_step, sizeof(active_step));
+            if (code[0] == '\0') continue;
+
+            /* Ensure metadata is cached for the journal + these notifications. */
+            quest_metadata_cache_fetch(code);
+            const QuestMetadataEntry* qm = quest_metadata_cache_get(code);
+            const char* disp = (qm && qm->title[0]) ? qm->title : code;
+
+            if (0 == strcmp(status, "completed") && !quest_store_is_completed(code)) {
+                if (qm && qm->reward_count > 0) {
+                    char body[160];
+                    snprintf(body, sizeof(body), "Reward: %dx %s",
+                             qm->rewards[0].quantity, qm->rewards[0].item_id);
+                    modal_notification_show_reward(disp, body, (Color){ 90, 200, 110, 255 },
+                                                   qm->rewards[0].item_id, qm->rewards[0].quantity);
+                } else {
+                    modal_notification_show("Quest Complete", disp, (Color){ 90, 200, 110, 255 });
+                }
+            } else if (0 == strcmp(code, quest_granted)) {
+                modal_notification_show("Quest Accepted",
+                                        active_step[0] ? active_step : disp,
+                                        (Color){ 220, 190, 60, 255 });
+            } else if (objectives_done && 0 == strcmp(status, "active")) {
+                char body[200];
+                snprintf(body, sizeof(body), "Next: %s", active_step[0] ? active_step : disp);
+                modal_notification_show("Objective Complete", body, (Color){ 90, 170, 220, 255 });
+            }
+        }
+    }
+
+    message_parser_upsert_quest_array(quests);
 
     if (quest_granted[0] != '\0')
         LOG_INFO("[DLG_ACK] quest granted: %s\n", quest_granted);

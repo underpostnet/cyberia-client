@@ -61,6 +61,10 @@ struct BotState {
     EntityState base;
     char behavior[MAX_BEHAVIOR_LENGTH];
     char caster_id[MAX_ID_LENGTH];
+    /* Authoritative quest binding from AOI — the code this action-provider
+     * grants, "" for ordinary bots. Position-independent, so a wandering NPC
+     * keeps its offer. */
+    char grant_quest_code[MAX_ID_LENGTH];
 };
 
 typedef struct WorldObject {

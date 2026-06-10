@@ -43,9 +43,9 @@ bool quest_store_upsert(const char* code, const char* title, const char* descrip
         copy_field(e->code, QUEST_CODE_MAX, code);
         added = true;
     }
-    copy_field(e->title,       QUEST_TITLE_MAX,      title);
-    copy_field(e->description, QUEST_DESC_MAX,       description);
-    copy_field(e->active_step, QUEST_STEP_MAX,       active_step);
+    if (title) copy_field(e->title, QUEST_TITLE_MAX, title);
+    if (description) copy_field(e->description, QUEST_DESC_MAX, description);
+    copy_field(e->active_step, QUEST_STEP_MAX, active_step);
     copy_field(e->objectives,  QUEST_OBJECTIVES_MAX, objectives);
     e->status = quest_store_parse_status(status_str);
     return added;
@@ -67,4 +67,24 @@ const QuestEntry* quest_store_get(QuestStatus status, int index) {
         ++seen;
     }
     return NULL;
+}
+
+const QuestEntry* quest_store_find(const char* code) {
+    if (!code) return NULL;
+    const QuestEntry* e = find_by_code(code);
+    return e;
+}
+
+bool quest_store_is_completed(const char* code) {
+    const QuestEntry* e = quest_store_find(code);
+    return e && QUEST_COMPLETED == e->status;
+}
+
+bool quest_store_set_meta(const char* code, const char* title,
+                          const char* description) {
+    QuestEntry* e = find_by_code(code);
+    if (!e) return false;
+    if (title) copy_field(e->title, QUEST_TITLE_MAX, title);
+    if (description) copy_field(e->description, QUEST_DESC_MAX, description);
+    return true;
 }

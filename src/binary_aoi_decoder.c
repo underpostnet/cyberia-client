@@ -278,6 +278,7 @@ static void decode_bot_entity(BinReader* r, uint8_t flags) {
     br_string(r, b->caster_id, MAX_ID_LENGTH);
     b->base.effective_level = (int)br_u16(r);
     b->base.status_icon = br_u8(r);  /* Entity Status Indicator */
+    br_string(r, b->grant_quest_code, MAX_ID_LENGTH);
 }
 
 static void decode_floor_entity(BinReader* r, uint8_t flags) {
