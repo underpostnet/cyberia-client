@@ -454,14 +454,17 @@ bool interaction_bubble_handle_click(int mx, int my) {
             LOG_INFO("[INTERACTION_BUBBLE] Slot %d clicked: entity=%s flags=0x%x\n",
                    i, slot->entity_id, slot->interact_flags);
 
-            /* Bubble tap opens modal_interact, which auto-opens the paired
-             * dialogue. has_dialogue is true when the active skin has one. */
+            /* Bubble tap opens modal_interact. has_dialogue is true when the
+             * active skin has dialogue; the action tab shows for entities
+             * the server marked as action-providers (ESI 8). */
             bool is_self      = (strcmp(slot->entity_id, g_game_state.player_id) == 0);
             bool has_dialogue = (slot->interact_flags & INTERACT_DIALOGUE) != 0 &&
                                 slot->dialogue_item_id[0] != '\0';
+            bool is_action_provider = (8 == slot->status_icon);
             Color bc = status_border_color(slot, is_self);
             modal_interact_open(slot->entity_id, slot->display_name,
-                                slot->dialogue_item_id, has_dialogue, bc);
+                                slot->dialogue_item_id, has_dialogue,
+                                is_action_provider, bc);
             return true;
         }
     }
