@@ -13,6 +13,7 @@
 #include "ui/modal_interact.h"
 #include "ui/modal_player.h"
 #include "ui/quest_journal.h"
+#include "ui/modal_notification.h"
 #include "ui/tap_effect.h"
 #include "ui/ui_icon.h"
 #include "network/engine_client.h"
@@ -78,6 +79,7 @@ void render_on_tick(float delta_time) {
     if (modal_dialogue_is_open())   modal_dialogue_update(delta_time);
     if (modal_interact_is_open())   modal_interact_update(delta_time);
     quest_journal_update(delta_time);
+    modal_notification_update(delta_time);
 
     interaction_bubble_update();
     dev_ui_on_tick(delta_time);

@@ -17,6 +17,7 @@
 #include "ui/modal_player.h"
 #include "ui/nameplate.h"
 #include "ui/quest_journal.h"
+#include "ui/modal_notification.h"
 #include "ui/tap_effect.h"
 #include "ui/ui_button.h"
 #include "ui/ui_icon.h"
@@ -123,6 +124,7 @@ int game_render_init(int screen_width, int screen_height) {
     dialogue_data_init();
     interaction_bubble_init();
     quest_journal_init();
+    modal_notification_init();
     ui_icon_init(UI_ICON_CACHE_CAPACITY);
     return 0;
 }
@@ -839,6 +841,9 @@ void game_render_ui(void) {
     if (modal_dialogue_is_open()) {
         modal_dialogue_draw();
     }
+
+    // Transient notification toast — top-most, above every modal.
+    modal_notification_draw();
 }
 
 typedef struct {
