@@ -1,6 +1,6 @@
 #include "input_command.h"
 #include "input.h"
-#include "network/session.h"
+#include "network/replication.h"
 #include "domain/camera.h"
 
 #include <assert.h>

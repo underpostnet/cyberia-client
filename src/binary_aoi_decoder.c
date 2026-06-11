@@ -633,9 +633,9 @@ int binary_aoi_process(const uint8_t* data, size_t length) {
     uint32_t last_acked_sequence = br_u32(&r);
     uint16_t entity_count        = br_u16(&r);
 
-    /* Feed the session module so prediction/interpolation downstream can
+    /* Feed the session bookkeeping so prediction/interpolation downstream can
      * align to the authoritative tick stream. session_on_snapshot is
-     * declared in network/session.h. */
+     * declared in network/replication.h. */
     extern void session_on_snapshot(uint32_t tick, uint32_t last_acked_sequence);
     session_on_snapshot(snapshot_tick, last_acked_sequence);
 

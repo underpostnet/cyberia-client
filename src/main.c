@@ -16,9 +16,6 @@
 
 #include "domain/camera.h"
 #include "domain/presentation_runtime.h"
-#include "network/interpolation.h"
-#include "network/session.h"
-#include "network/prediction.h"
 #include "util/log.h"
 #include "ui/ui_dispatch.h"
 #include "ui/tap_effect.h"
