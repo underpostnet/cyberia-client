@@ -1,6 +1,7 @@
 #include "quest_journal.h"
 
 #include "modal.h"
+#include "quest_metadata_cache.h"
 #include "quest_store.h"
 #include "ui_button.h"
 #include "ui_toggle.h"
@@ -11,7 +12,7 @@
 
 /* ── Layout ───────────────────────────────────────────────────────────── */
 
-#define QJ_PANEL_W        220
+#define QJ_PANEL_W        248
 #define QJ_MARGIN         8
 #define QJ_TOP_OFFSET     130   /* below the upper-right map info modal */
 #define QJ_HEADER_H       40
@@ -25,13 +26,19 @@
 #define QJ_FONT_TITLE     16
 #define QJ_FONT_SECTION   14
 #define QJ_FONT_ROW       13
+#define QJ_FONT_NAME      13
 #define QJ_FONT_SMALL     11
 
-/* Header / detail sit on top of the shared MODAL_PANEL_BG fill. */
+#define QJ_CARD_MX        6    /* card horizontal margin inside the panel */
+#define QJ_CARD_PAD       7    /* card inner padding                      */
+#define QJ_CARD_GAP       6    /* vertical gap between cards              */
+
+/* Header / cards sit on top of the shared MODAL_PANEL_BG fill. */
 static const Color C_HEADER   = {  24,  30,  48, 255 };
 static const Color C_TEXT     = { 220, 220, 230, 240 };
 static const Color C_DIM      = { 140, 140, 160, 200 };
-static const Color C_DETAIL   = {  22,  22,  34, 255 };
+static const Color C_CARD     = {  30,  34,  52, 210 };
+static const Color C_STEP     = { 120, 200, 140, 235 };
 static const Color C_DIS      = {  90,  90, 110, 160 };
 
 static const Color C_STATUS[QUEST_STATUS_COUNT] = {
@@ -54,7 +61,6 @@ static float    s_panel_h = QJ_HEADER_H;
 static UIToggle s_panel;
 static UIToggle s_section[QUEST_STATUS_COUNT];
 static int      s_page[QUEST_STATUS_COUNT]   = { 0, 0, 0 };
-static int      s_detail[QUEST_STATUS_COUNT] = { -1, -1, -1 };
 
 static int page_count(int count) {
     if (count <= 0) return 1;
@@ -81,6 +87,63 @@ static void ensure_init(void) {
         ui_toggle_init(&s_section[i], z, i == QUEST_ACTIVE, UI_TOGGLE_CHEVRON_DOWN);
     }
     s_init = true;
+}
+
+/* Draw (or just measure when draw==false) `text` word-wrapped within maxw.
+ * Returns the pixel height consumed. */
+static int wrap_block(bool draw, const char* text, int x, int y, int maxw, int font, Color col) {
+    if (!text || text[0] == '\0') return 0;
+    char buf[512];
+    strncpy(buf, text, sizeof(buf) - 1);
+    buf[sizeof(buf) - 1] = '\0';
+
+    char line[512] = { 0 }, test[512];
+    int cy = y;
+    char* tok = strtok(buf, " ");
+    while (tok) {
+        if (line[0] == '\0') snprintf(test, sizeof(test), "%s", tok);
+        else                 snprintf(test, sizeof(test), "%s %s", line, tok);
+        if (MeasureText(test, font) > maxw && line[0] != '\0') {
+            if (draw) DrawText(line, x, cy, font, col);
+            cy += font + 3;
+            snprintf(line, sizeof(line), "%s", tok);
+        } else {
+            snprintf(line, sizeof(line), "%s", test);
+        }
+        tok = strtok(NULL, " ");
+    }
+    if (line[0] != '\0') {
+        if (draw) DrawText(line, x, cy, font, col);
+        cy += font + 3;
+    }
+    return cy - y;
+}
+
+/* Render (or measure) one quest's expanded detail: wrapped description plus the
+ * Render (or measure) one quest as a single flat card — no nested expand:
+ * a status dot, the prominent quest name, then either the active step +
+ * objectives (active) or a one-word status (Completed / Abandoned). Everything
+ * wraps to the card width. Returns the card's pixel height. */
+static int quest_card_layout(bool draw, const QuestEntry* e, QuestStatus sec, int x, int y, int w) {
+    const char* name = e->title[0] != '\0' ? e->title : e->code;
+    int tx = x + QJ_CARD_PAD + 12;                 /* text column, right of the dot */
+    int tw = w - (QJ_CARD_PAD + 12) - QJ_CARD_PAD;
+    int cy = y + QJ_CARD_PAD;
+
+    if (draw) {
+        DrawCircle(x + QJ_CARD_PAD + 4, cy + QJ_FONT_NAME / 2, 4.0f, C_STATUS[sec]);
+    }
+    cy += wrap_block(draw, name, tx, cy, tw, QJ_FONT_NAME, C_TEXT);
+    cy += 2;
+
+    if (QUEST_ACTIVE == sec) {
+        cy += wrap_block(draw, e->active_step, tx, cy, tw, QJ_FONT_SMALL, C_STEP);
+        cy += wrap_block(draw, e->objectives, tx, cy, tw, QJ_FONT_SMALL, C_DIM);
+    } else {
+        const char* status = (QUEST_COMPLETED == sec) ? "Completed" : "Abandoned";
+        cy += wrap_block(draw, status, tx, cy, tw, QJ_FONT_SMALL, C_STATUS[sec]);
+    }
+    return (cy - y) + QJ_CARD_PAD;
 }
 
 /* ── Unified layout walk (single source of truth) ─────────────────────── */
@@ -154,31 +217,15 @@ static bool journal_walk(int mode, int mx, int my) {
             const QuestEntry* e = quest_store_get((QuestStatus)sec, i);
             if (!e) continue;
 
-            Rectangle row = { x, y, w, QJ_ROW_H };
+            int ch = quest_card_layout(false, e, (QuestStatus)sec,
+                                       (int)(x + QJ_CARD_MX), (int)y, (int)(w - 2 * QJ_CARD_MX));
             if (JW_DRAW == mode) {
-                DrawCircle((int)(x + 12), (int)(y + QJ_ROW_H / 2), 4.0f, C_STATUS[sec]);
-                DrawText(e->title, (int)(x + 24),
-                         (int)(y + (QJ_ROW_H - QJ_FONT_ROW) / 2), QJ_FONT_ROW, C_TEXT);
-            } else if (JW_CLICK == mode && hit(mx, my, row)) {
-                s_detail[sec] = (s_detail[sec] == i) ? -1 : i; /* one open per section */
-                return true;
+                Rectangle card = { x + QJ_CARD_MX, y, w - 2 * QJ_CARD_MX, (float)ch };
+                DrawRectangleRounded(card, 0.16f, 4, C_CARD);
+                quest_card_layout(true, e, (QuestStatus)sec,
+                                  (int)(x + QJ_CARD_MX), (int)y, (int)(w - 2 * QJ_CARD_MX));
             }
-            y += QJ_ROW_H;
-
-            if (s_detail[sec] == i) {
-                Rectangle det = { x, y, w, QJ_DETAIL_H };
-                if (JW_DRAW == mode) {
-                    DrawRectangleRec(det, C_DETAIL);
-                    DrawText(e->description, (int)(x + 10), (int)(y + 4), QJ_FONT_SMALL, C_DIM);
-                    if (e->active_step[0] != '\0') {
-                        DrawText(e->active_step, (int)(x + 10), (int)(y + 20), QJ_FONT_SMALL, C_TEXT);
-                    }
-                    if (e->objectives[0] != '\0') {
-                        DrawText(e->objectives, (int)(x + 10), (int)(y + 36), QJ_FONT_SMALL, C_DIM);
-                    }
-                }
-                y += QJ_DETAIL_H;
-            }
+            y += ch + QJ_CARD_GAP;
         }
 
         /* Pagination — only when expanded and count exceeds one page. */
@@ -200,11 +247,9 @@ static bool journal_walk(int mode, int mx, int my) {
                 DrawText(ctr, (int)(x + (w - cw) / 2), (int)(y + 4), QJ_FONT_SMALL, C_DIM);
             } else if (JW_CLICK == mode && can_prev && hit(mx, my, prev)) {
                 s_page[sec]--;
-                s_detail[sec] = -1;
                 return true;
             } else if (JW_CLICK == mode && can_next && hit(mx, my, next)) {
                 s_page[sec]++;
-                s_detail[sec] = -1;
                 return true;
             }
             y += QJ_PAGER_H;
@@ -221,8 +266,7 @@ void quest_journal_init(void) {
     s_init = false;
     s_age  = 0.0f;
     for (int i = 0; i < QUEST_STATUS_COUNT; ++i) {
-        s_page[i]   = 0;
-        s_detail[i] = -1;
+        s_page[i] = 0;
     }
 }
 
@@ -232,6 +276,18 @@ void quest_journal_update(float dt) {
     ui_toggle_update(&s_panel, dt);
     for (int i = 0; i < QUEST_STATUS_COUNT; ++i) {
         ui_toggle_update(&s_section[i], dt);
+    }
+
+    /* Ensure every tracked quest has its metadata — the store seeds from the
+     * authoritative snapshot (codes + progress only), so titles/descriptions
+     * for quests we never opened (e.g. seeded on reconnect, completed, failed)
+     * would otherwise render blank. The cache no-ops once a code is resolved. */
+    for (int sec = 0; sec < QUEST_STATUS_COUNT; ++sec) {
+        int n = quest_store_count((QuestStatus)sec);
+        for (int i = 0; i < n; ++i) {
+            const QuestEntry* e = quest_store_get((QuestStatus)sec, i);
+            if (e && e->title[0] == '\0') quest_metadata_cache_fetch(e->code);
+        }
     }
 }
 
