@@ -20,16 +20,16 @@
  * All endpoints are public GET requests (no authentication required).
  *
  * Atlas Sprite Sheet Flow:
- *   1. GET {API_BASE_URL}/api/atlas-sprite-sheet/?filterModel=...&limit=1
+ *   1. GET /api/atlas-sprite-sheet/?filterModel=...&limit=1
  *      Returns: { status, data: { data: [ { fileId, metadata: { itemKey, frames, ... } } ] } }
  *   2. Extract fileId._id and FrameMetadata per direction
- *   3. GET {API_BASE_URL}/api/file/blob/{fileId}
+ *   3. GET /api/file/blob/{fileId}
  *      Returns: raw PNG binary buffer
  *   4. Load single atlas texture into GPU
  *   5. On render, clip individual frames using FrameMetadata source rects
  *
  * Object Layer Metadata Flow:
- *   1. GET {API_BASE_URL}/api/object-layer/?filterModel=...&limit=1
+ *   1. GET /api/object-layer/?filterModel=...&limit=1
  *      Returns: { status, data: { data: [ { data: { item, stats, ledger, render, ... }, sha256 } ] } }
  *   2. Parse item type, stats, ledger (blockchain metadata), render CIDs (IPFS)
  *   3. Cache for rendering priority and animation timing
@@ -85,8 +85,8 @@ ObjectLayer* lookup_cached_layer(const char* item_id);
  * 7. Caches everything for future requests
  *
  * API Requests:
- * - Atlas metadata: GET {API_BASE_URL}/api/atlas-sprite-sheet/?filterModel=...&limit=1
- * - Atlas PNG blob: GET {API_BASE_URL}/api/file/blob/{fileId}
+ * - Atlas metadata: GET /api/atlas-sprite-sheet/?filterModel=...&limit=1
+ * - Atlas PNG blob: GET /api/file/blob/{fileId}
  *
  * @param item_key The item identifier key (e.g., "anon", "sword_basic")
  * @return Pointer to AtlasSpriteSheetData on success, NULL on failure
@@ -134,7 +134,7 @@ void populate_object_layer_from_json(const char* item_id, const cJSON* ol_json);
 /**
  * @brief Schedule a REST fetch for atlas sprite sheet metadata by item_key.
  *
- * Triggers: GET {API_BASE_URL}/api/atlas-sprite-sheet/metadata/{item_key}
+ * Triggers: GET /api/atlas-sprite-sheet/metadata/{item_key}
  * Response: { status, data: { metadata: { itemKey, atlasWidth, atlasHeight,
  *                                         cellPixelDim, frame_duration, frames }, cid } }
  *

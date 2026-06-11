@@ -7,7 +7,7 @@
  * callback (no per-frame poll required from the caller).
  *
  * API endpoint:
- *   GET {API_BASE_URL}/api/cyberia-dialogue/code/default-<itemId>
+ *   GET /api/cyberia-dialogue/code/default-<itemId>
  *
  * Response shape (success):
  *   { "status": "success", "data": [ { code, order, speaker, text, mood }, ... ] }

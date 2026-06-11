@@ -6,6 +6,9 @@
 #include <stdbool.h>
 #include <stdlib.h>
 #include <string.h>
+#include <stdio.h>
+
+#include "config.h"
 
 typedef struct {
     char*            asset_id;
@@ -70,5 +73,9 @@ void fetch_request_start(const char* asset_id, const char* url, FetchCompletedCb
     attr.onsuccess  = on_fetch_success;
     attr.onerror    = on_fetch_error;
     attr.userData   = ctx;
+
+
+    static char target_url[1024];
+    snprintf(target_url, sizeof(target_url), "%s%s", API_BASE_URL, url);
     emscripten_fetch(&attr, url);
 }

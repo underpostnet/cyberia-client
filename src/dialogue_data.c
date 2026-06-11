@@ -1,5 +1,4 @@
 #include "dialogue_data.h"
-#include "config.h"
 #include "hash_table.h"
 #include "network/engine_client.h"
 #include "util/log.h"
@@ -103,7 +102,7 @@ void dialogue_data_request(const char* item_id) {
     hash_table_put(&ht, item_id, d);
 
     char url[1024];
-    snprintf(url, sizeof(url), "%s/api/cyberia-dialogue/code/default-%s", API_BASE_URL, item_id);
+    snprintf(url, sizeof(url), "/api/cyberia-dialogue/code/default-%s", item_id);
     fetch_request_start(item_id, url, on_dialogue_fetched);
     LOG_INFO("[DIALOGUE_DATA] Fetch started for '%s'", item_id);
 }

@@ -47,7 +47,7 @@ extern "C" {
 
 /** Kick off the asynchronous fetch. Safe to call exactly once at startup
  *  after js_init_engine_api has run. Subsequent calls are no-ops. */
-void presentation_runtime_start_fetch(const char* api_base_url, const char* client_hints_code);
+void presentation_runtime_start_fetch(const char* client_hints_code);
 
 /** True once the fetch has settled (succeeded, errored, or 404). After
  *  this point, all accessors reflect the resolved table; before then they

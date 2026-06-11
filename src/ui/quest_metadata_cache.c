@@ -13,7 +13,6 @@
 #include "quest_store.h"
 
 #include "network/engine_client.h"
-#include "config.h"
 #include "util/log.h"
 
 #include <cJSON.h>
@@ -75,7 +74,7 @@ void quest_metadata_cache_fetch(const char* code) {
     e->state = QUEST_META_LOADING;
 
     char url[512];
-    snprintf(url, sizeof url, "%s/api/cyberia-quest/code/%s", API_BASE_URL, code);
+    snprintf(url, sizeof url, "/api/cyberia-quest/code/%s", code);
     fetch_request_start(code, url, on_quest_fetched);
 }
 

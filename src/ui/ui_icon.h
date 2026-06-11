@@ -19,7 +19,7 @@
  *
  * ── Asset pipeline ──────────────────────────────────────────────────────
  * Icons live on the engine API under:
- *   {API_BASE_URL}/assets/ui-icons/{icon_id}.png
+ *   /assets/ui-icons/{icon_id}.png
  *
  * Textures are loaded asynchronously through the engine_client fetch
  * queue; completion is delivered via a registered callback. Until loaded,
@@ -77,7 +77,7 @@ void ui_icon_cleanup(void);
  * @brief Draw an icon at the given world-pixel position.
  *
  * The icon is fetched (and cached) from:
- *   {API_BASE_URL}/assets/ui-icons/{icon_id}.png
+ *   /assets/ui-icons/{icon_id}.png
  *
  * While the texture is loading, a subtle pulsing placeholder dot is drawn
  * so the layout stays stable.

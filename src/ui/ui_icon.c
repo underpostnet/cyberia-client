@@ -1,6 +1,5 @@
 #include "ui_icon.h"
 
-#include "config.h"
 #include "texture_cache.h"
 
 #include <assert.h>
@@ -10,7 +9,7 @@
 #include <string.h>
 
 /* ui_icon owns its own texture cache — decorative, presentation-only icons
- * fetched from {API_BASE_URL}/assets/ui-icons/{id}.png. It is a peer of the
+ * fetched from /assets/ui-icons/{id}.png. It is a peer of the
  * object-layer atlas cache, not a tenant of it: zero dependency on
  * object_layers_management. */
 
@@ -46,7 +45,7 @@ void ui_icon_draw(const char* icon_id, float cx, float cy, int size, bool bounce
     float draw_cy = cy + offset_y;
 
     char url[512];
-    snprintf(url, sizeof(url), "%s/assets/ui-icons/%s.png", API_BASE_URL, icon_id);
+    snprintf(url, sizeof(url), "/assets/ui-icons/%s.png", icon_id);
     Texture2D tex = texture_cache_get(s_icon_cache, url);
 
     if (tex.id > 0) {

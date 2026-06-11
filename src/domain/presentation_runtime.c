@@ -188,11 +188,11 @@ static void on_hints_fetched(const FetchResponse* r) {
 
 /* ── Public lifecycle ──────────────────────────────────────────────── */
 
-void presentation_runtime_start_fetch(const char* api_base_url, const char* client_hints_code) {
+void presentation_runtime_start_fetch(const char* client_hints_code) {
     if (g_rt.started) return;
-    if (!api_base_url || !client_hints_code) return;
+    if (!client_hints_code) return;
     char url[512];
-    int n = snprintf(url, sizeof(url), "%s/api/cyberia-client-hints/%s", api_base_url, client_hints_code);
+    int n = snprintf(url, sizeof(url), "/api/cyberia-client-hints/%s", client_hints_code);
     if (n <= 0 || n >= (int)sizeof(url)) return;
     g_rt.started = true;
     fetch_request_start("cyberia-client-hints", url, on_hints_fetched);

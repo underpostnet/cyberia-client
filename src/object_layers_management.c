@@ -34,7 +34,7 @@ struct ObjectLayersManager {
 };
 
 static void atlas_blob_url(const char* item_key, char* out, size_t out_sz) {
-    snprintf(out, out_sz, "%s/api/atlas-sprite-sheet/blob/%s", API_BASE_URL, item_key);
+    snprintf(out, out_sz, "/api/atlas-sprite-sheet/blob/%s", item_key);
 }
 
 /* engine_client fetch trampoline → routes blob completions into the atlas cache. */
@@ -304,7 +304,7 @@ void obj_layers_mgr_schedule_atlas_fetch(const char* item_key) {
     hash_table_put(&g_olm_singleton->meta, item_key, META_SENTINEL);
 
     char url[512];
-    snprintf(url, sizeof(url), "%s/api/atlas-sprite-sheet/metadata/%s", API_BASE_URL, item_key);
+    snprintf(url, sizeof(url), "/api/atlas-sprite-sheet/metadata/%s", item_key);
     fetch_request_start(item_key, url, on_atlas_meta_fetched);
     LOG_INFO("[ATLAS REST] Fetch scheduled via engine_client: %s", item_key);
 }

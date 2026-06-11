@@ -147,7 +147,7 @@ int main(void) {
     // NOTE: Do not mix the start fetch loop with the running game loop
     // if need to be non blocking then wait in a loading screen before starting main_loop
     // all the initializations should be consolidated in related modules
-    presentation_runtime_start_fetch(API_BASE_URL, CYBERIA_CLIENT_HINTS_CODE);
+    presentation_runtime_start_fetch(CYBERIA_CLIENT_HINTS_CODE);
 
     // [preload] it should handle the switch to gameloop on callback
     emscripten_set_main_loop(preloading_loop, 0, 1);
