@@ -88,6 +88,18 @@ void local_player_request_dialogue_cancel(const char* entity_id, const char* ite
     g_local.freeze_pending = false;
 }
 
+void local_player_request_quest_abandon(const char* quest_code) {
+    BinWriter w;
+    uplink_quest_abandon(&w, quest_code);
+    network_send_binary(w.buf, w.pos);
+}
+
+void local_player_request_quest_accept(const char* entity_id) {
+    BinWriter w;
+    uplink_quest_accept(&w, entity_id);
+    network_send_binary(w.buf, w.pos);
+}
+
 void local_player_on_tick(void) {
     if (!g_local.freeze_pending) { return; }
     if (GetTime() < g_local.freeze_deadline) { return; }

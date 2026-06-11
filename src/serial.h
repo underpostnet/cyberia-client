@@ -182,6 +182,8 @@ bool serial_get_bool_default(const cJSON* json, const char* key, bool default_va
 #define UPLINK_DLG_START       0x17
 #define UPLINK_DLG_COMPLETE    0x18
 #define UPLINK_DLG_CANCEL      0x19
+#define UPLINK_QUEST_ABANDON   0x1A
+#define UPLINK_QUEST_ACCEPT    0x1B
 
 typedef struct {
     uint8_t  buf[256];
@@ -223,5 +225,11 @@ void uplink_dlg_start(BinWriter* w, const char* entity_id, const char* item_id);
 void uplink_dlg_complete(BinWriter* w, const char* entity_id, const char* item_id,
                          const char* dialog_code);
 void uplink_dlg_cancel(BinWriter* w, const char* entity_id, const char* item_id);
+
+/* Abandon an active quest by code — server moves it to the failed section. */
+void uplink_quest_abandon(BinWriter* w, const char* quest_code);
+
+/* Accept the quest the entity offers — the only path to start a mission. */
+void uplink_quest_accept(BinWriter* w, const char* entity_id);
 
 #endif // SERIAL_H

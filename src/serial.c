@@ -519,3 +519,11 @@ void uplink_dlg_cancel(BinWriter* w, const char* entity_id, const char* item_id)
     bw_str(w, entity_id ? entity_id : "");
     bw_str(w, item_id   ? item_id   : "");
 }
+void uplink_quest_abandon(BinWriter* w, const char* quest_code) {
+    bw_init(w, UPLINK_QUEST_ABANDON);
+    bw_str(w, quest_code ? quest_code : "");
+}
+void uplink_quest_accept(BinWriter* w, const char* entity_id) {
+    bw_init(w, UPLINK_QUEST_ACCEPT);
+    bw_str(w, entity_id ? entity_id : "");
+}

@@ -55,6 +55,12 @@ void  local_player_request_dialogue_complete(const char* entity_id, const char* 
                                              const char* dialog_code);
 void  local_player_request_dialogue_cancel(const char* entity_id, const char* item_id);
 
+/* Abandon an active quest by code — server moves it to the failed section. */
+void  local_player_request_quest_abandon(const char* quest_code);
+
+/* Accept the quest the entity offers — the only path to start a mission. */
+void  local_player_request_quest_accept(const char* entity_id);
+
 /* Advance the freeze watchdog; call once per render frame. */
 void  local_player_on_tick(void);
 
