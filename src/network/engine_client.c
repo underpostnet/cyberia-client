@@ -77,5 +77,5 @@ void fetch_request_start(const char* asset_id, const char* url, FetchCompletedCb
 
     static char target_url[1024];
     snprintf(target_url, sizeof(target_url), "%s%s", API_BASE_URL, url);
-    emscripten_fetch(&attr, url);
+    emscripten_fetch(&attr, target_url);
 }
