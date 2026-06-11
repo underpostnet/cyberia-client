@@ -12,7 +12,7 @@
 #include <raylib.h>
 #include <emscripten/emscripten.h>
 
-#include "js/services.h"
+#include "js/interact_bridge.h"
 
 #include "domain/camera.h"
 #include "domain/presentation_runtime.h"

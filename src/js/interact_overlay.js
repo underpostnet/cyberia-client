@@ -23,6 +23,32 @@
 
 mergeInto(LibraryManager.library, {
   /* ================================================================
+   * Engine API base URL — set from C (js_init_engine_api), read here when
+   * building DOM <img src> asset previews:
+   *   GET {api_base_url}/assets/{type}/{itemId}/08/0.png
+   *
+   * This is the ONLY sanctioned JS-side fetch surface, and only because the
+   * browser <img> element fetches/decodes/renders natively. For anything that
+   * pulls bytes into wasm (REST JSON, blobs), use the native engine fetch API
+   * (network/engine_client.h: fetch_request_start) — do NOT add a JS bridge.
+   * ================================================================ */
+
+  $FetchState: {
+    api_base_url: 'https://www.cyberiaonline.com',
+  },
+
+  js_init_engine_api__deps: ['$FetchState'],
+  js_init_engine_api: function (api_base_url_ptr) {
+    var api_base_url = UTF8ToString(api_base_url_ptr);
+
+    if (api_base_url) {
+      FetchState.api_base_url = api_base_url;
+    }
+
+    console.log('[API] Engine API base URL set to: ' + FetchState.api_base_url);
+  },
+
+  /* ================================================================
    * State — single reusable panel instance
    * ================================================================ */
 

@@ -22,7 +22,6 @@ LDFLAGS += -lwebsocket.js
 LDFLAGS += -s 'EXPORTED_RUNTIME_METHODS=["writeArrayToMemory","setValue","allocateUTF8"]'
 LDFLAGS += -sASYNCIFY
 LDFLAGS += -sFETCH=1
-LDFLAGS += --js-library $(SRC_DIR)/js/services.js
 LDFLAGS += --js-library $(SRC_DIR)/js/interact_overlay.js
 LDFLAGS += -sEXPORTED_FUNCTIONS='["_main","_c_send_chat_binary"]'
 

@@ -41,6 +41,12 @@ extern void js_interact_overlay_receive_chat(const char* from_id,
                                              const char* from_name,
                                              const char* text);
 
+/* Set the engine API base URL on the JS side (FetchState.api_base_url),
+ * consulted when building DOM <img> asset previews. For REST/blob fetches
+ * prefer the native engine fetch API (network/engine_client.h:
+ * fetch_request_start) over adding a JS bridge here. */
+extern void js_init_engine_api(const char* api_base_url);
+
 /* ── C functions (EMSCRIPTEN_KEEPALIVE, called from JS as Module._xxx) ── */
 
 void c_send_chat_binary(const char* to_id, const char* text);
