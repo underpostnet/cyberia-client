@@ -49,14 +49,9 @@ const QuestMetadataEntry* quest_metadata_cache_get(const char* code);
 /* Return the fetch state for a quest code. */
 QuestMetaState quest_metadata_cache_state(const char* code);
 
-/* Schedule an async REST fetch (GET /api/cyberia-quest/code/:code) via the JS
- * bridge if not already cached/loading. The JS side calls
- * quest_metadata_cache_ingest_json() with the raw response on completion. */
+/* Schedule an async REST fetch (GET /api/cyberia-quest/code/:code) via
+ * engine_client if not already cached/loading. Parses the
+ * `{ status, data: <quest doc> }` envelope on completion. */
 void quest_metadata_cache_fetch(const char* code);
-
-/* Called from JS (Module._quest_metadata_cache_ingest_json) with the raw
- * `{ status, data: <quest doc> }` JSON; parses title/description/steps/rewards.
- * An empty/invalid body marks the entry as errored. */
-void quest_metadata_cache_ingest_json(const char* code, const char* json);
 
 #endif /* QUEST_METADATA_CACHE_H */

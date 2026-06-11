@@ -12,11 +12,12 @@
 #include "quest_metadata_cache.h"
 #include "quest_store.h"
 
-#include "js/services.h"
+#include "network/engine_client.h"
+#include "config.h"
 #include "util/log.h"
 
 #include <cJSON.h>
-#include <emscripten.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -62,6 +63,8 @@ QuestMetaState quest_metadata_cache_state(const char* code) {
     return e->state;
 }
 
+static void on_quest_fetched(const FetchResponse* r);
+
 void quest_metadata_cache_fetch(const char* code) {
     if (!code || '\0' == code[0]) return;
 
@@ -70,7 +73,10 @@ void quest_metadata_cache_fetch(const char* code) {
     if (QUEST_META_READY == e->state || QUEST_META_LOADING == e->state) return;
 
     e->state = QUEST_META_LOADING;
-    js_fetch_quest_metadata(code);
+
+    char url[512];
+    snprintf(url, sizeof url, "%s/api/cyberia-quest/code/%s", API_BASE_URL, code);
+    fetch_request_start(code, url, on_quest_fetched);
 }
 
 /* Parse the quest doc (`data` object of the engine envelope) into entry. */
@@ -125,23 +131,24 @@ static const cJSON* envelope_success_doc(const cJSON* root) {
     return doc;
 }
 
-EMSCRIPTEN_KEEPALIVE
-void quest_metadata_cache_ingest_json(const char* code, const char* json) {
-    if (!code || '\0' == code[0]) return;
+static void on_quest_fetched(const FetchResponse* r) {
+    QuestMetadataEntry* e = find_by_code(r->asset_id);
+    if (!e) { free(r->data); return; }
 
-    QuestMetadataEntry* e = find_or_create(code);
-    if (!e) return;
-    copy_str(e->code, QUEST_META_CODE_MAX, code);
-
-    cJSON* root = json ? cJSON_Parse(json) : NULL;
-    const cJSON* doc = envelope_success_doc(root);
-    if (!doc) {
+    if (!r->success) {
         e->state = QUEST_META_ERROR;
-        if (!root) LOG_WARN("quest metadata fetch failed for %s", code);
-        cJSON_Delete(root);
+        LOG_WARN("quest metadata fetch failed for %s", r->asset_id);
+        free(r->data);
         return;
     }
 
-    store_quest_doc(code, doc);
+    cJSON* root = cJSON_ParseWithLength((const char*)r->data, r->size);
+    const cJSON* doc = envelope_success_doc(root);
+    if (!doc) {
+        e->state = QUEST_META_ERROR;
+    } else {
+        store_quest_doc(r->asset_id, doc);
+    }
     cJSON_Delete(root);
+    free(r->data);
 }
