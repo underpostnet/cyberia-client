@@ -25,4 +25,8 @@ void modal_notification_show_reward(const char* title, const char* message, Colo
 void modal_notification_update(float dt);
 void modal_notification_draw(void);
 
+/* Handle a click on the notification. Returns true if consumed
+ * (e.g. the OK button was tapped).  Call from the main click dispatch. */
+bool modal_notification_handle_click(int mx, int my);
+
 #endif /* MODAL_NOTIFICATION_H */

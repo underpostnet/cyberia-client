@@ -1,6 +1,7 @@
 #include "modal_interact.h"
 
 #include "dialogue_data.h"
+#include "domain/local_player.h"
 #include "game_state.h"
 #include "interaction_bubble.h"
 #include "inventory_modal.h"
@@ -44,12 +45,23 @@ static Color s_border = { 80, 160, 220, 240 };
  * action tab fetches its metadata by code via REST. */
 static char  s_offer_code[64] = {0};
 
+
 /* Reward slot hit-boxes captured during the action-tab draw so the click
  * handler can open the same read-only inspection the stack tab uses. */
 #define MI_REWARD_SLOT_MAX 8
 static Rectangle        s_reward_rects[MI_REWARD_SLOT_MAX];
 static ObjectLayerState s_reward_ols[MI_REWARD_SLOT_MAX];
 static int              s_reward_slot_count = 0;
+
+/* Abandon-button hit-box, captured during the action-tab draw when an active
+ * quest is shown so the click handler can drop it to the failed section. */
+static Rectangle s_abandon_rect = { 0 };
+static bool      s_abandon_visible = false;
+static char      s_abandon_code[64] = { 0 };
+
+/* Accept-button hit-box, captured when an acceptable offer is shown. */
+static Rectangle s_accept_rect = { 0 };
+static bool      s_accept_visible = false;
 
 /* The paired modal_dialogue always opens alongside this modal; opened once
  * the (async) skin dialogue resolves, render-only when there is none. */
@@ -155,19 +167,85 @@ static const Color C_TEXT       = { 220, 220, 230, 240 };
 static const Color C_TAB_DIM    = { 130, 140, 165, 220 };
 static const Color C_LABEL      = { 150, 160, 190, 220 };
 static const Color C_STAT       = { 120, 220, 140, 255 };
-static const Color C_BAR_BG     = {  14,  18,  30, 230 };
-static const Color C_TAKE       = {  30, 110,  70, 255 };
 static const Color C_REW_LABEL  = { 255, 215,   0, 220 };
 static const Color C_DESC_TEXT  = { 170, 180, 200, 220 };
 
-static int tab_count(void) { return s_is_action_provider ? 3 : 2; }
+/* ── Quest-tab visibility predicate ──────────────────────────────────── */
+
+/* True when every prerequisite of `code` is completed. Optimistic while the
+ * metadata is still loading so the offer gets a chance to resolve. */
+static bool offer_prereqs_met(const char* code) {
+    const QuestMetadataEntry* m = quest_metadata_cache_get(code);
+    if (!m || QUEST_META_READY != m->state) return true;
+    for (int i = 0; i < m->prerequisite_count; i++) {
+        if (!quest_store_is_completed(m->prerequisites[i])) return false;
+    }
+    return true;
+}
+
+/* The quest tab is shown only when the player actually has an interaction with
+ * it: this NPC grants a quest that is in progress or acceptable (prerequisites
+ * met), OR an active quest's current step needs a talk with this NPC's skin.
+ * A bare quest-talk NPC with nothing to offer or progress hides the tab. */
+static bool quest_tab_visible(void) {
+    if (!s_is_action_provider) return false;
+
+    if (s_offer_code[0] != '\0') {
+        const QuestEntry* q = quest_store_find(s_offer_code);
+        if (q && QUEST_ACTIVE == q->status) return true;            /* in progress */
+        if ((!q || QUEST_FAILED == q->status) && offer_prereqs_met(s_offer_code))
+            return true;                                            /* acceptable */
+    }
+
+    if (s_dlg_item[0] != '\0') {
+        int qc = quest_store_count(QUEST_ACTIVE);
+        for (int qi = 0; qi < qc; qi++) {
+            const QuestEntry* e = quest_store_get(QUEST_ACTIVE, qi);
+            if (e && strstr(e->objectives, s_dlg_item)) return true;
+        }
+    }
+    return false;
+}
+
+/* True when the paired dialogue is genuinely mission-relevant: this NPC has an
+ * acceptable offer, or an active quest's current step needs a talk with it. The
+ * dialogue's quest icon + yellow frame show only in these cases (an in-progress
+ * quest whose current step is elsewhere does not count). */
+static bool quest_dialogue_relevant(void) {
+    if (!s_is_action_provider) return false;
+
+    if (s_offer_code[0] != '\0') {
+        const QuestEntry* q = quest_store_find(s_offer_code);
+        if ((!q || QUEST_FAILED == q->status) && offer_prereqs_met(s_offer_code))
+            return true; /* acceptable offer */
+    }
+
+    if (s_dlg_item[0] != '\0') {
+        int qc = quest_store_count(QUEST_ACTIVE);
+        for (int qi = 0; qi < qc; qi++) {
+            const QuestEntry* e = quest_store_get(QUEST_ACTIVE, qi);
+            if (e && strstr(e->objectives, s_dlg_item)) return true; /* talk step */
+        }
+    }
+    return false;
+}
+
+static int tab_count(void) {
+    if (!s_is_action_provider) return 2;
+    return quest_tab_visible() ? 3 : 2;
+}
 
 /* Top half of the screen with generous padding all round. */
+/* Top-half card. Its bottom edge meets the dialogue's top (MI_TOP_FRAC ==
+ * DLG_TOP_FRAC) with a one-padding gap, so the two halves frame the screen
+ * with matching margins. */
+#define MI_TOP_FRAC 0.56f
+
 static Rectangle card_rect(void) {
     int sw = GetScreenWidth();
     int sh = GetScreenHeight();
     return (Rectangle){ (float)MI_PAD, (float)MI_PAD,
-                        (float)(sw - 2 * MI_PAD), sh * 0.5f - MI_PAD * 1.5f };
+                        (float)(sw - 2 * MI_PAD), sh * MI_TOP_FRAC - MI_PAD * 1.5f };
 }
 
 static Rectangle close_rect(Rectangle card) {
@@ -214,11 +292,6 @@ static Rectangle rew_slot_rect(Rectangle content, int i, float y) {
                         (float)MI_REW_SLOT_SZ, (float)MI_REW_SLOT_SZ };
 }
 
-/* Primary "Talk" action button, centred near the top of the content area. */
-static Rectangle talk_rect(Rectangle content) {
-    float w = content.width < 220.0f ? content.width : 220.0f;
-    return (Rectangle){ content.x + (content.width - w) * 0.5f, content.y + 8.0f, w, 44.0f };
-}
 
 /* ── Helpers ──────────────────────────────────────────────────────────── */
 
@@ -258,16 +331,17 @@ static void open_dialogue(const DialogueLine* lines, int count) {
     snprintf(code, sizeof(code), "default-%s", s_dlg_item);
     modal_dialogue_open(s_entity_id, s_dlg_item, code,
                         MODAL_DIALOGUE_RENDER_ENTITY, lines, count);
+    /* Yellow quest frame only when this dialogue actually matters for a mission
+     * — an acceptable offer or an active quest-talk step — not for every NPC. */
+    modal_dialogue_set_quest_style(quest_dialogue_relevant());
     s_dialogue_opened = true;
 }
 
-/* Open the dialogue with whatever data is available right now (render-only
- * when the skin has no dialogue). Used for the auto-open and the action
- * tab's re-open after the player dismissed it. */
-static void start_dialogue(void) {
-    const DialogueDataSet* d = dialogue_data_get(s_dlg_item);
-    if (d && d->state == DLG_DATA_READY && d->line_count > 0) open_dialogue(d->lines, d->line_count);
-    else                                                      open_dialogue(NULL, 0);
+/* Accept the offered mission — the only path to start it. The server validates
+ * the NPC offers the quest and the prerequisites are met. Reading the dialogue
+ * never grants a quest; only this explicit request does. */
+static void accept_mission(void) {
+    local_player_request_quest_accept(s_entity_id);
 }
 
 static void open_overlay(int tab) {
@@ -431,24 +505,20 @@ static void draw_stats_tab(Rectangle content) {
 
 /* ── Quest tab: show the entity's active-quest description + rewards ──── */
 static void draw_action_tab(Rectangle content, int mx, int my) {
-    /* Talk / Take mission button at the top, same as before. */
-    Rectangle tr = talk_rect(content);
-    bool talking = modal_dialogue_is_open();
-    UIButtonStyle take = { .text = talking ? "Reading..." : "Take mission",
-                           .icon_id = "quest", .font_size = MI_FONT_BTN,
-                           .bg = C_TAKE, .text_color = C_TEXT };
-    ui_button_draw(tr, &take, ui_button_resolve_state(!talking, false, ui_button_hit(tr, mx, my)));
-
-    float y = tr.y + tr.height + MI_PAD;
-
     /* ── Resolve the quest to show ──────────────────────────────────────
      * Prefer the player's active progress for this NPC's offered quest;
      * otherwise show the NPC's offer (pre-accept) from the REST metadata
-     * cache, resolved by the NPC's grid cell. */
+     * cache, keyed by the authoritative grant code delivered over AOI. */
     const char* offer_code = s_offer_code;
 
     const QuestEntry* active = NULL;
-    if (offer_code[0] != '\0') active = quest_store_find(offer_code);
+    if (offer_code[0] != '\0') {
+        const QuestEntry* q = quest_store_find(offer_code);
+        /* Only an ACTIVE quest counts — a failed/abandoned one must read as an
+         * offer again (Accept shown, Abandon hidden), and a completed one is
+         * neither offerable nor abandonable. */
+        if (q && QUEST_ACTIVE == q->status) active = q;
+    }
     if (!active && s_dlg_item[0] != '\0') {
         int quest_count = quest_store_count(QUEST_ACTIVE);
         for (int qi = 0; qi < quest_count; qi++) {
@@ -462,6 +532,7 @@ static void draw_action_tab(Rectangle content, int mx, int my) {
     const char* q_desc = "";
     const char* q_active_step = "";
     const char* q_objectives = "";
+    bool is_offer = false;
 
     if (active) {
         q_code = active->code;
@@ -475,8 +546,50 @@ static void draw_action_tab(Rectangle content, int mx, int my) {
             q_code = om->code;
             q_title = om->title;
             q_desc = om->description;
+            is_offer = true;
         }
     }
+
+    /* ── Prerequisite gate (offer only; the server enforces it too) ───── */
+    bool locked = false;
+    char lock_reason[160] = {0};
+    if (is_offer) {
+        const QuestMetadataEntry* om = quest_metadata_cache_get(offer_code);
+        for (int i = 0; om && i < om->prerequisite_count; i++) {
+            if (quest_store_is_completed(om->prerequisites[i])) continue;
+            locked = true;
+            quest_metadata_cache_fetch(om->prerequisites[i]); /* warm its title */
+            const QuestMetadataEntry* pm = quest_metadata_cache_get(om->prerequisites[i]);
+            snprintf(lock_reason, sizeof(lock_reason), "Requires: %s",
+                     (pm && pm->title[0]) ? pm->title : om->prerequisites[i]);
+            break;
+        }
+    }
+    /* Top action row — only an Abandon button for active quests. There is NO
+     * Talk/Accept button: a quest-talk is accepted and its talk objectives
+     * advance by reading the paired dialogue to the end (the server validates
+     * only a fully-read dlg_complete), so missions are never one-tap completed. */
+    float y = content.y + 6.0f;
+    s_abandon_visible = false;
+    s_accept_visible = false;
+    const float btnw = 110.0f;
+    Rectangle btn = { content.x + content.width - btnw, y, btnw, 30.0f };
+    if (active) {
+        UIButtonStyle abandon = { .text = "Abandon", .font_size = MI_FONT_BTN - 3,
+                                  .bg = (Color){ 120, 44, 44, 255 }, .text_color = C_TEXT };
+        ui_button_draw(btn, &abandon, ui_button_resolve_state(true, false, ui_button_hit(btn, mx, my)));
+        s_abandon_rect = btn;
+        s_abandon_visible = true;
+        strncpy(s_abandon_code, q_code, sizeof(s_abandon_code) - 1);
+        s_abandon_code[sizeof(s_abandon_code) - 1] = '\0';
+    } else if (is_offer && !locked) {
+        UIButtonStyle accept = { .text = "Accept", .icon_id = "quest", .font_size = MI_FONT_BTN - 3,
+                                 .bg = (Color){ 30, 110, 70, 255 }, .text_color = C_TEXT };
+        ui_button_draw(btn, &accept, ui_button_resolve_state(true, false, ui_button_hit(btn, mx, my)));
+        s_accept_rect = btn;
+        s_accept_visible = true;
+    }
+    y += 36.0f;
 
     if (q_title[0] == '\0' && q_desc[0] == '\0') {
         DrawText(offer_code[0] != '\0' ? "Loading mission..."
@@ -488,6 +601,12 @@ static void draw_action_tab(Rectangle content, int mx, int my) {
     /* ── Quest title ───────────────────────────────────────────────── */
     DrawText(q_title, (int)content.x, (int)y, MI_FONT_QUEST, C_TEXT);
     y += MI_FONT_QUEST + 4;
+
+    /* ── Locked banner ──────────────────────────────────────────────── */
+    if (locked) {
+        DrawText(lock_reason, (int)content.x, (int)y, MI_FONT_DESC, (Color){ 220, 120, 110, 230 });
+        y += MI_FONT_DESC + 6;
+    }
 
     /* ── Quest description ──────────────────────────────────────────── */
     char desc_buf[512];
@@ -520,26 +639,56 @@ static void draw_action_tab(Rectangle content, int mx, int my) {
         }
     }
 
-    /* ── Active step (only meaningful once accepted) ─────────────────── */
-    if (q_active_step[0] != '\0') {
-        y += 4;
-        DrawText(q_active_step, (int)content.x, (int)y, MI_FONT_QUEST,
-                 (Color){ 120, 220, 140, 230 });
-        y += MI_FONT_QUEST + 3;
-    }
+    ObjectLayersManager* mgr = obj_layers_mgr_get();
+    const QuestMetadataEntry* qm = quest_metadata_cache_get(q_code);
 
-    /* ── Objectives progress ────────────────────────────────────────── */
-    if (q_objectives[0] != '\0') {
-        DrawText(q_objectives, (int)content.x, (int)y, MI_FONT_DESC, C_LABEL);
-        y += MI_FONT_DESC + 8;
+    /* ── Mission steps: a sectioned objective list with per-step status ──
+     * For an accepted quest the active step (matched by description) is gold
+     * with live counts, prior steps are done (green), later ones pending. The
+     * pre-accept offer previews every step neutrally. */
+    if (qm && QUEST_META_READY == qm->state && qm->step_count > 0) {
+        DrawText("Objectives:", (int)content.x, (int)y, MI_FONT_LABEL, C_REW_LABEL);
+        y += MI_FONT_LABEL + 4;
+
+        int active_idx = -1;
+        if (active && q_active_step[0] != '\0') {
+            for (int i = 0; i < qm->step_count; i++) {
+                if (0 == strcmp(qm->steps[i].description, q_active_step)) { active_idx = i; break; }
+            }
+            if (active_idx < 0) active_idx = 0;
+        }
+
+        for (int i = 0; i < qm->step_count; i++) {
+            const QuestStepMeta* sm = &qm->steps[i];
+            bool done    = (active_idx >= 0 && i < active_idx);
+            bool current = (active_idx >= 0 && i == active_idx);
+            Color step_col = done ? (Color){ 120, 200, 130, 230 }
+                           : current ? (Color){ 220, 190, 70, 240 }
+                                     : (active ? (Color){ 110, 116, 138, 180 } : C_DESC_TEXT);
+            DrawCircle((int)(content.x + 4), (int)(y + MI_FONT_DESC / 2), 3.0f, step_col);
+            DrawText(sm->description, (int)(content.x + 14), (int)y, MI_FONT_DESC, step_col);
+            y += MI_FONT_DESC + 2;
+
+            if (current && q_objectives[0] != '\0') {
+                DrawText(q_objectives, (int)(content.x + 14), (int)y, MI_FONT_REW, C_LABEL);
+                y += MI_FONT_REW + 3;
+            } else {
+                for (int o = 0; o < sm->objective_count; o++) {
+                    const QuestObjectiveMeta* om = &sm->objectives[o];
+                    char line[96];
+                    snprintf(line, sizeof(line), "%s %s x%d", om->type, om->item_id, om->quantity);
+                    DrawText(line, (int)(content.x + 14), (int)y, MI_FONT_REW, (Color){ 110, 116, 138, 180 });
+                    y += MI_FONT_REW + 1;
+                }
+            }
+            y += 3;
+        }
+        y += 4;
     }
 
     /* ── Rewards: render as item_slot icons from metadata cache ── */
     DrawText("Rewards:", (int)content.x, (int)y, MI_FONT_LABEL, C_REW_LABEL);
     y += MI_FONT_LABEL + 4;
-
-    ObjectLayersManager* mgr = obj_layers_mgr_get();
-    const QuestMetadataEntry* qm = quest_metadata_cache_get(q_code);
 
     s_reward_slot_count = 0;
     if (qm && qm->state == QUEST_META_READY && qm->reward_count > 0) {
@@ -621,9 +770,9 @@ void modal_interact_draw(void) {
     else if (s_tab == MI_TAB_STATS)  draw_stats_tab(content);
     else if (s_tab == MI_TAB_ACTION) draw_action_tab(content, mx, my);
 
-    /* Fixed bottom bar with integration buttons (right-aligned). */
-    Rectangle bar = bar_rect(card);
-    DrawRectangleRec(bar, C_BAR_BG);
+    /* Fixed bottom bar with integration buttons (right-aligned). No background
+     * fill — it shares the modal's panel so the modal's bottom border stays
+     * visible and the chrome reads as one surface. */
     Rectangle chat, integration;
     bar_buttons(card, &chat, &integration);
 
@@ -714,10 +863,16 @@ bool modal_interact_handle_click(int mx, int my) {
         }
     }
 
-    /* Action tab: Take mission — re-open the dialogue if it was dismissed. */
-    if (s_tab == MI_TAB_ACTION && !modal_dialogue_is_open() &&
-        ui_button_hit(talk_rect(content), mx, my)) {
-        start_dialogue();
+    /* Action tab: Accept — grant the offered mission (no reading required). */
+    if (s_tab == MI_TAB_ACTION && s_accept_visible && ui_button_hit(s_accept_rect, mx, my)) {
+        accept_mission();
+        return true;
+    }
+
+    /* Action tab: Abandon — drop the active quest to the failed section. */
+    if (s_tab == MI_TAB_ACTION && s_abandon_visible && ui_button_hit(s_abandon_rect, mx, my)) {
+        local_player_request_quest_abandon(s_abandon_code);
+        modal_interact_close();
         return true;
     }
 

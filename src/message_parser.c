@@ -688,10 +688,17 @@ static int message_parser_parse_dlg_ack(const cJSON* json_root) {
                 modal_notification_show("Quest Accepted",
                                         active_step[0] ? active_step : disp,
                                         (Color){ 220, 190, 60, 255 });
-            } else if (objectives_done && 0 == strcmp(status, "active")) {
-                char body[200];
-                snprintf(body, sizeof(body), "Next: %s", active_step[0] ? active_step : disp);
-                modal_notification_show("Objective Complete", body, (Color){ 90, 170, 220, 255 });
+            } else if (0 == strcmp(status, "active")) {
+                /* Notify only when a whole STEP completes — i.e. the active step
+                 * advanced — not on every per-objective +1. The active step
+                 * description changes exactly when the previous step finished. */
+                const QuestEntry* prev = quest_store_find(code);
+                if (prev && QUEST_ACTIVE == prev->status && prev->active_step[0] != '\0' &&
+                    0 != strcmp(prev->active_step, active_step)) {
+                    char body[200];
+                    snprintf(body, sizeof(body), "Next: %s", active_step[0] ? active_step : disp);
+                    modal_notification_show("Step Complete", body, (Color){ 90, 170, 220, 255 });
+                }
             }
         }
     }

@@ -7,12 +7,16 @@
 #include "inventory_modal.h"
 #include "modal_dialogue.h"
 #include "modal_interact.h"
+#include "modal_notification.h"
 #include "quest_journal.h"
 #include "game_render.h"
 #include "js/interact_bridge.h"
 
 bool ui_dispatch_tap(int x, int y) {
-    /* Highest priority: dialogue modal claims everything while open. */
+    /* Notification OK button has highest priority while visible. */
+    if (modal_notification_handle_click(x, y)) return true;
+
+    /* Dialogue modal claims everything while open. */
     if (modal_dialogue_handle_click(x, y)) return true;
 
     /* Intermediate interaction modal sits between dialogue and the JS

@@ -91,6 +91,10 @@ void modal_dialogue_open(const char* entity_id, const char* item_id,
  */
 void modal_dialogue_close(void);
 
+/* Mark the next/current dialogue as a quest-talk so it renders the quest icon
+ * and a yellow frame. Cleared automatically on close. */
+void modal_dialogue_set_quest_style(bool on);
+
 /**
  * @brief Set a one-shot callback that fires when the modal closes.
  *

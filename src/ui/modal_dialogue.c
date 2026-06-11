@@ -21,6 +21,7 @@
 #include "object_layers_management.h"
 #include "ol_as_animated_ico.h"
 #include "ol_stack_ico.h"
+#include "ui_icon.h"
 #include "util/log.h"
 
 #include <assert.h>
@@ -50,6 +51,8 @@ static ModalDialogueRender s_render = MODAL_DIALOGUE_RENDER_ITEM;
  * when the dialogue actually has lines. */
 static bool s_auto_dismiss = true;
 static bool s_dlg_started  = false;
+static bool s_quest_style  = false;
+static bool s_ended        = false;  /* all lines read at least once (entity) */
 
 /* Typewriter state */
 static float s_char_timer    = 0.0f;
@@ -81,7 +84,8 @@ static Modal s_modal;
 #define DLG_TYPEWRITER_SPD  0.022f  /* seconds per character                   */
 
 /* Vertical split: panel occupies [50 % … bottom − bar_h] of the screen.   */
-#define DLG_TOP_FRAC        0.50f
+#define DLG_TOP_FRAC        0.56f
+#define DLG_SIDE_PAD        18      /* matches modal_interact MI_PAD            */
 #define DLG_BAR_OFFSET      72      /* inventory bar height                    */
 
 /* ── Colours ──────────────────────────────────────────────────────────── */
@@ -181,6 +185,7 @@ void modal_dialogue_open(const char* entity_id, const char* item_id,
     s_char_timer    = 0.0f;
     s_chars_visible = 0;
     s_line_complete = false;
+    s_ended         = false;
     s_open          = true;
 
     LOG_INFO("[MODAL_DIALOGUE] Open: entity=%s item=%s code=%s lines=%d\n",
@@ -221,6 +226,19 @@ static void modal_dialogue_finish(bool completed) {
     s_dlg_started = false;
     s_line_count  = 0;
     s_current     = 0;
+    s_quest_style = false;
+}
+
+void modal_dialogue_set_quest_style(bool on) {
+    s_quest_style = on;
+}
+
+/* Emit dlg_complete (the server validates quest-talk objectives) WITHOUT
+ * closing — the entity dialogue stays open so the player can repeat it. */
+static void emit_dlg_complete(void) {
+    if (!s_dlg_started) return;
+    s_dlg_started = false;
+    local_player_request_dialogue_complete(s_entity_id, s_item_id, s_dialog_code);
 }
 
 void modal_dialogue_close(void) {
@@ -270,17 +288,28 @@ void modal_dialogue_draw(void) {
     DrawRectangle(0, (int)panel.y, sw, (int)panel.height + DLG_BAR_OFFSET,
                   (Color){ 0, 0, 0, oa });
 
-    /* Slide-up: panel starts 20px below its rest position */
+    /* Slide-up: panel starts 20px below its rest position. The card is inset
+     * horizontally by DLG_SIDE_PAD to match the interaction modal's margin so
+     * the two screen halves frame with the same padding. */
     float slide_offset = 20.0f * (1.0f - ease);
     Rectangle card = {
-        panel.x, panel.y + slide_offset,
-        panel.width, panel.height
+        panel.x + DLG_SIDE_PAD, panel.y + slide_offset,
+        panel.width - 2 * DLG_SIDE_PAD, panel.height
     };
 
-    /* Card background with subtle top border — standardized panel fill. */
-    DrawRectangleRec(card, MODAL_PANEL_BG);
-    DrawLine((int)card.x, (int)card.y,
-             (int)(card.x + card.width), (int)card.y, C_CARD_BORD);
+    /* Card background — translucent so the world reads through. Quest-talk
+     * dialogues get a yellow frame + quest icon to mark the mission context. */
+    Color bg = MODAL_PANEL_BG;
+    bg.a = 190;
+    DrawRectangleRec(card, bg);
+    if (s_quest_style) {
+        DrawRectangleLinesEx(card, 2.0f, (Color){ 230, 200, 60, 230 });
+        int qs = 22;
+        ui_icon_draw("quest", card.x + card.width - qs - 4, card.y + qs - 2, qs, false, 0.0f);
+    } else {
+        DrawLine((int)card.x, (int)card.y,
+                 (int)(card.x + card.width), (int)card.y, C_CARD_BORD);
+    }
 
     int pad       = dlg_pad(sw);
 
@@ -373,10 +402,12 @@ void modal_dialogue_draw(void) {
         hint = "...";
     else if (s_current + 1 < s_line_count)
         hint = "[Tap to continue]";
-    else if (!s_auto_dismiss)
-        hint = "[Tap to repeat]";
-    else
+    else if (s_auto_dismiss)
         hint = "[Tap to close]";
+    else if (s_ended)
+        hint = "[Repeat Dialog]";
+    else
+        hint = "[Tap to finish]";
 
     int hfs = DLG_FONT_HINT;
     int htw = MeasureText(hint, hfs);
@@ -407,7 +438,7 @@ bool modal_dialogue_handle_click(int mx, int my) {
     /* Render-only: nothing to advance, just swallow the tap. */
     if (s_line_count == 0) return true;
 
-    /* Inside card → advance or repeat */
+    /* Inside card → advance the typewriter / line, or complete. */
     if (!s_line_complete) {
         /* Reveal full line immediately */
         s_chars_visible = (int)strlen(s_lines[s_current].text);
@@ -418,15 +449,21 @@ bool modal_dialogue_handle_click(int mx, int my) {
         s_chars_visible = 0;
         s_char_timer    = 0.0f;
         s_line_complete = false;
-    } else if (!s_auto_dismiss) {
-        /* Interaction mode: restart dialogue from the beginning. */
+    } else if (s_auto_dismiss) {
+        /* Inventory lore: read-through closes the modal. */
+        modal_dialogue_finish(true);
+    } else if (!s_ended) {
+        /* Entity dialogue: first full read emits the dlg_complete the server
+         * validates for quest-talk, then stays open showing "Repeat Dialog". */
+        s_ended = true;
+        emit_dlg_complete();
+    } else {
+        /* Repeat Dialog → re-read from the top (visual only). */
         s_current       = 0;
         s_chars_visible = 0;
         s_char_timer    = 0.0f;
         s_line_complete = false;
-    } else {
-        /* All lines read → complete (dlg_complete) */
-        modal_dialogue_finish(true);
+        s_ended         = false;
     }
 
     return true;
