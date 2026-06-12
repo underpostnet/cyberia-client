@@ -13,6 +13,7 @@
 #include "ui/inventory_bar.h"
 #include "ui/inventory_modal.h"
 #include "ui/modal_dialogue.h"
+#include "ui/action_meta_cache.h"
 #include "ui/modal_interact.h"
 #include "ui/modal_player.h"
 #include "ui/nameplate.h"
@@ -731,6 +732,19 @@ void game_render_entities(void) {
                                   np_layers, np_lc,
                                   obj_layers_mgr_get(),
                                   np_buf, (int)sizeof(np_buf));
+                /* Action bots show the action's label (NPC name) once its
+                 * metadata loads, fetched by the action code from AOI. */
+                if (!np_is_player) {
+                    const BotState* np_bot = game_state_find_bot(entity_base->id);
+                    if (np_bot && np_bot->action_code[0] != '\0') {
+                        action_meta_cache_fetch(np_bot->action_code);
+                        const ActionMetaEntry* am = action_meta_cache_get(np_bot->action_code);
+                        if (am && ACTION_META_READY == am->state && am->label[0] != '\0') {
+                            strncpy(np_buf, am->label, sizeof(np_buf) - 1);
+                            np_buf[sizeof(np_buf) - 1] = '\0';
+                        }
+                    }
+                }
                 EntityOverheadParams ohp = {
                     .name            = np_buf,
                     .effective_level = entity_base->effective_level,
