@@ -59,7 +59,7 @@ void  local_player_request_dialogue_cancel(const char* entity_id, const char* it
 void  local_player_request_quest_abandon(const char* quest_code);
 
 /* Accept the quest the entity offers — the only path to start a mission. */
-void  local_player_request_quest_accept(const char* entity_id);
+void  local_player_request_quest_accept(const char* entity_id, const char* quest_code);
 
 /* Advance the freeze watchdog; call once per render frame. */
 void  local_player_on_tick(void);

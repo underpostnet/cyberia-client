@@ -230,6 +230,6 @@ void uplink_dlg_cancel(BinWriter* w, const char* entity_id, const char* item_id)
 void uplink_quest_abandon(BinWriter* w, const char* quest_code);
 
 /* Accept the quest the entity offers — the only path to start a mission. */
-void uplink_quest_accept(BinWriter* w, const char* entity_id);
+void uplink_quest_accept(BinWriter* w, const char* entity_id, const char* quest_code);
 
 #endif // SERIAL_H

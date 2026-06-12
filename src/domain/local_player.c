@@ -94,9 +94,9 @@ void local_player_request_quest_abandon(const char* quest_code) {
     network_send_binary(w.buf, w.pos);
 }
 
-void local_player_request_quest_accept(const char* entity_id) {
+void local_player_request_quest_accept(const char* entity_id, const char* quest_code) {
     BinWriter w;
-    uplink_quest_accept(&w, entity_id);
+    uplink_quest_accept(&w, entity_id, quest_code);
     network_send_binary(w.buf, w.pos);
 }
 
