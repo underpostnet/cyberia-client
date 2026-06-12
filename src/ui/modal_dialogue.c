@@ -233,6 +233,13 @@ void modal_dialogue_set_quest_style(bool on) {
     s_quest_style = on;
 }
 
+void modal_dialogue_set_dialog_code(const char* code) {
+    if (!s_open || NULL == code || '\0' == code[0]) return;
+    if (0 == strcmp(s_dialog_code, code)) return;
+    strncpy(s_dialog_code, code, sizeof(s_dialog_code) - 1);
+    s_dialog_code[sizeof(s_dialog_code) - 1] = '\0';
+}
+
 /* Emit dlg_complete (the server validates quest-talk objectives) WITHOUT
  * closing — the entity dialogue stays open so the player can repeat it. */
 static void emit_dlg_complete(void) {

@@ -12,9 +12,11 @@
 #include "notification.h"
 #include "object_layer.h"
 #include "object_layers_management.h"
+#include "action_meta_cache.h"
 #include "quest_store.h"
 #include "quest_metadata_cache.h"
 #include "ui_button.h"
+#include "ui_toggle.h"
 #include "util/log.h"
 
 #include <raylib.h>
@@ -41,31 +43,40 @@ static bool  s_has_dialogue = false;
 static bool  s_is_action_provider = false;
 static Color s_border = { 80, 160, 220, 240 };
 
-/* Authoritative quest code this NPC offers (from AOI), "" when none. The
- * action tab fetches its metadata by code via REST. */
+/* The bot's action code (from AOI). The action metadata (label, dialogue map,
+ * source cell) is fetched by code via REST. */
+static char  s_action_code[64] = {0};
+
+/* The single most-relevant quest this NPC offers/relates to for the player,
+ * resolved from the action's quests (active > acceptable > completed), plus the
+ * dialogue code to show for it (from the action's per-quest dialogue map). */
 static char  s_offer_code[64] = {0};
+static char  s_offer_dialog[64] = {0};
 
 /* True while this modal holds a server interaction context (dlg_start sent on
  * open, freezing the player and binding the entity); released on close. */
 static bool  s_dlg_context = false;
 
 
-/* Reward slot hit-boxes captured during the action-tab draw so the click
- * handler can open the same read-only inspection the stack tab uses. */
+/* Max reward icons rendered per mission card. */
 #define MI_REWARD_SLOT_MAX 8
-static Rectangle        s_reward_rects[MI_REWARD_SLOT_MAX];
-static ObjectLayerState s_reward_ols[MI_REWARD_SLOT_MAX];
+
+/* Multi-mission quest tab: one collapsible ui_toggle card per offered quest,
+ * each with a per-card Accept/Abandon button captured during draw. */
+#define MI_QUEST_MAX 8
+static UIToggle  s_q_toggle[MI_QUEST_MAX];
+static bool      s_q_toggle_init = false;
+static Rectangle s_q_header[MI_QUEST_MAX]; /* full header bar — click toggles */
+static Rectangle s_q_btn[MI_QUEST_MAX];
+static int       s_q_btn_kind[MI_QUEST_MAX]; /* 0 none, 1 accept, 2 abandon */
+static char      s_q_btn_code[MI_QUEST_MAX][64];
+static int       s_q_count = 0;
+
+/* Reward icon hit-boxes captured across all visible cards during the draw, so
+ * the click handler can open the same read-only inspection the stack tab uses. */
+static Rectangle        s_reward_rects[MI_QUEST_MAX * MI_REWARD_SLOT_MAX];
+static ObjectLayerState s_reward_ols[MI_QUEST_MAX * MI_REWARD_SLOT_MAX];
 static int              s_reward_slot_count = 0;
-
-/* Abandon-button hit-box, captured during the action-tab draw when an active
- * quest is shown so the click handler can drop it to the failed section. */
-static Rectangle s_abandon_rect = { 0 };
-static bool      s_abandon_visible = false;
-static char      s_abandon_code[64] = { 0 };
-
-/* Accept-button hit-box, captured when an acceptable offer is shown. */
-static Rectangle s_accept_rect = { 0 };
-static bool      s_accept_visible = false;
 
 /* The paired modal_dialogue always opens alongside this modal; opened once
  * the (async) skin dialogue resolves, render-only when there is none. */
@@ -187,6 +198,63 @@ static bool offer_prereqs_met(const char* code) {
     return true;
 }
 
+/* True when quest `code` is bound to action `am`'s own cell (so this NPC OFFERS
+ * it, vs merely handling its talk step). Optimistic while metadata loads. */
+static bool quest_offered_by_action(const char* code, const ActionMetaEntry* am) {
+    const QuestMetadataEntry* qm = quest_metadata_cache_get(code);
+    if (!qm || QUEST_META_READY != qm->state) return true;
+    return qm->source_cell_x == am->source_cell_x && qm->source_cell_y == am->source_cell_y &&
+           0 == strcmp(qm->source_map_code, am->source_map_code);
+}
+
+/* Resolve s_offer_code + s_offer_dialog from the fetched action metadata: the
+ * most relevant quest the NPC offers (active > acceptable > completed). The
+ * dialogue prefers an active quest whose current step needs a talk here. */
+static void resolve_offer_from_action(void) {
+    s_offer_code[0] = '\0';
+    s_offer_dialog[0] = '\0';
+    const ActionMetaEntry* am = action_meta_cache_get(s_action_code);
+    if (!am || ACTION_META_READY != am->state) return;
+
+    const char* pick_code = NULL;
+    const char* pick_dlg = "";
+    int pick_rank = 0; /* 1 acceptable, 2 completed, 3 active (highest) */
+    for (int i = 0; i < am->quest_count; i++) {
+        const char* qc = am->quests[i].quest_code;
+        quest_metadata_cache_fetch(qc);
+        if (!quest_offered_by_action(qc, am)) continue;
+        const QuestEntry* q = quest_store_find(qc);
+        int rank = 0;
+        if (q && QUEST_ACTIVE == q->status) rank = 3;
+        else if (q && QUEST_COMPLETED == q->status) rank = 2;
+        else if ((!q || QUEST_FAILED == q->status) && offer_prereqs_met(qc)) rank = 1;
+        if (rank > pick_rank) {
+            pick_rank = rank;
+            pick_code = qc;
+            pick_dlg = am->quests[i].dialog_code;
+        }
+    }
+    /* Talk-target: an active quest's current step needs a talk with this NPC's
+     * skin (the quest may be offered elsewhere, e.g. report-back). Its dialogue
+     * takes priority so reading it advances that talk objective. */
+    for (int i = 0; i < am->quest_count; i++) {
+        const char* qc = am->quests[i].quest_code;
+        const QuestEntry* q = quest_store_find(qc);
+        if (q && QUEST_ACTIVE == q->status && s_dlg_item[0] != '\0' &&
+            strstr(q->objectives, s_dlg_item)) {
+            pick_code = qc;
+            pick_dlg = am->quests[i].dialog_code;
+            break;
+        }
+    }
+    if (pick_code) {
+        strncpy(s_offer_code, pick_code, sizeof(s_offer_code) - 1);
+        s_offer_code[sizeof(s_offer_code) - 1] = '\0';
+        strncpy(s_offer_dialog, pick_dlg ? pick_dlg : "", sizeof(s_offer_dialog) - 1);
+        s_offer_dialog[sizeof(s_offer_dialog) - 1] = '\0';
+    }
+}
+
 /* The quest tab is shown only when the player actually has an interaction with
  * it: this NPC grants a quest that is in progress or acceptable (prerequisites
  * met), OR an active quest's current step needs a talk with this NPC's skin.
@@ -212,6 +280,12 @@ static bool quest_tab_visible(void) {
     return false;
 }
 
+/* Number of selectable tabs. The trailing quest tab only appears when this NPC
+ * is mission-relevant; stack + stats are always present. */
+static int tab_count(void) {
+    return quest_tab_visible() ? MI_TAB_COUNT : MI_TAB_COUNT - 1;
+}
+
 /* True when the paired dialogue is genuinely mission-relevant: this NPC has an
  * acceptable offer, or an active quest's current step needs a talk with it. The
  * dialogue's quest icon + yellow frame show only in these cases (an in-progress
@@ -233,11 +307,6 @@ static bool quest_dialogue_relevant(void) {
         }
     }
     return false;
-}
-
-static int tab_count(void) {
-    if (!s_is_action_provider) return 2;
-    return quest_tab_visible() ? 3 : 2;
 }
 
 /* Top half of the screen with generous padding all round. */
@@ -292,11 +361,6 @@ static Rectangle slot_rect_in(Rectangle content, int i) {
                         (float)MI_SLOT_SZ, (float)MI_SLOT_SZ };
 }
 
-static Rectangle rew_slot_rect(Rectangle content, int i, float y) {
-    return (Rectangle){ content.x + (float)i * (MI_REW_SLOT_SZ + MI_REW_SLOT_GAP), y,
-                        (float)MI_REW_SLOT_SZ, (float)MI_REW_SLOT_SZ };
-}
-
 
 /* ── Helpers ──────────────────────────────────────────────────────────── */
 
@@ -332,21 +396,17 @@ static Stats stack_stats(void) {
 /* Open the paired dialogue (bottom half). The client fetches dialogue at
  * /code/default-<itemId>, so the reported group is "default-<skin>". */
 static void open_dialogue(const DialogueLine* lines, int count) {
-    char code[96];
-    snprintf(code, sizeof(code), "default-%s", s_dlg_item);
+    /* The dlg_complete code is the per-quest dialogue (so the server advances
+     * the matching talk objective); falls back to the skin greeting. */
+    char fallback[96];
+    snprintf(fallback, sizeof(fallback), "default-%s", s_dlg_item);
+    const char* code = s_offer_dialog[0] != '\0' ? s_offer_dialog : fallback;
     modal_dialogue_open(s_entity_id, s_dlg_item, code,
                         MODAL_DIALOGUE_RENDER_ENTITY, lines, count);
     /* Yellow quest frame only when this dialogue actually matters for a mission
      * — an acceptable offer or an active quest-talk step — not for every NPC. */
     modal_dialogue_set_quest_style(quest_dialogue_relevant());
     s_dialogue_opened = true;
-}
-
-/* Accept the offered mission — the only path to start it. The server validates
- * the NPC offers the quest and the prerequisites are met. Reading the dialogue
- * never grants a quest; only this explicit request does. */
-static void accept_mission(void) {
-    local_player_request_quest_accept(s_entity_id);
 }
 
 static void open_overlay(int tab) {
@@ -439,30 +499,32 @@ void modal_interact_open(const char* entity_id, const char* display_name,
     if (s_has_dialogue) dialogue_data_request(s_dlg_item);
     else                open_dialogue(NULL, 0);
 
-    /* The quest this NPC grants comes from the authoritative AOI binding (always
-     * on the wire, position-independent). A grantor surfaces the quest tab even
-     * when its per-player status now reads passive — e.g. an already-completed
-     * quest the player can still review. */
-    s_offer_code[0] = '\0';
+    /* The bot carries its action code over AOI; fetch the action metadata
+     * (label, dialogue map, source cell) and the metadata of each quest it
+     * handles so the quest tab can list every mission. */
+    s_action_code[0] = '\0';
+    s_offer_code[0]  = '\0';
     {
         const BotState* bot = game_state_find_bot(s_entity_id);
-        if (bot && bot->grant_quest_code[0] != '\0') {
-            strncpy(s_offer_code, bot->grant_quest_code, sizeof(s_offer_code) - 1);
-            s_offer_code[sizeof(s_offer_code) - 1] = '\0';
-            quest_metadata_cache_fetch(s_offer_code);
+        if (bot && bot->action_code[0] != '\0') {
+            strncpy(s_action_code, bot->action_code, sizeof(s_action_code) - 1);
+            s_action_code[sizeof(s_action_code) - 1] = '\0';
+            action_meta_cache_fetch(s_action_code);
             s_is_action_provider = true;
         }
     }
-
-    /* Establish the dialogue/interaction context on the server the moment the
-     * modal opens (freeze + bind ActiveDialogueEntityID), so a quest-talk is
-     * validated reliably even if the bot then wanders out of the AOI. Only for
-     * a genuine quest interaction; review-only / non-action taps don't freeze. */
-    s_dlg_context = quest_dialogue_relevant();
-    if (s_dlg_context) {
-        local_player_request_dialogue_start(s_entity_id, s_dlg_item);
+    const ActionMetaEntry* am = action_meta_cache_get(s_action_code);
+    if (am) {
+        for (int i = 0; i < am->quest_count; i++) quest_metadata_cache_fetch(am->quests[i].quest_code);
     }
 
+    /* The dialogue modal (paired with this interact modal) already sends its own
+     * dlg_start on open and dlg_complete/cancel on finish — it owns the freeze/
+     * unfreeze lifecycle. We do NOT send a redundant dlg_start here; doing so
+     * creates a double-freeze that leaks the server-side ActiveDialogueEntityID
+     * and breaks quest-talk validation when the bot leaves the AOI. The dialogue
+     * modal's handshake is authoritative. */
+    s_dlg_context = false;
     LOG_INFO("[MODAL_INTERACT] Open: entity=%s action=%d layers=%d offer=%s\n",
              s_entity_id, s_is_action_provider ? 1 : 0, s_cached_layer_count, s_offer_code);
 }
@@ -485,6 +547,16 @@ bool modal_interact_is_open(void) { return s_open; }
 void modal_interact_update(float dt) {
     if (!s_open) return;
     s_age += dt;
+
+    /* Action + quest metadata arrive async; re-resolve the offered quest each
+     * frame until it settles. */
+    resolve_offer_from_action();
+    for (int i = 0; i < MI_QUEST_MAX; i++) ui_toggle_update(&s_q_toggle[i], dt);
+
+    /* The per-quest dialog code can resolve after the dialogue already opened;
+     * keep the open dialogue's dlg_complete code in sync so a quest-talk match
+     * doesn't depend on metadata having loaded before the first read. */
+    if (s_offer_dialog[0] != '\0') modal_dialogue_set_dialog_code(s_offer_dialog);
 
     if (!s_dialogue_opened) {
         const DialogueDataSet* d = dialogue_data_get(s_dlg_item);
@@ -527,218 +599,166 @@ static void draw_stats_tab(Rectangle content) {
 }
 
 /* ── Quest tab: show the entity's active-quest description + rewards ──── */
+/* Collect the quest codes this NPC OFFERS (its action's quests bound to the
+ * action's own cell). Returns the count. */
+static int offered_quest_codes(char out[][64], int max) {
+    int n = 0;
+    const ActionMetaEntry* am = action_meta_cache_get(s_action_code);
+    if (!am || ACTION_META_READY != am->state) return 0;
+    for (int i = 0; i < am->quest_count && n < max; i++) {
+        const char* qc = am->quests[i].quest_code;
+        quest_metadata_cache_fetch(qc);
+        if (!quest_offered_by_action(qc, am)) continue;
+        strncpy(out[n], qc, 63);
+        out[n][63] = '\0';
+        n++;
+    }
+    return n;
+}
+
+/* Word-wrap helper for card bodies; returns the y after drawing. */
+static float mi_wrap(const char* text, float x, float y, int maxw, int font, Color col) {
+    if (!text || text[0] == '\0') return y;
+    char buf[512];
+    strncpy(buf, text, sizeof(buf) - 1);
+    buf[sizeof(buf) - 1] = '\0';
+    char line[512] = { 0 }, test[512];
+    char* tok = strtok(buf, " ");
+    while (tok) {
+        if (line[0] == '\0') snprintf(test, sizeof(test), "%s", tok);
+        else                 snprintf(test, sizeof(test), "%s %s", line, tok);
+        if (MeasureText(test, font) > maxw && line[0] != '\0') {
+            DrawText(line, (int)x, (int)y, font, col);
+            y += font + 2;
+            snprintf(line, sizeof(line), "%s", tok);
+        } else {
+            snprintf(line, sizeof(line), "%s", test);
+        }
+        tok = strtok(NULL, " ");
+    }
+    if (line[0] != '\0') { DrawText(line, (int)x, (int)y, font, col); y += font + 2; }
+    return y;
+}
+
+/* One collapsible mission card. Advances *y; records the per-card primary
+ * button (Accept / Abandon) so the click handler can act on it. */
+static void draw_quest_card(int slot, const char* code, Rectangle content,
+                            float* y, int mx, int my) {
+    quest_metadata_cache_fetch(code);
+    const QuestEntry* q = quest_store_find(code);
+    const QuestMetadataEntry* qm = quest_metadata_cache_get(code);
+
+    bool active    = q && QUEST_ACTIVE == q->status;
+    bool completed = q && QUEST_COMPLETED == q->status;
+    bool locked    = false;
+    if (!active && !completed && qm && QUEST_META_READY == qm->state) {
+        for (int i = 0; i < qm->prerequisite_count; i++) {
+            if (!quest_store_is_completed(qm->prerequisites[i])) { locked = true; break; }
+        }
+    }
+    bool acceptable = !active && !completed && !locked;
+
+    const char* title = (q && q->title[0]) ? q->title
+                      : (qm && qm->title[0]) ? qm->title : code;
+    Color statusc = active ? (Color){ 220, 190, 70, 255 }
+                  : completed ? (Color){ 110, 210, 130, 235 }
+                  : locked ? (Color){ 210, 120, 110, 230 }
+                           : (Color){ 120, 200, 140, 235 };
+    const char* statusw = active ? "Active" : completed ? "Completed"
+                        : locked ? "Locked" : "Available";
+
+    UIToggle* tg = &s_q_toggle[slot];
+    float hx = content.x, hw = content.width;
+    Rectangle header = { hx, *y, hw, 26.0f };
+    s_q_header[slot] = header;
+    ui_toggle_set_anchor(tg, (Rectangle){ hx + 4, *y + 4, 18, 18 });
+    DrawRectangleRounded(header, 0.18f, 4, (Color){ 30, 34, 52, 205 });
+    ui_toggle_draw(tg);
+    DrawCircle((int)(hx + 30), (int)(*y + 13), 3.5f, statusc);
+    DrawText(title, (int)(hx + 40), (int)(*y + (26 - MI_FONT_QUEST) / 2), MI_FONT_QUEST, C_TEXT);
+    int sww = MeasureText(statusw, MI_FONT_REW);
+    DrawText(statusw, (int)(hx + hw - sww - 8), (int)(*y + (26 - MI_FONT_REW) / 2), MI_FONT_REW, statusc);
+    *y += 26 + 4;
+
+    s_q_btn_kind[slot] = 0;
+    if (!tg->expanded) { *y += 2; return; }
+
+    float ix = hx + 16;
+    int   iw = (int)(hw - 24);
+
+    if (qm && QUEST_META_READY == qm->state) {
+        *y = mi_wrap(qm->description, ix, *y, iw, MI_FONT_DESC, C_DESC_TEXT);
+        *y += 4;
+        if (qm->reward_count > 0) {
+            DrawText("Reward:", (int)ix, (int)*y, MI_FONT_REW, C_REW_LABEL);
+            float rx = ix + MeasureText("Reward:", MI_FONT_REW) + 8;
+            ObjectLayersManager* mgr = obj_layers_mgr_get();
+            for (int r = 0; r < qm->reward_count && r < MI_REWARD_SLOT_MAX; r++) {
+                ObjectLayerState ol = { 0 };
+                strncpy(ol.item_id, qm->rewards[r].item_id, MAX_ID_LENGTH - 1);
+                ol.active = true;
+                ol.quantity = qm->rewards[r].quantity;
+                Rectangle rr = { rx + r * (MI_REW_SLOT_SZ + MI_REW_SLOT_GAP), *y - 4,
+                                 MI_REW_SLOT_SZ, MI_REW_SLOT_SZ };
+                item_slot_draw(rr, &ol, mgr);
+                if (s_reward_slot_count < MI_QUEST_MAX * MI_REWARD_SLOT_MAX) {
+                    s_reward_rects[s_reward_slot_count] = rr;
+                    s_reward_ols[s_reward_slot_count]   = ol;
+                    s_reward_slot_count++;
+                }
+            }
+            *y += MI_REW_SLOT_SZ + 2;
+        }
+    } else {
+        DrawText("Loading...", (int)ix, (int)*y, MI_FONT_DESC, C_LABEL);
+        *y += MI_FONT_DESC + 2;
+    }
+
+    if (active || acceptable) {
+        Rectangle btn = { hx + hw - 100, *y, 96, 26 };
+        UIButtonStyle st = active
+            ? (UIButtonStyle){ .text = "Abandon", .font_size = MI_FONT_BTN - 4,
+                               .bg = (Color){ 120, 44, 44, 255 }, .text_color = C_TEXT }
+            : (UIButtonStyle){ .text = "Accept", .icon_id = "quest", .font_size = MI_FONT_BTN - 4,
+                               .bg = (Color){ 30, 110, 70, 255 }, .text_color = C_TEXT };
+        ui_button_draw(btn, &st, ui_button_resolve_state(true, false, ui_button_hit(btn, mx, my)));
+        s_q_btn[slot] = btn;
+        s_q_btn_kind[slot] = active ? 2 : 1;
+        strncpy(s_q_btn_code[slot], code, 63);
+        s_q_btn_code[slot][63] = '\0';
+        *y += 30;
+    } else if (locked) {
+        DrawText("Prerequisite not met.", (int)ix, (int)*y, MI_FONT_REW,
+                 (Color){ 210, 120, 110, 220 });
+        *y += MI_FONT_REW + 4;
+    }
+    *y += 4;
+}
+
+/* Quest tab: a collapsible card per mission this NPC offers. */
 static void draw_action_tab(Rectangle content, int mx, int my) {
-    /* ── Resolve the quest to show ──────────────────────────────────────
-     * Prefer the player's active progress for this NPC's offered quest;
-     * otherwise show the NPC's offer (pre-accept) from the REST metadata
-     * cache, keyed by the authoritative grant code delivered over AOI. */
-    const char* offer_code = s_offer_code;
-
-    const QuestEntry* active = NULL;
-    bool is_completed = false;
-    if (offer_code[0] != '\0') {
-        const QuestEntry* q = quest_store_find(offer_code);
-        /* Active → progress + Abandon; completed → review-only "Completed";
-         * a failed/abandoned one reads as an offer again (Accept shown). */
-        if (q && QUEST_ACTIVE == q->status) active = q;
-        else if (q && QUEST_COMPLETED == q->status) is_completed = true;
+    if (!s_q_toggle_init) {
+        for (int i = 0; i < MI_QUEST_MAX; i++)
+            ui_toggle_init(&s_q_toggle[i], (Rectangle){ 0, 0, 18, 18 }, 0 == i, UI_TOGGLE_CHEVRON_DOWN);
+        s_q_toggle_init = true;
     }
-    if (!active && !is_completed && s_dlg_item[0] != '\0') {
-        int quest_count = quest_store_count(QUEST_ACTIVE);
-        for (int qi = 0; qi < quest_count; qi++) {
-            const QuestEntry* e = quest_store_get(QUEST_ACTIVE, qi);
-            if (e && strstr(e->objectives, s_dlg_item)) { active = e; break; }
-        }
-    }
+    s_reward_slot_count = 0;
 
-    const char* q_code = "";
-    const char* q_title = "";
-    const char* q_desc = "";
-    const char* q_active_step = "";
-    const char* q_objectives = "";
-    bool is_offer = false;
+    char codes[MI_QUEST_MAX][64];
+    s_q_count = offered_quest_codes(codes, MI_QUEST_MAX);
 
-    if (active) {
-        q_code = active->code;
-        q_title = active->title;
-        q_desc = active->description;
-        q_active_step = active->active_step;
-        q_objectives = active->objectives;
-    } else if (offer_code[0] != '\0') {
-        const QuestMetadataEntry* om = quest_metadata_cache_get(offer_code);
-        if (om && QUEST_META_READY == om->state) {
-            q_code = om->code;
-            q_title = om->title;
-            q_desc = om->description;
-            is_offer = !is_completed; /* a completed quest is not offerable */
-        }
-    }
-
-    /* ── Prerequisite gate (offer only; the server enforces it too) ───── */
-    bool locked = false;
-    char lock_reason[160] = {0};
-    if (is_offer) {
-        const QuestMetadataEntry* om = quest_metadata_cache_get(offer_code);
-        for (int i = 0; om && i < om->prerequisite_count; i++) {
-            if (quest_store_is_completed(om->prerequisites[i])) continue;
-            locked = true;
-            quest_metadata_cache_fetch(om->prerequisites[i]); /* warm its title */
-            const QuestMetadataEntry* pm = quest_metadata_cache_get(om->prerequisites[i]);
-            snprintf(lock_reason, sizeof(lock_reason), "Requires: %s",
-                     (pm && pm->title[0]) ? pm->title : om->prerequisites[i]);
-            break;
-        }
-    }
-    /* Top action row — only an Abandon button for active quests. There is NO
-     * Talk/Accept button: a quest-talk is accepted and its talk objectives
-     * advance by reading the paired dialogue to the end (the server validates
-     * only a fully-read dlg_complete), so missions are never one-tap completed. */
-    float y = content.y + 6.0f;
-    s_abandon_visible = false;
-    s_accept_visible = false;
-    const float btnw = 110.0f;
-    Rectangle btn = { content.x + content.width - btnw, y, btnw, 30.0f };
-    if (active) {
-        UIButtonStyle abandon = { .text = "Abandon", .font_size = MI_FONT_BTN - 3,
-                                  .bg = (Color){ 120, 44, 44, 255 }, .text_color = C_TEXT };
-        ui_button_draw(btn, &abandon, ui_button_resolve_state(true, false, ui_button_hit(btn, mx, my)));
-        s_abandon_rect = btn;
-        s_abandon_visible = true;
-        strncpy(s_abandon_code, q_code, sizeof(s_abandon_code) - 1);
-        s_abandon_code[sizeof(s_abandon_code) - 1] = '\0';
-    } else if (is_offer && !locked) {
-        UIButtonStyle accept = { .text = "Accept", .icon_id = "quest", .font_size = MI_FONT_BTN - 3,
-                                 .bg = (Color){ 30, 110, 70, 255 }, .text_color = C_TEXT };
-        ui_button_draw(btn, &accept, ui_button_resolve_state(true, false, ui_button_hit(btn, mx, my)));
-        s_accept_rect = btn;
-        s_accept_visible = true;
-    }
-    y += 36.0f;
-
-    if (q_title[0] == '\0' && q_desc[0] == '\0') {
-        DrawText(offer_code[0] != '\0' ? "Loading mission..."
-                                       : "Accept a mission from this NPC to see quest details.",
+    float y = content.y + 4.0f;
+    if (0 == s_q_count) {
+        const ActionMetaEntry* am = action_meta_cache_get(s_action_code);
+        DrawText((am && ACTION_META_READY == am->state) ? "No missions available here."
+                                                        : "Loading...",
                  (int)content.x, (int)y, MI_FONT_QUEST, C_LABEL);
         return;
     }
-
-    /* ── Quest title ───────────────────────────────────────────────── */
-    DrawText(q_title, (int)content.x, (int)y, MI_FONT_QUEST, C_TEXT);
-    y += MI_FONT_QUEST + 4;
-
-    /* ── Completed banner ───────────────────────────────────────────── */
-    if (is_completed) {
-        DrawText("Completed", (int)content.x, (int)y, MI_FONT_DESC, (Color){ 110, 210, 130, 235 });
-        y += MI_FONT_DESC + 6;
-    }
-
-    /* ── Locked banner ──────────────────────────────────────────────── */
-    if (locked) {
-        DrawText(lock_reason, (int)content.x, (int)y, MI_FONT_DESC, (Color){ 220, 120, 110, 230 });
-        y += MI_FONT_DESC + 6;
-    }
-
-    /* ── Quest description ──────────────────────────────────────────── */
-    char desc_buf[512];
-    strncpy(desc_buf, q_desc, sizeof(desc_buf) - 1);
-    desc_buf[sizeof(desc_buf) - 1] = '\0';
-    int fs_d = MI_FONT_DESC;
-    int max_w = (int)(content.width);
-    /* Word-wrap the description */
-    {
-        char line_buf[256] = {0};
-        char line_test[256];
-        char* tok = strtok(desc_buf, " ");
-        while (tok) {
-            if (line_buf[0] == '\0')
-                snprintf(line_test, sizeof(line_test), "%s", tok);
-            else
-                snprintf(line_test, sizeof(line_test), "%s %s", line_buf, tok);
-            if (MeasureText(line_test, fs_d) > max_w && line_buf[0] != '\0') {
-                DrawText(line_buf, (int)content.x, (int)y, fs_d, C_DESC_TEXT);
-                y += fs_d + 2;
-                snprintf(line_buf, sizeof(line_buf), "%s", tok);
-            } else {
-                snprintf(line_buf, sizeof(line_buf), "%s", line_test);
-            }
-            tok = strtok(NULL, " ");
-        }
-        if (line_buf[0] != '\0') {
-            DrawText(line_buf, (int)content.x, (int)y, fs_d, C_DESC_TEXT);
-            y += fs_d + 4;
-        }
-    }
-
-    ObjectLayersManager* mgr = obj_layers_mgr_get();
-    const QuestMetadataEntry* qm = quest_metadata_cache_get(q_code);
-
-    /* ── Mission steps: a sectioned objective list with per-step status ──
-     * For an accepted quest the active step (matched by description) is gold
-     * with live counts, prior steps are done (green), later ones pending. The
-     * pre-accept offer previews every step neutrally. */
-    if (qm && QUEST_META_READY == qm->state && qm->step_count > 0) {
-        DrawText("Objectives:", (int)content.x, (int)y, MI_FONT_LABEL, C_REW_LABEL);
-        y += MI_FONT_LABEL + 4;
-
-        int active_idx = -1;
-        if (active && q_active_step[0] != '\0') {
-            for (int i = 0; i < qm->step_count; i++) {
-                if (0 == strcmp(qm->steps[i].description, q_active_step)) { active_idx = i; break; }
-            }
-            if (active_idx < 0) active_idx = 0;
-        }
-
-        for (int i = 0; i < qm->step_count; i++) {
-            const QuestStepMeta* sm = &qm->steps[i];
-            bool done    = (active_idx >= 0 && i < active_idx);
-            bool current = (active_idx >= 0 && i == active_idx);
-            Color step_col = done ? (Color){ 120, 200, 130, 230 }
-                           : current ? (Color){ 220, 190, 70, 240 }
-                                     : (active ? (Color){ 110, 116, 138, 180 } : C_DESC_TEXT);
-            DrawCircle((int)(content.x + 4), (int)(y + MI_FONT_DESC / 2), 3.0f, step_col);
-            DrawText(sm->description, (int)(content.x + 14), (int)y, MI_FONT_DESC, step_col);
-            y += MI_FONT_DESC + 2;
-
-            if (current && q_objectives[0] != '\0') {
-                DrawText(q_objectives, (int)(content.x + 14), (int)y, MI_FONT_REW, C_LABEL);
-                y += MI_FONT_REW + 3;
-            } else {
-                for (int o = 0; o < sm->objective_count; o++) {
-                    const QuestObjectiveMeta* om = &sm->objectives[o];
-                    char line[96];
-                    snprintf(line, sizeof(line), "%s %s x%d", om->type, om->item_id, om->quantity);
-                    DrawText(line, (int)(content.x + 14), (int)y, MI_FONT_REW, (Color){ 110, 116, 138, 180 });
-                    y += MI_FONT_REW + 1;
-                }
-            }
-            y += 3;
-        }
-        y += 4;
-    }
-
-    /* ── Rewards: render as item_slot icons from metadata cache ── */
-    DrawText("Rewards:", (int)content.x, (int)y, MI_FONT_LABEL, C_REW_LABEL);
-    y += MI_FONT_LABEL + 4;
-
-    s_reward_slot_count = 0;
-    if (qm && qm->state == QUEST_META_READY && qm->reward_count > 0) {
-        int slot_count = qm->reward_count < MI_REWARD_SLOT_MAX ? qm->reward_count : MI_REWARD_SLOT_MAX;
-        for (int ri = 0; ri < slot_count; ri++) {
-            const QuestRewardMeta* rm = &qm->rewards[ri];
-            ObjectLayerState ol = { 0 };
-            strncpy(ol.item_id, rm->item_id, MAX_ID_LENGTH - 1);
-            ol.active = true;
-            ol.quantity = rm->quantity;
-            Rectangle rr = rew_slot_rect(content, ri, y);
-            item_slot_draw(rr, &ol, mgr);
-            /* Cache the hit-box + payload so a tap opens the read-only inspector. */
-            s_reward_rects[ri] = rr;
-            s_reward_ols[ri] = ol;
-        }
-        s_reward_slot_count = slot_count;
-    } else {
-        DrawText("Complete this quest to claim your reward.",
-                 (int)content.x, (int)y, MI_FONT_REW, C_LABEL);
+    DrawText("Missions", (int)content.x, (int)y, MI_FONT_LABEL, C_REW_LABEL);
+    y += MI_FONT_LABEL + 6;
+    for (int i = 0; i < s_q_count; i++) {
+        draw_quest_card(i, codes[i], content, &y, mx, my);
     }
 }
 
@@ -879,8 +899,18 @@ bool modal_interact_handle_click(int mx, int my) {
         }
     }
 
-    /* Action tab: tap a reward slot → read-only inspection (same as stack). */
+    /* Action tab: mission cards — Accept/Abandon, reward inspect, or toggle
+     * expand by clicking anywhere on the header bar. */
     if (s_tab == MI_TAB_ACTION) {
+        for (int i = 0; i < s_q_count; i++) {
+            if (0 == s_q_btn_kind[i] || !ui_button_hit(s_q_btn[i], mx, my)) continue;
+            if (1 == s_q_btn_kind[i]) {
+                local_player_request_quest_accept(s_entity_id, s_q_btn_code[i]);
+            } else {
+                local_player_request_quest_abandon(s_q_btn_code[i]);
+            }
+            return true;
+        }
         for (int i = 0; i < s_reward_slot_count; i++) {
             if (item_slot_hit(s_reward_rects[i], mx, my)) {
                 ObjectLayerState ols = s_reward_ols[i];
@@ -891,19 +921,12 @@ bool modal_interact_handle_click(int mx, int my) {
                 return true;
             }
         }
-    }
-
-    /* Action tab: Accept — grant the offered mission (no reading required). */
-    if (s_tab == MI_TAB_ACTION && s_accept_visible && ui_button_hit(s_accept_rect, mx, my)) {
-        accept_mission();
-        return true;
-    }
-
-    /* Action tab: Abandon — drop the active quest to the failed section. */
-    if (s_tab == MI_TAB_ACTION && s_abandon_visible && ui_button_hit(s_abandon_rect, mx, my)) {
-        local_player_request_quest_abandon(s_abandon_code);
-        modal_interact_close();
-        return true;
+        for (int i = 0; i < s_q_count; i++) {
+            if (CheckCollisionPointRec((Vector2){ (float)mx, (float)my }, s_q_header[i])) {
+                s_q_toggle[i].expanded = !s_q_toggle[i].expanded;
+                return true;
+            }
+        }
     }
 
     if (!ui_button_hit(card, mx, my)) {

@@ -95,6 +95,12 @@ void modal_dialogue_close(void);
  * and a yellow frame. Cleared automatically on close. */
 void modal_dialogue_set_quest_style(bool on);
 
+/* Update the dialogue group the open dialogue reports on dlg_complete. The
+ * per-quest dialog code resolves async from action metadata, so the owning
+ * interaction re-applies it each frame to close the open-before-resolved gap
+ * that left dlg_complete carrying the greeting code (no quest-talk match). */
+void modal_dialogue_set_dialog_code(const char* code);
+
 /**
  * @brief Set a one-shot callback that fires when the modal closes.
  *

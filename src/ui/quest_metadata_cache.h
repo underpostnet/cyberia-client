@@ -58,6 +58,9 @@ typedef struct {
     int     reward_count;
     char    prerequisites[QUEST_META_PREREQ_MAX][QUEST_META_CODE_MAX];
     int     prerequisite_count;
+    char    source_map_code[QUEST_META_CODE_MAX];
+    int     source_cell_x;
+    int     source_cell_y;
     QuestMetaState state;
 } QuestMetadataEntry;
 
