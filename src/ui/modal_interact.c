@@ -45,6 +45,10 @@ static Color s_border = { 80, 160, 220, 240 };
  * action tab fetches its metadata by code via REST. */
 static char  s_offer_code[64] = {0};
 
+/* True while this modal holds a server interaction context (dlg_start sent on
+ * open, freezing the player and binding the entity); released on close. */
+static bool  s_dlg_context = false;
+
 
 /* Reward slot hit-boxes captured during the action-tab draw so the click
  * handler can open the same read-only inspection the stack tab uses. */
@@ -193,6 +197,7 @@ static bool quest_tab_visible(void) {
     if (s_offer_code[0] != '\0') {
         const QuestEntry* q = quest_store_find(s_offer_code);
         if (q && QUEST_ACTIVE == q->status) return true;            /* in progress */
+        if (q && QUEST_COMPLETED == q->status) return true;         /* completed feedback */
         if ((!q || QUEST_FAILED == q->status) && offer_prereqs_met(s_offer_code))
             return true;                                            /* acceptable */
     }
@@ -434,16 +439,28 @@ void modal_interact_open(const char* entity_id, const char* display_name,
     if (s_has_dialogue) dialogue_data_request(s_dlg_item);
     else                open_dialogue(NULL, 0);
 
-    /* The quest this NPC offers comes from the authoritative AOI binding, not
-     * the live (wandering) position, so the offer survives the bot moving. */
+    /* The quest this NPC grants comes from the authoritative AOI binding (always
+     * on the wire, position-independent). A grantor surfaces the quest tab even
+     * when its per-player status now reads passive — e.g. an already-completed
+     * quest the player can still review. */
     s_offer_code[0] = '\0';
-    if (s_is_action_provider) {
+    {
         const BotState* bot = game_state_find_bot(s_entity_id);
         if (bot && bot->grant_quest_code[0] != '\0') {
             strncpy(s_offer_code, bot->grant_quest_code, sizeof(s_offer_code) - 1);
             s_offer_code[sizeof(s_offer_code) - 1] = '\0';
             quest_metadata_cache_fetch(s_offer_code);
+            s_is_action_provider = true;
         }
+    }
+
+    /* Establish the dialogue/interaction context on the server the moment the
+     * modal opens (freeze + bind ActiveDialogueEntityID), so a quest-talk is
+     * validated reliably even if the bot then wanders out of the AOI. Only for
+     * a genuine quest interaction; review-only / non-action taps don't freeze. */
+    s_dlg_context = quest_dialogue_relevant();
+    if (s_dlg_context) {
+        local_player_request_dialogue_start(s_entity_id, s_dlg_item);
     }
 
     LOG_INFO("[MODAL_INTERACT] Open: entity=%s action=%d layers=%d offer=%s\n",
@@ -455,6 +472,12 @@ void modal_interact_close(void) {
     s_overlay_open = false;
     es_clear();
     if (modal_dialogue_is_open()) modal_dialogue_close();
+    /* Release the interaction context/freeze established on open. Dropped by the
+     * server if the dialogue already completed/cancelled it. */
+    if (s_dlg_context) {
+        local_player_request_dialogue_cancel(s_entity_id, s_dlg_item);
+        s_dlg_context = false;
+    }
 }
 
 bool modal_interact_is_open(void) { return s_open; }
@@ -512,14 +535,15 @@ static void draw_action_tab(Rectangle content, int mx, int my) {
     const char* offer_code = s_offer_code;
 
     const QuestEntry* active = NULL;
+    bool is_completed = false;
     if (offer_code[0] != '\0') {
         const QuestEntry* q = quest_store_find(offer_code);
-        /* Only an ACTIVE quest counts — a failed/abandoned one must read as an
-         * offer again (Accept shown, Abandon hidden), and a completed one is
-         * neither offerable nor abandonable. */
+        /* Active → progress + Abandon; completed → review-only "Completed";
+         * a failed/abandoned one reads as an offer again (Accept shown). */
         if (q && QUEST_ACTIVE == q->status) active = q;
+        else if (q && QUEST_COMPLETED == q->status) is_completed = true;
     }
-    if (!active && s_dlg_item[0] != '\0') {
+    if (!active && !is_completed && s_dlg_item[0] != '\0') {
         int quest_count = quest_store_count(QUEST_ACTIVE);
         for (int qi = 0; qi < quest_count; qi++) {
             const QuestEntry* e = quest_store_get(QUEST_ACTIVE, qi);
@@ -546,7 +570,7 @@ static void draw_action_tab(Rectangle content, int mx, int my) {
             q_code = om->code;
             q_title = om->title;
             q_desc = om->description;
-            is_offer = true;
+            is_offer = !is_completed; /* a completed quest is not offerable */
         }
     }
 
@@ -601,6 +625,12 @@ static void draw_action_tab(Rectangle content, int mx, int my) {
     /* ── Quest title ───────────────────────────────────────────────── */
     DrawText(q_title, (int)content.x, (int)y, MI_FONT_QUEST, C_TEXT);
     y += MI_FONT_QUEST + 4;
+
+    /* ── Completed banner ───────────────────────────────────────────── */
+    if (is_completed) {
+        DrawText("Completed", (int)content.x, (int)y, MI_FONT_DESC, (Color){ 110, 210, 130, 235 });
+        y += MI_FONT_DESC + 6;
+    }
 
     /* ── Locked banner ──────────────────────────────────────────────── */
     if (locked) {
