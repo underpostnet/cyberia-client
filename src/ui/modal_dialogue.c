@@ -305,7 +305,7 @@ void modal_dialogue_draw(void) {
     if (s_quest_style) {
         DrawRectangleLinesEx(card, 2.0f, (Color){ 230, 200, 60, 230 });
         int qs = 22;
-        ui_icon_draw("quest", card.x + card.width - qs - 4, card.y + qs - 2, qs, false, 0.0f);
+        ui_icon_draw("quest", card.x + 22, card.y + qs + 3, qs, false, 0.0f);
     } else {
         DrawLine((int)card.x, (int)card.y,
                  (int)(card.x + card.width), (int)card.y, C_CARD_BORD);
