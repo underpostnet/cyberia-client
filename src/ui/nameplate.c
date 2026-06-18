@@ -5,6 +5,8 @@
 
 #include "nameplate.h"
 
+#include "domain/presentation_runtime.h"
+
 #include <assert.h>
 #include <ctype.h>
 #include <stdio.h>
@@ -31,14 +33,18 @@ void nameplate_resolve(const char *entity_id,
 
     if (!entity_id || entity_id[0] == '\0') return;
 
-    /* ── Players: "Anon-<first 8 chars of websocket ID>" ──────────── */
+    /* The "-<id hash>" suffix is a dev aid; off-mode shows the clean label. */
+    bool dev = presentation_runtime_dev_ui();
+
+    /* ── Players: "Anon" (+ "-<first 8 chars of websocket ID>" in dev). ── */
     if (is_player) {
-        snprintf(out, (size_t)out_size, "Anon-%.8s", entity_id);
+        if (dev) snprintf(out, (size_t)out_size, "Anon-%.8s", entity_id);
+        else     snprintf(out, (size_t)out_size, "Anon");
         return;
     }
 
-    /* ── Bots: "<Skin_item_id>-<first 8 chars of entity ID>"
-     *    First character of skin item_id is uppercased. ───────────── */
+    /* ── Bots: "<Skin_item_id>" (+ "-<first 8 chars of entity ID>" in dev),
+     *    first character uppercased. ───────────────────────────────────── */
     if (layers && layer_count > 0 && mgr) {
         const char *skin_id = NULL;
         const char *first_active_id = NULL;
@@ -61,11 +67,12 @@ void nameplate_resolve(const char *entity_id,
         if (label) {
             char ucbuf[64];
             copy_ucfirst(ucbuf, (int)sizeof(ucbuf), label);
-            snprintf(out, (size_t)out_size, "%s-%.8s", ucbuf, entity_id);
+            if (dev) snprintf(out, (size_t)out_size, "%s-%.8s", ucbuf, entity_id);
+            else     snprintf(out, (size_t)out_size, "%s", ucbuf);
             return;
         }
     }
 
-    /* Fallback — raw entity ID, truncated to fit. */
-    snprintf(out, (size_t)out_size, "%.8s", entity_id);
+    /* No resolvable label — only the raw id remains, shown in dev mode only. */
+    if (dev) snprintf(out, (size_t)out_size, "%.8s", entity_id);
 }

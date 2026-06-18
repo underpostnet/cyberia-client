@@ -2,31 +2,15 @@
  * @file entity_overhead_ui.h
  * @brief World-space overhead UI rendered above each game entity.
  *
- * Renders three stacked elements anchored above the entity bounding box,
- * in world space (inside BeginMode2D / EndMode2D):
+ * Rendering stack (drawn bottom → top, above the entity), in world space
+ * (inside BeginMode2D / EndMode2D):
  *
- *   ┌──────────────────────┐   ← nameplate   (display name label)
- *   │  [===level bar=====] │   ← level bar   (effective level / sum_stats_limit)
- *   │  [====HP  bar======] │   ← health bar   (life / max_life)
- *   └──────────────────────┘
+ *   [presence status icon]                  ← lifecycle icon (unchanged)
+ *   ( Σ )[action][quest]   capability bar    ← Σ-stats circle + capability icons
+ *   [nameplate text]                         ← display name label
+ *   [====HP  bar======]    health bar        ← life / max_life
  *            │
  *         entity
- *
- * Usage — call once per entity per frame, after the entity sprite is drawn
- * but still inside BeginMode2D:
- *
- *   EntityOverheadParams p = {
- *       .name            = entity_base->id,
- *       .effective_level = entity_base->effective_level,
- *       .max_level       = g_game_state.sum_stats_limit,
- *       .life            = entity_base->life,
- *       .max_life        = entity_base->max_life,
- *       .show_level      = true,
- *   };
- *   entity_overhead_ui_draw(&p,
- *       entity_base->interp_pos.x, entity_base->interp_pos.y,
- *       entity_base->dims.x,       entity_base->dims.y,
- *       cell_size);
  *
  * All values are read-only; the module never mutates game state.
  */
@@ -40,41 +24,40 @@
 
 /* ── Layout constants (world-space, scaled by cell_size at draw time) ─── */
 
-/** Vertical gap between the top of the entity and the bottom of the HP bar.  */
-#define EOHUD_GAP_ABOVE_ENTITY  0.12f   /* world units */
+/* All overhead geometry below is in FIXED screen pixels — uniform for every
+ * entity, independent of its world size (only the vertical anchor above the
+ * entity tracks world space). The three rows (HP bar, nameplate, capability
+ * bar) share one pill background, height, padding, and rounding. */
 
-/** Height of each bar (HP / load) in world units. */
-#define EOHUD_BAR_HEIGHT        0.30f
+/** Vertical gap between the entity top edge and the overhead stack (world). */
+#define EOHUD_GAP_ABOVE_ENTITY  0.12f
 
-/** Vertical gap between stacked bars (label now sits inside the bar). */
-#define EOHUD_BAR_SPACING       0.08f
+/** Shared pill height for all three rows (HP, nameplate, capability bar). */
+#define EOHUD_BAR_H             22
 
-/** Vertical spacing between load bar and nameplate text. */
-#define EOHUD_NAME_SPACING      0.08f
+/** HP bar width. */
+#define EOHUD_HP_BAR_W          104
 
-/** Vertical spacing between nameplate and status icon. */
-#define EOHUD_ICON_SPACING      0.08f
+/** Horizontal padding inside every pill. */
+#define EOHUD_PILL_PAD_X        8
 
-/** Bar width relative to entity width (1.0 = same as entity). */
-#define EOHUD_BAR_WIDTH_RATIO   1.20f
+/** Pill corner roundness (0..1) and vertical gap between stacked rows. */
+#define EOHUD_PILL_ROUND        0.5f
+#define EOHUD_ROW_GAP           3
 
-/** Font size for the nameplate in screen pixels. Fixed; not world-scaled. */
+/** Horizontal gap between items in the capability bar. */
+#define EOHUD_ITEM_GAP          5
+
+/** Uniform icon sizes: presence (standalone, topmost), capability icon
+ *  (slightly smaller), and the sum-of-stats circle (the standout). */
+#define EOHUD_PRESENCE_SIZE     28
+#define EOHUD_CAP_ICON_SIZE     20
+#define EOHUD_STAT_DIAM         24
+
+/** Label font sizes (screen pixels). The sum-of-stats value is the largest. */
 #define EOHUD_NAME_FONT_SIZE    13
-
-/** Font size for the HP label (e.g. "HP 73/100") in screen pixels. */
-#define EOHUD_HP_LABEL_FONT_SIZE   12
-
-/** Font size for the level label (e.g. "Lv. 15 / 30") in screen pixels. */
-#define EOHUD_LEVEL_LABEL_FONT_SIZE 12
-
-/** Horizontal padding around the nameplate text for the background pill. */
-#define EOHUD_NAME_PAD_X        6
-
-/** Vertical padding around the nameplate text for the background pill. */
-#define EOHUD_NAME_PAD_Y        3
-
-/** Corner roundness of bars (pixels). */
-#define EOHUD_BAR_ROUNDING      3.0f
+#define EOHUD_HP_LABEL_FONT_SIZE 12
+#define EOHUD_STATS_FONT_SIZE   16
 
 /* ── Data model ─────────────────────────────────────────────────────────── */
 
@@ -89,17 +72,9 @@ typedef struct {
     /** Display label (e.g. entity ID or human-readable nickname). */
     const char *name;
 
-    /**
-     * Current effective level (clamped sum of all stat fields).
-     * Transmitted by the server for every entity (player and bot).
-     */
-    int effective_level;
-
-    /**
-     * Maximum effective level (sum_stats_limit).
-     * Set to 0 to hide the level bar entirely.
-     */
-    int max_level;
+    /** Sum of the entity's active stats (capped at sum_stats_limit); shown in
+     *  the capability bar's leading circle. */
+    int stats_sum;
 
     /** Current life (HP). */
     float life;
@@ -107,31 +82,23 @@ typedef struct {
     /** Maximum life. Set to 0 to hide the HP bar entirely. */
     float max_life;
 
-    /**
-     * Whether to render the effective level bar.
-     * Display for all living entities.
-     */
-    bool show_level;
+    /** Whether to render the capability bar (Σ-stats circle + capability
+     *  icons). Suppressed for dead entities. */
+    bool show_stats;
 
-    /**
-     * Whether to render the nameplate.
-     * May be suppressed for skill/coin projectile bots.
-     */
+    /** Whether to render the nameplate. Suppressed for projectile bots. */
     bool show_name;
 
-    /**
-     * Whether to render the HP bar.
-     * May be suppressed for dead entities (respawn_in > 0).
-     */
+    /** Whether to render the HP bar. Suppressed for dead entities. */
     bool show_hp;
 
-    /**
-     * Server-assigned Entity Status Indicator icon ID (u8).
-     * 0 = none.  See entity_status.h for the enum values.
-     * The entity_overhead_ui module calls entity_status_icon_id() to
-     * resolve this to a ui-icon filename and renders it above the nameplate.
-     */
+    /** Presence lifecycle icon ID (u8); 0 = none. Rendered unchanged as the
+     *  topmost icon. */
     uint8_t status_icon;
+
+    /** Per-player interaction capability bitmask (INTERACTION_FLAG_*), 0 for
+     *  non-bots. Each set bit adds its icon to the capability bar. */
+    uint8_t interaction_flags;
 } EntityOverheadParams;
 
 /* ── Public API ─────────────────────────────────────────────────────────── */

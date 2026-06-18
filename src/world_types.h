@@ -42,7 +42,7 @@ struct EntityState {
     double snapshot_time;   /* wall-clock time of the snapshot that produced
                              * pos_server. Used by interpolation to compute
                              * a per-entity alpha instead of a global one. */
-    int effective_level;
+    int stats_sum;          /* sum of active stats, capped at sum_stats_limit */
     uint8_t status_icon;
 };
 
@@ -57,14 +57,30 @@ struct PlayerState {
     bool    has_tap_target;
 };
 
+/* Interaction capability bits (mirror cyberia-server entity_status.go). Each set
+ * bit enables an overlay status icon and its interact-modal tab. The bit index
+ * pairs with the capability status-icon ID (bit i ↔ status icon 8+i). */
+#define INTERACTION_FLAG_ACTION       (1u << 0)
+#define INTERACTION_FLAG_QUEST        (1u << 1)
+#define STATUS_ICON_ACTION_PROVIDER   8
+#define STATUS_ICON_QUEST_PROVIDER    9
+
+#define BOT_QUEST_CODES_MAX           8
+
 struct BotState {
     EntityState base;
     char behavior[MAX_BEHAVIOR_LENGTH];
     char caster_id[MAX_ID_LENGTH];
-    /* The quest this NPC surfaces to the local player, resolved per player from
-     * the quests bound to the action's cell (active > acceptable > completed);
-     * "" for ordinary bots. Position-independent, so a wandering NPC keeps it. */
+    /* Bound cyberia-action code; "" for ordinary bots. The client fetches the
+     * action metadata (label, dialogue map) by this code via REST.
+     * Position-independent, so a wandering NPC keeps it. */
     char action_code[MAX_ID_LENGTH];
+    /* Per-player interaction capability bitmask (INTERACTION_FLAG_*). */
+    uint8_t interaction_flags;
+    /* Authoritative quest codes this NPC provides to the local player; metadata
+     * is fetched by code only when not already cached. */
+    char quest_codes[BOT_QUEST_CODES_MAX][MAX_ID_LENGTH];
+    int  quest_code_count;
 };
 
 typedef struct WorldObject {

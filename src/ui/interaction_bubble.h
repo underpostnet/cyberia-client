@@ -54,7 +54,8 @@ typedef struct {
     int direction;
     uint32_t interact_flags;
     char dialogue_item_id[128];
-    uint8_t status_icon;
+    uint8_t status_icon;        /* presence lifecycle icon */
+    uint8_t interaction_flags;  /* INTERACTION_FLAG_* capability bits */
     bool is_player;
     bool active;
     double appeared_at;

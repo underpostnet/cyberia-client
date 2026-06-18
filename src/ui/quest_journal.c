@@ -1,8 +1,8 @@
 #include "quest_journal.h"
 
 #include "modal.h"
-#include "quest_metadata_cache.h"
-#include "quest_store.h"
+#include "quest_cache.h"
+#include "quest_progress_store.h"
 #include "ui_button.h"
 #include "ui_toggle.h"
 
@@ -124,7 +124,7 @@ static int wrap_block(bool draw, const char* text, int x, int y, int maxw, int f
  * a status dot, the prominent quest name, then either the active step +
  * objectives (active) or a one-word status (Completed / Abandoned). Everything
  * wraps to the card width. Returns the card's pixel height. */
-static int quest_card_layout(bool draw, const QuestEntry* e, QuestStatus sec, int x, int y, int w) {
+static int quest_card_layout(bool draw, const QuestProgressEntry* e, QuestStatus sec, int x, int y, int w) {
     const char* name = e->title[0] != '\0' ? e->title : e->code;
     int tx = x + QJ_CARD_PAD + 12;                 /* text column, right of the dot */
     int tw = w - (QJ_CARD_PAD + 12) - QJ_CARD_PAD;
@@ -184,7 +184,7 @@ static bool journal_walk(int mode, int mx, int my) {
     }
 
     for (int sec = 0; sec < QUEST_STATUS_COUNT; ++sec) {
-        int count = quest_store_count((QuestStatus)sec);
+        int count = quest_progress_store_count((QuestStatus)sec);
 
         Rectangle srow = { x, y, w, QJ_SECTION_H };
         Rectangle schev = { x + 6, y + (QJ_SECTION_H - QJ_CHEVRON) / 2, QJ_CHEVRON, QJ_CHEVRON };
@@ -214,7 +214,7 @@ static bool journal_walk(int mode, int mx, int my) {
         if (end > count) end = count;
 
         for (int i = start; i < end; ++i) {
-            const QuestEntry* e = quest_store_get((QuestStatus)sec, i);
+            const QuestProgressEntry* e = quest_progress_store_get((QuestStatus)sec, i);
             if (!e) continue;
 
             int ch = quest_card_layout(false, e, (QuestStatus)sec,
@@ -283,10 +283,10 @@ void quest_journal_update(float dt) {
      * for quests we never opened (e.g. seeded on reconnect, completed, failed)
      * would otherwise render blank. The cache no-ops once a code is resolved. */
     for (int sec = 0; sec < QUEST_STATUS_COUNT; ++sec) {
-        int n = quest_store_count((QuestStatus)sec);
+        int n = quest_progress_store_count((QuestStatus)sec);
         for (int i = 0; i < n; ++i) {
-            const QuestEntry* e = quest_store_get((QuestStatus)sec, i);
-            if (e && e->title[0] == '\0') quest_metadata_cache_fetch(e->code);
+            const QuestProgressEntry* e = quest_progress_store_get((QuestStatus)sec, i);
+            if (e && e->title[0] == '\0') quest_cache_fetch(e->code);
         }
     }
 }

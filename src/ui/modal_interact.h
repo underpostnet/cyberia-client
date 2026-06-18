@@ -19,16 +19,18 @@
 #include "object_layer.h"
 #include <raylib.h>
 #include <stdbool.h>
+#include <stdint.h>
 
 void modal_interact_init(void);
 
-/* dialogue_item_id is the entity's active skin; has_dialogue is true when
- * that skin has a default dialogue. is_action_provider gates the action tab
- * (true for entities bound to a CyberiaAction). border tints the header to
- * match the entity's status indicator. */
+/* dialogue_item_id is the entity's active skin; has_dialogue is true when that
+ * skin has a default dialogue. interaction_flags is the server's per-player
+ * capability bitmask (INTERACTION_FLAG_*): the action bit gates the Action tab,
+ * the quest bit gates the Quest tab. border tints the header to match the
+ * entity's status indicator. */
 void modal_interact_open(const char* entity_id, const char* display_name,
                          const char* dialogue_item_id, bool has_dialogue,
-                         bool is_action_provider, Color border);
+                         uint8_t interaction_flags, Color border);
 
 void modal_interact_close(void);
 bool modal_interact_is_open(void);

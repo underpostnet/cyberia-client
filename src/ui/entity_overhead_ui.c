@@ -1,60 +1,59 @@
 /**
  * @file entity_overhead_ui.c
- * @brief World-space overhead UI — nameplate, capacity bar, HP bar.
+ * @brief World-space overhead UI — HP bar, nameplate, capability bar, presence.
  *
- * Rendering stack (drawn top → bottom, above the entity):
+ * Rendering stack (drawn bottom → top, above the entity):
  *
- *   [nameplate text]                    ← topmost, white label with shadow
- *   [■■■■■■■■■■□□□□]  load bar          ← green→yellow gradient by fill %
- *   [■■■■■■■□□□□□□□]  HP bar            ← green fill, grey background
- *    "HP 73 / 100"                      ← label centred under HP bar
+ *   [presence icon]                      ← standalone lifecycle icon (unchanged)
+ *   ( Σ )[action][quest]   capability bar ← Σ-stats circle + capability icons
+ *   [ Display Name ]       nameplate
+ *   [ HP 73 / 100  ]       HP bar
  *            │
  *         entity top edge
  *
- * All coordinates are in world space — this function is called inside
- * BeginMode2D so Raylib's camera transform is already applied.
- *
- * The module is fully stateless.  Call entity_overhead_ui_draw() with fresh
- * params every frame; no init/cleanup is required.
+ * The three pill rows (HP bar, nameplate, capability bar) share one background,
+ * height, padding, and rounding, and are sized in fixed screen pixels so they
+ * are uniform for every entity regardless of its world size. Only the vertical
+ * anchor above the entity tracks world space. Stateless — call per entity per
+ * frame inside BeginMode2D.
  */
 
 #include "entity_overhead_ui.h"
 
 #include "domain/presentation_runtime.h"
-#include "game_state.h"
 #include "ui_icon.h"
+#include "world_types.h"
 
-#include <assert.h>
 #include <raylib.h>
 #include <stdio.h>
-#include <string.h>
 
-/* ── Internal colours ────────────────────────────────────────────────── */
+/* ── Colours ─────────────────────────────────────────────────────────── */
 
-/* Bar backgrounds — solid black for maximum contrast with fills. */
-static const Color C_BAR_BG      = {  8,   8,   8, 210 };
+/* HP bar fill — green → amber → red as HP falls. */
+static const Color C_HP_FULL     = { 50, 220,  50, 240 };
+static const Color C_HP_LOW      = {230,  50,  40, 240 };
+static const Color C_HP_MID      = {200, 180,  30, 240 };
 
-/* HP bar fill — green palette (bright → amber → red as HP drops). */
-static const Color C_HP_FULL     = { 50, 220,  50, 240 };   /* vivid green   */
-static const Color C_HP_LOW      = {230,  50,  40, 240 };   /* red when ≤25% */
-static const Color C_HP_MID      = {200, 180,  30, 240 };   /* amber at 50 % */
+/* Sum-of-stats circle fill — electric yellow. */
+static const Color C_STATS_FILL  = {255, 238,  10, 255 };
 
-/* Level bar fill — yellow / gold palette (warm → orange at cap). */
-static const Color C_LEVEL_LOW    = {210, 190,  50, 240 };   /* gold           */
-static const Color C_LEVEL_MID    = {240, 175,  30, 240 };   /* warm amber     */
-static const Color C_LEVEL_FULL   = {245, 120,  20, 240 };   /* deep orange    */
+/* Nameplate pill backdrop + the subtle border shared by the pill and the
+ * sum-of-stats circle outline. */
+static const Color C_PILL_BG     = {  4,   4,  12, 150 };
+static const Color C_PILL_BORDER = {120, 120, 120, 160 };
 
-/* Bar border — subtle bright edge for definition. */
-static const Color C_BAR_BORDER  = {120, 120, 120, 160 };
+/* HP bar — black background (the depleted portion reads as black) + outline. */
+static const Color C_HP_BG       = {  0,   0,   0, 235 };
+static const Color C_HP_BORDER   = {  0,   0,   0, 235 };
 
-/* Text colours */
+/* Text. */
 static const Color C_NAME_TEXT   = {255, 255, 255, 255 };
 static const Color C_NAME_SHADOW = {  0,   0,   0, 200 };
-static const Color C_NAME_BG     = {  4,   4,  12, 110 };   /* pill backdrop  */
-static const Color C_BAR_LABEL   = {255, 255, 255, 245 };
-static const Color C_BAR_LABEL_S = {  0,   0,   0, 200 };   /* label shadow   */
+static const Color C_LABEL       = {255, 255, 255, 245 };
+static const Color C_LABEL_SHADOW = {  0,   0,   0, 200 };
 
-/* ── Colour lerp helper ───────────────────────────────────────────────── */
+/* Stronger, fully-opaque shadow for the sum-of-stats value only. */
+static const Color C_STAT_SHADOW = {  0,   0,   0, 255 };
 
 static Color color_lerp(Color a, Color b, float t) {
     if (t <= 0.0f) return a;
@@ -67,117 +66,111 @@ static Color color_lerp(Color a, Color b, float t) {
     };
 }
 
-/* ── Sub-component: nameplate ────────────────────────────────────────── */
+/* ── Shared pill ─────────────────────────────────────────────────────── */
 
-/** Draws the display-name label, centred horizontally over the entity.
- *  @param cx  Screen-space centre X (pixels).
- *  @param sy  Screen-space Y of the bottom edge of the nameplate row.   */
-static void draw_nameplate(const char *name, float cx, float sy) {
-    if (!name || name[0] == '\0') return;
+/** Draws the standardized pill (dark rounded backdrop + subtle border) sized to
+ *  `content_w` at the fixed row height, centred at cx with its top at top_y.
+ *  Returns the inner content rectangle. */
+static Rectangle draw_pill(float cx, float top_y, float content_w) {
+    float pill_w = content_w + EOHUD_PILL_PAD_X * 2;
+    Rectangle pill = { cx - pill_w * 0.5f, top_y, pill_w, (float)EOHUD_BAR_H };
+    DrawRectangleRounded(pill, EOHUD_PILL_ROUND, 8, C_PILL_BG);
+    DrawRectangleRoundedLinesEx(pill, EOHUD_PILL_ROUND, 8, 1.0f, C_PILL_BORDER);
+    return (Rectangle){ cx - content_w * 0.5f, top_y, content_w, (float)EOHUD_BAR_H };
+}
 
-    int fs = EOHUD_NAME_FONT_SIZE;
-    int tw = MeasureText(name, fs);
+/* Centre `label` (with shadow) vertically inside a row whose top is top_y. */
+static void draw_centered_label(const char *label, float cx, float top_y, int fs,
+                                Color fg, Color shadow) {
+    int tw = MeasureText(label, fs);
     int tx = (int)(cx - tw * 0.5f);
-    int ty = (int)(sy - fs);
-
-    /* Dark rounded pill behind the text for readability. */
-    Rectangle pill = {
-        (float)(tx - EOHUD_NAME_PAD_X),
-        (float)(ty - EOHUD_NAME_PAD_Y),
-        (float)(tw + EOHUD_NAME_PAD_X * 2),
-        (float)(fs + EOHUD_NAME_PAD_Y * 2)
-    };
-    DrawRectangleRounded(pill, 0.4f, 6, C_NAME_BG);
-
-    /* Drop shadow (2-px offset for bolder contrast). */
-    DrawText(name, tx + 1, ty + 1, fs, C_NAME_SHADOW);
-    /* Main label */
-    DrawText(name, tx, ty, fs, C_NAME_TEXT);
+    int ty = (int)(top_y + (EOHUD_BAR_H - fs) * 0.5f);
+    DrawText(label, tx + 1, ty + 1, fs, shadow);
+    DrawText(label, tx, ty, fs, fg);
 }
 
-/* ── Sub-component: effective level bar ─────────────────────────────── */
+/* ── Rows ────────────────────────────────────────────────────────────── */
 
-/** Draws the effective-level bar.
- *  @param bar_rect  Screen-space rectangle for the full bar background. */
-static void draw_level_bar(Rectangle bar_rect, int current, int max) {
-    /* Solid black background — the unfilled portion is clearly dark. */
-    DrawRectangleRounded(bar_rect, 0.3f, 6, C_BAR_BG);
+static void draw_hp_bar(float cx, float top_y, float life, float max_life) {
+    Rectangle bar = { cx - EOHUD_HP_BAR_W * 0.5f, top_y,
+                      (float)EOHUD_HP_BAR_W, (float)EOHUD_BAR_H };
 
-    if (max <= 0 || current < 0) return;
+    /* Black background so the depleted (subtracted) HP reads as black. */
+    DrawRectangleRounded(bar, EOHUD_PILL_ROUND, 8, C_HP_BG);
 
-    float frac = (float)current / (float)max;
-    if (frac > 1.0f) frac = 1.0f;
-
-    /* Colour: gold → amber → deep orange as stats load grows. */
-    Color fill;
-    if (frac < 0.5f) {
-        fill = color_lerp(C_LEVEL_LOW, C_LEVEL_MID, frac * 2.0f);
-    } else {
-        fill = color_lerp(C_LEVEL_MID, C_LEVEL_FULL, (frac - 0.5f) * 2.0f);
+    if (max_life > 0.0f && life >= 0.0f) {
+        float frac = life / max_life;
+        if (frac > 1.0f) frac = 1.0f;
+        Color fill = (frac > 0.5f)
+            ? color_lerp(C_HP_MID, C_HP_FULL, (frac - 0.5f) * 2.0f)
+            : color_lerp(C_HP_LOW, C_HP_MID, frac * 2.0f);
+        Rectangle fr = bar;
+        fr.width = bar.width * frac;
+        if (fr.width < 1.0f && life > 0.0f) fr.width = 1.0f;
+        DrawRectangleRounded(fr, EOHUD_PILL_ROUND, 8, fill);
     }
+    DrawRectangleRoundedLinesEx(bar, EOHUD_PILL_ROUND, 8, 1.0f, C_HP_BORDER);
 
-    Rectangle fill_rect = bar_rect;
-    fill_rect.width = bar_rect.width * frac;
-    if (fill_rect.width < 1.0f && current > 0) fill_rect.width = 1.0f;
-    DrawRectangleRounded(fill_rect, 0.3f, 6, fill);
-
-    /* Border for definition. */
-    DrawRectangleRoundedLinesEx(bar_rect, 0.3f, 6, 1.0f, C_BAR_BORDER);
-
-    /* Level label: "Lv. X / Y" centred inside the bar. */
-    char label[32];
-    snprintf(label, sizeof(label), "Lv. %d / %d", current, max);
-    int lfs = EOHUD_LEVEL_LABEL_FONT_SIZE;
-    int ltw = MeasureText(label, lfs);
-    int lx  = (int)(bar_rect.x + bar_rect.width * 0.5f - ltw * 0.5f);
-    int ly  = (int)(bar_rect.y + (bar_rect.height - lfs) * 0.5f);
-    DrawText(label, lx + 1, ly + 1, lfs, C_BAR_LABEL_S);
-    DrawText(label, lx,     ly,     lfs, C_BAR_LABEL);
-}
-
-/* ── Sub-component: health bar ───────────────────────────────────────── */
-
-/** Draws the HP bar + "HP cur / max" label below it.
- *  @param bar_rect  Screen-space rectangle for the full bar background.  */
-static void draw_hp_bar(Rectangle bar_rect, float life, float max_life) {
-    /* Solid black background — the unfilled portion is clearly dark. */
-    DrawRectangleRounded(bar_rect, 0.3f, 6, C_BAR_BG);
-
-    if (max_life <= 0.0f || life < 0.0f) return;
-
-    float frac = life / max_life;
-    if (frac > 1.0f) frac = 1.0f;
-
-    /* Colour: vivid green → amber → red as HP falls. */
-    Color fill;
-    if (frac > 0.5f) {
-        fill = color_lerp(C_HP_MID, C_HP_FULL, (frac - 0.5f) * 2.0f);
-    } else {
-        fill = color_lerp(C_HP_LOW, C_HP_MID, frac * 2.0f);
-    }
-
-    Rectangle fill_rect = bar_rect;
-    fill_rect.width = bar_rect.width * frac;
-    if (fill_rect.width < 1.0f && life > 0.0f) fill_rect.width = 1.0f;
-    DrawRectangleRounded(fill_rect, 0.3f, 6, fill);
-
-    /* Border for definition. */
-    DrawRectangleRoundedLinesEx(bar_rect, 0.3f, 6, 1.0f, C_BAR_BORDER);
-
-    /* HP label: "HP 73 / 100" centred inside the bar. */
-    int ilif  = (int)(life + 0.5f);
-    int imaxl = (int)(max_life + 0.5f);
+    int ilif = (int)(life + 0.5f), imaxl = (int)(max_life + 0.5f);
     char label[32];
     snprintf(label, sizeof(label), "HP %d / %d", ilif, imaxl);
-    int lfs = EOHUD_HP_LABEL_FONT_SIZE;
-    int ltw = MeasureText(label, lfs);
-    int lx  = (int)(bar_rect.x + bar_rect.width * 0.5f - ltw * 0.5f);
-    int ly  = (int)(bar_rect.y + (bar_rect.height - lfs) * 0.5f);
-    DrawText(label, lx + 1, ly + 1, lfs, C_BAR_LABEL_S);
-    DrawText(label, lx,     ly,     lfs, C_BAR_LABEL);
+    draw_centered_label(label, cx, top_y, EOHUD_HP_LABEL_FONT_SIZE, C_LABEL, C_LABEL_SHADOW);
 }
 
-/* ── Public API ─────────────────────────────────────────────────────── */
+static void draw_nameplate(const char *name, float cx, float top_y) {
+    if (!name || name[0] == '\0') return;
+    int tw = MeasureText(name, EOHUD_NAME_FONT_SIZE);
+    draw_pill(cx, top_y, (float)tw);
+    draw_centered_label(name, cx, top_y, EOHUD_NAME_FONT_SIZE, C_NAME_TEXT, C_NAME_SHADOW);
+}
+
+/** Capability bar: the standardized pill holding a leading sum-of-stats circle
+ *  then one icon per set interaction-capability bit (action, quest). The circle
+ *  is the only element that stands out — gold fill, outline border, and a
+ *  slightly larger, tightly-padded value. */
+static void draw_capability_bar(float cx, float top_y, int stats_sum,
+                                uint8_t flags, float phase) {
+    const char *icons[2];
+    int icon_n = 0;
+    if (flags & INTERACTION_FLAG_ACTION)
+        icons[icon_n++] = presentation_runtime_status_icon(STATUS_ICON_ACTION_PROVIDER);
+    if (flags & INTERACTION_FLAG_QUEST)
+        icons[icon_n++] = presentation_runtime_status_icon(STATUS_ICON_QUEST_PROVIDER);
+
+    float content_w = (float)EOHUD_STAT_DIAM
+                    + (float)icon_n * (EOHUD_ITEM_GAP + EOHUD_CAP_ICON_SIZE);
+    float row_cy = top_y + EOHUD_BAR_H * 0.5f;
+    float x = cx - content_w * 0.5f;
+
+    float r = EOHUD_STAT_DIAM * 0.5f;
+    DrawCircle((int)(x + r), (int)row_cy, r, C_STATS_FILL);
+    DrawCircleLines((int)(x + r), (int)row_cy, r, C_PILL_BORDER);
+    char num[16];
+    snprintf(num, sizeof(num), "%d", stats_sum);
+    int fs = EOHUD_STATS_FONT_SIZE;
+    int tw = MeasureText(num, fs);
+    int nx = (int)(x + r - tw * 0.5f);
+    int ny = (int)(row_cy - fs * 0.5f);
+    /* Solid, gapless outline: two concentric 8-direction rings (1px then 2px)
+     * so the shadow abuts the glyph with no translucent gap, then the value. */
+    for (int o = 1; o <= 2; o++)
+        for (int dy = -1; dy <= 1; dy++)
+            for (int dx = -1; dx <= 1; dx++)
+                if (dx || dy)
+                    DrawText(num, nx + dx * o, ny + dy * o, fs, C_STAT_SHADOW);
+    DrawText(num, nx, ny, fs, C_LABEL);
+    x += EOHUD_STAT_DIAM;
+
+    for (int i = 0; i < icon_n; i++) {
+        x += EOHUD_ITEM_GAP;
+        if (icons[i] && icons[i][0] != '\0')
+            ui_icon_draw(icons[i], x + EOHUD_CAP_ICON_SIZE * 0.5f, row_cy,
+                         EOHUD_CAP_ICON_SIZE, true, phase);
+        x += EOHUD_CAP_ICON_SIZE;
+    }
+}
+
+/* ── Public API ──────────────────────────────────────────────────────── */
 
 void entity_overhead_ui_draw(
     const EntityOverheadParams *p,
@@ -187,71 +180,45 @@ void entity_overhead_ui_draw(
     float world_h,
     float cell_size)
 {
-    /* Convert entity top edge and horizontal centre to screen pixels. */
     float entity_top_px = world_y * cell_size;
     float entity_cx_px  = (world_x + world_w * 0.5f) * cell_size;
 
-    /* Bar pixel width (wider than the entity by BAR_WIDTH_RATIO). */
-    float bar_w_px = world_w * cell_size * EOHUD_BAR_WIDTH_RATIO;
-    float bar_h_px = EOHUD_BAR_HEIGHT * cell_size;
-
-    /* Stack cursor: start above the entity top edge and grow upward. */
+    /* Anchor above the entity; rows stack upward in fixed pixels. */
     float cursor_px = entity_top_px - EOHUD_GAP_ABOVE_ENTITY * cell_size;
 
-    /* ── HP bar (closest to entity) ──────────────────────────────────── */
+    float phase = 0.0f;
+    if (p->name) {
+        unsigned int h = 0;
+        for (const char* c = p->name; *c; c++) h = h * 31 + (unsigned char)*c;
+        phase = (float)(h % 1000) * 0.001f * 6.2832f;
+    }
+
     if (p->show_hp && p->max_life > 0.0f) {
-        /* Place bar so its bottom is at cursor_px. */
-        cursor_px -= bar_h_px;
-        Rectangle hprect = {
-            entity_cx_px - bar_w_px * 0.5f,
-            cursor_px,
-            bar_w_px,
-            bar_h_px
-        };
-        draw_hp_bar(hprect, p->life, p->max_life);
-        cursor_px -= EOHUD_BAR_SPACING * cell_size;
+        cursor_px -= EOHUD_BAR_H;
+        draw_hp_bar(entity_cx_px, cursor_px, p->life, p->max_life);
+        cursor_px -= EOHUD_ROW_GAP;
     }
 
-    /* ── Level bar (above HP bar) ────────────────────────────────────── */
-    if (p->show_level && p->max_level > 0) {
-        cursor_px -= bar_h_px;
-        Rectangle ldrect = {
-            entity_cx_px - bar_w_px * 0.5f,
-            cursor_px,
-            bar_w_px,
-            bar_h_px
-        };
-        draw_level_bar(ldrect, p->effective_level, p->max_level);
-    }
-
-    /* ── Nameplate (topmost) ──────────────────────────────────────────── */
     if (p->show_name) {
-        cursor_px -= EOHUD_NAME_SPACING * cell_size;
+        cursor_px -= EOHUD_BAR_H;
         draw_nameplate(p->name, entity_cx_px, cursor_px);
-        cursor_px -= (float)(EOHUD_NAME_FONT_SIZE + EOHUD_NAME_PAD_Y * 2);
+        cursor_px -= EOHUD_ROW_GAP;
     }
 
-    /* ── Status icon (above nameplate) ──────────────────────────────────
-     * Resolved against the client-owned presentation table. The server
-     * only ships the numeric status_icon u8 on the AOI wire; the icon
-     * stem comes from the presentation runtime hints fetch. */
+    if (p->show_stats) {
+        cursor_px -= EOHUD_BAR_H;
+        draw_capability_bar(entity_cx_px, cursor_px, p->stats_sum, p->interaction_flags, phase);
+        cursor_px -= EOHUD_ROW_GAP;
+    }
+
+    /* Presence status icon — topmost, unchanged behaviour (standalone bouncing
+     * icon, no pill), now at a uniform size. */
     if (p->status_icon != 0) {
         const char* icon_id = presentation_runtime_status_icon(p->status_icon);
         if (icon_id && icon_id[0] != '\0') {
-            cursor_px -= EOHUD_ICON_SPACING * cell_size;
-            /* Scale icon with zoom: roughly 55% of one cell, clamped. */
-            int icon_sz = (int)(0.55f * world_w * cell_size);
-            if (icon_sz < 20) icon_sz = 20;
-            if (icon_sz > 36) icon_sz = 36;
-            /* Phase offset: simple hash of entity name for desync. */
-            float phase = 0.0f;
-            if (p->name) {
-                unsigned int h = 0;
-                for (const char* c = p->name; *c; c++) h = h * 31 + (unsigned char)*c;
-                phase = (float)(h % 1000) * 0.001f * 6.2832f;
-            }
-            ui_icon_draw(icon_id, entity_cx_px, cursor_px - icon_sz * 0.5f,
-                         icon_sz, true, phase);
+            cursor_px -= EOHUD_PRESENCE_SIZE;
+            ui_icon_draw(icon_id, entity_cx_px, cursor_px + EOHUD_PRESENCE_SIZE * 0.5f,
+                         EOHUD_PRESENCE_SIZE, true, phase);
         }
     }
 }

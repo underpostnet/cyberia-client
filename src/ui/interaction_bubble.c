@@ -17,6 +17,7 @@
 #include "dialogue_data.h"
 #include "entity_render.h"
 #include "game_state.h"
+#include "world_types.h"
 #include "js/interact_bridge.h"
 #include "modal_interact.h"
 #include "notification.h"
@@ -158,7 +159,8 @@ static const char* active_skin_item_id(const ObjectLayerState* layers, int count
 }
 
 static void scan_entity(const char* entity_id, const EntityState* base,
-                        bool is_player, const char* behavior) {
+                        bool is_player, const char* behavior,
+                        uint8_t interaction_flags) {
     if (!base || !entity_id || entity_id[0] == '\0') return;
 
     if (behavior) {
@@ -215,6 +217,7 @@ static void scan_entity(const char* entity_id, const EntityState* base,
 
     slot->interact_flags = flags;
     slot->status_icon = base->status_icon;
+    slot->interaction_flags = interaction_flags;
     slot->is_player = is_player;
 
     /* Resolve the solid-colour fallback from the client-owned presentation
@@ -281,21 +284,21 @@ void interaction_bubble_update(void) {
     /* Self-player is always scanned first → occupies slot 0. */
     if (g_game_state.player_id[0] != '\0') {
         scan_entity(g_game_state.player_id,
-                    &g_game_state.player.base, true, NULL);
+                    &g_game_state.player.base, true, NULL, 0);
     }
 
     for (int i = 0; i < g_game_state.other_player_count; i++) {
         scan_entity(
             g_game_state.other_players[i].base.id,
             &g_game_state.other_players[i].base,
-            true, NULL
+            true, NULL, 0
         );
     }
 
     for (int i = 0; i < g_game_state.bot_count; i++) {
         const BotState* bot = &g_game_state.bots[i];
         if (bot->caster_id[0] != '\0') continue;
-        scan_entity(bot->base.id, &bot->base, false, bot->behavior);
+        scan_entity(bot->base.id, &bot->base, false, bot->behavior, bot->interaction_flags);
     }
 
     double now = GetTime();
@@ -367,20 +370,28 @@ void interaction_bubble_draw(void) {
                      (Color){220, 220, 230, 240});
         }
 
-        /* Status icon — small icon in bottom-right corner of the bubble.
-         * Resolved client-side from presentation_runtime; the server only
-         * ships the numeric status_icon u8 on the AOI wire. */
-        if (slot->status_icon != 0) {
-            const char* icon_id = presentation_runtime_status_icon(slot->status_icon);
-            if (icon_id && icon_id[0] != '\0') {
-                int ico_sz = 16;
-                float ix = r.x + r.width - ico_sz * 0.5f - 2.0f;
-                float iy = r.y + r.height - ico_sz * 0.5f - 2.0f;
-                /* Phase from entity_id hash for desync */
-                unsigned int h = 0;
-                for (const char* c = slot->entity_id; *c; c++)
-                    h = h * 31 + (unsigned char)*c;
-                float phase = (float)(h % 1000) * 0.001f * 6.2832f;
+        /* Status icons — the presence lifecycle icon plus one overlay per set
+         * interaction-capability bit (action, quest). Drawn as a small row in
+         * the bottom-right; the server ships the presence u8 + capability
+         * bitmask, the client resolves each stem from presentation_runtime. */
+        uint8_t status_ids[3];
+        int status_n = 0;
+        if (slot->status_icon != 0) status_ids[status_n++] = slot->status_icon;
+        if (slot->interaction_flags & INTERACTION_FLAG_ACTION)
+            status_ids[status_n++] = STATUS_ICON_ACTION_PROVIDER;
+        if (slot->interaction_flags & INTERACTION_FLAG_QUEST)
+            status_ids[status_n++] = STATUS_ICON_QUEST_PROVIDER;
+        if (status_n > 0) {
+            int ico_sz = 16;
+            unsigned int h = 0;
+            for (const char* c = slot->entity_id; *c; c++)
+                h = h * 31 + (unsigned char)*c;
+            float phase = (float)(h % 1000) * 0.001f * 6.2832f;
+            float iy = r.y + r.height - ico_sz * 0.5f - 2.0f;
+            for (int k = 0; k < status_n; k++) {
+                const char* icon_id = presentation_runtime_status_icon(status_ids[k]);
+                if (!icon_id || icon_id[0] == '\0') continue;
+                float ix = r.x + r.width - ico_sz * 0.5f - 2.0f - (float)k * (ico_sz + 2.0f);
                 ui_icon_draw(icon_id, ix, iy, ico_sz, false, phase);
             }
         }
@@ -455,16 +466,15 @@ bool interaction_bubble_handle_click(int mx, int my) {
                    i, slot->entity_id, slot->interact_flags);
 
             /* Bubble tap opens modal_interact. has_dialogue is true when the
-             * active skin has dialogue; the action tab shows for entities
-             * the server marked as action-providers (ESI 8). */
+             * active skin has dialogue; the capability bitmask gates the Action
+             * and Quest tabs. */
             bool is_self      = (strcmp(slot->entity_id, g_game_state.player_id) == 0);
             bool has_dialogue = (slot->interact_flags & INTERACT_DIALOGUE) != 0 &&
                                 slot->dialogue_item_id[0] != '\0';
-            bool is_action_provider = (8 == slot->status_icon);
             Color bc = status_border_color(slot, is_self);
             modal_interact_open(slot->entity_id, slot->display_name,
                                 slot->dialogue_item_id, has_dialogue,
-                                is_action_provider, bc);
+                                slot->interaction_flags, bc);
             return true;
         }
     }
