@@ -10,9 +10,9 @@
 #include "domain/camera.h"
 #include "domain/presentation_runtime.h"
 #include "ui/ui_state.h"
-#include "ui/quest_store.h"
+#include "ui/quest_progress_store.h"
 #include "ui/modal_notification.h"
-#include "ui/quest_metadata_cache.h"
+#include "ui/quest_cache.h"
 #include "notification.h"
 #include "util/log.h"
 #include <stdio.h>
@@ -246,7 +246,7 @@ static int message_parser_parse_init_data(const cJSON* json_root) {
 
     /* Seed the Quest Journal store from the connect-time snapshot. Cleared
      * first so a reconnect repopulates cleanly. */
-    quest_store_reset();
+    quest_progress_store_reset();
     message_parser_upsert_quest_array(cJSON_GetObjectItem(payload, "quests"));
 
     LOG_INFO("init_data parsed gridW=%d gridH=%d aoiRadius=%.1f entityDefaults=%d skills=%d",
@@ -620,7 +620,7 @@ static MessageType get_message_type(const cJSON* root) {
  * Shared by init_data (initial snapshot) and dlg_ack (live updates).
  * The server only sends authoritative data (code, status, progress);
  * metadata (title, description, rewards) is fetched asynchronously from
- * the engine REST endpoint /api/cyberia-quest/:code via quest_metadata_cache. */
+ * the engine REST endpoint /api/cyberia-quest/:code via quest_cache. */
 static void message_parser_upsert_quest_array(const cJSON* quests_json) {
     if (!quests_json || !cJSON_IsArray(quests_json)) return;
     const cJSON* q = NULL;
@@ -635,16 +635,16 @@ static void message_parser_upsert_quest_array(const cJSON* quests_json) {
         serial_get_string(q, "objectivesText", objectives, sizeof(objectives));
 
         /* Store authoritative data — title/description will be populated
-         * lazily by quest_metadata_cache when its REST fetch completes.
-         * Use an empty title as placeholder for the quest_store upsert. */
-        quest_store_upsert(code, "", "", status, active_step, objectives);
+         * lazily by quest_cache when its REST fetch completes.
+         * Use an empty title as placeholder for the quest_progress_store upsert. */
+        quest_progress_store_upsert(code, "", "", status, active_step, objectives);
 
         /* Kick off async metadata fetch from engine REST. */
-        quest_metadata_cache_fetch(code);
+        quest_cache_fetch(code);
     }
 }
 
-/* dlg_ack is notify-only: it updates the local quest_store from the affected
+/* dlg_ack is notify-only: it updates the local quest_progress_store from the affected
  * quest entries the server attached. questGranted / objectivesDone gate an
  * optional notification; no simulation state is touched here. */
 static int message_parser_parse_dlg_ack(const cJSON* json_root) {
@@ -670,11 +670,11 @@ static int message_parser_parse_dlg_ack(const cJSON* json_root) {
             if (code[0] == '\0') continue;
 
             /* Ensure metadata is cached for the journal + these notifications. */
-            quest_metadata_cache_fetch(code);
-            const QuestMetadataEntry* qm = quest_metadata_cache_get(code);
+            quest_cache_fetch(code);
+            const QuestMetadataEntry* qm = quest_cache_get(code);
             const char* disp = (qm && qm->title[0]) ? qm->title : code;
 
-            if (0 == strcmp(status, "completed") && !quest_store_is_completed(code)) {
+            if (0 == strcmp(status, "completed") && !quest_progress_store_is_completed(code)) {
                 if (qm && qm->reward_count > 0) {
                     char body[160];
                     snprintf(body, sizeof(body), "Reward: %dx %s",
@@ -692,7 +692,7 @@ static int message_parser_parse_dlg_ack(const cJSON* json_root) {
                 /* Notify only when a whole STEP completes — i.e. the active step
                  * advanced — not on every per-objective +1. The active step
                  * description changes exactly when the previous step finished. */
-                const QuestEntry* prev = quest_store_find(code);
+                const QuestProgressEntry* prev = quest_progress_store_find(code);
                 if (prev && QUEST_ACTIVE == prev->status && prev->active_step[0] != '\0' &&
                     0 != strcmp(prev->active_step, active_step)) {
                     char body[200];
