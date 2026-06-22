@@ -24,6 +24,3 @@
 !Dockerfile
 !.dockerignore
 !deployment.yaml
-!dev-server.sh
-!server.py
-!deploy.sh
