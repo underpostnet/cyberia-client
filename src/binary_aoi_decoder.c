@@ -401,6 +401,33 @@ static void decode_foreground_entity(BinReader* r, uint8_t flags) {
         r, fg->object_layers, MAX_OBJECT_LAYERS);
 }
 
+/* ── Static decorator decoder ──────────────────────────────────── */
+
+static void decode_static_entity(BinReader* r, uint8_t flags) {
+    GameState* gs = &g_game_state;
+    char id[MAX_ID_LENGTH];
+    br_id(r, id, sizeof(id));
+
+    float px = br_f32(r);
+    float py = br_f32(r);
+    float dw = br_f32(r);
+    float dh = br_f32(r);
+    br_u8(r); /* direction — unused for statics */
+    br_u8(r); /* mode      — unused for statics */
+
+    if (gs->static_count >= MAX_ENTITIES) { skip_item_ids(r); return; }
+    int idx = gs->static_count++;
+    WorldObject* st = &gs->statics[idx];
+    memset(st, 0, sizeof(WorldObject));
+    strncpy(st->id, id, MAX_ID_LENGTH - 1);
+    st->pos  = (Vector2){ px, py };
+    st->dims = (Vector2){ dw, dh };
+    st->type_kind = OBJECT_LAYER_TYPE_STATIC;
+    strncpy(st->type, "static", MAX_TYPE_LENGTH - 1);
+    st->object_layer_count = read_item_ids(
+        r, st->object_layers, MAX_OBJECT_LAYERS);
+}
+
 /* ── Resource entity decoder ───────────────────────────────────── */
 
 static void decode_resource_entity(BinReader* r, uint8_t flags) {
@@ -674,6 +701,7 @@ int binary_aoi_process(const uint8_t* data, size_t length) {
     gs->resource_count = 0;
     gs->obstacle_count = 0;
     gs->foreground_count = 0;
+    gs->static_count = 0;
     gs->portal_count = 0;
     gs->floor_count = 0;
 
@@ -698,6 +726,7 @@ int binary_aoi_process(const uint8_t* data, size_t length) {
             case BIN_ENTITY_PORTAL:     decode_portal_entity(&r, flags);     break;
             case BIN_ENTITY_FOREGROUND: decode_foreground_entity(&r, flags); break;
             case BIN_ENTITY_RESOURCE:   decode_resource_entity(&r, flags);   break;
+            case BIN_ENTITY_STATIC:     decode_static_entity(&r, flags);     break;
             default:
                 LOG_ERROR("[BINARY_AOI] Unknown entity type %d at offset %zu", etype, r.pos);
                 return -1;

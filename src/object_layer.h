@@ -44,6 +44,7 @@ typedef enum {
     OBJECT_LAYER_TYPE_WEAPON     = 7,
     OBJECT_LAYER_TYPE_ICON       = 8,
     OBJECT_LAYER_TYPE_OTHER      = 9,
+    OBJECT_LAYER_TYPE_STATIC     = 10,
 } ObjectLayerType;
 
 /**

@@ -49,6 +49,7 @@
 #define BIN_ENTITY_PORTAL      4
 #define BIN_ENTITY_FOREGROUND  5
 #define BIN_ENTITY_RESOURCE    6
+#define BIN_ENTITY_STATIC      7
 
 /* ── Flag bits ─────────────────────────────────────────────────── */
 #define BIN_FLAG_REMOVED       0x08

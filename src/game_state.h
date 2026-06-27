@@ -86,6 +86,12 @@ struct GameState {
     WorldObject foregrounds[MAX_OBJECTS];
     int foreground_count;
 
+    /* Static decorators — non-moving, passable; depth-sorted with entities.
+     * AOI-bounded like bots/resources, so sized MAX_ENTITIES (not MAX_OBJECTS,
+     * which is reserved for full-map-tiling objects like floors). */
+    WorldObject statics[MAX_ENTITIES];
+    int static_count;
+
     BotState resources[MAX_ENTITIES];
     int resource_count;
 

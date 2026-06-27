@@ -410,11 +410,13 @@ void game_render_foregrounds(void) {
     }
 }
 
-// Helper structure for depth sorting entities
-#define MAX_DEPTH_SORT_ENTRIES (MAX_OBJECTS + (MAX_ENTITIES * 3) + 1)
+// Helper structure for depth sorting entities.
+// Capacity covers obstacles (≤ MAX_OBJECTS) plus the main player, other players,
+// bots, resources, and statics (each ≤ MAX_ENTITIES).
+#define MAX_DEPTH_SORT_ENTRIES (MAX_OBJECTS + (MAX_ENTITIES * 4) + 1)
 
 typedef struct {
-    enum { ENTITY_TYPE_OBSTACLE, ENTITY_TYPE_PLAYER, ENTITY_TYPE_OTHER_PLAYER, ENTITY_TYPE_BOT, ENTITY_TYPE_RESOURCE } type;
+    enum { ENTITY_TYPE_OBSTACLE, ENTITY_TYPE_STATIC, ENTITY_TYPE_PLAYER, ENTITY_TYPE_OTHER_PLAYER, ENTITY_TYPE_BOT, ENTITY_TYPE_RESOURCE } type;
     float bottom_y;  // Y position of entity's bottom edge (for depth sorting)
     const char* sort_id;
     int source_order;
@@ -511,6 +513,21 @@ void game_render_entities(void) {
         entry_count++;
     }
 
+    // Add static decorators to sort list — passable, but share the same depth
+    // rules as entities so the player can pass behind / in front of them.
+    for (int i = 0; i < g_game_state.static_count; i++) {
+        WorldObject* st = &g_game_state.statics[i];
+        float bottom_y = st->pos.y + st->dims.y;
+
+        sort_entries[entry_count].type = ENTITY_TYPE_STATIC;
+        sort_entries[entry_count].bottom_y = bottom_y;
+        sort_entries[entry_count].sort_id = st->id;
+        sort_entries[entry_count].source_order = entry_count;
+        sort_entries[entry_count].data.object = st;
+        sort_entries[entry_count].is_main_player = false;
+        entry_count++;
+    }
+
     // Add main player to sort list
     float player_bottom_y = g_game_state.player.base.interp_pos.y + g_game_state.player.base.dims.y;
     sort_entries[entry_count].type = ENTITY_TYPE_PLAYER;
@@ -588,6 +605,13 @@ void game_render_entities(void) {
                 layers_count = obstacle->object_layer_count;
                 break;
 
+            case ENTITY_TYPE_STATIC:
+                obstacle = entry->data.object;
+                entity_type_str = "static";
+                entity_id = obstacle->id;
+                layers_count = obstacle->object_layer_count;
+                break;
+
             case ENTITY_TYPE_PLAYER:
                 entity_base = &entry->data.player->base;
                 entity_type_str = entry->is_main_player ? "self" : "other";
@@ -626,7 +650,10 @@ void game_render_entities(void) {
         }
 
         if (obstacle && entity_id) {
-            Color obstacle_color = presentation_runtime_palette("OBSTACLE");
+            // entity_type_str is "obstacle" or "static"; resolve the solid-colour
+            // fallback from the entity-colour table so each renders its own palette
+            // key when no object-layer texture is present.
+            Color obstacle_color = presentation_runtime_entity_fallback_color(entity_type_str);
 
             if (layers_count == 0) {
                 Rectangle rect = {

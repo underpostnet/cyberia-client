@@ -23,6 +23,7 @@ void game_state_reset(void) {
     g_game_state.resource_count       = 0;
     g_game_state.obstacle_count       = 0;
     g_game_state.foreground_count     = 0;
+    g_game_state.static_count         = 0;
     g_game_state.portal_count         = 0;
     g_game_state.floor_count          = 0;
     g_game_state.full_inventory_count = 0;
