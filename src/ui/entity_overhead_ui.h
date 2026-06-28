@@ -49,10 +49,9 @@
 #define EOHUD_ITEM_GAP          5
 
 /** Uniform icon sizes: presence (standalone, topmost), capability icon
- *  (slightly smaller), and the sum-of-stats circle (the standout). */
+ *  (slightly smaller), and the capability-row icons. */
 #define EOHUD_PRESENCE_SIZE     28
 #define EOHUD_CAP_ICON_SIZE     20
-#define EOHUD_STAT_DIAM         24
 
 /** Label font sizes (screen pixels). The sum-of-stats value is the largest. */
 #define EOHUD_NAME_FONT_SIZE    13

@@ -34,11 +34,7 @@ static const Color C_HP_FULL     = { 50, 220,  50, 240 };
 static const Color C_HP_LOW      = {230,  50,  40, 240 };
 static const Color C_HP_MID      = {200, 180,  30, 240 };
 
-/* Sum-of-stats circle fill — electric yellow. */
-static const Color C_STATS_FILL  = {255, 238,  10, 255 };
-
-/* Nameplate pill backdrop + the subtle border shared by the pill and the
- * sum-of-stats circle outline. */
+/* Nameplate pill backdrop + the subtle border. */
 static const Color C_PILL_BG     = {  4,   4,  12, 150 };
 static const Color C_PILL_BORDER = {120, 120, 120, 160 };
 
@@ -124,10 +120,9 @@ static void draw_nameplate(const char *name, float cx, float top_y) {
     draw_centered_label(name, cx, top_y, EOHUD_NAME_FONT_SIZE, C_NAME_TEXT, C_NAME_SHADOW);
 }
 
-/** Capability bar: the standardized pill holding a leading sum-of-stats circle
- *  then one icon per set interaction-capability bit (action, quest). The circle
- *  is the only element that stands out — gold fill, outline border, and a
- *  slightly larger, tightly-padded value. */
+/** Capability bar: a leading 'stats' icon followed by the outlined sum-of-stats
+ *  value (no fill — the strong glyph outline carries it), then one icon per set
+ *  interaction-capability bit (action, quest). */
 static void draw_capability_bar(float cx, float top_y, int stats_sum,
                                 uint8_t flags, float phase) {
     const char *icons[2];
@@ -137,21 +132,23 @@ static void draw_capability_bar(float cx, float top_y, int stats_sum,
     if (flags & INTERACTION_FLAG_QUEST)
         icons[icon_n++] = presentation_runtime_status_icon(STATUS_ICON_QUEST_PROVIDER);
 
-    float content_w = (float)EOHUD_STAT_DIAM
-                    + (float)icon_n * (EOHUD_ITEM_GAP + EOHUD_CAP_ICON_SIZE);
-    float row_cy = top_y + EOHUD_BAR_H * 0.5f;
-    float x = cx - content_w * 0.5f;
-
-    float r = EOHUD_STAT_DIAM * 0.5f;
-    DrawCircle((int)(x + r), (int)row_cy, r, C_STATS_FILL);
-    DrawCircleLines((int)(x + r), (int)row_cy, r, C_PILL_BORDER);
     char num[16];
     snprintf(num, sizeof(num), "%d", stats_sum);
     int fs = EOHUD_STATS_FONT_SIZE;
     int tw = MeasureText(num, fs);
-    int nx = (int)(x + r - tw * 0.5f);
+
+    float lead_w = (float)EOHUD_CAP_ICON_SIZE + (float)EOHUD_ITEM_GAP + (float)tw;
+    float content_w = lead_w + (float)icon_n * (EOHUD_ITEM_GAP + EOHUD_CAP_ICON_SIZE);
+    float row_cy = top_y + EOHUD_BAR_H * 0.5f;
+    float x = cx - content_w * 0.5f;
+
+    ui_icon_draw("stats", x + EOHUD_CAP_ICON_SIZE * 0.5f, row_cy,
+                 EOHUD_CAP_ICON_SIZE, false, phase);
+    x += EOHUD_CAP_ICON_SIZE + EOHUD_ITEM_GAP;
+
+    int nx = (int)x;
     int ny = (int)(row_cy - fs * 0.5f);
-    /* Solid, gapless outline: two concentric 8-direction rings (1px then 2px)
+    /* Strong, gapless outline: two concentric 8-direction rings (1px then 2px)
      * so the shadow abuts the glyph with no translucent gap, then the value. */
     for (int o = 1; o <= 2; o++)
         for (int dy = -1; dy <= 1; dy++)
@@ -159,7 +156,7 @@ static void draw_capability_bar(float cx, float top_y, int stats_sum,
                 if (dx || dy)
                     DrawText(num, nx + dx * o, ny + dy * o, fs, C_STAT_SHADOW);
     DrawText(num, nx, ny, fs, C_LABEL);
-    x += EOHUD_STAT_DIAM;
+    x += (float)tw;
 
     for (int i = 0; i < icon_n; i++) {
         x += EOHUD_ITEM_GAP;
