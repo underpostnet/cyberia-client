@@ -107,6 +107,24 @@ void dialogue_data_request(const char* item_id) {
     LOG_INFO("[DIALOGUE_DATA] Fetch started for '%s'", item_id);
 }
 
+void dialogue_data_request_code(const char* code) {
+    assert(code);
+    assert(strlen(code) > 0);
+    if (hash_table_get(&ht, code)) return; /* already in cache or in-flight */
+
+    DialogueDataSet* d = calloc(1, sizeof(DialogueDataSet));
+
+    strncpy(d->item_id, code, sizeof(d->item_id) - 1);
+    d->state = DLG_DATA_FETCHING;
+
+    hash_table_put(&ht, code, d);
+
+    char url[1024];
+    snprintf(url, sizeof(url), "/api/cyberia-dialogue/code/%s", code);
+    fetch_request_start(code, url, on_dialogue_fetched);
+    LOG_INFO("[DIALOGUE_DATA] Fetch started for code '%s'", code);
+}
+
 const DialogueDataSet* dialogue_data_get(const char* item_id) {
     assert(item_id);
     return hash_table_get(&ht, item_id);

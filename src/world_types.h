@@ -57,9 +57,10 @@ struct PlayerState {
     bool    has_tap_target;
 };
 
-/* Interaction capability bits (mirror cyberia-server entity_status.go). Each set
- * bit enables an overlay status icon and its interact-modal tab. The bit index
- * pairs with the capability status-icon ID (bit i ↔ status icon 8+i). */
+/* Interaction capability bits (mirror cyberia-server entity_status.go). The bit
+ * index pairs with the capability status-icon ID (bit i ↔ status icon 8+i). The
+ * quest bit also enables the interact-modal Quest tab; the action bit marks a
+ * pending action-talk-quest (overlay icon + quest-framed dialogue, no tab). */
 #define INTERACTION_FLAG_ACTION       (1u << 0)
 #define INTERACTION_FLAG_QUEST        (1u << 1)
 #define STATUS_ICON_ACTION_PROVIDER   8
@@ -75,6 +76,10 @@ struct BotState {
      * action metadata (label, dialogue map) by this code via REST.
      * Position-independent, so a wandering NPC keeps it. */
     char action_code[MAX_ID_LENGTH];
+    /* Per-player pending action-talk-quest dialogue code, "" when none. Non-empty
+     * means an active talk step this NPC advances; the interact modal shows this
+     * dialogue (quest-framed) in place of the default greeting. */
+    char action_dialog_code[MAX_ID_LENGTH];
     /* Per-player interaction capability bitmask (INTERACTION_FLAG_*). */
     uint8_t interaction_flags;
     /* Authoritative quest codes this NPC provides to the local player; metadata

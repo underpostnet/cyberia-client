@@ -60,6 +60,14 @@ void dialogue_data_cleanup(void);
 void dialogue_data_request(const char* item_id);
 
 /**
+ * @brief Request dialogue data by full dialogue code (e.g. a quest's talk
+ *        dialogue), fetching GET /api/cyberia-dialogue/code/<code> verbatim —
+ *        no "default-" prefix. Cached under `code`; look it up with
+ *        dialogue_data_get(code).
+ */
+void dialogue_data_request_code(const char* code);
+
+/**
  * @brief Look up cached dialogue data for an item ID.
  *
  * @return Pointer to cached data, or NULL if not yet requested.

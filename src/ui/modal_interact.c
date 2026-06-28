@@ -13,7 +13,6 @@
 #include "notification.h"
 #include "object_layer.h"
 #include "object_layers_management.h"
-#include "action_cache.h"
 #include "quest_progress_store.h"
 #include "quest_cache.h"
 #include "ui_button.h"
@@ -26,10 +25,10 @@
 
 /* ── Tabs ─────────────────────────────────────────────────────────────── */
 
-enum { MI_TAB_STACK = 0, MI_TAB_STATS, MI_TAB_ACTION, MI_TAB_QUEST, MI_TAB_COUNT };
+enum { MI_TAB_STACK = 0, MI_TAB_STATS, MI_TAB_QUEST, MI_TAB_COUNT };
 
-static const char* MI_TAB_ICON[MI_TAB_COUNT]  = { "stack", "stats", "hand", "quest" };
-static const char* MI_TAB_LABEL[MI_TAB_COUNT] = { "Stack", "Stats", "Action", "Quest" };
+static const char* MI_TAB_ICON[MI_TAB_COUNT]  = { "stack", "stats", "quest" };
+static const char* MI_TAB_LABEL[MI_TAB_COUNT] = { "Stack", "Stats", "Quest" };
 
 /* ── Module state ─────────────────────────────────────────────────────── */
 
@@ -42,13 +41,15 @@ static char  s_display_name[64] = {0};
 static char  s_dlg_item[128]    = {0};
 static bool  s_has_dialogue = false;
 /* Per-player interaction capability bitmask (INTERACTION_FLAG_*), from AOI.
- * The action bit enables the Action tab; the quest bit enables the Quest tab. */
+ * The action bit marks a pending action-talk-quest; the quest bit enables the
+ * Quest tab. */
 static uint8_t s_interaction_flags = 0;
 static Color s_border = { 80, 160, 220, 240 };
 
-/* The bot's action code (from AOI). The action metadata (label, dialogue map)
- * is fetched by code via REST. */
-static char  s_action_code[64] = {0};
+/* Per-player pending action-talk-quest dialogue code (from AOI), "" when none.
+ * When set, the paired dialogue shows this mapped dialogue (quest-framed) in
+ * place of the default greeting. */
+static char  s_action_dialog_code[64] = {0};
 
 /* Authoritative quest codes this NPC provides to the player (from AOI). The
  * Quest tab renders one mission card per code; metadata is fetched by code. */
@@ -106,6 +107,7 @@ typedef struct {
     char  entity_id[64];
     char  display_name[64];
     char  dlg_item[128];
+    char  action_dialog_code[64];
     bool  has_dialogue;
     uint8_t interaction_flags;
     Color border;
@@ -123,6 +125,7 @@ static void es_push(void) {
     strncpy(f->entity_id, s_entity_id, sizeof(f->entity_id) - 1);
     strncpy(f->display_name, s_display_name, sizeof(f->display_name) - 1);
     strncpy(f->dlg_item, s_dlg_item, sizeof(f->dlg_item) - 1);
+    strncpy(f->action_dialog_code, s_action_dialog_code, sizeof(f->action_dialog_code) - 1);
     f->has_dialogue       = s_has_dialogue;
     f->interaction_flags  = s_interaction_flags;
     f->border             = s_border;
@@ -140,6 +143,7 @@ static void es_pop(void) {
     strncpy(s_entity_id, f->entity_id, sizeof(s_entity_id) - 1);
     strncpy(s_display_name, f->display_name, sizeof(s_display_name) - 1);
     strncpy(s_dlg_item, f->dlg_item, sizeof(s_dlg_item) - 1);
+    strncpy(s_action_dialog_code, f->action_dialog_code, sizeof(s_action_dialog_code) - 1);
     s_has_dialogue       = f->has_dialogue;
     s_interaction_flags  = f->interaction_flags;
     s_border             = f->border;
@@ -189,21 +193,11 @@ static const Color C_DESC_TEXT  = { 170, 180, 200, 220 };
 
 /* ── Capability tabs ─────────────────────────────────────────────────── */
 
-/* Each tab is gated by the server's per-player interaction bitmask: Stack and
- * Stats always show; Action and Quest appear only when their capability bit is
- * set. The quest codes the Quest tab renders are sent authoritatively over AOI. */
-static bool action_tab_visible(void) {
-    return (s_interaction_flags & INTERACTION_FLAG_ACTION) != 0;
-}
-
+/* Stack and Stats always show; Quest appears only when the server sets the quest
+ * capability bit. There is no Action tab: a pending action-talk-quest needs no
+ * tab — the player just taps the paired modal dialogue to advance it. */
 static bool quest_tab_visible(void) {
     return (s_interaction_flags & INTERACTION_FLAG_QUEST) != 0;
-}
-
-/* The paired dialogue renders its quest icon + yellow frame when this NPC offers
- * or advances a quest for the player. */
-static bool quest_dialogue_relevant(void) {
-    return quest_tab_visible();
 }
 
 /* Fill `out` with the visible tab IDs in strip order; returns the count. */
@@ -211,7 +205,6 @@ static int visible_tabs(int out[MI_TAB_COUNT]) {
     int n = 0;
     out[n++] = MI_TAB_STACK;
     out[n++] = MI_TAB_STATS;
-    if (action_tab_visible()) out[n++] = MI_TAB_ACTION;
     if (quest_tab_visible())  out[n++] = MI_TAB_QUEST;
     return n;
 }
@@ -300,19 +293,37 @@ static Stats stack_stats(void) {
     return t;
 }
 
-/* Open the paired dialogue (bottom half). The client fetches dialogue at
- * /code/default-<itemId>, so the reported group is "default-<skin>". */
+/* The active dialogue key: a pending action-talk-quest dialogue code (shown
+ * quest-framed in place of the greeting) when present, else the skin greeting. */
+static const char* active_dlg_key(void) {
+    return s_action_dialog_code[0] != '\0' ? s_action_dialog_code : s_dlg_item;
+}
+
+/* Open the paired dialogue (bottom half). A pending action-talk-quest shows its
+ * mapped dialogue by full code; otherwise the entity's "default-<skin>" greeting.
+ * The server validates talk objectives by the NPC's skin, not this code, so the
+ * code is reported on dlg_complete only for traceability. */
 static void open_dialogue(const DialogueLine* lines, int count) {
-    /* The server validates talk objectives by the NPC's skin, not the dialogue
-     * code, so the greeting group is reported on dlg_complete. */
     char code[96];
-    snprintf(code, sizeof(code), "default-%s", s_dlg_item);
+    if (s_action_dialog_code[0] != '\0')
+        snprintf(code, sizeof(code), "%s", s_action_dialog_code);
+    else
+        snprintf(code, sizeof(code), "default-%s", s_dlg_item);
     modal_dialogue_open(s_entity_id, s_dlg_item, code,
                         MODAL_DIALOGUE_RENDER_ENTITY, lines, count);
-    /* Yellow quest frame only when this dialogue actually matters for a mission
-     * — an acceptable offer or an active quest-talk step — not for every NPC. */
-    modal_dialogue_set_quest_style(quest_dialogue_relevant());
+    /* Yellow quest frame only for a pending action-talk-quest — not for every NPC
+     * and not merely because the NPC offers a quest. */
+    modal_dialogue_set_quest_style(s_action_dialog_code[0] != '\0');
     s_dialogue_opened = true;
+}
+
+/* Kick off the fetch for the active dialogue (pending quest dialogue by code, or
+ * the skin greeting). Render-only when the skin has no greeting and there is no
+ * pending dialogue. */
+static void request_active_dialogue(void) {
+    if (s_action_dialog_code[0] != '\0') dialogue_data_request_code(s_action_dialog_code);
+    else if (s_has_dialogue)             dialogue_data_request(s_dlg_item);
+    else                                 open_dialogue(NULL, 0);
 }
 
 static void open_overlay(int tab) {
@@ -332,11 +343,10 @@ static void modal_interact_reopen(void) {
     s_dialogue_opened  = false;
     s_overlay_open     = false;
 
-    /* The paired dialogue always appears alongside this modal. When the skin
-     * has a default dialogue, open with its text (resolved async in update);
-     * otherwise open render-only right away. */
-    if (s_has_dialogue) dialogue_data_request(s_dlg_item);
-    else                open_dialogue(NULL, 0);
+    /* The paired dialogue always appears alongside this modal; its key (pending
+     * quest dialogue or skin greeting) was restored by es_pop. Text resolves async
+     * in update; render-only opens right away. */
+    request_active_dialogue();
 
     LOG_INFO("[MODAL_INTERACT] Reopen from ephemeral session: entity=%s layers=%d\n",
              s_entity_id, s_cached_layer_count);
@@ -399,27 +409,18 @@ void modal_interact_open(const char* entity_id, const char* display_name,
         snapshot_alive_layers();
     }
 
-    /* The paired dialogue always appears alongside this modal. When the skin
-     * has a default dialogue, open with its text (resolved async in update);
-     * otherwise open render-only right away. */
-    if (s_has_dialogue) dialogue_data_request(s_dlg_item);
-    else                open_dialogue(NULL, 0);
-
-    /* The bot carries, per player, its action code, capability bitmask, and the
-     * authoritative quest codes it provides. Fetch the action metadata (label)
-     * and each quest's metadata by code so the tabs can render; the capability
-     * bits gate which tabs appear. */
-    s_action_code[0]   = '\0';
+    /* The bot carries, per player, the capability bitmask, the authoritative quest
+     * codes it provides, and any pending action-talk-quest dialogue code. Read
+     * these BEFORE requesting the dialogue, since the pending code decides which
+     * dialogue (and frame style) the paired panel opens. */
+    s_action_dialog_code[0] = '\0';
     s_quest_code_count = 0;
     {
         const BotState* bot = game_state_find_bot(s_entity_id);
         if (bot) {
             s_interaction_flags = bot->interaction_flags;
-            if (bot->action_code[0] != '\0') {
-                strncpy(s_action_code, bot->action_code, sizeof(s_action_code) - 1);
-                s_action_code[sizeof(s_action_code) - 1] = '\0';
-                action_cache_fetch(s_action_code);
-            }
+            strncpy(s_action_dialog_code, bot->action_dialog_code, sizeof(s_action_dialog_code) - 1);
+            s_action_dialog_code[sizeof(s_action_dialog_code) - 1] = '\0';
             for (int i = 0; i < bot->quest_code_count && i < BOT_QUEST_CODES_MAX; i++) {
                 strncpy(s_quest_codes[s_quest_code_count], bot->quest_codes[i], 63);
                 s_quest_codes[s_quest_code_count][63] = '\0';
@@ -428,6 +429,11 @@ void modal_interact_open(const char* entity_id, const char* display_name,
             }
         }
     }
+
+    /* The paired dialogue always appears alongside this modal: a pending quest
+     * dialogue (quest-framed) when present, else the skin greeting, else
+     * render-only. Text resolves async in update. */
+    request_active_dialogue();
 
     /* The dialogue modal (paired with this interact modal) already sends its own
      * dlg_start on open and dlg_complete/cancel on finish — it owns the freeze/
@@ -462,7 +468,7 @@ void modal_interact_update(float dt) {
     for (int i = 0; i < MI_QUEST_MAX; i++) ui_toggle_update(&s_q_toggle[i], dt);
 
     if (!s_dialogue_opened) {
-        const DialogueDataSet* d = dialogue_data_get(s_dlg_item);
+        const DialogueDataSet* d = dialogue_data_get(active_dlg_key());
         if (d && d->state == DLG_DATA_READY && d->line_count > 0) {
             open_dialogue(d->lines, d->line_count);
         } else if (d && (d->state == DLG_DATA_EMPTY || d->state == DLG_DATA_ERROR)) {
@@ -645,23 +651,6 @@ static void draw_quest_tab(Rectangle content, int mx, int my) {
     }
 }
 
-/* Action tab: the cyberia-action this NPC exposes. Talk is always available
- * (its dialogue fills the paired bottom panel); shop/craft/storage surface here
- * as the action gains those capabilities. */
-static void draw_action_tab(Rectangle content) {
-    const ActionMetadataEntry* am = action_cache_get(s_action_code);
-    float y = content.y + 4.0f;
-    if (!am || ACTION_CACHE_READY != am->state) {
-        DrawText("Loading...", (int)content.x, (int)y, MI_FONT_QUEST, C_LABEL);
-        return;
-    }
-    DrawText("Actions", (int)content.x, (int)y, MI_FONT_LABEL, C_REW_LABEL);
-    y += MI_FONT_LABEL + 6;
-    char line[128];
-    snprintf(line, sizeof(line), "Talk to %s", am->label[0] != '\0' ? am->label : s_display_name);
-    DrawText(line, (int)content.x, (int)y, MI_FONT_QUEST, C_TEXT);
-}
-
 /* ── Draw ─────────────────────────────────────────────────────────────── */
 
 void modal_interact_draw(void) {
@@ -725,7 +714,6 @@ void modal_interact_draw(void) {
 
     if (s_tab == MI_TAB_STACK)       draw_stack_tab(content);
     else if (s_tab == MI_TAB_STATS)  draw_stats_tab(content);
-    else if (s_tab == MI_TAB_ACTION) draw_action_tab(content);
     else if (s_tab == MI_TAB_QUEST)  draw_quest_tab(content, mx, my);
 
     /* Fixed bottom bar with integration buttons (right-aligned). No background

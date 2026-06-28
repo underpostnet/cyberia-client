@@ -289,6 +289,7 @@ static void decode_bot_entity(BinReader* r, uint8_t flags) {
             memcpy(b->quest_codes[b->quest_code_count++], code, MAX_ID_LENGTH);
         }
     }
+    br_string(r, b->action_dialog_code, MAX_ID_LENGTH); /* pending talk-quest dialogue */
 }
 
 static void decode_floor_entity(BinReader* r, uint8_t flags) {
