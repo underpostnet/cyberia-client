@@ -25,10 +25,10 @@ RUN dnf module install -y nodejs:24/common && \
 WORKDIR /opt/cyberia-client
 
 COPY --from=builder /cyberia-client/bin .
-COPY --from=builder /cyberia-client/server.py ./server.py
+COPY --from=builder /cyberia-client/docker-driver.py ./docker-driver.py
 
 ENV PYTHONUNBUFFERED=1
 
 EXPOSE 8081
 
-CMD ["python3", "server.py", "RELEASE", "8081", "bin"]
+CMD ["python3", "docker-driver.py", "8081"]

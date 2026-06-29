@@ -32,7 +32,7 @@ spec:
             - /bin/sh
             - -c
             - >
-              set -a && . /home/dd/engine/engine-private/conf/dd-cyberia/instances/mmo-client/env/production.env && set +a && exec python3 /home/dd/engine/cyberia-client/server.py 8081 /home/dd/engine/cyberia-client/bin production
+              set -a && . /home/dd/engine/engine-private/conf/dd-cyberia/instances/mmo-client/env/production.env && set +a && exec python3 /home/dd/engine/cyberia-client/docker-driver.py 8081 /home/dd/engine/cyberia-client/bin
           readinessProbe:
             {
               "tcpSocket": {
@@ -76,17 +76,17 @@ spec:
             }
 
 
-    
+
           volumeMounts:
             - name: instance-cyberia-client-dd-cyberia-mmo-client-production-blue
               mountPath: /home/dd/engine/engine-private/conf/dd-cyberia/instances/mmo-client/env
-    
+
       volumes:
         - name: instance-cyberia-client-dd-cyberia-mmo-client-production-blue
           persistentVolumeClaim:
             claimName: instance-cyberia-client-dd-cyberia-mmo-client-production-blue
-    
-      
+
+
 ---
 apiVersion: v1
 kind: Service
