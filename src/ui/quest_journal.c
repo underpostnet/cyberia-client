@@ -90,38 +90,7 @@ static void ensure_init(void) {
     s_init = true;
 }
 
-/* Draw (or just measure when draw==false) `text` word-wrapped within maxw.
- * Returns the pixel height consumed. */
-static int wrap_block(bool draw, const char* text, int x, int y, int maxw, int font, Color col) {
-    if (!text || text[0] == '\0') return 0;
-    char buf[512];
-    strncpy(buf, text, sizeof(buf) - 1);
-    buf[sizeof(buf) - 1] = '\0';
-
-    char line[512] = { 0 }, test[512];
-    int cy = y;
-    char* tok = strtok(buf, " ");
-    while (tok) {
-        if (line[0] == '\0') snprintf(test, sizeof(test), "%s", tok);
-        else                 snprintf(test, sizeof(test), "%s %s", line, tok);
-        if (MeasureText(test, font) > maxw && line[0] != '\0') {
-            if (draw) DrawText(line, x, cy, font, col);
-            cy += font + 3;
-            snprintf(line, sizeof(line), "%s", tok);
-        } else {
-            snprintf(line, sizeof(line), "%s", test);
-        }
-        tok = strtok(NULL, " ");
-    }
-    if (line[0] != '\0') {
-        if (draw) DrawText(line, x, cy, font, col);
-        cy += font + 3;
-    }
-    return cy - y;
-}
-
-/* Render (or measure) one quest's expanded detail: wrapped description plus the
- * Render (or measure) one quest as a single flat card — no nested expand:
+/* Render (or measure) one quest as a single flat card — no nested expand:
  * a status dot, the prominent quest name, then either the active step +
  * objectives (active) or a one-word status (Completed / Abandoned). Everything
  * wraps to the card width. Returns the card's pixel height. */
@@ -134,15 +103,15 @@ static int quest_card_layout(bool draw, const QuestProgressEntry* e, QuestStatus
     if (draw) {
         DrawCircle(x + QJ_CARD_PAD + 4, cy + QJ_FONT_NAME / 2, 4.0f, C_STATUS[sec]);
     }
-    cy += wrap_block(draw, name, tx, cy, tw, QJ_FONT_NAME, C_TEXT);
+    cy += text_wrap(name, tx, cy, tw, QJ_FONT_NAME, C_TEXT, false, draw);
     cy += 2;
 
     if (QUEST_ACTIVE == sec) {
-        cy += wrap_block(draw, e->active_step, tx, cy, tw, QJ_FONT_SMALL, C_STEP);
-        cy += wrap_block(draw, e->objectives, tx, cy, tw, QJ_FONT_SMALL, C_DIM);
+        cy += text_wrap(e->active_step, tx, cy, tw, QJ_FONT_SMALL, C_STEP, false, draw);
+        cy += text_wrap(e->objectives, tx, cy, tw, QJ_FONT_SMALL, C_DIM, false, draw);
     } else {
         const char* status = (QUEST_COMPLETED == sec) ? "Completed" : "Abandoned";
-        cy += wrap_block(draw, status, tx, cy, tw, QJ_FONT_SMALL, C_STATUS[sec]);
+        cy += text_wrap(status, tx, cy, tw, QJ_FONT_SMALL, C_STATUS[sec], false, draw);
     }
     return (cy - y) + QJ_CARD_PAD;
 }
@@ -162,22 +131,19 @@ static bool journal_walk(int mode, int mx, int my) {
     float w = panel.width;
     float y = panel.y;
 
-    Rectangle header = { x, y, w, QJ_HEADER_H };
-    Rectangle ptoggle = { x + w - QJ_CHEVRON - 6, y + (QJ_HEADER_H - QJ_CHEVRON) / 2,
-                          QJ_CHEVRON, QJ_CHEVRON };
-    ui_toggle_set_anchor(&s_panel, ptoggle);
-
+    float header_h = ui_toggle_header(&s_panel, x, y, w, "Quest Journal", QJ_FONT_TITLE,
+                                      C_TEXT, UI_TOGGLE_HEADER_RIGHT, 0.0f, 0.0f, false);
+    Rectangle header = { x, y, w, header_h };
     if (JW_DRAW == mode) {
         DrawRectangleRec(header, C_HEADER);
-        DrawText("Quest Journal", (int)(x + 8), (int)(y + (QJ_HEADER_H - QJ_FONT_TITLE) / 2),
-                 QJ_FONT_TITLE, C_TEXT);
-        ui_toggle_draw(&s_panel);
+        ui_toggle_header(&s_panel, x, y, w, "Quest Journal", QJ_FONT_TITLE,
+                         C_TEXT, UI_TOGGLE_HEADER_RIGHT, 0.0f, 0.0f, true);
     } else if (JW_CLICK == mode && hit(mx, my, header)) {
         s_panel.expanded = !s_panel.expanded; /* tap anywhere on header */
         return true;
     }
 
-    y += QJ_HEADER_H;
+    y += header_h;
 
     if (!s_panel.expanded) {
         s_panel_h = y - panel.y;
@@ -187,22 +153,17 @@ static bool journal_walk(int mode, int mx, int my) {
     for (int sec = 0; sec < QUEST_STATUS_COUNT; ++sec) {
         int count = quest_progress_store_count((QuestStatus)sec);
 
-        Rectangle srow = { x, y, w, QJ_SECTION_H };
-        Rectangle schev = { x + 6, y + (QJ_SECTION_H - QJ_CHEVRON) / 2, QJ_CHEVRON, QJ_CHEVRON };
-        ui_toggle_set_anchor(&s_section[sec], schev);
-
-        if (JW_DRAW == mode) {
-            ui_toggle_draw(&s_section[sec]);
-            char label[64];
-            snprintf(label, sizeof(label), "%s (%d)", C_SECTION_LABEL[sec], count);
-            DrawText(label, (int)(x + 6 + QJ_CHEVRON + 6),
-                     (int)(y + (QJ_SECTION_H - QJ_FONT_SECTION) / 2),
-                     QJ_FONT_SECTION, count > 0 ? C_TEXT : C_DIM);
-        } else if (JW_CLICK == mode && hit(mx, my, srow)) {
+        char label[64];
+        snprintf(label, sizeof(label), "%s (%d)", C_SECTION_LABEL[sec], count);
+        float srow_h = ui_toggle_header(&s_section[sec], x, y, w, label, QJ_FONT_SECTION,
+                                        count > 0 ? C_TEXT : C_DIM, UI_TOGGLE_HEADER_LEFT,
+                                        0.0f, 0.0f, JW_DRAW == mode);
+        Rectangle srow = { x, y, w, srow_h };
+        if (JW_CLICK == mode && hit(mx, my, srow)) {
             s_section[sec].expanded = !s_section[sec].expanded;
             return true;
         }
-        y += QJ_SECTION_H;
+        y += srow_h;
 
         if (!s_section[sec].expanded) continue;
 

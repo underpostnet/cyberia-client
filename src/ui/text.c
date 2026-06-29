@@ -98,3 +98,48 @@ int text_measure_compat(const char *text, int size) {
     float spacing = (float)((int)fs / 10);
     return (int)MeasureTextEx(text_active_font(), text, fs, spacing).x;
 }
+
+#define TEXT_LINE_GAP 3
+
+int text_line_height(int size) {
+    int fs = (int)((float)size * s_factor);
+    if (fs < 1) fs = 1;
+    return fs + TEXT_LINE_GAP;
+}
+
+int text_wrap(const char *text, int x, int y, int maxw, int size, Color col, bool center, bool draw) {
+    if (NULL == text || '\0' == text[0]) return 0;
+    char buf[512];
+    strncpy(buf, text, sizeof(buf) - 1);
+    buf[sizeof(buf) - 1] = '\0';
+
+    int line_h = text_line_height(size);
+    int cy = y;
+    char line[512] = { 0 };
+    char test[512];
+
+    char *tok = strtok(buf, " ");
+    while (tok) {
+        if ('\0' == line[0]) snprintf(test, sizeof(test), "%s", tok);
+        else                 snprintf(test, sizeof(test), "%s %s", line, tok);
+        if (text_measure_compat(test, size) > maxw && '\0' != line[0]) {
+            if (draw) {
+                int lx = center ? x + (maxw - text_measure_compat(line, size)) / 2 : x;
+                text_draw_compat(line, lx, cy, size, col);
+            }
+            cy += line_h;
+            snprintf(line, sizeof(line), "%s", tok);
+        } else {
+            snprintf(line, sizeof(line), "%s", test);
+        }
+        tok = strtok(NULL, " ");
+    }
+    if ('\0' != line[0]) {
+        if (draw) {
+            int lx = center ? x + (maxw - text_measure_compat(line, size)) / 2 : x;
+            text_draw_compat(line, lx, cy, size, col);
+        }
+        cy += line_h;
+    }
+    return cy - y;
+}

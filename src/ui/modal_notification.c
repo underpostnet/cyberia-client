@@ -27,13 +27,16 @@
 #include <string.h>
 
 #define MN_W          360
-#define MN_H          168
 #define MN_FONT_TITLE 19
 #define MN_FONT_BODY  13
 #define MN_SLOT       48
 #define MN_OK_W       96
 #define MN_OK_H       34
 #define MN_QUEUE_CAP  16
+#define MN_PAD        18   /* inner horizontal padding (text wrap margin)  */
+#define MN_TOP        16   /* top padding above the title                  */
+#define MN_GAP        10   /* vertical gap between content blocks          */
+#define MN_BOT        12   /* bottom padding below the OK button           */
 
 /* ── Queued notification entry ────────────────────────────────────────── */
 typedef struct {
@@ -117,11 +120,32 @@ void modal_notification_show_reward(const char* title, const char* message, Colo
     push_queue(title, message, accent, reward_item_id, reward_quantity);
 }
 
+/* Inner content width available for wrapped title / message text. */
+static int notif_inner_w(void) { return MN_W - 2 * MN_PAD; }
+
+/* Card height derived from the wrapped content so text never overflows and the
+ * card grows with longer messages (and the active font size / family). */
+static float notif_content_height(void) {
+    int iw = notif_inner_w();
+    float h = MN_TOP;
+    h += (float)text_wrap(s_title, 0, 0, iw, MN_FONT_TITLE, C_TITLE, true, false);
+    if (s_message[0] != '\0') {
+        h += MN_GAP + (float)text_wrap(s_message, 0, 0, iw, MN_FONT_BODY, C_BODY, true, false);
+    }
+    if (s_reward_item[0] != '\0') {
+        h += MN_GAP + MN_SLOT;
+    }
+    h += MN_GAP + MN_OK_H + MN_BOT;
+    return h;
+}
+
 /* Screen-centred card. The notification stays until the player taps OK, so the
- * geometry is static (no slide/fade) and shared by draw + hit-test. */
+ * geometry is static (no slide/fade) and shared by draw + hit-test; its height is
+ * content-driven (see notif_content_height). */
 static Rectangle notif_card(void) {
     int sw = GetScreenWidth(), sh = GetScreenHeight();
-    return (Rectangle){ (sw - MN_W) / 2.0f, (sh - MN_H) / 2.0f, MN_W, MN_H };
+    float h = notif_content_height();
+    return (Rectangle){ (sw - MN_W) / 2.0f, (sh - h) / 2.0f, MN_W, h };
 }
 
 static Rectangle notif_ok(Rectangle card) {
@@ -154,20 +178,22 @@ void modal_notification_draw(void) {
     Color title = C_TITLE; title.a = (unsigned char)(title.a * a);
     Color body  = C_BODY;  body.a  = (unsigned char)(body.a * a);
 
-    /* Title — centred. */
-    int tw = MeasureText(s_title, MN_FONT_TITLE);
-    DrawText(s_title, (int)(card.x + (card.width - tw) / 2), (int)(card.y + 16), MN_FONT_TITLE, title);
+    int   ix = (int)(card.x + MN_PAD);
+    int   iw = notif_inner_w();
 
-    /* Message — centred. */
-    float cy = card.y + 16 + MN_FONT_TITLE + 10;
+    /* Title — wrapped + centred. */
+    float cy = card.y + MN_TOP;
+    cy += (float)text_wrap(s_title, ix, (int)cy, iw, MN_FONT_TITLE, title, true, true);
+
+    /* Message — wrapped + centred. */
     if (s_message[0] != '\0') {
-        int mw = MeasureText(s_message, MN_FONT_BODY);
-        DrawText(s_message, (int)(card.x + (card.width - mw) / 2), (int)cy, MN_FONT_BODY, body);
-        cy += MN_FONT_BODY + 10;
+        cy += MN_GAP;
+        cy += (float)text_wrap(s_message, ix, (int)cy, iw, MN_FONT_BODY, body, true, true);
     }
 
     /* Reward item slot — centred. */
     if (s_reward_item[0] != '\0') {
+        cy += MN_GAP;
         Rectangle slot = { card.x + (card.width - MN_SLOT) / 2.0f, cy, MN_SLOT, MN_SLOT };
         ObjectLayerState ol = { 0 };
         strncpy(ol.item_id, s_reward_item, sizeof(ol.item_id) - 1);

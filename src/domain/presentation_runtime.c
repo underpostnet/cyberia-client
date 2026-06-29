@@ -73,7 +73,7 @@ static struct {
     .default_obj_width  = 1.0f,
     .default_obj_height = 1.0f,
     .dev_ui             = false,
-    .font_family        = "VT323-Regular.ttf",
+    .font_family        = "",
     .font_factor_size   = 1.0f,
 };
 

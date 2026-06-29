@@ -510,30 +510,6 @@ static void draw_stats_tab(Rectangle content) {
 
 /* ── Quest tab: show the entity's active-quest description + rewards ──── */
 
-/* Word-wrap helper for card bodies; returns the y after drawing. */
-static float mi_wrap(const char* text, float x, float y, int maxw, int font, Color col) {
-    if (!text || text[0] == '\0') return y;
-    char buf[512];
-    strncpy(buf, text, sizeof(buf) - 1);
-    buf[sizeof(buf) - 1] = '\0';
-    char line[512] = { 0 }, test[512];
-    char* tok = strtok(buf, " ");
-    while (tok) {
-        if (line[0] == '\0') snprintf(test, sizeof(test), "%s", tok);
-        else                 snprintf(test, sizeof(test), "%s %s", line, tok);
-        if (MeasureText(test, font) > maxw && line[0] != '\0') {
-            DrawText(line, (int)x, (int)y, font, col);
-            y += font + 2;
-            snprintf(line, sizeof(line), "%s", tok);
-        } else {
-            snprintf(line, sizeof(line), "%s", test);
-        }
-        tok = strtok(NULL, " ");
-    }
-    if (line[0] != '\0') { DrawText(line, (int)x, (int)y, font, col); y += font + 2; }
-    return y;
-}
-
 /* One collapsible mission card. Advances *y; records the per-card primary
  * button (Accept / Abandon) so the click handler can act on it. */
 static void draw_quest_card(int slot, const char* code, Rectangle content,
@@ -563,16 +539,20 @@ static void draw_quest_card(int slot, const char* code, Rectangle content,
 
     UIToggle* tg = &s_q_toggle[slot];
     float hx = content.x, hw = content.width;
-    Rectangle header = { hx, *y, hw, 26.0f };
-    s_q_header[slot] = header;
-    ui_toggle_set_anchor(tg, (Rectangle){ hx + 4, *y + 4, 18, 18 });
-    DrawRectangleRounded(header, 0.18f, 4, (Color){ 30, 34, 52, 205 });
-    ui_toggle_draw(tg);
-    DrawCircle((int)(hx + 30), (int)(*y + 13), 3.5f, statusc);
-    DrawText(title, (int)(hx + 40), (int)(*y + (26 - MI_FONT_QUEST) / 2), MI_FONT_QUEST, C_TEXT);
+    /* Centralized dynamic-height header: chevron + wrapped title, with the status
+     * word reserved on the right so the title never overflows into it. */
     int sww = MeasureText(statusw, MI_FONT_REW);
-    DrawText(statusw, (int)(hx + hw - sww - 8), (int)(*y + (26 - MI_FONT_REW) / 2), MI_FONT_REW, statusc);
-    *y += 26 + 4;
+    float reserve_right = (float)sww + 12.0f;
+    float header_h = ui_toggle_header(tg, hx, *y, hw, title, MI_FONT_QUEST, C_TEXT,
+                                      UI_TOGGLE_HEADER_LEFT, 0.0f, reserve_right, false);
+    Rectangle header = { hx, *y, hw, header_h };
+    s_q_header[slot] = header;
+    DrawRectangleRounded(header, 0.18f, 4, (Color){ 30, 34, 52, 205 });
+    ui_toggle_header(tg, hx, *y, hw, title, MI_FONT_QUEST, C_TEXT,
+                     UI_TOGGLE_HEADER_LEFT, 0.0f, reserve_right, true);
+    DrawText(statusw, (int)(hx + hw - sww - 8),
+             (int)(*y + (header_h - text_line_height(MI_FONT_REW)) / 2), MI_FONT_REW, statusc);
+    *y += header_h + 4;
 
     s_q_btn_kind[slot] = 0;
     if (!tg->expanded) { *y += 2; return; }
@@ -581,7 +561,7 @@ static void draw_quest_card(int slot, const char* code, Rectangle content,
     int   iw = (int)(hw - 24);
 
     if (qm && QUEST_CACHE_READY == qm->state) {
-        *y = mi_wrap(qm->description, ix, *y, iw, MI_FONT_DESC, C_DESC_TEXT);
+        *y += text_wrap(qm->description, (int)ix, (int)*y, iw, MI_FONT_DESC, C_DESC_TEXT, false, true);
         *y += 4;
         if (qm->reward_count > 0) {
             DrawText("Reward:", (int)ix, (int)*y, MI_FONT_REW, C_REW_LABEL);

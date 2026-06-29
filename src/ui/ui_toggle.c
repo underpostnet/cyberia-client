@@ -1,7 +1,13 @@
 #include "ui_toggle.h"
 #include "ui_button.h"
+#include "text.h"
 
 #define UI_TOGGLE_ANIM_SPEED 6.667f /* ~150 ms 0..1 */
+
+/* Header row geometry — uniform across every collapsible list. */
+#define UI_TOGGLE_HDR_CHEVRON 22.0f
+#define UI_TOGGLE_HDR_GAP      6.0f
+#define UI_TOGGLE_HDR_VPAD     6.0f
 
 void ui_toggle_init(UIToggle* t, Rectangle anchor, bool initial_expanded,
                     UIToggleChevron chevron) {
@@ -62,4 +68,30 @@ bool ui_toggle_handle_click(UIToggle* t, int mx, int my) {
     }
     t->expanded = !t->expanded;
     return true;
+}
+
+float ui_toggle_header(UIToggle* t, float x, float y, float width,
+                       const char* label, int font, Color text_col,
+                       UIToggleHeaderSide side, float reserve_left, float reserve_right, bool draw) {
+    const float chev = UI_TOGGLE_HDR_CHEVRON;
+
+    float text_w = width - chev - UI_TOGGLE_HDR_GAP - reserve_left - reserve_right;
+    if (text_w < 8.0f) text_w = 8.0f;
+
+    float text_h = (float)text_wrap(label, 0, 0, (int)text_w, font, text_col, false, false);
+    float content_h = text_h > chev ? text_h : chev;
+    float row_h = content_h + 2.0f * UI_TOGGLE_HDR_VPAD;
+
+    if (draw) {
+        float chev_x = (UI_TOGGLE_HEADER_LEFT == side) ? x : (x + width - chev);
+        ui_toggle_set_anchor(t, (Rectangle){ chev_x, y + (row_h - chev) / 2.0f, chev, chev });
+        ui_toggle_draw(t);
+
+        float text_x = (UI_TOGGLE_HEADER_LEFT == side)
+                     ? (x + chev + UI_TOGGLE_HDR_GAP + reserve_left)
+                     : (x + reserve_left);
+        float text_y = y + (row_h - text_h) / 2.0f;
+        text_wrap(label, (int)text_x, (int)text_y, (int)text_w, font, text_col, false, true);
+    }
+    return row_h;
 }
