@@ -63,6 +63,8 @@ static struct {
     float            default_obj_width;
     float            default_obj_height;
     bool             dev_ui;
+    char             font_family[128];
+    float            font_factor_size;
 } g_rt = {
     .cell_size          = 45.0f,
     .camera_zoom        = 1.0f,
@@ -71,6 +73,8 @@ static struct {
     .default_obj_width  = 1.0f,
     .default_obj_height = 1.0f,
     .dev_ui             = false,
+    .font_family        = "VT323-Regular.ttf",
+    .font_factor_size   = 1.0f,
 };
 
 /* ── JSON parsing helpers ──────────────────────────────────────────── */
@@ -161,6 +165,14 @@ static void parse_response(const char* body, int len) {
     if ((n = cJSON_GetObjectItem(data, "defaultObjHeight")) && cJSON_IsNumber(n))   g_rt.default_obj_height = (float)n->valuedouble;
     if ((n = cJSON_GetObjectItem(data, "devUi")) && cJSON_IsBool(n))                g_rt.dev_ui = cJSON_IsTrue(n);
 
+    /* Main UI font (text.c fetches assets/fonts/<fontFamily> and applies the factor). */
+    cJSON* ff = cJSON_GetObjectItem(data, "fontFamily");
+    if (ff && cJSON_IsString(ff) && ff->valuestring[0] != '\0') {
+        strncpy(g_rt.font_family, ff->valuestring, sizeof(g_rt.font_family) - 1);
+        g_rt.font_family[sizeof(g_rt.font_family) - 1] = '\0';
+    }
+    if ((n = cJSON_GetObjectItem(data, "fontFactorSize")) && cJSON_IsNumber(n))     g_rt.font_factor_size = (float)n->valuedouble;
+
     cJSON_Delete(root);
     LOG_INFO("[presentation_runtime] hydrated %d palette / %d entity-keys / %d status-icons; cellSize=%.1f interp=%dms",
            g_rt.palette_count, g_rt.entity_key_count, g_rt.status_count,
@@ -250,6 +262,8 @@ int   presentation_runtime_interpolation_ms(void)  { return g_rt.interpolation_m
 float presentation_runtime_default_obj_width(void) { return g_rt.default_obj_width; }
 float presentation_runtime_default_obj_height(void){ return g_rt.default_obj_height; }
 bool  presentation_runtime_dev_ui(void)            { return g_rt.dev_ui; }
+const char* presentation_runtime_font_family(void) { return g_rt.font_family; }
+float presentation_runtime_font_factor_size(void)  { return g_rt.font_factor_size; }
 
 void  presentation_runtime_set_dev_ui(bool enabled) { g_rt.dev_ui = enabled; }
 void  presentation_runtime_toggle_dev_ui(void)     { g_rt.dev_ui = !g_rt.dev_ui; }

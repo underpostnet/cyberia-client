@@ -11,6 +11,7 @@
  */
 
 #include "modal_dialogue.h"
+#include "text.h"
 
 #include "domain/local_player.h"
 #include "game_state.h"

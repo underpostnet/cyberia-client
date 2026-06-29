@@ -11,6 +11,7 @@
  */
 
 #include "interaction_bubble.h"
+#include "text.h"
 
 #include "network/game_client.h"
 #include "domain/presentation_runtime.h"

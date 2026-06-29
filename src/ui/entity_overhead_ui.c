@@ -19,6 +19,7 @@
  */
 
 #include "entity_overhead_ui.h"
+#include "text.h"
 
 #include "domain/presentation_runtime.h"
 #include "ui_icon.h"

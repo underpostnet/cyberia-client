@@ -18,6 +18,7 @@
  */
 
 #include "inventory_modal.h"
+#include "text.h"
 
 #include "domain/local_player.h"
 #include "network/game_client.h"

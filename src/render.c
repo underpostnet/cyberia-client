@@ -1,4 +1,5 @@
 #include "render.h"
+#include "ui/text.h"
 
 #include "dialogue_data.h"
 #include "domain/camera.h"

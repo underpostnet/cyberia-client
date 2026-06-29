@@ -15,6 +15,7 @@
  */
 
 #include "modal_notification.h"
+#include "text.h"
 
 #include "item_slot.h"
 #include "modal.h"

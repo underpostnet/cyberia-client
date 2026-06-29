@@ -1,4 +1,5 @@
 #include "item_slot.h"
+#include "text.h"
 
 #include "ol_as_animated_ico.h"
 

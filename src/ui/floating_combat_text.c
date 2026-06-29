@@ -34,6 +34,7 @@
  */
 
 #include "floating_combat_text.h"
+#include "text.h"
 
 #include "domain/local_player.h"
 #include "game_state.h"

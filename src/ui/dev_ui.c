@@ -1,4 +1,5 @@
 #include "dev_ui.h"
+#include "text.h"
 
 #include "network/game_client.h"
 #include "game_render.h"

@@ -1,4 +1,5 @@
 #include "modal_interact.h"
+#include "text.h"
 
 #include "dialogue_data.h"
 #include "domain/local_player.h"

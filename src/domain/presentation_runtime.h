@@ -81,6 +81,11 @@ bool     presentation_runtime_dev_ui(void);
 void     presentation_runtime_set_dev_ui(bool enabled);
 void     presentation_runtime_toggle_dev_ui(void);
 
+/** Main UI font: TTF file name under engine assets/fonts/ ("" = built-in font)
+ *  and a uniform multiplier applied to every text size. */
+const char* presentation_runtime_font_family(void);
+float       presentation_runtime_font_factor_size(void);
+
 #ifdef __cplusplus
 }
 #endif

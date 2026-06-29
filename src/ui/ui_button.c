@@ -1,4 +1,5 @@
 #include "ui_button.h"
+#include "text.h"
 #include "ui_icon.h"
 
 #include <stddef.h>

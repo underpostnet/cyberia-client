@@ -12,6 +12,7 @@
  */
 
 #include "modal_player.h"
+#include "text.h"
 
 #include "network/game_client.h"
 #include "game_state.h"

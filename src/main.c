@@ -19,6 +19,7 @@
 #include "util/log.h"
 #include "ui/ui_dispatch.h"
 #include "ui/tap_effect.h"
+#include "ui/text.h"
 #include "domain/local_player.h"
 
 static const double fixed_step = 1.0/(double)TICK_RATE_HZ;
@@ -30,6 +31,7 @@ static void gameloop(void) {
 #endif
     sim_acc += (double)frame_dt;
 
+    text_font_sync();
     game_client_on_tick();
     local_player_on_tick();
 
@@ -111,6 +113,7 @@ static void gameloop(void) {
 
 static void preloading_loop(void) {
     const float frame_dt = GetFrameTime();
+    text_font_sync();
     game_client_on_tick();
 
     // will fall into render fallback... those should be here and not there(?)
@@ -137,6 +140,7 @@ int main(void) {
 
     prediction_init(); // Note: this is just data, should be replaced by GameState
     render_init(vp_w, vp_h); // NOTE: if render is the window, then combine with it
+    text_font_init(); // main UI font (loaded async once client-hints name a fontFamily)
 
     // [preload] start loading step, fetch from Data Server (Engine)
     js_init_engine_api(API_BASE_URL);

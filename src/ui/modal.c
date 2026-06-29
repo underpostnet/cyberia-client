@@ -1,4 +1,5 @@
 #include "modal.h"
+#include "text.h"
 #include <math.h>
 #include <stdio.h>
 #include <string.h>

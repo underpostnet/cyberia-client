@@ -1,4 +1,5 @@
 #include "quest_journal.h"
+#include "text.h"
 
 #include "modal.h"
 #include "quest_cache.h"

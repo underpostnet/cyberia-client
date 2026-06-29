@@ -15,6 +15,7 @@
  */
 
 #include "inventory_bar.h"
+#include "text.h"
 
 #include "game_state.h"
 #include "item_slot.h"

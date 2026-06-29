@@ -1,4 +1,5 @@
 #include "entity_render.h"
+#include "ui/text.h"
 #include "object_layers_management.h"
 #include "layer_z_order.h"
 #include "hash_table.h"
