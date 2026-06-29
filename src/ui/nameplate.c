@@ -76,3 +76,19 @@ void nameplate_resolve(const char *entity_id,
     /* No resolvable label — only the raw id remains, shown in dev mode only. */
     if (dev) snprintf(out, (size_t)out_size, "%.8s", entity_id);
 }
+
+void nameplate_resolve_portal(const char *target_map_code,
+                              int target_cell_x,
+                              int target_cell_y,
+                              char *out,
+                              int out_size) {
+    if (!out || out_size <= 0) return;
+    out[0] = '\0';
+    if (!target_map_code || target_map_code[0] == '\0') return;
+    /* Random portals (negative target cell) name only the map — the destination
+     * cell is chosen at teleport time, so coordinates would be meaningless. */
+    if (target_cell_x < 0 || target_cell_y < 0)
+        snprintf(out, (size_t)out_size, "%s", target_map_code);
+    else
+        snprintf(out, (size_t)out_size, "%s %d,%d", target_map_code, target_cell_x, target_cell_y);
+}

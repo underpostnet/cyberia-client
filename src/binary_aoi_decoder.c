@@ -357,10 +357,11 @@ static void decode_portal_entity(BinReader* r, uint8_t flags) {
     br_u8(r); /* direction */
     br_u8(r); /* mode */
 
-    /* portal label */
-    char label[MAX_ID_LENGTH];
-    br_string(r, label, sizeof(label));
-
+    uint8_t status_icon = br_u8(r);     /* presence icon (ESI 10 for portals) */
+    char target_map[MAX_ID_LENGTH];
+    br_string(r, target_map, sizeof(target_map)); /* teleport destination map */
+    int16_t target_cell_x = br_i16(r);
+    int16_t target_cell_y = br_i16(r);
 
     if (gs->portal_count >= MAX_OBJECTS) { skip_item_ids(r); return; }
     int idx = gs->portal_count++;
@@ -371,7 +372,10 @@ static void decode_portal_entity(BinReader* r, uint8_t flags) {
     p->dims = (Vector2){ dw, dh };
     p->type_kind = OBJECT_LAYER_TYPE_PORTAL;
     strncpy(p->type, "portal", MAX_TYPE_LENGTH - 1);
-    strncpy(p->portal_label, label, MAX_ID_LENGTH - 1);
+    p->status_icon = status_icon;
+    strncpy(p->target_map_code, target_map, MAX_ID_LENGTH - 1);
+    p->target_cell_x = (int)target_cell_x;
+    p->target_cell_y = (int)target_cell_y;
     p->object_layer_count = read_item_ids(
         r, p->object_layers, MAX_OBJECT_LAYERS);
 }

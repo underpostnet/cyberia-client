@@ -397,9 +397,6 @@ int serial_deserialize_world_object(const cJSON* json, WorldObject* out) {
         return -1;
     }
 
-    // Portal label (optional)
-    serial_get_string_default(json, "PortalLabel", out->portal_label, sizeof(out->portal_label), "");
-
     // Object layers
     cJSON* layers_obj = serial_get_array(json, "objectLayers");
     if (layers_obj) {

@@ -365,6 +365,22 @@ void game_render_world_objects(void) {
             };
             DrawRectangleRec(rect, portal_color);
         }
+
+        /* Overhead: portals carry only the 'portal' presence icon (transport)
+         * plus a "<targetMapCode> <x>,<y>" destination nameplate. */
+        char portal_name[80];
+        nameplate_resolve_portal(portal->target_map_code, portal->target_cell_x,
+                                 portal->target_cell_y, portal_name, (int)sizeof(portal_name));
+        EntityOverheadParams ohp = {
+            .name              = portal_name,
+            .show_name         = portal_name[0] != '\0',
+            .show_stats        = false,
+            .show_hp           = false,
+            .status_icon       = portal->status_icon,
+            .interaction_flags = 0,
+        };
+        entity_overhead_ui_draw(&ohp, portal->pos.x, portal->pos.y,
+                                portal->dims.x, portal->dims.y, cell_size);
     }
 }
 

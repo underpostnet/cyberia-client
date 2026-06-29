@@ -94,7 +94,12 @@ typedef struct WorldObject {
     Vector2          dims;
     ObjectLayerType  type_kind;
     char             type[MAX_TYPE_LENGTH];
-    char             portal_label[MAX_ID_LENGTH];
+    /* Portal-only: presence status icon (ESI 10) + teleport destination, used to
+     * build the "<targetMapCode> <x>,<y>" overhead nameplate. Zero for non-portals. */
+    uint8_t          status_icon;
+    char             target_map_code[MAX_ID_LENGTH];
+    int              target_cell_x;
+    int              target_cell_y;
     ObjectLayerState object_layers[MAX_OBJECT_LAYERS];
     int              object_layer_count;
 } WorldObject;

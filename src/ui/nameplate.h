@@ -42,4 +42,13 @@ void nameplate_resolve(const char *entity_id,
                        char *out,
                        int out_size);
 
+/* Resolve a portal nameplate: "<target_map_code> <x>,<y>" for a fixed target, or
+ * just "<target_map_code>" for a random target (negative cell). Empty when
+ * target_map_code is empty. */
+void nameplate_resolve_portal(const char *target_map_code,
+                              int target_cell_x,
+                              int target_cell_y,
+                              char *out,
+                              int out_size);
+
 #endif /* NAMEPLATE_H */
