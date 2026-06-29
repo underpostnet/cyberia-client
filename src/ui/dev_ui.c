@@ -4,6 +4,7 @@
 #include "game_render.h"
 #include "game_state.h"
 #include "domain/presentation_runtime.h"
+#include "inventory_bar.h"
 #include "util/log.h"
 
 #include <assert.h>
@@ -173,12 +174,23 @@ void dev_ui_draw(int screen_width, int screen_height, int hud_occupied) {
         }
     }
 
-    // Draw background panel (top-left)
-    Rectangle bg_rect = {0, 0, (float)g_dev_ui.dev_ui_width, (float)dev_ui_height};
+    // Position the panel at bottom-right, above the inventory bar.
+    // The zoom buttons sit to the right (they are narrow, ~54px from right edge)
+    // so the dev UI spans from the left edge up to before the zoom column.
+    // ZOOM_BTN_SIZE=44, ZOOM_BTN_GAP=6, ZOOM_BTN_MARGIN=10 → zoom column ~54px.
+    #define DEV_UI_RIGHT_MARGIN 56
+    int panel_x = screen_width - g_dev_ui.dev_ui_width - DEV_UI_RIGHT_MARGIN;
+    if (panel_x < 0) panel_x = 0;
+    int panel_y = screen_height - INV_BAR_HEIGHT - dev_ui_height - 4;
+    if (panel_y < 0) panel_y = 0;
+
+    // Draw background panel (bottom-right, above inventory bar)
+    Rectangle bg_rect = {(float)panel_x, (float)panel_y, (float)g_dev_ui.dev_ui_width, (float)dev_ui_height};
     DrawRectangleRec(bg_rect, g_dev_ui.background_color);
 
-    int y_offset = 10;
-    int x_margin = 10;
+    int y_offset = panel_y + 10;
+    int x_margin = panel_x + 10;
+    #undef DEV_UI_RIGHT_MARGIN
     int font_size_title = 20;
     int font_size_text = 18;
     int line_spacing = 20;
@@ -224,9 +236,9 @@ void dev_ui_draw(int screen_width, int screen_height, int hud_occupied) {
         y_offset += line_spacing;
     }
 
-    // Draw error message at the bottom if present
+    // Draw error message at the bottom of the panel if present
     if (g_dev_ui.show_error_section && error_msg[0] != '\0') {
-        int error_y = dev_ui_height - 30;
+        int error_y = panel_y + dev_ui_height - 30;
         char error_text[256];
         snprintf(error_text, sizeof(error_text), "Error: %s", error_msg);
         DrawText(error_text, x_margin, error_y, font_size_text, g_dev_ui.error_text_color);
