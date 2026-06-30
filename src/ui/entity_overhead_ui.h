@@ -81,9 +81,14 @@ typedef struct {
     /** Maximum life. Set to 0 to hide the HP bar entirely. */
     float max_life;
 
-    /** Whether to render the capability bar (Σ-stats circle + capability
+    /** Whether to render the capability bar row (Σ-stats value + capability
      *  icons). Suppressed for dead entities. */
     bool show_stats;
+
+    /** Whether the capability bar's leading Σ-stats icon + value is drawn. False
+     *  suppresses only that element (capability icons still show) — used for
+     *  provider NPCs. */
+    bool show_stats_value;
 
     /** Whether to render the nameplate. Suppressed for projectile bots. */
     bool show_name;

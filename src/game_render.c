@@ -780,10 +780,16 @@ void game_render_entities(void) {
                  * metadata loads, fetched by the action code from AOI. The
                  * per-player capability bitmask drives the overhead overlays. */
                 uint8_t np_flags = 0;
+                /* Provider NPCs (mission/action givers) are immortal and inert:
+                 * suppress their HP bar and the Σ-stats value — their action/quest
+                 * capability icons still show. */
+                bool np_is_provider = false;
                 if (!np_is_player) {
                     const BotState* np_bot = game_state_find_bot(entity_base->id);
                     if (np_bot) {
                         np_flags = np_bot->interaction_flags;
+                        np_is_provider = (0 == strcmp(np_bot->behavior, "provider"))
+                                         || (0 == strcmp(np_bot->behavior, "provider-static"));
                         if (np_bot->action_code[0] != '\0') {
                             action_cache_fetch(np_bot->action_code);
                             const ActionMetadataEntry* am = action_cache_get(np_bot->action_code);
@@ -800,8 +806,10 @@ void game_render_entities(void) {
                     .life              = entity_base->life,
                     .max_life          = entity_base->max_life,
                     .show_name         = true,
-                    .show_stats        = entity_base->respawn_in <= 0.0f,
-                    .show_hp           = entity_base->max_life > 0.0f
+                    .show_stats        = entity_base->respawn_in <= 0.0f
+                                         && (!np_is_provider || np_flags != 0),
+                    .show_stats_value  = !np_is_provider,
+                    .show_hp           = !np_is_provider && entity_base->max_life > 0.0f
                                          && entity_base->respawn_in <= 0.0f,
                     .status_icon       = entity_base->status_icon,
                     .interaction_flags = np_flags,

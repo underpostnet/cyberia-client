@@ -121,11 +121,12 @@ static void draw_nameplate(const char *name, float cx, float top_y) {
     draw_centered_label(name, cx, top_y, EOHUD_NAME_FONT_SIZE, C_NAME_TEXT, C_NAME_SHADOW);
 }
 
-/** Capability bar: a leading 'stats' icon followed by the outlined sum-of-stats
- *  value (no fill — the strong glyph outline carries it), then one icon per set
- *  interaction-capability bit (action, quest). */
+/** Capability bar: an optional leading 'stats' icon + outlined sum-of-stats value
+ *  (no fill — the strong glyph outline carries it), then one icon per set
+ *  interaction-capability bit (action, quest). `show_value` gates only the
+ *  Σ-stats lead; the capability icons always render for the set flags. */
 static void draw_capability_bar(float cx, float top_y, int stats_sum,
-                                uint8_t flags, float phase) {
+                                bool show_value, uint8_t flags, float phase) {
     const char *icons[2];
     int icon_n = 0;
     if (flags & INTERACTION_FLAG_ACTION)
@@ -133,38 +134,59 @@ static void draw_capability_bar(float cx, float top_y, int stats_sum,
     if (flags & INTERACTION_FLAG_QUEST)
         icons[icon_n++] = presentation_runtime_status_icon(STATUS_ICON_QUEST_PROVIDER);
 
-    char num[16];
-    snprintf(num, sizeof(num), "%d", stats_sum);
     int fs = EOHUD_STATS_FONT_SIZE;
-    int tw = MeasureText(num, fs);
+    char num[16];
+    int tw = 0;
+    if (show_value) {
+        snprintf(num, sizeof(num), "%d", stats_sum);
+        tw = MeasureText(num, fs);
+    }
 
-    float lead_w = (float)EOHUD_CAP_ICON_SIZE + (float)EOHUD_ITEM_GAP + (float)tw;
-    float content_w = lead_w + (float)icon_n * (EOHUD_ITEM_GAP + EOHUD_CAP_ICON_SIZE);
+    /* Total width: optional Σ-stats lead (icon + value) plus one icon per
+     * capability flag, each element separated by EOHUD_ITEM_GAP. */
+    float content_w = 0.0f;
+    bool acc = false;
+    if (show_value) {
+        content_w += (float)EOHUD_CAP_ICON_SIZE + (float)EOHUD_ITEM_GAP + (float)tw;
+        acc = true;
+    }
+    for (int i = 0; i < icon_n; i++) {
+        if (acc) content_w += (float)EOHUD_ITEM_GAP;
+        content_w += (float)EOHUD_CAP_ICON_SIZE;
+        acc = true;
+    }
+    if (content_w <= 0.0f) return;
+
     float row_cy = top_y + EOHUD_BAR_H * 0.5f;
     float x = cx - content_w * 0.5f;
+    bool drew = false;
 
-    ui_icon_draw("stats", x + EOHUD_CAP_ICON_SIZE * 0.5f, row_cy,
-                 EOHUD_CAP_ICON_SIZE, false, phase);
-    x += EOHUD_CAP_ICON_SIZE + EOHUD_ITEM_GAP;
+    if (show_value) {
+        ui_icon_draw("stats", x + EOHUD_CAP_ICON_SIZE * 0.5f, row_cy,
+                     EOHUD_CAP_ICON_SIZE, false, phase);
+        x += EOHUD_CAP_ICON_SIZE + EOHUD_ITEM_GAP;
 
-    int nx = (int)x;
-    int ny = (int)(row_cy - fs * 0.5f);
-    /* Strong, gapless outline: two concentric 8-direction rings (1px then 2px)
-     * so the shadow abuts the glyph with no translucent gap, then the value. */
-    for (int o = 1; o <= 2; o++)
-        for (int dy = -1; dy <= 1; dy++)
-            for (int dx = -1; dx <= 1; dx++)
-                if (dx || dy)
-                    DrawText(num, nx + dx * o, ny + dy * o, fs, C_STAT_SHADOW);
-    DrawText(num, nx, ny, fs, C_LABEL);
-    x += (float)tw;
+        int nx = (int)x;
+        int ny = (int)(row_cy - fs * 0.5f);
+        /* Strong, gapless outline: two concentric 8-direction rings (1px then 2px)
+         * so the shadow abuts the glyph with no translucent gap, then the value. */
+        for (int o = 1; o <= 2; o++)
+            for (int dy = -1; dy <= 1; dy++)
+                for (int dx = -1; dx <= 1; dx++)
+                    if (dx || dy)
+                        DrawText(num, nx + dx * o, ny + dy * o, fs, C_STAT_SHADOW);
+        DrawText(num, nx, ny, fs, C_LABEL);
+        x += (float)tw;
+        drew = true;
+    }
 
     for (int i = 0; i < icon_n; i++) {
-        x += EOHUD_ITEM_GAP;
+        if (drew) x += EOHUD_ITEM_GAP;
         if (icons[i] && icons[i][0] != '\0')
             ui_icon_draw(icons[i], x + EOHUD_CAP_ICON_SIZE * 0.5f, row_cy,
                          EOHUD_CAP_ICON_SIZE, true, phase);
         x += EOHUD_CAP_ICON_SIZE;
+        drew = true;
     }
 }
 
@@ -205,7 +227,7 @@ void entity_overhead_ui_draw(
 
     if (p->show_stats) {
         cursor_px -= EOHUD_BAR_H;
-        draw_capability_bar(entity_cx_px, cursor_px, p->stats_sum, p->interaction_flags, phase);
+        draw_capability_bar(entity_cx_px, cursor_px, p->stats_sum, p->show_stats_value, p->interaction_flags, phase);
         cursor_px -= EOHUD_ROW_GAP;
     }
 
