@@ -473,6 +473,7 @@ static void decode_resource_entity(BinReader* r, uint8_t flags) {
     }
     res->base.object_layer_count = read_item_ids(
         r, res->base.object_layers, MAX_OBJECT_LAYERS);
+    res->base.stats_sum = (int)br_u16(r);  /* sum of active-layer stats */
     res->base.status_icon = br_u8(r);
     strncpy(res->behavior, "resource", MAX_BEHAVIOR_LENGTH - 1);
 }
