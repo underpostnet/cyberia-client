@@ -21,6 +21,7 @@
 #include "ui/tap_effect.h"
 #include "ui/text.h"
 #include "domain/local_player.h"
+#include "domain/local_player_view.h"
 
 static const double fixed_step = 1.0/(double)TICK_RATE_HZ;
 static double sim_acc = 0.0;
@@ -102,7 +103,10 @@ static void gameloop(void) {
     const double alpha = sim_acc / fixed_step;
     // state_interpolation(alpha) -> curr * alpha +  prev * ( 1.0 - alpha );
     prediction_display_step((double)frame_dt);
-    g_game_state.player.base.interp_pos = prediction_self_position();
+    /* Visual-only damping: slide the rendered local-player position toward the
+     * authoritative predicted/reconciled position so corrections never snap.
+     * Prediction itself is untouched — this affects rendering/camera only. */
+    g_game_state.player.base.interp_pos = local_player_view_update(prediction_self_position(), frame_dt);
 
     /* Remote-entity render-time interpolation. */
     interpolation_compute_view();
