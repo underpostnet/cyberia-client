@@ -20,7 +20,7 @@ spec:
     spec:
       containers:
         - name: dd-cyberia-mmo-client-production-blue
-          image: underpost/cyberia-client:v3.2.22
+          image: underpost/cyberia-client:v3.2.30
           imagePullPolicy: Always
           envFrom:
             - secretRef:
@@ -76,17 +76,17 @@ spec:
             }
 
 
-
+    
           volumeMounts:
             - name: instance-cyberia-client-dd-cyberia-mmo-client-production-blue
               mountPath: /home/dd/engine/engine-private/conf/dd-cyberia/instances/mmo-client/env
-
+    
       volumes:
         - name: instance-cyberia-client-dd-cyberia-mmo-client-production-blue
           persistentVolumeClaim:
             claimName: instance-cyberia-client-dd-cyberia-mmo-client-production-blue
-
-
+    
+      
 ---
 apiVersion: v1
 kind: Service
