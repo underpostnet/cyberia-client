@@ -300,7 +300,8 @@ static int message_parser_parse_metadata(const cJSON* json_root) {
         }
     }
 
-    // Parse apiBaseUrl if provided (update the Engine API URL for blob fetches)
+    // Parse apiBaseUrl if provided: the server-forwarded public Content
+    // Authority origin (never the internal cluster address).
     char api_url[256] = {0};
     if (serial_get_string(payload, "apiBaseUrl", api_url, sizeof(api_url)) == 0 && api_url[0] != '\0') {
         js_init_engine_api(api_url);

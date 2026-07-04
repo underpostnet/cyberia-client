@@ -23,14 +23,18 @@
 
 mergeInto(LibraryManager.library, {
   /* ================================================================
-   * Engine API base URL — set from C (js_init_engine_api), read here when
-   * building DOM <img src> asset previews:
-   *   GET {api_base_url}/assets/{type}/{itemId}/08/0.png
+   * Public Content Authority (engine-cyberia) origin — the client-visible
+   * address every client→engine content request resolves against. Seeded from
+   * C (js_init_engine_api) with the compile-time public origin, then overridden
+   * at runtime by the server-forwarded public URL. It is NEVER the internal
+   * cluster/service address (that stays server-side only). Read here for:
+   *   - asset previews:      GET {api_base_url}/assets/{type}/{itemId}/08/0.png
+   *   - integration links:   {api_base_url}/object-layer-engine-viewer?...
    *
-   * This is the ONLY sanctioned JS-side fetch surface, and only because the
-   * browser <img> element fetches/decodes/renders natively. For anything that
-   * pulls bytes into wasm (REST JSON, blobs), use the native engine fetch API
-   * (network/engine_client.h: fetch_request_start) — do NOT add a JS bridge.
+   * The <img src> asset fetch is the ONLY sanctioned JS-side fetch surface, and
+   * only because the browser <img> element fetches/decodes/renders natively. For
+   * anything that pulls bytes into wasm (REST JSON, blobs), use the native engine
+   * fetch API (network/engine_client.h: fetch_request_start) — no JS bridge.
    * ================================================================ */
 
   $FetchState: {
@@ -476,8 +480,7 @@ mergeInto(LibraryManager.library, {
             'data.item.id': { filterType: 'text', type: 'contains', filter: this.dataset.itemId },
           });
           window.open(
-            'https://www.cyberiaonline.com/object-layer-engine-viewer?page=1&limit=10&id=&filterModel=' +
-              encodeURIComponent(filter),
+            base + '/object-layer-engine-viewer?page=1&limit=10&id=&filterModel=' + encodeURIComponent(filter),
             '_blank',
           );
         };
