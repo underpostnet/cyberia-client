@@ -516,8 +516,8 @@ static void decode_self_player(BinReader* r, uint8_t flags) {
     br_f32(r); /* aoiMaxX */
     br_f32(r); /* aoiMaxY */
 
-    /* onPortal */
-    br_u8(r);
+    /* onPortal — authoritative portal-occupancy flag for the local player. */
+    bool on_portal = (br_u8(r) != 0);
 
     /* sumStatsLimit */
     gs->sum_stats_limit = (int)br_u16(r);
@@ -589,6 +589,12 @@ static void decode_self_player(BinReader* r, uint8_t flags) {
      * phaseMovement on every change (Agility, buffs, debuffs). */
     float ms = br_f32(r);
     if (ms > 0.0f) local_player_set_move_speed(ms);
+
+    /* Portal hold progress — f32 0..1, authoritative teleport charge. Paired
+     * with the onPortal flag read above; the HUD renders the hold bar only
+     * while on_portal is set. */
+    float portal_hold = br_f32(r);
+    local_player_set_portal_hold(on_portal, portal_hold);
 }
 
 /* ── Main entry point ──────────────────────────────────────────── */

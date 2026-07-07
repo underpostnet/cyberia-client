@@ -74,6 +74,14 @@ uint8_t  local_player_status_icon(void);
 void   local_player_set_move_speed(float speed);
 float  local_player_move_speed(void);
 
+/* Portal hold — authoritative teleport charge for the local player. on_portal
+ * mirrors the server OnPortal flag; hold_progress is the 0..1 fraction of the
+ * hold time elapsed. Both come from the AOI self-player block; the HUD renders
+ * the progress bar only while on_portal is set. */
+void   local_player_set_portal_hold(bool on_portal, float progress);
+bool   local_player_on_portal(void);
+float  local_player_portal_hold_progress(void);
+
 /* FCT event queue — single-producer (binary_aoi_decoder) /
  * single-consumer (floating_combat_text). */
 bool                   local_player_fct_push(const LocalFctEvent* ev);

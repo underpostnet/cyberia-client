@@ -1,6 +1,7 @@
 #include "game_render.h"
 #include "ui/text.h"
 #include "domain/camera.h"
+#include "domain/local_player.h"
 
 #include "dialogue_data.h"
 #include "domain/presentation_runtime.h"
@@ -58,6 +59,41 @@ static void draw_zoom_buttons(int sw, int sh) {
         UIButtonState st = ui_button_resolve_state(true, false, ui_button_hit(r, mx, my));
         ui_button_draw(r, &style, st);
     }
+}
+
+/* ── Portal hold progress bar ─────────────────────────────────────────── */
+#define PORTAL_BAR_W       220
+#define PORTAL_BAR_H        14
+#define PORTAL_BAR_MARGIN   10
+
+/* Centered just above the inventory hotbar; visible only while the local
+ * player is standing inside an active portal. Renders the authoritative
+ * replicated hold progress — the client derives nothing. */
+static void draw_portal_progress_bar(int sw, int sh) {
+    if (!local_player_on_portal()) return;
+
+    float progress = local_player_portal_hold_progress();
+    if (progress < 0.0f) progress = 0.0f;
+    if (progress > 1.0f) progress = 1.0f;
+
+    float x = (sw - PORTAL_BAR_W) * 0.5f;
+    float y = (float)(sh - INV_BAR_HEIGHT - PORTAL_BAR_MARGIN - PORTAL_BAR_H);
+    Rectangle track = { x, y, (float)PORTAL_BAR_W, (float)PORTAL_BAR_H };
+
+    DrawRectangleRounded(track, 0.5f, 6, (Color){ 10, 12, 24, 220 });
+    if (progress > 0.0f) {
+        Rectangle fill = { x, y, PORTAL_BAR_W * progress, (float)PORTAL_BAR_H };
+        DrawRectangleRounded(fill, 0.5f, 6, (Color){ 90, 170, 255, 240 });
+    }
+    DrawRectangleRoundedLinesEx(track, 0.5f, 6, 1.0f, (Color){ 120, 160, 220, 200 });
+
+    const char* label = "Teleporting...";
+    int fs = 12;
+    int tw = MeasureText(label, fs);
+    int tx = (int)(x + (PORTAL_BAR_W - tw) * 0.5f);
+    int ty = (int)(y - fs - 2);
+    DrawText(label, tx + 1, ty + 1, fs, (Color){ 0, 0, 0, 200 });
+    DrawText(label, tx, ty, fs, (Color){ 220, 230, 245, 245 });
 }
 
 int game_render_zoom_btn_hit(int mx, int my) {
@@ -893,6 +929,10 @@ void game_render_ui(void) {
 
     // Inventory bar (always visible in screen space)
     inventory_bar_draw();
+
+    // Portal hold progress bar (centered above the inventory bar; only while
+    // the local player stands inside an active portal)
+    draw_portal_progress_bar(g_renderer.screen_width, g_renderer.screen_height);
 
     // Zoom buttons (above inventory bar, right side)
     draw_zoom_buttons(g_renderer.screen_width, g_renderer.screen_height);
