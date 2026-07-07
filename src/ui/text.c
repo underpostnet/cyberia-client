@@ -14,6 +14,12 @@
 /* Glyph atlas base size — generous so the font stays crisp when scaled up. */
 #define TEXT_FONT_BASE_SIZE 64
 
+/* Responsive scaling: below this viewport width the global font multiplier is
+ * reduced so HUD/UI text is proportionally smaller on phones. Desktop (≥ the
+ * breakpoint) is unaffected. */
+#define TEXT_MOBILE_BREAKPOINT_PX 600
+#define TEXT_MOBILE_FONT_SCALE    0.88f
+
 static Font  s_font;
 static bool  s_loaded;
 static bool  s_fetching;
@@ -81,19 +87,28 @@ Font text_active_font(void) {
     return s_loaded ? s_font : GetFontDefault();
 }
 
+/* Effective multiplier: the hint-derived factor times a live responsive
+ * reduction below the mobile breakpoint. Evaluated per call (not cached in
+ * s_factor) so it tracks viewport width even in loops that never re-sync. */
+static float effective_factor(void) {
+    float f = s_factor;
+    if (GetScreenWidth() < TEXT_MOBILE_BREAKPOINT_PX) f *= TEXT_MOBILE_FONT_SCALE;
+    return f;
+}
+
 float text_font_factor(void) {
-    return s_factor;
+    return effective_factor();
 }
 
 void text_draw_compat(const char *text, int x, int y, int size, Color color) {
-    float fs = (float)size * s_factor;
+    float fs = (float)size * effective_factor();
     if (fs < 1.0f) fs = 1.0f;
     float spacing = (float)((int)fs / 10);
     DrawTextEx(text_active_font(), text, (Vector2){ (float)x, (float)y }, fs, spacing, color);
 }
 
 int text_measure_compat(const char *text, int size) {
-    float fs = (float)size * s_factor;
+    float fs = (float)size * effective_factor();
     if (fs < 1.0f) fs = 1.0f;
     float spacing = (float)((int)fs / 10);
     return (int)MeasureTextEx(text_active_font(), text, fs, spacing).x;
@@ -102,7 +117,7 @@ int text_measure_compat(const char *text, int size) {
 #define TEXT_LINE_GAP 3
 
 int text_line_height(int size) {
-    int fs = (int)((float)size * s_factor);
+    int fs = (int)((float)size * effective_factor());
     if (fs < 1) fs = 1;
     return fs + TEXT_LINE_GAP;
 }
