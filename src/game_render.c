@@ -13,6 +13,7 @@
 #include "ui/floating_combat_text.h"
 #include "ui/interaction_bubble.h"
 #include "ui/inventory_bar.h"
+#include "ui/loot_fx.h"
 #include "ui/inventory_modal.h"
 #include "ui/modal_dialogue.h"
 #include "ui/action_cache.h"
@@ -228,6 +229,74 @@ void game_render_frame(void) {
     EndDrawing();
 }
 
+/* Draw one loot spark: an opaque yellow square with a solid black border,
+ * matching the tap-effect shape language (black plate slightly larger, coloured
+ * body on top, pixel-snapped). */
+static void draw_loot_spark(float cx_px, float cy_px, float size_px, Color body) {
+    if (size_px < 2.0f) size_px = 2.0f;
+    float border = size_px * 0.28f;
+    if (border < 1.0f) border = 1.0f;
+
+    int x = (int)(cx_px - size_px * 0.5f + 0.5f);
+    int y = (int)(cy_px - size_px * 0.5f + 0.5f);
+    int s = (int)(size_px + 0.5f);
+    int b = (int)(border + 0.5f);
+
+    body.a = 255;
+    DrawRectangle(x - b, y - b, s + b * 2, s + b * 2, BLACK);
+    DrawRectangle(x, y, s, s, body);
+}
+
+/* Draw the loot collection stage: the yellow treasure-burst / ambient sparks at
+ * each pickup, then the Object Layer tokens vacuuming toward their collectors.
+ * Tokens reuse the shared entity-layer path (async atlas pipeline). No
+ * background plate — the token and bordered-square sparks carry the read. */
+static void game_render_loot_fx(void) {
+    if (!g_entity_render) return;
+    const float cell_size = g_game_state.cell_size > 0 ? g_game_state.cell_size : 12.0f;
+
+    /* Yellow bordered-square particles (ambient float + collection burst). */
+    int pslots = loot_fx_particle_slot_count();
+    for (int i = 0; i < pslots; i++) {
+        LootFxParticle pt;
+        if (!loot_fx_particle_at(i, &pt)) continue;
+        Color body = (pt.tint == 0) ? (Color){ 255, 240, 0, 255 }    /* pure yellow    */
+                                    : (Color){ 255, 226, 20, 255 };  /* golden yellow  */
+        draw_loot_spark(pt.x * cell_size, pt.y * cell_size,
+                        pt.size * cell_size, body);
+    }
+
+    /* Vacuum flight tokens. */
+    int slots = loot_fx_slot_count();
+    for (int i = 0; i < slots; i++) {
+        LootFxRender fx;
+        if (!loot_fx_render_at(i, &fx)) continue;
+
+        float half = fx.size * 0.5f;
+
+        ObjectLayerState layer = { .active = true, .quantity = 1 };
+        strncpy(layer.item_id, fx.item_id, MAX_ITEM_ID_LENGTH - 1);
+        ObjectLayerState* layers[1] = { &layer };
+
+        draw_entity_layers(
+            g_entity_render,
+            fx.item_id,            /* per-item animation key */
+            fx.x - half,
+            fx.y - half,
+            fx.size,
+            fx.size,
+            DIRECTION_DOWN,
+            MODE_IDLE,
+            layers,
+            1,
+            "loot",
+            false,
+            cell_size,
+            (Color){ 255, 225, 130, 255 }
+        );
+    }
+}
+
 void game_render_world(void) {
 
     // Render world components in correct z-order
@@ -256,10 +325,11 @@ void game_render_world(void) {
     // 6. Foregrounds (always on top of entities) - creates depth
     game_render_foregrounds();
 
-    // 7. Effects — click effects, floating text, FCT pop-ups
+    // 7. Effects — click effects, floating text, FCT pop-ups, loot flights
     game_render_click_effects();
     game_render_floating_texts();
     fct_draw();
+    game_render_loot_fx();
 
     // 8. Grid overlay (if dev_ui enabled - renders on top of everything)
     if (presentation_runtime_dev_ui()) {
@@ -688,6 +758,8 @@ void game_render_entities(void) {
                     entity_type_str = "skill";
                 else if (strcmp(entry->data.bot->behavior, "coin") == 0)
                     entity_type_str = "coin";
+                else if (strcmp(entry->data.bot->behavior, "drop") == 0)
+                    entity_type_str = "drop";
                 else
                     entity_type_str = "bot";
                 entity_id = entity_base->id;
@@ -748,11 +820,27 @@ void game_render_entities(void) {
             // a texture fails to load instead of a generic gray rectangle.
             Color entity_fallback_color = presentation_runtime_entity_fallback_color(entity_type_str);
 
+            /* Draw position — authoritative interpolation, except loot drops,
+             * whose top-left is driven by the launch/idle-float FX timeline.
+             * A collected drop yields entirely to its detached vacuum flight. */
+            float draw_x = entity_base->interp_pos.x;
+            float draw_y = entity_base->interp_pos.y;
+            if (entry->type == ENTITY_TYPE_BOT && strcmp(entity_type_str, "drop") == 0) {
+                if (!loot_fx_drop_render_pos(entity_id,
+                                             entity_base->interp_pos.x,
+                                             entity_base->interp_pos.y,
+                                             entity_base->dims.x,
+                                             entity_base->dims.y,
+                                             &draw_x, &draw_y)) {
+                    continue;
+                }
+            }
+
             if (layers_count == 0) {
                 /* No object layers — draw a solid colored rectangle as fallback. */
                 Rectangle rect = {
-                    entity_base->interp_pos.x * cell_size,
-                    entity_base->interp_pos.y * cell_size,
+                    draw_x * cell_size,
+                    draw_y * cell_size,
                     entity_base->dims.x * cell_size,
                     entity_base->dims.y * cell_size
                 };
@@ -768,8 +856,8 @@ void game_render_entities(void) {
                 draw_entity_layers(
                     g_entity_render,
                     entity_id,
-                    entity_base->interp_pos.x,
-                    entity_base->interp_pos.y,
+                    draw_x,
+                    draw_y,
                     entity_base->dims.x,
                     entity_base->dims.y,
                     entity_base->direction,
@@ -784,12 +872,14 @@ void game_render_entities(void) {
             }
 
             /* ── Overhead UI — nameplate, capacity bar, HP bar ─────────── */
-            /* Skip for skill/coin bots — they are short-lived projectiles. */
-            bool is_skill_or_coin = (entry->type == ENTITY_TYPE_BOT)
+            /* Skip for skill/coin projectiles and inert loot drops — none of
+             * them carry combat/identity overhead. */
+            bool is_non_combat_bot = (entry->type == ENTITY_TYPE_BOT)
                 && (strcmp(entity_type_str, "skill") == 0
-                    || strcmp(entity_type_str, "coin")  == 0);
+                    || strcmp(entity_type_str, "coin")  == 0
+                    || strcmp(entity_type_str, "drop")  == 0);
 
-            if (!is_skill_or_coin) {
+            if (!is_non_combat_bot) {
                 /* Every entity carries a stats_sum (server-clamped sum of its
                  * active stats) used by the overhead capability bar.  */
                 bool np_is_player = (entry->type == ENTITY_TYPE_PLAYER

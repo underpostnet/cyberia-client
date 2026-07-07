@@ -11,6 +11,7 @@
 #include "domain/local_player.h"
 #include "game_state.h"
 #include "network/game_client.h"
+#include "ui/loot_fx.h"
 #include "util/log.h"
 
 #include <assert.h>
@@ -656,6 +657,42 @@ int binary_aoi_process(const uint8_t* data, size_t length) {
         };
         strncpy(ev.item_id, item_id, MAX_ITEM_ID_LENGTH - 1);
         local_player_fct_push(&ev);
+        return 0;
+    }
+    /* ── Drop collected — arm the parabolic pickup flight ─────────────────── */
+    if (msg_type == BIN_MSG_DROP_COLLECT) {
+        if (length < 82) {
+            LOG_ERROR("[BINARY_AOI] DropCollect message too short (%zu bytes, need 82)", length);
+            return -1;
+        }
+        char drop_id[MAX_ID_LENGTH];
+        char collector_id[MAX_ID_LENGTH];
+        br_id(&r, drop_id, sizeof(drop_id));
+        br_id(&r, collector_id, sizeof(collector_id));
+        float world_x = br_f32(&r);
+        float world_y = br_f32(&r);
+        char  item_id[MAX_ITEM_ID_LENGTH];
+        br_string(&r, item_id, sizeof(item_id));
+        loot_fx_push(drop_id, collector_id, item_id, world_x, world_y);
+        return 0;
+    }
+    /* ── Drop launched — arm the corpse→cell parabolic spawn launch ───────── */
+    if (msg_type == BIN_MSG_DROP_SPAWN) {
+        if (length < 56) {
+            LOG_ERROR("[BINARY_AOI] DropSpawn message too short (%zu bytes, need 56)", length);
+            return -1;
+        }
+        char drop_id[MAX_ID_LENGTH];
+        br_id(&r, drop_id, sizeof(drop_id));
+        float origin_x  = br_f32(&r);
+        float origin_y  = br_f32(&r);
+        float landing_x = br_f32(&r);
+        float landing_y = br_f32(&r);
+        uint16_t launch_ms = br_u16(&r);
+        char item_id[MAX_ITEM_ID_LENGTH];
+        br_string(&r, item_id, sizeof(item_id));
+        loot_fx_note_spawn(drop_id, origin_x, origin_y, landing_x, landing_y,
+                           item_id, launch_ms);
         return 0;
     }
     /* ── AOI update / full AOI ─────────────────────────────────────────────

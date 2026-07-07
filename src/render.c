@@ -8,6 +8,7 @@
 #include "ui/dev_ui.h"
 #include "ui/floating_combat_text.h"
 #include "ui/interaction_bubble.h"
+#include "ui/loot_fx.h"
 #include "ui/inventory_bar.h"
 #include "ui/inventory_modal.h"
 #include "ui/modal_dialogue.h"
@@ -62,6 +63,7 @@ void render_init(int width, int height) {
     }
 
     tap_effect_init();
+    loot_fx_reset();
     camera_init(width, height);
 }
 
@@ -73,6 +75,7 @@ void render_on_tick(float delta_time) {
 
     game_render_update_effects(delta_time);
     fct_update(delta_time);
+    loot_fx_update(delta_time);
     tap_effect_update(delta_time);
 
     inventory_bar_update(delta_time);

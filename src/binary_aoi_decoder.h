@@ -36,6 +36,26 @@
  *   [14]    u8   itemId length (0\u201363)
  *   [15..]  str  itemId bytes                                               */
 #define BIN_MSG_ITEM_FCT   0x05
+/* BIN_MSG_DROP_COLLECT — scattered loot token collected by a player (≥82 bytes).
+ *   [0]        u8   0x06 (this constant)
+ *   [1..36]    36B  dropId       (token entity UUID, zero-padded)
+ *   [37..72]   36B  collectorId  (collecting player UUID, zero-padded)
+ *   [73..76]   f32  worldX       (token origin — parabolic flight start)
+ *   [77..80]   f32  worldY
+ *   [81]       u8   itemId length (0–63)
+ *   [82..]     str  itemId bytes                                            */
+#define BIN_MSG_DROP_COLLECT 0x06
+/* BIN_MSG_DROP_SPAWN — scattered loot token launched from a corpse (≥56 bytes).
+ *   [0]        u8   0x07 (this constant)
+ *   [1..36]    36B  dropId       (token entity UUID, zero-padded)
+ *   [37..40]   f32  originX      (corpse center — launch start)
+ *   [41..44]   f32  originY
+ *   [45..48]   f32  landingX     (token center — launch end / rest cell)
+ *   [49..52]   f32  landingY
+ *   [53..54]   u16  launchMs     (settle-window / animation duration)
+ *   [55]       u8   itemId length (0–63)
+ *   [56..]     str  itemId bytes                                            */
+#define BIN_MSG_DROP_SPAWN   0x07
 /* FCT event type constants are defined in floating_combat_text.h — the
  * single source of truth for the FCT subsystem.  Include it directly
  * rather than duplicating the defines here.                              */
