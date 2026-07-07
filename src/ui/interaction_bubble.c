@@ -360,8 +360,10 @@ void interaction_bubble_draw(void) {
             DrawCircle(cx, cy, r.width * 0.3f, slot->fallback_color);
         }
 
-        /* Nameplate label — top-left, just to the right of the icon */
-        int np_fs = 9;
+        /* Nameplate label — top-left, just to the right of the icon. Base size
+         * is larger than the surrounding UI so the name reads clearly after the
+         * global font multiplier (text.h shim) scales it. */
+        int np_fs = 13;
         int np_x  = (int)(r.x + r.width + 4);
         int np_y  = (int)(r.y + 2);
         if (slot->display_name[0] != '\0') {
