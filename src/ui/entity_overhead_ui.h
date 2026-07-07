@@ -103,6 +103,12 @@ typedef struct {
     /** Per-player interaction capability bitmask (INTERACTION_FLAG_*), 0 for
      *  non-bots. Each set bit adds its icon to the capability bar. */
     uint8_t interaction_flags;
+
+    /** Remaining respawn seconds for the LOCAL player only; 0 hides the row.
+     *  Renders a countdown row above the nameplate and below the presence icon.
+     *  The caller sets this exclusively for the self-player so a remote client
+     *  never sees another player's respawn countdown. */
+    int respawn_seconds;
 } EntityOverheadParams;
 
 /* ── Public API ─────────────────────────────────────────────────────────── */

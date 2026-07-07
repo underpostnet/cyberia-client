@@ -46,6 +46,9 @@ static const Color C_HP_BORDER   = {  0,   0,   0, 235 };
 /* Text. */
 static const Color C_NAME_TEXT   = {255, 255, 255, 255 };
 static const Color C_NAME_SHADOW = {  0,   0,   0, 200 };
+
+/* Respawn countdown — amber, distinct from the white nameplate. */
+static const Color C_RESPAWN_TEXT = {255, 205,  70, 255 };
 static const Color C_LABEL       = {255, 255, 255, 245 };
 static const Color C_LABEL_SHADOW = {  0,   0,   0, 200 };
 
@@ -228,6 +231,19 @@ void entity_overhead_ui_draw(
     if (p->show_stats) {
         cursor_px -= EOHUD_BAR_H;
         draw_capability_bar(entity_cx_px, cursor_px, p->stats_sum, p->show_stats_value, p->interaction_flags, phase);
+        cursor_px -= EOHUD_ROW_GAP;
+    }
+
+    /* Respawn countdown — local player only (caller gates), above the nameplate
+     * and below the presence icon. Renders the replicated remaining seconds. */
+    if (p->respawn_seconds > 0) {
+        cursor_px -= EOHUD_BAR_H;
+        char rbuf[16];
+        snprintf(rbuf, sizeof(rbuf), "%ds", p->respawn_seconds);
+        int tw = MeasureText(rbuf, EOHUD_NAME_FONT_SIZE);
+        draw_pill(entity_cx_px, cursor_px, (float)tw);
+        draw_centered_label(rbuf, entity_cx_px, cursor_px, EOHUD_NAME_FONT_SIZE,
+                            C_RESPAWN_TEXT, C_NAME_SHADOW);
         cursor_px -= EOHUD_ROW_GAP;
     }
 

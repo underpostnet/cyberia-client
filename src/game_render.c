@@ -849,6 +849,10 @@ void game_render_entities(void) {
                                          && entity_base->respawn_in <= 0.0f,
                     .status_icon       = entity_base->status_icon,
                     .interaction_flags = np_flags,
+                    /* Respawn countdown is local-player-only: a remote client
+                     * must never see another player's countdown. */
+                    .respawn_seconds   = (entry->is_main_player && entity_base->respawn_in > 0.0f)
+                                         ? (int)(entity_base->respawn_in + 0.5f) : 0,
                 };
                 entity_overhead_ui_draw(
                     &ohp,
