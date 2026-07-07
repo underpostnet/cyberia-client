@@ -76,9 +76,8 @@ static void gameloop(void) {
             if(!consumed && INPUT_TAP == evt.type) {
                 TapEffectParams fx = tap_effect_default_params();
                 fx.scale = 1.15f;
-                fx.duration = 0.42f;
+                fx.duration = 0.70f;
                 fx.intensity = 1.25f;
-                fx.style_mask = TAP_EFFECT_STYLE_PREMIUM;
                 tap_effect_spawn(evt.screen_position, &fx);
                 consumed = false; // TAP EFFECTS DON'T CONSUME THE INPUT, BUT ALSO SHOULDN'T HAPPEN BEFORE PROCESS
             }
