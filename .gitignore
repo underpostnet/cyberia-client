@@ -29,3 +29,6 @@
 !proxy.yaml
 !pv-pvc.yaml
 !docker-driver.py
+
+build/
+bin/
