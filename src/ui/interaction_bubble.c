@@ -167,6 +167,7 @@ static void scan_entity(const char* entity_id, const EntityState* base,
     if (behavior) {
         if (strcmp(behavior, "skill") == 0) return;
         if (strcmp(behavior, "coin")  == 0) return;
+        if (strcmp(behavior, "drop")  == 0) return; /* loot tokens are not interactable */
     }
 
     bool is_dead = (base->respawn_in > 0.0f);

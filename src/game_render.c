@@ -247,6 +247,26 @@ static void draw_loot_spark(float cx_px, float cy_px, float size_px, Color body)
     DrawRectangle(x, y, s, s, body);
 }
 
+/* Draw the on-grid quantity counter centered above a drop token. Discreet
+ * fixed-size glyph with a gapless wide black border (two concentric 8-direction
+ * rings), matching the capacity-bar sum-of-stats value style. */
+static void draw_drop_count(float top_x, float top_y, float dims_w, float cell_size, int qty) {
+    char buf[16];
+    snprintf(buf, sizeof(buf), "x%d", qty);
+
+    const int fs = 13;
+    int tw = MeasureText(buf, fs);
+    int nx = (int)((top_x + dims_w * 0.5f) * cell_size) - tw / 2;
+    int ny = (int)(top_y * cell_size) - fs - 3;
+
+    for (int o = 1; o <= 2; o++)
+        for (int dy = -1; dy <= 1; dy++)
+            for (int dx = -1; dx <= 1; dx++)
+                if (dx || dy)
+                    DrawText(buf, nx + dx * o, ny + dy * o, fs, (Color){ 0, 0, 0, 255 });
+    DrawText(buf, nx, ny, fs, (Color){ 255, 255, 255, 245 });
+}
+
 /* Draw the loot collection stage: the yellow treasure-burst / ambient sparks at
  * each pickup, then the Object Layer tokens vacuuming toward their collectors.
  * Tokens reuse the shared entity-layer path (async atlas pipeline). No
@@ -869,6 +889,14 @@ void game_render_entities(void) {
                     cell_size,
                     entity_fallback_color
                 );
+            }
+
+            /* On-grid quantity counter above a stacked drop (coins, bundles). */
+            if (entry->type == ENTITY_TYPE_BOT && strcmp(entity_type_str, "drop") == 0
+                && entity_base->object_layer_count > 0
+                && entity_base->object_layers[0].quantity > 1) {
+                draw_drop_count(draw_x, draw_y, entity_base->dims.x, cell_size,
+                                entity_base->object_layers[0].quantity);
             }
 
             /* ── Overhead UI — nameplate, capacity bar, HP bar ─────────── */
