@@ -47,13 +47,19 @@ static const Color C_HP_BORDER   = {  0,   0,   0, 235 };
 static const Color C_NAME_TEXT   = {255, 255, 255, 255 };
 static const Color C_NAME_SHADOW = {  0,   0,   0, 200 };
 
-/* Respawn countdown — amber, distinct from the white nameplate. */
-static const Color C_RESPAWN_TEXT = {255, 205,  70, 255 };
+/* Respawn countdown — yellow, marking player death. */
+static const Color C_RESPAWN_TEXT = {255, 220,  40, 255 };
 static const Color C_LABEL       = {255, 255, 255, 245 };
 static const Color C_LABEL_SHADOW = {  0,   0,   0, 200 };
 
 /* Stronger, fully-opaque shadow for the sum-of-stats value only. */
 static const Color C_STAT_SHADOW = {  0,   0,   0, 255 };
+
+/* Death countdown gets a black outline instead of a shadow, so the yellow
+ * digits read clearly against any world background. */
+static const Color C_RESPAWN_OUTLINE = {   0,   0,   0, 255 };
+#define EOHUD_STAT_OUTLINE_RINGS    2
+#define EOHUD_RESPAWN_OUTLINE_RINGS 2
 
 static Color color_lerp(Color a, Color b, float t) {
     if (t <= 0.0f) return a;
@@ -69,24 +75,49 @@ static Color color_lerp(Color a, Color b, float t) {
 /* ── Shared pill ─────────────────────────────────────────────────────── */
 
 /** Draws the standardized pill (dark rounded backdrop + subtle border) sized to
- *  `content_w` at the fixed row height, centred at cx with its top at top_y.
- *  Returns the inner content rectangle. */
-static Rectangle draw_pill(float cx, float top_y, float content_w) {
+ *  `content_w` at `height`, centred at cx with its top at top_y. Returns the
+ *  inner content rectangle. `height` is EOHUD_BAR_H for the three shared rows;
+ *  the death countdown row uses a taller EOHUD_RESPAWN_BAR_H. */
+static Rectangle draw_pill(float cx, float top_y, float content_w, float height) {
     float pill_w = content_w + EOHUD_PILL_PAD_X * 2;
-    Rectangle pill = { cx - pill_w * 0.5f, top_y, pill_w, (float)EOHUD_BAR_H };
+    Rectangle pill = { cx - pill_w * 0.5f, top_y, pill_w, height };
     DrawRectangleRounded(pill, EOHUD_PILL_ROUND, 8, C_PILL_BG);
     DrawRectangleRoundedLinesEx(pill, EOHUD_PILL_ROUND, 8, 1.0f, C_PILL_BORDER);
-    return (Rectangle){ cx - content_w * 0.5f, top_y, content_w, (float)EOHUD_BAR_H };
+    return (Rectangle){ cx - content_w * 0.5f, top_y, content_w, height };
 }
 
-/* Centre `label` (with shadow) vertically inside a row whose top is top_y. */
+/* Centre `label` (with shadow) vertically inside a row of height `row_h` whose
+ * top is top_y. */
 static void draw_centered_label(const char *label, float cx, float top_y, int fs,
-                                Color fg, Color shadow) {
+                                Color fg, Color shadow, float row_h) {
     int tw = MeasureText(label, fs);
     int tx = (int)(cx - tw * 0.5f);
-    int ty = (int)(top_y + (EOHUD_BAR_H - fs) * 0.5f);
+    int ty = (int)(top_y + (row_h - fs) * 0.5f);
     DrawText(label, tx + 1, ty + 1, fs, shadow);
     DrawText(label, tx, ty, fs, fg);
+}
+
+/* Gapless text outline: `rings` concentric 8-direction passes of `outline`
+ * behind `fg`, at (x, y) top-left. Used where a label must stay legible over
+ * any background (Σ-stats value, death countdown). */
+static void draw_outlined_text(const char *text, int x, int y, int fs,
+                               Color fg, Color outline, int rings) {
+    for (int o = 1; o <= rings; o++)
+        for (int dy = -1; dy <= 1; dy++)
+            for (int dx = -1; dx <= 1; dx++)
+                if (dx || dy)
+                    DrawText(text, x + dx * o, y + dy * o, fs, outline);
+    DrawText(text, x, y, fs, fg);
+}
+
+/* Centre `label` with a gapless outline (see draw_outlined_text) vertically
+ * inside a row of height `row_h` whose top is top_y. */
+static void draw_centered_outlined_label(const char *label, float cx, float top_y, int fs,
+                                         Color fg, Color outline, int rings, float row_h) {
+    int tw = MeasureText(label, fs);
+    int tx = (int)(cx - tw * 0.5f);
+    int ty = (int)(top_y + (row_h - fs) * 0.5f);
+    draw_outlined_text(label, tx, ty, fs, fg, outline, rings);
 }
 
 /* ── Rows ────────────────────────────────────────────────────────────── */
@@ -114,14 +145,14 @@ static void draw_hp_bar(float cx, float top_y, float life, float max_life) {
     int ilif = (int)(life + 0.5f), imaxl = (int)(max_life + 0.5f);
     char label[32];
     snprintf(label, sizeof(label), "HP %d / %d", ilif, imaxl);
-    draw_centered_label(label, cx, top_y, EOHUD_HP_LABEL_FONT_SIZE, C_LABEL, C_LABEL_SHADOW);
+    draw_centered_label(label, cx, top_y, EOHUD_HP_LABEL_FONT_SIZE, C_LABEL, C_LABEL_SHADOW, (float)EOHUD_BAR_H);
 }
 
 static void draw_nameplate(const char *name, float cx, float top_y) {
     if (!name || name[0] == '\0') return;
     int tw = MeasureText(name, EOHUD_NAME_FONT_SIZE);
-    draw_pill(cx, top_y, (float)tw);
-    draw_centered_label(name, cx, top_y, EOHUD_NAME_FONT_SIZE, C_NAME_TEXT, C_NAME_SHADOW);
+    draw_pill(cx, top_y, (float)tw, (float)EOHUD_BAR_H);
+    draw_centered_label(name, cx, top_y, EOHUD_NAME_FONT_SIZE, C_NAME_TEXT, C_NAME_SHADOW, (float)EOHUD_BAR_H);
 }
 
 /** Capability bar: an optional leading 'stats' icon + outlined sum-of-stats value
@@ -171,14 +202,7 @@ static void draw_capability_bar(float cx, float top_y, int stats_sum,
 
         int nx = (int)x;
         int ny = (int)(row_cy - fs * 0.5f);
-        /* Strong, gapless outline: two concentric 8-direction rings (1px then 2px)
-         * so the shadow abuts the glyph with no translucent gap, then the value. */
-        for (int o = 1; o <= 2; o++)
-            for (int dy = -1; dy <= 1; dy++)
-                for (int dx = -1; dx <= 1; dx++)
-                    if (dx || dy)
-                        DrawText(num, nx + dx * o, ny + dy * o, fs, C_STAT_SHADOW);
-        DrawText(num, nx, ny, fs, C_LABEL);
+        draw_outlined_text(num, nx, ny, fs, C_LABEL, C_STAT_SHADOW, EOHUD_STAT_OUTLINE_RINGS);
         x += (float)tw;
         drew = true;
     }
@@ -234,16 +258,19 @@ void entity_overhead_ui_draw(
         cursor_px -= EOHUD_ROW_GAP;
     }
 
-    /* Respawn countdown — local player only (caller gates), above the nameplate
-     * and below the presence icon. Renders the replicated remaining seconds. */
+    /* Death/respawn countdown — local player only (caller gates), above the
+     * nameplate and below the presence icon. Larger, dark red, and wrapped in
+     * a wide white outline so a death reads unmistakably, unlike the
+     * shared-size white rows above. */
     if (p->respawn_seconds > 0) {
-        cursor_px -= EOHUD_BAR_H;
+        cursor_px -= EOHUD_RESPAWN_BAR_H;
         char rbuf[16];
         snprintf(rbuf, sizeof(rbuf), "%ds", p->respawn_seconds);
-        int tw = MeasureText(rbuf, EOHUD_NAME_FONT_SIZE);
-        draw_pill(entity_cx_px, cursor_px, (float)tw);
-        draw_centered_label(rbuf, entity_cx_px, cursor_px, EOHUD_NAME_FONT_SIZE,
-                            C_RESPAWN_TEXT, C_NAME_SHADOW);
+        int tw = MeasureText(rbuf, EOHUD_RESPAWN_FONT_SIZE);
+        draw_pill(entity_cx_px, cursor_px, (float)tw, (float)EOHUD_RESPAWN_BAR_H);
+        draw_centered_outlined_label(rbuf, entity_cx_px, cursor_px, EOHUD_RESPAWN_FONT_SIZE,
+                                     C_RESPAWN_TEXT, C_RESPAWN_OUTLINE, EOHUD_RESPAWN_OUTLINE_RINGS,
+                                     (float)EOHUD_RESPAWN_BAR_H);
         cursor_px -= EOHUD_ROW_GAP;
     }
 

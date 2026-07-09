@@ -53,10 +53,15 @@
 #define EOHUD_PRESENCE_SIZE     28
 #define EOHUD_CAP_ICON_SIZE     20
 
-/** Label font sizes (screen pixels). The sum-of-stats value is the largest. */
+/** Label font sizes (screen pixels). The death countdown is the largest. */
 #define EOHUD_NAME_FONT_SIZE    13
 #define EOHUD_HP_LABEL_FONT_SIZE 12
 #define EOHUD_STATS_FONT_SIZE   16
+#define EOHUD_RESPAWN_FONT_SIZE 20
+
+/** Death/respawn countdown row height — taller than the shared EOHUD_BAR_H
+ *  so the larger font fits without clipping. */
+#define EOHUD_RESPAWN_BAR_H     30
 
 /* ── Data model ─────────────────────────────────────────────────────────── */
 
