@@ -116,4 +116,15 @@ int inventory_bar_get_tapped_slot(int mx, int my);
  */
 void inventory_bar_scroll(int delta);
 
+/**
+ * @brief Get the screen-space center of the slot holding a given item.
+ *
+ * Used by loot_fx to position the delivery particle stream endpoint.
+ *
+ * @param item_id  The item identifier to look up.
+ * @param out      Receives the screen-space center (pixels).
+ * @return         true if the slot was found, false otherwise.
+ */
+bool inventory_bar_item_slot_center(const char* item_id, Vector2* out);
+
 #endif /* INVENTORY_BAR_H */

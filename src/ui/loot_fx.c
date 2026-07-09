@@ -1,16 +1,22 @@
 #include "ui/loot_fx.h"
 
+#include "game_render.h"
 #include "game_state.h"
+#include "ui/fx_inventory_bar_qty.h"
+#include "ui/inventory_bar.h"
 #include "world_types.h"
 
 #include <math.h>
+#include <raylib.h>
 #include <string.h>
 
 /* ── Tuning ─────────────────────────────────────────────────────────────── */
 
 #define LOOT_FX_MAX          64      /* concurrent vacuum flights               */
 #define LOOT_DROP_MAX        128     /* concurrent in-world drop animations     */
-#define LOOT_PARTICLE_MAX    512     /* pooled burst particles                  */
+#define LOOT_PARTICLE_MAX    512     /* pooled world-space burst particles      */
+#define LOOT_SCR_PARTICLE_MAX 256    /* pooled screen-space delivery particles  */
+#define LOOT_PENDING_MAX     32      /* scheduled slot-arrival bursts           */
 
 /* Stage 3 — vacuum flight (ground → player). The token pops larger the moment
  * it is taken, then vacuums in. */
@@ -61,6 +67,25 @@
 #define AMBIENT_SIZE_MIN     0.18f   /* grid cells                              */
 #define AMBIENT_SIZE_MAX     0.32f
 
+/* Screen-space slot delivery — after the world vacuum lands on the local
+ * player, particles stream (homing) into the item's inventory slot, then burst
+ * on arrival. All in screen pixels. */
+#define DELIVER_COUNT        9
+#define DELIVER_TTL          0.62f   /* seconds, avatar → slot (slow enough to read)*/
+#define DELIVER_ARC_PX       130.0f  /* parabola peak height, screen px           */
+#define DELIVER_START_SPREAD 24.0f   /* px jitter around the avatar origin        */
+#define DELIVER_TARGET_JIT   7.0f    /* px jitter around the slot center          */
+#define DELIVER_SIZE_MIN     6.0f    /* px squares                                */
+#define DELIVER_SIZE_MAX     12.0f
+#define ARRIVAL_COUNT        11
+#define ARRIVAL_TTL          0.44f
+#define ARRIVAL_SPEED_MIN    55.0f   /* px/s                                      */
+#define ARRIVAL_SPEED_MAX    150.0f
+#define ARRIVAL_UP_BIAS      45.0f   /* px/s upward bias                          */
+#define ARRIVAL_GRAVITY      240.0f  /* px/s^2                                    */
+#define ARRIVAL_SIZE_MIN     8.0f
+#define ARRIVAL_SIZE_MAX     16.0f
+
 #define DROP_ANIM_EVICT_SEC  1.5f    /* forget a drop unseen this long          */
 
 /* ── State ──────────────────────────────────────────────────────────────── */
@@ -97,9 +122,31 @@ typedef struct {
     bool    active;
 } Particle;
 
-static VacFlight s_flights[LOOT_FX_MAX];
-static DropAnim  s_drops[LOOT_DROP_MAX];
-static Particle  s_particles[LOOT_PARTICLE_MAX];
+/* Screen-space particle: homing (avatar → slot) or ballistic burst (at slot). */
+typedef struct {
+    uint8_t mode;          /* 0 = homing, 1 = burst                            */
+    float   x, y;          /* current screen px                                */
+    float   sx, sy, tx, ty;/* homing endpoints                                 */
+    float   vx, vy;        /* burst velocity, px/s                             */
+    float   age, ttl;
+    float   size;          /* px                                              */
+    uint8_t tint;
+    bool    active;
+} ScrParticle;
+
+/* A slot-arrival burst scheduled to fire when a delivery stream lands. */
+typedef struct {
+    float  tx, ty;
+    char   item_id[MAX_ITEM_ID_LENGTH];
+    double fire_at;
+    bool   active;
+} PendingArrival;
+
+static VacFlight      s_flights[LOOT_FX_MAX];
+static DropAnim       s_drops[LOOT_DROP_MAX];
+static Particle       s_particles[LOOT_PARTICLE_MAX];
+static ScrParticle    s_scr[LOOT_SCR_PARTICLE_MAX];
+static PendingArrival s_pending[LOOT_PENDING_MAX];
 
 /* Presentation clock, advanced only by loot_fx_update — keeps launch/idle
  * timing independent of the raylib frame clock and of message arrival time. */
@@ -128,6 +175,8 @@ void loot_fx_reset(void) {
     memset(s_flights, 0, sizeof(s_flights));
     memset(s_drops, 0, sizeof(s_drops));
     memset(s_particles, 0, sizeof(s_particles));
+    memset(s_scr, 0, sizeof(s_scr));
+    memset(s_pending, 0, sizeof(s_pending));
     s_clock = 0.0;
 }
 
@@ -281,6 +330,85 @@ static void spawn_ambient(float wx, float wy) {
     p->active = true;
 }
 
+/* ── Screen-space slot delivery (stage 4) ──────────────────────────────── */
+
+static ScrParticle* scr_alloc(void) {
+    for (int i = 0; i < LOOT_SCR_PARTICLE_MAX; i++) {
+        if (!s_scr[i].active) return &s_scr[i];
+    }
+    return NULL;
+}
+
+/* Burst of screen particles popping outward at the destination slot. */
+static void spawn_slot_arrival(float sx, float sy) {
+    for (int n = 0; n < ARRIVAL_COUNT; n++) {
+        ScrParticle* p = scr_alloc();
+        if (!p) return;
+        float ang = lcg_range(0.0f, 6.2831853f);
+        float spd = lcg_range(ARRIVAL_SPEED_MIN, ARRIVAL_SPEED_MAX);
+        *p = (ScrParticle){
+            .mode   = 1,
+            .x      = sx,
+            .y      = sy,
+            .vx     = cosf(ang) * spd,
+            .vy     = sinf(ang) * spd - ARRIVAL_UP_BIAS,
+            .ttl    = ARRIVAL_TTL * lcg_range(0.8f, 1.2f),
+            .size   = lcg_range(ARRIVAL_SIZE_MIN, ARRIVAL_SIZE_MAX),
+            .tint   = (uint8_t)(n & 1),
+            .active = true,
+        };
+    }
+}
+
+/* Stream of homing screen particles from the avatar into the slot, plus a
+ * scheduled arrival burst when they land. */
+static void spawn_slot_delivery(float from_x, float from_y, float to_x, float to_y,
+                                const char* item_id) {
+    for (int n = 0; n < DELIVER_COUNT; n++) {
+        ScrParticle* p = scr_alloc();
+        if (!p) break;
+        float sx = from_x + lcg_range(-DELIVER_START_SPREAD, DELIVER_START_SPREAD);
+        float sy = from_y + lcg_range(-DELIVER_START_SPREAD, DELIVER_START_SPREAD);
+        *p = (ScrParticle){
+            .mode   = 0,
+            .x      = sx,
+            .y      = sy,
+            .sx     = sx,
+            .sy     = sy,
+            .tx     = to_x + lcg_range(-DELIVER_TARGET_JIT, DELIVER_TARGET_JIT),
+            .ty     = to_y + lcg_range(-DELIVER_TARGET_JIT, DELIVER_TARGET_JIT),
+            .ttl    = DELIVER_TTL * lcg_range(0.85f, 1.15f),
+            .size   = lcg_range(DELIVER_SIZE_MIN, DELIVER_SIZE_MAX),
+            .tint   = (uint8_t)(n & 1),
+            .active = true,
+        };
+    }
+
+    for (int i = 0; i < LOOT_PENDING_MAX; i++) {
+        if (!s_pending[i].active) {
+            s_pending[i] = (PendingArrival){
+                .tx = to_x, .ty = to_y,
+                .fire_at = s_clock + DELIVER_TTL,
+                .active = true,
+            };
+            if (item_id) strncpy(s_pending[i].item_id, item_id, MAX_ITEM_ID_LENGTH - 1);
+            break;
+        }
+    }
+}
+
+/* On a local-player vacuum landing, hand off to the inventory slot: convert the
+ * avatar's world position to screen, resolve the item's slot, and launch the
+ * delivery stream. No-op for remote collectors (no local inventory shown). */
+static void trigger_slot_delivery(const VacFlight* f) {
+    if (0 != strcmp(f->collector_id, g_game_state.player_id)) return;
+
+    Vector2 from = game_render_world_to_screen((Vector2){ f->cur_x, f->cur_y });
+    Vector2 slot;
+    if (!inventory_bar_item_slot_center(f->item_id, &slot)) return;
+    spawn_slot_delivery(from.x, from.y, slot.x, slot.y, f->item_id);
+}
+
 /* ── Vacuum flight (stage 3) ───────────────────────────────────────────── */
 
 void loot_fx_push(const char* drop_id, const char* collector_id,
@@ -349,7 +477,11 @@ void loot_fx_update(float dt) {
 
         f->age += dt;
         float t = f->age / VAC_DURATION;
-        if (t >= 1.0f) { f->active = false; continue; }
+        if (t >= 1.0f) {
+            f->active = false;
+            trigger_slot_delivery(f); /* hand the item off into its slot */
+            continue;
+        }
 
         float eased = powf(t, VAC_EASE_POW);
 
@@ -387,6 +519,38 @@ void loot_fx_update(float dt) {
         p->y  += p->vy * dt;
     }
 
+    /* Fire scheduled slot-arrival bursts. */
+    for (int i = 0; i < LOOT_PENDING_MAX; i++) {
+        if (!s_pending[i].active) continue;
+        if (s_clock >= s_pending[i].fire_at) {
+            spawn_slot_arrival(s_pending[i].tx, s_pending[i].ty);
+            /* The quantity change becomes visible exactly as the item lands. */
+            fx_inventory_bar_qty_notify_arrival(s_pending[i].item_id);
+            s_pending[i].active = false;
+        }
+    }
+
+    /* Screen-space delivery + arrival particles. */
+    for (int i = 0; i < LOOT_SCR_PARTICLE_MAX; i++) {
+        ScrParticle* p = &s_scr[i];
+        if (!p->active) continue;
+        p->age += dt;
+        if (p->age >= p->ttl) { p->active = false; continue; }
+        if (p->mode == 0) {
+            /* Constant-speed horizontal travel with a vertical parabolic arc, so
+             * the spark tosses up and settles into the slot rather than darting
+             * straight in. */
+            float t = p->age / p->ttl;
+            p->x = p->sx + (p->tx - p->sx) * t;
+            p->y = p->sy + (p->ty - p->sy) * t
+                 - 4.0f * DELIVER_ARC_PX * t * (1.0f - t);
+        } else {
+            p->vy += ARRIVAL_GRAVITY * dt;
+            p->x  += p->vx * dt;
+            p->y  += p->vy * dt;
+        }
+    }
+
     /* Evict drop animations for tokens no longer being rendered. */
     for (int i = 0; i < LOOT_DROP_MAX; i++) {
         DropAnim* a = &s_drops[i];
@@ -418,6 +582,22 @@ int loot_fx_particle_slot_count(void) { return LOOT_PARTICLE_MAX; }
 bool loot_fx_particle_at(int i, LootFxParticle* out) {
     if (i < 0 || i >= LOOT_PARTICLE_MAX || !out) return false;
     const Particle* p = &s_particles[i];
+    if (!p->active) return false;
+
+    out->x     = p->x;
+    out->y     = p->y;
+    out->size  = p->size;
+    out->tint  = p->tint;
+    out->alpha = 1.0f - p->age / p->ttl;
+    if (out->alpha < 0.0f) out->alpha = 0.0f;
+    return true;
+}
+
+int loot_fx_screen_particle_slot_count(void) { return LOOT_SCR_PARTICLE_MAX; }
+
+bool loot_fx_screen_particle_at(int i, LootFxScreenParticle* out) {
+    if (i < 0 || i >= LOOT_SCR_PARTICLE_MAX || !out) return false;
+    const ScrParticle* p = &s_scr[i];
     if (!p->active) return false;
 
     out->x     = p->x;

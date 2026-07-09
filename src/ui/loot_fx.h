@@ -69,8 +69,19 @@ bool loot_fx_drop_render_pos(const char* drop_id,
 int  loot_fx_slot_count(void);
 bool loot_fx_render_at(int i, LootFxRender* out);
 
-/* Renderer bridge: collection-burst particles. */
+/* Renderer bridge: collection-burst particles (world-space). */
 int  loot_fx_particle_slot_count(void);
 bool loot_fx_particle_at(int i, LootFxParticle* out);
+
+/* Renderer bridge: screen-space delivery particles (inventory slot arrival). */
+typedef struct {
+    float   x, y;    /* center, screen pixels                    */
+    float   size;    /* square side, screen pixels               */
+    float   alpha;   /* 0..1                                     */
+    uint8_t tint;    /* 0 = gold, 1 = cyan                       */
+} LootFxScreenParticle;
+
+int  loot_fx_screen_particle_slot_count(void);
+bool loot_fx_screen_particle_at(int i, LootFxScreenParticle* out);
 
 #endif /* CYBERIA_UI_LOOT_FX_H */

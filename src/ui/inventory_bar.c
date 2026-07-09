@@ -17,6 +17,7 @@
 #include "inventory_bar.h"
 #include "text.h"
 
+#include "fx_inventory_bar_qty.h"
 #include "game_state.h"
 #include "item_slot.h"
 #include "object_layers_management.h"
@@ -123,7 +124,9 @@ static void draw_coin_slot(Rectangle r, int coin_idx, ObjectLayersManager* mgr) 
     else
         snprintf(buf, sizeof(buf), "%d", balance);
 
-    int fs = INV_QTY_FONT_SIZE;
+    /* Match the scrollable item slots' badge font size. */
+    int fs = (int)(INV_SLOT_SIZE * 0.26f);
+    if (fs < 13) fs = 13;
     int tw = MeasureText(buf, fs);
     int bx = (int)(r.x + r.width - tw - 3);
     int by = (int)(r.y + r.height - fs - 2);
@@ -156,9 +159,12 @@ void inventory_bar_init(ObjectLayersManager* ol_manager) {
     s_ol_manager    = ol_manager;
     s_scroll_offset = 0;
     s_scroll_anim   = 0.0f;
+    fx_inventory_bar_qty_init();
 }
 
 void inventory_bar_update(float dt) {
+    fx_inventory_bar_qty_update(dt);
+
     float target = (float)s_scroll_offset;
     float diff   = target - s_scroll_anim;
     if (fabsf(diff) < 0.01f) {
@@ -207,12 +213,17 @@ void inventory_bar_draw(void) {
         if (r.x + r.width <= (float)arrow_w) continue;
         if (r.x >= coin_left)                continue;
 
-        item_slot_draw(r, &g_game_state.full_inventory[inv_idx], s_ol_manager);
+        /* Badge shows the gradually-counted value; popup layers the +/- change. */
+        ObjectLayerState ol = g_game_state.full_inventory[inv_idx];
+        ol.quantity = fx_inventory_bar_qty_display(ol.item_id, ol.quantity);
+        item_slot_draw(r, &ol, s_ol_manager);
+        fx_inventory_bar_qty_draw(r, g_game_state.full_inventory[inv_idx].item_id);
     }
 
     /* Pinned coin slot — right side, just inside the right arrow */
     Rectangle cr = coin_slot_rect(screen_w, screen_h);
     draw_coin_slot(cr, coin_idx, s_ol_manager);
+    fx_inventory_bar_qty_draw(cr, coin_item_key());
 
     /* Scroll indicator dots — positioned ABOVE slot area, at the top of the bar */
     if (scroll_count > vis) {
@@ -292,4 +303,52 @@ void inventory_bar_scroll(int delta) {
     s_scroll_offset += delta;
     if (s_scroll_offset < 0)       s_scroll_offset = 0;
     if (s_scroll_offset > max_off) s_scroll_offset = max_off;
+}
+
+bool inventory_bar_item_slot_center(const char* item_id, Vector2* out) {
+    if (!out || !item_id || item_id[0] == '\0') return false;
+
+    int screen_w = GetScreenWidth();
+    int screen_h = GetScreenHeight();
+    int n_inv    = g_game_state.full_inventory_count;
+    int coin_idx = find_coin_slot();
+
+    int inv_idx = -1;
+    for (int i = 0; i < n_inv; i++) {
+        if (0 == strcmp(g_game_state.full_inventory[i].item_id, item_id)) { inv_idx = i; break; }
+    }
+
+    /* Coins live in the pinned right slot. */
+    if (inv_idx >= 0 && inv_idx == coin_idx) {
+        Rectangle r = coin_slot_rect(screen_w, screen_h);
+        *out = (Vector2){ r.x + r.width * 0.5f, r.y + r.height * 0.5f };
+        return true;
+    }
+
+    /* Scrollable slot — clamp to the nearest visible column when scrolled off. */
+    if (inv_idx >= 0) {
+        int scroll_map[MAX_OBJECT_LAYERS];
+        int scroll_count = 0;
+        for (int i = 0; i < n_inv && scroll_count < MAX_OBJECT_LAYERS; i++) {
+            if (i != coin_idx) scroll_map[scroll_count++] = i;
+        }
+        int si = -1;
+        for (int k = 0; k < scroll_count; k++) {
+            if (scroll_map[k] == inv_idx) { si = k; break; }
+        }
+        if (si >= 0) {
+            int vis = visible_slot_count(screen_w);
+            int vi  = si - s_scroll_offset;
+            if (vi < 0)        vi = 0;
+            if (vi > vis - 1)  vi = vis - 1;
+            Rectangle r = slot_rect(vi, screen_w, screen_h);
+            *out = (Vector2){ r.x + r.width * 0.5f, r.y + r.height * 0.5f };
+            return true;
+        }
+    }
+
+    /* Unknown item — aim at the bar center. */
+    float bar_top = (float)(screen_h - INV_BAR_HEIGHT);
+    *out = (Vector2){ screen_w * 0.5f, bar_top + INV_BAR_HEIGHT * 0.5f };
+    return true;
 }

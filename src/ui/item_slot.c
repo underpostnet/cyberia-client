@@ -16,13 +16,32 @@ bool item_slot_hit(Rectangle r, int mx, int my) {
             (float)my >= r.y && (float)my < r.y + r.height);
 }
 
+static Color lerp_color(Color from, Color to, float t) {
+    if (t <= 0.0f) return from;
+    if (t >= 1.0f) return to;
+    return (Color){
+        (unsigned char)(from.r + (to.r - from.r) * t),
+        (unsigned char)(from.g + (to.g - from.g) * t),
+        (unsigned char)(from.b + (to.b - from.b) * t),
+        (unsigned char)(from.a + (to.a - from.a) * t),
+    };
+}
+
 void item_slot_draw(Rectangle r, const ObjectLayerState* ols, ObjectLayersManager* mgr) {
+    item_slot_draw_ex(r, ols, mgr, WHITE, 0.0f);
+}
+
+void item_slot_draw_ex(Rectangle r, const ObjectLayerState* ols, ObjectLayersManager* mgr,
+                       Color highlight, float highlight_t) {
     int pad = (int)(r.width * 0.07f);
     if (pad < 3) pad = 3;
-    int fs = (int)(r.width * 0.17f);
-    if (fs < 10) fs = 10;
+    int fs = (int)(r.width * 0.26f);
+    if (fs < 13) fs = 13;
 
-    DrawRectangleRec(r, C_SLOT_BG);
+    /* highlight_t blends the slot's neutral bg/border toward `highlight` — used
+     * to briefly "color" a slot (e.g. a fresh reward settling in). */
+    Color slot_bg = lerp_color(C_SLOT_BG, (Color){ highlight.r, highlight.g, highlight.b, C_SLOT_BG.a }, highlight_t);
+    DrawRectangleRec(r, slot_bg);
 
     bool active    = ols->active;
     bool activable = true;
@@ -30,7 +49,9 @@ void item_slot_draw(Rectangle r, const ObjectLayerState* ols, ObjectLayersManage
         ObjectLayer* ol_data = lookup_cached_layer(ols->item_id);
         if (ol_data) activable = ol_data->data.item.activable;
     }
-    DrawRectangleLinesEx(r, 2.0f, (active && activable) ? C_ACTIVE_GLOW : C_SLOT_BORDER);
+    Color border = (active && activable) ? C_ACTIVE_GLOW : C_SLOT_BORDER;
+    border = lerp_color(border, highlight, highlight_t);
+    DrawRectangleLinesEx(r, 2.0f, border);
 
     if (ols->item_id[0] == '\0') {
         DrawCircle((int)(r.x + r.width * 0.5f), (int)(r.y + r.height * 0.5f),
