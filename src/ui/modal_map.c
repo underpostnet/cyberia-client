@@ -1,6 +1,7 @@
 #include "modal_map.h"
 #include "text.h"
 
+#include "game_render.h"
 #include "network/game_client.h"
 #include "game_state.h"
 
@@ -82,8 +83,10 @@ void modal_map_draw(int screen_width, int screen_height) {
     int box_w  = (w1 > w2 ? w1 : w2) + pad * 2 + 10; /* +10 for dot */
     int box_h  = lsp * 2 + pad * 2 - 2;
     int margin = 10;
-    int bx     = screen_width - box_w - margin;
-    int by     = margin;
+    /* Shifted left of its natural corner position to leave room for the
+     * fullscreen toggle button pinned in the top-right corner. */
+    int bx = screen_width - box_w - margin - (FULLSCREEN_BTN_SIZE + FULLSCREEN_BTN_MARGIN);
+    int by = margin;
 
     g_modal_map.bounds = (Rectangle){ (float)bx, (float)by, (float)box_w, (float)box_h };
 

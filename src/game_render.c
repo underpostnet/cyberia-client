@@ -2,11 +2,13 @@
 #include "ui/text.h"
 #include "domain/camera.h"
 #include "domain/local_player.h"
+#include "domain/local_player_view.h"
 
 #include "dialogue_data.h"
 #include "domain/presentation_runtime.h"
 #include "entity_render.h"
 #include "game_state.h"
+#include "js/fullscreen_bridge.h"
 #include "object_layers_management.h"
 #include "ui/dev_ui.h"
 #include "ui/entity_overhead_ui.h"
@@ -63,6 +65,30 @@ static void draw_zoom_buttons(int sw, int sh) {
     }
 }
 
+/* ── Fullscreen button ────────────────────────────────────────────────── */
+/* Size/margin are public (game_render.h) so modal_map.c can offset its own
+ * HUD box to sit beside this button in the top-right corner. */
+static Rectangle fullscreen_btn_rect(int sw) {
+    float x = sw - FULLSCREEN_BTN_SIZE - FULLSCREEN_BTN_MARGIN;
+    float y = FULLSCREEN_BTN_MARGIN;
+    return (Rectangle){ x, y, FULLSCREEN_BTN_SIZE, FULLSCREEN_BTN_SIZE };
+}
+
+static void draw_fullscreen_button(int sw) {
+    Rectangle r = fullscreen_btn_rect(sw);
+    int mx = GetMouseX(), my = GetMouseY();
+    bool active = fullscreen_bridge_is_active();
+    UIButtonStyle style = {
+        .icon_id    = active ? "close-yellow" : "fullscreen",
+        .icon_size  = FULLSCREEN_BTN_SIZE - 12,
+        .bg         = { 20, 20, 35, 200 },
+        .bg_hover   = { 50, 50, 70, 220 },
+        .border     = { 80, 80, 120, 180 },
+    };
+    UIButtonState st = ui_button_resolve_state(true, false, ui_button_hit(r, mx, my));
+    ui_button_draw(r, &style, st);
+}
+
 /* ── Portal hold progress bar ─────────────────────────────────────────── */
 #define PORTAL_BAR_W       220
 #define PORTAL_BAR_H        14
@@ -108,6 +134,10 @@ int game_render_zoom_btn_hit(int mx, int my) {
         }
     }
     return 0;
+}
+
+bool game_render_fullscreen_btn_hit(int mx, int my) {
+    return ui_button_hit(fullscreen_btn_rect(GetScreenWidth()), mx, my);
 }
 
 // Global renderer instance
@@ -821,6 +851,14 @@ void game_render_entities(void) {
             // a texture fails to load instead of a generic gray rectangle.
             Color entity_fallback_color = presentation_runtime_entity_fallback_color(entity_type_str);
 
+            /* Skill/coin projectiles and inert loot drops carry no ground
+             * shadow or combat/identity overhead — only players, other
+             * players, combat bots (passive/hostile), and resources do. */
+            bool is_non_combat_bot = (entry->type == ENTITY_TYPE_BOT)
+                && (strcmp(entity_type_str, "skill") == 0
+                    || strcmp(entity_type_str, "coin")  == 0
+                    || strcmp(entity_type_str, "drop")  == 0);
+
             /* Draw position — authoritative interpolation, except loot drops,
              * whose top-left is driven by the launch/idle-float FX timeline.
              * A collected drop yields entirely to its detached vacuum flight. */
@@ -837,13 +875,34 @@ void game_render_entities(void) {
                 }
             }
 
+            float render_width = entity_base->dims.x;
+            float render_height = entity_base->dims.y;
+
+            /* Ground shadow, shared by every living entity (drawn before the
+             * sprite so it sits beneath it). Overhead UI below keeps using
+             * the unscaled interp_pos/dims so the nameplate/HP bar never
+             * shifts. */
+            if (!is_non_combat_bot) {
+                draw_entity_shadow(draw_x, draw_y, render_width, render_height, cell_size);
+            }
+
+            /* Local-player-exclusive render-scale bump, so the character
+             * reads slightly larger than everyone else. */
+            if (entry->is_main_player) {
+                Rectangle scaled = local_player_view_scaled_footprint(draw_x, draw_y, render_width, render_height);
+                draw_x = scaled.x;
+                draw_y = scaled.y;
+                render_width = scaled.width;
+                render_height = scaled.height;
+            }
+
             if (layers_count == 0) {
                 /* No object layers — draw a solid colored rectangle as fallback. */
                 Rectangle rect = {
                     draw_x * cell_size,
                     draw_y * cell_size,
-                    entity_base->dims.x * cell_size,
-                    entity_base->dims.y * cell_size
+                    render_width * cell_size,
+                    render_height * cell_size
                 };
                 DrawRectangleRec(rect, entity_fallback_color);
             } else {
@@ -859,8 +918,8 @@ void game_render_entities(void) {
                     entity_id,
                     draw_x,
                     draw_y,
-                    entity_base->dims.x,
-                    entity_base->dims.y,
+                    render_width,
+                    render_height,
                     entity_base->direction,
                     entity_base->mode,
                     temp_layers,
@@ -882,12 +941,8 @@ void game_render_entities(void) {
 
             /* ── Overhead UI — nameplate, capacity bar, HP bar ─────────── */
             /* Skip for skill/coin projectiles and inert loot drops — none of
-             * them carry combat/identity overhead. */
-            bool is_non_combat_bot = (entry->type == ENTITY_TYPE_BOT)
-                && (strcmp(entity_type_str, "skill") == 0
-                    || strcmp(entity_type_str, "coin")  == 0
-                    || strcmp(entity_type_str, "drop")  == 0);
-
+             * them carry combat/identity overhead (is_non_combat_bot computed
+             * above, shared with the ground-shadow gate). */
             if (!is_non_combat_bot) {
                 /* Every entity carries a stats_sum (server-clamped sum of its
                  * active stats) used by the overhead capability bar.  */
@@ -1023,6 +1078,9 @@ void game_render_ui(void) {
     } else {
         modal_map_draw(g_renderer.screen_width, g_renderer.screen_height);
     }
+
+    // Fullscreen toggle (top-right corner, beside the map/fps HUD box)
+    draw_fullscreen_button(g_renderer.screen_width);
 
     // Entity interaction bubbles (left side, collapsible column)
     interaction_bubble_draw();

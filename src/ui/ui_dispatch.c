@@ -10,6 +10,7 @@
 #include "modal_notification.h"
 #include "quest_journal.h"
 #include "game_render.h"
+#include "js/fullscreen_bridge.h"
 #include "js/interact_bridge.h"
 
 bool ui_dispatch_tap(int x, int y) {
@@ -47,6 +48,11 @@ bool ui_dispatch_tap(int x, int y) {
         return true;
     }
 
+    if (game_render_fullscreen_btn_hit(x, y)) {
+        fullscreen_bridge_toggle();
+        return true;
+    }
+
     return false;
 }
 
@@ -60,5 +66,6 @@ bool ui_dispatch_covers_point(int x, int y) {
     if (interaction_bubble_point_covered(x, y)) return true;
     if (y > GetScreenHeight() - INV_BAR_HEIGHT) return true;
     if (0 != game_render_zoom_btn_hit(x, y))    return true;
+    if (game_render_fullscreen_btn_hit(x, y))   return true;
     return false;
 }
