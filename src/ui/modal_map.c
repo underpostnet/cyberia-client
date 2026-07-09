@@ -1,17 +1,4 @@
-/**
- * @file modal_player.c
- * @brief Compact frameless HUD for player information.
- *
- * Renders a minimal two-line HUD at the top-right corner:
- *   ● <map_code>  (drop shadow)
- *   (<x>, <y>)  <fps>fps
- *
- * No border frame — just a semi-transparent rounded background + text shadows.
- * Coin balance is now visible in the pinned coin slot of the inventory bar, so
- * it is intentionally omitted here.
- */
-
-#include "modal_player.h"
+#include "modal_map.h"
 #include "text.h"
 
 #include "network/game_client.h"
@@ -24,32 +11,34 @@
 #include <string.h>
 
 /* Global instance */
-ModalPlayer g_modal_player = {0};
+ModalMap g_modal_map = {0};
 
 /* ── Initialisation ───────────────────────────────────────────────────── */
 
-int modal_player_init(void) {
-    memset(&g_modal_player, 0, sizeof(ModalPlayer));
-    g_modal_player.show_connection  = true;
-    g_modal_player.show_map         = true;
-    g_modal_player.show_position    = true;
-    g_modal_player.show_fps         = true;
-    g_modal_player.cached_fps       = 60.0f;
-    g_modal_player.last_fps_update  = 0.0;
+int modal_map_init(void) {
+    memset(&g_modal_map, 0, sizeof(ModalMap));
+    g_modal_map.show_connection = true;
+    g_modal_map.show_map        = true;
+    g_modal_map.show_position   = true;
+    g_modal_map.show_fps        = true;
+    g_modal_map.cached_fps      = 60.0f;
+    g_modal_map.last_fps_update = 0.0;
     return 0;
 }
 
-void modal_player_cleanup(void) {
-    memset(&g_modal_player, 0, sizeof(ModalPlayer));
+void modal_map_cleanup(void) {
+    memset(&g_modal_map, 0, sizeof(ModalMap));
 }
 
 /* ── Update ───────────────────────────────────────────────────────────── */
 
-void modal_player_update(float delta_time) {
+void modal_map_update(float delta_time) {
+    g_modal_map.age += delta_time;
+
     double t = GetTime();
-    if (t - g_modal_player.last_fps_update >= 0.5) {
-        g_modal_player.cached_fps      = (float)GetFPS();
-        g_modal_player.last_fps_update = t;
+    if (t - g_modal_map.last_fps_update >= 0.5) {
+        g_modal_map.cached_fps      = (float)GetFPS();
+        g_modal_map.last_fps_update = t;
     }
 }
 
@@ -57,17 +46,17 @@ void modal_player_update(float delta_time) {
 
 /* shadow_text renders `text` with a subtle 1-pixel black shadow. */
 static void shadow_text(const char* text, int x, int y, int fs, Color c) {
-    DrawText(text, x + 1, y + 1, fs, (Color){ 0, 0, 0, 160 });
+    DrawText(text, x + 1, y + 1, fs, (Color){ 0, 0, 0, (unsigned char)(160.0f * (c.a / 255.0f)) });
     DrawText(text, x,     y,     fs, c);
 }
 
 /* ── Draw ─────────────────────────────────────────────────────────────── */
 
-void modal_player_draw(int screen_width, int screen_height) {
+void modal_map_draw(int screen_width, int screen_height) {
     const char* map = g_game_state.player.map_code;
     float px        = g_game_state.player.base.interp_pos.x;
     float py        = g_game_state.player.base.interp_pos.y;
-    int   fps       = (int)roundf(g_modal_player.cached_fps);
+    int   fps       = (int)roundf(g_modal_map.cached_fps);
     bool  init      = g_game_state.init_received;
 
     /* ── Build two compact lines ──────────────────────────────────────── */
@@ -96,21 +85,33 @@ void modal_player_draw(int screen_width, int screen_height) {
     int bx     = screen_width - box_w - margin;
     int by     = margin;
 
-    /* ── Background: rounded rect, no border ─────────────────────────── */
+    g_modal_map.bounds = (Rectangle){ (float)bx, (float)by, (float)box_w, (float)box_h };
+
+    /* ── Background: rounded rect, no border, shared fade-in ──────────── */
+    float fade = modal_pop_alpha(g_modal_map.age);
     DrawRectangleRounded(
-        (Rectangle){ (float)bx, (float)by, (float)box_w, (float)box_h },
-        0.35f, 8, (Color){ 0, 0, 0, 130 });
+        g_modal_map.bounds,
+        0.35f, 8, (Color){ 0, 0, 0, (unsigned char)(130.0f * fade) });
 
     /* ── Status dot (connection indicator) ───────────────────────────── */
     /* Always draw — shows disconnected state too. */
     bool connected = connection_is_open();
     Color dot_c = connected ? (Color){ 60, 220, 80, 255 }
                             : (Color){ 220, 60, 60, 255 };
+    dot_c.a = (unsigned char)((float)dot_c.a * fade);
     DrawCircle(bx + pad + 4, by + pad + fs / 2 + 1, 3.0f, dot_c);
 
     /* ── Line 1: map code ─────────────────────────────────────────────── */
-    shadow_text(line1, bx + pad, by + pad, fs, (Color){ 240, 215, 100, 230 });
+    Color line1_c = { 240, 215, 100, 230 };
+    line1_c.a = (unsigned char)((float)line1_c.a * fade);
+    shadow_text(line1, bx + pad, by + pad, fs, line1_c);
 
     /* ── Line 2: position + fps ───────────────────────────────────────── */
-    shadow_text(line2, bx + pad, by + pad + lsp, fs, (Color){ 180, 195, 220, 210 });
+    Color line2_c = { 180, 195, 220, 210 };
+    line2_c.a = (unsigned char)((float)line2_c.a * fade);
+    shadow_text(line2, bx + pad, by + pad + lsp, fs, line2_c);
+}
+
+Rectangle modal_map_bounds(void) {
+    return g_modal_map.bounds;
 }
