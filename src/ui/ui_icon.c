@@ -61,3 +61,21 @@ void ui_icon_draw(const char* icon_id, float cx, float cy, int size, bool bounce
         DrawCircle((int)cx, (int)draw_cy, r, (Color){150, 160, 180, alpha});
     }
 }
+
+void ui_icon_draw_ex(const char* icon_id, float cx, float cy, float size,
+                     float rotation_deg, Color tint) {
+    assert(icon_id);
+    assert(strlen(icon_id));
+    assert(s_icon_cache);
+
+    char url[512];
+    snprintf(url, sizeof(url), "/assets/ui-icons/%s.png", icon_id);
+    Texture2D tex = texture_cache_get(s_icon_cache, url);
+    if (tex.id <= 0) return; /* decorative — nothing while loading */
+
+    Rectangle src = { 0, 0, (float)tex.width, (float)tex.height };
+    Rectangle dst = { cx, cy, size, size };
+    /* Origin at the icon centre so rotation spins in place. */
+    DrawTexturePro(tex, src, dst, (Vector2){ size * 0.5f, size * 0.5f },
+                   rotation_deg, tint);
+}

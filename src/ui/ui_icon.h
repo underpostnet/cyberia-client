@@ -92,4 +92,10 @@ void ui_icon_cleanup(void);
  */
 void ui_icon_draw(const char* icon_id, float cx, float cy, int size, bool bounce, float phase);
 
+/* Draw an icon with an arbitrary float size, rotation (degrees, around the
+ * centre), and tint (tint.a fades it). No loading placeholder — for decorative,
+ * transient FX (e.g. reward celebration stars). No-op until the texture loads. */
+void ui_icon_draw_ex(const char* icon_id, float cx, float cy, float size,
+                     float rotation_deg, Color tint);
+
 #endif /* UI_ICON_H */

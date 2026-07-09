@@ -21,15 +21,17 @@
 #include "modal.h"
 #include "object_layer.h"
 #include "object_layers_management.h"
+#include "fx_reward.h"
 #include "ui_button.h"
 
 #include <raylib.h>
+#include <math.h>
 #include <string.h>
 
 #define MN_W          360
 #define MN_FONT_TITLE 19
 #define MN_FONT_BODY  13
-#define MN_SLOT       48
+#define MN_SLOT       76
 #define MN_OK_W       96
 #define MN_OK_H       34
 #define MN_QUEUE_CAP  16
@@ -37,6 +39,12 @@
 #define MN_TOP        16   /* top padding above the title                  */
 #define MN_GAP        10   /* vertical gap between content blocks          */
 #define MN_BOT        12   /* bottom padding below the OK button           */
+
+/* Reward preview arrival flourish: it pops in slightly oversized (with a soft
+ * overshoot) and its slot color transitions from the notification's accent
+ * back to its normal tone as it settles. */
+#define MN_REWARD_POP_DUR  0.45f
+#define MN_REWARD_TINT_DUR  0.90f
 
 /* ── Queued notification entry ────────────────────────────────────────── */
 typedef struct {
@@ -58,6 +66,8 @@ static char  s_message[160] = {0};
 static Color s_accent = { 90, 200, 110, 255 };
 static char  s_reward_item[64] = {0};
 static int   s_reward_qty = 0;
+static bool  s_reward_new = false;  /* fresh reward → fire the arrival flourish once */
+static float s_reward_pop_age = 0.0f; /* time since this reward started popping in */
 
 static const Color C_TITLE = { 230, 235, 245, 255 };
 static const Color C_BODY  = { 170, 180, 200, 230 };
@@ -80,6 +90,8 @@ static void show_next(void) {
     s_accent = e->accent;
     s_age    = 0.0f;
     s_open   = true;
+    s_reward_new = (s_reward_item[0] != '\0');
+    s_reward_pop_age = 0.0f;
 }
 
 static void push_queue(const char* title, const char* message, Color accent,
@@ -123,6 +135,15 @@ void modal_notification_show_reward(const char* title, const char* message, Colo
 /* Inner content width available for wrapped title / message text. */
 static int notif_inner_w(void) { return MN_W - 2 * MN_PAD; }
 
+/* Overshoot ease — used for the reward slot's pop-in so it briefly grows past
+ * its final size before settling, reading as a small "impact". */
+static float mn_ease_out_back(float t) {
+    static const float c1 = 1.70158f;
+    static const float c3 = c1 + 1.0f;
+    float u = t - 1.0f;
+    return 1.0f + c3 * u * u * u + c1 * u * u;
+}
+
 /* Card height derived from the wrapped content so text never overflows and the
  * card grows with longer messages (and the active font size / family). */
 static float notif_content_height(void) {
@@ -156,6 +177,13 @@ static Rectangle notif_ok(Rectangle card) {
 void modal_notification_update(float dt) {
     if (!s_open) return;
     s_age += dt; /* drives the pop-in only; dismissal is OK-only */
+    /* Celebrate only when the notice carries an object layer (a reward item). */
+    if (s_reward_item[0] != '\0') {
+        Rectangle card = notif_card();
+        if (s_reward_new) { fx_reward_trigger(card); s_reward_new = false; }
+        fx_reward_show(card);
+        s_reward_pop_age += dt;
+    }
 }
 
 void modal_notification_draw(void) {
@@ -167,6 +195,9 @@ void modal_notification_draw(void) {
     /* Dim the screen so a stacked notification reads as modal. */
     DrawRectangle(0, 0, GetScreenWidth(), GetScreenHeight(),
                   (Color){ 0, 0, 0, (unsigned char)(90 * a) });
+
+    /* Celebration behind the card — frames it without covering the text. */
+    fx_reward_draw();
 
     Color bg = MODAL_PANEL_BG;
     bg.a = (unsigned char)(245 * a);
@@ -191,15 +222,27 @@ void modal_notification_draw(void) {
         cy += (float)text_wrap(s_message, ix, (int)cy, iw, MN_FONT_BODY, body, true, true);
     }
 
-    /* Reward item slot — centred. */
+    /* Reward item slot — centred, pops in oversized (soft overshoot) and its
+     * color transitions from the notification's accent back to normal as it
+     * settles, so a fresh reward reads as a distinct, celebratory arrival. */
     if (s_reward_item[0] != '\0') {
         cy += MN_GAP;
         Rectangle slot = { card.x + (card.width - MN_SLOT) / 2.0f, cy, MN_SLOT, MN_SLOT };
+
+        float pop_t  = fminf(1.0f, s_reward_pop_age / MN_REWARD_POP_DUR);
+        float pop    = mn_ease_out_back(pop_t);
+        float scale  = 0.55f + 0.45f * pop;
+        float sw = MN_SLOT * scale, sh = MN_SLOT * scale;
+        Rectangle pop_slot = { slot.x + (slot.width - sw) * 0.5f,
+                               slot.y + (slot.height - sh) * 0.5f, sw, sh };
+
+        float tint_t = 1.0f - fminf(1.0f, s_reward_pop_age / MN_REWARD_TINT_DUR);
+
         ObjectLayerState ol = { 0 };
         strncpy(ol.item_id, s_reward_item, sizeof(ol.item_id) - 1);
         ol.active = true;
         ol.quantity = s_reward_qty;
-        item_slot_draw(slot, &ol, obj_layers_mgr_get());
+        item_slot_draw_ex(pop_slot, &ol, obj_layers_mgr_get(), s_accent, tint_t);
     }
 
     /* OK button — bottom centre. */
