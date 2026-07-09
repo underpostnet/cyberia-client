@@ -13,6 +13,12 @@
 #define MAX_LAYERS_PER_ENTITY 20
 #define DEFAULT_FRAME_DURATION_MS 100
 
+/* Ground-shadow tuning — a small flat ellipse under the feet, not a puddle. */
+#define ENTITY_SHADOW_RADIUS_RATIO 0.34f
+#define ENTITY_SHADOW_SQUASH 0.45f
+
+static const Color ENTITY_SHADOW_COLOR = { 10, 8, 6, 130 };
+
 /* Animation states untouched for this long are assumed to belong to entities
  * that left the AOI and are evicted by entity_render_gc(). */
 #define ANIM_IDLE_EVICT_SECONDS 4.0
@@ -498,4 +504,15 @@ void draw_entity_layers(
             );
         }
     }
+}
+
+void draw_entity_shadow(float pos_x, float pos_y, float width, float height, float cell_size) {
+    if (cell_size <= 0.0f) cell_size = 12.0f;
+
+    float center_x = (pos_x + width * 0.5f) * cell_size;
+    float feet_y = (pos_y + height) * cell_size;
+    float rx = width * cell_size * ENTITY_SHADOW_RADIUS_RATIO;
+    float ry = rx * ENTITY_SHADOW_SQUASH;
+
+    DrawEllipse((int)center_x, (int)feet_y, rx, ry, ENTITY_SHADOW_COLOR);
 }

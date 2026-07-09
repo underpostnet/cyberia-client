@@ -211,4 +211,13 @@ void draw_entity_layers(
     Color fallback_color
 );
 
+/* Draws a flat, squashed dark ellipse under an entity's feet — a ground
+ * shadow shared by every living entity (players, other players, bots,
+ * resources). `pos_x`/`pos_y`/`width`/`height` are the same grid-unit
+ * footprint passed to draw_entity_layers; scaled internally by `cell_size`.
+ * Stateless. Call once per frame, immediately before drawing the entity's
+ * sprite layers, so the shadow sits beneath it. Not used for obstacles,
+ * statics, or non-combat bots (skill/coin/drop projectiles). */
+void draw_entity_shadow(float pos_x, float pos_y, float width, float height, float cell_size);
+
 #endif // ENTITY_RENDER_H
