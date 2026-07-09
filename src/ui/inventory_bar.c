@@ -46,19 +46,36 @@ static const Color C_SCROLL_ARROW  = { 180, 180, 200, 220 };
 
 /* ── Internal helpers ─────────────────────────────────────────────────── */
 
-/* coin_item_key returns the coin item ID from entity_defaults, or NULL. */
+/* coin_item_key returns a representative coin item ID from entity_defaults
+ * (the world-drop pickup bot's default skin), or NULL. This is ONLY a
+ * fallback icon for the pinned slot before any coin entry has arrived in
+ * full_inventory (e.g. a fresh session with a zero balance) — it must never
+ * be used for matching, see is_coin_item_id(). */
 static const char* coin_item_key(void) {
     const EntityTypeDefault* def = game_state_get_entity_default("coin");
     if (def && def->live_item_id_count > 0) return def->live_item_ids[0];
     return NULL;
 }
 
+/* is_coin_item_id classifies an inventory entry as currency via the item's
+ * OWN type metadata (ObjectLayer.data.item.type == "coin") — the same
+ * authoritative field layer_z_order.c uses to tell "skin" from "weapon".
+ * This is deliberately independent of entity_defaults: the "coin" entity
+ * type there describes the default sprite for world coin-pickup bots, not
+ * the currency item's classification, so matching against it (as this used
+ * to) missed real coin entries whenever their id wasn't also the pickup
+ * bot's first registered skin — letting the coin fall through into the
+ * scrollable list as an ordinary item. */
+static bool is_coin_item_id(const char* item_id) {
+    if (!item_id || item_id[0] == '\0') return false;
+    ObjectLayer* ol = lookup_cached_layer(item_id);
+    return ol && 0 == strcmp(ol->data.item.type, "coin");
+}
+
 /* find_coin_slot returns the index of the coin slot in full_inventory, or -1. */
 static int find_coin_slot(void) {
-    const char* ck = coin_item_key();
-    if (!ck) return -1;
     for (int i = 0; i < g_game_state.full_inventory_count; i++) {
-        if (strcmp(g_game_state.full_inventory[i].item_id, ck) == 0) return i;
+        if (is_coin_item_id(g_game_state.full_inventory[i].item_id)) return i;
     }
     return -1;
 }
@@ -96,7 +113,9 @@ static Rectangle coin_slot_rect(int screen_w, int screen_h) {
     return (Rectangle){ cx, slot_top, (float)INV_SLOT_SIZE, (float)INV_SLOT_SIZE };
 }
 
-/* draw_coin_slot renders the pinned right coin slot. */
+/* draw_coin_slot renders the pinned right coin slot. `coin_idx` is the
+ * matched full_inventory entry (from find_coin_slot()), so the sprite
+ * reflects the player's actual coin skin variant when one is owned. */
 static void draw_coin_slot(Rectangle r, int coin_idx, ObjectLayersManager* mgr) {
     /* Gold-tinted background to distinguish from normal slots */
     DrawRectangleRec(r, (Color){ 35, 28, 10, 210 });
@@ -105,7 +124,7 @@ static void draw_coin_slot(Rectangle r, int coin_idx, ObjectLayersManager* mgr) 
     DrawRectangleLinesEx(r, 2.0f, C_COIN_BORDER);
 
     /* Coin sprite (animated, down_idle) */
-    const char* ck = coin_item_key();
+    const char* ck = (coin_idx >= 0) ? g_game_state.full_inventory[coin_idx].item_id : coin_item_key();
     if (ck && ck[0] != '\0') {
         int inner = INV_SLOT_SIZE - INV_SLOT_PADDING * 2;
         ol_as_ico_draw(mgr, ck,
@@ -223,7 +242,7 @@ void inventory_bar_draw(void) {
     /* Pinned coin slot — right side, just inside the right arrow */
     Rectangle cr = coin_slot_rect(screen_w, screen_h);
     draw_coin_slot(cr, coin_idx, s_ol_manager);
-    fx_inventory_bar_qty_draw(cr, coin_item_key());
+    fx_inventory_bar_qty_draw(cr, (coin_idx >= 0) ? g_game_state.full_inventory[coin_idx].item_id : coin_item_key());
 
     /* Scroll indicator dots — positioned ABOVE slot area, at the top of the bar */
     if (scroll_count > vis) {
