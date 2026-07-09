@@ -3,7 +3,7 @@
 #include <math.h>
 #include <raylib.h>
 
-/* ── Tuning ──────────────────────────────────────────────────────────────────
+/* ── Smoothing tuning ────────────────────────────────────────────────────────
  * DAMP_LAMBDA — exponential convergence rate (1/seconds). Higher snaps faster,
  *               lower floats longer; ~18 gives a ≈55 ms time constant, absorbing
  *               corrections within a few frames while staying smooth.
@@ -12,6 +12,10 @@
  *               sliding across the map. */
 #define LOCAL_PLAYER_VIEW_DAMP_LAMBDA 18.0f
 #define LOCAL_PLAYER_VIEW_SNAP_CELLS 6.0f
+
+/* Local player's draw footprint bump, a clean +10% so the character stands
+ * out without breaking the grid. */
+#define LOCAL_PLAYER_VIEW_RENDER_SCALE 1.10f
 
 static Vector2 s_pos = { 0.0f, 0.0f };
 static bool s_initialized = false;
@@ -34,4 +38,15 @@ Vector2 local_player_view_update(Vector2 target, float dt) {
     s_pos.x += ex * blend;
     s_pos.y += ey * blend;
     return s_pos;
+}
+
+Rectangle local_player_view_scaled_footprint(float pos_x, float pos_y, float width, float height) {
+    float scaled_w = width * LOCAL_PLAYER_VIEW_RENDER_SCALE;
+    float scaled_h = height * LOCAL_PLAYER_VIEW_RENDER_SCALE;
+    return (Rectangle){
+        pos_x - (scaled_w - width) * 0.5f,
+        pos_y - (scaled_h - height),
+        scaled_w,
+        scaled_h
+    };
 }
