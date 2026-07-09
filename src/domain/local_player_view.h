@@ -3,20 +3,47 @@
 
 #include <raylib.h>
 
-/* Presentation-only visual smoothing AND identity marking for the LOCAL
- * player — the entity rendered at screen centre. It absorbs the
- * authoritative position corrections produced by client prediction + server
- * reconciliation as a smooth, frame-rate independent slide instead of an
- * instant snap, and provides the local-player-exclusive render-scale bump
- * that lets the player pick themself out of a crowd.
- *
- * This layer is purely visual: it is never read by prediction, reconciliation,
- * collision, or any gameplay/simulation code — only by the renderer/camera. */
+#include "object_layer.h"
 
-/* Advance the smoothed visual position toward the authoritative `target` over
- * `dt` seconds and return it. The first call and any jump beyond the snap
- * threshold (teleports / respawns) snap instead of sliding. */
-Vector2 local_player_view_update(Vector2 target, float dt);
+/* Presentation layer for the LOCAL player — the entity rendered at screen
+ * centre. Purely visual: never read by prediction, reconciliation, collision,
+ * or any gameplay/simulation code — only by the renderer/camera.
+ *
+ * It owns an independent presentation state (position, velocity, facing,
+ * walk/idle mode) advanced each render frame toward the simulation's
+ * predicted/reconciled position by a critically damped spring. Reconciliation
+ * displacements are absorbed into a correction offset the instant they land —
+ * the spring target never jumps — and the offset bleeds away with its speed
+ * capped below the walk speed, so a correction can slightly slow the walk but
+ * can never reverse it or read as a hesitation. Facing and animation mode are
+ * derived from the presentation velocity with hysteresis, so corrections can
+ * never flip or flicker the sprite. Teleports and respawns (explicit
+ * MODE_TELEPORTING, or a jump beyond the snap distance) snap instantly. */
+
+/* Advance the presentation state toward `sim_pos` over `dt` seconds.
+ * `sim_correction` is this frame's reconciliation displacement
+ * (prediction_consume_correction()), absorbed so it never disturbs the
+ * rendered trajectory. `sim_direction` and `sim_mode` are the authoritative
+ * snapshot values; they are consumed only on snaps (a teleport has no organic
+ * motion vector to derive facing from) and to detect MODE_TELEPORTING. Call
+ * once per render frame, then read the accessors below. Frame-rate
+ * independent. */
+void local_player_view_update(Vector2 sim_pos, Vector2 sim_correction,
+                              Direction sim_direction, ObjectLayerMode sim_mode,
+                              float dt);
+
+/* Smoothed on-screen position (grid units). */
+Vector2 local_player_view_position(void);
+
+/* Facing derived from the presentation velocity, committed only after the
+ * motion has pointed to a new octant for a hold interval; holds the last
+ * committed facing while idle or during correction transients. */
+Direction local_player_view_direction(void);
+
+/* Walk/idle animation mode derived from the presentation speed — always
+ * consistent with the motion actually rendered, never with the server's
+ * asynchronous snapshot cadence. */
+ObjectLayerMode local_player_view_mode(void);
 
 /* Local player's draw footprint (grid units) scaled up so the character
  * reads slightly larger than other entities. Anchored at the same feet

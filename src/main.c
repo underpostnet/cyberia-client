@@ -99,13 +99,20 @@ static void gameloop(void) {
         prediction_step(fixed_step);
         sim_acc -= fixed_step;
     }
-    const double alpha = sim_acc / fixed_step;
-    // state_interpolation(alpha) -> curr * alpha +  prev * ( 1.0 - alpha );
-    prediction_display_step((double)frame_dt);
-    /* Visual-only damping: slide the rendered local-player position toward the
-     * authoritative predicted/reconciled position so corrections never snap.
-     * Prediction itself is untouched — this affects rendering/camera only. */
-    g_game_state.player.base.interp_pos = local_player_view_update(prediction_self_position(), frame_dt);
+    /* Presentation-only: advance the local player's visual state (spring
+     * position, velocity-derived facing and walk/idle mode) toward the
+     * predicted/reconciled simulation position. Prediction itself is
+     * untouched — the outputs written back below feed rendering/camera only,
+     * keeping sprite motion, facing, and animation in lockstep instead of
+     * following the server's asynchronous snapshot cadence. */
+    local_player_view_update(prediction_self_position(),
+                             prediction_consume_correction(),
+                             g_game_state.player.base.direction,
+                             g_game_state.player.base.mode,
+                             frame_dt);
+    g_game_state.player.base.interp_pos = local_player_view_position();
+    g_game_state.player.base.direction  = local_player_view_direction();
+    g_game_state.player.base.mode       = local_player_view_mode();
 
     /* Remote-entity render-time interpolation. */
     interpolation_compute_view();

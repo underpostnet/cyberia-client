@@ -31,8 +31,11 @@ bool prediction_apply(const input_command_t* cmd);
 void prediction_enqueue_input(const input_command_t* cmd);
 void prediction_step(double tick_dt);
 void prediction_reconcile(void);
-void prediction_display_step(double frame_dt);
 Vector2 prediction_self_position(void);
+/* Net reconciliation displacement since the last call (then zeroed). Consumed
+ * once per render frame by the local-player presentation layer, which absorbs
+ * it so corrections never disturb the rendered trajectory. */
+Vector2 prediction_consume_correction(void);
 
 /* Interpolation — render-time smoothing of remote entities (sole writer of
  * EntityState.interp_pos; never the local player). */

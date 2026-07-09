@@ -156,14 +156,14 @@ static void command_queue_clear(void) {
 static struct {
     Vector2       predicted_pos;
     Vector2       authoritative_pos;
-    Vector2       display_pos;
+    /* Net displacement reconciliation applied to predicted_pos since the last
+     * prediction_consume_correction() — read once per render frame by the
+     * presentation layer so it can absorb corrections without breaking the
+     * visual trajectory. Presentation-only; never read by the simulation. */
+    Vector2       correction_accum;
     input_ring_t  unacked;
     bool          initialised;
 } g_pred = {0};
-
-/* Exponential-smoothing constant. Same value as before; tuned for 60 FPS
- * to converge a sim-tick step within ~80 ms. */
-#define PREDICTION_DISPLAY_LAMBDA 18.0
 
 static void ring_clear(input_ring_t* r) {
     r->head = 0;
@@ -220,7 +220,7 @@ void prediction_init(void) {
 void prediction_reset(Vector2 authoritative_pos) {
     g_pred.authoritative_pos = authoritative_pos;
     g_pred.predicted_pos     = authoritative_pos;
-    g_pred.display_pos       = authoritative_pos;
+    g_pred.correction_accum  = (Vector2){ 0.0f, 0.0f };
     ring_clear(&g_pred.unacked);
     command_queue_clear();
 }
@@ -256,25 +256,21 @@ void prediction_reconcile(void) {
         int idx = (g_pred.unacked.head + i) % PREDICTION_RING_CAP;
         rebased = sim_step_one(rebased, &g_pred.unacked.items[idx], TICK_DURATION_S);
     }
+    g_pred.correction_accum.x += rebased.x - g_pred.predicted_pos.x;
+    g_pred.correction_accum.y += rebased.y - g_pred.predicted_pos.y;
     g_pred.predicted_pos = rebased;
 }
 
-void prediction_display_step(double frame_dt) {
-    if (frame_dt <= 0.0) return;
-    double blend = 1.0 - exp(-PREDICTION_DISPLAY_LAMBDA * frame_dt);
-    if (blend < 0.0) blend = 0.0;
-    if (blend > 1.0) blend = 1.0;
-    g_pred.display_pos.x = (float)((double)g_pred.display_pos.x +
-                                   ((double)g_pred.predicted_pos.x - (double)g_pred.display_pos.x) * blend);
-    g_pred.display_pos.y = (float)((double)g_pred.display_pos.y +
-                                   ((double)g_pred.predicted_pos.y - (double)g_pred.display_pos.y) * blend);
-    if (fabsf(g_pred.predicted_pos.x - g_pred.display_pos.x) < 0.001f)
-        g_pred.display_pos.x = g_pred.predicted_pos.x;
-    if (fabsf(g_pred.predicted_pos.y - g_pred.display_pos.y) < 0.001f)
-        g_pred.display_pos.y = g_pred.predicted_pos.y;
-}
+/* Raw predicted simulation position. Discrete at sim-tick granularity by
+ * design — visual smoothing is the presentation layer's job
+ * (domain/local_player_view). */
+Vector2 prediction_self_position(void) { return g_pred.predicted_pos; }
 
-Vector2 prediction_self_position(void) { return g_pred.display_pos; }
+Vector2 prediction_consume_correction(void) {
+    Vector2 c = g_pred.correction_accum;
+    g_pred.correction_accum = (Vector2){ 0.0f, 0.0f };
+    return c;
+}
 
 /* ── Interpolation ─────────────────────────────────────────────────────── */
 
