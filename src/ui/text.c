@@ -4,6 +4,7 @@
 #include "text.h"
 
 #include "domain/presentation_runtime.h"
+#include "domain/viewport.h"
 #include "network/engine_client.h"
 #include "util/log.h"
 
@@ -14,11 +15,10 @@
 /* Glyph atlas base size — generous so the font stays crisp when scaled up. */
 #define TEXT_FONT_BASE_SIZE 64
 
-/* Responsive scaling: below this viewport width the global font multiplier is
- * reduced so HUD/UI text is proportionally smaller on phones. Desktop (≥ the
- * breakpoint) is unaffected. */
-#define TEXT_MOBILE_BREAKPOINT_PX 600
-#define TEXT_MOBILE_FONT_SCALE    0.88f
+/* Responsive scaling: on a mobile viewport (see domain/viewport.h) the global
+ * font multiplier is reduced so HUD/UI text is proportionally smaller on
+ * phones. Desktop is unaffected. */
+#define TEXT_MOBILE_FONT_SCALE 0.88f
 
 static Font  s_font;
 static bool  s_loaded;
@@ -92,7 +92,7 @@ Font text_active_font(void) {
  * s_factor) so it tracks viewport width even in loops that never re-sync. */
 static float effective_factor(void) {
     float f = s_factor;
-    if (GetScreenWidth() < TEXT_MOBILE_BREAKPOINT_PX) f *= TEXT_MOBILE_FONT_SCALE;
+    if (viewport_is_mobile()) f *= TEXT_MOBILE_FONT_SCALE;
     return f;
 }
 
