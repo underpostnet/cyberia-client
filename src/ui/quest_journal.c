@@ -2,6 +2,7 @@
 #include "text.h"
 
 #include "modal.h"
+#include "modal_map.h"
 #include "quest_cache.h"
 #include "quest_progress_store.h"
 #include "ui_button.h"
@@ -15,8 +16,9 @@
 
 #define QJ_PANEL_W        248
 #define QJ_MARGIN         8
-#define QJ_TOP_OFFSET     130   /* below the upper-right map info modal */
+#define QJ_TOP_MARGIN     12    /* gap below the map info HUD when it is shown */
 #define QJ_HEADER_H       40
+#define QJ_HEADER_PAD     10    /* left inset for the "Quest Journal" title    */
 #define QJ_SECTION_H      36
 #define QJ_ROW_H          22
 #define QJ_DETAIL_H       54
@@ -68,9 +70,18 @@ static int page_count(int count) {
     return (count + QUEST_JOURNAL_PAGE_SIZE - 1) / QUEST_JOURNAL_PAGE_SIZE;
 }
 
+/* Sits directly below the map info HUD (a small margin below its bottom
+ * edge) when that HUD is on screen, else falls back to the top margin —
+ * dynamic so the two panels never drift apart or overlap. */
+static float panel_top(void) {
+    Rectangle mm = modal_map_bounds();
+    if (mm.height > 0.0f) return mm.y + mm.height + QJ_TOP_MARGIN;
+    return (float)QJ_MARGIN;
+}
+
 static Rectangle panel_rect(void) {
     int sw = GetScreenWidth();
-    return (Rectangle){ (float)(sw - QJ_PANEL_W - QJ_MARGIN), (float)QJ_TOP_OFFSET,
+    return (Rectangle){ (float)(sw - QJ_PANEL_W - QJ_MARGIN), panel_top(),
                         (float)QJ_PANEL_W, 0.0f };
 }
 
@@ -132,12 +143,12 @@ static bool journal_walk(int mode, int mx, int my) {
     float y = panel.y;
 
     float header_h = ui_toggle_header(&s_panel, x, y, w, "Quest Journal", QJ_FONT_TITLE,
-                                      C_TEXT, UI_TOGGLE_HEADER_RIGHT, 0.0f, 0.0f, false);
+                                      C_TEXT, UI_TOGGLE_HEADER_RIGHT, QJ_HEADER_PAD, 0.0f, false);
     Rectangle header = { x, y, w, header_h };
     if (JW_DRAW == mode) {
         DrawRectangleRec(header, C_HEADER);
         ui_toggle_header(&s_panel, x, y, w, "Quest Journal", QJ_FONT_TITLE,
-                         C_TEXT, UI_TOGGLE_HEADER_RIGHT, 0.0f, 0.0f, true);
+                         C_TEXT, UI_TOGGLE_HEADER_RIGHT, QJ_HEADER_PAD, 0.0f, true);
     } else if (JW_CLICK == mode && hit(mx, my, header)) {
         s_panel.expanded = !s_panel.expanded; /* tap anywhere on header */
         return true;
