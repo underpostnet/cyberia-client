@@ -11,6 +11,7 @@
 #include "ui/dev_ui.h"
 #include "ui/entity_overhead_ui.h"
 #include "ui/floating_combat_text.h"
+#include "ui/fx_shapes.h"
 #include "ui/interaction_bubble.h"
 #include "ui/inventory_bar.h"
 #include "ui/loot_fx.h"
@@ -18,11 +19,11 @@
 #include "ui/modal_dialogue.h"
 #include "ui/action_cache.h"
 #include "ui/modal_interact.h"
-#include "ui/modal_player.h"
+#include "ui/modal_map.h"
 #include "ui/nameplate.h"
 #include "ui/quest_journal.h"
 #include "ui/modal_notification.h"
-#include "ui/tap_effect.h"
+#include "ui/fx_tap.h"
 #include "ui/ui_button.h"
 #include "ui/ui_icon.h"
 #include "util/log.h"
@@ -214,7 +215,7 @@ void game_render_frame(void) {
 
     // Tap effects are rendered in screen space so input systems can spawn
     // them directly from screen coordinates without camera conversions.
-    tap_effect_draw();
+    fx_tap_draw();
 
     // Update performance tracking
     g_renderer.frames_rendered++;
@@ -227,24 +228,6 @@ void game_render_frame(void) {
 
     // CRITICAL: Always call EndDrawing() even if errors occurred above
     EndDrawing();
-}
-
-/* Draw one loot spark: an opaque yellow square with a solid black border,
- * matching the tap-effect shape language (black plate slightly larger, coloured
- * body on top, pixel-snapped). */
-static void draw_loot_spark(float cx_px, float cy_px, float size_px, Color body) {
-    if (size_px < 2.0f) size_px = 2.0f;
-    float border = size_px * 0.28f;
-    if (border < 1.0f) border = 1.0f;
-
-    int x = (int)(cx_px - size_px * 0.5f + 0.5f);
-    int y = (int)(cy_px - size_px * 0.5f + 0.5f);
-    int s = (int)(size_px + 0.5f);
-    int b = (int)(border + 0.5f);
-
-    body.a = 255;
-    DrawRectangle(x - b, y - b, s + b * 2, s + b * 2, BLACK);
-    DrawRectangle(x, y, s, s, body);
 }
 
 /* Draw the on-grid quantity counter centered above a drop token. Discreet
@@ -280,10 +263,8 @@ static void game_render_loot_fx(void) {
     for (int i = 0; i < pslots; i++) {
         LootFxParticle pt;
         if (!loot_fx_particle_at(i, &pt)) continue;
-        Color body = (pt.tint == 0) ? (Color){ 255, 240, 0, 255 }    /* pure yellow    */
-                                    : (Color){ 255, 226, 20, 255 };  /* golden yellow  */
-        draw_loot_spark(pt.x * cell_size, pt.y * cell_size,
-                        pt.size * cell_size, body);
+        fx_shape_spark(pt.x * cell_size, pt.y * cell_size,
+                       pt.size * cell_size, FX_SPARK_GOLD, 1.0f);
     }
 
     /* Vacuum flight tokens. */
@@ -1040,7 +1021,7 @@ void game_render_ui(void) {
     if (presentation_runtime_dev_ui()) {
         dev_ui_draw(g_renderer.screen_width, g_renderer.screen_height, 0);
     } else {
-        modal_player_draw(g_renderer.screen_width, g_renderer.screen_height);
+        modal_map_draw(g_renderer.screen_width, g_renderer.screen_height);
     }
 
     // Entity interaction bubbles (left side, collapsible column)
@@ -1051,6 +1032,14 @@ void game_render_ui(void) {
 
     // Inventory bar (always visible in screen space)
     inventory_bar_draw();
+
+    // Loot delivery + slot-arrival sparks land on top of the bar slots.
+    int loot_scr = loot_fx_screen_particle_slot_count();
+    for (int i = 0; i < loot_scr; i++) {
+        LootFxScreenParticle sp;
+        if (!loot_fx_screen_particle_at(i, &sp)) continue;
+        fx_shape_spark(sp.x, sp.y, sp.size, FX_SPARK_GOLD, 1.0f);
+    }
 
     // Portal hold progress bar (centered above the inventory bar; only while
     // the local player stands inside an active portal)

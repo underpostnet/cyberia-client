@@ -18,7 +18,7 @@
 #include "domain/presentation_runtime.h"
 #include "util/log.h"
 #include "ui/ui_dispatch.h"
-#include "ui/tap_effect.h"
+#include "ui/fx_tap.h"
 #include "ui/text.h"
 #include "domain/local_player.h"
 #include "domain/local_player_view.h"
@@ -74,11 +74,11 @@ static void gameloop(void) {
         while (input_pop(&frame_input, &evt)) {
             bool consumed = false;
             if(!consumed && INPUT_TAP == evt.type) {
-                TapEffectParams fx = tap_effect_default_params();
+                FxTapParams fx = fx_tap_default_params();
                 fx.scale = 1.15f;
                 fx.duration = 0.70f;
                 fx.intensity = 1.25f;
-                tap_effect_spawn(evt.screen_position, &fx);
+                fx_tap_spawn(evt.screen_position, &fx);
                 consumed = false; // TAP EFFECTS DON'T CONSUME THE INPUT, BUT ALSO SHOULDN'T HAPPEN BEFORE PROCESS
             }
              // unconsumed event back to the queue

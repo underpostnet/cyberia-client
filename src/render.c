@@ -9,14 +9,15 @@
 #include "ui/floating_combat_text.h"
 #include "ui/interaction_bubble.h"
 #include "ui/loot_fx.h"
+#include "ui/fx_reward.h"
 #include "ui/inventory_bar.h"
 #include "ui/inventory_modal.h"
 #include "ui/modal_dialogue.h"
 #include "ui/modal_interact.h"
-#include "ui/modal_player.h"
+#include "ui/modal_map.h"
 #include "ui/quest_journal.h"
 #include "ui/modal_notification.h"
-#include "ui/tap_effect.h"
+#include "ui/fx_tap.h"
 #include "ui/ui_icon.h"
 #include "network/engine_client.h"
 #include "util/log.h"
@@ -58,12 +59,13 @@ void render_init(int width, int height) {
     if (0 != dev_ui_init()) {
         LOG_WARN("dev_ui_init failed");
     }
-    if (0 != modal_player_init()) {
-        LOG_WARN("modal_player_init failed");
+    if (0 != modal_map_init()) {
+        LOG_WARN("modal_map_init failed");
     }
 
-    tap_effect_init();
+    fx_tap_init();
     loot_fx_reset();
+    fx_reward_init();
     camera_init(width, height);
 }
 
@@ -76,7 +78,7 @@ void render_on_tick(float delta_time) {
     game_render_update_effects(delta_time);
     fct_update(delta_time);
     loot_fx_update(delta_time);
-    tap_effect_update(delta_time);
+    fx_tap_update(delta_time);
 
     inventory_bar_update(delta_time);
     if (inventory_modal_is_open())  inventory_modal_update(delta_time);
@@ -84,10 +86,11 @@ void render_on_tick(float delta_time) {
     if (modal_interact_is_open())   modal_interact_update(delta_time);
     quest_journal_update(delta_time);
     modal_notification_update(delta_time);
+    fx_reward_update(delta_time);
 
     interaction_bubble_update();
     dev_ui_on_tick(delta_time);
-    modal_player_update(delta_time);
+    modal_map_update(delta_time);
 
     if (g_game_state.init_received) {
         game_render_frame();
@@ -118,8 +121,8 @@ void render_fallback(int width, int height) {
 
 void render_cleanup(void) {
     UnloadTexture(render_state.splash_texture);
-    tap_effect_reset();
+    fx_tap_reset();
     game_render_cleanup();
     dev_ui_cleanup();
-    modal_player_cleanup();
+    modal_map_cleanup();
 }

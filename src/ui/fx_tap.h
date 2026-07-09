@@ -4,30 +4,30 @@
 // screen position by existing input or UI systems. No input handling lives here.
 //
 // Integration pattern:
-//   init:    tap_effect_init();
-//   update:  tap_effect_update(delta_time);
-//   draw:    tap_effect_draw();   // screen-space, outside BeginMode2D
+//   init:    fx_tap_init();
+//   update:  fx_tap_update(delta_time);
+//   draw:    fx_tap_draw();   // screen-space, outside BeginMode2D
 
-#ifndef TAP_EFFECT_H
-#define TAP_EFFECT_H
+#ifndef FX_TAP_H
+#define FX_TAP_H
 
 #include <raylib.h>
 #include <stdbool.h>
 
-#define TAP_EFFECT_MAX_ENTRIES 32
+#define FX_TAP_MAX_ENTRIES 32
 
 typedef struct {
     Color color;      // Base palette color for the cross.
     float scale;      // 1.0 = normal size, >1.0 = larger cross.
     float duration;   // Total lifetime in seconds.
     float intensity;  // 0.0..2.0 visual energy multiplier.
-} TapEffectParams;
+} FxTapParams;
 
-void tap_effect_init(void);
-void tap_effect_reset(void);
-TapEffectParams tap_effect_default_params(void);
-void tap_effect_spawn(Vector2 screen_position, const TapEffectParams* params);
-void tap_effect_update(float dt);
-void tap_effect_draw(void);
+void fx_tap_init(void);
+void fx_tap_reset(void);
+FxTapParams fx_tap_default_params(void);
+void fx_tap_spawn(Vector2 screen_position, const FxTapParams* params);
+void fx_tap_update(float dt);
+void fx_tap_draw(void);
 
-#endif /* TAP_EFFECT_H */
+#endif /* FX_TAP_H */
