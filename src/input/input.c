@@ -46,7 +46,9 @@ void input_queue_on_tick(input_queue_t* q, double dt) {
 
     float wheel = GetMouseWheelMove();
     if (!FloatEquals(wheel, 0.0f)) {
-        input_push(q, (input_event_t){ .type = INPUT_ZOOM, .zoom_in = wheel > 0 });
+        input_push(q, (input_event_t){ .type = INPUT_ZOOM,
+                                       .zoom_in = wheel > 0,
+                                       .wheel_delta = wheel });
     }
 }
 

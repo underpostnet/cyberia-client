@@ -68,6 +68,7 @@ void interaction_bubble_init(void);
 void interaction_bubble_update(void);
 void interaction_bubble_draw(void);
 bool interaction_bubble_handle_click(int mx, int my);
+bool interaction_bubble_handle_wheel(float wheel_delta);
 int  interaction_bubble_slot_count(void);
 
 /**

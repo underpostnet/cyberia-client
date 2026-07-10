@@ -34,9 +34,11 @@ void modal_interact_open(const char* entity_id, const char* display_name,
 
 void modal_interact_close(void);
 bool modal_interact_is_open(void);
+float modal_interact_layout_bottom(void);
 void modal_interact_update(float dt);
 void modal_interact_draw(void);
 bool modal_interact_handle_click(int mx, int my);
+bool modal_interact_handle_wheel(float wheel_delta);
 
 /* Called when the JS overlay closes — reopens this modal. */
 void modal_interact_overlay_closed(void);

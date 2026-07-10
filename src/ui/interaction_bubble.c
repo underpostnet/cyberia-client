@@ -15,6 +15,7 @@
 
 #include "network/game_client.h"
 #include "domain/presentation_runtime.h"
+#include "domain/viewport.h"
 #include "dialogue_data.h"
 #include "entity_render.h"
 #include "game_state.h"
@@ -24,7 +25,9 @@
 #include "notification.h"
 #include "notify_store.h"
 #include "layer_z_order.h"
+#include "inventory_bar.h"
 #include "ui_toggle.h"
+#include "ui_scroll.h"
 #include "nameplate.h"
 #include "object_layers_management.h"
 #include "ol_stack_ico.h"
@@ -44,14 +47,17 @@ static int                   s_border_color_dbg = 0;
 
 /* Collapsible column: a left-edge toggle slides the bubbles in/out. Slots
  * keep updating while collapsed (entities stay tracked). */
-#define IBUBBLE_SMALL_SCREEN_BREAKPOINT_PX 600
 /* Small square toggle matching the Quest Journal chevron size. */
 #define IBUBBLE_TOGGLE_SZ  32
 #define IBUBBLE_TOGGLE_PAD  6
+#define IBUBBLE_SCROLL_GAP   6.0f
 static UIToggle s_col_toggle;
 static bool     s_col_init = false;
 /* Horizontal slide: 0 when expanded, −column_width when fully collapsed. */
 static float    s_col_offset = 0.0f;
+static UIScroll s_col_scroll;
+
+static bool open_slot_at(int mx, int my);
 
 static float column_width(void) {
     return (float)(IBUBBLE_MARGIN_X + IBUBBLE_ICON_SIZE + IBUBBLE_GAP);
@@ -64,13 +70,39 @@ static Rectangle toggle_anchor(void) {
                         (float)IBUBBLE_TOGGLE_SZ,  (float)IBUBBLE_TOGGLE_SZ };
 }
 
+static Rectangle column_scroll_view(void) {
+    Rectangle inventory_toggle = inventory_bar_toggle_bounds();
+    float top = s_col_toggle.anchor.y + s_col_toggle.anchor.height + IBUBBLE_SCROLL_GAP;
+    float bottom = inventory_toggle.y - IBUBBLE_SCROLL_GAP;
+    if (bottom < top) bottom = top;
+    return (Rectangle){ 0.0f, top, (float)GetScreenWidth(), bottom - top };
+}
+
+static Rectangle column_input_bounds(Rectangle view) {
+    float right = (float)IBUBBLE_MARGIN_X + s_col_offset +
+                  (float)IBUBBLE_ICON_SIZE + (float)IBUBBLE_GAP;
+    if (right < 0.0f) right = 0.0f;
+    if (right > view.width) right = view.width;
+    return (Rectangle){ 0.0f, view.y, right, view.height };
+}
+
+static Rectangle column_scrollbar_bounds(Rectangle view) {
+    return (Rectangle){ 0.0f, view.y, (float)IBUBBLE_MARGIN_X, view.height };
+}
+
+static float column_content_height(void) {
+    return (float)IBUBBLE_MARGIN_Y +
+           (float)s_slot_count * (float)(IBUBBLE_ICON_SIZE + IBUBBLE_GAP);
+}
+
 static void column_ensure_toggle(void) {
     if (s_col_init) return;
-    bool expanded = GetScreenWidth() >= IBUBBLE_SMALL_SCREEN_BREAKPOINT_PX;
+    bool expanded = !viewport_is_mobile();
     s_col_offset  = expanded ? 0.0f : -column_width();
     /* Chevron points LEFT when expanded ("tap to collapse"); flips to RIGHT
      * when collapsed via resolve_chevron so it means "tap to expand". */
     ui_toggle_init(&s_col_toggle, toggle_anchor(), expanded, UI_TOGGLE_CHEVRON_LEFT);
+    ui_scroll_reset(&s_col_scroll);
     s_col_init = true;
 }
 
@@ -98,10 +130,11 @@ static Color status_border_color(const InteractionBubbleSlot* slot, bool is_self
 
 /* ── Helpers ──────────────────────────────────────────────────────────── */
 
-static Rectangle slot_rect(int index) {
+static Rectangle slot_rect(int index, Rectangle view) {
     float x = (float)IBUBBLE_MARGIN_X + s_col_offset;
-    /* Slots start one full slot-height below the top to clear the toggle. */
-    float y = (float)(IBUBBLE_MARGIN_Y + (index + 1) * (IBUBBLE_ICON_SIZE + IBUBBLE_GAP));
+    float y = view.y + (float)IBUBBLE_MARGIN_Y +
+              (float)index * (float)(IBUBBLE_ICON_SIZE + IBUBBLE_GAP) -
+              ui_scroll_offset(&s_col_scroll);
     return (Rectangle){ x, y, (float)IBUBBLE_ICON_SIZE, (float)IBUBBLE_ICON_SIZE };
 }
 
@@ -272,6 +305,7 @@ void interaction_bubble_init(void) {
     s_slot_count = 0;
     memset(s_slots, 0, sizeof(s_slots));
     s_col_init = false;
+    ui_scroll_reset(&s_col_scroll);
 }
 
 void interaction_bubble_update(void) {
@@ -315,21 +349,35 @@ void interaction_bubble_update(void) {
         }
     }
     s_slot_count = write;
+
+    if (s_col_toggle.expanded) {
+        Rectangle view = column_scroll_view();
+        ui_scroll_set_input_bounds(&s_col_scroll, column_input_bounds(view));
+        ui_scroll_set_scrollbar_bounds(&s_col_scroll, column_scrollbar_bounds(view));
+        ui_scroll_update(&s_col_scroll, view, column_content_height(), GetFrameTime());
+        int click_x, click_y;
+        if (ui_scroll_take_click(&s_col_scroll, &click_x, &click_y)) {
+            open_slot_at(click_x, click_y);
+        }
+    }
 }
 
 void interaction_bubble_draw(void) {
     column_ensure_toggle();
-    ui_toggle_draw(&s_col_toggle);
-
-    if (s_slot_count <= 0) return;
+    if (!s_col_toggle.expanded || s_slot_count <= 0) {
+        ui_toggle_draw(&s_col_toggle);
+        return;
+    }
 
     int mx = GetMouseX();
     int my = GetMouseY();
     ObjectLayersManager* mgr = obj_layers_mgr_get();
+    Rectangle view = column_scroll_view();
 
+    ui_scroll_begin(&s_col_scroll);
     for (int i = 0; i < s_slot_count; i++) {
         InteractionBubbleSlot* slot = &s_slots[i];
-        Rectangle r = slot_rect(i);
+        Rectangle r = slot_rect(i, view);
         bool hovered = hit_rect(mx, my, r);
         bool is_self = (strcmp(slot->entity_id, g_game_state.player_id) == 0);
 
@@ -452,18 +500,14 @@ void interaction_bubble_draw(void) {
                      (Color){ 210, 220, 240, (unsigned char)(245 * fade) });
         }
     }
+    ui_scroll_end(&s_col_scroll);
+    ui_toggle_draw(&s_col_toggle);
 }
 
-bool interaction_bubble_handle_click(int mx, int my) {
-    column_ensure_toggle();
-    if (ui_toggle_handle_click(&s_col_toggle, mx, my)) return true;
-
-    /* When collapsed the bubbles are off-screen; ignore slot hit-tests. */
-    if (!s_col_toggle.expanded) return false;
-    if (s_slot_count <= 0) return false;
-
+static bool open_slot_at(int mx, int my) {
+    Rectangle view = column_scroll_view();
     for (int i = 0; i < s_slot_count; i++) {
-        Rectangle r = slot_rect(i);
+        Rectangle r = slot_rect(i, view);
         if (hit_rect(mx, my, r)) {
             InteractionBubbleSlot* slot = &s_slots[i];
             LOG_INFO("[INTERACTION_BUBBLE] Slot %d clicked: entity=%s flags=0x%x\n",
@@ -483,6 +527,30 @@ bool interaction_bubble_handle_click(int mx, int my) {
         }
     }
     return false;
+}
+
+bool interaction_bubble_handle_click(int mx, int my) {
+    column_ensure_toggle();
+    if (ui_toggle_handle_click(&s_col_toggle, mx, my)) {
+        ui_scroll_reset(&s_col_scroll);
+        return true;
+    }
+
+    if (!s_col_toggle.expanded || s_slot_count <= 0) return false;
+    Rectangle view = column_scroll_view();
+    Rectangle input = column_input_bounds(view);
+    if (!hit_rect(mx, my, input)) return false;
+    ui_scroll_on_press(&s_col_scroll, mx, my);
+    return true;
+}
+
+bool interaction_bubble_handle_wheel(float wheel_delta) {
+    column_ensure_toggle();
+    if (!s_col_toggle.expanded || s_slot_count <= 0) return false;
+    Rectangle view = column_scroll_view();
+    ui_scroll_set_input_bounds(&s_col_scroll, column_input_bounds(view));
+    ui_scroll_set_scrollbar_bounds(&s_col_scroll, column_scrollbar_bounds(view));
+    return ui_scroll_on_wheel(&s_col_scroll, view, column_content_height(), wheel_delta);
 }
 
 /* Open the JS overlay for one resolved slot on a given tab, pushing its OL
@@ -552,9 +620,7 @@ bool interaction_bubble_point_covered(int x, int y) {
     if (hit_rect(x, y, s_col_toggle.anchor)) return true; /* tab always blocks */
     if (!s_col_toggle.expanded) return false;             /* collapsed → free for game */
     if (s_slot_count <= 0) return false;
-    float right = (float)IBUBBLE_MARGIN_X + s_col_offset +
-                  (float)IBUBBLE_ICON_SIZE + (float)IBUBBLE_MARGIN_X;
-    return (float)x < right;
+    return hit_rect(x, y, column_input_bounds(column_scroll_view()));
 }
 
 int interaction_bubble_slot_count(void) {

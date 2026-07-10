@@ -7,6 +7,7 @@
 #include "game_state.h"
 #include "world_types.h"
 #include "interaction_bubble.h"
+#include "inventory_bar.h"
 #include "inventory_modal.h"
 #include "item_slot.h"
 #include "modal.h"
@@ -18,6 +19,7 @@
 #include "quest_progress_store.h"
 #include "quest_cache.h"
 #include "ui_button.h"
+#include "ui_scroll.h"
 #include "ui_toggle.h"
 #include "util/log.h"
 
@@ -76,6 +78,8 @@ static Rectangle s_q_btn[MI_QUEST_MAX];
 static int       s_q_btn_kind[MI_QUEST_MAX]; /* 0 none, 1 accept, 2 abandon */
 static char      s_q_btn_code[MI_QUEST_MAX][64];
 static int       s_q_count = 0;
+static UIScroll  s_q_scroll;
+static float     s_q_content_height = 0.0f;
 
 /* Reward icon hit-boxes captured across all visible cards during the draw, so
  * the click handler can open the same read-only inspection the stack tab uses. */
@@ -94,6 +98,8 @@ static int              s_cached_layer_count = 0;
 
 /* The JS overlay is open and we wait for it to close to reopen this modal. */
 static bool  s_overlay_open = false;
+
+static void handle_quest_click(int mx, int my);
 
 /* ─────────────────────────────────────────────────────────────────────────
  *  EPHEMERAL SESSION DATA — survives navigating away to inspection modals
@@ -206,6 +212,21 @@ static inline int   mi_font_rew(void)    { return viewport_is_mobile() ? MI_FONT
 static inline float mi_rew_slot_sz(void) { return viewport_is_mobile() ? (float)MI_REW_SLOT_SZ  : MI_REW_SLOT_SZ_DESKTOP; }
 static inline float mi_rew_slot_gap(void){ return viewport_is_mobile() ? (float)MI_REW_SLOT_GAP : MI_REW_SLOT_GAP_DESKTOP; }
 static inline float mi_q_chevron(void)   { return viewport_is_mobile() ? UI_TOGGLE_HDR_CHEVRON : MI_Q_CHEVRON_DESKTOP; }
+static inline float mi_pad(void)          { return viewport_is_mobile() ? 8.0f : (float)MI_PAD; }
+static inline float mi_header_h(void)     { return viewport_is_mobile() ? 36.0f : (float)MI_HEADER_H; }
+static inline float mi_close_sz(void)     { return viewport_is_mobile() ? 32.0f : (float)MI_CLOSE_SZ; }
+static inline float mi_tab_h(void)        { return viewport_is_mobile() ? 32.0f : (float)MI_TAB_H; }
+static inline float mi_tab_w(Rectangle card) {
+    if (!viewport_is_mobile()) return (float)MI_TAB_W;
+    float available = (card.width - 2.0f * mi_pad() - 2.0f * MI_TAB_GAP) / MI_TAB_COUNT;
+    return available < 90.0f ? available : 90.0f;
+}
+static inline float mi_bar_h(void)        { return viewport_is_mobile() ? 48.0f : (float)MI_BAR_H; }
+static inline float mi_bar_btn_h(void)    { return viewport_is_mobile() ? 34.0f : (float)MI_BAR_BTN_H; }
+static inline float mi_bar_btn_maxw(void) { return viewport_is_mobile() ? 128.0f : (float)MI_BAR_BTN_MAXW; }
+static inline int   mi_font_name(void)    { return viewport_is_mobile() ? 18 : MI_FONT_NAME; }
+static inline int   mi_font_label(void)   { return viewport_is_mobile() ? 12 : MI_FONT_LABEL; }
+static inline int   mi_font_btn(void)     { return viewport_is_mobile() ? 14 : MI_FONT_BTN; }
 
 static const Color C_BTN        = {  24,  30,  48, 255 };
 static const Color C_CONTENT    = {  60,  80, 130,  36 };
@@ -219,11 +240,13 @@ static const Color C_DESC_TEXT  = { 170, 180, 200, 220 };
 
 /* ── Capability tabs ─────────────────────────────────────────────────── */
 
-/* Stack and Stats always show; Quest appears only when the server sets the quest
- * capability bit. There is no Action tab: a pending action-talk-quest needs no
- * tab — the player just taps the paired modal dialogue to advance it. */
+/* Stack and Stats always show; Quest appears whenever the NPC surfaces any
+ * quest codes — including completed feedback, which carries no attention icon
+ * (the quest capability bit lights only for actionable content). There is no
+ * Action tab: a pending action-talk-quest needs no tab — the player just taps
+ * the paired modal dialogue to advance it. */
 static bool quest_tab_visible(void) {
-    return (s_interaction_flags & INTERACTION_FLAG_QUEST) != 0;
+    return s_quest_code_count > 0;
 }
 
 /* Fill `out` with the visible tab IDs in strip order; returns the count. */
@@ -244,42 +267,52 @@ static int visible_tabs(int out[MI_TAB_COUNT]) {
 static Rectangle card_rect(void) {
     int sw = GetScreenWidth();
     int sh = GetScreenHeight();
-    return (Rectangle){ (float)MI_PAD, (float)MI_PAD,
-                        (float)(sw - 2 * MI_PAD), sh * MI_TOP_FRAC - MI_PAD * 1.5f };
+    float pad = mi_pad();
+    float hidden_bar_h = inventory_bar_full_height() - inventory_bar_visible_height();
+    float bottom = sh * MI_TOP_FRAC - pad * 0.5f + hidden_bar_h;
+    float max_bottom = sh - inventory_bar_visible_height() - pad;
+    if (bottom > max_bottom) bottom = max_bottom;
+    return (Rectangle){ pad, pad, (float)sw - 2.0f * pad, bottom - pad };
 }
 
 static Rectangle close_rect(Rectangle card) {
-    return (Rectangle){ card.x + card.width - MI_CLOSE_SZ - 8.0f, card.y + 3.0f,
-                        (float)MI_CLOSE_SZ, (float)MI_CLOSE_SZ };
+    float size = mi_close_sz();
+    return (Rectangle){ card.x + card.width - size - mi_pad() * 0.5f, card.y + 2.0f,
+                        size, size };
 }
 
 static Rectangle tab_rect(Rectangle card, int i) {
-    float y = card.y + MI_HEADER_H;
-    return (Rectangle){ card.x + MI_PAD + (float)i * (MI_TAB_W + MI_TAB_GAP), y,
-                        (float)MI_TAB_W, (float)MI_TAB_H };
+    float y = card.y + mi_header_h();
+    float width = mi_tab_w(card);
+    return (Rectangle){ card.x + mi_pad() + (float)i * (width + MI_TAB_GAP), y,
+                        width, mi_tab_h() };
 }
 
 /* Content area between the tab strip and the bottom bar. */
 static Rectangle content_rect(Rectangle card) {
-    float top = card.y + MI_HEADER_H + MI_TAB_H + MI_PAD;
-    float bot = card.y + card.height - MI_BAR_H - MI_PAD;
-    return (Rectangle){ card.x + MI_PAD, top, card.width - 2 * MI_PAD, bot - top };
+    float pad = mi_pad();
+    float top = card.y + mi_header_h() + mi_tab_h() + pad;
+    float bot = card.y + card.height - mi_bar_h() - pad;
+    return (Rectangle){ card.x + pad, top, card.width - 2.0f * pad, bot - top };
 }
 
 static Rectangle bar_rect(Rectangle card) {
-    return (Rectangle){ card.x, card.y + card.height - MI_BAR_H, card.width, (float)MI_BAR_H };
+    float height = mi_bar_h();
+    return (Rectangle){ card.x, card.y + card.height - height, card.width, height };
 }
 
 /* Chat + Integration buttons: right-aligned in the bottom bar, each capped
  * at MI_BAR_BTN_MAXW wide. */
 static void bar_buttons(Rectangle card, Rectangle* chat, Rectangle* integration) {
     Rectangle bar = bar_rect(card);
-    float bw = (bar.width - 3 * MI_PAD) * 0.5f;
-    if (bw > MI_BAR_BTN_MAXW) bw = MI_BAR_BTN_MAXW;
-    float by = bar.y + (MI_BAR_H - MI_BAR_BTN_H) * 0.5f;
-    float ix = bar.x + bar.width - MI_PAD - bw;
-    *integration = (Rectangle){ ix, by, bw, (float)MI_BAR_BTN_H };
-    *chat        = (Rectangle){ ix - MI_BAR_BTN_GAP - bw, by, bw, (float)MI_BAR_BTN_H };
+    float pad = mi_pad();
+    float button_h = mi_bar_btn_h();
+    float bw = (bar.width - 3.0f * pad) * 0.5f;
+    if (bw > mi_bar_btn_maxw()) bw = mi_bar_btn_maxw();
+    float by = bar.y + (bar.height - button_h) * 0.5f;
+    float ix = bar.x + bar.width - pad - bw;
+    *integration = (Rectangle){ ix, by, bw, button_h };
+    *chat        = (Rectangle){ ix - MI_BAR_BTN_GAP - bw, by, bw, button_h };
 }
 
 static Rectangle slot_rect_in(Rectangle content, int i) {
@@ -389,6 +422,8 @@ void modal_interact_overlay_closed(void) {
 void modal_interact_init(void) {
     s_open = false;
     s_overlay_open = false;
+    ui_scroll_reset(&s_q_scroll);
+    s_q_content_height = 0.0f;
     es_clear();
 }
 
@@ -427,6 +462,8 @@ void modal_interact_open(const char* entity_id, const char* display_name,
     s_overlay_open       = false;
     s_open               = true;
     s_tab                = MI_TAB_STACK;
+    ui_scroll_reset(&s_q_scroll);
+    s_q_content_height = 0.0f;
 
     /* Only snapshot layers from AOI when we don't already have a cached
      * copy from the ephemeral session.  This way, returning from the
@@ -487,11 +524,32 @@ void modal_interact_close(void) {
 
 bool modal_interact_is_open(void) { return s_open; }
 
+float modal_interact_layout_bottom(void) {
+    if (!s_open) return 0.0f;
+    Rectangle card = card_rect();
+    return card.y + card.height;
+}
+
+bool modal_interact_handle_wheel(float wheel_delta) {
+    if (!s_open || s_age < MODAL_POP_DURATION || s_tab != MI_TAB_QUEST) return false;
+    return ui_scroll_on_wheel(&s_q_scroll, content_rect(card_rect()),
+                              s_q_content_height, wheel_delta);
+}
+
 void modal_interact_update(float dt) {
     if (!s_open) return;
     s_age += dt;
 
     for (int i = 0; i < MI_QUEST_MAX; i++) ui_toggle_update(&s_q_toggle[i], dt);
+
+    if (s_tab == MI_TAB_QUEST) {
+        ui_scroll_update(&s_q_scroll, content_rect(card_rect()), s_q_content_height, dt);
+        int click_x, click_y;
+        if (ui_scroll_take_click(&s_q_scroll, &click_x, &click_y)) {
+            handle_quest_click(click_x, click_y);
+            if (!s_open) return;
+        }
+    }
 
     if (!s_dialogue_opened) {
         const DialogueDataSet* d = dialogue_data_get(active_dlg_key());
@@ -529,11 +587,87 @@ static void draw_stats_tab(Rectangle content) {
         char val[16];
         snprintf(val, sizeof(val), "%d", values[i]);
         int vw = MeasureText(val, MI_FONT_STAT);
-        DrawText(val, (int)(cx + col_w - vw - MI_PAD), (int)cy, MI_FONT_STAT, C_STAT);
+        DrawText(val, (int)(cx + col_w - vw - mi_pad()), (int)cy, MI_FONT_STAT, C_STAT);
     }
 }
 
 /* ── Quest tab: show the entity's active-quest description + rewards ──── */
+
+static int quest_active_step_index(const QuestMetadataEntry* metadata,
+                                   const QuestProgressEntry* progress) {
+    if (NULL == metadata || NULL == progress || '\0' == progress->active_step[0]) return 0;
+    for (int i = 0; i < metadata->step_count; i++) {
+        const QuestStepMeta* step = &metadata->steps[i];
+        if (0 == strcmp(step->id, progress->active_step) ||
+            0 == strcmp(step->description, progress->active_step)) {
+            return i;
+        }
+    }
+    return 0;
+}
+
+static const char* quest_objective_verb(const char* type) {
+    if (type && 0 == strcmp(type, "collect")) return "Collect";
+    if (type && 0 == strcmp(type, "kill"))    return "Defeat";
+    if (type && 0 == strcmp(type, "talk"))    return "Talk to";
+    return "Complete";
+}
+
+static float draw_quest_step_objectives(const QuestStepMeta* step,
+                                        const char* progress, int x, float y,
+                                        int width, int font, Color color) {
+    if (progress && '\0' != progress[0]) {
+        char line[QUEST_OBJECTIVES_MAX + 16];
+        snprintf(line, sizeof(line), "Objective: %s", progress);
+        return (float)text_wrap(line, x, (int)y, width, font, color, false, true);
+    }
+    if (NULL == step) return 0.0f;
+
+    float used = 0.0f;
+    for (int i = 0; i < step->objective_count; i++) {
+        const QuestObjectiveMeta* objective = &step->objectives[i];
+        char line[QUEST_CACHE_ITEM_MAX + 40];
+        snprintf(line, sizeof(line), "Objective: %s %s x%d",
+                 quest_objective_verb(objective->type), objective->item_id,
+                 objective->quantity);
+        int height = text_wrap(line, x, (int)(y + used), width, font, color, false, true);
+        used += (float)height;
+    }
+    return used;
+}
+
+static void draw_quest_steps(const QuestMetadataEntry* metadata,
+                             const QuestProgressEntry* progress, bool active,
+                             bool completed, bool acceptable, float x, float* y,
+                             int width, int step_font, int objective_font) {
+    if (NULL == metadata || metadata->step_count <= 0) return;
+
+    DrawText("Steps", (int)x, (int)*y, objective_font, C_REW_LABEL);
+    *y += objective_font + 4.0f;
+
+    int current_step = active ? quest_active_step_index(metadata, progress)
+                     : acceptable ? 0 : metadata->step_count;
+    for (int i = 0; i < metadata->step_count; i++) {
+        bool is_current = i == current_step;
+        bool is_done = completed || (active && i < current_step);
+        Color step_color = is_current ? C_STAT : is_done ? (Color){ 105, 145, 118, 185 }
+                                      : (Color){ 120, 130, 155, 175 };
+        float marker_y = *y + text_line_height(step_font) * 0.5f;
+        DrawCircle((int)(x + 4.0f), (int)marker_y, is_current ? 4.0f : 3.0f, step_color);
+
+        char line[QUEST_CACHE_STEPDESC_MAX + 24];
+        snprintf(line, sizeof(line), "Step %d: %s", i + 1, metadata->steps[i].description);
+        *y += text_wrap(line, (int)(x + 14.0f), (int)*y, width - 14,
+                        step_font, step_color, false, true);
+
+        const char* live_progress = is_current && progress ? progress->objectives : NULL;
+        Color objective_color = is_current ? C_DESC_TEXT : step_color;
+        *y += draw_quest_step_objectives(&metadata->steps[i], live_progress,
+                                         (int)(x + 22.0f), *y, width - 22,
+                                         objective_font, objective_color);
+        *y += 4.0f;
+    }
+}
 
 /* One collapsible mission card. Advances *y; records the per-card primary
  * button (Accept / Abandon) so the click handler can act on it. */
@@ -591,6 +725,8 @@ static void draw_quest_card(int slot, const char* code, Rectangle content,
     if (qm && QUEST_CACHE_READY == qm->state) {
         *y += text_wrap(qm->description, (int)ix, (int)*y, iw, mi_font_desc(), C_DESC_TEXT, false, true);
         *y += 4;
+        draw_quest_steps(qm, q, active, completed, acceptable, ix, y, iw,
+                         mi_font_desc(), rfont);
         if (qm->reward_count > 0) {
             DrawText("Reward:", (int)ix, (int)*y, rfont, C_REW_LABEL);
             float rx = ix + MeasureText("Reward:", rfont) + 8;
@@ -613,8 +749,17 @@ static void draw_quest_card(int slot, const char* code, Rectangle content,
             *y += slot_sz + 2;
         }
     } else {
-        DrawText("Loading...", (int)ix, (int)*y, mi_font_desc(), C_LABEL);
-        *y += mi_font_desc() + 2;
+        if (active && q && q->active_step[0] != '\0') {
+            DrawText("Current step", (int)ix, (int)*y, rfont, C_REW_LABEL);
+            *y += rfont + 3;
+            *y += text_wrap(q->active_step, (int)ix, (int)*y, iw,
+                            mi_font_desc(), C_STAT, false, true);
+            *y += draw_quest_step_objectives(NULL, q->objectives, (int)ix,
+                                             *y, iw, rfont, C_DESC_TEXT);
+        } else {
+            DrawText("Loading mission details...", (int)ix, (int)*y, mi_font_desc(), C_LABEL);
+            *y += mi_font_desc() + 2;
+        }
     }
 
     if (active || acceptable) {
@@ -653,9 +798,13 @@ static void draw_quest_tab(Rectangle content, int mx, int my) {
     s_reward_slot_count = 0;
     s_q_count = s_quest_code_count < MI_QUEST_MAX ? s_quest_code_count : MI_QUEST_MAX;
 
-    float y = content.y + 4.0f;
+    float content_y = content.y - ui_scroll_offset(&s_q_scroll);
+    float y = content_y + 4.0f;
+    ui_scroll_begin(&s_q_scroll);
     if (0 == s_q_count) {
         DrawText("No missions available here.", (int)content.x, (int)y, mi_font_quest(), C_LABEL);
+        s_q_content_height = y - content_y + mi_font_quest() + 4.0f;
+        ui_scroll_end(&s_q_scroll);
         return;
     }
     int lfont = mi_font_qlabel();
@@ -663,6 +812,36 @@ static void draw_quest_tab(Rectangle content, int mx, int my) {
     y += lfont + 6;
     for (int i = 0; i < s_q_count; i++) {
         draw_quest_card(i, s_quest_codes[i], content, &y, mx, my);
+    }
+    s_q_content_height = y - content_y + 4.0f;
+    ui_scroll_end(&s_q_scroll);
+}
+
+static void handle_quest_click(int mx, int my) {
+    for (int i = 0; i < s_q_count; i++) {
+        if (0 == s_q_btn_kind[i] || !ui_button_hit(s_q_btn[i], mx, my)) continue;
+        if (1 == s_q_btn_kind[i]) {
+            local_player_request_quest_accept(s_entity_id, s_q_btn_code[i]);
+        } else {
+            local_player_request_quest_abandon(s_q_btn_code[i]);
+        }
+        return;
+    }
+    for (int i = 0; i < s_reward_slot_count; i++) {
+        if (item_slot_hit(s_reward_rects[i], mx, my)) {
+            ObjectLayerState ols = s_reward_ols[i];
+            es_push();
+            modal_interact_close();
+            inventory_modal_open_external(&ols);
+            inventory_modal_set_on_close(modal_interact_reopen);
+            return;
+        }
+    }
+    for (int i = 0; i < s_q_count; i++) {
+        if (CheckCollisionPointRec((Vector2){ (float)mx, (float)my }, s_q_header[i])) {
+            s_q_toggle[i].expanded = !s_q_toggle[i].expanded;
+            return;
+        }
     }
 }
 
@@ -685,11 +864,12 @@ void modal_interact_draw(void) {
     DrawRectangleLinesEx(card, 1.0f, bc);
 
     /* Header */
-    DrawRectangle((int)card.x, (int)card.y, (int)card.width, MI_HEADER_H,
+    DrawRectangle((int)card.x, (int)card.y, (int)card.width, (int)mi_header_h(),
                   (Color){ s_border.r, s_border.g, s_border.b, 40 });
     if (s_display_name[0] != '\0') {
-        DrawText(s_display_name, (int)(card.x + MI_PAD),
-                 (int)(card.y + (MI_HEADER_H - MI_FONT_NAME) / 2), MI_FONT_NAME, C_TEXT);
+        int name_font = mi_font_name();
+        DrawText(s_display_name, (int)(card.x + mi_pad()),
+                 (int)(card.y + (mi_header_h() - name_font) * 0.5f), name_font, C_TEXT);
     }
     Rectangle xr = close_rect(card);
     UIButtonStyle close_btn = { .icon_id = "close-yellow", .no_fill = true };
@@ -698,9 +878,11 @@ void modal_interact_draw(void) {
     /* Content panel — faint, mostly transparent so the world shows through;
      * just enough to delimit the active tab's content area. */
     Rectangle content = content_rect(card);
-    Rectangle panel = { card.x + MI_PAD - 4, card.y + MI_HEADER_H + MI_TAB_H,
-                        card.width - 2 * (MI_PAD - 4),
-                        (card.y + card.height - MI_BAR_H) - (card.y + MI_HEADER_H + MI_TAB_H) };
+    float pad = mi_pad();
+    Rectangle panel = { card.x + pad - 4.0f, card.y + mi_header_h() + mi_tab_h(),
+                        card.width - 2.0f * (pad - 4.0f),
+                        (card.y + card.height - mi_bar_h()) -
+                        (card.y + mi_header_h() + mi_tab_h()) };
     DrawRectangleRec(panel, C_CONTENT);
 
     /* Tab strip — inactive tabs are transparent with a dimmed icon+label;
@@ -717,11 +899,11 @@ void modal_interact_draw(void) {
         UIButtonStyle tb;
         if (t == s_tab) {
             tb = (UIButtonStyle){ .text = MI_TAB_LABEL[t], .icon_id = MI_TAB_ICON[t],
-                                  .font_size = MI_FONT_LABEL, .bg = C_TAB_ACTIVE,
+                                  .font_size = mi_font_label(), .bg = C_TAB_ACTIVE,
                                   .text_color = C_TEXT, .rounded = true, .roundness = 0.25f };
         } else {
             tb = (UIButtonStyle){ .text = MI_TAB_LABEL[t], .icon_id = MI_TAB_ICON[t],
-                                  .font_size = MI_FONT_LABEL, .no_fill = true,
+                                  .font_size = mi_font_label(), .no_fill = true,
                                   .text_color = C_TAB_DIM };
         }
         ui_button_draw(r, &tb, UI_BUTTON_NORMAL);
@@ -738,7 +920,7 @@ void modal_interact_draw(void) {
     bar_buttons(card, &chat, &integration);
 
     UIButtonStyle chat_btn = { .text = "Chat", .icon_id = "chat",
-                               .font_size = MI_FONT_BTN, .bg = C_BTN, .text_color = C_TEXT };
+                               .font_size = mi_font_btn(), .bg = C_BTN, .text_color = C_TEXT };
     ui_button_draw(chat, &chat_btn, ui_button_resolve_state(true, false, ui_button_hit(chat, mx, my)));
 
     int unread = notification_count(NOTIF_CHAT, s_entity_id);
@@ -754,7 +936,7 @@ void modal_interact_draw(void) {
     }
 
     UIButtonStyle integration_btn = { .text = "Integration", .icon_id = "reload",
-                                      .font_size = MI_FONT_BTN, .bg = C_BTN, .text_color = C_TEXT };
+                                      .font_size = mi_font_btn(), .bg = C_BTN, .text_color = C_TEXT };
     ui_button_draw(integration, &integration_btn,
                    ui_button_resolve_state(true, false, ui_button_hit(integration, mx, my)));
 }
@@ -797,6 +979,12 @@ bool modal_interact_handle_click(int mx, int my) {
 
     Rectangle content = content_rect(card);
 
+    if (s_tab == MI_TAB_QUEST &&
+        CheckCollisionPointRec((Vector2){ (float)mx, (float)my }, content)) {
+        ui_scroll_on_press(&s_q_scroll, mx, my);
+        return true;
+    }
+
     /* Stack tab: tap an item slot → read-only inspection.  Push the current
      * modal session onto the ephemeral stack so popping restores it. */
     if (s_tab == MI_TAB_STACK) {
@@ -807,36 +995,6 @@ bool modal_interact_handle_click(int mx, int my) {
                 modal_interact_close();
                 inventory_modal_open_external(&ols);
                 inventory_modal_set_on_close(modal_interact_reopen);
-                return true;
-            }
-        }
-    }
-
-    /* Quest tab: mission cards — Accept/Abandon, reward inspect, or toggle
-     * expand by clicking anywhere on the header bar. */
-    if (s_tab == MI_TAB_QUEST) {
-        for (int i = 0; i < s_q_count; i++) {
-            if (0 == s_q_btn_kind[i] || !ui_button_hit(s_q_btn[i], mx, my)) continue;
-            if (1 == s_q_btn_kind[i]) {
-                local_player_request_quest_accept(s_entity_id, s_q_btn_code[i]);
-            } else {
-                local_player_request_quest_abandon(s_q_btn_code[i]);
-            }
-            return true;
-        }
-        for (int i = 0; i < s_reward_slot_count; i++) {
-            if (item_slot_hit(s_reward_rects[i], mx, my)) {
-                ObjectLayerState ols = s_reward_ols[i];
-                es_push();
-                modal_interact_close();
-                inventory_modal_open_external(&ols);
-                inventory_modal_set_on_close(modal_interact_reopen);
-                return true;
-            }
-        }
-        for (int i = 0; i < s_q_count; i++) {
-            if (CheckCollisionPointRec((Vector2){ (float)mx, (float)my }, s_q_header[i])) {
-                s_q_toggle[i].expanded = !s_q_toggle[i].expanded;
                 return true;
             }
         }

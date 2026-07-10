@@ -20,6 +20,7 @@ typedef struct input_event {
     enum input_type type;
     Vector2 screen_position; /* For INPUT_TAP */
     bool zoom_in;            /* For INPUT_ZOOM */
+    float wheel_delta;       /* For INPUT_ZOOM */
     Vector2 world_position;  /* For INPUT_TAP */
 } input_event_t;
 
