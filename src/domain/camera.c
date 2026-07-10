@@ -19,7 +19,7 @@
  * visible on a small screen. One "level" matches the manual zoom-out step
  * used by the zoom button/scroll wheel (see ui_dispatch.c). */
 #define CAMERA_MOBILE_ZOOM_STEP   0.9f
-#define CAMERA_MOBILE_ZOOM_LEVELS 7
+#define CAMERA_MOBILE_ZOOM_LEVELS 6
 
 static Camera2D g_camera = {
     .offset   = {0.0f, 0.0f},
@@ -28,11 +28,19 @@ static Camera2D g_camera = {
     .zoom     = 1.0f,
 };
 
-/* Tracks whether the one-time mobile zoom pullback has already been applied,
- * independent of g_camera.zoom's own value — camera_init() runs more than
- * once (startup, then again once init_data arrives) and the pullback must
- * land exactly once, not compound on every re-init. */
+/* Tracks whether the mobile pullback is active so viewport transitions do not
+ * compound it across repeated camera initialization and resize calls. */
 static bool s_mobile_zoom_applied = false;
+
+static void camera_sync_mobile_zoom(void) {
+    bool mobile = viewport_is_mobile();
+    if (mobile == s_mobile_zoom_applied) return;
+
+    float factor = powf(CAMERA_MOBILE_ZOOM_STEP, (float)CAMERA_MOBILE_ZOOM_LEVELS);
+    g_camera.zoom *= mobile ? factor : 1.0f / factor;
+    g_camera.zoom = Clamp(g_camera.zoom, 0.1f, 5.0f);
+    s_mobile_zoom_applied = mobile;
+}
 
 void camera_init(int screen_width, int screen_height) {
     Vector2 self = prediction_self_position();
@@ -46,18 +54,14 @@ void camera_init(int screen_width, int screen_height) {
     if (g_camera.zoom <= 0.0f) {
         g_camera.zoom = presentation_runtime_camera_zoom();
     }
-    if (!s_mobile_zoom_applied) {
-        s_mobile_zoom_applied = true;
-        if (viewport_is_mobile()) {
-            g_camera.zoom *= powf(CAMERA_MOBILE_ZOOM_STEP, (float)CAMERA_MOBILE_ZOOM_LEVELS);
-        }
-    }
+    camera_sync_mobile_zoom();
     LOG_INFO("camera_init target=(%.1f, %.1f) zoom=%.2f", cx, cy, g_camera.zoom);
 }
 
 void camera_resize(int screen_width, int screen_height) {
     g_camera.offset.x = screen_width / 2.0f;
     g_camera.offset.y = screen_height / 2.0f;
+    camera_sync_mobile_zoom();
 }
 
 void camera_set_zoom(float zoom) {
