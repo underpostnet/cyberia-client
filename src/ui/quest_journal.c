@@ -143,12 +143,14 @@ static bool journal_walk(int mode, int mx, int my) {
     float y = panel.y;
 
     float header_h = ui_toggle_header(&s_panel, x, y, w, "Quest Journal", QJ_FONT_TITLE,
-                                      C_TEXT, UI_TOGGLE_HEADER_RIGHT, QJ_HEADER_PAD, 0.0f, false);
+                                      C_TEXT, UI_TOGGLE_HEADER_RIGHT, QJ_HEADER_PAD, 0.0f,
+                                      UI_TOGGLE_HDR_CHEVRON, false);
     Rectangle header = { x, y, w, header_h };
     if (JW_DRAW == mode) {
         DrawRectangleRec(header, C_HEADER);
         ui_toggle_header(&s_panel, x, y, w, "Quest Journal", QJ_FONT_TITLE,
-                         C_TEXT, UI_TOGGLE_HEADER_RIGHT, QJ_HEADER_PAD, 0.0f, true);
+                         C_TEXT, UI_TOGGLE_HEADER_RIGHT, QJ_HEADER_PAD, 0.0f,
+                         UI_TOGGLE_HDR_CHEVRON, true);
     } else if (JW_CLICK == mode && hit(mx, my, header)) {
         s_panel.expanded = !s_panel.expanded; /* tap anywhere on header */
         return true;
@@ -168,7 +170,7 @@ static bool journal_walk(int mode, int mx, int my) {
         snprintf(label, sizeof(label), "%s (%d)", C_SECTION_LABEL[sec], count);
         float srow_h = ui_toggle_header(&s_section[sec], x, y, w, label, QJ_FONT_SECTION,
                                         count > 0 ? C_TEXT : C_DIM, UI_TOGGLE_HEADER_LEFT,
-                                        0.0f, 0.0f, JW_DRAW == mode);
+                                        0.0f, 0.0f, UI_TOGGLE_HDR_CHEVRON, JW_DRAW == mode);
         Rectangle srow = { x, y, w, srow_h };
         if (JW_CLICK == mode && hit(mx, my, srow)) {
             s_section[sec].expanded = !s_section[sec].expanded;

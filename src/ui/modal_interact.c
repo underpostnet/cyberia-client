@@ -3,6 +3,7 @@
 
 #include "dialogue_data.h"
 #include "domain/local_player.h"
+#include "domain/viewport.h"
 #include "game_state.h"
 #include "world_types.h"
 #include "interaction_bubble.h"
@@ -181,6 +182,30 @@ static void es_clear(void) {
 #define MI_FONT_REW       11
 #define MI_REW_SLOT_SZ    32
 #define MI_REW_SLOT_GAP   6
+
+/* Quest tab desktop enlargement. The mission cards, reward slots, toggle
+ * chevrons and Accept/Abandon button read too small at the base sizes above
+ * on a full-size monitor; bumped up on desktop only via the mi_* accessors
+ * below. Mobile keeps the base sizing untouched (already scaled down by
+ * text.c's TEXT_MOBILE_FONT_SCALE). */
+#define MI_FONT_QLABEL_DESKTOP   18
+#define MI_FONT_QUEST_DESKTOP    17
+#define MI_FONT_DESC_DESKTOP     15
+#define MI_FONT_REW_DESKTOP      14
+#define MI_REW_SLOT_SZ_DESKTOP   44.0f
+#define MI_REW_SLOT_GAP_DESKTOP  8.0f
+#define MI_Q_CHEVRON_DESKTOP     28.0f
+#define MI_Q_BTN_W_DESKTOP       124.0f
+#define MI_Q_BTN_H_DESKTOP       34.0f
+#define MI_FONT_QBTN_DESKTOP     16
+
+static inline int   mi_font_qlabel(void) { return viewport_is_mobile() ? MI_FONT_LABEL : MI_FONT_QLABEL_DESKTOP; }
+static inline int   mi_font_quest(void)  { return viewport_is_mobile() ? MI_FONT_QUEST : MI_FONT_QUEST_DESKTOP; }
+static inline int   mi_font_desc(void)   { return viewport_is_mobile() ? MI_FONT_DESC  : MI_FONT_DESC_DESKTOP; }
+static inline int   mi_font_rew(void)    { return viewport_is_mobile() ? MI_FONT_REW   : MI_FONT_REW_DESKTOP; }
+static inline float mi_rew_slot_sz(void) { return viewport_is_mobile() ? (float)MI_REW_SLOT_SZ  : MI_REW_SLOT_SZ_DESKTOP; }
+static inline float mi_rew_slot_gap(void){ return viewport_is_mobile() ? (float)MI_REW_SLOT_GAP : MI_REW_SLOT_GAP_DESKTOP; }
+static inline float mi_q_chevron(void)   { return viewport_is_mobile() ? UI_TOGGLE_HDR_CHEVRON : MI_Q_CHEVRON_DESKTOP; }
 
 static const Color C_BTN        = {  24,  30,  48, 255 };
 static const Color C_CONTENT    = {  60,  80, 130,  36 };
@@ -539,19 +564,22 @@ static void draw_quest_card(int slot, const char* code, Rectangle content,
 
     UIToggle* tg = &s_q_toggle[slot];
     float hx = content.x, hw = content.width;
+    int qfont = mi_font_quest();
+    int rfont = mi_font_rew();
+    float chev = mi_q_chevron();
     /* Centralized dynamic-height header: chevron + wrapped title, with the status
      * word reserved on the right so the title never overflows into it. */
-    int sww = MeasureText(statusw, MI_FONT_REW);
+    int sww = MeasureText(statusw, rfont);
     float reserve_right = (float)sww + 12.0f;
-    float header_h = ui_toggle_header(tg, hx, *y, hw, title, MI_FONT_QUEST, C_TEXT,
-                                      UI_TOGGLE_HEADER_LEFT, 0.0f, reserve_right, false);
+    float header_h = ui_toggle_header(tg, hx, *y, hw, title, qfont, C_TEXT,
+                                      UI_TOGGLE_HEADER_LEFT, 0.0f, reserve_right, chev, false);
     Rectangle header = { hx, *y, hw, header_h };
     s_q_header[slot] = header;
     DrawRectangleRounded(header, 0.18f, 4, (Color){ 30, 34, 52, 205 });
-    ui_toggle_header(tg, hx, *y, hw, title, MI_FONT_QUEST, C_TEXT,
-                     UI_TOGGLE_HEADER_LEFT, 0.0f, reserve_right, true);
+    ui_toggle_header(tg, hx, *y, hw, title, qfont, C_TEXT,
+                     UI_TOGGLE_HEADER_LEFT, 0.0f, reserve_right, chev, true);
     DrawText(statusw, (int)(hx + hw - sww - 8),
-             (int)(*y + (header_h - text_line_height(MI_FONT_REW)) / 2), MI_FONT_REW, statusc);
+             (int)(*y + (header_h - text_line_height(rfont)) / 2), rfont, statusc);
     *y += header_h + 4;
 
     s_q_btn_kind[slot] = 0;
@@ -561,19 +589,20 @@ static void draw_quest_card(int slot, const char* code, Rectangle content,
     int   iw = (int)(hw - 24);
 
     if (qm && QUEST_CACHE_READY == qm->state) {
-        *y += text_wrap(qm->description, (int)ix, (int)*y, iw, MI_FONT_DESC, C_DESC_TEXT, false, true);
+        *y += text_wrap(qm->description, (int)ix, (int)*y, iw, mi_font_desc(), C_DESC_TEXT, false, true);
         *y += 4;
         if (qm->reward_count > 0) {
-            DrawText("Reward:", (int)ix, (int)*y, MI_FONT_REW, C_REW_LABEL);
-            float rx = ix + MeasureText("Reward:", MI_FONT_REW) + 8;
+            DrawText("Reward:", (int)ix, (int)*y, rfont, C_REW_LABEL);
+            float rx = ix + MeasureText("Reward:", rfont) + 8;
+            float slot_sz = mi_rew_slot_sz();
+            float slot_gap = mi_rew_slot_gap();
             ObjectLayersManager* mgr = obj_layers_mgr_get();
             for (int r = 0; r < qm->reward_count && r < MI_REWARD_SLOT_MAX; r++) {
                 ObjectLayerState ol = { 0 };
                 strncpy(ol.item_id, qm->rewards[r].item_id, MAX_ID_LENGTH - 1);
                 ol.active = true;
                 ol.quantity = qm->rewards[r].quantity;
-                Rectangle rr = { rx + r * (MI_REW_SLOT_SZ + MI_REW_SLOT_GAP), *y - 4,
-                                 MI_REW_SLOT_SZ, MI_REW_SLOT_SZ };
+                Rectangle rr = { rx + r * (slot_sz + slot_gap), *y - 4, slot_sz, slot_sz };
                 item_slot_draw(rr, &ol, mgr);
                 if (s_reward_slot_count < MI_QUEST_MAX * MI_REWARD_SLOT_MAX) {
                     s_reward_rects[s_reward_slot_count] = rr;
@@ -581,30 +610,34 @@ static void draw_quest_card(int slot, const char* code, Rectangle content,
                     s_reward_slot_count++;
                 }
             }
-            *y += MI_REW_SLOT_SZ + 2;
+            *y += slot_sz + 2;
         }
     } else {
-        DrawText("Loading...", (int)ix, (int)*y, MI_FONT_DESC, C_LABEL);
-        *y += MI_FONT_DESC + 2;
+        DrawText("Loading...", (int)ix, (int)*y, mi_font_desc(), C_LABEL);
+        *y += mi_font_desc() + 2;
     }
 
     if (active || acceptable) {
-        Rectangle btn = { hx + hw - 100, *y, 96, 26 };
+        bool desktop = !viewport_is_mobile();
+        float bw = desktop ? MI_Q_BTN_W_DESKTOP : 96.0f;
+        float bh = desktop ? MI_Q_BTN_H_DESKTOP : 26.0f;
+        int   bfont = desktop ? MI_FONT_QBTN_DESKTOP : (MI_FONT_BTN - 4);
+        Rectangle btn = { hx + hw - bw, *y, bw, bh };
         UIButtonStyle st = active
-            ? (UIButtonStyle){ .text = "Abandon", .font_size = MI_FONT_BTN - 4,
+            ? (UIButtonStyle){ .text = "Abandon", .font_size = bfont,
                                .bg = (Color){ 120, 44, 44, 255 }, .text_color = C_TEXT }
-            : (UIButtonStyle){ .text = "Accept", .icon_id = "quest", .font_size = MI_FONT_BTN - 4,
+            : (UIButtonStyle){ .text = "Accept", .icon_id = "quest", .font_size = bfont,
                                .bg = (Color){ 30, 110, 70, 255 }, .text_color = C_TEXT };
         ui_button_draw(btn, &st, ui_button_resolve_state(true, false, ui_button_hit(btn, mx, my)));
         s_q_btn[slot] = btn;
         s_q_btn_kind[slot] = active ? 2 : 1;
         strncpy(s_q_btn_code[slot], code, 63);
         s_q_btn_code[slot][63] = '\0';
-        *y += 30;
+        *y += bh + 4;
     } else if (locked) {
-        DrawText("Prerequisite not met.", (int)ix, (int)*y, MI_FONT_REW,
+        DrawText("Prerequisite not met.", (int)ix, (int)*y, rfont,
                  (Color){ 210, 120, 110, 220 });
-        *y += MI_FONT_REW + 4;
+        *y += rfont + 4;
     }
     *y += 4;
 }
@@ -622,11 +655,12 @@ static void draw_quest_tab(Rectangle content, int mx, int my) {
 
     float y = content.y + 4.0f;
     if (0 == s_q_count) {
-        DrawText("No missions available here.", (int)content.x, (int)y, MI_FONT_QUEST, C_LABEL);
+        DrawText("No missions available here.", (int)content.x, (int)y, mi_font_quest(), C_LABEL);
         return;
     }
-    DrawText("Missions", (int)content.x, (int)y, MI_FONT_LABEL, C_REW_LABEL);
-    y += MI_FONT_LABEL + 6;
+    int lfont = mi_font_qlabel();
+    DrawText("Missions", (int)content.x, (int)y, lfont, C_REW_LABEL);
+    y += lfont + 6;
     for (int i = 0; i < s_q_count; i++) {
         draw_quest_card(i, s_quest_codes[i], content, &y, mx, my);
     }
