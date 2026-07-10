@@ -5,7 +5,7 @@
 #include "modal_map.h"
 #include "quest_cache.h"
 #include "quest_progress_store.h"
-#include "ui_button.h"
+#include "ui_icon.h"
 #include "ui_toggle.h"
 
 #include <raylib.h>
@@ -42,7 +42,8 @@ static const Color C_TEXT     = { 220, 220, 230, 240 };
 static const Color C_DIM      = { 140, 140, 160, 200 };
 static const Color C_CARD     = {  30,  34,  52, 210 };
 static const Color C_STEP     = { 120, 200, 140, 235 };
-static const Color C_DIS      = {  90,  90, 110, 160 };
+static const Color C_STEP_DONE = { 105, 145, 118, 185 }; /* muted green — completed step */
+static const Color C_DIS      = {  90,  90, 110, 160 };  /* also: future (locked) steps  */
 
 static const Color C_STATUS[QUEST_STATUS_COUNT] = {
     { 220, 190,  60, 255 }, /* active    — gold */
@@ -118,8 +119,29 @@ static int quest_card_layout(bool draw, const QuestProgressEntry* e, QuestStatus
     cy += 2;
 
     if (QUEST_ACTIVE == sec) {
-        cy += text_wrap(e->active_step, tx, cy, tw, QJ_FONT_SMALL, C_STEP, false, draw);
-        cy += text_wrap(e->objectives, tx, cy, tw, QJ_FONT_SMALL, C_DIM, false, draw);
+        /* Full step list when metadata is cached: completed steps in muted
+         * green, the current step as the green focus (with its objectives
+         * line), future steps visually disabled. */
+        const QuestMetadataEntry* qm = quest_cache_get(e->code);
+        if (qm && QUEST_CACHE_READY == qm->state && qm->step_count > 0) {
+            int active_idx = 0;
+            for (int s = 0; s < qm->step_count; s++) {
+                if (0 == strcmp(qm->steps[s].id, e->active_step)) { active_idx = s; break; }
+            }
+            for (int s = 0; s < qm->step_count; s++) {
+                bool current = s == active_idx;
+                Color c = current ? C_STEP : (s < active_idx ? C_STEP_DONE : C_DIS);
+                char line[QUEST_CACHE_STEPDESC_MAX + 4];
+                snprintf(line, sizeof(line), "%s %s", current ? ">" : "-", qm->steps[s].description);
+                cy += text_wrap(line, tx, cy, tw, QJ_FONT_SMALL, c, false, draw);
+                if (current) {
+                    cy += text_wrap(e->objectives, tx + 8, cy, tw - 8, QJ_FONT_SMALL, C_DIM, false, draw);
+                }
+            }
+        } else {
+            cy += text_wrap(e->active_step, tx, cy, tw, QJ_FONT_SMALL, C_STEP, false, draw);
+            cy += text_wrap(e->objectives, tx, cy, tw, QJ_FONT_SMALL, C_DIM, false, draw);
+        }
     } else {
         const char* status = (QUEST_COMPLETED == sec) ? "Completed" : "Abandoned";
         cy += text_wrap(status, tx, cy, tw, QJ_FONT_SMALL, C_STATUS[sec], false, draw);
@@ -203,21 +225,24 @@ static bool journal_walk(int mode, int mx, int my) {
             y += ch + QJ_CARD_GAP;
         }
 
-        /* Pagination — only when expanded and count exceeds one page. */
+        /* Pagination — "<  Page N/M  >" with the shared ui-icon arrows; a
+         * disabled arrow fades instead of disappearing so layout stays stable. */
         if (count > QUEST_JOURNAL_PAGE_SIZE) {
-            Rectangle prev = { x + 8, y + 2, 54, QJ_PAGER_H - 4 };
-            Rectangle next = { x + w - 54 - 8, y + 2, 54, QJ_PAGER_H - 4 };
+            Rectangle prev = { x + 8, y + 2, (float)QJ_PAGER_H, QJ_PAGER_H - 4 };
+            Rectangle next = { x + w - QJ_PAGER_H - 8, y + 2, (float)QJ_PAGER_H, QJ_PAGER_H - 4 };
             bool can_prev = s_page[sec] > 0;
             bool can_next = s_page[sec] < pages - 1;
             if (JW_DRAW == mode) {
-                UIButtonStyle pager = { .font_size = QJ_FONT_SMALL, .no_fill = true,
-                                        .text_color = C_TEXT, .text_disabled = C_DIS };
-                pager.text = "Prev";
-                ui_button_draw(prev, &pager, ui_button_resolve_state(can_prev, false, false));
-                pager.text = "Next";
-                ui_button_draw(next, &pager, ui_button_resolve_state(can_next, false, false));
+                Color on  = { 255, 255, 255, 235 };
+                Color off = { 255, 255, 255, 70 };
+                ui_icon_draw_ex("arrow-left", prev.x + prev.width * 0.5f,
+                                prev.y + prev.height * 0.5f, 14.0f, 0.0f,
+                                can_prev ? on : off);
+                ui_icon_draw_ex("arrow-right", next.x + next.width * 0.5f,
+                                next.y + next.height * 0.5f, 14.0f, 0.0f,
+                                can_next ? on : off);
                 char ctr[24];
-                snprintf(ctr, sizeof(ctr), "Page %d / %d", s_page[sec] + 1, pages);
+                snprintf(ctr, sizeof(ctr), "Page %d/%d", s_page[sec] + 1, pages);
                 int cw = MeasureText(ctr, QJ_FONT_SMALL);
                 DrawText(ctr, (int)(x + (w - cw) / 2), (int)(y + 4), QJ_FONT_SMALL, C_DIM);
             } else if (JW_CLICK == mode && can_prev && hit(mx, my, prev)) {

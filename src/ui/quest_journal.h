@@ -3,8 +3,10 @@
  *
  * A three-section tree (Active / Completed / Failed). The panel and each
  * section collapse independently via the shared ui_toggle component. Each
- * section paginates its own quest list (10 per page) and can expand one
- * inline quest detail at a time. Reads entirely from quest_progress_store — no REST.
+ * section paginates its own quest list (QUEST_JOURNAL_PAGE_SIZE per page,
+ * ui-icon arrow navigation). Active cards list every quest step: completed in
+ * muted green, the current step highlighted, future steps visually disabled.
+ * Reads progress from quest_progress_store; step metadata from quest_cache.
  */
 
 #ifndef QUEST_JOURNAL_H
@@ -12,7 +14,7 @@
 
 #include <stdbool.h>
 
-#define QUEST_JOURNAL_PAGE_SIZE 10
+#define QUEST_JOURNAL_PAGE_SIZE 3
 
 void quest_journal_init(void);
 void quest_journal_update(float dt);
