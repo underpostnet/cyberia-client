@@ -36,14 +36,14 @@
 #include <string.h>
 
 /* ── Zoom buttons ─────────────────────────────────────────────────────── */
-#define ZOOM_BTN_SIZE   44
-#define ZOOM_BTN_GAP     6
-#define ZOOM_BTN_MARGIN 10
+#define ZOOM_BTN_SIZE   30
+#define ZOOM_BTN_GAP     4
+#define ZOOM_BTN_MARGIN  8
 
 static Rectangle zoom_btn_rect(int idx, int sw, int sh) {
     /* Two square buttons stacked vertically, bottom-right, above the bar. */
     float x = sw - ZOOM_BTN_SIZE - ZOOM_BTN_MARGIN;
-    float y = sh - INV_BAR_HEIGHT - ZOOM_BTN_MARGIN
+    float y = sh - inventory_bar_visible_height() - ZOOM_BTN_MARGIN
               - (2 - idx) * (ZOOM_BTN_SIZE + ZOOM_BTN_GAP) + ZOOM_BTN_GAP;
     return (Rectangle){ x, y, ZOOM_BTN_SIZE, ZOOM_BTN_SIZE };
 }
@@ -55,7 +55,7 @@ static void draw_zoom_buttons(int sw, int sh) {
         Rectangle r = zoom_btn_rect(i, sw, sh);
         UIButtonStyle style = {
             .text       = labels[i],
-            .font_size  = 24,
+            .font_size  = 18,
             .bg         = { 20, 20, 35, 200 },
             .bg_hover   = { 50, 50, 70, 220 },
             .border     = { 80, 80, 120, 180 },
@@ -105,7 +105,7 @@ static void draw_portal_progress_bar(int sw, int sh) {
     if (progress > 1.0f) progress = 1.0f;
 
     float x = (sw - PORTAL_BAR_W) * 0.5f;
-    float y = (float)(sh - INV_BAR_HEIGHT - PORTAL_BAR_MARGIN - PORTAL_BAR_H);
+    float y = (float)(sh - inventory_bar_visible_height() - PORTAL_BAR_MARGIN - PORTAL_BAR_H);
     Rectangle track = { x, y, (float)PORTAL_BAR_W, (float)PORTAL_BAR_H };
 
     DrawRectangleRounded(track, 0.5f, 6, (Color){ 10, 12, 24, 220 });
@@ -1097,15 +1097,16 @@ void game_render_ui(void) {
     // Quest Journal (right side, below map info, collapsible)
     quest_journal_draw();
 
-    // Inventory bar (always visible in screen space)
-    inventory_bar_draw();
+    bool inventory_companion = modal_interact_is_open() || modal_dialogue_is_open();
+    if (!inventory_companion) {
+        inventory_bar_draw();
 
-    // Loot delivery + slot-arrival sparks land on top of the bar slots.
-    int loot_scr = loot_fx_screen_particle_slot_count();
-    for (int i = 0; i < loot_scr; i++) {
-        LootFxScreenParticle sp;
-        if (!loot_fx_screen_particle_at(i, &sp)) continue;
-        fx_shape_spark(sp.x, sp.y, sp.size, FX_SPARK_GOLD, 1.0f);
+        int loot_scr = loot_fx_screen_particle_slot_count();
+        for (int i = 0; i < loot_scr; i++) {
+            LootFxScreenParticle sp;
+            if (!loot_fx_screen_particle_at(i, &sp)) continue;
+            fx_shape_spark(sp.x, sp.y, sp.size, FX_SPARK_GOLD, 1.0f);
+        }
     }
 
     // Portal hold progress bar (centered above the inventory bar; only while
@@ -1128,6 +1129,17 @@ void game_render_ui(void) {
     // Dialogue modal
     if (modal_dialogue_is_open()) {
         modal_dialogue_draw();
+    }
+
+    if (inventory_companion) {
+        inventory_bar_draw();
+
+        int loot_scr = loot_fx_screen_particle_slot_count();
+        for (int i = 0; i < loot_scr; i++) {
+            LootFxScreenParticle sp;
+            if (!loot_fx_screen_particle_at(i, &sp)) continue;
+            fx_shape_spark(sp.x, sp.y, sp.size, FX_SPARK_GOLD, 1.0f);
+        }
     }
 
     // Transient notification toast — top-most, above every modal.
