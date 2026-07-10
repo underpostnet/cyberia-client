@@ -14,8 +14,10 @@
 #include "text.h"
 
 #include "domain/local_player.h"
+#include "domain/viewport.h"
 #include "game_state.h"
 #include "interaction_bubble.h"
+#include "inventory_bar.h"
 #include "modal_interact.h"
 #include "modal.h"
 #include "object_layer.h"
@@ -86,8 +88,9 @@ static Modal s_modal;
 
 /* Vertical split: panel occupies [50 % … bottom − bar_h] of the screen.   */
 #define DLG_TOP_FRAC        0.56f
-#define DLG_SIDE_PAD        18      /* matches modal_interact MI_PAD            */
-#define DLG_BAR_OFFSET      72      /* inventory bar height                    */
+#define DLG_SIDE_PAD        18
+#define DLG_SIDE_PAD_MOBILE  8
+#define DLG_PANEL_GAP        6.0f
 
 /* ── Colours ──────────────────────────────────────────────────────────── */
 
@@ -98,10 +101,16 @@ static const Color C_CARD_BORD = {  70,  70, 120, 200 };
 /* ── Helpers ──────────────────────────────────────────────────────────── */
 
 static Rectangle panel_rect(int sw, int sh) {
-    float top = sh * DLG_TOP_FRAC;
-    float bot = (float)(sh - DLG_BAR_OFFSET);
+    float top = modal_interact_is_open()
+              ? modal_interact_layout_bottom() + DLG_PANEL_GAP
+              : sh * DLG_TOP_FRAC;
+    float bot = (float)sh - inventory_bar_visible_height();
     if (bot <= top) bot = top + 60.0f;
     return (Rectangle){ 0.0f, top, (float)sw, bot - top };
+}
+
+static int dlg_side_pad(void) {
+    return viewport_is_mobile() ? DLG_SIDE_PAD_MOBILE : DLG_SIDE_PAD;
 }
 
 static int dlg_pad(int sw) {
@@ -286,7 +295,8 @@ void modal_dialogue_draw(void) {
 
     /* Dim only the bottom half */
     Rectangle panel = panel_rect(sw, sh);
-    DrawRectangle(0, (int)panel.y, sw, (int)panel.height + DLG_BAR_OFFSET,
+    DrawRectangle(0, (int)panel.y, sw,
+                  (int)(panel.height + inventory_bar_visible_height()),
                   (Color){ 0, 0, 0, oa });
 
     /* Slide-up: panel starts 20px below its rest position. The card is inset
@@ -294,8 +304,8 @@ void modal_dialogue_draw(void) {
      * the two screen halves frame with the same padding. */
     float slide_offset = 20.0f * (1.0f - ease);
     Rectangle card = {
-        panel.x + DLG_SIDE_PAD, panel.y + slide_offset,
-        panel.width - 2 * DLG_SIDE_PAD, panel.height
+        panel.x + dlg_side_pad(), panel.y + slide_offset,
+        panel.width - 2 * dlg_side_pad(), panel.height
     };
 
     /* Card background — translucent so the world reads through. Quest-talk
