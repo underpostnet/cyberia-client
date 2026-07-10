@@ -5,6 +5,8 @@
 #include "input/input.h"
 #include "domain/presentation_runtime.h"
 #include "domain/camera.h"
+#include "interaction_bubble.h"
+#include "modal_interact.h"
 
 
 /* UI tap dispatcher.
@@ -39,6 +41,13 @@ static void ui_on_tick(input_queue_t* input_queue, double dt) {
             consumed = true;
         }
 
+        if(!consumed && INPUT_ZOOM == evt.type) {
+            if (modal_interact_handle_wheel(evt.wheel_delta)) { consumed = true; }
+        }
+        if(!consumed && INPUT_ZOOM == evt.type) {
+            if (!modal_interact_is_open() &&
+                interaction_bubble_handle_wheel(evt.wheel_delta)) { consumed = true; }
+        }
         if(!consumed && INPUT_ZOOM == evt.type) {
             if(evt.zoom_in) { camera_zoom_by(1.1); } else { camera_zoom_by(0.9); }
             consumed = true;

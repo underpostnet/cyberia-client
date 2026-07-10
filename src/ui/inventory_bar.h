@@ -28,8 +28,10 @@
  * Call sequence (each frame):
  *   1. inventory_bar_update(dt);       — advance scroll animation
  *   2. inventory_bar_draw();           — render the bar (screen space)
- *   3. int idx = inventory_bar_get_tapped_slot(mx, my);
- *      if (idx >= 0) { ... open modal ... }
+ *   3. int idx = -1;
+ *      if (inventory_bar_handle_click(mx, my, &idx) && idx >= 0) {
+ *          ... open modal ...
+ *      }
  */
 
 #ifndef INVENTORY_BAR_H
@@ -93,6 +95,27 @@ void inventory_bar_update(float dt);
  * Reads the current slot list from g_game_state.full_inventory.
  */
 void inventory_bar_draw(void);
+
+/* Current on-screen height while the bar slides between shown and hidden. */
+float inventory_bar_visible_height(void);
+
+/* Full height of the current responsive bar when expanded. */
+float inventory_bar_full_height(void);
+
+/* Bounds of the persistent bottom toggle, used by neighboring UI to avoid
+ * overlapping it while the bar is shown or hidden. */
+Rectangle inventory_bar_toggle_bounds(void);
+
+/* Toggle-only input for modal overlays that expose the bar as a read-only
+ * companion surface. */
+bool inventory_bar_handle_toggle_click(int mx, int my);
+
+/* Handle a tap on the bar or its persistent toggle. Returns true when the UI
+ * consumed the tap; `out_slot` receives an inventory index for a slot tap. */
+bool inventory_bar_handle_click(int mx, int my, int* out_slot);
+
+/* True for the visible bar or its persistent bottom toggle. */
+bool inventory_bar_point_covered(int mx, int my);
 
 /**
  * @brief Test whether a screen-space point lands inside a slot.

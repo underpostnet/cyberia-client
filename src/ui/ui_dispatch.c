@@ -17,6 +17,14 @@ bool ui_dispatch_tap(int x, int y) {
     /* Notification OK button has highest priority while visible. */
     if (modal_notification_handle_click(x, y)) return true;
 
+    /* Interaction and dialogue modals keep the bottom inventory companion
+     * visible. Its toggle remains actionable; the shown slots are read-only
+     * so a tap cannot advance or dismiss the modal behind them. */
+    if (modal_dialogue_is_open() || modal_interact_is_open()) {
+        if (inventory_bar_handle_toggle_click(x, y)) return true;
+        if (inventory_bar_point_covered(x, y)) return true;
+    }
+
     /* Dialogue modal claims everything while open. */
     if (modal_dialogue_handle_click(x, y)) return true;
 
@@ -35,9 +43,9 @@ bool ui_dispatch_tap(int x, int y) {
 
     if (interaction_bubble_handle_click(x, y)) return true;
 
-    int bar_hit = inventory_bar_get_tapped_slot(x, y);
-    if (bar_hit >= 0) {
-        inventory_modal_open(bar_hit);
+    int bar_hit = -1;
+    if (inventory_bar_handle_click(x, y, &bar_hit)) {
+        if (bar_hit >= 0) inventory_modal_open(bar_hit);
         return true;
     }
 
@@ -64,7 +72,7 @@ bool ui_dispatch_covers_point(int x, int y) {
     /* Bubble column only blocks taps while expanded (its own predicate
      * accounts for collapse state and the always-present toggle tab). */
     if (interaction_bubble_point_covered(x, y)) return true;
-    if (y > GetScreenHeight() - INV_BAR_HEIGHT) return true;
+    if (inventory_bar_point_covered(x, y)) return true;
     if (0 != game_render_zoom_btn_hit(x, y))    return true;
     if (game_render_fullscreen_btn_hit(x, y))   return true;
     return false;

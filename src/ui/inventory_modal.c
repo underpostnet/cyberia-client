@@ -21,6 +21,7 @@
 #include "text.h"
 
 #include "domain/local_player.h"
+#include "domain/viewport.h"
 #include "network/game_client.h"
 #include "dialogue_data.h"
 #include "game_state.h"
@@ -129,6 +130,33 @@ static const Color C_LORE_BTN     = {  50,  50, 120, 240 };
 
 /* ── Helpers ──────────────────────────────────────────────────────────── */
 
+static bool inventory_modal_compact(void) { return viewport_is_mobile(); }
+static float im_card_w_frac(void) { return inventory_modal_compact() ? 0.92f : MODAL_CARD_W_FRAC; }
+static float im_card_h_frac(void) { return inventory_modal_compact() ? 0.74f : MODAL_CARD_H_FRAC; }
+static float im_sprite_frac(void) { return inventory_modal_compact() ? 0.28f : MODAL_SPRITE_FRAC; }
+static int im_sprite_min(void) { return inventory_modal_compact() ? 68 : MODAL_SPRITE_MIN; }
+static int im_sprite_max(void) { return inventory_modal_compact() ? 132 : MODAL_SPRITE_MAX; }
+static int im_font_title(void) { return inventory_modal_compact() ? 22 : MODAL_FONT_TITLE; }
+static int im_font_body(void) { return inventory_modal_compact() ? 16 : MODAL_FONT_BODY; }
+static int im_font_stat(void) { return inventory_modal_compact() ? 14 : MODAL_FONT_STAT; }
+static float im_button_w(void) { return inventory_modal_compact() ? 160.0f : MODAL_BTN_W; }
+static float im_button_h(void) { return inventory_modal_compact() ? 34.0f : MODAL_BTN_H; }
+static float im_lore_button_w(void) { return inventory_modal_compact() ? 160.0f : MODAL_LORE_BTN_W; }
+static float im_lore_button_h(void) { return inventory_modal_compact() ? 30.0f : MODAL_LORE_BTN_H; }
+static float im_close_size(void) { return inventory_modal_compact() ? 30.0f : MODAL_CLOSE_SIZE; }
+static float im_dir_button_w(void) { return inventory_modal_compact() ? 52.0f : DIR_BTN_W; }
+static float im_dir_button_h(void) { return inventory_modal_compact() ? 28.0f : DIR_BTN_H; }
+static float im_dir_button_gap(void) { return inventory_modal_compact() ? 4.0f : DIR_BTN_GAP; }
+static float im_mode_button_w(void) { return inventory_modal_compact() ? 72.0f : MODE_BTN_W; }
+static float im_pad(float card_w) {
+    float pad = card_w * 0.04f;
+    float min = inventory_modal_compact() ? 10.0f : 14.0f;
+    float max = inventory_modal_compact() ? 18.0f : 28.0f;
+    if (pad < min) pad = min;
+    if (pad > max) pad = max;
+    return pad;
+}
+
 /* Callback for dialogue modal → re-opens the inventory modal at the same slot. */
 static void on_dialogue_close_reopen(void) {
     if (s_inv_idx >= 0 && s_inv_idx < g_game_state.full_inventory_count) {
@@ -141,8 +169,8 @@ static void rebuild_dir_str(void) {
 }
 
 static Rectangle card_rect(int sw, int sh, float scale) {
-    float w = sw * MODAL_CARD_W_FRAC;
-    float h = sh * MODAL_CARD_H_FRAC;
+    float w = sw * im_card_w_frac();
+    float h = sh * im_card_h_frac();
     if (w > MODAL_CARD_W_MAX) w = MODAL_CARD_W_MAX;
     if (h > MODAL_CARD_H_MAX) h = MODAL_CARD_H_MAX;
     w *= scale;
@@ -150,10 +178,13 @@ static Rectangle card_rect(int sw, int sh, float scale) {
     return (Rectangle){ (sw - w) * 0.5f, (sh - h) * 0.5f, w, h };
 }
 
-static int modal_sprite_size(float card_w) {
-    int s = (int)(card_w * MODAL_SPRITE_FRAC);
-    if (s < MODAL_SPRITE_MIN) s = MODAL_SPRITE_MIN;
-    if (s > MODAL_SPRITE_MAX) s = MODAL_SPRITE_MAX;
+static int modal_sprite_size(float card_w, float card_h) {
+    int s = (int)(card_w * im_sprite_frac());
+    int max_by_height = (int)(card_h * (inventory_modal_compact() ? 0.34f : 0.46f));
+    if (s < im_sprite_min()) s = im_sprite_min();
+    if (s > im_sprite_max()) s = im_sprite_max();
+    if (s > max_by_height) s = max_by_height;
+    if (s < 4) s = 4;
     return s;
 }
 
@@ -187,7 +218,7 @@ static void draw_small_btn(Rectangle r, const char* label, const char* icon_id,
     UIButtonStyle style = {
         .text            = label,
         .icon_id         = icon_id,
-        .font_size       = MODAL_FONT_STAT,
+        .font_size       = im_font_stat(),
         .bg              = base_bg,
         .bg_selected     = base_bg,
         .bg_disabled     = C_DIR_BTN_DIS,
@@ -327,13 +358,19 @@ void inventory_modal_draw(void) {
     float cx  = card.x;
     float cy  = card.y;
     float cw  = card.width;
-    int   pad = (int)(cw * 0.04f);
-    if (pad < 14) pad = 14;
-    if (pad > 28) pad = 28;
+    int   pad = (int)im_pad(cw);
+    int title_font = im_font_title();
+    int body_font = im_font_body();
+    int stat_font = im_font_stat();
+    float button_w = im_button_w();
+    float button_h = im_button_h();
+    float lore_button_w = im_lore_button_w();
+    float lore_button_h = im_lore_button_h();
 
     /* 3. Close button */
-    Rectangle close_r = { cx + cw - MODAL_CLOSE_SIZE - 6, cy + 6,
-                           MODAL_CLOSE_SIZE, MODAL_CLOSE_SIZE };
+    float close_size = im_close_size();
+    Rectangle close_r = { cx + cw - close_size - 6.0f, cy + 6.0f,
+                           close_size, close_size };
     {
         int mx = GetMouseX(), my = GetMouseY();
         UIButtonStyle close_btn = { .icon_id = "close-yellow", .no_fill = true };
@@ -347,9 +384,9 @@ void inventory_modal_draw(void) {
         atlas = get_or_fetch_atlas_data(ols->item_id);
 
     /* 4. Animated sprite via ol_as_animated_ico */
-    int sprite_sz = modal_sprite_size(cw);
+    int sprite_sz = modal_sprite_size(cw, card.height);
     float sprite_x = cx + cw * 0.5f - sprite_sz * 0.5f;
-    float sprite_y = cy + 14.0f;
+    float sprite_y = cy + (inventory_modal_compact() ? 8.0f : 14.0f);
     Rectangle sprite_dst = { sprite_x, sprite_y,
                               (float)sprite_sz, (float)sprite_sz };
 
@@ -364,7 +401,7 @@ void inventory_modal_draw(void) {
      * Only directions with atlas frames for the current mode are rendered.
      * With a single available direction there is nothing to choose, so no
      * buttons render: the preview is locked to that direction. */
-    float dir_row_y = sprite_y + sprite_sz + 8.0f;
+    float dir_row_y = sprite_y + sprite_sz + (inventory_modal_compact() ? 6.0f : 8.0f);
     const char* dirs[4]  = { "up",         "down",         "left",         "right"       };
     const char* icons[4] = { "arrow-up",   "arrow-down",   "arrow-left",   "arrow-right" };
 
@@ -376,24 +413,28 @@ void inventory_modal_draw(void) {
     bool show_dir_buttons = n_present > 1;
 
     if (show_dir_buttons) {
-        int total_w = n_present * DIR_BTN_W + (n_present - 1) * DIR_BTN_GAP
-                      + DIR_BTN_GAP * 2 + MODE_BTN_W;
+        float dir_w = im_dir_button_w();
+        float dir_h = im_dir_button_h();
+        float dir_gap = im_dir_button_gap();
+        float mode_w = im_mode_button_w();
+        float total_w = n_present * dir_w + (n_present - 1) * dir_gap
+                  + dir_gap * 2.0f + mode_w;
         float row_x = cx + (cw - total_w) * 0.5f;
         float row_y = dir_row_y;
         int mx = GetMouseX(), my = GetMouseY();
 
         for (int k = 0; k < n_present; k++) {
             int i = present[k];
-            Rectangle r = { row_x + k * (DIR_BTN_W + DIR_BTN_GAP),
-                            row_y, DIR_BTN_W, DIR_BTN_H };
+            Rectangle r = { row_x + k * (dir_w + dir_gap),
+                            row_y, dir_w, dir_h };
             s_dir_btn_rects[i] = r;
             bool sel = (0 == strcmp(s_dir, dirs[i]));
             draw_small_btn(r, NULL, icons[i], C_DIR_BTN_DEF, sel, true, mx, my);
         }
 
         /* Mode toggle button */
-        float mode_x = row_x + n_present * (DIR_BTN_W + DIR_BTN_GAP) + DIR_BTN_GAP;
-        Rectangle mr = { mode_x, row_y, MODE_BTN_W, DIR_BTN_H };
+        float mode_x = row_x + n_present * (dir_w + dir_gap) + dir_gap;
+        Rectangle mr = { mode_x, row_y, mode_w, dir_h };
         s_dir_btn_rects[4]   = mr;
         s_dir_btn_enabled[4] = true;
         bool walk_mode = (0 == strcmp(s_mode, "walking"));
@@ -411,7 +452,9 @@ void inventory_modal_draw(void) {
         }
     }
 
-    float y_cursor = show_dir_buttons ? dir_row_y + DIR_BTN_H + 10.0f : dir_row_y;
+    float y_cursor = show_dir_buttons
+                   ? dir_row_y + im_dir_button_h() + (inventory_modal_compact() ? 6.0f : 10.0f)
+                   : dir_row_y;
 
     /* 6. Fetch item metadata */
     const char* item_name = ols->item_id;
@@ -438,7 +481,7 @@ void inventory_modal_draw(void) {
     }
 
     /* 7. Item name */
-    int tfs = MODAL_FONT_TITLE;
+    int tfs = title_font;
     int ttw = MeasureText(item_name, tfs);
     DrawText(item_name, (int)(cx + (cw - ttw) * 0.5f), (int)y_cursor, tfs, C_TITLE);
     y_cursor += tfs + 4;
@@ -447,7 +490,7 @@ void inventory_modal_draw(void) {
     if (item_type && item_type[0] != '\0') {
         char tbuf[64];
         snprintf(tbuf, sizeof(tbuf), "[%s]", item_type);
-        int tbf = MODAL_FONT_BODY - 1;
+        int tbf = body_font - 1;
         int tbw = MeasureText(tbuf, tbf);
         DrawText(tbuf, (int)(cx + (cw - tbw) * 0.5f), (int)y_cursor, tbf,
                  (Color){ 120, 180, 255, 200 });
@@ -464,7 +507,7 @@ void inventory_modal_draw(void) {
         strncpy(desc_copy, item_desc, sizeof(desc_copy) - 1);
         desc_copy[sizeof(desc_copy) - 1] = '\0';
 
-        int fs_d  = MODAL_FONT_BODY;
+        int fs_d  = body_font;
         int max_w = (int)(cw - pad * 2);
         char line_buf[256] = {0};
         char* tok = strtok(desc_copy, " ");
@@ -492,7 +535,7 @@ void inventory_modal_draw(void) {
 
     /* 9. Stats grid (2-column) */
     {
-        int fs_s  = MODAL_FONT_STAT;
+        int fs_s  = stat_font;
         int col_w = (int)(cw * 0.5f) - pad;
         struct { const char* label; int val; } rows[6] = {
             { "Effect",       st_effect  },
@@ -526,8 +569,8 @@ void inventory_modal_draw(void) {
     if (ols->quantity > 0) {
         char qbuf[48];
         snprintf(qbuf, sizeof(qbuf), "Quantity: %d", ols->quantity);
-        DrawText(qbuf, (int)(cx + pad), (int)y_cursor, MODAL_FONT_BODY, C_QTY);
-        y_cursor += MODAL_FONT_BODY + 8;
+        DrawText(qbuf, (int)(cx + pad), (int)y_cursor, body_font, C_QTY);
+        y_cursor += body_font + 8;
     }
 
     /* 10b. Skill bar — summoned entities associated via skillConfig ──── */
@@ -580,12 +623,12 @@ void inventory_modal_draw(void) {
                     snprintf(header_buf, sizeof(header_buf), "%s", skill_label);
 
                 DrawText(header_buf, (int)(cx + pad), (int)y_cursor,
-                         MODAL_FONT_STAT, (Color){ 180, 160, 255, 220 });
+                         stat_font, (Color){ 180, 160, 255, 220 });
 
                 /* Right-aligned arrows (only when >1 skill) */
                 if (match_count > 1) {
-                    float arrow_w = 28;
-                    float arrow_h = 22;
+                    float arrow_w = inventory_modal_compact() ? 24.0f : 28.0f;
+                    float arrow_h = inventory_modal_compact() ? 20.0f : 22.0f;
                     float arrow_y = y_cursor;
                     float next_x = cx + cw - pad - arrow_w;
                     float prev_x = next_x - arrow_w - 4;
@@ -597,7 +640,7 @@ void inventory_modal_draw(void) {
                     int mx = GetMouseX(), my = GetMouseY();
 
                     UIButtonStyle arrow = {
-                        .font_size     = MODAL_FONT_STAT,
+                        .font_size     = stat_font,
                         .bg            = { 40, 42, 68, 220 },
                         .bg_hover      = { 60, 60, 100, 240 },
                         .bg_disabled   = C_DIR_BTN_DIS,
@@ -615,11 +658,11 @@ void inventory_modal_draw(void) {
                         ui_button_resolve_state(can_next, false, hit_rect(mx, my, s_skill_next_rect)));
                 }
 
-                y_cursor += MODAL_FONT_STAT + 6;
+                y_cursor += stat_font + 6;
             }
 
             /* ── Content row: [sprite] + summoned item name + description ── */
-            int ico_sz = 36;
+            int ico_sz = inventory_modal_compact() ? 30 : 36;
             float ico_x = cx + pad;
             float ico_y = y_cursor;
 
@@ -637,12 +680,12 @@ void inventory_modal_draw(void) {
             float text_x = ico_x + ico_sz + 8;
             DrawText(resolved_summon,
                      (int)text_x, (int)ico_y,
-                     MODAL_FONT_STAT, (Color){ 200, 220, 255, 240 });
+                     stat_font, (Color){ 200, 220, 255, 240 });
 
             /* Skill description below the name, word-wrapped */
             if (se->description[0] != '\0') {
-                float desc_y = ico_y + MODAL_FONT_STAT + 3;
-                int fs_sk = MODAL_FONT_STAT - 1;
+                float desc_y = ico_y + stat_font + 3;
+                int fs_sk = stat_font - 1;
                 int max_desc_w = (int)(cx + cw - pad - text_x);
                 char sk_desc[256];
                 strncpy(sk_desc, se->description, sizeof(sk_desc) - 1);
@@ -691,13 +734,14 @@ void inventory_modal_draw(void) {
         dialogue_data_request(ols->item_id);
         if (dialogue_data_available(ols->item_id)) {
             s_lore_btn_visible = true;
-            float lore_x = cx + (cw - MODAL_LORE_BTN_W) * 0.5f;
-            float lore_y = card.y + card.height - MODAL_BTN_H - MODAL_LORE_BTN_H - 24;
+              float lore_x = cx + (cw - lore_button_w) * 0.5f;
+              float lore_y = card.y + card.height - button_h - lore_button_h -
+                          (inventory_modal_compact() ? 16.0f : 24.0f);
             s_lore_btn_rect = (Rectangle){ lore_x, lore_y,
-                                            MODAL_LORE_BTN_W, MODAL_LORE_BTN_H };
+                                        lore_button_w, lore_button_h };
             int mx = GetMouseX(), my = GetMouseY();
             UIButtonStyle lore_btn = { .text = "Dialog", .icon_id = "chat",
-                                       .font_size = MODAL_FONT_BODY, .bg = C_LORE_BTN,
+                                    .font_size = body_font, .bg = C_LORE_BTN,
                                        .text_color = C_BTN_TEXT, .rounded = true, .roundness = 0.12f };
             ui_button_draw(s_lore_btn_rect, &lore_btn,
                            ui_button_resolve_state(true, false, hit_rect(mx, my, s_lore_btn_rect)));
@@ -726,12 +770,12 @@ void inventory_modal_draw(void) {
                         : currently_active ? C_BTN_DEACT : C_BTN_ACTIVATE;
         Color txt_color = !btn_enabled ? (Color){ 100, 100, 110, 160 } : C_BTN_TEXT;
 
-        float btn_x = cx + (cw - MODAL_BTN_W) * 0.5f;
-        float btn_y = card.y + card.height - MODAL_BTN_H - 14;
-        Rectangle btn_r = (Rectangle){ btn_x, btn_y, MODAL_BTN_W, MODAL_BTN_H };
+        float btn_x = cx + (cw - button_w) * 0.5f;
+        float btn_y = card.y + card.height - button_h - (inventory_modal_compact() ? 10.0f : 14.0f);
+        Rectangle btn_r = (Rectangle){ btn_x, btn_y, button_w, button_h };
         int mx = GetMouseX(), my = GetMouseY();
         UIButtonStyle act_btn = { .text = btn_label, .icon_id = btn_icon,
-                                  .font_size = MODAL_FONT_BODY + 2, .bg = btn_color,
+                                  .font_size = body_font + 2, .bg = btn_color,
                                   .text_color = txt_color, .rounded = true, .roundness = 0.12f };
         ui_button_draw(btn_r, &act_btn,
                        ui_button_resolve_state(btn_enabled, false, hit_rect(mx, my, btn_r)));
@@ -751,8 +795,9 @@ bool inventory_modal_handle_click(int mx, int my) {
     if (!inside) { inventory_modal_close(); return true; }
 
     /* Close button */
-    Rectangle close_r = { card.x + card.width - MODAL_CLOSE_SIZE - 6,
-                           card.y + 6, MODAL_CLOSE_SIZE, MODAL_CLOSE_SIZE };
+    float close_size = im_close_size();
+    Rectangle close_r = { card.x + card.width - close_size - 6.0f,
+                           card.y + 6.0f, close_size, close_size };
     if (hit_rect(mx, my, close_r)) { inventory_modal_close(); return true; }
 
     /* Direction buttons (0..3) */
@@ -842,9 +887,12 @@ bool inventory_modal_handle_click(int mx, int my) {
                 btn_enabled = false;
         }
         if (btn_enabled) {
-            float btn_x = card.x + (card.width - MODAL_BTN_W) * 0.5f;
-            float btn_y = card.y + card.height - MODAL_BTN_H - 14;
-            Rectangle btn_r = { btn_x, btn_y, MODAL_BTN_W, MODAL_BTN_H };
+            float button_w = im_button_w();
+            float button_h = im_button_h();
+            float btn_x = card.x + (card.width - button_w) * 0.5f;
+            float btn_y = card.y + card.height - button_h -
+                          (inventory_modal_compact() ? 10.0f : 14.0f);
+            Rectangle btn_r = { btn_x, btn_y, button_w, button_h };
             if (hit_rect(mx, my, btn_r)) {
                 bool new_active = !ols->active;
                 send_activation(ols->item_id, new_active);
