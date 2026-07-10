@@ -31,6 +31,10 @@
  *   FCT_TYPE_REGEN     green {80,240,80}   rise 2.2  drift ±0.5  font 14–32  overshoot ≤1.45×
  *   FCT_TYPE_COIN_GAIN gold  {255,215,0}   rise 2.6  drift ±1.2  font 14–36  overshoot ≤1.50×
  *   FCT_TYPE_COIN_LOSS amber {255,130,0}   rise 2.6  drift ±1.2  font 14–36  overshoot ≤1.50×
+ *
+ * Damage/regen events are broadcast to every AOI viewer; the red/green screen
+ * vignette is personal — it fires only when the event lands on the local
+ * player's own footprint.
  */
 
 #include "floating_combat_text.h"
@@ -38,6 +42,7 @@
 
 #include "domain/local_player.h"
 #include "game_state.h"
+#include "world_types.h"
 
 #include <assert.h>
 #include <math.h>
@@ -124,6 +129,14 @@ static float lcg_f01(void) {
     return (float)(s_lcg >> 8) / (float)(1u << 24);
 }
 
+/* Whether a broadcast FCT event lies inside the local player's footprint —
+ * gates the personal screen vignettes on viewer-shared (abstract) events. */
+static bool fct_event_on_self(float wx, float wy) {
+    const EntityState* self = &g_game_state.player.base;
+    return wx >= self->interp_pos.x && wx <= self->interp_pos.x + self->dims.x
+        && wy >= self->interp_pos.y && wy <= self->interp_pos.y + self->dims.y;
+}
+
 /* ── Public API ─────────────────────────────────────────────────────────── */
 
 void fct_init(void) {
@@ -158,6 +171,8 @@ void fct_spawn(float world_x, float world_y, uint32_t value, uint8_t type) {
     Color base_color;
 
     switch (type) {
+        /* Damage/regen are broadcast to every AOI viewer; the screen vignette
+         * is personal — only when the event lands on the local player. */
         case FCT_TYPE_DAMAGE:
             rise_speed     = FCT_RISE_DAMAGE;
             drift_max      = FCT_DRIFT_DAMAGE;
@@ -165,7 +180,8 @@ void fct_spawn(float world_x, float world_y, uint32_t value, uint8_t type) {
             font_max       = FCT_FONT_MAX_DAMAGE;
             base_color     = s_color_damage;
             base_overshoot = 1.45f;
-            s_damage_overlay = FCT_OVERLAY_DMG_ALPHA;  /* trigger screen flash */
+            if (fct_event_on_self(world_x, world_y))
+                s_damage_overlay = FCT_OVERLAY_DMG_ALPHA;
             break;
         case FCT_TYPE_REGEN:
             rise_speed     = FCT_RISE_REGEN;
@@ -174,7 +190,8 @@ void fct_spawn(float world_x, float world_y, uint32_t value, uint8_t type) {
             font_max       = FCT_FONT_MAX_REGEN;
             base_color     = s_color_regen;
             base_overshoot = 1.20f;
-            s_regen_overlay = FCT_OVERLAY_RGN_ALPHA;   /* trigger screen pulse */
+            if (fct_event_on_self(world_x, world_y))
+                s_regen_overlay = FCT_OVERLAY_RGN_ALPHA;
             break;
         case FCT_TYPE_COIN_GAIN:
             rise_speed     = FCT_RISE_COIN;

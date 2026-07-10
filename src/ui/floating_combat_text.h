@@ -42,14 +42,15 @@
 
 /* ── FCT event types ─────────────────────────────────────────────────────
  * These values MUST stay in sync with Go constants in aoi_binary.go:
- *   FCTTypeDamage   = 0x00
- *   FCTTypeRegen    = 0x01
- *   FCTTypeCoinGain = 0x02
- *   FCTTypeCoinLoss = 0x03                                                  */
+ *   FCTTypeDamage = 0x00
+ *   FCTTypeRegen  = 0x01
+ * Damage/regen are broadcast to every AOI viewer with the exact amount.
+ * Coin types are retired on the server (balance changes surface in the
+ * inventory-bar quantity FX); kept here for wire compatibility.             */
 #define FCT_TYPE_DAMAGE    0x00   /* life loss    — red    "-N"            */
 #define FCT_TYPE_REGEN     0x01   /* life gain    — green  "+N"            */
 #define FCT_TYPE_COIN_GAIN 0x02   /* coins in     — yellow "+N"            */
-#define FCT_TYPE_COIN_LOSS 0x03   /* coins out    — yellow "-N" (PvP/sink) */
+#define FCT_TYPE_COIN_LOSS 0x03   /* coins out    — yellow "-N"            */
 #define FCT_TYPE_ITEM_GAIN 0x04   /* item qty in  — cyan   "+N ItemID"     */
 #define FCT_TYPE_ITEM_LOSS 0x05   /* item qty out — purple "-N ItemID"     */
 
