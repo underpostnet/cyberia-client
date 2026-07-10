@@ -19,7 +19,7 @@
  * visible on a small screen. One "level" matches the manual zoom-out step
  * used by the zoom button/scroll wheel (see ui_dispatch.c). */
 #define CAMERA_MOBILE_ZOOM_STEP   0.9f
-#define CAMERA_MOBILE_ZOOM_LEVELS 4
+#define CAMERA_MOBILE_ZOOM_LEVELS 7
 
 static Camera2D g_camera = {
     .offset   = {0.0f, 0.0f},
