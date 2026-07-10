@@ -63,6 +63,10 @@ struct PlayerState {
  * pending action-talk-quest (overlay icon + quest-framed dialogue, no tab). */
 #define INTERACTION_FLAG_ACTION       (1u << 0)
 #define INTERACTION_FLAG_QUEST        (1u << 1)
+/* Drop tokens only, per viewing player: set when the local player is a damage
+ * contributor eligible to collect. Drives particle tint (gold vs gray); no
+ * overhead icon. */
+#define INTERACTION_FLAG_LOOT_ELIGIBLE (1u << 2)
 #define STATUS_ICON_ACTION_PROVIDER   8
 #define STATUS_ICON_QUEST_PROVIDER    9
 

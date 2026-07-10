@@ -7,7 +7,8 @@
  * the tap effect, loot drops, and reward celebration. Pure drawing, no state,
  * screen/world agnostic (caller supplies pixel coordinates). */
 
-extern const Color FX_SPARK_GOLD;   /* golden yellow — the single spark colour */
+extern const Color FX_SPARK_GOLD;   /* golden yellow — loot the player may collect */
+extern const Color FX_SPARK_GRAY;   /* neutral gray — another player's loot */
 
 /* Pixel-snapped filled rectangle with a solid black border `border` px larger on
  * every side (the tap-effect bar look). */

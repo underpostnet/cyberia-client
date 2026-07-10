@@ -3,6 +3,7 @@
 #include <raylib.h>
 
 const Color FX_SPARK_GOLD = { 255, 226, 20, 255 };
+const Color FX_SPARK_GRAY = { 168, 168, 168, 255 };
 
 void fx_shape_bar(float x, float y, float w, float h, float border, Color body) {
     DrawRectangle((int)(x - border), (int)(y - border),

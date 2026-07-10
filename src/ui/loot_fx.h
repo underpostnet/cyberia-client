@@ -17,9 +17,11 @@
  *      bounce. Collision is server-gated for the same window.
  *   2. Idle    — while it waits, the token floats on a continuous sine bounce
  *      over its cell (no background plate).
- *   3. Collect (MsgTypeDropCollect) — a golden/cyan particle burst fires at the
- *      ground location and the token vacuums along a parabolic arc into the
- *      collecting player's avatar boundary before it is erased.
+ *   3. Collect (MsgTypeDropCollect) — a particle burst fires at the ground
+ *      location (gold when the local player was eligible for the drop, gray
+ *      when it was another player's loot) and the token vacuums along a
+ *      parabolic arc into the collecting player's avatar boundary before it
+ *      is erased.
  *
  * Stages 1–2 drive the render position of the drop bot that lives in the world
  * mirror (loot_fx_drop_render_pos). Stage 3 owns detached flight tokens and the
@@ -32,11 +34,18 @@ typedef struct {
     float alpha;  /* 0..1 — fades to 0 as it enters the UI      */
 } LootFxRender;
 
+/* Particle tint — personal per player: gold for loot the local player may
+ * collect (damage contributor), gray for another player's loot. */
+enum {
+    LOOT_FX_TINT_GOLD = 0,
+    LOOT_FX_TINT_GRAY = 1,
+};
+
 typedef struct {
     float   x, y;    /* center, grid units                        */
     float   size;    /* square side, grid units                   */
     float   alpha;   /* 0..1                                       */
-    uint8_t tint;    /* 0 = gold, 1 = cyan                         */
+    uint8_t tint;    /* LOOT_FX_TINT_*                             */
 } LootFxParticle;
 
 /* Reset all flights, drop animations, and particles (call on world reset). */
@@ -58,11 +67,14 @@ void loot_fx_update(float dt);
 
 /* In-world drop render hook. Given the token's authoritative AOI rect (top-left
  * + dims, grid units), writes the animated top-left draw position (launch arc
- * or idle float). Returns false when the token has been collected and its
- * in-world render must yield to the detached vacuum flight. */
+ * or idle float). `loot_eligible` is the per-viewer AOI flag
+ * (INTERACTION_FLAG_LOOT_ELIGIBLE) selecting the particle tint. Returns false
+ * when the token has been collected and its in-world render must yield to the
+ * detached vacuum flight. */
 bool loot_fx_drop_render_pos(const char* drop_id,
                              float land_topx, float land_topy,
                              float dims_w, float dims_h,
+                             bool loot_eligible,
                              float* out_topx, float* out_topy);
 
 /* Renderer bridge: detached vacuum tokens. */
@@ -78,7 +90,7 @@ typedef struct {
     float   x, y;    /* center, screen pixels                    */
     float   size;    /* square side, screen pixels               */
     float   alpha;   /* 0..1                                     */
-    uint8_t tint;    /* 0 = gold, 1 = cyan                       */
+    uint8_t tint;    /* LOOT_FX_TINT_* (always gold: local-only)  */
 } LootFxScreenParticle;
 
 int  loot_fx_screen_particle_slot_count(void);

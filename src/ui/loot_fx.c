@@ -111,6 +111,7 @@ typedef struct {
     double last_seen;            /* s_clock at last render query               */
     double next_emit;            /* s_clock at which the next ambient spark fires */
     bool   collected;            /* in-world render yields to vacuum flight    */
+    bool   eligible;             /* local player may collect (AOI per-viewer flag) */
     bool   active;
 } DropAnim;
 
@@ -167,7 +168,7 @@ static float id_phase(const char* id) {
     return (float)(h & 0xFFFFu) / 65535.0f * 6.2831853f;
 }
 
-static void spawn_ambient(float wx, float wy);
+static void spawn_ambient(float wx, float wy, uint8_t tint);
 
 /* ── Lifecycle ──────────────────────────────────────────────────────────── */
 
@@ -230,6 +231,7 @@ void loot_fx_note_spawn(const char* drop_id, float origin_x, float origin_y,
 bool loot_fx_drop_render_pos(const char* drop_id,
                              float land_topx, float land_topy,
                              float dims_w, float dims_h,
+                             bool loot_eligible,
                              float* out_topx, float* out_topy) {
     if (!out_topx || !out_topy) return false;
 
@@ -246,6 +248,9 @@ bool loot_fx_drop_render_pos(const char* drop_id,
         a->launch_dur = 0.0f;
     }
     a->last_seen = s_clock;
+    /* Pinned to the live AOI value — eligibility is personal per viewer and
+     * can arrive after the spawn event. */
+    a->eligible = loot_eligible;
 
     if (a->collected) return false;
 
@@ -279,7 +284,8 @@ bool loot_fx_drop_render_pos(const char* drop_id,
 
         /* Ambient sparks emit from below the token base and rise up over it. */
         if (s_clock >= a->next_emit) {
-            spawn_ambient(cx, cy + dims_h * EMIT_DOWN_FRAC);
+            spawn_ambient(cx, cy + dims_h * EMIT_DOWN_FRAC,
+                          a->eligible ? LOOT_FX_TINT_GOLD : LOOT_FX_TINT_GRAY);
             a->next_emit = s_clock + lcg_range(AMBIENT_INTERVAL_MIN, AMBIENT_INTERVAL_MAX);
         }
     }
@@ -299,7 +305,7 @@ static Particle* particle_alloc(void) {
 }
 
 /* Big treasure burst fired the moment the drop is taken. */
-static void spawn_burst(float wx, float wy) {
+static void spawn_burst(float wx, float wy, uint8_t tint) {
     for (int n = 0; n < BURST_COUNT; n++) {
         Particle* p = particle_alloc();
         if (!p) return;
@@ -310,13 +316,13 @@ static void spawn_burst(float wx, float wy) {
         p->age  = 0.0f;
         p->ttl  = lcg_range(BURST_TTL_MIN, BURST_TTL_MAX);
         p->size = lcg_range(BURST_SIZE_MIN, BURST_SIZE_MAX);
-        p->tint = (uint8_t)(n & 1);   /* two yellow shades */
+        p->tint = tint;
         p->active = true;
     }
 }
 
 /* One gentle ambient spark drifting off the idle floating token. */
-static void spawn_ambient(float wx, float wy) {
+static void spawn_ambient(float wx, float wy, uint8_t tint) {
     Particle* p = particle_alloc();
     if (!p) return;
     p->x    = wx + lcg_range(-AMBIENT_OFFSET, AMBIENT_OFFSET);
@@ -326,7 +332,7 @@ static void spawn_ambient(float wx, float wy) {
     p->age  = 0.0f;
     p->ttl  = lcg_range(AMBIENT_TTL_MIN, AMBIENT_TTL_MAX);
     p->size = lcg_range(AMBIENT_SIZE_MIN, AMBIENT_SIZE_MAX);
-    p->tint = (uint8_t)(s_lcg & 1u);
+    p->tint = tint;
     p->active = true;
 }
 
@@ -354,7 +360,7 @@ static void spawn_slot_arrival(float sx, float sy) {
             .vy     = sinf(ang) * spd - ARRIVAL_UP_BIAS,
             .ttl    = ARRIVAL_TTL * lcg_range(0.8f, 1.2f),
             .size   = lcg_range(ARRIVAL_SIZE_MIN, ARRIVAL_SIZE_MAX),
-            .tint   = (uint8_t)(n & 1),
+            .tint   = LOOT_FX_TINT_GOLD,
             .active = true,
         };
     }
@@ -379,7 +385,7 @@ static void spawn_slot_delivery(float from_x, float from_y, float to_x, float to
             .ty     = to_y + lcg_range(-DELIVER_TARGET_JIT, DELIVER_TARGET_JIT),
             .ttl    = DELIVER_TTL * lcg_range(0.85f, 1.15f),
             .size   = lcg_range(DELIVER_SIZE_MIN, DELIVER_SIZE_MAX),
-            .tint   = (uint8_t)(n & 1),
+            .tint   = LOOT_FX_TINT_GOLD,
             .active = true,
         };
     }
@@ -415,14 +421,25 @@ void loot_fx_push(const char* drop_id, const char* collector_id,
                   const char* item_id, float world_x, float world_y) {
     if (!item_id || item_id[0] == '\0') return;
 
+    /* Burst tint is personal: gold when the local player was eligible for
+     * this drop (contributed damage — the server only lets contributors
+     * collect, so a self-collect is always gold), gray when another player
+     * collects loot that was never ours. */
+    bool eligible = (NULL != collector_id)
+        && (0 == strcmp(collector_id, g_game_state.player_id));
+
     /* Stop the in-world idle render for this token. */
     if (drop_id && drop_id[0] != '\0') {
         DropAnim* a = drop_find(drop_id);
-        if (a) a->collected = true;
+        if (a) {
+            a->collected = true;
+            if (a->eligible) eligible = true;
+        }
     }
 
     /* Treasure burst rising from below the token's ground location. */
-    spawn_burst(world_x, world_y + BURST_EMIT_DOWN);
+    spawn_burst(world_x, world_y + BURST_EMIT_DOWN,
+                eligible ? LOOT_FX_TINT_GOLD : LOOT_FX_TINT_GRAY);
 
     /* Arm the detached vacuum flight. */
     VacFlight* slot = NULL;

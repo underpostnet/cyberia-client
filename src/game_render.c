@@ -280,21 +280,23 @@ static void draw_drop_count(float top_x, float top_y, float dims_w, float cell_s
     DrawText(buf, nx, ny, fs, (Color){ 255, 255, 255, 245 });
 }
 
-/* Draw the loot collection stage: the yellow treasure-burst / ambient sparks at
- * each pickup, then the Object Layer tokens vacuuming toward their collectors.
+/* Draw the loot collection stage: the treasure-burst / ambient sparks at each
+ * pickup (gold when the local player may collect, gray for another player's
+ * loot), then the Object Layer tokens vacuuming toward their collectors.
  * Tokens reuse the shared entity-layer path (async atlas pipeline). No
  * background plate — the token and bordered-square sparks carry the read. */
 static void game_render_loot_fx(void) {
     if (!g_entity_render) return;
     const float cell_size = g_game_state.cell_size > 0 ? g_game_state.cell_size : 12.0f;
 
-    /* Yellow bordered-square particles (ambient float + collection burst). */
+    /* Bordered-square particles (ambient float + collection burst). */
     int pslots = loot_fx_particle_slot_count();
     for (int i = 0; i < pslots; i++) {
         LootFxParticle pt;
         if (!loot_fx_particle_at(i, &pt)) continue;
+        Color body = (LOOT_FX_TINT_GRAY == pt.tint) ? FX_SPARK_GRAY : FX_SPARK_GOLD;
         fx_shape_spark(pt.x * cell_size, pt.y * cell_size,
-                       pt.size * cell_size, FX_SPARK_GOLD, 1.0f);
+                       pt.size * cell_size, body, 1.0f);
     }
 
     /* Vacuum flight tokens. */
@@ -865,11 +867,18 @@ void game_render_entities(void) {
             float draw_x = entity_base->interp_pos.x;
             float draw_y = entity_base->interp_pos.y;
             if (entry->type == ENTITY_TYPE_BOT && strcmp(entity_type_str, "drop") == 0) {
+                /* Per-viewer loot eligibility (AOI bot flag) picks the drop's
+                 * particle tint: gold = collectable by us, gray = another
+                 * player's loot. */
+                const BotState* drop_bot = game_state_find_bot(entity_id);
+                bool loot_eligible = (NULL != drop_bot)
+                    && 0 != (drop_bot->interaction_flags & INTERACTION_FLAG_LOOT_ELIGIBLE);
                 if (!loot_fx_drop_render_pos(entity_id,
                                              entity_base->interp_pos.x,
                                              entity_base->interp_pos.y,
                                              entity_base->dims.x,
                                              entity_base->dims.y,
+                                             loot_eligible,
                                              &draw_x, &draw_y)) {
                     continue;
                 }
