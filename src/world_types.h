@@ -58,9 +58,11 @@ struct PlayerState {
 };
 
 /* Interaction capability bits (mirror cyberia-server entity_status.go). The bit
- * index pairs with the capability status-icon ID (bit i ↔ status icon 8+i). The
- * quest bit also enables the interact-modal Quest tab; the action bit marks a
- * pending action-talk-quest (overlay icon + quest-framed dialogue, no tab). */
+ * index pairs with the capability status-icon ID (bit i ↔ status icon 8+i).
+ * Both bits mean "actionable for this player right now" and drive attention
+ * icons only: the quest bit lights for an acceptable/advanceable quest (never
+ * completed feedback — the Quest tab follows quest_codes instead); the action
+ * bit marks a pending action-talk-quest (quest-framed dialogue, no tab). */
 #define INTERACTION_FLAG_ACTION       (1u << 0)
 #define INTERACTION_FLAG_QUEST        (1u << 1)
 /* Drop tokens only, per viewing player: set when the local player is a damage
