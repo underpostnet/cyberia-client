@@ -463,6 +463,23 @@ void loot_fx_push(const char* drop_id, const char* collector_id,
     slot->active  = true;
 }
 
+bool loot_fx_inbound_to_inventory(const char* item_id) {
+    if (!item_id || item_id[0] == '\0') return false;
+    for (int i = 0; i < LOOT_FX_MAX; i++) {
+        const VacFlight* f = &s_flights[i];
+        if (f->active && 0 == strcmp(f->item_id, item_id) &&
+            0 == strcmp(f->collector_id, g_game_state.player_id)) {
+            return true;
+        }
+    }
+    for (int i = 0; i < LOOT_PENDING_MAX; i++) {
+        if (s_pending[i].active && 0 == strcmp(s_pending[i].item_id, item_id)) {
+            return true;
+        }
+    }
+    return false;
+}
+
 static bool resolve_collector_center(const char* collector_id, float* cx, float* cy) {
     const GameState* gs = &g_game_state;
 

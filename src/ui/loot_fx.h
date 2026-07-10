@@ -77,6 +77,12 @@ bool loot_fx_drop_render_pos(const char* drop_id,
                              bool loot_eligible,
                              float* out_topx, float* out_topy);
 
+/* True while a pickup of this item is still travelling to the local player's
+ * inventory (vacuum flight toward the local player, or a slot-delivery stream
+ * whose arrival burst has not fired yet). The inventory bar defers revealing a
+ * first-copy slot until this turns false. */
+bool loot_fx_inbound_to_inventory(const char* item_id);
+
 /* Renderer bridge: detached vacuum tokens. */
 int  loot_fx_slot_count(void);
 bool loot_fx_render_at(int i, LootFxRender* out);
