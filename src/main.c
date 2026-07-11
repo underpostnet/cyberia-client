@@ -1,5 +1,6 @@
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 #include <assert.h>
 
 #include "input/input.h"
@@ -13,6 +14,8 @@
 #include <emscripten/emscripten.h>
 
 #include "js/interact_bridge.h"
+#include "js/loading_bridge.h"
+#include "network/engine_client.h"
 
 #include "domain/camera.h"
 #include "domain/presentation_runtime.h"
@@ -121,18 +124,126 @@ static void gameloop(void) {
     render_on_tick(frame_dt);
 }
 
+/* ── Loading stages ──────────────────────────────────────────────────────
+ * Each stage completes on a REAL initialization signal — never a timer.
+ * The world renders beneath the DOM loading overlay for the whole preload,
+ * so atlas/ObjectLayer fetches and texture creation are warmed before the
+ * player ever sees the scene. The order is the true dependency chain. */
+enum {
+    LOAD_RUNTIME = 0, /* WASM runtime, renderer, UI systems initialized     */
+    LOAD_CONNECT,     /* WebSocket to the simulation server open            */
+    LOAD_WORLD,       /* authoritative init_data received                   */
+    LOAD_HINTS,       /* presentation client-hints fetched                  */
+    LOAD_ASSETS,      /* engine REST pipeline (atlas/OL/textures) went idle */
+    LOAD_STABLE,      /* sustained frames with zero outstanding fetches     */
+    LOAD_STAGE_COUNT,
+};
+
+/* Label of the stage IN PROGRESS. */
+static const char* LOAD_STAGE_LABEL[LOAD_STAGE_COUNT] = {
+    "INITIALIZING RUNTIME...",
+    "CONNECTING TO CYBERIA SERVER...",
+    "SYNCHRONIZING WORLD STATE...",
+    "LOADING PRESENTATION HINTS...",
+    "STREAMING ATLAS TEXTURES...",
+    "STABILIZING INSTANCE...",
+};
+
+/* Share of the progress bar per stage (sums to 100). Asset streaming
+ * dominates real load time, so it owns most of the bar and advances
+ * continuously with the fetch completion ratio. */
+static const float LOAD_STAGE_WEIGHT[LOAD_STAGE_COUNT] = {
+    5.0f, 10.0f, 10.0f, 10.0f, 55.0f, 10.0f,
+};
+
+/* The stabilization window: this many consecutive rendered frames with an
+ * idle fetch pipeline before the world counts as visually stable. */
+#define LOAD_STABLE_FRAMES 45
+
+static int  s_load_done      = 0;     /* stages completed so far            */
+static int  s_stable_frames  = 0;
+static bool s_load_ready     = false; /* all stages done, awaiting the tap  */
+
+/* True when the current stage's real completion signal is observed. */
+static bool load_stage_complete(int stage) {
+    switch (stage) {
+        case LOAD_RUNTIME: return true; /* main() finished all init calls   */
+        case LOAD_CONNECT: return connection_is_open();
+        case LOAD_WORLD:   return g_game_state.init_received;
+        case LOAD_HINTS:   return presentation_runtime_is_ready();
+        case LOAD_ASSETS:  return fetch_total_started() > 0 &&
+                                  0 == fetch_pending_count();
+        case LOAD_STABLE:
+            if (0 == fetch_pending_count()) s_stable_frames++;
+            else                            s_stable_frames = 0;
+            return LOAD_STABLE_FRAMES <= s_stable_frames;
+    }
+    return false;
+}
+
+/* 0..1 completion of the stage in progress — real measurements only. */
+static float load_stage_fraction(int stage) {
+    switch (stage) {
+        case LOAD_ASSETS: {
+            int total = fetch_total_started();
+            if (0 >= total) return 0.0f;
+            return (float)(total - fetch_pending_count()) / (float)total;
+        }
+        case LOAD_STABLE:
+            return (float)s_stable_frames / (float)LOAD_STABLE_FRAMES;
+        default:
+            return 0.0f;
+    }
+}
+
+/* Bar percent + streamed label for this frame. While assets stream, the
+ * label is the id of the last completed fetch so the player sees exactly
+ * what is loading. */
+static void report_loading_progress(void) {
+    float pct = 0.0f;
+    for (int i = 0; i < s_load_done; i++) pct += LOAD_STAGE_WEIGHT[i];
+    pct += LOAD_STAGE_WEIGHT[s_load_done] * load_stage_fraction(s_load_done);
+
+    const char* label = LOAD_STAGE_LABEL[s_load_done];
+    static char asset_label[128];
+    if (LOAD_ASSETS == s_load_done && '\0' != fetch_last_completed_id()[0]) {
+        /* Bare asset name: last path segment, extension stripped
+         * ("/api/atlas-sprite-sheet/blob/eiri.png" → "eiri"). */
+        const char* id    = fetch_last_completed_id();
+        const char* slash = strrchr(id, '/');
+        snprintf(asset_label, sizeof(asset_label), " %s",
+                 slash ? slash + 1 : id);
+        char* dot = strrchr(asset_label, '.');
+        if (dot) *dot = '\0';
+        label = asset_label;
+    }
+    loading_bridge_progress(pct, label);
+}
+
 static void preloading_loop(void) {
     const float frame_dt = GetFrameTime();
     text_font_sync();
     game_client_on_tick();
 
-    // will fall into render fallback... those should be here and not there(?)
+    /* Render the (still hidden) world every preload frame: this is what
+     * drives the lazy atlas/ObjectLayer fetches and texture creation, so
+     * LOAD_ASSETS / LOAD_STABLE measure genuine readiness. */
     render_on_tick(frame_dt);
 
-    bool hints_ready = presentation_runtime_is_ready(); // TODO: Turn this into a fetch request
-    bool world_ready = g_game_state.init_received;
-    if (hints_ready && world_ready) {
-        // when loading is done we replace loop with normal game loop
+    /* Stages complete strictly in order — each is gated on the previous. */
+    while (!s_load_ready && load_stage_complete(s_load_done)) {
+        s_load_done++;
+        if (LOAD_STAGE_COUNT <= s_load_done) {
+            s_load_ready = true;
+            loading_bridge_ready();
+        }
+    }
+    if (!s_load_ready) report_loading_progress();
+
+    /* Gameplay begins only on the player's explicit Tap-to-Start. */
+    if (s_load_ready && loading_bridge_start_requested()) {
+        loading_bridge_hide();
+        client_confirm_loading_done(); /* release the server "loading" freeze */
         emscripten_cancel_main_loop();
         emscripten_set_main_loop(gameloop, 0, 1);
     }
