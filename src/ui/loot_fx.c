@@ -77,6 +77,13 @@
 #define DELIVER_TARGET_JIT   7.0f    /* px jitter around the slot center          */
 #define DELIVER_SIZE_MIN     6.0f    /* px squares                                */
 #define DELIVER_SIZE_MAX     12.0f
+
+/* Delivery token — the item icon riding the stream, above the particles. */
+#define TOKEN_MAX            16      /* concurrent delivery tokens               */
+#define TOKEN_SIZE_START     36.0f   /* px at launch                             */
+#define TOKEN_SIZE_END       22.0f   /* px on slot arrival                       */
+#define TOKEN_LIFT_PX        16.0f   /* rides this far above the particle arc    */
+#define TOKEN_FADE_FROM      0.85f   /* progress at which the token fades out    */
 #define ARRIVAL_COUNT        11
 #define ARRIVAL_TTL          0.44f
 #define ARRIVAL_SPEED_MIN    55.0f   /* px/s                                      */
@@ -143,11 +150,20 @@ typedef struct {
     bool   active;
 } PendingArrival;
 
+/* The item icon flying with a delivery stream (screen space). */
+typedef struct {
+    char  item_id[MAX_ITEM_ID_LENGTH];
+    float sx, sy, tx, ty;
+    float age, ttl;
+    bool  active;
+} DeliveryToken;
+
 static VacFlight      s_flights[LOOT_FX_MAX];
 static DropAnim       s_drops[LOOT_DROP_MAX];
 static Particle       s_particles[LOOT_PARTICLE_MAX];
 static ScrParticle    s_scr[LOOT_SCR_PARTICLE_MAX];
 static PendingArrival s_pending[LOOT_PENDING_MAX];
+static DeliveryToken  s_tokens[TOKEN_MAX];
 
 /* Presentation clock, advanced only by loot_fx_update — keeps launch/idle
  * timing independent of the raylib frame clock and of message arrival time. */
@@ -178,6 +194,7 @@ void loot_fx_reset(void) {
     memset(s_particles, 0, sizeof(s_particles));
     memset(s_scr, 0, sizeof(s_scr));
     memset(s_pending, 0, sizeof(s_pending));
+    memset(s_tokens, 0, sizeof(s_tokens));
     s_clock = 0.0;
 }
 
@@ -366,10 +383,24 @@ static void spawn_slot_arrival(float sx, float sy) {
     }
 }
 
+/* The item icon riding the delivery stream, drawn above the particles. */
+static void spawn_delivery_token(float from_x, float from_y, float to_x, float to_y,
+                                 const char* item_id) {
+    DeliveryToken* t = NULL;
+    for (int i = 0; i < TOKEN_MAX; i++) {
+        if (!s_tokens[i].active) { t = &s_tokens[i]; break; }
+    }
+    if (!t) return;
+    *t = (DeliveryToken){ .sx = from_x, .sy = from_y, .tx = to_x, .ty = to_y,
+                          .ttl = DELIVER_TTL, .active = true };
+    if (item_id) strncpy(t->item_id, item_id, MAX_ITEM_ID_LENGTH - 1);
+}
+
 /* Stream of homing screen particles from the avatar into the slot, plus a
  * scheduled arrival burst when they land. */
 static void spawn_slot_delivery(float from_x, float from_y, float to_x, float to_y,
                                 const char* item_id) {
+    spawn_delivery_token(from_x, from_y, to_x, to_y, item_id);
     for (int n = 0; n < DELIVER_COUNT; n++) {
         ScrParticle* p = scr_alloc();
         if (!p) break;
@@ -413,6 +444,13 @@ static void trigger_slot_delivery(const VacFlight* f) {
     Vector2 slot;
     if (!inventory_bar_item_slot_center(f->item_id, &slot)) return;
     spawn_slot_delivery(from.x, from.y, slot.x, slot.y, f->item_id);
+}
+
+void loot_fx_reward_delivery(const char* item_id, float from_x, float from_y) {
+    if (!item_id || item_id[0] == '\0') return;
+    Vector2 slot;
+    if (!inventory_bar_item_slot_center(item_id, &slot)) return;
+    spawn_slot_delivery(from_x, from_y, slot.x, slot.y, item_id);
 }
 
 /* ── Vacuum flight (stage 3) ───────────────────────────────────────────── */
@@ -585,6 +623,14 @@ void loot_fx_update(float dt) {
         }
     }
 
+    /* Delivery tokens age out with their stream. */
+    for (int i = 0; i < TOKEN_MAX; i++) {
+        DeliveryToken* t = &s_tokens[i];
+        if (!t->active) continue;
+        t->age += dt;
+        if (t->age >= t->ttl) t->active = false;
+    }
+
     /* Evict drop animations for tokens no longer being rendered. */
     for (int i = 0; i < LOOT_DROP_MAX; i++) {
         DropAnim* a = &s_drops[i];
@@ -624,6 +670,29 @@ bool loot_fx_particle_at(int i, LootFxParticle* out) {
     out->tint  = p->tint;
     out->alpha = 1.0f - p->age / p->ttl;
     if (out->alpha < 0.0f) out->alpha = 0.0f;
+    return true;
+}
+
+int loot_fx_delivery_token_slot_count(void) { return TOKEN_MAX; }
+
+bool loot_fx_delivery_token_at(int i, LootFxDeliveryToken* out) {
+    if (i < 0 || i >= TOKEN_MAX || !out) return false;
+    const DeliveryToken* t = &s_tokens[i];
+    if (!t->active) return false;
+
+    /* Same constant-speed horizontal + parabolic arc as the homing stream,
+     * lifted above it; the lift eases out so the token lands on the slot. */
+    float p = t->age / t->ttl;
+    out->x = t->sx + (t->tx - t->sx) * p;
+    out->y = t->sy + (t->ty - t->sy) * p
+           - 4.0f * DELIVER_ARC_PX * p * (1.0f - p)
+           - TOKEN_LIFT_PX * (1.0f - p);
+    out->size  = TOKEN_SIZE_START + (TOKEN_SIZE_END - TOKEN_SIZE_START) * p;
+    out->alpha = (p < TOKEN_FADE_FROM)
+               ? 1.0f
+               : 1.0f - (p - TOKEN_FADE_FROM) / (1.0f - TOKEN_FADE_FROM);
+    strncpy(out->item_id, t->item_id, MAX_ITEM_ID_LENGTH - 1);
+    out->item_id[MAX_ITEM_ID_LENGTH - 1] = '\0';
     return true;
 }
 

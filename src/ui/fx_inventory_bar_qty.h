@@ -39,6 +39,16 @@ bool fx_inventory_bar_qty_slot_visible(const char* item_id);
  * quantity gain and on first-copy reveal, in sync with the +N popup. */
 float fx_inventory_bar_qty_slot_scale(const char* item_id);
 
+/* True while the slot's arrival pulse is playing — the bar renders the item
+ * sprite in full colour for its duration. */
+bool fx_inventory_bar_qty_slot_pulsing(const char* item_id);
+
+/* Hold this item's next quantity change (and, for a first copy, the slot
+ * itself) until a delivery lands (notify_arrival). The holder must call this
+ * every frame while waiting — e.g. the notification modal with a pending
+ * reward — so the hold outlives the ordinary release fallback. */
+void fx_inventory_bar_qty_hold_for_delivery(const char* item_id);
+
 /* Draw the active +/- transition popup above a slot, if any. */
 void fx_inventory_bar_qty_draw(Rectangle slot, const char* item_id);
 

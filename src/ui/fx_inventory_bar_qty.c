@@ -15,14 +15,16 @@
 #define FQ_MAX          96      /* tracked items                                */
 #define FQ_TWEEN_RATE   9.0f    /* count-toward-target smoothing (per second)   */
 #define FQ_RELEASE_WAIT 1.6     /* s to wait for a pickup particle before firing */
+#define FQ_HELD_WAIT    4.0     /* s fallback for externally-held changes (the
+                                   holder refreshes pending_since while waiting) */
 #define FQ_POPUP_TTL    1.30f   /* seconds a +/- popup lives                     */
 #define FQ_POPUP_RISE   34.0f   /* px/s the popup floats upward                  */
 #define FQ_FADE_FROM    0.62f   /* popup progress at which it starts fading      */
 #define FQ_FONT_BASE    22      /* base glyph size (grows over life)            */
 #define FQ_FONT_GROW    0.85f   /* extra scale gained by end of life            */
 #define FQ_EVICT_SEC    3.0     /* forget an item unseen this long              */
-#define FQ_PULSE_TTL    0.28f   /* slot pulse duration                          */
-#define FQ_PULSE_AMP    0.12f   /* slot pulse peak extra scale                  */
+#define FQ_PULSE_TTL    0.32f   /* slot pulse duration                          */
+#define FQ_PULSE_AMP    0.18f   /* slot pulse peak extra scale                  */
 
 static const Color FQ_GAIN = {  70, 240,  90, 255 }; /* vivid green + */
 static const Color FQ_LOSS = { 245,  65,  55, 255 }; /* vivid red   - */
@@ -42,6 +44,7 @@ typedef struct {
     float  popup_age;     /* seconds since fired; < 0 = no popup                */
     float  pulse_age;     /* seconds since the slot pulse fired; < 0 = at rest  */
     bool   hidden;        /* first-copy slot held invisible until pickup lands  */
+    bool   held;          /* external hold (reward delivery) — long fallback    */
     double last_seen;     /* eviction sentinel                                  */
     bool   used;
 } FqEntry;
@@ -93,8 +96,24 @@ static void release_pending(FqEntry* e) {
         if (e->pending_delta > 0 || e->hidden) e->pulse_age = 0.0f;
     }
     e->hidden = false;
+    e->held = false;
     e->pending = false;
     e->pending_delta = 0;
+}
+
+void fx_inventory_bar_qty_hold_for_delivery(const char* item_id) {
+    if (!item_id || item_id[0] == '\0') return;
+    FqEntry* e = find(item_id);
+    if (!e) {
+        /* Reward for an item not yet tracked: pre-register a hidden first-copy
+         * entry so the slot reveals only when the delivery lands. */
+        e = alloc_entry(item_id);
+        e->hidden = true;
+    }
+    e->held    = true;
+    e->pending = true;
+    e->pending_since = s_clock; /* refreshed by the holder while it waits */
+    e->last_seen     = s_clock;
 }
 
 void fx_inventory_bar_qty_notify_arrival(const char* item_id) {
@@ -144,7 +163,8 @@ void fx_inventory_bar_qty_update(float dt) {
         if (!e->used) continue;
 
         /* Fallback: fire even without a pickup animation (quests, coins, etc.). */
-        if (e->pending && (s_clock - e->pending_since) > FQ_RELEASE_WAIT) {
+        double wait = e->held ? FQ_HELD_WAIT : FQ_RELEASE_WAIT;
+        if (e->pending && (s_clock - e->pending_since) > wait) {
             release_pending(e);
         }
 
@@ -193,6 +213,12 @@ float fx_inventory_bar_qty_slot_scale(const char* item_id) {
     return 1.0f + FQ_PULSE_AMP * sinf(PI * t);
 }
 
+bool fx_inventory_bar_qty_slot_pulsing(const char* item_id) {
+    if (!item_id || item_id[0] == '\0') return false;
+    FqEntry* e = find(item_id);
+    return e && 0.0f <= e->pulse_age;
+}
+
 static void draw_popup(const FqEntry* e, Rectangle slot) {
     float t = e->popup_age / FQ_POPUP_TTL;
     float alpha = (t < FQ_FADE_FROM) ? 1.0f : 1.0f - (t - FQ_FADE_FROM) / (1.0f - FQ_FADE_FROM);
@@ -237,17 +263,20 @@ void fx_inventory_bar_qty_draw(Rectangle slot, const char* item_id) {
 }
 
 void fx_inventory_bar_qty_draw_bottom(Rectangle anchor) {
+    /* Hidden-bar popups launch beside the toggle (which hugs the left screen
+     * edge) and travel diagonally toward the upper right — the horizontal
+     * drift matches draw_popup's vertical rise — so the glyph stays fully on
+     * screen. Concurrent popups stagger upward along the same diagonal. */
     int shown = 0;
     for (int i = 0; i < FQ_MAX && shown < 6; i++) {
         const FqEntry* e = &s_e[i];
         if (!e->used || e->popup_age < 0.0f) continue;
 
-        int column = shown % 3 - 1;
-        int row = shown / 3;
-        float lane = anchor.width;
+        float drift = FQ_POPUP_RISE * e->popup_age;
         Rectangle slot = {
-            anchor.x + anchor.width * 0.5f + column * (lane + 6.0f) - lane * 0.5f,
-            anchor.y - row * (lane * 0.6f), lane, anchor.height,
+            anchor.x + anchor.width + drift,
+            anchor.y - (float)shown * (anchor.height * 0.8f),
+            anchor.width, anchor.height,
         };
         draw_popup(e, slot);
         shown++;

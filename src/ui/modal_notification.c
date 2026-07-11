@@ -17,7 +17,9 @@
 #include "modal_notification.h"
 #include "text.h"
 
+#include "fx_inventory_bar_qty.h"
 #include "item_slot.h"
+#include "loot_fx.h"
 #include "modal.h"
 #include "object_layer.h"
 #include "object_layers_management.h"
@@ -113,6 +115,10 @@ static void push_queue(const char* title, const char* message, Color accent,
     e->reward_qty = reward_quantity;
     e->accent = accent;
 
+    /* A reward's inventory change (and, for a first copy, its slot) stays held
+     * until the OK-press delivery flight lands on the slot. */
+    if (e->reward_item[0] != '\0') fx_inventory_bar_qty_hold_for_delivery(e->reward_item);
+
     /* Start displaying if nothing is visible right now. */
     if (!s_open) show_next();
 }
@@ -174,6 +180,19 @@ static Rectangle notif_ok(Rectangle card) {
                         card.y + card.height - MN_OK_H - 12, MN_OK_W, MN_OK_H };
 }
 
+/* Resting rect of the reward slot (below title + message) — shared by the
+ * draw pass and the OK-press delivery launch. */
+static Rectangle notif_reward_slot(Rectangle card) {
+    int iw = notif_inner_w();
+    float cy = card.y + MN_TOP;
+    cy += (float)text_wrap(s_title, 0, 0, iw, MN_FONT_TITLE, C_TITLE, true, false);
+    if (s_message[0] != '\0') {
+        cy += MN_GAP + (float)text_wrap(s_message, 0, 0, iw, MN_FONT_BODY, C_BODY, true, false);
+    }
+    cy += MN_GAP;
+    return (Rectangle){ card.x + (card.width - MN_SLOT) / 2.0f, cy, MN_SLOT, MN_SLOT };
+}
+
 void modal_notification_update(float dt) {
     if (!s_open) return;
     s_age += dt; /* drives the pop-in only; dismissal is OK-only */
@@ -183,6 +202,14 @@ void modal_notification_update(float dt) {
         if (s_reward_new) { fx_reward_trigger(card); s_reward_new = false; }
         fx_reward_show(card);
         s_reward_pop_age += dt;
+    }
+
+    /* Keep the visible + queued reward holds alive while the player reads —
+     * they release when the OK-press delivery lands on the inventory slot. */
+    if (s_reward_item[0] != '\0') fx_inventory_bar_qty_hold_for_delivery(s_reward_item);
+    for (int i = s_queue_head; i != s_queue_tail; i = (i + 1) % MN_QUEUE_CAP) {
+        if (s_queue[i].reward_item[0] != '\0')
+            fx_inventory_bar_qty_hold_for_delivery(s_queue[i].reward_item);
     }
 }
 
@@ -226,8 +253,7 @@ void modal_notification_draw(void) {
      * color transitions from the notification's accent back to normal as it
      * settles, so a fresh reward reads as a distinct, celebratory arrival. */
     if (s_reward_item[0] != '\0') {
-        cy += MN_GAP;
-        Rectangle slot = { card.x + (card.width - MN_SLOT) / 2.0f, cy, MN_SLOT, MN_SLOT };
+        Rectangle slot = notif_reward_slot(card);
 
         float pop_t  = fminf(1.0f, s_reward_pop_age / MN_REWARD_POP_DUR);
         float pop    = mn_ease_out_back(pop_t);
@@ -242,7 +268,7 @@ void modal_notification_draw(void) {
         strncpy(ol.item_id, s_reward_item, sizeof(ol.item_id) - 1);
         ol.active = true;
         ol.quantity = s_reward_qty;
-        item_slot_draw_ex(pop_slot, &ol, obj_layers_mgr_get(), s_accent, tint_t);
+        item_slot_draw_ex(pop_slot, &ol, obj_layers_mgr_get(), s_accent, tint_t, true);
     }
 
     /* OK button — bottom centre. */
@@ -258,9 +284,19 @@ void modal_notification_draw(void) {
 
 bool modal_notification_handle_click(int mx, int my) {
     if (!s_open) return false;
-    Rectangle ok_r = notif_ok(notif_card());
+    Rectangle card = notif_card();
+    Rectangle ok_r = notif_ok(card);
     if ((float)mx >= ok_r.x && (float)mx < ok_r.x + ok_r.width &&
         (float)my >= ok_r.y && (float)my < ok_r.y + ok_r.height) {
+        /* Reward arrival — the same presentation as a world pickup, launched
+         * from the notification's reward slot. Landing releases the held slot
+         * reveal / +N popup / pulse. */
+        if (s_reward_item[0] != '\0') {
+            Rectangle slot = notif_reward_slot(card);
+            loot_fx_reward_delivery(s_reward_item,
+                                    slot.x + slot.width * 0.5f,
+                                    slot.y + slot.height * 0.5f);
+        }
         show_next();
         return true;
     }

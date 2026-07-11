@@ -102,4 +102,23 @@ typedef struct {
 int  loot_fx_screen_particle_slot_count(void);
 bool loot_fx_screen_particle_at(int i, LootFxScreenParticle* out);
 
+/* Renderer bridge: the delivery token — the picked item's ObjectLayer icon
+ * riding the same avatar→slot arc as the delivery stream, slightly above the
+ * particles, so the item itself is seen entering the inventory. */
+typedef struct {
+    char  item_id[MAX_ITEM_ID_LENGTH];
+    float x, y;      /* center, screen pixels                    */
+    float size;      /* square side, screen pixels               */
+    float alpha;     /* 0..1                                      */
+} LootFxDeliveryToken;
+
+int  loot_fx_delivery_token_slot_count(void);
+bool loot_fx_delivery_token_at(int i, LootFxDeliveryToken* out);
+
+/* Fly a reward item from an arbitrary screen position (e.g. the notification
+ * modal's reward slot) into its inventory slot, reusing the pickup delivery
+ * presentation: homing stream + delivery token + slot-arrival burst, which
+ * releases the held +N popup / first-copy reveal on landing. */
+void loot_fx_reward_delivery(const char* item_id, float from_x, float from_y);
+
 #endif /* CYBERIA_UI_LOOT_FX_H */
