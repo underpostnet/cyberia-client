@@ -23,6 +23,10 @@ void game_client_on_tick(void);
  * graduates from AWAITING_INIT to RUNNING. */
 void client_on_init_received(void);
 
+/* The player tapped Start on the loading screen: release the server's
+ * "loading" freeze. Reconnect joins re-release automatically. */
+void client_confirm_loading_done(void);
+
 /** Send a pre-built binary uplink frame (BinWriter output). */
 bool network_send_binary(const uint8_t* data, uint16_t len);
 

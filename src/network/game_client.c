@@ -67,8 +67,26 @@ conn_stats connection_get_stats(void) {
     return g_client.stats;
 }
 
+static bool s_loading_confirmed = false;
+
+void client_confirm_loading_done(void) {
+    s_loading_confirmed = true;
+    BinWriter w;
+    uplink_freeze_end(&w, "loading");
+    network_send_binary(w.buf, w.pos);
+}
+
 void client_on_init_received(void) {
     LOG_INFO("init_data received");
+    /* Every fresh join spawns frozen under the server's "loading" protection.
+     * On a reconnect the client is already loaded and playing, so release the
+     * new session immediately; the first join instead waits for the player's
+     * explicit Tap-to-Start (client_confirm_loading_done). */
+    if (s_loading_confirmed) {
+        BinWriter w;
+        uplink_freeze_end(&w, "loading");
+        network_send_binary(w.buf, w.pos);
+    }
 }
 
 void game_client_on_tick(void) {

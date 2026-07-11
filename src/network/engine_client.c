@@ -15,8 +15,25 @@ typedef struct {
     FetchCompletedCb on_completed;
 } FetchContext;
 
+static int  s_pending_count = 0;
+static int  s_total_started = 0;
+static char s_last_completed[96] = {0};
+
+int fetch_pending_count(void) { return s_pending_count; }
+int fetch_total_started(void) { return s_total_started; }
+const char* fetch_last_completed_id(void) { return s_last_completed; }
+
+static void note_completed(const char* asset_id) {
+    s_pending_count--;
+    if (asset_id) {
+        strncpy(s_last_completed, asset_id, sizeof(s_last_completed) - 1);
+        s_last_completed[sizeof(s_last_completed) - 1] = '\0';
+    }
+}
+
 static void on_fetch_success(emscripten_fetch_t* f) {
     FetchContext* ctx = f->userData;
+    note_completed(ctx->asset_id);
 
     void*  buf = NULL;
     size_t sz  = 0;
@@ -43,6 +60,7 @@ static void on_fetch_success(emscripten_fetch_t* f) {
 
 static void on_fetch_error(emscripten_fetch_t* f) {
     FetchContext* ctx = f->userData;
+    note_completed(ctx->asset_id);
 
     FetchResponse response = (FetchResponse){
         .success  = false,
@@ -65,6 +83,8 @@ void fetch_request_start(const char* asset_id, const char* url, FetchCompletedCb
     FetchContext* ctx = malloc(sizeof(FetchContext));
     ctx->asset_id     = strdup(asset_id);
     ctx->on_completed = on_completed;
+    s_pending_count++;
+    s_total_started++;
 
     emscripten_fetch_attr_t attr;
     emscripten_fetch_attr_init(&attr);
