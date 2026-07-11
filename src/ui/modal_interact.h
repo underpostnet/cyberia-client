@@ -43,6 +43,10 @@ bool modal_interact_handle_wheel(float wheel_delta);
 /* Called when the JS overlay closes — reopens this modal. */
 void modal_interact_overlay_closed(void);
 
+/* Inventory-bar slot tap while this modal is open: stack the player-item
+ * inventory modal on top of the session; closing it returns here. */
+void modal_interact_stack_player_item(int inv_idx);
+
 /* Returns the cached alive layer snapshot (persists across AOI changes). */
 const ObjectLayerState* modal_interact_get_cached_layers(int* out_count);
 

@@ -417,6 +417,14 @@ void modal_interact_overlay_closed(void) {
     modal_interact_reopen();
 }
 
+void modal_interact_stack_player_item(int inv_idx) {
+    if (!s_open) return;
+    es_push();
+    modal_interact_close();
+    inventory_modal_open(inv_idx);
+    inventory_modal_set_on_close(modal_interact_reopen);
+}
+
 /* ── Public API ───────────────────────────────────────────────────────── */
 
 void modal_interact_init(void) {
@@ -669,9 +677,10 @@ static void draw_quest_steps(const QuestMetadataEntry* metadata,
     }
 }
 
-/* One collapsible mission card. Advances *y; records the per-card primary
- * button (Accept / Abandon) so the click handler can act on it. */
-static void draw_quest_card(int slot, const char* code, Rectangle content,
+/* One collapsible mission card in the column at (x, w). Advances *y; records
+ * the per-card primary button (Accept / Abandon) so the click handler can act
+ * on it. */
+static void draw_quest_card(int slot, const char* code, float x, float w,
                             float* y, int mx, int my) {
     quest_cache_fetch(code);
     const QuestProgressEntry* q = quest_progress_store_find(code);
@@ -697,7 +706,7 @@ static void draw_quest_card(int slot, const char* code, Rectangle content,
                         : locked ? "Locked" : "Available";
 
     UIToggle* tg = &s_q_toggle[slot];
-    float hx = content.x, hw = content.width;
+    float hx = x, hw = w;
     int qfont = mi_font_quest();
     int rfont = mi_font_rew();
     float chev = mi_q_chevron();
@@ -810,9 +819,20 @@ static void draw_quest_tab(Rectangle content, int mx, int my) {
     int lfont = mi_font_qlabel();
     DrawText("Missions", (int)content.x, (int)y, lfont, C_REW_LABEL);
     y += lfont + 6;
+
+    /* Wide (landscape): cards flow into two columns — each card lands in the
+     * currently shorter one — instead of a single tall stack. */
+    bool  two_col = modal_wide_layout();
+    float col_gap = two_col ? 10.0f : 0.0f;
+    float col_w   = two_col ? (content.width - col_gap) * 0.5f : content.width;
+    float col_x[2] = { content.x, content.x + col_w + col_gap };
+    float col_y[2] = { y, y };
     for (int i = 0; i < s_q_count; i++) {
-        draw_quest_card(i, s_quest_codes[i], content, &y, mx, my);
+        int c = (two_col && col_y[1] < col_y[0]) ? 1 : 0;
+        draw_quest_card(i, s_quest_codes[i], col_x[c], col_w, &col_y[c], mx, my);
     }
+    y = col_y[0] > col_y[1] ? col_y[0] : col_y[1];
+
     s_q_content_height = y - content_y + 4.0f;
     ui_scroll_end(&s_q_scroll);
 }

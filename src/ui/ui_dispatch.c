@@ -18,10 +18,19 @@ bool ui_dispatch_tap(int x, int y) {
     if (modal_notification_handle_click(x, y)) return true;
 
     /* Interaction and dialogue modals keep the bottom inventory companion
-     * visible. Its toggle remains actionable; the shown slots are read-only
-     * so a tap cannot advance or dismiss the modal behind them. */
+     * visible. Its toggle remains actionable. While the interact modal is up,
+     * bar slots stay live too: tapping one stacks the inventory modal on top
+     * and returns to the interact session on close. A standalone dialogue
+     * keeps the slots read-only. */
     if (modal_dialogue_is_open() || modal_interact_is_open()) {
         if (inventory_bar_handle_toggle_click(x, y)) return true;
+        if (modal_interact_is_open()) {
+            int bar_hit = -1;
+            if (inventory_bar_handle_click(x, y, &bar_hit)) {
+                if (bar_hit >= 0) modal_interact_stack_player_item(bar_hit);
+                return true;
+            }
+        }
         if (inventory_bar_point_covered(x, y)) return true;
     }
 
