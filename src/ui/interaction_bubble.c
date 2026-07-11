@@ -63,6 +63,31 @@ static float column_width(void) {
     return (float)(IBUBBLE_MARGIN_X + IBUBBLE_ICON_SIZE + IBUBBLE_GAP);
 }
 
+/* Minimum label/chat overhang assumed right of the icon lane; the draw pass
+ * grows it from the measured content so the slide always travels far enough
+ * for the WIDEST nameplate / chat bubble to clear the left edge — nothing is
+ * left to pop off when the draw gate closes. */
+#define IBUBBLE_SLIDE_REACH_MIN 260.0f
+
+/* Fixed slide duration, both directions. The offset derives from a
+ * normalized progress with a smoothstep ease, so hide departs exactly as
+ * gently as show arrives no matter how far the measured reach extends the
+ * travel (a time-constant ease toward the target would instead spend its
+ * fastest stretch on the visible part of the hide). */
+#define IBUBBLE_SLIDE_DURATION 0.35f
+
+static float s_col_reach   = IBUBBLE_SLIDE_REACH_MIN;
+static float s_col_slide_t = 1.0f; /* 0 = fully hidden, 1 = fully expanded */
+
+static float column_slide_width(void) {
+    return column_width() + s_col_reach;
+}
+
+/* Fully off screen: collapsed and the slide has finished. */
+static bool column_hidden(void) {
+    return !s_col_toggle.expanded && 0.0f >= s_col_slide_t;
+}
+
 /* Fixed screen-space anchor: top-left corner with small padding.
  * The toggle never moves — it is always at the same screen position. */
 static Rectangle toggle_anchor(void) {
@@ -98,7 +123,8 @@ static float column_content_height(void) {
 static void column_ensure_toggle(void) {
     if (s_col_init) return;
     bool expanded = !viewport_is_mobile();
-    s_col_offset  = expanded ? 0.0f : -column_width();
+    s_col_slide_t = expanded ? 1.0f : 0.0f;
+    s_col_offset  = expanded ? 0.0f : -column_slide_width();
     /* Chevron points LEFT when expanded ("tap to collapse"); flips to RIGHT
      * when collapsed via resolve_chevron so it means "tap to expand". */
     ui_toggle_init(&s_col_toggle, toggle_anchor(), expanded, UI_TOGGLE_CHEVRON_LEFT);
@@ -305,6 +331,7 @@ void interaction_bubble_init(void) {
     s_slot_count = 0;
     memset(s_slots, 0, sizeof(s_slots));
     s_col_init = false;
+    s_col_reach = IBUBBLE_SLIDE_REACH_MIN;
     ui_scroll_reset(&s_col_scroll);
 }
 
@@ -312,7 +339,13 @@ void interaction_bubble_update(void) {
     column_ensure_toggle();
     /* Re-anchor not needed — the toggle is fixed in screen space. */
     ui_toggle_update(&s_col_toggle, GetFrameTime());
-    s_col_offset = -column_width() * (1.0f - s_col_toggle.anim_t);
+    /* Fixed-duration slide progress, independent of the chevron's anim_t. */
+    float dir = s_col_toggle.expanded ? 1.0f : -1.0f;
+    s_col_slide_t += dir * GetFrameTime() / IBUBBLE_SLIDE_DURATION;
+    if (s_col_slide_t < 0.0f) s_col_slide_t = 0.0f;
+    if (s_col_slide_t > 1.0f) s_col_slide_t = 1.0f;
+    float ease = s_col_slide_t * s_col_slide_t * (3.0f - 2.0f * s_col_slide_t);
+    s_col_offset = -column_slide_width() * (1.0f - ease);
 
     for (int i = 0; i < s_slot_count; i++)
         s_slots[i].active = false;
@@ -350,13 +383,17 @@ void interaction_bubble_update(void) {
     }
     s_slot_count = write;
 
-    if (s_col_toggle.expanded) {
+    /* Keep the scroll geometry (the draw scissor's view) current whenever the
+     * column is visible — including the slide-out — so it is never clipped by
+     * a stale rect. Clicks are consumed only while expanded. */
+    if (!column_hidden()) {
         Rectangle view = column_scroll_view();
         ui_scroll_set_input_bounds(&s_col_scroll, column_input_bounds(view));
         ui_scroll_set_scrollbar_bounds(&s_col_scroll, column_scrollbar_bounds(view));
         ui_scroll_update(&s_col_scroll, view, column_content_height(), GetFrameTime());
         int click_x, click_y;
-        if (ui_scroll_take_click(&s_col_scroll, &click_x, &click_y)) {
+        if (ui_scroll_take_click(&s_col_scroll, &click_x, &click_y) &&
+            s_col_toggle.expanded) {
             open_slot_at(click_x, click_y);
         }
     }
@@ -364,7 +401,9 @@ void interaction_bubble_update(void) {
 
 void interaction_bubble_draw(void) {
     column_ensure_toggle();
-    if (!s_col_toggle.expanded || s_slot_count <= 0) {
+    /* Keep drawing until the slide offset settles off screen so collapsing
+     * plays the same slide the expand does, instead of vanishing on the tap. */
+    if (column_hidden() || s_slot_count <= 0) {
         ui_toggle_draw(&s_col_toggle);
         return;
     }
@@ -420,6 +459,10 @@ void interaction_bubble_draw(void) {
                      (Color){0, 0, 0, 180});
             DrawText(slot->display_name, np_x, np_y, np_fs,
                      (Color){220, 220, 230, 240});
+            /* Grow the slide reach to this label's overhang past the icon. */
+            float reach = r.width + 4.0f +
+                          (float)MeasureText(slot->display_name, np_fs) + 8.0f;
+            if (reach > s_col_reach) s_col_reach = reach;
         }
 
         /* Status icons — the presence lifecycle icon plus one overlay per set
@@ -479,6 +522,9 @@ void interaction_bubble_draw(void) {
             float bubw = (float)(padx * 2 + badge_w + tw);
             float bubh = (float)(mfs + pady * 2);
             Rectangle bub = { bubx, buby, bubw, bubh };
+            /* Grow the slide reach to this chat bubble's overhang. */
+            float reach = (bubx + bubw + 8.0f) - r.x;
+            if (reach > s_col_reach) s_col_reach = reach;
             DrawRectangleRounded(bub, 0.5f, 6, (Color){ 18, 22, 38, (unsigned char)(225 * fade) });
             DrawRectangleRoundedLinesEx(bub, 0.5f, 6, 1.0f,
                                         (Color){ border.r, border.g, border.b,
@@ -532,7 +578,10 @@ static bool open_slot_at(int mx, int my) {
 bool interaction_bubble_handle_click(int mx, int my) {
     column_ensure_toggle();
     if (ui_toggle_handle_click(&s_col_toggle, mx, my)) {
-        ui_scroll_reset(&s_col_scroll);
+        /* Reset the scroll only when opening. Resetting on collapse would
+         * zero the scroll's stored view — a 0×0 scissor — and scissor the
+         * column away on the next frame instead of letting it slide out. */
+        if (s_col_toggle.expanded) ui_scroll_reset(&s_col_scroll);
         return true;
     }
 
