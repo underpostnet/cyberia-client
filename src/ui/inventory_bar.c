@@ -316,7 +316,10 @@ void inventory_bar_draw(void) {
 
             ObjectLayerState ol = g_game_state.full_inventory[inv_idx];
             ol.quantity = fx_inventory_bar_qty_display(ol.item_id, ol.quantity);
-            item_slot_draw(scale_rect(r, fx_inventory_bar_qty_slot_scale(ol.item_id)), &ol, s_ol_manager);
+            /* During the arrival pulse the sprite renders in full colour. */
+            item_slot_draw_ex(scale_rect(r, fx_inventory_bar_qty_slot_scale(ol.item_id)),
+                              &ol, s_ol_manager, WHITE, 0.0f,
+                              fx_inventory_bar_qty_slot_pulsing(ol.item_id));
             if (bar_slots_settled())
                 fx_inventory_bar_qty_draw(r, g_game_state.full_inventory[inv_idx].item_id);
         }

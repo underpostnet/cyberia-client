@@ -28,11 +28,11 @@ static Color lerp_color(Color from, Color to, float t) {
 }
 
 void item_slot_draw(Rectangle r, const ObjectLayerState* ols, ObjectLayersManager* mgr) {
-    item_slot_draw_ex(r, ols, mgr, WHITE, 0.0f);
+    item_slot_draw_ex(r, ols, mgr, WHITE, 0.0f, false);
 }
 
 void item_slot_draw_ex(Rectangle r, const ObjectLayerState* ols, ObjectLayersManager* mgr,
-                       Color highlight, float highlight_t) {
+                       Color highlight, float highlight_t, bool sprite_full_color) {
     int pad = (int)(r.width * 0.07f);
     if (pad < 3) pad = 3;
     int fs = (int)(r.width * 0.26f);
@@ -59,7 +59,8 @@ void item_slot_draw_ex(Rectangle r, const ObjectLayerState* ols, ObjectLayersMan
         return;
     }
 
-    Color tint = (active && activable) ? WHITE : (Color){ 180, 180, 180, 160 };
+    Color tint = (sprite_full_color || (active && activable))
+               ? WHITE : (Color){ 180, 180, 180, 160 };
     int inner  = (int)r.width - pad * 2;
     ol_as_ico_draw(mgr, ols->item_id,
                    (int)(r.x + pad), (int)(r.y + pad), inner,
