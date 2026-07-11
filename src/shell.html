@@ -8,7 +8,19 @@
             content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"
         />
         <title>Cyberia Client</title>
+        <!-- Retro pixel-art font for the loading screen -->
+        <link
+            href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap"
+            rel="stylesheet"
+        />
         <style>
+            :root {
+                --color-bg: #050505;
+                --color-gold: #ffcc00;
+                --color-gold-glow: rgba(255, 204, 0, 0.6);
+                --color-white: #f5f5f5;
+            }
+
             * {
                 margin: 0;
                 padding: 0;
@@ -42,46 +54,312 @@
                 -ms-interpolation-mode: nearest-neighbor;
             }
 
+            /* =========================================
+               CYBERIA MATRIX LOADING SCREEN
+               (production loading overlay — driven by the
+               C client through window.CyberiaLoading)
+            ========================================= */
             #loading {
                 position: absolute;
-                top: 50%;
-                left: 50%;
-                transform: translate(-50%, -50%);
-                color: #fff;
-                font-family: monospace;
-                text-align: center;
+                top: 0;
+                left: 0;
+                width: 100%;
+                height: 100%;
+                background-color: var(--color-bg);
+                color: white;
+                font-family: "Press Start 2P", monospace;
+                display: flex;
+                flex-direction: column;
+                justify-content: center;
+                align-items: center;
+                overflow: hidden;
                 z-index: 1000;
+                image-rendering: pixelated;
             }
 
-            .spinner {
-                border: 3px solid rgba(255, 255, 255, 0.1);
-                border-top: 3px solid #fff;
-                border-radius: 50%;
-                width: 40px;
-                height: 40px;
-                animation: spin 1s linear infinite;
-                margin: 0 auto 20px;
+            /* Retro screen effects (CRT) */
+            #loading .scanlines {
+                position: absolute;
+                top: 0;
+                left: 0;
+                width: 100%;
+                height: 100%;
+                background: linear-gradient(
+                    to bottom,
+                    rgba(255, 255, 255, 0),
+                    rgba(255, 255, 255, 0) 50%,
+                    rgba(0, 0, 0, 0.25) 50%,
+                    rgba(0, 0, 0, 0.25)
+                );
+                background-size: 100% 4px;
+                pointer-events: none;
+                z-index: 50;
             }
 
-            @keyframes spin {
+            #loading .vignette {
+                position: absolute;
+                top: 0;
+                left: 0;
+                width: 100%;
+                height: 100%;
+                background: radial-gradient(
+                    circle,
+                    rgba(0, 0, 0, 0) 40%,
+                    rgba(0, 0, 0, 0.8) 100%
+                );
+                pointer-events: none;
+                z-index: 40;
+            }
+
+            /* Cyberia logo in pure CSS — splash.png as a 7x8 pixel matrix:
+                 1111111
+                 1000001
+                 1011101
+                 1010101
+                 1011101
+                 1000001
+                 1110111
+                 0010100
+               One element is the top-left pixel; every other white cell is
+               drawn with a box-shadow offset. */
+            #loading .logo-container {
+                /* One logo pixel = 1em; change font-size to scale the mark */
+                font-size: 22px;
+                width: 7em;
+                height: 8em;
+                margin-bottom: 50px;
+                animation:
+                    pulse-glow 3s infinite ease-in-out,
+                    glitch-anim 10s infinite linear;
+                z-index: 10;
+            }
+
+            #loading .logo-pixels {
+                width: 1em;
+                height: 1em;
+                background-color: var(--color-white);
+                box-shadow:
+                    /* row 0: full top edge */
+                    1em 0 var(--color-white),
+                    2em 0 var(--color-white),
+                    3em 0 var(--color-white),
+                    4em 0 var(--color-white),
+                    5em 0 var(--color-white),
+                    6em 0 var(--color-white),
+                    /* row 1: outer side edges */ 0 1em var(--color-white),
+                    6em 1em var(--color-white),
+                    /* row 2: outer sides + inner square top */ 0 2em
+                        var(--color-white),
+                    2em 2em var(--color-white),
+                    3em 2em var(--color-white),
+                    4em 2em var(--color-white),
+                    6em 2em var(--color-white),
+                    /* row 3: outer sides + inner sides (hollow core pixel) */
+                        0 3em var(--color-white),
+                    2em 3em var(--color-white),
+                    4em 3em var(--color-white),
+                    6em 3em var(--color-white),
+                    /* row 4: outer sides + inner square bottom */ 0 4em
+                        var(--color-white),
+                    2em 4em var(--color-white),
+                    3em 4em var(--color-white),
+                    4em 4em var(--color-white),
+                    6em 4em var(--color-white),
+                    /* row 5: outer side edges */ 0 5em var(--color-white),
+                    6em 5em var(--color-white),
+                    /* row 6: bottom edge with center gap */ 0 6em
+                        var(--color-white),
+                    1em 6em var(--color-white),
+                    2em 6em var(--color-white),
+                    4em 6em var(--color-white),
+                    5em 6em var(--color-white),
+                    6em 6em var(--color-white),
+                    /* row 7: the two feet below the bottom edge */ 2em 7em
+                        var(--color-white),
+                    4em 7em var(--color-white);
+            }
+
+            /* Loading interface */
+            #loading .ui-container {
+                width: 90%;
+                max-width: 600px;
+                z-index: 10;
+                display: flex;
+                flex-direction: column;
+                align-items: center;
+            }
+
+            #loading .title {
+                color: var(--color-gold);
+                font-size: 24px;
+                margin-bottom: 15px;
+                text-shadow: 0 0 10px var(--color-gold-glow);
+                letter-spacing: 2px;
+            }
+
+            #loading .module-text {
+                color: #aaaaaa;
+                font-size: 10px;
+                margin-bottom: 20px;
+                height: 12px; /* fixed height so the layout does not jump */
+                max-width: 100%;
+                white-space: nowrap;
+                overflow: hidden;
+                text-overflow: ellipsis;
+            }
+
+            #loading .progress-wrapper {
+                width: 100%;
+                max-width: 300px; /* the bar never grows past this */
+                position: relative;
+                display: flex;
+                align-items: center;
+            }
+
+            #loading .progress-border {
+                width: 100%;
+                height: 36px;
+                border: 3px solid #444;
+                background-color: #111;
+                padding: 2px;
+                position: relative;
+                box-shadow: 0 0 15px rgba(0, 0, 0, 0.8);
+            }
+
+            #loading .progress-fill {
+                height: 100%;
+                width: 0%;
+                background-color: var(--color-gold);
+                box-shadow: 0 0 10px var(--color-gold-glow);
+                transition: width 0.2s linear;
+                position: relative;
+            }
+
+            #loading .progress-fill::after {
+                content: "";
+                position: absolute;
+                top: 0;
+                left: 0;
+                width: 100%;
+                height: 30%;
+                background-color: rgba(255, 255, 255, 0.4);
+            }
+
+            /* Percentage lives INSIDE the bar so it is always on screen:
+               bold white fill with a solid black outline, fully opaque over
+               both the dark track and the gold fill. */
+            #loading .progress-percent {
+                position: absolute;
+                right: 10px;
+                top: 50%;
+                transform: translateY(-50%);
+                font-size: 13px;
+                font-weight: 700;
+                color: #fff;
+                text-shadow:
+                    2px 0 0 #000,
+                    -2px 0 0 #000,
+                    0 2px 0 #000,
+                    0 -2px 0 #000,
+                    2px 2px 0 #000,
+                    -2px 2px 0 #000,
+                    2px -2px 0 #000,
+                    -2px -2px 0 #000,
+                    1px 0 0 #000,
+                    -1px 0 0 #000,
+                    0 1px 0 #000,
+                    0 -1px 0 #000;
+                z-index: 2;
+                pointer-events: none;
+            }
+
+            /* Space is always reserved (visibility, not display) so the bar
+               never shifts when the ready prompt appears. */
+            #loading .ready-text {
+                visibility: hidden;
+                color: #fff;
+                font-size: 12px;
+                margin-top: 20px;
+                animation: blink 1s infinite;
+                text-shadow: 0 0 8px rgba(255, 255, 255, 0.8);
+            }
+
+            @keyframes pulse-glow {
                 0% {
-                    transform: rotate(0deg);
+                    transform: scale(1);
+                    filter: drop-shadow(0 0 5px rgba(255, 255, 255, 0.15));
+                }
+                50% {
+                    transform: scale(1.03);
+                    filter: drop-shadow(0 0 20px rgba(255, 255, 255, 0.45));
                 }
                 100% {
-                    transform: rotate(360deg);
+                    transform: scale(1);
+                    filter: drop-shadow(0 0 5px rgba(255, 255, 255, 0.15));
                 }
             }
 
-            .emscripten-loaded #loading {
-                display: none;
+            @keyframes glitch-anim {
+                0%,
+                96% {
+                    transform: translate(0) scale(1);
+                }
+                97% {
+                    transform: translate(-3px, 2px) scale(1.02);
+                    filter: hue-rotate(90deg);
+                }
+                98% {
+                    transform: translate(3px, -2px) scale(0.98);
+                    filter: hue-rotate(-90deg);
+                }
+                99% {
+                    transform: translate(-3px, -2px) scale(1.02);
+                    filter: drop-shadow(0 0 20px red);
+                }
+                100% {
+                    transform: translate(0) scale(1);
+                }
+            }
+
+            @keyframes blink {
+                0%,
+                100% {
+                    opacity: 1;
+                }
+                50% {
+                    opacity: 0;
+                }
             }
         </style>
     </head>
     <body>
+        <!-- Production loading screen — visible until the C client reports
+             every real init stage complete AND the player taps to start. -->
         <div id="loading">
-            <div class="spinner"></div>
-            <div>Loading...</div>
+            <div class="scanlines"></div>
+            <div class="vignette"></div>
+
+            <div class="logo-container" id="loading-logo">
+                <div class="logo-pixels"></div>
+            </div>
+
+            <div class="ui-container">
+                <h1 class="title">CYBERIA</h1>
+                <p class="module-text" id="loading-text">
+                    INITIALIZING RUNTIME...
+                </p>
+                <div class="progress-wrapper">
+                    <div class="progress-border">
+                        <div class="progress-fill" id="loading-bar"></div>
+                        <span class="progress-percent" id="loading-percent"
+                            >0%</span
+                        >
+                    </div>
+                </div>
+                <p class="ready-text" id="loading-ready">TAP TO START</p>
+            </div>
         </div>
+
         <canvas
             id="canvas"
             oncontextmenu="event.preventDefault()"
@@ -104,13 +382,78 @@
                 );
             })();
 
+            /* Loading-screen controller. The C client (js/loading_bridge.c)
+               drives it with REAL initialization stages — there are no
+               timers or simulated progress. */
+            window.CyberiaLoading = (function () {
+                "use strict";
+
+                let ready = false;
+                let startRequested = false;
+                let lastPct = 0;
+
+                function el(id) {
+                    return document.getElementById(id);
+                }
+
+                /* pct is 0..100 from REAL stage/fetch accounting; clamped
+                   monotonic so late-queued fetches never move it backward. */
+                function progress(pct, label) {
+                    const bar = el("loading-bar");
+                    if (!bar) return;
+                    pct = Math.floor(Math.max(lastPct, Math.min(100, pct)));
+                    lastPct = pct;
+                    bar.style.width = pct + "%";
+                    el("loading-percent").innerText = pct + "%";
+                    if (label) {
+                        el("loading-text").innerText = "[MODULE]: " + label;
+                    }
+                }
+
+                function setReady() {
+                    if (ready || !el("loading-bar")) return;
+                    ready = true;
+                    progress(100, null);
+                    const text = el("loading-text");
+                    text.innerText = "LOADING COMPLETE.";
+                    text.style.color = "#ffcc00";
+                    el("loading-ready").style.visibility = "visible";
+                    el("loading-logo").style.animation =
+                        "pulse-glow 1s infinite ease-in-out, glitch-anim 5s infinite linear";
+                }
+
+                function hide() {
+                    const overlay = el("loading");
+                    if (!overlay) return;
+                    overlay.style.transition = "opacity 0.6s ease";
+                    overlay.style.opacity = "0";
+                    setTimeout(function () {
+                        overlay.remove();
+                    }, 650);
+                }
+
+                function requestStart() {
+                    if (ready) startRequested = true;
+                }
+
+                document
+                    .getElementById("loading")
+                    .addEventListener("pointerdown", requestStart);
+                document.addEventListener("keydown", requestStart);
+
+                return {
+                    progress: progress,
+                    setReady: setReady,
+                    hide: hide,
+                    startRequested: function () {
+                        return startRequested ? 1 : 0;
+                    },
+                };
+            })();
+
             var Module = {
                 preRun: [],
-                postRun: [
-                    function () {
-                        document.body.classList.add("emscripten-loaded");
-                    },
-                ],
+                postRun: [],
 
                 print: function (text) {
                     if (arguments.length > 1) {
