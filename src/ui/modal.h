@@ -138,5 +138,9 @@ void modal_draw_overlay(int screen_width, int screen_height, float age);
 void modal_draw_panel(Rectangle rect, float age);
 void modal_draw_panel_ex(Rectangle rect, float age, Color border, float border_width);
 
+/* Landscape breakpoint: the UI area is significantly wider than tall, so
+ * modals prefer two-column layouts over vertical stacking. */
+bool modal_wide_layout(void);
+
 
 #endif // MODAL_H

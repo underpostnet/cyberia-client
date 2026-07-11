@@ -52,6 +52,12 @@ void modal_draw_panel(Rectangle rect, float age) {
     modal_draw_panel_ex(rect, age, MODAL_PANEL_BORDER, 1.5f);
 }
 
+bool modal_wide_layout(void) {
+    int sw = GetScreenWidth();
+    int sh = GetScreenHeight();
+    return (float)sw > (float)sh * 1.4f;
+}
+
 int modal_init_struct(Modal* modal) {
     assert(modal);
 

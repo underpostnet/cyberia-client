@@ -24,6 +24,7 @@
 #include "object_layers_management.h"
 #include "ol_as_animated_ico.h"
 #include "ol_stack_ico.h"
+#include "ui_button.h"
 #include "ui_icon.h"
 #include "util/log.h"
 
@@ -57,6 +58,15 @@ static bool s_dlg_started  = false;
 static bool s_quest_style  = false;
 static bool s_ended        = false;  /* all lines read at least once (entity) */
 
+/* Mobile reading modes: an ENTITY dialogue paired with the interact modal
+ * starts compact — sprite plus a pulsing chat button instead of text — and
+ * the button expands a fullscreen reader that hides the interact modal;
+ * close-yellow returns to compact. ITEM (inventory lore) dialogues open the
+ * fullscreen reader directly. Desktop is unaffected. */
+static bool      s_fullscreen = false;
+static Rectangle s_chat_btn_rect;  /* compact-mode expand button  */
+static Rectangle s_fs_close_rect;  /* fullscreen close button     */
+
 /* Typewriter state */
 static float s_char_timer    = 0.0f;
 static int   s_chars_visible = 0;
@@ -77,7 +87,8 @@ static Modal s_modal;
  * No fixed pixel sizes — everything is derived from screen dimensions
  * so it scales naturally across resolutions.                               */
 
-#define DLG_SPRITE_FRAC     0.50f   /* sprite width as fraction of card width  */
+#define DLG_SPRITE_FRAC        0.50f    /* desktop: sprite column = half card   */
+#define DLG_SPRITE_FRAC_MOBILE 0.3333f  /* mobile: 1/3 sprite, 2/3 dialogue     */
 #define DLG_FONT_SPEAKER    22
 #define DLG_FONT_TEXT       18
 #define DLG_FONT_HINT       14
@@ -100,7 +111,28 @@ static const Color C_HINT      = { 140, 140, 160, 180 };
 static const Color C_CARD_BORD = {  70,  70, 120, 200 };
 /* ── Helpers ──────────────────────────────────────────────────────────── */
 
+/* Mobile fullscreen reader: expanded from the compact chat button, or an
+ * inventory-lore dialogue (always fullscreen on mobile). */
+static bool dlg_fullscreen(void) {
+    return viewport_is_mobile() && s_line_count > 0 &&
+           (s_fullscreen || MODAL_DIALOGUE_RENDER_ITEM == s_render);
+}
+
+/* Mobile compact half-panel: sprite + pulsing chat button, no text. */
+static bool dlg_compact(void) {
+    return viewport_is_mobile() && s_line_count > 0 && !s_fullscreen &&
+           MODAL_DIALOGUE_RENDER_ENTITY == s_render;
+}
+
+bool modal_dialogue_is_fullscreen(void) {
+    return s_open && dlg_fullscreen();
+}
+
 static Rectangle panel_rect(int sw, int sh) {
+    if (dlg_fullscreen()) {
+        float bot = (float)sh - inventory_bar_visible_height();
+        return (Rectangle){ 0.0f, 0.0f, (float)sw, bot };
+    }
     float top = modal_interact_is_open()
               ? modal_interact_layout_bottom() + DLG_PANEL_GAP
               : sh * DLG_TOP_FRAC;
@@ -114,6 +146,13 @@ static int dlg_side_pad(void) {
 }
 
 static int dlg_pad(int sw) {
+    if (viewport_is_mobile()) {
+        /* Mobile: tight padding so the text column gets the space. */
+        int p = (int)(sw * 0.015f);
+        if (p < 6)  p = 6;
+        if (p > 10) p = 10;
+        return p;
+    }
     int p = (int)(sw * DLG_PAD_FRAC);
     if (p < DLG_PAD_MIN) p = DLG_PAD_MIN;
     if (p > DLG_PAD_MAX) p = DLG_PAD_MAX;
@@ -121,7 +160,8 @@ static int dlg_pad(int sw) {
 }
 
 static int dlg_sprite_size(float card_w) {
-    return (int)(card_w * DLG_SPRITE_FRAC);
+    float frac = viewport_is_mobile() ? DLG_SPRITE_FRAC_MOBILE : DLG_SPRITE_FRAC;
+    return (int)(card_w * frac);
 }
 
 static bool hit_rect(int mx, int my, Rectangle r) {
@@ -196,6 +236,7 @@ void modal_dialogue_open(const char* entity_id, const char* item_id,
     s_chars_visible = 0;
     s_line_complete = false;
     s_ended         = false;
+    s_fullscreen    = false;
     s_open          = true;
 
     LOG_INFO("[MODAL_DIALOGUE] Open: entity=%s item=%s code=%s lines=%d\n",
@@ -237,6 +278,7 @@ static void modal_dialogue_finish(bool completed) {
     s_line_count  = 0;
     s_current     = 0;
     s_quest_style = false;
+    s_fullscreen  = false;
 }
 
 void modal_dialogue_set_quest_style(bool on) {
@@ -307,6 +349,9 @@ void modal_dialogue_draw(void) {
         panel.x + dlg_side_pad(), panel.y + slide_offset,
         panel.width - 2 * dlg_side_pad(), panel.height
     };
+    /* Shared modal pop (the inventory-modal pattern): the card scales in from
+     * its centre on open and on every compact↔fullscreen mode change. */
+    card = modal_scale_rect(card, modal_pop_scale(s_age));
 
     /* Card background — translucent so the world reads through. Quest-talk
      * dialogues get a yellow frame + quest icon to mark the mission context. */
@@ -328,10 +373,11 @@ void modal_dialogue_draw(void) {
     float x0 = card.x;
     float y0 = card.y;
 
-    /* Left-column width is always half the card; the drawn icon is
-     * capped to the available card height so it never overflows the
-     * bottom edge.  The icon is then centred inside its column.       */
-    int col_w    = dlg_sprite_size(card.width);           /* column = half card width */
+    /* Left-column width: half the card on desktop, a third on mobile (the
+     * dialogue text keeps the rest). The drawn icon is capped to the available
+     * card height so it never overflows the bottom edge, then centred inside
+     * its column. */
+    int col_w    = dlg_sprite_size(card.width);
     int avail_h  = (int)card.height - 2 * pad;
     if (avail_h < 4) avail_h = 4;
     int icon_sz  = col_w < avail_h ? col_w : avail_h;    /* cap to available height  */
@@ -344,6 +390,31 @@ void modal_dialogue_draw(void) {
 
     /* Render-only: no dialogue lines → show the entity, no text. */
     if (s_line_count == 0) return;
+
+    /* Compact (mobile + interact): a pulsing chat button takes the text
+     * column; tapping it expands the fullscreen reader. */
+    if (dlg_compact()) {
+        float bsz   = 56.0f;
+        float pulse = 1.0f + 0.10f * sinf((float)GetTime() * 4.4f);
+        float bx = x0 + col_w + (card.width - col_w) * 0.5f - bsz * 0.5f;
+        float by = y0 + (card.height - bsz) * 0.5f;
+        s_chat_btn_rect = (Rectangle){ bx, by, bsz, bsz };
+        DrawRectangleRounded(s_chat_btn_rect, 0.3f, 6, (Color){ 40, 48, 80, 230 });
+        ui_icon_draw_ex("chat", bx + bsz * 0.5f, by + bsz * 0.5f,
+                        bsz * 0.60f * pulse, 0.0f, WHITE);
+        return;
+    }
+
+    /* Fullscreen reader expanded from the chat button: close-yellow returns
+     * to the compact state (the interact modal reappears with it). */
+    bool fs_close = viewport_is_mobile() && s_fullscreen;
+    float fs_close_sz = 34.0f;
+    if (fs_close) {
+        s_fs_close_rect = (Rectangle){ card.x + card.width - fs_close_sz - 8.0f,
+                                       card.y + 8.0f, fs_close_sz, fs_close_sz };
+        UIButtonStyle cb = { .icon_id = "close-yellow", .no_fill = true };
+        ui_button_draw(s_fs_close_rect, &cb, UI_BUTTON_NORMAL);
+    }
 
     /* Speaker name + progress — right of sprite column */
     const DialogueLine* line = &s_lines[s_current];
@@ -361,9 +432,9 @@ void modal_dialogue_draw(void) {
         snprintf(prog, sizeof(prog), "%d / %d", s_current + 1, s_line_count);
         int pfs = DLG_FONT_HINT;
         int pw  = MeasureText(prog, pfs);
-        DrawText(prog,
-                 (int)(card.x + card.width - pw - pad),
-                 (int)(ty + 2), pfs, C_HINT);
+        float prog_right = card.x + card.width - pad
+                         - (fs_close ? fs_close_sz + 8.0f : 0.0f);
+        DrawText(prog, (int)(prog_right - pw), (int)(ty + 2), pfs, C_HINT);
     }
 
     float text_y = ty + fs_speaker + 6.0f;
@@ -436,9 +507,31 @@ bool modal_dialogue_handle_click(int mx, int my) {
     int sh = GetScreenHeight();
     Rectangle card = panel_rect(sw, sh);
 
+    /* Compact (mobile + interact): the chat button expands the fullscreen
+     * reader; other panel taps are inert, outside falls to modal_interact. */
+    if (dlg_compact()) {
+        if (hit_rect(mx, my, s_chat_btn_rect)) {
+            s_fullscreen = true;
+            s_age = 0.0f; /* replay the modal pop for the mode change */
+            return true;
+        }
+        return hit_rect(mx, my, card);
+    }
+
+    /* Fullscreen reader: close-yellow collapses back to the compact state. */
+    if (viewport_is_mobile() && s_fullscreen) {
+        if (hit_rect(mx, my, s_fs_close_rect)) {
+            s_fullscreen = false;
+            s_age = 0.0f; /* replay the modal pop for the mode change */
+            return true;
+        }
+    }
+
     bool inside = hit_rect(mx, my, card);
 
     if (!inside) {
+        /* The fullscreen reader owns the whole screen — swallow. */
+        if (dlg_fullscreen()) return true;
         /* Inventory lore dismisses itself; the paired interaction view lets
          * modal_interact own dismissal, so let the tap fall through. */
         if (!s_auto_dismiss) return false;
