@@ -10,6 +10,7 @@
 #include "game_state.h"
 #include "js/fullscreen_bridge.h"
 #include "object_layers_management.h"
+#include "ol_as_animated_ico.h"
 #include "ui/dev_ui.h"
 #include "ui/entity_overhead_ui.h"
 #include "ui/floating_combat_text.h"
@@ -1077,6 +1078,29 @@ void game_render_aoi_circle(void) {
     DrawCircleLines(center.x, center.y, aoi_radius, (Color){ 180, 180, 255, 120 });
 }
 
+/* Inventory bar + the screen-space loot FX that land on its slots: delivery
+ * sparks, then the delivered item's icon riding above them into the slot. */
+static void draw_inventory_bar_with_loot_fx(void) {
+    inventory_bar_draw();
+
+    int loot_scr = loot_fx_screen_particle_slot_count();
+    for (int i = 0; i < loot_scr; i++) {
+        LootFxScreenParticle sp;
+        if (!loot_fx_screen_particle_at(i, &sp)) continue;
+        fx_shape_spark(sp.x, sp.y, sp.size, FX_SPARK_GOLD, 1.0f);
+    }
+
+    int loot_tok = loot_fx_delivery_token_slot_count();
+    for (int i = 0; i < loot_tok; i++) {
+        LootFxDeliveryToken tk;
+        if (!loot_fx_delivery_token_at(i, &tk)) continue;
+        Color tint = { 255, 255, 255, (unsigned char)(255.0f * tk.alpha + 0.5f) };
+        ol_as_ico_draw(obj_layers_mgr_get(), tk.item_id,
+                       (int)(tk.x - tk.size * 0.5f), (int)(tk.y - tk.size * 0.5f),
+                       (int)tk.size, OL_ICO_DEFAULT_DIR, 0, tint);
+    }
+}
+
 void game_render_ui(void) {
 
     // Render error messages (always visible)
@@ -1094,19 +1118,13 @@ void game_render_ui(void) {
     // Entity interaction bubbles (left side, collapsible column)
     interaction_bubble_draw();
 
+
     // Quest Journal (right side, below map info, collapsible)
     quest_journal_draw();
 
     bool inventory_companion = modal_interact_is_open() || modal_dialogue_is_open();
     if (!inventory_companion) {
-        inventory_bar_draw();
-
-        int loot_scr = loot_fx_screen_particle_slot_count();
-        for (int i = 0; i < loot_scr; i++) {
-            LootFxScreenParticle sp;
-            if (!loot_fx_screen_particle_at(i, &sp)) continue;
-            fx_shape_spark(sp.x, sp.y, sp.size, FX_SPARK_GOLD, 1.0f);
-        }
+        draw_inventory_bar_with_loot_fx();
     }
 
     // Portal hold progress bar (centered above the inventory bar; only while
@@ -1121,8 +1139,9 @@ void game_render_ui(void) {
         inventory_modal_draw();
     }
 
-    // Intermediate interaction modal (below dialogue in the draw order)
-    if (modal_interact_is_open()) {
+    // Intermediate interaction modal (below dialogue in the draw order).
+    // Hidden while the mobile fullscreen dialogue reader is up.
+    if (modal_interact_is_open() && !modal_dialogue_is_fullscreen()) {
         modal_interact_draw();
     }
 
@@ -1132,14 +1151,7 @@ void game_render_ui(void) {
     }
 
     if (inventory_companion) {
-        inventory_bar_draw();
-
-        int loot_scr = loot_fx_screen_particle_slot_count();
-        for (int i = 0; i < loot_scr; i++) {
-            LootFxScreenParticle sp;
-            if (!loot_fx_screen_particle_at(i, &sp)) continue;
-            fx_shape_spark(sp.x, sp.y, sp.size, FX_SPARK_GOLD, 1.0f);
-        }
+        draw_inventory_bar_with_loot_fx();
     }
 
     // Transient notification toast — top-most, above every modal.
