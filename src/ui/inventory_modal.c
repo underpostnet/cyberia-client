@@ -89,6 +89,7 @@ static bool      s_skill_arrows_visible = false;
 #define MODAL_CARD_W_FRAC  0.88f   /* fraction of screen width              */
 #define MODAL_CARD_H_FRAC  0.82f   /* fraction of screen height             */
 #define MODAL_CARD_W_MAX   600     /* hard max px                            */
+#define MODAL_CARD_W_MAX_WIDE 900  /* max px in the landscape two-column layout */
 #define MODAL_CARD_H_MAX   800
 
 #define MODAL_SPRITE_FRAC  0.38f   /* sprite size as fraction of card width */
@@ -171,7 +172,8 @@ static void rebuild_dir_str(void) {
 static Rectangle card_rect(int sw, int sh, float scale) {
     float w = sw * im_card_w_frac();
     float h = sh * im_card_h_frac();
-    if (w > MODAL_CARD_W_MAX) w = MODAL_CARD_W_MAX;
+    float w_max = modal_wide_layout() ? MODAL_CARD_W_MAX_WIDE : MODAL_CARD_W_MAX;
+    if (w > w_max) w = w_max;
     if (h > MODAL_CARD_H_MAX) h = MODAL_CARD_H_MAX;
     w *= scale;
     h *= scale;
@@ -359,6 +361,13 @@ void inventory_modal_draw(void) {
     float cy  = card.y;
     float cw  = card.width;
     int   pad = (int)im_pad(cw);
+
+    /* Wide (landscape) split: sprite + direction controls in a left pane,
+     * textual content in a right pane; stacked full-width otherwise. */
+    bool  wide   = modal_wide_layout();
+    float pane_w = wide ? cw * 0.40f : cw;  /* sprite pane width  */
+    float info_x = wide ? cx + pane_w : cx; /* content pane left  */
+    float info_w = wide ? cw - pane_w : cw; /* content pane width */
     int title_font = im_font_title();
     int body_font = im_font_body();
     int stat_font = im_font_stat();
@@ -384,8 +393,16 @@ void inventory_modal_draw(void) {
         atlas = get_or_fetch_atlas_data(ols->item_id);
 
     /* 4. Animated sprite via ol_as_animated_ico */
-    int sprite_sz = modal_sprite_size(cw, card.height);
-    float sprite_x = cx + cw * 0.5f - sprite_sz * 0.5f;
+    int sprite_sz = modal_sprite_size(pane_w, card.height);
+    if (wide) {
+        /* The left pane is dedicated to the preview — let the sprite fill
+         * most of it instead of keeping the stacked-layout size. */
+        int s = (int)(pane_w * 0.66f);
+        int max_h = (int)(card.height * 0.52f);
+        if (s > max_h) s = max_h;
+        if (s > sprite_sz) sprite_sz = s;
+    }
+    float sprite_x = cx + pane_w * 0.5f - sprite_sz * 0.5f;
     float sprite_y = cy + (inventory_modal_compact() ? 8.0f : 14.0f);
     Rectangle sprite_dst = { sprite_x, sprite_y,
                               (float)sprite_sz, (float)sprite_sz };
@@ -419,7 +436,16 @@ void inventory_modal_draw(void) {
         float mode_w = im_mode_button_w();
         float total_w = n_present * dir_w + (n_present - 1) * dir_gap
                   + dir_gap * 2.0f + mode_w;
-        float row_x = cx + (cw - total_w) * 0.5f;
+        /* Never overflow the pane (or the card): scale the row down to fit. */
+        float avail = pane_w - 12.0f;
+        if (total_w > avail) {
+            float k = avail / total_w;
+            dir_w   *= k;
+            dir_gap *= k;
+            mode_w  *= k;
+            total_w  = avail;
+        }
+        float row_x = cx + (pane_w - total_w) * 0.5f;
         float row_y = dir_row_y;
         int mx = GetMouseX(), my = GetMouseY();
 
@@ -455,6 +481,9 @@ void inventory_modal_draw(void) {
     float y_cursor = show_dir_buttons
                    ? dir_row_y + im_dir_button_h() + (inventory_modal_compact() ? 6.0f : 10.0f)
                    : dir_row_y;
+    /* In the two-column layout the content pane starts at the card top,
+     * beside the sprite instead of under it. */
+    if (wide) y_cursor = sprite_y;
 
     /* 6. Fetch item metadata */
     const char* item_name = ols->item_id;
@@ -483,7 +512,7 @@ void inventory_modal_draw(void) {
     /* 7. Item name */
     int tfs = title_font;
     int ttw = MeasureText(item_name, tfs);
-    DrawText(item_name, (int)(cx + (cw - ttw) * 0.5f), (int)y_cursor, tfs, C_TITLE);
+    DrawText(item_name, (int)(info_x + (info_w - ttw) * 0.5f), (int)y_cursor, tfs, C_TITLE);
     y_cursor += tfs + 4;
 
     /* Type badge */
@@ -492,12 +521,12 @@ void inventory_modal_draw(void) {
         snprintf(tbuf, sizeof(tbuf), "[%s]", item_type);
         int tbf = body_font - 1;
         int tbw = MeasureText(tbuf, tbf);
-        DrawText(tbuf, (int)(cx + (cw - tbw) * 0.5f), (int)y_cursor, tbf,
+        DrawText(tbuf, (int)(info_x + (info_w - tbw) * 0.5f), (int)y_cursor, tbf,
                  (Color){ 120, 180, 255, 200 });
         y_cursor += tbf + 6;
     }
 
-    DrawLine((int)(cx + pad), (int)y_cursor, (int)(cx + cw - pad), (int)y_cursor,
+    DrawLine((int)(info_x + pad), (int)y_cursor, (int)(info_x + info_w - pad), (int)y_cursor,
              (Color){ 70, 70, 100, 180 });
     y_cursor += 6;
 
@@ -508,7 +537,7 @@ void inventory_modal_draw(void) {
         desc_copy[sizeof(desc_copy) - 1] = '\0';
 
         int fs_d  = body_font;
-        int max_w = (int)(cw - pad * 2);
+        int max_w = (int)(info_w - pad * 2);
         char line_buf[256] = {0};
         char* tok = strtok(desc_copy, " ");
         while (tok) {
@@ -519,7 +548,7 @@ void inventory_modal_draw(void) {
                 snprintf(test, sizeof(test), "%s %s", line_buf, tok);
 
             if (MeasureText(test, fs_d) > max_w && line_buf[0] != '\0') {
-                DrawText(line_buf, (int)(cx + pad), (int)y_cursor, fs_d, C_BODY);
+                DrawText(line_buf, (int)(info_x + pad), (int)y_cursor, fs_d, C_BODY);
                 y_cursor += fs_d + 2;
                 snprintf(line_buf, sizeof(line_buf), "%s", tok);
             } else {
@@ -528,7 +557,7 @@ void inventory_modal_draw(void) {
             tok = strtok(NULL, " ");
         }
         if (line_buf[0] != '\0') {
-            DrawText(line_buf, (int)(cx + pad), (int)y_cursor, fs_d, C_BODY);
+            DrawText(line_buf, (int)(info_x + pad), (int)y_cursor, fs_d, C_BODY);
             y_cursor += fs_d + 6;
         }
     }
@@ -536,7 +565,7 @@ void inventory_modal_draw(void) {
     /* 9. Stats grid (2-column) */
     {
         int fs_s  = stat_font;
-        int col_w = (int)(cw * 0.5f) - pad;
+        int col_w = (int)(info_w * 0.5f) - pad;
         struct { const char* label; int val; } rows[6] = {
             { "Effect",       st_effect  },
             { "Resistance",   st_resist  },
@@ -545,13 +574,13 @@ void inventory_modal_draw(void) {
             { "Intelligence", st_intel   },
             { "Utility",      st_utility },
         };
-        DrawText("Stats", (int)(cx + pad), (int)y_cursor, fs_s,
+        DrawText("Stats", (int)(info_x + pad), (int)y_cursor, fs_s,
                  (Color){ 160, 180, 255, 220 });
         y_cursor += fs_s + 3;
         for (int r = 0; r < 3; r++) {
             for (int col = 0; col < 2; col++) {
                 int si = r * 2 + col;
-                int sx = (int)(cx + pad + col * col_w);
+                int sx = (int)(info_x + pad + col * col_w);
                 int sy = (int)y_cursor;
                 DrawText(rows[si].label, sx, sy, fs_s, C_STAT_LABEL);
                 char vbuf[16];
@@ -569,7 +598,7 @@ void inventory_modal_draw(void) {
     if (ols->quantity > 0) {
         char qbuf[48];
         snprintf(qbuf, sizeof(qbuf), "Quantity: %d", ols->quantity);
-        DrawText(qbuf, (int)(cx + pad), (int)y_cursor, body_font, C_QTY);
+        DrawText(qbuf, (int)(info_x + pad), (int)y_cursor, body_font, C_QTY);
         y_cursor += body_font + 8;
     }
 
@@ -606,8 +635,8 @@ void inventory_modal_draw(void) {
             const char* resolved_summon = resolve_summoned_item_id(se->summoned_entity_item_id);
 
             /* Separator line */
-            DrawLine((int)(cx + pad), (int)y_cursor,
-                     (int)(cx + cw - pad), (int)y_cursor,
+            DrawLine((int)(info_x + pad), (int)y_cursor,
+                     (int)(info_x + info_w - pad), (int)y_cursor,
                      (Color){ 70, 70, 100, 140 });
             y_cursor += 6;
 
@@ -622,7 +651,7 @@ void inventory_modal_draw(void) {
                 else
                     snprintf(header_buf, sizeof(header_buf), "%s", skill_label);
 
-                DrawText(header_buf, (int)(cx + pad), (int)y_cursor,
+                DrawText(header_buf, (int)(info_x + pad), (int)y_cursor,
                          stat_font, (Color){ 180, 160, 255, 220 });
 
                 /* Right-aligned arrows (only when >1 skill) */
@@ -630,7 +659,7 @@ void inventory_modal_draw(void) {
                     float arrow_w = inventory_modal_compact() ? 24.0f : 28.0f;
                     float arrow_h = inventory_modal_compact() ? 20.0f : 22.0f;
                     float arrow_y = y_cursor;
-                    float next_x = cx + cw - pad - arrow_w;
+                    float next_x = info_x + info_w - pad - arrow_w;
                     float prev_x = next_x - arrow_w - 4;
 
                     s_skill_prev_rect = (Rectangle){ prev_x, arrow_y, arrow_w, arrow_h };
@@ -663,7 +692,7 @@ void inventory_modal_draw(void) {
 
             /* ── Content row: [sprite] + summoned item name + description ── */
             int ico_sz = inventory_modal_compact() ? 30 : 36;
-            float ico_x = cx + pad;
+            float ico_x = info_x + pad;
             float ico_y = y_cursor;
 
             /* Animated sprite of the summoned entity */
@@ -686,7 +715,7 @@ void inventory_modal_draw(void) {
             if (se->description[0] != '\0') {
                 float desc_y = ico_y + stat_font + 3;
                 int fs_sk = stat_font - 1;
-                int max_desc_w = (int)(cx + cw - pad - text_x);
+                int max_desc_w = (int)(info_x + info_w - pad - text_x);
                 char sk_desc[256];
                 strncpy(sk_desc, se->description, sizeof(sk_desc) - 1);
                 sk_desc[sizeof(sk_desc) - 1] = '\0';
