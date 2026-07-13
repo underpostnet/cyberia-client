@@ -399,12 +399,34 @@ void interaction_bubble_update(void) {
     }
 }
 
+/* Aggregate unread badge on the collapsed toggle — every register, every
+ * target. Per-target chat previews render only while the column is open,
+ * so this counter is the sole unread indicator while it is collapsed. */
+static void draw_collapsed_total_badge(void) {
+    if (s_col_toggle.expanded) return;
+    int total = notification_total();
+    if (0 >= total) return;
+
+    Rectangle a  = s_col_toggle.anchor;
+    int   fs = 11;
+    float br = 9.0f;
+    float cx = a.x + a.width;
+    float cy = a.y + 4.0f;
+    DrawCircle((int)cx, (int)cy, br, (Color){ 210, 60, 60, 245 });
+    char buf[8];
+    snprintf(buf, sizeof(buf), "%d", total > 99 ? 99 : total);
+    int tw = MeasureText(buf, fs);
+    DrawText(buf, (int)(cx - tw * 0.5f), (int)(cy - fs * 0.5f), fs,
+             (Color){ 255, 255, 255, 245 });
+}
+
 void interaction_bubble_draw(void) {
     column_ensure_toggle();
     /* Keep drawing until the slide offset settles off screen so collapsing
      * plays the same slide the expand does, instead of vanishing on the tap. */
     if (column_hidden() || s_slot_count <= 0) {
         ui_toggle_draw(&s_col_toggle);
+        draw_collapsed_total_badge();
         return;
     }
 
@@ -548,6 +570,7 @@ void interaction_bubble_draw(void) {
     }
     ui_scroll_end(&s_col_scroll);
     ui_toggle_draw(&s_col_toggle);
+    draw_collapsed_total_badge();
 }
 
 static bool open_slot_at(int mx, int my) {
