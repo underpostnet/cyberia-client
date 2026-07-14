@@ -27,6 +27,7 @@ void game_state_reset(void) {
     g_game_state.portal_count         = 0;
     g_game_state.floor_count          = 0;
     g_game_state.full_inventory_count = 0;
+    g_game_state.dead_item_id_count   = 0;
 }
 
 static GameStateEntityRemovedFn s_entity_removed_cb = NULL;

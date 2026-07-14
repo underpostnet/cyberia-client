@@ -211,6 +211,23 @@ static int message_parser_parse_init_data(const cJSON* json_root) {
         }
     }
 
+    /* Resolved dead-state (Fragmentation) ids — inventory labelling and
+     * equip gating; the server rejects their activation regardless. */
+    g_game_state.dead_item_id_count = 0;
+    cJSON* dead_ids_json = cJSON_GetObjectItem(payload, "deadItemIds");
+    if (dead_ids_json && cJSON_IsArray(dead_ids_json)) {
+        cJSON* item = NULL;
+        cJSON_ArrayForEach(item, dead_ids_json) {
+            if (g_game_state.dead_item_id_count >= MAX_DEAD_ITEM_IDS) break;
+            if (cJSON_IsString(item)) {
+                char* dst = g_game_state.dead_item_ids[g_game_state.dead_item_id_count];
+                strncpy(dst, cJSON_GetStringValue(item), 127);
+                dst[127] = '\0';
+                g_game_state.dead_item_id_count++;
+            }
+        }
+    }
+
     if (skill_map_json && cJSON_IsObject(skill_map_json)) {
         cJSON* entry = NULL;
         cJSON_ArrayForEach(entry, skill_map_json) {

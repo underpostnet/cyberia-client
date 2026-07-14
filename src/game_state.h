@@ -36,6 +36,7 @@
 #define MAX_ENTITY_TYPES     16
 #define MAX_DEFAULT_ITEM_IDS  8
 #define MAX_ACTIVE_ITEM_TYPES 8
+#define MAX_DEAD_ITEM_IDS    16
 
 /* EntityState / PlayerState / BotState / WorldObject + their MAX_* sizing
  * macros live in world_types.h so the serializer can use them without
@@ -111,6 +112,11 @@ struct GameState {
     ObjectLayerState full_inventory[MAX_OBJECT_LAYERS];
     int full_inventory_count;
 
+    /* Dead-state (Fragmentation) item ids from init_data. Visible in the
+     * inventory but never equippable; the default id is server-filtered. */
+    char dead_item_ids[MAX_DEAD_ITEM_IDS][128];
+    int  dead_item_id_count;
+
     bool init_received;
     double last_update_time;       /* wall-clock arrival of the latest snapshot */
     uint32_t last_snapshot_tick;   /* mirror of session_server_tick_estimate() */
@@ -153,6 +159,16 @@ static inline const EntityTypeDefault* game_state_get_entity_default(const char*
 
 static inline int game_state_get_player_coins(void) {
     return g_game_state.player_coins;
+}
+
+/* True when item_id is a dead-state (Fragmentation) visual — an incomplete
+ * manifestation the player can hold but never equip. */
+static inline bool game_state_is_dead_item(const char* item_id) {
+    if (NULL == item_id || '\0' == item_id[0]) return false;
+    for (int i = 0; i < g_game_state.dead_item_id_count; i++) {
+        if (0 == strcmp(g_game_state.dead_item_ids[i], item_id)) return true;
+    }
+    return false;
 }
 
 static inline bool game_state_is_active_item_type(const char* item_type) {
