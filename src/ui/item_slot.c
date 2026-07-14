@@ -1,7 +1,10 @@
 #include "item_slot.h"
 #include "text.h"
 
+#include "domain/local_player.h"
+#include "game_state.h"
 #include "ol_as_animated_ico.h"
+#include "world_types.h"
 
 #include <stdio.h>
 
@@ -49,6 +52,11 @@ void item_slot_draw_ex(Rectangle r, const ObjectLayerState* ols, ObjectLayersMan
         ObjectLayer* ol_data = lookup_cached_layer(ols->item_id);
         if (ol_data) activable = ol_data->data.item.activable;
     }
+    /* Dead-state (Fragmentation) items equip only during the Fragmented
+     * State — lock badge while the player is alive. */
+    if (game_state_is_dead_item(ols->item_id) &&
+        STATUS_ICON_DEAD != local_player_status_icon())
+        activable = false;
     Color border = (active && activable) ? C_ACTIVE_GLOW : C_SLOT_BORDER;
     border = lerp_color(border, highlight, highlight_t);
     DrawRectangleLinesEx(r, 2.0f, border);

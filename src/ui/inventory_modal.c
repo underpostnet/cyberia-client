@@ -35,6 +35,7 @@
 #include "serial.h"
 #include "ui_button.h"
 #include "ui_state.h"
+#include "world_types.h"
 
 #include <assert.h>
 #include <math.h>
@@ -509,20 +510,29 @@ void inventory_modal_draw(void) {
         }
     }
 
+    /* Dead-state ids are Fragmentation items: equippable only while dead. */
+    bool is_fragment = game_state_is_dead_item(ols->item_id);
+
     /* 7. Item name */
     int tfs = title_font;
     int ttw = MeasureText(item_name, tfs);
     DrawText(item_name, (int)(info_x + (info_w - ttw) * 0.5f), (int)y_cursor, tfs, C_TITLE);
     y_cursor += tfs + 4;
 
-    /* Type badge */
-    if (item_type && item_type[0] != '\0') {
+    /* Type badge — Fragmentation items carry the state as a type suffix. */
+    if (is_fragment || (item_type && item_type[0] != '\0')) {
         char tbuf[64];
-        snprintf(tbuf, sizeof(tbuf), "[%s]", item_type);
+        if (is_fragment && item_type[0] != '\0')
+            snprintf(tbuf, sizeof(tbuf), "[%s - fragmentation]", item_type);
+        else if (is_fragment)
+            snprintf(tbuf, sizeof(tbuf), "[fragmentation]");
+        else
+            snprintf(tbuf, sizeof(tbuf), "[%s]", item_type);
         int tbf = body_font - 1;
         int tbw = MeasureText(tbuf, tbf);
-        DrawText(tbuf, (int)(info_x + (info_w - tbw) * 0.5f), (int)y_cursor, tbf,
-                 (Color){ 120, 180, 255, 200 });
+        Color tcol = is_fragment ? (Color){ 160, 130, 200, 220 }
+                                 : (Color){ 120, 180, 255, 200 };
+        DrawText(tbuf, (int)(info_x + (info_w - tbw) * 0.5f), (int)y_cursor, tbf, tcol);
         y_cursor += tbf + 6;
     }
 
@@ -783,14 +793,18 @@ void inventory_modal_draw(void) {
         const char* btn_label  = currently_active ? "Deactivate" : "Activate";
         const char* btn_icon   = currently_active ? "unequip" : "equip";
 
-        /* Determine whether the button should be enabled */
-        bool btn_enabled = activable;
+        /* Determine whether the button should be enabled. Fragmentation
+         * items equip only during the Fragmented State (dead). */
+        bool player_dead = (STATUS_ICON_DEAD == local_player_status_icon());
+        bool btn_enabled = activable && (!is_fragment || player_dead);
         if (btn_enabled && item_type[0] != '\0') {
             /* Item type must be in activeItemTypes to be activable */
             if (!game_state_is_active_item_type(item_type))
                 btn_enabled = false;
-            /* Active skins cannot be deactivated when requireSkin is set */
-            if (currently_active && strcmp(item_type, "skin") == 0
+            /* Active skins cannot be deactivated when requireSkin is set.
+             * Fragments are exempt: the server swaps in the hidden default
+             * dead skin, so the rule is never violated. */
+            if (currently_active && !is_fragment && strcmp(item_type, "skin") == 0
                 && g_game_state.equipment_rules.require_skin)
                 btn_enabled = false;
         }
@@ -907,11 +921,13 @@ bool inventory_modal_handle_click(int mx, int my) {
                 item_type = ol_data->data.item.type;
             }
         }
-        bool btn_enabled = activable;
+        bool is_fragment = game_state_is_dead_item(ols->item_id);
+        bool btn_enabled = activable &&
+                           (!is_fragment || STATUS_ICON_DEAD == local_player_status_icon());
         if (btn_enabled && item_type[0] != '\0') {
             if (!game_state_is_active_item_type(item_type))
                 btn_enabled = false;
-            if (ols->active && strcmp(item_type, "skin") == 0
+            if (ols->active && !is_fragment && strcmp(item_type, "skin") == 0
                 && g_game_state.equipment_rules.require_skin)
                 btn_enabled = false;
         }
@@ -929,7 +945,7 @@ bool inventory_modal_handle_click(int mx, int my) {
                 /* Dead-equip: optimistically update the self-player bubble
                  * so it reflects what will render on revive (the server
                  * only mutates PreRespawnObjectLayers, never sent to us). */
-                if (local_player_status_icon() == 5) /* StatusDead */
+                if (STATUS_ICON_DEAD == local_player_status_icon())
                     interaction_bubble_dead_equip(ols->item_id, new_active);
 
                 inventory_modal_close();
