@@ -81,7 +81,7 @@ static void draw_fullscreen_button(int sw) {
     int mx = GetMouseX(), my = GetMouseY();
     bool active = fullscreen_bridge_is_active();
     UIButtonStyle style = {
-        .icon_id    = active ? "close-yellow" : "fullscreen",
+        .icon_id    = active ? "shrink" : "fullscreen",
         .icon_size  = FULLSCREEN_BTN_SIZE - 12,
         .bg         = { 20, 20, 35, 200 },
         .bg_hover   = { 50, 50, 70, 220 },
