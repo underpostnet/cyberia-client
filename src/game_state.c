@@ -18,6 +18,7 @@ GameState g_game_state = {0};
 void game_state_reset(void) {
     g_game_state.init_received        = false;
     g_game_state.player_id[0]         = '\0';
+    g_game_state.instance_code[0]     = '\0';
     g_game_state.other_player_count   = 0;
     g_game_state.bot_count            = 0;
     g_game_state.resource_count       = 0;

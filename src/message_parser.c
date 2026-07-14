@@ -324,6 +324,10 @@ static int message_parser_parse_metadata(const cJSON* json_root) {
         js_init_engine_api(api_url);
     }
 
+    // Parse instanceCode if provided: keys the Instance Map REST fetches.
+    serial_get_string(payload, "instanceCode", g_game_state.instance_code,
+                      sizeof(g_game_state.instance_code));
+
     // Parse equipmentRules if provided
     cJSON* eq_rules = cJSON_GetObjectItem(payload, "equipmentRules");
     if (eq_rules && cJSON_IsObject(eq_rules)) {

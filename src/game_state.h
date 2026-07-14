@@ -64,6 +64,10 @@ typedef struct {
 struct GameState {
     char player_id[MAX_ID_LENGTH];
 
+    /* Instance the simulation server loaded (forwarded in the metadata
+     * message) — keys the Instance Map REST fetches against engine-cyberia. */
+    char instance_code[MAX_ID_LENGTH];
+
     int grid_w;
     int grid_h;
     float cell_size;
