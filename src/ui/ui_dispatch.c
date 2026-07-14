@@ -6,7 +6,9 @@
 #include "inventory_bar.h"
 #include "inventory_modal.h"
 #include "modal_dialogue.h"
+#include "modal_instance_map.h"
 #include "modal_interact.h"
+#include "modal_map.h"
 #include "modal_notification.h"
 #include "quest_journal.h"
 #include "game_render.h"
@@ -16,6 +18,16 @@
 bool ui_dispatch_tap(int x, int y) {
     /* Notification OK button has highest priority while visible. */
     if (modal_notification_handle_click(x, y)) return true;
+
+    /* Map toggle stays live above the expanded container so it also retracts
+     * it; the fullscreen toggle shares that top-right row, then the Instance
+     * Map container consumes presses inside its bounds. */
+    if (modal_map_handle_expand_click(x, y)) return true;
+    if (modal_instance_map_is_open() && game_render_fullscreen_btn_hit(x, y)) {
+        fullscreen_bridge_toggle();
+        return true;
+    }
+    if (modal_instance_map_handle_click(x, y)) return true;
 
     /* Interaction and dialogue modals keep the bottom inventory companion
      * visible. Its toggle remains actionable. While the interact modal is up,
@@ -74,6 +86,7 @@ bool ui_dispatch_tap(int x, int y) {
 }
 
 bool ui_dispatch_covers_point(int x, int y) {
+    if (modal_instance_map_covers_point(x, y)) return true;
     if (modal_dialogue_is_open())   return true;
     if (modal_interact_is_open())   return true;
     if (js_interact_overlay_is_open()) return true;

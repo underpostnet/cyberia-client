@@ -21,6 +21,7 @@
 #include "ui/inventory_modal.h"
 #include "ui/modal_dialogue.h"
 #include "ui/action_cache.h"
+#include "ui/modal_instance_map.h"
 #include "ui/modal_interact.h"
 #include "ui/modal_map.h"
 #include "ui/nameplate.h"
@@ -1106,15 +1107,6 @@ void game_render_ui(void) {
     // Render error messages (always visible)
     game_render_error_messages();
 
-    if (presentation_runtime_dev_ui()) {
-        dev_ui_draw(g_renderer.screen_width, g_renderer.screen_height, 0);
-    } else {
-        modal_map_draw(g_renderer.screen_width, g_renderer.screen_height);
-    }
-
-    // Fullscreen toggle (top-right corner, beside the map/fps HUD box)
-    draw_fullscreen_button(g_renderer.screen_width);
-
     // Entity interaction bubbles (left side, collapsible column)
     interaction_bubble_draw();
 
@@ -1153,6 +1145,20 @@ void game_render_ui(void) {
     if (inventory_companion) {
         draw_inventory_bar_with_loot_fx();
     }
+
+    // Instance Map content inside the modal_map container — independent
+    // visualization system above the gameplay UI (world stays visible
+    // behind the translucent container).
+    modal_instance_map_draw(g_renderer.screen_width, g_renderer.screen_height);
+
+    // Corner HUD + toggles draw above the expanded container so the Map
+    // button can retract it.
+    if (presentation_runtime_dev_ui()) {
+        dev_ui_draw(g_renderer.screen_width, g_renderer.screen_height, 0);
+    } else {
+        modal_map_draw(g_renderer.screen_width, g_renderer.screen_height);
+    }
+    draw_fullscreen_button(g_renderer.screen_width);
 
     // Transient notification toast — top-most, above every modal.
     modal_notification_draw();

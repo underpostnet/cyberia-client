@@ -6,6 +6,7 @@
 #include "domain/presentation_runtime.h"
 #include "domain/camera.h"
 #include "interaction_bubble.h"
+#include "modal_instance_map.h"
 #include "modal_interact.h"
 
 
@@ -41,6 +42,9 @@ static void ui_on_tick(input_queue_t* input_queue, double dt) {
             consumed = true;
         }
 
+        if(!consumed && INPUT_ZOOM == evt.type) {
+            if (modal_instance_map_handle_wheel(evt.wheel_delta)) { consumed = true; }
+        }
         if(!consumed && INPUT_ZOOM == evt.type) {
             if (modal_interact_handle_wheel(evt.wheel_delta)) { consumed = true; }
         }
