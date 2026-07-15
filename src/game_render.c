@@ -1151,12 +1151,12 @@ void game_render_ui(void) {
     // behind the translucent container).
     modal_instance_map_draw(g_renderer.screen_width, g_renderer.screen_height);
 
+    modal_map_draw(g_renderer.screen_width, g_renderer.screen_height);
+
     // Corner HUD + toggles draw above the expanded container so the Map
     // button can retract it.
     if (presentation_runtime_dev_ui()) {
         dev_ui_draw(g_renderer.screen_width, g_renderer.screen_height, 0);
-    } else {
-        modal_map_draw(g_renderer.screen_width, g_renderer.screen_height);
     }
     draw_fullscreen_button(g_renderer.screen_width);
 
