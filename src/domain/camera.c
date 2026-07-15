@@ -17,7 +17,7 @@
 /* On a mobile viewport (domain/viewport.h), pull the initial zoom back
  * several levels from the server-hinted default so more of the world is
  * visible on a small screen. One "level" matches the manual zoom-out step
- * used by the zoom button/scroll wheel (see ui_dispatch.c). */
+ * used by the scroll wheel (see ui_dispatch.h). */
 #define CAMERA_MOBILE_ZOOM_STEP   0.9f
 #define CAMERA_MOBILE_ZOOM_LEVELS 6
 

@@ -6,6 +6,7 @@
 #include "ui_button.h"
 
 #include "game_state.h"
+#include "input/input.h"
 
 #include <assert.h>
 #include <math.h>
@@ -74,7 +75,10 @@ void modal_instance_map_init(void) {
 }
 
 void modal_instance_map_cleanup(void) {
-    if (s_m.open) instance_map_data_close();
+    if (s_m.open) {
+        instance_map_data_close();
+        input_gestures_set_blocked(false);
+    }
     memset(&s_m, 0, sizeof(s_m));
 }
 
@@ -92,7 +96,8 @@ void modal_instance_map_toggle(void) {
     s_m.pressed = s_m.dragging = s_m.pinching = false;
     reset_camera();
     instance_map_data_open();
-    modal_map_set_expanded(true);   /* container morphs to full screen */
+    modal_map_set_expanded(true);      /* container morphs to full screen */
+    input_gestures_set_blocked(true);  /* map owns pinch while expanded    */
 }
 
 void modal_instance_map_close(void) {
@@ -100,6 +105,7 @@ void modal_instance_map_close(void) {
     s_m.open = false;
     instance_map_data_close();      /* stops dynamic polling immediately */
     modal_map_set_expanded(false);  /* container retracts to the readout */
+    input_gestures_set_blocked(false);
 }
 
 /* ── Projection ─────────────────────────────────────────────────────────── */

@@ -37,36 +37,6 @@
 #include <stdlib.h>
 #include <string.h>
 
-/* ── Zoom buttons ─────────────────────────────────────────────────────── */
-#define ZOOM_BTN_SIZE   30
-#define ZOOM_BTN_GAP     4
-#define ZOOM_BTN_MARGIN  8
-
-static Rectangle zoom_btn_rect(int idx, int sw, int sh) {
-    /* Two square buttons stacked vertically, bottom-right, above the bar. */
-    float x = sw - ZOOM_BTN_SIZE - ZOOM_BTN_MARGIN;
-    float y = sh - inventory_bar_visible_height() - ZOOM_BTN_MARGIN
-              - (2 - idx) * (ZOOM_BTN_SIZE + ZOOM_BTN_GAP) + ZOOM_BTN_GAP;
-    return (Rectangle){ x, y, ZOOM_BTN_SIZE, ZOOM_BTN_SIZE };
-}
-
-static void draw_zoom_buttons(int sw, int sh) {
-    const char* labels[2] = { "+", "-" };   /* 0 = zoom-in, 1 = zoom-out */
-    int mx = GetMouseX(), my = GetMouseY();
-    for (int i = 0; i < 2; i++) {
-        Rectangle r = zoom_btn_rect(i, sw, sh);
-        UIButtonStyle style = {
-            .text       = labels[i],
-            .font_size  = 18,
-            .bg         = { 20, 20, 35, 200 },
-            .bg_hover   = { 50, 50, 70, 220 },
-            .border     = { 80, 80, 120, 180 },
-        };
-        UIButtonState st = ui_button_resolve_state(true, false, ui_button_hit(r, mx, my));
-        ui_button_draw(r, &style, st);
-    }
-}
-
 /* ── Fullscreen button ────────────────────────────────────────────────── */
 /* Size/margin are public (game_render.h) so modal_map.c can offset its own
  * HUD box to sit beside this button in the top-right corner. */
@@ -124,18 +94,6 @@ static void draw_portal_progress_bar(int sw, int sh) {
     int ty = (int)(y - fs - 2);
     DrawText(label, tx + 1, ty + 1, fs, (Color){ 0, 0, 0, 200 });
     DrawText(label, tx, ty, fs, (Color){ 220, 230, 245, 245 });
-}
-
-int game_render_zoom_btn_hit(int mx, int my) {
-    int sw = GetScreenWidth(), sh = GetScreenHeight();
-    for (int i = 0; i < 2; i++) {
-        Rectangle r = zoom_btn_rect(i, sw, sh);
-        if ((float)mx >= r.x && (float)mx < r.x + r.width &&
-            (float)my >= r.y && (float)my < r.y + r.height) {
-            return (i == 0) ? 1 : -1;
-        }
-    }
-    return 0;
 }
 
 bool game_render_fullscreen_btn_hit(int mx, int my) {
@@ -1122,9 +1080,6 @@ void game_render_ui(void) {
     // Portal hold progress bar (centered above the inventory bar; only while
     // the local player stands inside an active portal)
     draw_portal_progress_bar(g_renderer.screen_width, g_renderer.screen_height);
-
-    // Zoom buttons (above inventory bar, right side)
-    draw_zoom_buttons(g_renderer.screen_width, g_renderer.screen_height);
 
     // Inventory modal (shown on top of everything when open)
     if (inventory_modal_is_open()) {

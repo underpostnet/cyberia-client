@@ -233,12 +233,6 @@ void game_render_error_messages(void);
 void game_render_set_error_message(const char* msg);
 const char* game_render_get_error_message(void);
 
-/**
- * @brief Check if a screen point hits a zoom button.
- * @return +1 for zoom-in, -1 for zoom-out, 0 for no hit.
- */
-int game_render_zoom_btn_hit(int mx, int my);
-
 /** Check if a screen point hits the top-right fullscreen toggle button. */
 bool game_render_fullscreen_btn_hit(int mx, int my);
 

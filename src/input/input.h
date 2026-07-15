@@ -35,4 +35,9 @@ void input_queue_on_tick(input_queue_t* q, double dt);
 bool input_pop(input_queue_t* q, input_event_t* out);
 void input_push(input_queue_t* q, input_event_t e);
 
+/* While blocked, the capture layer runs no gameplay pinch zoom — a
+ * full-screen UI surface (the Instance Map) owns touch gestures instead.
+ * Taps, wheel, and debug-key events still flow. */
+void input_gestures_set_blocked(bool blocked);
+
 #endif /* CYBERIA_INPUT_H */

@@ -78,13 +78,6 @@ bool ui_dispatch_tap(int x, int y) {
         return true;
     }
 
-    int zoom_hit = game_render_zoom_btn_hit(x, y);
-    if (zoom_hit != 0) {
-        extern void camera_zoom_by(float factor);
-        camera_zoom_by((zoom_hit > 0) ? 1.1f : 0.9f);
-        return true;
-    }
-
     return false;
 }
 
@@ -98,7 +91,6 @@ bool ui_dispatch_covers_point(int x, int y) {
      * accounts for collapse state and the always-present toggle tab). */
     if (interaction_bubble_point_covered(x, y)) return true;
     if (inventory_bar_point_covered(x, y)) return true;
-    if (0 != game_render_zoom_btn_hit(x, y))    return true;
     if (game_render_fullscreen_btn_hit(x, y))   return true;
     return false;
 }
