@@ -19,6 +19,7 @@
 #include "interaction_bubble.h"
 #include "inventory_bar.h"
 #include "modal_interact.h"
+#include "modal_map.h"
 #include "modal.h"
 #include "object_layer.h"
 #include "object_layers_management.h"
@@ -361,7 +362,9 @@ void modal_dialogue_draw(void) {
     if (s_quest_style) {
         DrawRectangleLinesEx(card, 2.0f, (Color){ 230, 200, 60, 230 });
         int qs = 22;
-        ui_icon_draw("quest", card.x + 22, card.y + qs + 3, qs, false, 0.0f);
+        /* The fullscreen reader's close button owns the top-left corner. */
+        float qx_off = (viewport_is_mobile() && s_fullscreen) ? 42.0f : 0.0f;
+        ui_icon_draw("quest", card.x + 22 + qx_off, card.y + qs + 3, qs, false, 0.0f);
     } else {
         DrawLine((int)card.x, (int)card.y,
                  (int)(card.x + card.width), (int)card.y, C_CARD_BORD);
@@ -405,13 +408,24 @@ void modal_dialogue_draw(void) {
         return;
     }
 
+    /* Fullscreen: the card keeps the whole screen, but the header content
+     * (close button, speaker name, first text line) starts below the corner
+     * HUD (map readout + toggle row) so it is never covered by it. */
+    float fs_top_inset = 0.0f;
+    if (dlg_fullscreen()) {
+        Rectangle hud = modal_map_bounds();
+        fs_top_inset = hud.y + hud.height + 8.0f - card.y;
+        if (fs_top_inset < 56.0f) fs_top_inset = 56.0f;
+    }
+
     /* Fullscreen reader expanded from the chat button: close-yellow returns
-     * to the compact state (the interact modal reappears with it). */
+     * to the compact state (the interact modal reappears with it). Pinned to
+     * the top-LEFT corner — the top-right belongs to the corner HUD. */
     bool fs_close = viewport_is_mobile() && s_fullscreen;
     float fs_close_sz = 34.0f;
     if (fs_close) {
-        s_fs_close_rect = (Rectangle){ card.x + card.width - fs_close_sz - 8.0f,
-                                       card.y + 8.0f, fs_close_sz, fs_close_sz };
+        s_fs_close_rect = (Rectangle){ card.x + 8.0f, card.y + 8.0f,
+                                       fs_close_sz, fs_close_sz };
         UIButtonStyle cb = { .icon_id = "close-yellow", .no_fill = true };
         ui_button_draw(s_fs_close_rect, &cb, UI_BUTTON_NORMAL);
     }
@@ -421,7 +435,7 @@ void modal_dialogue_draw(void) {
     int fs_speaker = DLG_FONT_SPEAKER;
     float txt_x    = x0 + col_w + pad;
     float txt_max  = card.x + card.width - txt_x - pad;
-    float ty       = y0 + pad;
+    float ty       = y0 + pad + fs_top_inset;
 
     if (line->speaker[0] != '\0') {
         DrawText(line->speaker, (int)txt_x, (int)ty, fs_speaker, C_SPEAKER);
@@ -432,8 +446,7 @@ void modal_dialogue_draw(void) {
         snprintf(prog, sizeof(prog), "%d / %d", s_current + 1, s_line_count);
         int pfs = DLG_FONT_HINT;
         int pw  = MeasureText(prog, pfs);
-        float prog_right = card.x + card.width - pad
-                         - (fs_close ? fs_close_sz + 8.0f : 0.0f);
+        float prog_right = card.x + card.width - pad;
         DrawText(prog, (int)(prog_right - pw), (int)(ty + 2), pfs, C_HINT);
     }
 
@@ -561,6 +574,20 @@ bool modal_dialogue_handle_click(int mx, int my) {
          * validates for quest-talk, then stays open showing "Repeat Dialog". */
         s_ended = true;
         emit_dlg_complete();
+        /* Mobile reader expanded from the compact chat button: a finished
+         * read collapses back to the compact state (the interact modal
+         * reappears) instead of staying fullscreen. Reading state resets so
+         * re-expanding starts a fresh visual read. */
+        if (viewport_is_mobile() && s_fullscreen &&
+            MODAL_DIALOGUE_RENDER_ENTITY == s_render) {
+            s_fullscreen    = false;
+            s_age           = 0.0f; /* replay the modal pop for the mode change */
+            s_current       = 0;
+            s_chars_visible = 0;
+            s_char_timer    = 0.0f;
+            s_line_complete = false;
+            s_ended         = false;
+        }
     } else {
         /* Repeat Dialog → re-read from the top (visual only). */
         s_current       = 0;
