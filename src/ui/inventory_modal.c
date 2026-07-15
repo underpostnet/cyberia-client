@@ -377,9 +377,9 @@ void inventory_modal_draw(void) {
     float lore_button_w = im_lore_button_w();
     float lore_button_h = im_lore_button_h();
 
-    /* 3. Close button */
+    /* 3. Close button — top-left corner, away from the map/fullscreen buttons */
     float close_size = im_close_size();
-    Rectangle close_r = { cx + cw - close_size - 6.0f, cy + 6.0f,
+    Rectangle close_r = { cx + 6.0f, cy + 6.0f,
                            close_size, close_size };
     {
         int mx = GetMouseX(), my = GetMouseY();
@@ -837,9 +837,9 @@ bool inventory_modal_handle_click(int mx, int my) {
     bool inside = hit_rect(mx, my, card);
     if (!inside) { inventory_modal_close(); return true; }
 
-    /* Close button */
+    /* Close button — top-left corner */
     float close_size = im_close_size();
-    Rectangle close_r = { card.x + card.width - close_size - 6.0f,
+    Rectangle close_r = { card.x + 6.0f,
                            card.y + 6.0f, close_size, close_size };
     if (hit_rect(mx, my, close_r)) { inventory_modal_close(); return true; }
 

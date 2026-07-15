@@ -29,6 +29,14 @@ bool ui_dispatch_tap(int x, int y) {
     }
     if (modal_instance_map_handle_click(x, y)) return true;
 
+    /* Fullscreen button — must be checked before any modal that consumes
+     * clicks outside its card bounds, so the button stays actionable even
+     * when the inventory or interact modal is open. */
+    if (!modal_instance_map_is_open() && game_render_fullscreen_btn_hit(x, y)) {
+        fullscreen_bridge_toggle();
+        return true;
+    }
+
     /* Interaction and dialogue modals keep the bottom inventory companion
      * visible. Its toggle remains actionable. While the interact modal is up,
      * bar slots stay live too: tapping one stacks the inventory modal on top
@@ -74,11 +82,6 @@ bool ui_dispatch_tap(int x, int y) {
     if (zoom_hit != 0) {
         extern void camera_zoom_by(float factor);
         camera_zoom_by((zoom_hit > 0) ? 1.1f : 0.9f);
-        return true;
-    }
-
-    if (game_render_fullscreen_btn_hit(x, y)) {
-        fullscreen_bridge_toggle();
         return true;
     }
 

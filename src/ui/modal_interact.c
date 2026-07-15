@@ -277,7 +277,7 @@ static Rectangle card_rect(void) {
 
 static Rectangle close_rect(Rectangle card) {
     float size = mi_close_sz();
-    return (Rectangle){ card.x + card.width - size - mi_pad() * 0.5f, card.y + 2.0f,
+    return (Rectangle){ card.x + mi_pad() * 0.5f, card.y + 2.0f,
                         size, size };
 }
 
@@ -886,12 +886,12 @@ void modal_interact_draw(void) {
     /* Header */
     DrawRectangle((int)card.x, (int)card.y, (int)card.width, (int)mi_header_h(),
                   (Color){ s_border.r, s_border.g, s_border.b, 40 });
+    Rectangle xr = close_rect(card);
     if (s_display_name[0] != '\0') {
         int name_font = mi_font_name();
-        DrawText(s_display_name, (int)(card.x + mi_pad()),
+        DrawText(s_display_name, (int)(card.x + mi_close_sz() + mi_pad() * 0.5f),
                  (int)(card.y + (mi_header_h() - name_font) * 0.5f), name_font, C_TEXT);
     }
-    Rectangle xr = close_rect(card);
     UIButtonStyle close_btn = { .icon_id = "close-yellow", .no_fill = true };
     ui_button_draw(xr, &close_btn, ui_button_resolve_state(true, false, ui_button_hit(xr, mx, my)));
 
