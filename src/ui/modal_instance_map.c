@@ -7,6 +7,7 @@
 
 #include "game_state.h"
 #include "input/input.h"
+#include "texture_cache.h"
 
 #include <assert.h>
 #include <math.h>
@@ -16,12 +17,15 @@
 
 /* ── Presentation constants ──────────────────────────────────────────────
  * Stylised strategic view: tilted (isometric-flavoured) graph plane with
- * glowing connections. Clarity over realism — no 3D rendering.            */
+ * glowing connections. Clarity over realism — no 3D rendering. Nodes are
+ * square map cards: the preview capture fills the card and strategic POIs
+ * (quest/action providers, portals, player) sit at their real map cells.  */
 #define IMAP_ISO_Y          0.56f   /* vertical squash of the graph plane   */
 #define IMAP_WORLD_SCALE    250.0f  /* graph units → px at zoom 1           */
-#define IMAP_NODE_RADIUS    30.0f
+#define IMAP_NODE_RADIUS    40.0f   /* half of the square card side at zoom 1 */
 #define IMAP_ZOOM_MIN       0.45f
-#define IMAP_ZOOM_MAX       3.2f
+#define IMAP_ZOOM_INIT      1.5f
+#define IMAP_ZOOM_MAX_FLOOR 3.2f
 #define IMAP_ZOOM_STEP      1.15f
 #define IMAP_DRAG_SLOP_PX   9.0f
 #define IMAP_CAM_LAMBDA     11.0f   /* exp smoothing rate for pan/zoom      */
@@ -66,18 +70,31 @@ typedef struct {
 
 static ModalInstanceMap s_m = {0};
 
+/* Node preview backgrounds: each map's auto-captured Object Layer render,
+ * fetched lazily from /api/file/blob/:id through the engine fetch pipeline. */
+static TextureCache* s_preview_cache = NULL;
+
+static void on_preview_blob(const FetchResponse* r) {
+    texture_cache_on_blob_fetched(s_preview_cache, r);
+}
+
 /* ── Lifecycle ──────────────────────────────────────────────────────────── */
 
 void modal_instance_map_init(void) {
     memset(&s_m, 0, sizeof(s_m));
-    s_m.zoom = s_m.zoom_target = 1.0f;
+    s_m.zoom = s_m.zoom_target = IMAP_ZOOM_INIT;
     s_m.selected_node = -1;
+    s_preview_cache = texture_cache_create(IMAP_MAX_NODES, "imap-preview", on_preview_blob);
 }
 
 void modal_instance_map_cleanup(void) {
     if (s_m.open) {
         instance_map_data_close();
         input_gestures_set_blocked(false);
+    }
+    if (s_preview_cache) {
+        texture_cache_destroy(s_preview_cache);
+        s_preview_cache = NULL;
     }
     memset(&s_m, 0, sizeof(s_m));
 }
@@ -86,7 +103,7 @@ bool modal_instance_map_is_open(void) { return s_m.open; }
 
 static void reset_camera(void) {
     s_m.pan = s_m.pan_target = (Vector2){ 0, 0 };
-    s_m.zoom = s_m.zoom_target = 1.0f;
+    s_m.zoom = s_m.zoom_target = IMAP_ZOOM_INIT;
 }
 
 void modal_instance_map_toggle(void) {
@@ -129,8 +146,16 @@ static float node_depth_scale(Vector2 g) {
     return 0.88f + (g.y + 1.0f) * 0.5f * 0.28f;
 }
 
+/* Half of the node card side, screen px. */
 static float node_screen_radius(const ImapNode* n) {
     return IMAP_NODE_RADIUS * s_m.zoom * node_depth_scale(n->pos);
+}
+
+/* Square map card, centered on the node's layout position. */
+static Rectangle node_rect(const ImapNode* n) {
+    Vector2 p = graph_to_screen(n->pos);
+    float   h = node_screen_radius(n);
+    return (Rectangle){ p.x - h, p.y - h, h * 2.0f, h * 2.0f };
 }
 
 static int node_at_point(float x, float y) {
@@ -139,10 +164,12 @@ static int node_at_point(float x, float y) {
     float best = 1e9f;
     for (int i = 0; i < gr->node_count; ++i) {
         Vector2 p = graph_to_screen(gr->nodes[i].pos);
-        float r = node_screen_radius(&gr->nodes[i]) + 8.0f;
+        Rectangle r = node_rect(&gr->nodes[i]);
+        r.x -= 6.0f; r.y -= 6.0f; r.width += 12.0f; r.height += 12.0f;
+        if (!CheckCollisionPointRec((Vector2){ x, y }, r)) continue;
         float dx = x - p.x, dy = y - p.y;
         float d2 = dx * dx + dy * dy;
-        if (d2 < r * r && d2 < best) { best = d2; hit = i; }
+        if (d2 < best) { best = d2; hit = i; }
     }
     return hit;
 }
@@ -153,9 +180,16 @@ static float clampf(float v, float lo, float hi) {
     return v < lo ? lo : (v > hi ? hi : v);
 }
 
+/* Zooming in may continue until one node card spans the full panel width. */
+static float imap_zoom_max(void) {
+    float w = s_m.panel.width > 4.0f ? s_m.panel.width : (float)GetScreenWidth();
+    float max = w / (2.0f * IMAP_NODE_RADIUS);
+    return max > IMAP_ZOOM_MAX_FLOOR ? max : IMAP_ZOOM_MAX_FLOOR;
+}
+
 /* Zoom about an anchor point: the graph point under the anchor stays put. */
 static void zoom_about(float factor, Vector2 anchor) {
-    float nz = clampf(s_m.zoom_target * factor, IMAP_ZOOM_MIN, IMAP_ZOOM_MAX);
+    float nz = clampf(s_m.zoom_target * factor, IMAP_ZOOM_MIN, imap_zoom_max());
     factor = nz / s_m.zoom_target;
     Vector2 c = panel_center();
     Vector2 rel = { anchor.x - c.x - s_m.pan_target.x,
@@ -303,35 +337,61 @@ static void draw_backdrop(float fade) {
                        fade_c((Color){ 40, 90, 160, 26 }, fade), BLANK);
 }
 
-/* Glowing connection: layered strokes + a travelling pulse dot. */
+/* Forward decls — edge endpoints anchor to positions on the node cards. */
+static Rectangle node_rect(const ImapNode* n);
+static Vector2   cell_to_card(Rectangle card, const ImapNode* n, float cell_x, float cell_y);
+
+/* Resolve one edge endpoint on its node card: a known cell anchors to that
+ * cell (the portal landmark); a random destination (-1) roams across the
+ * whole card — the link keeps pointing at ever-changing spots of the map,
+ * mirroring the teleport's "anywhere on this map" behaviour. */
+static Vector2 edge_endpoint(const ImapNode* n, int cell_x, int cell_y, double t, int salt) {
+    Rectangle card = node_rect(n);
+    if (cell_x < 0 || cell_y < 0) {
+        float sx = (float)salt * 2.1f, sy = (float)salt * 1.3f;
+        /* Slow incommensurate-frequency roam covering the card area... */
+        float fx = 0.5f + 0.36f * sinf((float)t * 0.83f + sx) * cosf((float)t * 0.31f + sy * 0.7f);
+        float fy = 0.5f + 0.36f * sinf((float)t * 0.67f + sy) * cosf((float)t * 0.41f + sx * 1.9f);
+        /* ...plus a fast vibration on top. */
+        fx += sinf((float)t * 29.0f + sx) * 0.012f;
+        fy += cosf((float)t * 23.0f + sy) * 0.012f;
+        return (Vector2){ card.x + fx * card.width, card.y + fy * card.height };
+    }
+    return cell_to_card(card, n, (float)cell_x + 0.5f, (float)cell_y + 0.5f);
+}
+
+/* Glowing connection: layered strokes + a travelling pulse dot, anchored at
+ * the real portal positions on the map cards. Multiple portals between the
+ * same pair of maps produce visibly distinct lines; intra-map links run
+ * inside their own card. */
 static void draw_edge(const ImapEdge* e, int idx, float fade, double t) {
     const ImapGraph* gr = instance_map_data_graph();
     Color base = e->intra ? IMAP_EDGE_INTRA : IMAP_EDGE;
 
-    if (e->intra) {
-        /* Self-loop: orbit ring around the node. */
-        Vector2 p = graph_to_screen(gr->nodes[e->source_node].pos);
-        float   r = node_screen_radius(&gr->nodes[e->source_node]) + 10.0f;
-        DrawRing(p, r - 1.5f, r + 1.5f, 0, 360, 40, fade_c((Color){ base.r, base.g, base.b, 60 }, fade));
-        float ang = (float)fmod(t * 90.0 + idx * 40.0, 360.0) * DEG2RAD;
-        DrawCircleV((Vector2){ p.x + cosf(ang) * r, p.y + sinf(ang) * r * IMAP_ISO_Y }, 2.5f,
-                    fade_c(base, fade));
+    Vector2 a = edge_endpoint(&gr->nodes[e->source_node], e->source_cell_x, e->source_cell_y,
+                              t, idx * 2);
+    Vector2 b = edge_endpoint(&gr->nodes[e->target_node], e->target_cell_x, e->target_cell_y,
+                              t, idx * 2 + 1);
+
+    /* Degenerate link (both endpoints random on the same map): a vibrating
+     * pulse ring at the card centre instead of a zero-length line. */
+    float dx = b.x - a.x, dy = b.y - a.y;
+    if (dx * dx + dy * dy < 16.0f) {
+        float pr = 6.0f + 2.0f * sinf((float)t * 5.0f + (float)idx);
+        DrawRing(a, pr - 1.5f, pr + 1.5f, 0, 360, 24, fade_c(base, fade * 0.8f));
         return;
     }
 
-    Vector2 a = graph_to_screen(gr->nodes[e->source_node].pos);
-    Vector2 b = graph_to_screen(gr->nodes[e->target_node].pos);
-
     float pulse = 0.75f + 0.25f * sinf((float)t * 2.2f + (float)idx * 1.7f);
-    DrawLineEx(a, b, 5.0f, fade_c((Color){ base.r, base.g, base.b, 22 }, fade * pulse));
-    DrawLineEx(a, b, 2.6f, fade_c((Color){ base.r, base.g, base.b, 60 }, fade * pulse));
-    DrawLineEx(a, b, 1.2f, fade_c((Color){ base.r, base.g, base.b, 170 }, fade));
+    DrawLineEx(a, b, 7.0f, fade_c((Color){ base.r, base.g, base.b, 24 }, fade * pulse));
+    DrawLineEx(a, b, 3.6f, fade_c((Color){ base.r, base.g, base.b, 65 }, fade * pulse));
+    DrawLineEx(a, b, 1.7f, fade_c((Color){ base.r, base.g, base.b, 175 }, fade));
 
     /* Travelling energy dot — directional flow along the portal. */
     float ft = (float)fmod(t * 0.45 + idx * 0.19, 1.0);
     Vector2 d = { a.x + (b.x - a.x) * ft, a.y + (b.y - a.y) * ft };
-    DrawCircleV(d, 4.5f, fade_c((Color){ base.r, base.g, base.b, 50 }, fade));
-    DrawCircleV(d, 2.0f, fade_c((Color){ 255, 255, 255, 200 }, fade));
+    DrawCircleV(d, 7.0f, fade_c((Color){ base.r, base.g, base.b, 55 }, fade));
+    DrawCircleV(d, 3.2f, fade_c((Color){ 255, 255, 255, 210 }, fade));
 }
 
 static void draw_provider_badge(Vector2 at, float r, int active, int total,
@@ -340,69 +400,157 @@ static void draw_provider_badge(Vector2 at, float r, int active, int total,
     bool  lit   = active > 0;
     float pulse = lit ? 0.8f + 0.2f * sinf((float)t * 3.0f) : 1.0f;
     Color c     = lit ? color : (Color){ 110, 120, 140, 160 };
-    if (lit) DrawCircleV(at, r + 3.5f, fade_c((Color){ c.r, c.g, c.b, 45 }, fade * pulse));
-    if (diamond) DrawPoly(at, 4, r, 45.0f, fade_c(c, fade));
+    if (lit) DrawCircleV(at, r + 5.0f, fade_c((Color){ c.r, c.g, c.b, 45 }, fade * pulse));
+    if (diamond) DrawPoly(at, 4, r + 2.0f, 45.0f, fade_c(c, fade));
     else         DrawCircleV(at, r, fade_c(c, fade));
 
     char txt[8];
     snprintf(txt, sizeof(txt), "%d", lit ? active : total);
-    int fs = 10;
+    int fs = (int)(r * 1.15f);
     int w  = MeasureText(txt, fs);
     shadow_label(txt, (int)(at.x - w / 2.0f), (int)(at.y - fs / 2.0f), fs,
                  fade_c((Color){ 10, 14, 24, 255 }, fade));
 }
 
-static void draw_node(int idx, float fade, double t) {
+/* Map cell → screen position inside the node card (the preview capture and
+ * the gameplay grid share the same cell space, so POIs land where they are
+ * on the real map). Cell centers use +0.5. */
+static Vector2 cell_to_card(Rectangle card, const ImapNode* n, float cell_x, float cell_y) {
+    float fx = n->grid_x > 0 ? cell_x / (float)n->grid_x : 0.5f;
+    float fy = n->grid_y > 0 ? cell_y / (float)n->grid_y : 0.5f;
+    fx = clampf(fx, 0.0f, 1.0f);
+    fy = clampf(fy, 0.0f, 1.0f);
+    return (Vector2){ card.x + fx * card.width, card.y + fy * card.height };
+}
+
+/* POI marker size: grows with the card so zooming in scales the landmarks. */
+static float poi_radius(float half_side) {
+    float r = half_side * 0.14f;
+    return r < 7.0f ? 7.0f : r;
+}
+
+/* Card pass: shadow, halo, fill, preview, borders. Runs before the edges so
+ * the link lines land ON the map surface, under the POI overlays. */
+static void draw_node_card(int idx, float fade, double t) {
     const ImapGraph* gr = instance_map_data_graph();
     const ImapNode*  n  = &gr->nodes[idx];
-    Vector2 p = graph_to_screen(n->pos);
-    float   r = node_screen_radius(n);
+    Vector2   p    = graph_to_screen(n->pos);
+    float     h    = node_screen_radius(n);
+    Rectangle card = node_rect(n);
+
+    bool selected = idx == s_m.selected_node;
+
+    /* Ground shadow sells the tilt: squashed ellipse below the card. */
+    DrawEllipse((int)p.x, (int)(card.y + card.height + h * 0.10f), h * 1.05f, h * 0.30f,
+                fade_c((Color){ 0, 0, 0, 70 }, fade));
+
+    /* Halo behind the card. */
+    Color line = selected ? IMAP_SELECTED : IMAP_NODE_LINE;
+    float halo = selected ? 0.9f + 0.1f * sinf((float)t * 4.0f) : 0.55f;
+    Rectangle halo_r = { card.x - 7.0f, card.y - 7.0f, card.width + 14.0f, card.height + 14.0f };
+    DrawRectangleRounded(halo_r, 0.10f, 6, fade_c((Color){ line.r, line.g, line.b, 26 }, fade * halo));
+
+    /* Square map card: dark fill + the preview capture filling the card. */
+    DrawRectangleRounded(card, 0.06f, 6, fade_c(IMAP_NODE_FILL, fade));
+    if ('\0' != n->preview_file_id[0]) {
+        char url[128];
+        snprintf(url, sizeof(url), "/api/file/blob/%s", n->preview_file_id);
+        Texture2D tex = texture_cache_get(s_preview_cache, url);
+        if (0 != tex.id) {
+            Rectangle src  = { 0, 0, (float)tex.width, (float)tex.height };
+            Rectangle dest = { card.x + 1.5f, card.y + 1.5f, card.width - 3.0f, card.height - 3.0f };
+            DrawTexturePro(tex, src, dest, (Vector2){ 0, 0 }, 0.0f,
+                           fade_c((Color){ 215, 225, 240, 245 }, fade));
+        }
+    }
+
+    DrawRectangleRoundedLines(card, 0.06f, 6, fade_c(line, fade));
+    Rectangle inner = { card.x + 4.0f, card.y + 4.0f, card.width - 8.0f, card.height - 8.0f };
+    DrawRectangleRoundedLines(inner, 0.06f, 6, fade_c((Color){ line.r, line.g, line.b, 60 }, fade));
+}
+
+/* Overlay pass: POIs, player, badges, name — above the edge lines so links
+ * appear to plug into the portal icons. */
+static void draw_node_overlay(int idx, float fade, double t) {
+    const ImapGraph* gr = instance_map_data_graph();
+    const ImapNode*  n  = &gr->nodes[idx];
+    Vector2   p    = graph_to_screen(n->pos);
+    float     h    = node_screen_radius(n);
+    Rectangle card = node_rect(n);
 
     bool selected  = idx == s_m.selected_node;
     bool is_player = 0 == strcmp(n->map_code, g_game_state.player.map_code);
 
-    /* Ground shadow sells the tilt: squashed ellipse below the node. */
-    DrawEllipse((int)p.x, (int)(p.y + r * 0.55f), r * 1.05f, r * 0.38f,
-                fade_c((Color){ 0, 0, 0, 70 }, fade));
+    /* ── POIs at their real map cells (init-spawn positions) ─────────── */
+    float pr = poi_radius(h);
 
-    /* Halo. */
-    Color line = selected ? IMAP_SELECTED : IMAP_NODE_LINE;
-    float halo = selected ? 0.9f + 0.1f * sinf((float)t * 4.0f) : 0.55f;
-    DrawPoly(p, 6, r + 7.0f, 90.0f, fade_c((Color){ line.r, line.g, line.b, 26 }, fade * halo));
-
-    /* Hex card. */
-    DrawPoly(p, 6, r, 90.0f, fade_c(IMAP_NODE_FILL, fade));
-    DrawPolyLinesEx(p, 6, r, 90.0f, selected ? 2.5f : 1.5f, fade_c(line, fade));
-    DrawPolyLinesEx(p, 6, r - 4.0f, 90.0f, 1.0f,
-                    fade_c((Color){ line.r, line.g, line.b, 60 }, fade));
-
-    /* Player presence ring. */
-    if (is_player) {
-        float pr = r + 11.0f + 3.0f * sinf((float)t * 3.2f);
-        DrawRing(p, pr - 1.6f, pr + 1.6f, 0, 360, 48, fade_c(IMAP_PLAYER, fade * 0.85f));
+    /* Portal landmarks: violet ring + core. */
+    for (int i = 0; i < gr->portal_poi_count; ++i) {
+        const ImapPortalPoi* poi = &gr->portal_pois[i];
+        if (poi->node != idx) continue;
+        Vector2 at = cell_to_card(card, n, poi->cell_x + 0.5f, poi->cell_y + 0.5f);
+        Color pc   = poi->intra ? IMAP_EDGE_INTRA : IMAP_EDGE;
+        float spin = 0.85f + 0.15f * sinf((float)t * 2.6f + (float)i);
+        DrawRing(at, pr * 0.55f, pr * 0.85f, 0, 360, 24, fade_c(pc, fade * spin));
+        DrawCircleV(at, pr * 0.30f, fade_c((Color){ 255, 255, 255, 200 }, fade));
     }
 
-    /* Strategic badges: quest (gold circle), action (cyan diamond). */
-    draw_provider_badge((Vector2){ p.x - r * 0.62f, p.y - r * 0.62f }, 8.0f,
+    /* Quest providers: gold circle + "!". */
+    for (int i = 0; i < gr->quest_provider_count; ++i) {
+        const ImapProvider* qp = &gr->quest_providers[i];
+        if (qp->node != idx) continue;
+        Vector2 at  = cell_to_card(card, n, qp->cell_x + 0.5f, qp->cell_y + 0.5f);
+        bool    lit = qp->active;
+        Color   c   = lit ? IMAP_QUEST : (Color){ 130, 125, 105, 170 };
+        if (lit) {
+            float pulse = 0.75f + 0.25f * sinf((float)t * 3.4f + (float)i);
+            DrawCircleV(at, pr * 1.5f, fade_c((Color){ c.r, c.g, c.b, 50 }, fade * pulse));
+        }
+        DrawCircleV(at, pr, fade_c(c, fade));
+        int fs = (int)(pr * 1.5f);
+        int w  = MeasureText("!", fs);
+        shadow_label("!", (int)(at.x - w / 2.0f), (int)(at.y - fs / 2.0f), fs,
+                     fade_c((Color){ 20, 16, 8, 255 }, fade));
+    }
+
+    /* Action providers: cyan diamond. */
+    for (int i = 0; i < gr->action_provider_count; ++i) {
+        const ImapProvider* ap = &gr->action_providers[i];
+        if (ap->node != idx) continue;
+        Vector2 at  = cell_to_card(card, n, ap->cell_x + 0.5f, ap->cell_y + 0.5f);
+        bool    lit = ap->active;
+        Color   c   = lit ? IMAP_ACTION : (Color){ 105, 130, 135, 170 };
+        if (lit) {
+            float pulse = 0.75f + 0.25f * sinf((float)t * 3.4f + (float)i);
+            DrawPoly(at, 4, pr * 1.6f, 45.0f, fade_c((Color){ c.r, c.g, c.b, 50 }, fade * pulse));
+        }
+        DrawPoly(at, 4, pr * 1.1f, 45.0f, fade_c(c, fade));
+    }
+
+    /* Local player: presence outline + marker at the live map cell. */
+    if (is_player) {
+        float grow = 9.0f + 3.0f * sinf((float)t * 3.2f);
+        Rectangle ring = { card.x - grow, card.y - grow, card.width + grow * 2.0f, card.height + grow * 2.0f };
+        DrawRectangleRoundedLines(ring, 0.10f, 6, fade_c(IMAP_PLAYER, fade * 0.85f));
+        Vector2 mp = cell_to_card(card, n,
+                                  g_game_state.player.base.interp_pos.x,
+                                  g_game_state.player.base.interp_pos.y);
+        DrawCircleV(mp, pr * 1.4f, fade_c((Color){ IMAP_PLAYER.r, IMAP_PLAYER.g, IMAP_PLAYER.b, 60 }, fade));
+        DrawCircleV(mp, pr * 0.65f, fade_c(IMAP_PLAYER, fade));
+    }
+
+    /* Strategic count badges pinned to the card's top corners. */
+    draw_provider_badge((Vector2){ card.x, card.y }, 12.0f,
                         instance_map_data_node_active_quests(idx), n->quest_provider_count,
                         IMAP_QUEST, false, fade, t);
-    draw_provider_badge((Vector2){ p.x + r * 0.62f, p.y - r * 0.62f }, 8.0f,
+    draw_provider_badge((Vector2){ card.x + card.width, card.y }, 12.0f,
                         instance_map_data_node_active_actions(idx), n->action_provider_count,
                         IMAP_ACTION, true, fade, t);
 
-    /* Local player marker, offset by cell fraction inside the node. */
-    if (is_player && n->grid_x > 0 && n->grid_y > 0) {
-        float fx = g_game_state.player.base.interp_pos.x / (float)n->grid_x - 0.5f;
-        float fy = g_game_state.player.base.interp_pos.y / (float)n->grid_y - 0.5f;
-        Vector2 mp = { p.x + fx * r * 1.1f, p.y + fy * r * 1.1f * IMAP_ISO_Y };
-        DrawCircleV(mp, 5.0f, fade_c((Color){ IMAP_PLAYER.r, IMAP_PLAYER.g, IMAP_PLAYER.b, 60 }, fade));
-        DrawCircleV(mp, 2.6f, fade_c(IMAP_PLAYER, fade));
-    }
-
     /* Name plate. */
-    int fs = 12;
+    int fs = 16;
     int w  = MeasureText(n->name, fs);
-    shadow_label(n->name, (int)(p.x - w / 2.0f), (int)(p.y + r + 8.0f), fs,
+    shadow_label(n->name, (int)(p.x - w / 2.0f), (int)(card.y + card.height + 10.0f), fs,
                  fade_c(selected ? IMAP_SELECTED : IMAP_TEXT, fade));
 }
 
@@ -524,11 +672,14 @@ void modal_instance_map_draw(int screen_width, int screen_height) {
     const ImapGraph* gr = instance_map_data_graph();
     if (content > 0.0f) {
         if (IMAP_DATA_READY == instance_map_data_state()) {
-            for (int e = 0; e < gr->edge_count; ++e) draw_edge(&gr->edges[e], e, content, t);
-
             int order[IMAP_MAX_NODES];
             sorted_node_order(order, gr->node_count);
-            for (int i = 0; i < gr->node_count; ++i) draw_node(order[i], content, t);
+
+            /* Cards → edges → overlays: link lines land on the map surfaces
+             * and the POI icons plug into them from above. */
+            for (int i = 0; i < gr->node_count; ++i) draw_node_card(order[i], content, t);
+            for (int e = 0; e < gr->edge_count; ++e) draw_edge(&gr->edges[e], e, content, t);
+            for (int i = 0; i < gr->node_count; ++i) draw_node_overlay(order[i], content, t);
 
             draw_info_panel(content);
         } else {

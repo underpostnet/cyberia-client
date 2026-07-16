@@ -17,11 +17,12 @@
  * no simulation state. The modal overlays g_game_state's predicted position.
  */
 
-#define IMAP_MAX_NODES      48
-#define IMAP_MAX_EDGES      128
-#define IMAP_MAX_PROVIDERS  96
-#define IMAP_CODE_MAX       64
-#define IMAP_NAME_MAX       64
+#define IMAP_MAX_NODES       48
+#define IMAP_MAX_EDGES       128
+#define IMAP_MAX_PROVIDERS   96
+#define IMAP_MAX_PORTAL_POIS 192
+#define IMAP_CODE_MAX        64
+#define IMAP_NAME_MAX        64
 
 typedef enum {
     IMAP_DATA_IDLE = 0,     /* modal closed, nothing fetched          */
@@ -33,6 +34,8 @@ typedef enum {
 typedef struct {
     char    map_code[IMAP_CODE_MAX];
     char    name[IMAP_NAME_MAX];
+    char    preview_file_id[IMAP_CODE_MAX]; /* File id of the map's Object
+                                             * Layer capture ("" = none)  */
     int     grid_x, grid_y;
     int     quest_provider_count;   /* static totals bound to this map */
     int     action_provider_count;
@@ -45,6 +48,10 @@ typedef struct {
     int  target_node;
     bool intra;                     /* same-map edge (intra-* mode)    */
     char portal_mode[16];
+    /* Endpoint cells on each node's map; -1 = random destination (the
+     * rendered link anchors to the node centre with a vibration). */
+    int  source_cell_x, source_cell_y;
+    int  target_cell_x, target_cell_y;
 } ImapEdge;
 
 typedef struct {
@@ -56,6 +63,14 @@ typedef struct {
     bool active;
     bool acceptable;                /* quest providers: never started  */
 } ImapProvider;
+
+/* Portal landmark on a node's map: an edge endpoint with a known cell
+ * (init spawn position). Random-cell endpoints carry no POI. */
+typedef struct {
+    int  node;
+    int  cell_x, cell_y;
+    bool intra;                     /* same-map portal                 */
+} ImapPortalPoi;
 
 typedef struct {
     char instance_code[IMAP_CODE_MAX];
@@ -72,6 +87,9 @@ typedef struct {
 
     ImapProvider action_providers[IMAP_MAX_PROVIDERS];
     int          action_provider_count;
+
+    ImapPortalPoi portal_pois[IMAP_MAX_PORTAL_POIS];
+    int           portal_poi_count;
 } ImapGraph;
 
 /* Begin the static fetch and enable dynamic polling. Requires the metadata

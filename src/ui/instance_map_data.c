@@ -149,6 +149,20 @@ static void parse_providers(const cJSON* node_doc, const char* key, int node_idx
     }
 }
 
+/* Register an edge endpoint as a portal landmark; negative cells (random
+ * destinations) carry no fixed position and are skipped. Duplicate cells on
+ * the same node collapse into one POI. */
+static void add_portal_poi(int node, int cell_x, int cell_y, bool intra) {
+    if (node < 0 || cell_x < 0 || cell_y < 0) return;
+    if (s_graph.portal_poi_count >= IMAP_MAX_PORTAL_POIS) return;
+    for (int i = 0; i < s_graph.portal_poi_count; ++i) {
+        const ImapPortalPoi* p = &s_graph.portal_pois[i];
+        if (p->node == node && p->cell_x == cell_x && p->cell_y == cell_y) return;
+    }
+    s_graph.portal_pois[s_graph.portal_poi_count++] =
+        (ImapPortalPoi){ .node = node, .cell_x = cell_x, .cell_y = cell_y, .intra = intra };
+}
+
 static bool parse_static_doc(const cJSON* doc) {
     memset(&s_graph, 0, sizeof(s_graph));
     copy_str(s_graph.instance_code, IMAP_CODE_MAX, json_str(doc, "instanceCode"));
@@ -165,6 +179,7 @@ static bool parse_static_doc(const cJSON* doc) {
         copy_str(node->map_code, IMAP_CODE_MAX, json_str(nd, "mapCode"));
         const char* name = json_str(nd, "name");
         copy_str(node->name, IMAP_NAME_MAX, name ? name : node->map_code);
+        copy_str(node->preview_file_id, IMAP_CODE_MAX, json_str(nd, "preview"));
         node->grid_x = json_int(nd, "gridX", 16);
         node->grid_y = json_int(nd, "gridY", 16);
 
@@ -188,12 +203,21 @@ static bool parse_static_doc(const cJSON* doc) {
             if (src < 0 || tgt < 0) continue;
             ImapEdge* e = &s_graph.edges[s_graph.edge_count++];
             memset(e, 0, sizeof(*e));
-            e->source_node = src;
-            e->target_node = tgt;
-            e->intra       = (src == tgt);
+            e->source_node   = src;
+            e->target_node   = tgt;
+            e->intra         = (src == tgt);
             copy_str(e->portal_mode, sizeof(e->portal_mode), json_str(ed, "portalMode"));
+            e->source_cell_x = json_int(ed, "sourceCellX", -1);
+            e->source_cell_y = json_int(ed, "sourceCellY", -1);
+            e->target_cell_x = json_int(ed, "targetCellX", -1);
+            e->target_cell_y = json_int(ed, "targetCellY", -1);
             s_graph.nodes[src].portal_count++;
             if (tgt != src) s_graph.nodes[tgt].portal_count++;
+
+            /* Portal landmarks: each edge endpoint with a known init-spawn
+             * cell becomes a POI on its node's map. */
+            add_portal_poi(src, e->source_cell_x, e->source_cell_y, e->intra);
+            add_portal_poi(tgt, e->target_cell_x, e->target_cell_y, e->intra);
         }
     }
 
