@@ -33,6 +33,7 @@
 #include "object_layers_management.h"
 #include "ol_as_animated_ico.h"
 #include "serial.h"
+#include "toolbar.h"
 #include "ui_button.h"
 #include "ui_state.h"
 #include "world_types.h"
@@ -83,15 +84,13 @@ static bool      s_skill_arrows_visible = false;
 
 /* ── Layout constants ───────────────────────────────────────────────────── */
 
-/* The inventory modal now fills most of the screen (with margin) rather than
- * using a fixed 380×540 card.  All inner sizes derive from the card
- * dimensions so everything scales across resolutions.                       */
+/* The inventory modal fills the whole viewport between the top toolbar and
+ * the inventory bar — the same container idea as the interact modal. All
+ * inner sizes derive from the card dimensions so everything scales across
+ * resolutions.                                                              */
 
-#define MODAL_CARD_W_FRAC  0.88f   /* fraction of screen width              */
-#define MODAL_CARD_H_FRAC  0.82f   /* fraction of screen height             */
-#define MODAL_CARD_W_MAX   600     /* hard max px                            */
-#define MODAL_CARD_W_MAX_WIDE 900  /* max px in the landscape two-column layout */
-#define MODAL_CARD_H_MAX   800
+#define IM_CARD_PAD    8.0f   /* outer margin around the full-screen card    */
+#define IM_HEADER_H   36.0f   /* interact-style header strip                 */
 
 #define MODAL_SPRITE_FRAC  0.38f   /* sprite size as fraction of card width */
 #define MODAL_SPRITE_MIN   100
@@ -113,7 +112,6 @@ static bool      s_skill_arrows_visible = false;
 
 /* ── Colours ──────────────────────────────────────────────────────────── */
 
-static const Color C_OVERLAY_BG    = {   0,   0,   0, 170 };
 static const Color C_CARD_BORDER   = {  80,  80, 130, 220 };
 static const Color C_TITLE         = { 220, 220, 255, 255 };
 static const Color C_BODY          = { 180, 180, 200, 220 };
@@ -133,12 +131,9 @@ static const Color C_LORE_BTN     = {  50,  50, 120, 240 };
 /* ── Helpers ──────────────────────────────────────────────────────────── */
 
 static bool inventory_modal_compact(void) { return viewport_is_mobile(); }
-static float im_card_w_frac(void) { return inventory_modal_compact() ? 0.92f : MODAL_CARD_W_FRAC; }
-static float im_card_h_frac(void) { return inventory_modal_compact() ? 0.74f : MODAL_CARD_H_FRAC; }
 static float im_sprite_frac(void) { return inventory_modal_compact() ? 0.28f : MODAL_SPRITE_FRAC; }
 static int im_sprite_min(void) { return inventory_modal_compact() ? 68 : MODAL_SPRITE_MIN; }
 static int im_sprite_max(void) { return inventory_modal_compact() ? 132 : MODAL_SPRITE_MAX; }
-static int im_font_title(void) { return inventory_modal_compact() ? 22 : MODAL_FONT_TITLE; }
 static int im_font_body(void) { return inventory_modal_compact() ? 16 : MODAL_FONT_BODY; }
 static int im_font_stat(void) { return inventory_modal_compact() ? 14 : MODAL_FONT_STAT; }
 static float im_button_w(void) { return inventory_modal_compact() ? 160.0f : MODAL_BTN_W; }
@@ -171,14 +166,13 @@ static void rebuild_dir_str(void) {
 }
 
 static Rectangle card_rect(int sw, int sh, float scale) {
-    float w = sw * im_card_w_frac();
-    float h = sh * im_card_h_frac();
-    float w_max = modal_wide_layout() ? MODAL_CARD_W_MAX_WIDE : MODAL_CARD_W_MAX;
-    if (w > w_max) w = w_max;
-    if (h > MODAL_CARD_H_MAX) h = MODAL_CARD_H_MAX;
-    w *= scale;
-    h *= scale;
-    return (Rectangle){ (sw - w) * 0.5f, (sh - h) * 0.5f, w, h };
+    /* Full-viewport card between the toolbar and the inventory bar —
+     * mirrors the interact modal's container. */
+    float top    = toolbar_height() + IM_CARD_PAD;
+    float bottom = (float)sh - inventory_bar_visible_height() - IM_CARD_PAD;
+    if (bottom < top + 160.0f) bottom = top + 160.0f;
+    Rectangle r = { IM_CARD_PAD, top, (float)sw - 2.0f * IM_CARD_PAD, bottom - top };
+    return modal_scale_rect(r, scale);
 }
 
 static int modal_sprite_size(float card_w, float card_h) {
@@ -354,12 +348,22 @@ void inventory_modal_draw(void) {
     int screen_w = GetScreenWidth();
     int screen_h = GetScreenHeight();
 
-    /* 2. Card — shared pop-in + standardized panel chrome. */
+    /* 2. Card — interact-style container: dim overlay, translucent panel,
+     * 1px border, and a header strip with close button + item title. */
+    modal_draw_overlay(screen_w, screen_h, s_age);
     Rectangle card = card_rect(screen_w, screen_h, modal_pop_scale(s_age));
-    modal_draw_panel_ex(card, s_age, C_CARD_BORDER, 2.0f);
+    float alpha = modal_pop_alpha(s_age);
+    Color card_bg = MODAL_PANEL_BG;
+    card_bg.a = (unsigned char)(150 * alpha);
+    DrawRectangleRec(card, card_bg);
+    Color card_bc = C_CARD_BORDER;
+    card_bc.a = (unsigned char)(card_bc.a * alpha);
+    DrawRectangleLinesEx(card, 1.0f, card_bc);
+    DrawRectangle((int)card.x, (int)card.y, (int)card.width, (int)IM_HEADER_H,
+                  (Color){ C_CARD_BORDER.r, C_CARD_BORDER.g, C_CARD_BORDER.b, 40 });
 
     float cx  = card.x;
-    float cy  = card.y;
+    float cy  = card.y + IM_HEADER_H;   /* content starts below the header */
     float cw  = card.width;
     int   pad = (int)im_pad(cw);
 
@@ -369,7 +373,6 @@ void inventory_modal_draw(void) {
     float pane_w = wide ? cw * 0.40f : cw;  /* sprite pane width  */
     float info_x = wide ? cx + pane_w : cx; /* content pane left  */
     float info_w = wide ? cw - pane_w : cw; /* content pane width */
-    int title_font = im_font_title();
     int body_font = im_font_body();
     int stat_font = im_font_stat();
     float button_w = im_button_w();
@@ -377,9 +380,10 @@ void inventory_modal_draw(void) {
     float lore_button_w = im_lore_button_w();
     float lore_button_h = im_lore_button_h();
 
-    /* 3. Close button — top-left corner, away from the map/fullscreen buttons */
+    /* 3. Close button — right-aligned inside the header strip. */
     float close_size = im_close_size();
-    Rectangle close_r = { cx + 6.0f, cy + 6.0f,
+    Rectangle close_r = { card.x + card.width - close_size - 4.0f,
+                           card.y + (IM_HEADER_H - close_size) * 0.5f,
                            close_size, close_size };
     {
         int mx = GetMouseX(), my = GetMouseY();
@@ -513,11 +517,12 @@ void inventory_modal_draw(void) {
     /* Dead-state ids are Fragmentation items: equippable only while dead. */
     bool is_fragment = game_state_is_dead_item(ols->item_id);
 
-    /* 7. Item name */
-    int tfs = title_font;
-    int ttw = MeasureText(item_name, tfs);
-    DrawText(item_name, (int)(info_x + (info_w - ttw) * 0.5f), (int)y_cursor, tfs, C_TITLE);
-    y_cursor += tfs + 4;
+    /* 7. Item name — header title, left-aligned like the interact modal. */
+    {
+        int tfs = 18;
+        DrawText(item_name, (int)(card.x + 10.0f),
+                 (int)(card.y + (IM_HEADER_H - tfs) * 0.5f), tfs, C_TITLE);
+    }
 
     /* Type badge — Fragmentation items carry the state as a type suffix. */
     if (is_fragment || (item_type && item_type[0] != '\0')) {
@@ -837,10 +842,11 @@ bool inventory_modal_handle_click(int mx, int my) {
     bool inside = hit_rect(mx, my, card);
     if (!inside) { inventory_modal_close(); return true; }
 
-    /* Close button — top-left corner */
+    /* Close button — right-aligned in the header strip */
     float close_size = im_close_size();
-    Rectangle close_r = { card.x + 6.0f,
-                           card.y + 6.0f, close_size, close_size };
+    Rectangle close_r = { card.x + card.width - close_size - 4.0f,
+                           card.y + (IM_HEADER_H - close_size) * 0.5f,
+                           close_size, close_size };
     if (hit_rect(mx, my, close_r)) { inventory_modal_close(); return true; }
 
     /* Direction buttons (0..3) */
