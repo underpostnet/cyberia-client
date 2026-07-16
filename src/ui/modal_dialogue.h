@@ -107,10 +107,12 @@ void modal_dialogue_set_on_close(ModalDialogueOnClose cb);
  */
 bool modal_dialogue_is_open(void);
 
-/* True while the mobile fullscreen reader is up (expanded from the compact
- * chat button, or an inventory-lore dialogue). The interact modal hides —
- * draw and clicks — for its duration. */
+/* True while the mobile fullscreen reader is up. The interact modal hides for
+ * its duration. */
 bool modal_dialogue_is_fullscreen(void);
+
+/* Show a paired entity dialogue in the mobile fullscreen reader. */
+void modal_dialogue_show_fullscreen(void);
 
 /**
  * @brief Advance animations / typewriter effect.

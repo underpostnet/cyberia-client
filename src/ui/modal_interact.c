@@ -21,7 +21,7 @@
 #include "quest_cache.h"
 #include "ui_button.h"
 #include "ui_scroll.h"
-#include "ui_toggle.h"
+#include "ui_icon.h"
 #include "util/log.h"
 
 #include <raylib.h>
@@ -69,12 +69,14 @@ static bool  s_dlg_context = false;
 /* Max reward icons rendered per mission card. */
 #define MI_REWARD_SLOT_MAX 8
 
-/* Multi-mission quest tab: one collapsible ui_toggle card per offered quest,
- * each with a per-card Accept/Abandon button captured during draw. */
+/* Multi-mission quest tab: a two-column grid of wrapped mission buttons.
+ * Tapping one expands that mission's full detail; its close button returns to
+ * the grid. */
 #define MI_QUEST_MAX 8
-static UIToggle  s_q_toggle[MI_QUEST_MAX];
-static bool      s_q_toggle_init = false;
-static Rectangle s_q_header[MI_QUEST_MAX]; /* full header bar — click toggles */
+static Rectangle s_q_grid_btn[MI_QUEST_MAX]; /* grid-mode mission buttons   */
+static int       s_q_expanded = -1;          /* -1 = grid of mission buttons */
+static float     s_q_expand_age = MODAL_POP_DURATION;
+static Rectangle s_q_close;                  /* detail-mode close button    */
 static Rectangle s_q_btn[MI_QUEST_MAX];
 static int       s_q_btn_kind[MI_QUEST_MAX]; /* 0 none, 1 accept, 2 abandon */
 static char      s_q_btn_code[MI_QUEST_MAX][64];
@@ -88,9 +90,9 @@ static Rectangle        s_reward_rects[MI_QUEST_MAX * MI_REWARD_SLOT_MAX];
 static ObjectLayerState s_reward_ols[MI_QUEST_MAX * MI_REWARD_SLOT_MAX];
 static int              s_reward_slot_count = 0;
 
-/* The paired modal_dialogue always opens alongside this modal; opened once
- * the (async) skin dialogue resolves, render-only when there is none. */
+/* The paired modal_dialogue opens once the async skin dialogue resolves. */
 static bool  s_dialogue_opened = false;
+static bool  s_dialogue_open_requested = false;
 
 /* Cached alive layers — snapshot at open so the stack stays visible even if
  * the entity leaves the AOI. */
@@ -189,30 +191,32 @@ static void es_clear(void) {
 #define MI_FONT_REW       11
 #define MI_REW_SLOT_SZ    32
 #define MI_REW_SLOT_GAP   6
+#define MI_Q_GRID_GAP     8.0f
+#define MI_Q_GRID_PAD     8.0f
+#define MI_Q_GRID_ICON_GAP 6.0f
+#define MI_Q_GRID_MIN_H_MOBILE 64.0f
+#define MI_Q_GRID_MIN_H_DESKTOP 70.0f
+#define MI_FONT_QGRID_MOBILE 15
 
 /* Quest tab desktop enlargement. The mission cards, reward slots, toggle
  * chevrons and Accept/Abandon button read too small at the base sizes above
  * on a full-size monitor; bumped up on desktop only via the mi_* accessors
  * below. Mobile keeps the base sizing untouched (already scaled down by
  * text.c's TEXT_MOBILE_FONT_SCALE). */
-#define MI_FONT_QLABEL_DESKTOP   18
 #define MI_FONT_QUEST_DESKTOP    17
 #define MI_FONT_DESC_DESKTOP     15
 #define MI_FONT_REW_DESKTOP      14
 #define MI_REW_SLOT_SZ_DESKTOP   44.0f
 #define MI_REW_SLOT_GAP_DESKTOP  8.0f
-#define MI_Q_CHEVRON_DESKTOP     28.0f
 #define MI_Q_BTN_W_DESKTOP       124.0f
 #define MI_Q_BTN_H_DESKTOP       34.0f
 #define MI_FONT_QBTN_DESKTOP     16
 
-static inline int   mi_font_qlabel(void) { return viewport_is_mobile() ? MI_FONT_LABEL : MI_FONT_QLABEL_DESKTOP; }
 static inline int   mi_font_quest(void)  { return viewport_is_mobile() ? MI_FONT_QUEST : MI_FONT_QUEST_DESKTOP; }
 static inline int   mi_font_desc(void)   { return viewport_is_mobile() ? MI_FONT_DESC  : MI_FONT_DESC_DESKTOP; }
 static inline int   mi_font_rew(void)    { return viewport_is_mobile() ? MI_FONT_REW   : MI_FONT_REW_DESKTOP; }
 static inline float mi_rew_slot_sz(void) { return viewport_is_mobile() ? (float)MI_REW_SLOT_SZ  : MI_REW_SLOT_SZ_DESKTOP; }
 static inline float mi_rew_slot_gap(void){ return viewport_is_mobile() ? (float)MI_REW_SLOT_GAP : MI_REW_SLOT_GAP_DESKTOP; }
-static inline float mi_q_chevron(void)   { return viewport_is_mobile() ? UI_TOGGLE_HDR_CHEVRON : MI_Q_CHEVRON_DESKTOP; }
 static inline float mi_pad(void)          { return viewport_is_mobile() ? 8.0f : (float)MI_PAD; }
 static inline float mi_header_h(void)     { return viewport_is_mobile() ? 36.0f : (float)MI_HEADER_H; }
 static inline float mi_close_sz(void)     { return viewport_is_mobile() ? 32.0f : (float)MI_CLOSE_SZ; }
@@ -259,10 +263,8 @@ static int visible_tabs(int out[MI_TAB_COUNT]) {
     return n;
 }
 
-/* Top half of the screen with generous padding all round. */
-/* Top-half card. Its bottom edge meets the dialogue's top (MI_TOP_FRAC ==
- * DLG_TOP_FRAC) with a one-padding gap, so the two halves frame the screen
- * with matching margins. */
+/* Desktop uses a top-half card. On mobile, the interact card fills the space
+ * otherwise reserved for the paired dialogue. */
 #define MI_TOP_FRAC 0.56f
 
 static Rectangle card_rect(void) {
@@ -271,8 +273,11 @@ static Rectangle card_rect(void) {
     float pad = mi_pad();
     float top = toolbar_height() + pad; /* below the top toolbar */
     float hidden_bar_h = inventory_bar_full_height() - inventory_bar_visible_height();
-    float bottom = sh * MI_TOP_FRAC - pad * 0.5f + hidden_bar_h;
-    float max_bottom = sh - inventory_bar_visible_height() - pad;
+    float max_bottom = sh - inventory_bar_visible_height() -
+        (viewport_is_mobile() ? 0.0f : pad);
+    float bottom = viewport_is_mobile()
+        ? max_bottom
+        : sh * MI_TOP_FRAC - pad * 0.5f + hidden_bar_h;
     if (bottom > max_bottom) bottom = max_bottom;
     if (bottom < top + 120.0f) bottom = top + 120.0f;
     return (Rectangle){ pad, top, (float)sw - 2.0f * pad, bottom - top };
@@ -304,15 +309,25 @@ static Rectangle bar_rect(Rectangle card) {
     return (Rectangle){ card.x, card.y + card.height - height, card.width, height };
 }
 
-/* Chat + Integration buttons: right-aligned in the bottom bar, each capped
- * at MI_BAR_BTN_MAXW wide. */
-static void bar_buttons(Rectangle card, Rectangle* chat, Rectangle* integration) {
+/* Mobile adds a Dialog entry alongside the Chat and Integration controls. */
+static void bar_buttons(Rectangle card, Rectangle* dialog, Rectangle* chat,
+                        Rectangle* integration) {
     Rectangle bar = bar_rect(card);
     float pad = mi_pad();
     float button_h = mi_bar_btn_h();
+    float by = bar.y + (bar.height - button_h) * 0.5f;
+    if (viewport_is_mobile()) {
+        float bw = (bar.width - 2.0f * pad - 2.0f * MI_BAR_BTN_GAP) / 3.0f;
+        float x = bar.x + pad;
+        *dialog      = (Rectangle){ x, by, bw, button_h };
+        *chat        = (Rectangle){ x + bw + MI_BAR_BTN_GAP, by, bw, button_h };
+        *integration = (Rectangle){ x + 2.0f * (bw + MI_BAR_BTN_GAP), by, bw, button_h };
+        return;
+    }
+
+    *dialog = (Rectangle){ 0 };
     float bw = (bar.width - 3.0f * pad) * 0.5f;
     if (bw > mi_bar_btn_maxw()) bw = mi_bar_btn_maxw();
-    float by = bar.y + (bar.height - button_h) * 0.5f;
     float ix = bar.x + bar.width - pad - bw;
     *integration = (Rectangle){ ix, by, bw, button_h };
     *chat        = (Rectangle){ ix - MI_BAR_BTN_GAP - bw, by, bw, button_h };
@@ -361,8 +376,8 @@ static const char* active_dlg_key(void) {
     return s_action_dialog_code[0] != '\0' ? s_action_dialog_code : s_dlg_item;
 }
 
-/* Open the paired dialogue (bottom half). A pending action-talk-quest shows its
- * mapped dialogue by full code; otherwise the entity's "default-<skin>" greeting.
+/* Open the paired dialogue. A pending action-talk-quest shows its mapped
+ * dialogue by full code; otherwise the entity's "default-<skin>" greeting.
  * The server validates talk objectives by the NPC's skin, not this code, so the
  * code is reported on dlg_complete only for traceability. */
 static void open_dialogue(const DialogueLine* lines, int count) {
@@ -377,6 +392,10 @@ static void open_dialogue(const DialogueLine* lines, int count) {
      * and not merely because the NPC offers a quest. */
     modal_dialogue_set_quest_style(s_action_dialog_code[0] != '\0');
     s_dialogue_opened = true;
+    if (s_dialogue_open_requested) {
+        s_dialogue_open_requested = false;
+        modal_dialogue_show_fullscreen();
+    }
 }
 
 /* Kick off the fetch for the active dialogue (pending quest dialogue by code, or
@@ -403,11 +422,11 @@ static void modal_interact_reopen(void) {
     s_open             = true;
     s_age              = 0.0f;
     s_dialogue_opened  = false;
+    s_dialogue_open_requested = false;
     s_overlay_open     = false;
 
-    /* The paired dialogue always appears alongside this modal; its key (pending
-     * quest dialogue or skin greeting) was restored by es_pop. Text resolves async
-     * in update; render-only opens right away. */
+    /* The paired dialogue key was restored by es_pop. Text resolves async in
+     * update; mobile renders it only after the footer opens the reader. */
     request_active_dialogue();
 
     LOG_INFO("[MODAL_INTERACT] Reopen from ephemeral session: entity=%s layers=%d\n",
@@ -433,8 +452,11 @@ void modal_interact_stack_player_item(int inv_idx) {
 void modal_interact_init(void) {
     s_open = false;
     s_overlay_open = false;
+    s_dialogue_open_requested = false;
     ui_scroll_reset(&s_q_scroll);
     s_q_content_height = 0.0f;
+    s_q_expanded = -1;
+    s_q_expand_age = MODAL_POP_DURATION;
     es_clear();
 }
 
@@ -470,11 +492,14 @@ void modal_interact_open(const char* entity_id, const char* display_name,
     s_border             = border;
     s_age                = 0.0f;
     s_dialogue_opened    = false;
+    s_dialogue_open_requested = false;
     s_overlay_open       = false;
     s_open               = true;
     s_tab                = MI_TAB_STACK;
     ui_scroll_reset(&s_q_scroll);
     s_q_content_height = 0.0f;
+    s_q_expanded = -1;
+    s_q_expand_age = MODAL_POP_DURATION;
 
     /* Only snapshot layers from AOI when we don't already have a cached
      * copy from the ephemeral session.  This way, returning from the
@@ -504,9 +529,8 @@ void modal_interact_open(const char* entity_id, const char* display_name,
         }
     }
 
-    /* The paired dialogue always appears alongside this modal: a pending quest
-     * dialogue (quest-framed) when present, else the skin greeting, else
-     * render-only. Text resolves async in update. */
+    /* The paired dialogue uses the pending quest dialogue when present, else
+     * the skin greeting, else render-only content. Text resolves async. */
     request_active_dialogue();
 
     /* The dialogue modal (paired with this interact modal) already sends its own
@@ -523,6 +547,7 @@ void modal_interact_open(const char* entity_id, const char* display_name,
 void modal_interact_close(void) {
     s_open = false;
     s_overlay_open = false;
+    s_dialogue_open_requested = false;
     es_clear();
     if (modal_dialogue_is_open()) modal_dialogue_close();
     /* Release the interaction context/freeze established on open. Dropped by the
@@ -543,6 +568,7 @@ float modal_interact_layout_bottom(void) {
 
 bool modal_interact_handle_wheel(float wheel_delta) {
     if (!s_open || s_age < MODAL_POP_DURATION || s_tab != MI_TAB_QUEST) return false;
+    if (0 <= s_q_expanded && s_q_expand_age < MODAL_POP_DURATION) return true;
     return ui_scroll_on_wheel(&s_q_scroll, content_rect(card_rect()),
                               s_q_content_height, wheel_delta);
 }
@@ -550,8 +576,11 @@ bool modal_interact_handle_wheel(float wheel_delta) {
 void modal_interact_update(float dt) {
     if (!s_open) return;
     s_age += dt;
-
-    for (int i = 0; i < MI_QUEST_MAX; i++) ui_toggle_update(&s_q_toggle[i], dt);
+    if (0 <= s_q_expanded && s_q_expand_age < MODAL_POP_DURATION) {
+        s_q_expand_age += dt;
+        if (s_q_expand_age > MODAL_POP_DURATION)
+            s_q_expand_age = MODAL_POP_DURATION;
+    }
 
     if (s_tab == MI_TAB_QUEST) {
         ui_scroll_update(&s_q_scroll, content_rect(card_rect()), s_q_content_height, dt);
@@ -680,59 +709,282 @@ static void draw_quest_steps(const QuestMetadataEntry* metadata,
     }
 }
 
-/* One collapsible mission card in the column at (x, w). Advances *y; records
- * the per-card primary button (Accept / Abandon) so the click handler can act
- * on it. */
-static void draw_quest_card(int slot, const char* code, float x, float w,
-                            float* y, int mx, int my) {
-    quest_cache_fetch(code);
-    const QuestProgressEntry* q = quest_progress_store_find(code);
-    const QuestMetadataEntry* qm = quest_cache_get(code);
+/* Status/title snapshot for one mission code (also kicks the metadata fetch). */
+typedef struct {
+    const QuestProgressEntry* q;
+    const QuestMetadataEntry* qm;
+    bool        active, completed, locked, acceptable;
+    const char* title;
+    const char* word;
+    Color       color;
+} QuestCardInfo;
 
-    bool active    = q && QUEST_ACTIVE == q->status;
-    bool completed = q && QUEST_COMPLETED == q->status;
-    bool locked    = false;
-    if (!active && !completed && qm && QUEST_CACHE_READY == qm->state) {
-        for (int i = 0; i < qm->prerequisite_count; i++) {
-            if (!quest_progress_store_is_completed(qm->prerequisites[i])) { locked = true; break; }
+static QuestCardInfo quest_card_info(const char* code) {
+    quest_cache_fetch(code);
+    QuestCardInfo in = { 0 };
+    in.q  = quest_progress_store_find(code);
+    in.qm = quest_cache_get(code);
+    in.active    = in.q && QUEST_ACTIVE == in.q->status;
+    in.completed = in.q && QUEST_COMPLETED == in.q->status;
+    if (!in.active && !in.completed && in.qm && QUEST_CACHE_READY == in.qm->state) {
+        for (int i = 0; i < in.qm->prerequisite_count; i++) {
+            if (!quest_progress_store_is_completed(in.qm->prerequisites[i])) {
+                in.locked = true;
+                break;
+            }
         }
     }
-    bool acceptable = !active && !completed && !locked;
+    in.acceptable = !in.active && !in.completed && !in.locked;
+    in.title = (in.q && in.q->title[0]) ? in.q->title
+             : (in.qm && in.qm->title[0]) ? in.qm->title : code;
+    in.color = in.active ? (Color){ 220, 190, 70, 255 }
+             : in.completed ? (Color){ 110, 210, 130, 235 }
+             : in.locked ? (Color){ 210, 120, 110, 230 }
+                         : (Color){ 120, 200, 140, 235 };
+    in.word = in.active ? "Active" : in.completed ? "Completed"
+            : in.locked ? "Locked" : "Available";
+    return in;
+}
 
-    const char* title = (q && q->title[0]) ? q->title
-                      : (qm && qm->title[0]) ? qm->title : code;
-    Color statusc = active ? (Color){ 220, 190, 70, 255 }
-                  : completed ? (Color){ 110, 210, 130, 235 }
-                  : locked ? (Color){ 210, 120, 110, 230 }
-                           : (Color){ 120, 200, 140, 235 };
-    const char* statusw = active ? "Active" : completed ? "Completed"
-                        : locked ? "Locked" : "Available";
+static int quest_grid_font(void) {
+    return viewport_is_mobile() ? MI_FONT_QGRID_MOBILE : MI_FONT_QUEST_DESKTOP;
+}
 
-    UIToggle* tg = &s_q_toggle[slot];
-    float hx = x, hw = w;
+static int quest_grid_status_font(int title_font) {
+    int status_font = title_font - 3;
+    return status_font > 10 ? status_font : 10;
+}
+
+static float quest_grid_icon_size(float button_width) {
+    return button_width < 140.0f ? 16.0f : 20.0f;
+}
+
+static int quest_grid_title_width(float button_width) {
+    float title_width = button_width - 2.0f * MI_Q_GRID_PAD -
+                        quest_grid_icon_size(button_width) - MI_Q_GRID_ICON_GAP;
+    return title_width > 12.0f ? (int)title_width : 12;
+}
+
+static void draw_quest_grid_title_line(const char* line, int x, int y,
+                                       int width, int font) {
+    int line_width = MeasureText(line, font);
+    int line_x = x + (width - line_width) / 2;
+    for (int offset_y = -1; offset_y <= 1; offset_y++) {
+        for (int offset_x = -1; offset_x <= 1; offset_x++) {
+            if (0 == offset_x && 0 == offset_y) continue;
+            DrawText(line, line_x + offset_x, y + offset_y, font, BLACK);
+        }
+    }
+    DrawText(line, line_x, y, font, WHITE);
+}
+
+static void draw_quest_grid_status_line(const char* line, int x, int y,
+                                        int width, int font, Color color) {
+    int line_width = MeasureText(line, font);
+    int line_x = x + (width - line_width) / 2;
+    for (int offset_y = -1; offset_y <= 1; offset_y++) {
+        for (int offset_x = -1; offset_x <= 1; offset_x++) {
+            if (0 == offset_x && 0 == offset_y) continue;
+            DrawText(line, line_x + offset_x, y + offset_y, font, BLACK);
+        }
+    }
+    DrawText(line, line_x, y, font, color);
+}
+
+static int quest_grid_title_wrap(const char* title, int x, int y, int width,
+                                 int font, bool draw) {
+    if (NULL == title || '\0' == title[0]) return 0;
+    if (width < 1) width = 1;
+
+    char line[QUEST_CACHE_TITLE_MAX] = { 0 };
+    char word[QUEST_CACHE_TITLE_MAX] = { 0 };
+    char candidate[QUEST_CACHE_TITLE_MAX] = { 0 };
+    const char* cursor = title;
+    int line_height = text_line_height(font);
+    int line_y = y;
+
+    while ('\0' != *cursor) {
+        while (' ' == *cursor) cursor++;
+        if ('\0' == *cursor) break;
+
+        int word_length = 0;
+        while ('\0' != cursor[word_length] && ' ' != cursor[word_length] &&
+               word_length < (int)sizeof(word) - 1) {
+            word[word_length] = cursor[word_length];
+            word_length++;
+        }
+        word[word_length] = '\0';
+        cursor += word_length;
+
+        int word_offset = 0;
+        while (word_offset < word_length) {
+            if ('\0' != line[0]) {
+                snprintf(candidate, sizeof(candidate), "%s %s", line, word + word_offset);
+                if (MeasureText(candidate, font) <= width) {
+                    strncpy(line, candidate, sizeof(line) - 1);
+                    line[sizeof(line) - 1] = '\0';
+                    word_offset = word_length;
+                    continue;
+                }
+                if (draw) draw_quest_grid_title_line(line, x, line_y, width, font);
+                line_y += line_height;
+                line[0] = '\0';
+                continue;
+            }
+
+            const char* remainder = word + word_offset;
+            if (MeasureText(remainder, font) <= width) {
+                strncpy(line, remainder, sizeof(line) - 1);
+                line[sizeof(line) - 1] = '\0';
+                word_offset = word_length;
+                continue;
+            }
+
+            int fragment_length = 0;
+            while (word_offset + fragment_length < word_length) {
+                line[fragment_length] = word[word_offset + fragment_length];
+                line[fragment_length + 1] = '\0';
+                if (MeasureText(line, font) > width && fragment_length > 0) break;
+                fragment_length++;
+            }
+            if (0 == fragment_length) fragment_length = 1;
+            line[fragment_length] = '\0';
+            word_offset += fragment_length;
+            if (word_offset < word_length) {
+                if (draw) draw_quest_grid_title_line(line, x, line_y, width, font);
+                line_y += line_height;
+                line[0] = '\0';
+            }
+        }
+    }
+
+    if ('\0' != line[0]) {
+        if (draw) draw_quest_grid_title_line(line, x, line_y, width, font);
+        line_y += line_height;
+    }
+    return line_y - y;
+}
+
+static float quest_grid_button_height(const char* title, float button_width,
+                                      int font) {
+    int title_height = quest_grid_title_wrap(title, 0, 0,
+                                             quest_grid_title_width(button_width),
+                                             font, false);
+    int status_height = text_line_height(quest_grid_status_font(font));
+    float icon_size = quest_grid_icon_size(button_width);
+    float text_height = title_height + 2.0f + status_height;
+    float content_height = text_height > icon_size ? text_height : icon_size;
+    float min_height = viewport_is_mobile() ? MI_Q_GRID_MIN_H_MOBILE
+                                             : MI_Q_GRID_MIN_H_DESKTOP;
+    float button_height = content_height + 2.0f * MI_Q_GRID_PAD;
+    return button_height > min_height ? button_height : min_height;
+}
+
+static void draw_quest_grid_button(Rectangle button, const QuestCardInfo* info,
+                                   int font, int mx, int my) {
+    bool hovered = ui_button_hit(button, mx, my);
+    Color fill = hovered ? (Color){ 255, 220, 42, 255 } : (Color){ 225, 191, 5, 255 };
+    Color highlight = hovered ? (Color){ 255, 250, 180, 255 } : (Color){ 255, 235, 110, 255 };
+    Color shadow = hovered ? (Color){ 166, 123, 0, 255 } : (Color){ 128, 92, 0, 255 };
+    Rectangle inner = { button.x + 2.0f, button.y + 2.0f,
+                        button.width - 4.0f, button.height - 4.0f };
+
+    DrawRectangleRounded(button, 0.18f, 6, BLACK);
+    DrawRectangleRounded(inner, 0.18f, 6, fill);
+    DrawRectangle((int)(inner.x + 6.0f), (int)inner.y,
+                  (int)(inner.width - 12.0f), 2, highlight);
+    DrawRectangle((int)inner.x, (int)(inner.y + 6.0f), 2,
+                  (int)(inner.height - 12.0f), highlight);
+    DrawRectangle((int)(inner.x + 6.0f), (int)(inner.y + inner.height - 2.0f),
+                  (int)(inner.width - 12.0f), 2, shadow);
+    DrawRectangle((int)(inner.x + inner.width - 2.0f), (int)(inner.y + 6.0f), 2,
+                  (int)(inner.height - 12.0f), shadow);
+    DrawRectangle((int)(inner.x + 6.0f), (int)(inner.y + inner.height - 4.0f),
+                  (int)(inner.width - 12.0f), 1, info->color);
+    if (hovered) {
+        DrawRectangleRoundedLinesEx(inner, 0.18f, 6, 1.0f, WHITE);
+        DrawRectangle((int)(inner.x + inner.width - 9.0f), (int)(inner.y + 5.0f), 3, 3, WHITE);
+        DrawRectangle((int)(inner.x + inner.width - 6.0f), (int)(inner.y + 8.0f), 2, 2, WHITE);
+    }
+
+    float icon_size = quest_grid_icon_size(button.width);
+    float icon_x = button.x + MI_Q_GRID_PAD + icon_size * 0.5f;
+    float icon_y = button.y + button.height * 0.5f;
+    ui_icon_draw_ex("quest", icon_x + 1.0f, icon_y + 1.0f, icon_size, 0.0f, BLACK);
+    ui_icon_draw_ex("quest", icon_x, icon_y, icon_size, 0.0f, WHITE);
+
+    int title_x = (int)(button.x + MI_Q_GRID_PAD + icon_size + MI_Q_GRID_ICON_GAP);
+    int title_width = quest_grid_title_width(button.width);
+    int title_height = quest_grid_title_wrap(info->title, title_x, 0,
+                                              title_width, font, false);
+    int status_font = quest_grid_status_font(font);
+    int status_height = text_line_height(status_font);
+    int text_height = title_height + 2 + status_height;
+    int title_y = (int)(button.y + (button.height - text_height) * 0.5f);
+    quest_grid_title_wrap(info->title, title_x, title_y, title_width, font, true);
+    draw_quest_grid_status_line(info->word, title_x, title_y + title_height + 2,
+                                title_width, status_font, info->color);
+}
+
+/* Expanded mission detail at (x, w): title row, then its primary action,
+ * description, steps, and rewards. Advances *y. */
+static void draw_quest_detail(int slot, const char* code, float x, float w,
+                              float* y, int mx, int my) {
+    QuestCardInfo in = quest_card_info(code);
+    const QuestProgressEntry* q = in.q;
+    const QuestMetadataEntry* qm = in.qm;
+    bool active = in.active, completed = in.completed;
+    bool locked = in.locked, acceptable = in.acceptable;
     int qfont = mi_font_quest();
     int rfont = mi_font_rew();
-    float chev = mi_q_chevron();
-    /* Centralized dynamic-height header: chevron + wrapped title, with the status
-     * word reserved on the right so the title never overflows into it. */
-    int sww = MeasureText(statusw, rfont);
-    float reserve_right = (float)sww + 12.0f;
-    float header_h = ui_toggle_header(tg, hx, *y, hw, title, qfont, C_TEXT,
-                                      UI_TOGGLE_HEADER_LEFT, 0.0f, reserve_right, chev, false);
-    Rectangle header = { hx, *y, hw, header_h };
-    s_q_header[slot] = header;
-    DrawRectangleRounded(header, 0.18f, 4, (Color){ 30, 34, 52, 205 });
-    ui_toggle_header(tg, hx, *y, hw, title, qfont, C_TEXT,
-                     UI_TOGGLE_HEADER_LEFT, 0.0f, reserve_right, chev, true);
-    DrawText(statusw, (int)(hx + hw - sww - 8),
-             (int)(*y + (header_h - text_line_height(rfont)) / 2), rfont, statusc);
-    *y += header_h + 4;
+
+    /* Title row. */
+    float close_sz = 26.0f;
+    float row_top  = *y;
+    s_q_close = (Rectangle){ x + w - close_sz - 2.0f, row_top, close_sz, close_sz };
+    UIButtonStyle cb = { .icon_id = "close-yellow", .no_fill = true };
+    ui_button_draw(s_q_close, &cb,
+                   ui_button_resolve_state(true, false, ui_button_hit(s_q_close, mx, my)));
+
+    ui_icon_draw_ex("quest", x + 11.0f, row_top + 13.0f, 20.0f, 0.0f, WHITE);
+    int sww = MeasureText(in.word, rfont);
+    DrawText(in.word, (int)(x + w - close_sz - sww - 12.0f),
+             (int)(row_top + (close_sz - text_line_height(rfont)) * 0.5f), rfont, in.color);
+    float th = (float)text_wrap(in.title, (int)(x + 26.0f), (int)(row_top + 3.0f),
+                                (int)(w - close_sz - sww - 26.0f - 24.0f),
+                                qfont, C_TEXT, false, true);
+    float row_h = th + 6.0f > close_sz + 4.0f ? th + 6.0f : close_sz + 4.0f;
+    *y += row_h + 4.0f;
 
     s_q_btn_kind[slot] = 0;
-    if (!tg->expanded) { *y += 2; return; }
 
-    float ix = hx + 16;
-    int   iw = (int)(hw - 24);
+    float ix = x + 16;
+    int   iw = (int)(w - 24);
+
+    if (active || acceptable) {
+        bool desktop = !viewport_is_mobile();
+        int bfont = desktop ? MI_FONT_QBTN_DESKTOP : (MI_FONT_BTN - 3);
+        UIButtonStyle st = active
+            ? (UIButtonStyle){ .text = "Abandon quest", .font_size = bfont,
+                               .bg = (Color){ 120, 44, 44, 255 },
+                               .bg_hover = (Color){ 160, 60, 60, 255 }, .text_color = C_TEXT,
+                               .rounded = true, .roundness = 0.18f }
+            : (UIButtonStyle){ .text = "Accept quest", .font_size = bfont,
+                               .bg = (Color){ 30, 110, 70, 255 },
+                               .bg_hover = (Color){ 45, 145, 90, 255 }, .text_color = C_TEXT,
+                               .rounded = true, .roundness = 0.18f };
+        Vector2 button_size = ui_button_measure(&st);
+        float button_width = button_size.x < iw ? button_size.x : (float)iw;
+        float button_height = desktop ? MI_Q_BTN_H_DESKTOP : 32.0f;
+        if (button_size.y > button_height) button_height = button_size.y;
+        Rectangle btn = { ix, *y, button_width, button_height };
+        ui_button_draw(btn, &st, ui_button_resolve_state(true, false, ui_button_hit(btn, mx, my)));
+        s_q_btn[slot] = btn;
+        s_q_btn_kind[slot] = active ? 2 : 1;
+        strncpy(s_q_btn_code[slot], code, 63);
+        s_q_btn_code[slot][63] = '\0';
+        *y += button_height + 8.0f;
+    }
 
     if (qm && QUEST_CACHE_READY == qm->state) {
         *y += text_wrap(qm->description, (int)ix, (int)*y, iw, mi_font_desc(), C_DESC_TEXT, false, true);
@@ -774,24 +1026,7 @@ static void draw_quest_card(int slot, const char* code, float x, float w,
         }
     }
 
-    if (active || acceptable) {
-        bool desktop = !viewport_is_mobile();
-        float bw = desktop ? MI_Q_BTN_W_DESKTOP : 96.0f;
-        float bh = desktop ? MI_Q_BTN_H_DESKTOP : 26.0f;
-        int   bfont = desktop ? MI_FONT_QBTN_DESKTOP : (MI_FONT_BTN - 4);
-        Rectangle btn = { hx + hw - bw, *y, bw, bh };
-        UIButtonStyle st = active
-            ? (UIButtonStyle){ .text = "Abandon", .font_size = bfont,
-                               .bg = (Color){ 120, 44, 44, 255 }, .text_color = C_TEXT }
-            : (UIButtonStyle){ .text = "Accept", .icon_id = "quest", .font_size = bfont,
-                               .bg = (Color){ 30, 110, 70, 255 }, .text_color = C_TEXT };
-        ui_button_draw(btn, &st, ui_button_resolve_state(true, false, ui_button_hit(btn, mx, my)));
-        s_q_btn[slot] = btn;
-        s_q_btn_kind[slot] = active ? 2 : 1;
-        strncpy(s_q_btn_code[slot], code, 63);
-        s_q_btn_code[slot][63] = '\0';
-        *y += bh + 4;
-    } else if (locked) {
+    if (locked) {
         DrawText("Prerequisite not met.", (int)ix, (int)*y, rfont,
                  (Color){ 210, 120, 110, 220 });
         *y += rfont + 4;
@@ -799,18 +1034,22 @@ static void draw_quest_card(int slot, const char* code, float x, float w,
     *y += 4;
 }
 
-/* Quest tab: a collapsible card per mission the server authoritatively says
- * this NPC provides to the player (codes from AOI; metadata fetched by code). */
+/* Quest tab: mission codes the server authoritatively says this NPC provides
+ * to the player (from AOI; metadata fetched by code). Grid mode shows one
+ * content-fit card button per mission; tapping one switches to that
+ * mission's full detail. */
 static void draw_quest_tab(Rectangle content, int mx, int my) {
-    if (!s_q_toggle_init) {
-        for (int i = 0; i < MI_QUEST_MAX; i++)
-            ui_toggle_init(&s_q_toggle[i], (Rectangle){ 0, 0, 18, 18 }, 0 == i, UI_TOGGLE_CHEVRON_DOWN);
-        s_q_toggle_init = true;
-    }
     s_reward_slot_count = 0;
     s_q_count = s_quest_code_count < MI_QUEST_MAX ? s_quest_code_count : MI_QUEST_MAX;
+    if (s_q_expanded >= s_q_count) {
+        s_q_expanded = -1;
+        s_q_expand_age = MODAL_POP_DURATION;
+    }
 
-    float content_y = content.y - ui_scroll_offset(&s_q_scroll);
+    Rectangle draw_content = content;
+    if (0 <= s_q_expanded)
+        draw_content = modal_scale_rect(content, modal_pop_scale(s_q_expand_age));
+    float content_y = draw_content.y - ui_scroll_offset(&s_q_scroll);
     float y = content_y + 4.0f;
     ui_scroll_begin(&s_q_scroll);
     if (0 == s_q_count) {
@@ -819,50 +1058,83 @@ static void draw_quest_tab(Rectangle content, int mx, int my) {
         ui_scroll_end(&s_q_scroll);
         return;
     }
-    int lfont = mi_font_qlabel();
-    DrawText("Missions", (int)content.x, (int)y, lfont, C_REW_LABEL);
-    y += lfont + 6;
 
-    /* Wide (landscape): cards flow into two columns — each card lands in the
-     * currently shorter one — instead of a single tall stack. */
-    bool  two_col = modal_wide_layout();
-    float col_gap = two_col ? 10.0f : 0.0f;
-    float col_w   = two_col ? (content.width - col_gap) * 0.5f : content.width;
-    float col_x[2] = { content.x, content.x + col_w + col_gap };
-    float col_y[2] = { y, y };
-    for (int i = 0; i < s_q_count; i++) {
-        int c = (two_col && col_y[1] < col_y[0]) ? 1 : 0;
-        draw_quest_card(i, s_quest_codes[i], col_x[c], col_w, &col_y[c], mx, my);
+    if (0 <= s_q_expanded) {
+        draw_quest_detail(s_q_expanded, s_quest_codes[s_q_expanded],
+                          draw_content.x, draw_content.width, &y, mx, my);
+    } else {
+        int qfont = quest_grid_font();
+        float column_width = (content.width - MI_Q_GRID_GAP) * 0.5f;
+        for (int first_slot = 0; first_slot < s_q_count; first_slot += 2) {
+            QuestCardInfo left = quest_card_info(s_quest_codes[first_slot]);
+            float row_height = quest_grid_button_height(left.title, column_width, qfont);
+            QuestCardInfo right = { 0 };
+            bool has_right = first_slot + 1 < s_q_count;
+            if (has_right) {
+                right = quest_card_info(s_quest_codes[first_slot + 1]);
+                float right_height = quest_grid_button_height(right.title, column_width, qfont);
+                if (right_height > row_height) row_height = right_height;
+            }
+
+            Rectangle left_button = { content.x, y, column_width, row_height };
+            s_q_grid_btn[first_slot] = left_button;
+            draw_quest_grid_button(left_button, &left, qfont, mx, my);
+            if (has_right) {
+                Rectangle right_button = { content.x + column_width + MI_Q_GRID_GAP,
+                                           y, column_width, row_height };
+                s_q_grid_btn[first_slot + 1] = right_button;
+                draw_quest_grid_button(right_button, &right, qfont, mx, my);
+            }
+
+            y += row_height;
+            if (first_slot + 2 < s_q_count) y += MI_Q_GRID_GAP;
+        }
+        y += 4.0f;
     }
-    y = col_y[0] > col_y[1] ? col_y[0] : col_y[1];
 
     s_q_content_height = y - content_y + 4.0f;
     ui_scroll_end(&s_q_scroll);
 }
 
 static void handle_quest_click(int mx, int my) {
-    for (int i = 0; i < s_q_count; i++) {
-        if (0 == s_q_btn_kind[i] || !ui_button_hit(s_q_btn[i], mx, my)) continue;
-        if (1 == s_q_btn_kind[i]) {
-            local_player_request_quest_accept(s_entity_id, s_q_btn_code[i]);
-        } else {
-            local_player_request_quest_abandon(s_q_btn_code[i]);
+    if (0 <= s_q_expanded) {
+        if (s_q_expand_age < MODAL_POP_DURATION) return;
+        /* Detail mode: close returns to the grid; then the mission's
+         * Accept/Abandon button and reward slots. */
+        if (ui_button_hit(s_q_close, mx, my)) {
+            s_q_expanded = -1;
+            s_q_expand_age = MODAL_POP_DURATION;
+            ui_scroll_reset(&s_q_scroll);
+            return;
+        }
+        int i = s_q_expanded;
+        if (0 != s_q_btn_kind[i] && ui_button_hit(s_q_btn[i], mx, my)) {
+            if (1 == s_q_btn_kind[i]) {
+                local_player_request_quest_accept(s_entity_id, s_q_btn_code[i]);
+            } else {
+                local_player_request_quest_abandon(s_q_btn_code[i]);
+            }
+            return;
+        }
+        for (int r = 0; r < s_reward_slot_count; r++) {
+            if (item_slot_hit(s_reward_rects[r], mx, my)) {
+                ObjectLayerState ols = s_reward_ols[r];
+                es_push();
+                modal_interact_close();
+                inventory_modal_open_external(&ols);
+                inventory_modal_set_on_close(modal_interact_reopen);
+                return;
+            }
         }
         return;
     }
-    for (int i = 0; i < s_reward_slot_count; i++) {
-        if (item_slot_hit(s_reward_rects[i], mx, my)) {
-            ObjectLayerState ols = s_reward_ols[i];
-            es_push();
-            modal_interact_close();
-            inventory_modal_open_external(&ols);
-            inventory_modal_set_on_close(modal_interact_reopen);
-            return;
-        }
-    }
+
+    /* Grid mode: tapping a mission button expands its detail. */
     for (int i = 0; i < s_q_count; i++) {
-        if (CheckCollisionPointRec((Vector2){ (float)mx, (float)my }, s_q_header[i])) {
-            s_q_toggle[i].expanded = !s_q_toggle[i].expanded;
+        if (ui_button_hit(s_q_grid_btn[i], mx, my)) {
+            s_q_expanded = i;
+            s_q_expand_age = 0.0f;
+            ui_scroll_reset(&s_q_scroll);
             return;
         }
     }
@@ -936,14 +1208,27 @@ void modal_interact_draw(void) {
     else if (s_tab == MI_TAB_STATS)  draw_stats_tab(content);
     else if (s_tab == MI_TAB_QUEST)  draw_quest_tab(content, mx, my);
 
-    /* Fixed bottom bar with integration buttons (right-aligned). No background
+    /* Fixed bottom bar with integration buttons. No background
      * fill — it shares the modal's panel so the modal's bottom border stays
      * visible and the chrome reads as one surface. */
-    Rectangle chat, integration;
-    bar_buttons(card, &chat, &integration);
+    Rectangle dialog, chat, integration;
+    bar_buttons(card, &dialog, &chat, &integration);
+
+    if (viewport_is_mobile()) {
+        UIButtonStyle dialog_btn = { .text = "dialog", .icon_id = "chat",
+                                     .font_size = 12, .padding = 2.0f, .gap = 2.0f,
+                                     .bg = C_BTN, .text_color = C_TEXT };
+        ui_button_draw(dialog, &dialog_btn,
+                       ui_button_resolve_state(true, false, ui_button_hit(dialog, mx, my)));
+    }
 
     UIButtonStyle chat_btn = { .text = "Chat", .icon_id = "chat",
                                .font_size = mi_font_btn(), .bg = C_BTN, .text_color = C_TEXT };
+    if (viewport_is_mobile()) {
+        chat_btn.font_size = 12;
+        chat_btn.padding = 2.0f;
+        chat_btn.gap = 2.0f;
+    }
     ui_button_draw(chat, &chat_btn, ui_button_resolve_state(true, false, ui_button_hit(chat, mx, my)));
 
     int unread = notification_count(NOTIF_CHAT, s_entity_id);
@@ -960,6 +1245,11 @@ void modal_interact_draw(void) {
 
     UIButtonStyle integration_btn = { .text = "Integration", .icon_id = "reload",
                                       .font_size = mi_font_btn(), .bg = C_BTN, .text_color = C_TEXT };
+    if (viewport_is_mobile()) {
+        integration_btn.font_size = 12;
+        integration_btn.padding = 2.0f;
+        integration_btn.gap = 2.0f;
+    }
     ui_button_draw(integration, &integration_btn,
                    ui_button_resolve_state(true, false, ui_button_hit(integration, mx, my)));
 }
@@ -988,8 +1278,15 @@ bool modal_interact_handle_click(int mx, int my) {
     }
 
     /* Bottom bar integration buttons */
-    Rectangle chat, integration;
-    bar_buttons(card, &chat, &integration);
+    Rectangle dialog, chat, integration;
+    bar_buttons(card, &dialog, &chat, &integration);
+    if (viewport_is_mobile() && ui_button_hit(dialog, mx, my)) {
+        if (s_dialogue_opened)
+            modal_dialogue_show_fullscreen();
+        else
+            s_dialogue_open_requested = true;
+        return true;
+    }
     if (ui_button_hit(chat, mx, my)) {
         notification_clear(NOTIF_CHAT, s_entity_id);
         open_overlay(INTERACT_OVERLAY_TAB_CHAT);
@@ -1004,6 +1301,7 @@ bool modal_interact_handle_click(int mx, int my) {
 
     if (s_tab == MI_TAB_QUEST &&
         CheckCollisionPointRec((Vector2){ (float)mx, (float)my }, content)) {
+        if (0 <= s_q_expanded && s_q_expand_age < MODAL_POP_DURATION) return true;
         ui_scroll_on_press(&s_q_scroll, mx, my);
         return true;
     }

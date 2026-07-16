@@ -59,13 +59,10 @@ static bool s_dlg_started  = false;
 static bool s_quest_style  = false;
 static bool s_ended        = false;  /* all lines read at least once (entity) */
 
-/* Mobile reading modes: an ENTITY dialogue paired with the interact modal
- * starts compact — sprite plus a pulsing chat button instead of text — and
- * the button expands a fullscreen reader that hides the interact modal;
- * close-yellow returns to compact. ITEM (inventory lore) dialogues open the
- * fullscreen reader directly. Desktop is unaffected. */
+/* On mobile, paired entity dialogue stays hidden until the interact footer
+ * opens the fullscreen reader. ITEM (inventory lore) opens fullscreen
+ * directly. */
 static bool      s_fullscreen = false;
-static Rectangle s_chat_btn_rect;  /* compact-mode expand button  */
 static Rectangle s_fs_close_rect;  /* fullscreen close button     */
 
 /* Typewriter state */
@@ -112,21 +109,27 @@ static const Color C_HINT      = { 140, 140, 160, 180 };
 static const Color C_CARD_BORD = {  70,  70, 120, 200 };
 /* ── Helpers ──────────────────────────────────────────────────────────── */
 
-/* Mobile fullscreen reader: expanded from the compact chat button, or an
- * inventory-lore dialogue (always fullscreen on mobile). */
+/* Mobile fullscreen reader for an explicitly opened entity dialogue or any
+ * inventory-lore dialogue. */
 static bool dlg_fullscreen(void) {
     return viewport_is_mobile() && s_line_count > 0 &&
            (s_fullscreen || MODAL_DIALOGUE_RENDER_ITEM == s_render);
 }
 
-/* Mobile compact half-panel: sprite + pulsing chat button, no text. */
-static bool dlg_compact(void) {
-    return viewport_is_mobile() && s_line_count > 0 && !s_fullscreen &&
-           MODAL_DIALOGUE_RENDER_ENTITY == s_render;
+static bool dlg_hidden_on_mobile(void) {
+    return viewport_is_mobile() && MODAL_DIALOGUE_RENDER_ENTITY == s_render &&
+           !s_fullscreen;
 }
 
 bool modal_dialogue_is_fullscreen(void) {
     return s_open && dlg_fullscreen();
+}
+
+void modal_dialogue_show_fullscreen(void) {
+    if (!s_open || !viewport_is_mobile() ||
+        MODAL_DIALOGUE_RENDER_ENTITY != s_render || s_line_count <= 0) return;
+    s_fullscreen = true;
+    s_age = 0.0f;
 }
 
 static Rectangle panel_rect(int sw, int sh) {
@@ -309,6 +312,7 @@ bool modal_dialogue_is_open(void) { return s_open; }
 
 void modal_dialogue_update(float dt) {
     if (!s_open) return;
+    if (dlg_hidden_on_mobile()) return;
     s_age += dt;
 
     /* Typewriter: reveal one character at a time */
@@ -326,7 +330,7 @@ void modal_dialogue_update(float dt) {
 }
 
 void modal_dialogue_draw(void) {
-    if (!s_open) return;
+    if (!s_open || dlg_hidden_on_mobile()) return;
 
     int sw = GetScreenWidth();
     int sh = GetScreenHeight();
@@ -353,8 +357,8 @@ void modal_dialogue_draw(void) {
         panel.x + dlg_side_pad(), panel.y + slide_offset,
         panel.width - 2 * dlg_side_pad(), panel.height
     };
-    /* Shared modal pop (the inventory-modal pattern): the card scales in from
-     * its centre on open and on every compact↔fullscreen mode change. */
+    /* Shared modal pop: the card scales in from its centre on open and when
+     * the mobile reader opens. */
     card = modal_scale_rect(card, modal_pop_scale(s_age));
 
     /* Card background — translucent so the world reads through. Quest-talk
@@ -397,23 +401,8 @@ void modal_dialogue_draw(void) {
     /* Render-only: no dialogue lines → show the entity, no text. */
     if (s_line_count == 0) return;
 
-    /* Compact (mobile + interact): a pulsing chat button takes the text
-     * column; tapping it expands the fullscreen reader. */
-    if (dlg_compact()) {
-        float bsz   = 56.0f;
-        float pulse = 1.0f + 0.10f * sinf((float)GetTime() * 4.4f);
-        float bx = x0 + col_w + (card.width - col_w) * 0.5f - bsz * 0.5f;
-        float by = y0 + (card.height - bsz) * 0.5f;
-        s_chat_btn_rect = (Rectangle){ bx, by, bsz, bsz };
-        DrawRectangleRounded(s_chat_btn_rect, 0.3f, 6, (Color){ 40, 48, 80, 230 });
-        ui_icon_draw_ex("chat", bx + bsz * 0.5f, by + bsz * 0.5f,
-                        bsz * 0.60f * pulse, 0.0f, WHITE);
-        return;
-    }
-
-    /* Fullscreen reader expanded from the chat button: close-yellow returns
-     * to the compact state (the interact modal reappears with it). Pinned to
-     * the top-LEFT corner — the top-right belongs to the corner HUD. */
+    /* Fullscreen reader close returns to the full interact modal. Pinned to
+     * the top-left corner — the top-right belongs to the corner HUD. */
     bool fs_close = viewport_is_mobile() && s_fullscreen;
     float fs_close_sz = 34.0f;
     if (fs_close) {
@@ -506,25 +495,14 @@ void modal_dialogue_draw(void) {
 }
 
 bool modal_dialogue_handle_click(int mx, int my) {
-    if (!s_open) return false;
+    if (!s_open || dlg_hidden_on_mobile()) return false;
     if (s_age < 0.12f) return true;  /* block during pop-in */
 
     int sw = GetScreenWidth();
     int sh = GetScreenHeight();
     Rectangle card = panel_rect(sw, sh);
 
-    /* Compact (mobile + interact): the chat button expands the fullscreen
-     * reader; other panel taps are inert, outside falls to modal_interact. */
-    if (dlg_compact()) {
-        if (hit_rect(mx, my, s_chat_btn_rect)) {
-            s_fullscreen = true;
-            s_age = 0.0f; /* replay the modal pop for the mode change */
-            return true;
-        }
-        return hit_rect(mx, my, card);
-    }
-
-    /* Fullscreen reader: close-yellow collapses back to the compact state. */
+    /* Fullscreen reader: close-yellow returns to the interact modal. */
     if (viewport_is_mobile() && s_fullscreen) {
         if (hit_rect(mx, my, s_fs_close_rect)) {
             s_fullscreen = false;
@@ -567,10 +545,8 @@ bool modal_dialogue_handle_click(int mx, int my) {
          * validates for quest-talk, then stays open showing "Repeat Dialog". */
         s_ended = true;
         emit_dlg_complete();
-        /* Mobile reader expanded from the compact chat button: a finished
-         * read collapses back to the compact state (the interact modal
-         * reappears) instead of staying fullscreen. Reading state resets so
-         * re-expanding starts a fresh visual read. */
+        /* A finished mobile entity dialogue returns to the interact modal.
+         * Reading state resets so the footer opens a fresh visual read. */
         if (viewport_is_mobile() && s_fullscreen &&
             MODAL_DIALOGUE_RENDER_ENTITY == s_render) {
             s_fullscreen    = false;
