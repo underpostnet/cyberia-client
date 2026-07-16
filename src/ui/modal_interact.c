@@ -14,6 +14,7 @@
 #include "modal_dialogue.h"
 #include "modal_notification.h"
 #include "notification.h"
+#include "toolbar.h"
 #include "object_layer.h"
 #include "object_layers_management.h"
 #include "quest_progress_store.h"
@@ -268,16 +269,18 @@ static Rectangle card_rect(void) {
     int sw = GetScreenWidth();
     int sh = GetScreenHeight();
     float pad = mi_pad();
+    float top = toolbar_height() + pad; /* below the top toolbar */
     float hidden_bar_h = inventory_bar_full_height() - inventory_bar_visible_height();
     float bottom = sh * MI_TOP_FRAC - pad * 0.5f + hidden_bar_h;
     float max_bottom = sh - inventory_bar_visible_height() - pad;
     if (bottom > max_bottom) bottom = max_bottom;
-    return (Rectangle){ pad, pad, (float)sw - 2.0f * pad, bottom - pad };
+    if (bottom < top + 120.0f) bottom = top + 120.0f;
+    return (Rectangle){ pad, top, (float)sw - 2.0f * pad, bottom - top };
 }
 
 static Rectangle close_rect(Rectangle card) {
     float size = mi_close_sz();
-    return (Rectangle){ card.x + mi_pad() * 0.5f, card.y + 2.0f,
+    return (Rectangle){ card.x + card.width - size - mi_pad() * 0.5f, card.y + 2.0f,
                         size, size };
 }
 
@@ -889,7 +892,7 @@ void modal_interact_draw(void) {
     Rectangle xr = close_rect(card);
     if (s_display_name[0] != '\0') {
         int name_font = mi_font_name();
-        DrawText(s_display_name, (int)(card.x + mi_close_sz() + mi_pad() * 0.5f),
+        DrawText(s_display_name, (int)(card.x + mi_pad()),
                  (int)(card.y + (mi_header_h() - name_font) * 0.5f), name_font, C_TEXT);
     }
     UIButtonStyle close_btn = { .icon_id = "close-yellow", .no_fill = true };

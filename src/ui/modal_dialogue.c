@@ -19,8 +19,8 @@
 #include "interaction_bubble.h"
 #include "inventory_bar.h"
 #include "modal_interact.h"
-#include "modal_map.h"
 #include "modal.h"
+#include "toolbar.h"
 #include "object_layer.h"
 #include "object_layers_management.h"
 #include "ol_as_animated_ico.h"
@@ -131,8 +131,11 @@ bool modal_dialogue_is_fullscreen(void) {
 
 static Rectangle panel_rect(int sw, int sh) {
     if (dlg_fullscreen()) {
+        /* Below the top toolbar so the reader never collides with it. */
+        float top = toolbar_height();
         float bot = (float)sh - inventory_bar_visible_height();
-        return (Rectangle){ 0.0f, 0.0f, (float)sw, bot };
+        if (bot <= top) bot = top + 60.0f;
+        return (Rectangle){ 0.0f, top, (float)sw, bot - top };
     }
     float top = modal_interact_is_open()
               ? modal_interact_layout_bottom() + DLG_PANEL_GAP
@@ -408,16 +411,6 @@ void modal_dialogue_draw(void) {
         return;
     }
 
-    /* Fullscreen: the card keeps the whole screen, but the header content
-     * (close button, speaker name, first text line) starts below the corner
-     * HUD (map readout + toggle row) so it is never covered by it. */
-    float fs_top_inset = 0.0f;
-    if (dlg_fullscreen()) {
-        Rectangle hud = modal_map_bounds();
-        fs_top_inset = hud.y + hud.height + 8.0f - card.y;
-        if (fs_top_inset < 56.0f) fs_top_inset = 56.0f;
-    }
-
     /* Fullscreen reader expanded from the chat button: close-yellow returns
      * to the compact state (the interact modal reappears with it). Pinned to
      * the top-LEFT corner — the top-right belongs to the corner HUD. */
@@ -435,7 +428,7 @@ void modal_dialogue_draw(void) {
     int fs_speaker = DLG_FONT_SPEAKER;
     float txt_x    = x0 + col_w + pad;
     float txt_max  = card.x + card.width - txt_x - pad;
-    float ty       = y0 + pad + fs_top_inset;
+    float ty       = y0 + pad;
 
     if (line->speaker[0] != '\0') {
         DrawText(line->speaker, (int)txt_x, (int)ty, fs_speaker, C_SPEAKER);

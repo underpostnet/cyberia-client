@@ -23,6 +23,7 @@
 #include "js/interact_bridge.h"
 #include "modal_interact.h"
 #include "notification.h"
+#include "toolbar.h"
 #include "notify_store.h"
 #include "layer_z_order.h"
 #include "inventory_bar.h"
@@ -91,7 +92,9 @@ static bool column_hidden(void) {
 /* Fixed screen-space anchor: top-left corner with small padding.
  * The toggle never moves — it is always at the same screen position. */
 static Rectangle toggle_anchor(void) {
-    return (Rectangle){ (float)IBUBBLE_TOGGLE_PAD, (float)IBUBBLE_TOGGLE_PAD,
+    /* Below the top toolbar so the tab never clashes with it. */
+    return (Rectangle){ (float)IBUBBLE_TOGGLE_PAD,
+                        toolbar_height() + (float)IBUBBLE_TOGGLE_PAD,
                         (float)IBUBBLE_TOGGLE_SZ,  (float)IBUBBLE_TOGGLE_SZ };
 }
 
