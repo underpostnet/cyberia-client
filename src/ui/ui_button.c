@@ -107,7 +107,12 @@ void ui_button_draw(Rectangle bounds, const UIButtonStyle* style, UIButtonState 
     if (border.a != 0) {
         float bw = style->border_width > 0.0f ? style->border_width : 1.0f;
         if (UI_BUTTON_SELECTED == st) bw += 0.5f;
-        DrawRectangleLinesEx(bounds, bw, border);
+        if (style->rounded) {
+            float r = style->roundness > 0.0f ? style->roundness : 0.18f;
+            DrawRectangleRoundedLinesEx(bounds, r, 4, bw, border);
+        } else {
+            DrawRectangleLinesEx(bounds, bw, border);
+        }
     }
 
     bool  ic   = has_str(style->icon_id);
