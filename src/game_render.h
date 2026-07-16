@@ -5,12 +5,6 @@
 #include <raylib.h>
 #include <stdbool.h>
 
-/* Fullscreen toggle button geometry (top-right corner). Public so
- * ui/modal_map.c can offset its own HUD box to sit beside it — one source
- * of truth instead of a duplicated magic-number margin. */
-#define FULLSCREEN_BTN_SIZE   32
-#define FULLSCREEN_BTN_MARGIN 10
-
 /**
  * @file game_render.h
  * @brief Enhanced game rendering system
@@ -232,9 +226,6 @@ void game_render_dev_ui(void);
 void game_render_error_messages(void);
 void game_render_set_error_message(const char* msg);
 const char* game_render_get_error_message(void);
-
-/** Check if a screen point hits the top-right fullscreen toggle button. */
-bool game_render_fullscreen_btn_hit(int mx, int my);
 
 // ============================================================================
 // Texture Management

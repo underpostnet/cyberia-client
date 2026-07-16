@@ -8,34 +8,21 @@
 #include "modal_dialogue.h"
 #include "modal_instance_map.h"
 #include "modal_interact.h"
-#include "modal_map.h"
 #include "modal_notification.h"
 #include "quest_journal.h"
-#include "game_render.h"
-#include "js/fullscreen_bridge.h"
+#include "toolbar.h"
 #include "js/interact_bridge.h"
 
 bool ui_dispatch_tap(int x, int y) {
     /* Notification OK button has highest priority while visible. */
     if (modal_notification_handle_click(x, y)) return true;
 
-    /* Map toggle stays live above the expanded container so it also retracts
-     * it; the fullscreen toggle shares that top-right row, then the Instance
-     * Map container consumes presses inside its bounds. */
-    if (modal_map_handle_expand_click(x, y)) return true;
-    if (modal_instance_map_is_open() && game_render_fullscreen_btn_hit(x, y)) {
-        fullscreen_bridge_toggle();
-        return true;
-    }
+    /* Toolbar toggles (quest / map / fullscreen) stay live above every
+     * modal; the Quest Journal floats above the Instance Map container,
+     * which then consumes presses inside its bounds. */
+    if (toolbar_handle_click(x, y)) return true;
+    if (quest_journal_handle_click(x, y)) return true;
     if (modal_instance_map_handle_click(x, y)) return true;
-
-    /* Fullscreen button — must be checked before any modal that consumes
-     * clicks outside its card bounds, so the button stays actionable even
-     * when the inventory or interact modal is open. */
-    if (!modal_instance_map_is_open() && game_render_fullscreen_btn_hit(x, y)) {
-        fullscreen_bridge_toggle();
-        return true;
-    }
 
     /* Interaction and dialogue modals keep the bottom inventory companion
      * visible. Its toggle remains actionable. While the interact modal is up,
@@ -67,9 +54,6 @@ bool ui_dispatch_tap(int x, int y) {
 
     if (inventory_modal_handle_click(x, y)) return true;
 
-    /* Quest Journal (right side) before the bubble column (left side). */
-    if (quest_journal_handle_click(x, y)) return true;
-
     if (interaction_bubble_handle_click(x, y)) return true;
 
     int bar_hit = -1;
@@ -91,6 +75,6 @@ bool ui_dispatch_covers_point(int x, int y) {
      * accounts for collapse state and the always-present toggle tab). */
     if (interaction_bubble_point_covered(x, y)) return true;
     if (inventory_bar_point_covered(x, y)) return true;
-    if (game_render_fullscreen_btn_hit(x, y))   return true;
+    if (toolbar_covers_point(x, y)) return true;
     return false;
 }

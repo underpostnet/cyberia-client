@@ -8,7 +8,7 @@
 #include "domain/presentation_runtime.h"
 #include "entity_render.h"
 #include "game_state.h"
-#include "js/fullscreen_bridge.h"
+#include "ui/toolbar.h"
 #include "object_layers_management.h"
 #include "ol_as_animated_ico.h"
 #include "ui/dev_ui.h"
@@ -28,7 +28,6 @@
 #include "ui/quest_journal.h"
 #include "ui/modal_notification.h"
 #include "ui/fx_tap.h"
-#include "ui/ui_button.h"
 #include "ui/ui_icon.h"
 #include "util/log.h"
 
@@ -36,30 +35,6 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-
-/* ── Fullscreen button ────────────────────────────────────────────────── */
-/* Size/margin are public (game_render.h) so modal_map.c can offset its own
- * HUD box to sit beside this button in the top-right corner. */
-static Rectangle fullscreen_btn_rect(int sw) {
-    float x = sw - FULLSCREEN_BTN_SIZE - FULLSCREEN_BTN_MARGIN;
-    float y = FULLSCREEN_BTN_MARGIN;
-    return (Rectangle){ x, y, FULLSCREEN_BTN_SIZE, FULLSCREEN_BTN_SIZE };
-}
-
-static void draw_fullscreen_button(int sw) {
-    Rectangle r = fullscreen_btn_rect(sw);
-    int mx = GetMouseX(), my = GetMouseY();
-    bool active = fullscreen_bridge_is_active();
-    UIButtonStyle style = {
-        .icon_id    = active ? "shrink" : "fullscreen",
-        .icon_size  = FULLSCREEN_BTN_SIZE - 12,
-        .bg         = { 20, 20, 35, 200 },
-        .bg_hover   = { 50, 50, 70, 220 },
-        .border     = { 80, 80, 120, 180 },
-    };
-    UIButtonState st = ui_button_resolve_state(true, false, ui_button_hit(r, mx, my));
-    ui_button_draw(r, &style, st);
-}
 
 /* ── Portal hold progress bar ─────────────────────────────────────────── */
 #define PORTAL_BAR_W       220
@@ -94,10 +69,6 @@ static void draw_portal_progress_bar(int sw, int sh) {
     int ty = (int)(y - fs - 2);
     DrawText(label, tx + 1, ty + 1, fs, (Color){ 0, 0, 0, 200 });
     DrawText(label, tx, ty, fs, (Color){ 220, 230, 245, 245 });
-}
-
-bool game_render_fullscreen_btn_hit(int mx, int my) {
-    return ui_button_hit(fullscreen_btn_rect(GetScreenWidth()), mx, my);
 }
 
 // Global renderer instance
@@ -1068,10 +1039,6 @@ void game_render_ui(void) {
     // Entity interaction bubbles (left side, collapsible column)
     interaction_bubble_draw();
 
-
-    // Quest Journal (right side, below map info, collapsible)
-    quest_journal_draw();
-
     bool inventory_companion = modal_interact_is_open() || modal_dialogue_is_open();
     if (!inventory_companion) {
         draw_inventory_bar_with_loot_fx();
@@ -1106,14 +1073,18 @@ void game_render_ui(void) {
     // behind the translucent container).
     modal_instance_map_draw(g_renderer.screen_width, g_renderer.screen_height);
 
+    // Quest Journal (right side) — above the Instance Map container so it
+    // stays readable and interactive while the map is expanded.
+    quest_journal_draw();
+
+    // Top toolbar + the compact map readout it hosts draw above the
+    // expanded container so its toggles can retract it.
+    toolbar_draw(g_renderer.screen_width);
     modal_map_draw(g_renderer.screen_width, g_renderer.screen_height);
 
-    // Corner HUD + toggles draw above the expanded container so the Map
-    // button can retract it.
     if (presentation_runtime_dev_ui()) {
         dev_ui_draw(g_renderer.screen_width, g_renderer.screen_height, 0);
     }
-    draw_fullscreen_button(g_renderer.screen_width);
 
     // Transient notification toast — top-most, above every modal.
     modal_notification_draw();
