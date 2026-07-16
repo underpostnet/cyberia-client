@@ -102,5 +102,6 @@ void inventory_modal_update(float dt);
 void inventory_modal_draw(void);
 
 bool inventory_modal_handle_click(int mx, int my);
+bool inventory_modal_handle_wheel(float wheel_delta);
 
 #endif /* INVENTORY_MODAL_H */

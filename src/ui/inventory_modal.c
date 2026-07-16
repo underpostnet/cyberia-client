@@ -35,6 +35,7 @@
 #include "serial.h"
 #include "toolbar.h"
 #include "ui_button.h"
+#include "ui_scroll.h"
 #include "ui_state.h"
 #include "world_types.h"
 
@@ -74,6 +75,8 @@ static bool      s_dir_btn_enabled[DIR_BTN_COUNT]; /* false = no frames */
 /* Lore button (dialogue preview) */
 static Rectangle s_lore_btn_rect;
 static bool      s_lore_btn_visible = false;
+static Rectangle s_activate_btn_rect;
+static bool      s_activate_btn_visible = false;
 
 /* Skill pagination (arrow buttons when >1 skill matches the item) */
 static int       s_skill_page = 0;
@@ -81,6 +84,10 @@ static int       s_skill_total = 0;
 static Rectangle s_skill_prev_rect;
 static Rectangle s_skill_next_rect;
 static bool      s_skill_arrows_visible = false;
+
+/* Main item preview/details column; header and action controls stay fixed. */
+static UIScroll s_content_scroll;
+static float    s_content_height = 0.0f;
 
 /* ── Layout constants ───────────────────────────────────────────────────── */
 
@@ -109,6 +116,8 @@ static bool      s_skill_arrows_visible = false;
 #define DIR_BTN_H  32
 #define DIR_BTN_GAP 6
 #define MODE_BTN_W 90
+#define IM_LANDSCAPE_COLUMN_GAP 8.0f
+#define IM_LANDSCAPE_CONTROL_PAD 8.0f
 
 /* ── Colours ──────────────────────────────────────────────────────────── */
 
@@ -153,6 +162,93 @@ static float im_pad(float card_w) {
     if (pad > max) pad = max;
     return pad;
 }
+
+typedef struct {
+    Rectangle content;
+    Rectangle controls;
+    bool      has_control_column;
+} InventoryModalLayout;
+
+static bool inventory_modal_mobile_landscape(void) {
+    return inventory_modal_compact() && GetScreenWidth() > GetScreenHeight();
+}
+
+static InventoryModalLayout inventory_modal_layout(Rectangle card) {
+    float content_y = card.y + IM_HEADER_H;
+    float content_h = card.height - IM_HEADER_H;
+    if (!inventory_modal_mobile_landscape()) {
+        return (InventoryModalLayout){
+            .content = { card.x, content_y, card.width, content_h },
+        };
+    }
+
+    float content_w = (card.width - IM_LANDSCAPE_COLUMN_GAP) * (2.0f / 3.0f);
+    float controls_x = card.x + content_w + IM_LANDSCAPE_COLUMN_GAP;
+    return (InventoryModalLayout){
+        .content = { card.x, content_y, content_w, content_h },
+        .controls = { controls_x, content_y, card.x + card.width - controls_x, content_h },
+        .has_control_column = true,
+    };
+}
+
+static Rectangle inventory_activate_button_rect(Rectangle card,
+                                                InventoryModalLayout layout,
+                                                float button_w, float button_h) {
+    if (layout.has_control_column) {
+        float width = layout.controls.width - 2.0f * IM_LANDSCAPE_CONTROL_PAD;
+        return (Rectangle){ layout.controls.x + IM_LANDSCAPE_CONTROL_PAD,
+                            layout.controls.y + layout.controls.height - button_h -
+                                IM_LANDSCAPE_CONTROL_PAD,
+                            width, button_h };
+    }
+    return (Rectangle){ card.x + (card.width - button_w) * 0.5f,
+                        card.y + card.height - button_h -
+                            (inventory_modal_compact() ? 10.0f : 14.0f),
+                        button_w, button_h };
+}
+
+static Rectangle inventory_lore_button_rect(Rectangle card,
+                                            InventoryModalLayout layout,
+                                            float button_h, float lore_button_w,
+                                            float lore_button_h) {
+    if (layout.has_control_column) {
+        Rectangle activate = inventory_activate_button_rect(card, layout, 0.0f, button_h);
+        float width = layout.controls.width - 2.0f * IM_LANDSCAPE_CONTROL_PAD;
+        return (Rectangle){ layout.controls.x + IM_LANDSCAPE_CONTROL_PAD,
+                            activate.y - lore_button_h - IM_LANDSCAPE_COLUMN_GAP,
+                            width, lore_button_h };
+    }
+    return (Rectangle){ card.x + (card.width - lore_button_w) * 0.5f,
+                        card.y + card.height - button_h - lore_button_h -
+                            (inventory_modal_compact() ? 16.0f : 24.0f),
+                        lore_button_w, lore_button_h };
+}
+
+static bool inventory_lore_available(const ObjectLayerState* ols) {
+    if (s_is_external || NULL == ols || '\0' == ols->item_id[0]) return false;
+    dialogue_data_request(ols->item_id);
+    return dialogue_data_available(ols->item_id);
+}
+
+static Rectangle inventory_content_view(Rectangle card, InventoryModalLayout layout,
+                                        bool lore_available) {
+    Rectangle view = layout.content;
+    if (layout.has_control_column || s_is_external) return view;
+
+    float button_h = im_button_h();
+    Rectangle activate = inventory_activate_button_rect(card, layout, im_button_w(), button_h);
+    float bottom = activate.y - IM_LANDSCAPE_CONTROL_PAD;
+    if (lore_available) {
+        Rectangle lore = inventory_lore_button_rect(card, layout, button_h,
+                                                    im_lore_button_w(), im_lore_button_h());
+        bottom = lore.y - IM_LANDSCAPE_CONTROL_PAD;
+    }
+    if (bottom < view.y + 48.0f) bottom = view.y + 48.0f;
+    view.height = bottom - view.y;
+    return view;
+}
+
+static void inventory_modal_handle_content_click(int mx, int my);
 
 /* Callback for dialogue modal → re-opens the inventory modal at the same slot. */
 static void on_dialogue_close_reopen(void) {
@@ -272,6 +368,8 @@ void inventory_modal_init(ObjectLayersManager* ol_manager) {
     s_open       = false;
     s_inv_idx    = -1;
     s_age        = 0.0f;
+    ui_scroll_reset(&s_content_scroll);
+    s_content_height = 0.0f;
 }
 
 /* The item currently shown: an external read-only item, or a player slot. */
@@ -290,6 +388,10 @@ static void reset_view_state(void) {
     s_skill_page = 0;
     s_skill_total = 0;
     s_skill_arrows_visible = false;
+    s_lore_btn_visible = false;
+    s_activate_btn_visible = false;
+    ui_scroll_reset(&s_content_scroll);
+    s_content_height = 0.0f;
 }
 
 void inventory_modal_open(int inv_idx) {
@@ -335,9 +437,66 @@ void inventory_modal_close(void) {
 
 bool inventory_modal_is_open(void) { return s_open; }
 
+static void inventory_modal_handle_content_click(int mx, int my) {
+    const char* dirs[4] = { "up", "down", "left", "right" };
+    for (int i = 0; i < 4; i++) {
+        if (s_dir_btn_enabled[i] && hit_rect(mx, my, s_dir_btn_rects[i])) {
+            strncpy(s_dir, dirs[i], sizeof(s_dir) - 1);
+            rebuild_dir_str();
+            return;
+        }
+    }
+
+    if (s_dir_btn_enabled[4] && hit_rect(mx, my, s_dir_btn_rects[4])) {
+        if (0 == strcmp(s_mode, "idle"))
+            strncpy(s_mode, "walking", sizeof(s_mode) - 1);
+        else
+            strncpy(s_mode, "idle", sizeof(s_mode) - 1);
+        rebuild_dir_str();
+        return;
+    }
+
+    if (s_skill_arrows_visible && s_skill_total > 1) {
+        if (s_skill_page > 0 && hit_rect(mx, my, s_skill_prev_rect)) {
+            s_skill_page--;
+            return;
+        }
+        if (s_skill_page < s_skill_total - 1 && hit_rect(mx, my, s_skill_next_rect)) {
+            s_skill_page++;
+        }
+    }
+}
+
 void inventory_modal_update(float dt) {
     if (!s_open) return;
     s_age += dt;
+
+    const ObjectLayerState* ols = current_ols();
+    if (NULL == ols) return;
+    Rectangle card = card_rect(GetScreenWidth(), GetScreenHeight(), 1.0f);
+    InventoryModalLayout layout = inventory_modal_layout(card);
+    Rectangle view = inventory_content_view(card, layout, inventory_lore_available(ols));
+    ui_scroll_update(&s_content_scroll, view, s_content_height, dt);
+
+    int click_x, click_y;
+    if (ui_scroll_take_click(&s_content_scroll, &click_x, &click_y))
+        inventory_modal_handle_content_click(click_x, click_y);
+}
+
+bool inventory_modal_handle_wheel(float wheel_delta) {
+    if (!s_open || s_age < MODAL_POP_DURATION) return false;
+
+    Rectangle card = card_rect(GetScreenWidth(), GetScreenHeight(), 1.0f);
+    Vector2 pointer = GetMousePosition();
+    if (!CheckCollisionPointRec(pointer, card)) return false;
+
+    const ObjectLayerState* ols = current_ols();
+    if (NULL == ols) return true;
+    InventoryModalLayout layout = inventory_modal_layout(card);
+    Rectangle view = inventory_content_view(card, layout, inventory_lore_available(ols));
+    if (CheckCollisionPointRec(pointer, view))
+        ui_scroll_on_wheel(&s_content_scroll, view, s_content_height, wheel_delta);
+    return true;
 }
 
 void inventory_modal_draw(void) {
@@ -362,10 +521,21 @@ void inventory_modal_draw(void) {
     DrawRectangle((int)card.x, (int)card.y, (int)card.width, (int)IM_HEADER_H,
                   (Color){ C_CARD_BORDER.r, C_CARD_BORDER.g, C_CARD_BORDER.b, 40 });
 
-    float cx  = card.x;
-    float cy  = card.y + IM_HEADER_H;   /* content starts below the header */
-    float cw  = card.width;
+    bool lore_available = inventory_lore_available(ols);
+    InventoryModalLayout layout = inventory_modal_layout(card);
+    Rectangle content_view = inventory_content_view(card, layout, lore_available);
+    float content_origin_y = content_view.y - ui_scroll_offset(&s_content_scroll);
+    float cx  = layout.content.x;
+    float cy  = content_origin_y;
+    float cw  = layout.content.width;
     int   pad = (int)im_pad(cw);
+
+    if (layout.has_control_column) {
+        float divider_x = layout.controls.x - IM_LANDSCAPE_COLUMN_GAP * 0.5f;
+        DrawLine((int)divider_x, (int)(layout.content.y + 6.0f),
+                 (int)divider_x, (int)(layout.content.y + layout.content.height - 6.0f),
+                 (Color){ 70, 70, 100, 180 });
+    }
 
     /* Wide (landscape) split: sprite + direction controls in a left pane,
      * textual content in a right pane; stacked full-width otherwise. */
@@ -392,6 +562,8 @@ void inventory_modal_draw(void) {
                        ui_button_resolve_state(true, false, hit_rect(mx, my, close_r)));
     }
 
+    ui_scroll_begin(&s_content_scroll);
+
     /* ── Fetch atlas for direction button enable state ───────────────── */
     AtlasSpriteSheetData* atlas = NULL;
     if (s_ol_manager && ols->item_id[0] != '\0')
@@ -411,6 +583,7 @@ void inventory_modal_draw(void) {
     float sprite_y = cy + (inventory_modal_compact() ? 8.0f : 14.0f);
     Rectangle sprite_dst = { sprite_x, sprite_y,
                               (float)sprite_sz, (float)sprite_sz };
+    float preview_bottom = sprite_y + sprite_sz;
 
     if (ols->item_id[0] != '\0') {
         ol_as_ico_draw(s_ol_manager, ols->item_id,
@@ -472,6 +645,7 @@ void inventory_modal_draw(void) {
         Color mode_bg  = walk_mode ? C_MODE_WALK : C_MODE_IDLE;
         draw_small_btn(mr, walk_mode ? "Walking" : "Idle", NULL,
                        mode_bg, true, true, mx, my);
+        preview_bottom = row_y + dir_h;
     } else {
         /* No controls; ignore stale rects and lock the preview to the one
          * available direction. */
@@ -516,13 +690,6 @@ void inventory_modal_draw(void) {
 
     /* Dead-state ids are Fragmentation items: equippable only while dead. */
     bool is_fragment = game_state_is_dead_item(ols->item_id);
-
-    /* 7. Item name — header title, left-aligned like the interact modal. */
-    {
-        int tfs = 18;
-        DrawText(item_name, (int)(card.x + 10.0f),
-                 (int)(card.y + (IM_HEADER_H - tfs) * 0.5f), tfs, C_TITLE);
-    }
 
     /* Type badge — Fragmentation items carry the state as a type suffix. */
     if (is_fragment || (item_type && item_type[0] != '\0')) {
@@ -769,30 +936,36 @@ void inventory_modal_draw(void) {
         }
     }
 
+    float content_bottom = y_cursor > preview_bottom ? y_cursor : preview_bottom;
+    s_content_height = content_bottom - content_origin_y + 8.0f;
+    ui_scroll_end(&s_content_scroll);
+
+    /* Item name stays fixed in the header while the main column scrolls. */
+    {
+        int tfs = 18;
+        DrawText(item_name, (int)(card.x + 10.0f),
+                 (int)(card.y + (IM_HEADER_H - tfs) * 0.5f), tfs, C_TITLE);
+    }
+
     /* ── Bottom-anchored buttons ────────────────────────────────────── */
 
     /* 11. Lore button — visible only when dialogue data exists for item.
      * Hidden for external read-only items (no player-owned dialogue flow). */
     s_lore_btn_visible = false;
-    if (!s_is_external && ols->item_id[0] != '\0') {
-        dialogue_data_request(ols->item_id);
-        if (dialogue_data_available(ols->item_id)) {
-            s_lore_btn_visible = true;
-              float lore_x = cx + (cw - lore_button_w) * 0.5f;
-              float lore_y = card.y + card.height - button_h - lore_button_h -
-                          (inventory_modal_compact() ? 16.0f : 24.0f);
-            s_lore_btn_rect = (Rectangle){ lore_x, lore_y,
-                                        lore_button_w, lore_button_h };
-            int mx = GetMouseX(), my = GetMouseY();
-            UIButtonStyle lore_btn = { .text = "Dialog", .icon_id = "chat",
-                                    .font_size = body_font, .bg = C_LORE_BTN,
-                                       .text_color = C_BTN_TEXT, .rounded = true, .roundness = 0.12f };
-            ui_button_draw(s_lore_btn_rect, &lore_btn,
-                           ui_button_resolve_state(true, false, hit_rect(mx, my, s_lore_btn_rect)));
-        }
+    if (lore_available) {
+        s_lore_btn_visible = true;
+        s_lore_btn_rect = inventory_lore_button_rect(card, layout, button_h,
+                                                      lore_button_w, lore_button_h);
+        int mx = GetMouseX(), my = GetMouseY();
+        UIButtonStyle lore_btn = { .text = "Dialog", .icon_id = "chat",
+                                   .font_size = body_font, .bg = C_LORE_BTN,
+                                   .text_color = C_BTN_TEXT, .rounded = true, .roundness = 0.12f };
+        ui_button_draw(s_lore_btn_rect, &lore_btn,
+                       ui_button_resolve_state(true, false, hit_rect(mx, my, s_lore_btn_rect)));
     }
 
     /* 12. Activate / Deactivate button — only for the player's own items. */
+    s_activate_btn_visible = false;
     if (!s_is_external) {
         bool currently_active = ols->active;
         const char* btn_label  = currently_active ? "Deactivate" : "Activate";
@@ -818,9 +991,9 @@ void inventory_modal_draw(void) {
                         : currently_active ? C_BTN_DEACT : C_BTN_ACTIVATE;
         Color txt_color = !btn_enabled ? (Color){ 100, 100, 110, 160 } : C_BTN_TEXT;
 
-        float btn_x = cx + (cw - button_w) * 0.5f;
-        float btn_y = card.y + card.height - button_h - (inventory_modal_compact() ? 10.0f : 14.0f);
-        Rectangle btn_r = (Rectangle){ btn_x, btn_y, button_w, button_h };
+        Rectangle btn_r = inventory_activate_button_rect(card, layout, button_w, button_h);
+        s_activate_btn_rect = btn_r;
+        s_activate_btn_visible = true;
         int mx = GetMouseX(), my = GetMouseY();
         UIButtonStyle act_btn = { .text = btn_label, .icon_id = btn_icon,
                                   .font_size = body_font + 2, .bg = btn_color,
@@ -848,38 +1021,6 @@ bool inventory_modal_handle_click(int mx, int my) {
                            card.y + (IM_HEADER_H - close_size) * 0.5f,
                            close_size, close_size };
     if (hit_rect(mx, my, close_r)) { inventory_modal_close(); return true; }
-
-    /* Direction buttons (0..3) */
-    const char* dirs[4] = { "up", "down", "left", "right" };
-    for (int i = 0; i < 4; i++) {
-        if (s_dir_btn_enabled[i] && hit_rect(mx, my, s_dir_btn_rects[i])) {
-            strncpy(s_dir, dirs[i], sizeof(s_dir) - 1);
-            rebuild_dir_str();
-            return true;
-        }
-    }
-
-    /* Mode toggle button (index 4) */
-    if (s_dir_btn_enabled[4] && hit_rect(mx, my, s_dir_btn_rects[4])) {
-        if (strcmp(s_mode, "idle") == 0)
-            strncpy(s_mode, "walking", sizeof(s_mode) - 1);
-        else
-            strncpy(s_mode, "idle",    sizeof(s_mode) - 1);
-        rebuild_dir_str();
-        return true;
-    }
-
-    /* Skill pagination arrows */
-    if (s_skill_arrows_visible && s_skill_total > 1) {
-        if (s_skill_page > 0 && hit_rect(mx, my, s_skill_prev_rect)) {
-            s_skill_page--;
-            return true;
-        }
-        if (s_skill_page < s_skill_total - 1 && hit_rect(mx, my, s_skill_next_rect)) {
-            s_skill_page++;
-            return true;
-        }
-    }
 
     /* Lore button */
     if (s_lore_btn_visible && hit_rect(mx, my, s_lore_btn_rect)) {
@@ -938,13 +1079,7 @@ bool inventory_modal_handle_click(int mx, int my) {
                 btn_enabled = false;
         }
         if (btn_enabled) {
-            float button_w = im_button_w();
-            float button_h = im_button_h();
-            float btn_x = card.x + (card.width - button_w) * 0.5f;
-            float btn_y = card.y + card.height - button_h -
-                          (inventory_modal_compact() ? 10.0f : 14.0f);
-            Rectangle btn_r = { btn_x, btn_y, button_w, button_h };
-            if (hit_rect(mx, my, btn_r)) {
+            if (s_activate_btn_visible && hit_rect(mx, my, s_activate_btn_rect)) {
                 bool new_active = !ols->active;
                 send_activation(ols->item_id, new_active);
 
@@ -957,6 +1092,16 @@ bool inventory_modal_handle_click(int mx, int my) {
                 inventory_modal_close();
                 return true;
             }
+        }
+    }
+
+    const ObjectLayerState* ols = current_ols();
+    if (NULL != ols) {
+        InventoryModalLayout layout = inventory_modal_layout(card);
+        Rectangle view = inventory_content_view(card, layout, inventory_lore_available(ols));
+        if (hit_rect(mx, my, view)) {
+            ui_scroll_on_press(&s_content_scroll, mx, my);
+            return true;
         }
     }
 
