@@ -1,9 +1,7 @@
 #include "modal_map.h"
-#include "modal_instance_map.h"
 #include "text.h"
-#include "ui_button.h"
+#include "toolbar.h"
 
-#include "game_render.h"
 #include "network/game_client.h"
 #include "game_state.h"
 
@@ -110,12 +108,9 @@ void modal_map_draw(int screen_width, int screen_height) {
     int w2  = MeasureText(line2, fs);
     int box_w  = (w1 > w2 ? w1 : w2) + pad * 2 + 10; /* +10 for dot */
     int box_h  = lsp * 2 + pad * 2 - 2;
-    int margin = 10;
-    /* Shifted left of its natural corner position to leave room for the Map
-     * toggle + fullscreen buttons pinned in the top-right corner. */
-    int bx = screen_width - box_w - margin
-             - 2 * (FULLSCREEN_BTN_SIZE + FULLSCREEN_BTN_MARGIN);
-    int by = margin;
+    /* Left-aligned inside the top toolbar, vertically centred on the strip. */
+    int bx = 10;
+    int by = (int)((toolbar_height() - (float)box_h) * 0.5f);
 
     g_modal_map.bounds = (Rectangle){ (float)bx, (float)by, (float)box_w, (float)box_h };
 
@@ -146,36 +141,8 @@ void modal_map_draw(int screen_width, int screen_height) {
         line2_c.a = (unsigned char)((float)line2_c.a * fade);
         shadow_text(line2, bx + pad, by + pad + lsp, fs, line2_c);
     }
-
-    /* ── Map toggle button: beside the fullscreen button, same chrome ─── */
-    g_modal_map.map_btn_bounds = (Rectangle){
-        (float)(screen_width - 2 * (FULLSCREEN_BTN_SIZE + FULLSCREEN_BTN_MARGIN)),
-        (float)FULLSCREEN_BTN_MARGIN,
-        (float)FULLSCREEN_BTN_SIZE, (float)FULLSCREEN_BTN_SIZE,
-    };
-    /* The Map button becomes the Close button while the container is
-     * expanded — one slot, one action, mirroring the fullscreen toggle. */
-    bool expanded = modal_instance_map_is_open();
-    UIButtonStyle style = {
-        .icon_id    = expanded ? "close-yellow" : "map",
-        .icon_size  = FULLSCREEN_BTN_SIZE - 12,
-        .bg         = { 20, 20, 35, 200 },
-        .bg_hover   = { 50, 50, 70, 220 },
-        .border     = { 80, 80, 120, 180 },
-        .border_selected = { 90, 210, 250, 220 },
-    };
-    Vector2 mp = GetMousePosition();
-    ui_button_draw(g_modal_map.map_btn_bounds, &style,
-                   ui_button_resolve_state(true, expanded,
-                                           CheckCollisionPointRec(mp, g_modal_map.map_btn_bounds)));
 }
 
 Rectangle modal_map_bounds(void) {
     return g_modal_map.bounds;
-}
-
-bool modal_map_handle_expand_click(int mx, int my) {
-    if (!ui_button_hit(g_modal_map.map_btn_bounds, mx, my)) return false;
-    modal_instance_map_toggle();
-    return true;
 }

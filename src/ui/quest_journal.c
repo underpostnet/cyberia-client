@@ -2,9 +2,9 @@
 #include "text.h"
 
 #include "modal.h"
-#include "modal_map.h"
 #include "quest_cache.h"
 #include "quest_progress_store.h"
+#include "toolbar.h"
 #include "ui_icon.h"
 #include "ui_toggle.h"
 
@@ -59,8 +59,9 @@ static const char* C_SECTION_LABEL[QUEST_STATUS_COUNT] = {
 
 enum { JW_DRAW, JW_CLICK, JW_MEASURE };
 
-static bool     s_init = false;
-static float    s_age  = 0.0f;
+static bool     s_init    = false;
+static bool     s_visible = false;   /* toolbar quest button toggles */
+static float    s_age     = 0.0f;
 static float    s_panel_h = QJ_HEADER_H;
 static UIToggle s_panel;
 static UIToggle s_section[QUEST_STATUS_COUNT];
@@ -71,13 +72,9 @@ static int page_count(int count) {
     return (count + QUEST_JOURNAL_PAGE_SIZE - 1) / QUEST_JOURNAL_PAGE_SIZE;
 }
 
-/* Sits directly below the map info HUD (a small margin below its bottom
- * edge) when that HUD is on screen, else falls back to the top margin —
- * dynamic so the two panels never drift apart or overlap. */
+/* Sits directly below the top toolbar. */
 static float panel_top(void) {
-    Rectangle mm = modal_map_bounds();
-    if (mm.height > 0.0f) return mm.y + mm.height + QJ_TOP_MARGIN;
-    return (float)QJ_MARGIN;
+    return toolbar_height() + QJ_TOP_MARGIN;
 }
 
 static Rectangle panel_rect(void) {
@@ -263,11 +260,21 @@ static bool journal_walk(int mode, int mx, int my) {
 /* ── Public API ───────────────────────────────────────────────────────── */
 
 void quest_journal_init(void) {
-    s_init = false;
-    s_age  = 0.0f;
+    s_init    = false;
+    s_visible = false;
+    s_age     = 0.0f;
     for (int i = 0; i < QUEST_STATUS_COUNT; ++i) {
         s_page[i] = 0;
     }
+}
+
+void quest_journal_toggle(void) {
+    s_visible = !s_visible;
+    if (s_visible) s_age = 0.0f; /* replay the panel pop on each open */
+}
+
+bool quest_journal_is_visible(void) {
+    return s_visible;
 }
 
 void quest_journal_update(float dt) {
@@ -292,6 +299,7 @@ void quest_journal_update(float dt) {
 }
 
 void quest_journal_draw(void) {
+    if (!s_visible) return;
     ensure_init();
     Rectangle panel = panel_rect();
     journal_walk(JW_MEASURE, 0, 0);                       /* size the panel */
@@ -301,6 +309,7 @@ void quest_journal_draw(void) {
 }
 
 bool quest_journal_handle_click(int mx, int my) {
+    if (!s_visible) return false;
     Rectangle panel = panel_rect();
     Rectangle bounds = { panel.x, panel.y, panel.width, s_panel_h };
     if (!hit(mx, my, bounds)) return false;

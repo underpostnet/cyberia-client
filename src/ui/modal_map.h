@@ -6,9 +6,9 @@
 
 /* modal_map — two-mode map container.
  *
- * Compact mode: minimal two-line corner readout (map code, position, fps)
- * sharing modal.c's fade-in easing, plus a Map toggle button styled like the
- * neighbouring fullscreen button (ui-icon "map").
+ * Compact mode: minimal two-line readout (map code, position, fps) sharing
+ * modal.c's fade-in easing, left-aligned inside the top toolbar. The Map
+ * toggle button lives in ui/toolbar's right-hand toggle row.
  *
  * Expanded mode: the container morphs from the compact box to the full
  * screen with an eased transition and hosts the Instance Map content
@@ -29,7 +29,6 @@ typedef struct {
 
     float age;         // seconds since init, feeds modal_pop_alpha()
     Rectangle bounds;  // last drawn compact box rect, screen pixels
-    Rectangle map_btn_bounds; // Map toggle button rect, screen pixels
 
     // Container expansion: 0 = compact readout, 1 = full-screen container.
     bool  expanded;
@@ -43,14 +42,9 @@ void modal_map_cleanup(void);
 void modal_map_update(float delta_time);
 void modal_map_draw(int screen_width, int screen_height);
 
-/* Screen-space rect of the last drawn compact box, so other UI (e.g. the
- * Quest Journal) can align beneath it. Zero-sized until the first draw.
- * Also the morph origin/target of the expanded container. */
+/* Screen-space rect of the last drawn compact box. Zero-sized until the
+ * first draw. Also the morph origin/target of the expanded container. */
 Rectangle modal_map_bounds(void);
-
-/* Map toggle button: expands/retracts the Instance Map container. Returns
- * true when the tap hit the button (works both to open and to close). */
-bool modal_map_handle_expand_click(int mx, int my);
 
 /* Container expansion state — driven by modal_instance_map open/close. */
 void  modal_map_set_expanded(bool expanded);

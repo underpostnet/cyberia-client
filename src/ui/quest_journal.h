@@ -21,4 +21,8 @@ void quest_journal_update(float dt);
 void quest_journal_draw(void);
 bool quest_journal_handle_click(int mx, int my);
 
+/* Hidden by default; the toolbar's quest button toggles it. */
+void quest_journal_toggle(void);
+bool quest_journal_is_visible(void);
+
 #endif /* QUEST_JOURNAL_H */
