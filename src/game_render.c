@@ -1039,6 +1039,9 @@ void game_render_ui(void) {
     // Entity interaction bubbles (left side, collapsible column)
     interaction_bubble_draw();
 
+    // Quest Journal (right side) — grid-level HUD, below every modal.
+    quest_journal_draw();
+
     bool inventory_companion = modal_interact_is_open() || modal_dialogue_is_open();
     if (!inventory_companion) {
         draw_inventory_bar_with_loot_fx();
@@ -1072,10 +1075,6 @@ void game_render_ui(void) {
     // visualization system above the gameplay UI (world stays visible
     // behind the translucent container).
     modal_instance_map_draw(g_renderer.screen_width, g_renderer.screen_height);
-
-    // Quest Journal (right side) — above the Instance Map container so it
-    // stays readable and interactive while the map is expanded.
-    quest_journal_draw();
 
     // Top toolbar + the compact map readout it hosts draw above the
     // expanded container so its toggles can retract it.

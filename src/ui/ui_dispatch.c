@@ -21,7 +21,6 @@ bool ui_dispatch_tap(int x, int y) {
      * modal; the Quest Journal floats above the Instance Map container,
      * which then consumes presses inside its bounds. */
     if (toolbar_handle_click(x, y)) return true;
-    if (quest_journal_handle_click(x, y)) return true;
     if (modal_instance_map_handle_click(x, y)) return true;
 
     /* Interaction and dialogue modals keep the bottom inventory companion
@@ -53,6 +52,9 @@ bool ui_dispatch_tap(int x, int y) {
     if (js_interact_overlay_is_open()) return true;
 
     if (inventory_modal_handle_click(x, y)) return true;
+
+    /* Quest Journal (right side) before the bubble column (left side). */
+    if (quest_journal_handle_click(x, y)) return true;
 
     if (interaction_bubble_handle_click(x, y)) return true;
 
