@@ -97,7 +97,6 @@ static float    s_content_height = 0.0f;
  * resolutions.                                                              */
 
 #define IM_CARD_PAD    8.0f   /* outer margin around the full-screen card    */
-#define IM_HEADER_H   36.0f   /* interact-style header strip                 */
 
 #define MODAL_SPRITE_FRAC  0.38f   /* sprite size as fraction of card width */
 #define MODAL_SPRITE_MIN   100
@@ -108,7 +107,6 @@ static float    s_content_height = 0.0f;
 #define MODAL_FONT_STAT    16
 #define MODAL_BTN_W        200
 #define MODAL_BTN_H         40
-#define MODAL_CLOSE_SIZE    36
 #define MODAL_LORE_BTN_W   200
 #define MODAL_LORE_BTN_H    36
 
@@ -149,7 +147,11 @@ static float im_button_w(void) { return inventory_modal_compact() ? 160.0f : MOD
 static float im_button_h(void) { return inventory_modal_compact() ? 34.0f : MODAL_BTN_H; }
 static float im_lore_button_w(void) { return inventory_modal_compact() ? 160.0f : MODAL_LORE_BTN_W; }
 static float im_lore_button_h(void) { return inventory_modal_compact() ? 30.0f : MODAL_LORE_BTN_H; }
-static float im_close_size(void) { return inventory_modal_compact() ? 30.0f : MODAL_CLOSE_SIZE; }
+/* Header metrics mirror the interact modal's header exactly. */
+static float im_header_h(void)    { return inventory_modal_compact() ? 36.0f : 46.0f; }
+static float im_header_pad(void)  { return inventory_modal_compact() ? 8.0f : 18.0f; }
+static int   im_header_font(void) { return inventory_modal_compact() ? 18 : 22; }
+static float im_close_size(void) { return inventory_modal_compact() ? 32.0f : 40.0f; }
 static float im_dir_button_w(void) { return inventory_modal_compact() ? 52.0f : DIR_BTN_W; }
 static float im_dir_button_h(void) { return inventory_modal_compact() ? 28.0f : DIR_BTN_H; }
 static float im_dir_button_gap(void) { return inventory_modal_compact() ? 4.0f : DIR_BTN_GAP; }
@@ -174,8 +176,8 @@ static bool inventory_modal_mobile_landscape(void) {
 }
 
 static InventoryModalLayout inventory_modal_layout(Rectangle card) {
-    float content_y = card.y + IM_HEADER_H;
-    float content_h = card.height - IM_HEADER_H;
+    float content_y = card.y + im_header_h();
+    float content_h = card.height - im_header_h();
     if (!inventory_modal_mobile_landscape()) {
         return (InventoryModalLayout){
             .content = { card.x, content_y, card.width, content_h },
@@ -518,7 +520,7 @@ void inventory_modal_draw(void) {
     Color card_bc = C_CARD_BORDER;
     card_bc.a = (unsigned char)(card_bc.a * alpha);
     DrawRectangleLinesEx(card, 1.0f, card_bc);
-    DrawRectangle((int)card.x, (int)card.y, (int)card.width, (int)IM_HEADER_H,
+    DrawRectangle((int)card.x, (int)card.y, (int)card.width, (int)im_header_h(),
                   (Color){ C_CARD_BORDER.r, C_CARD_BORDER.g, C_CARD_BORDER.b, 40 });
 
     bool lore_available = inventory_lore_available(ols);
@@ -550,11 +552,10 @@ void inventory_modal_draw(void) {
     float lore_button_w = im_lore_button_w();
     float lore_button_h = im_lore_button_h();
 
-    /* 3. Close button — right-aligned inside the header strip. */
+    /* 3. Close button — right-aligned in the header, interact geometry. */
     float close_size = im_close_size();
-    Rectangle close_r = { card.x + card.width - close_size - 4.0f,
-                           card.y + (IM_HEADER_H - close_size) * 0.5f,
-                           close_size, close_size };
+    Rectangle close_r = { card.x + card.width - close_size - im_header_pad() * 0.5f,
+                           card.y + 2.0f, close_size, close_size };
     {
         int mx = GetMouseX(), my = GetMouseY();
         UIButtonStyle close_btn = { .icon_id = "close-yellow", .no_fill = true };
@@ -940,11 +941,13 @@ void inventory_modal_draw(void) {
     s_content_height = content_bottom - content_origin_y + 8.0f;
     ui_scroll_end(&s_content_scroll);
 
-    /* Item name stays fixed in the header while the main column scrolls. */
+    /* Item name stays fixed in the header while the main column scrolls —
+     * same padding and font as the interact modal's header title. */
     {
-        int tfs = 18;
-        DrawText(item_name, (int)(card.x + 10.0f),
-                 (int)(card.y + (IM_HEADER_H - tfs) * 0.5f), tfs, C_TITLE);
+        int tfs = im_header_font();
+        /* Clears the toolbar's pinned top-left toggle when the strip hides. */
+        DrawText(item_name, (int)(card.x + TOOLBAR_BTN_SIZE + 12.0f),
+                 (int)(card.y + (im_header_h() - tfs) * 0.5f), tfs, C_TITLE);
     }
 
     /* ── Bottom-anchored buttons ────────────────────────────────────── */
@@ -1015,11 +1018,10 @@ bool inventory_modal_handle_click(int mx, int my) {
     bool inside = hit_rect(mx, my, card);
     if (!inside) { inventory_modal_close(); return true; }
 
-    /* Close button — right-aligned in the header strip */
+    /* Close button — right-aligned in the header, interact geometry */
     float close_size = im_close_size();
-    Rectangle close_r = { card.x + card.width - close_size - 4.0f,
-                           card.y + (IM_HEADER_H - close_size) * 0.5f,
-                           close_size, close_size };
+    Rectangle close_r = { card.x + card.width - close_size - im_header_pad() * 0.5f,
+                           card.y + 2.0f, close_size, close_size };
     if (hit_rect(mx, my, close_r)) { inventory_modal_close(); return true; }
 
     /* Lore button */
