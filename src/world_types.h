@@ -69,9 +69,18 @@ struct PlayerState {
  * contributor eligible to collect. Drives particle tint (gold vs gray); no
  * overhead icon. */
 #define INTERACTION_FLAG_LOOT_ELIGIBLE (1u << 2)
+#define STATUS_ICON_NONE              0
+#define STATUS_ICON_PASSIVE           1
+#define STATUS_ICON_HOSTILE           2
+#define STATUS_ICON_FROZEN            3
+#define STATUS_ICON_PLAYER            4
 #define STATUS_ICON_DEAD              5
+#define STATUS_ICON_RESOURCE          6
+#define STATUS_ICON_RESOURCE_EXTRACTED 7
 #define STATUS_ICON_ACTION_PROVIDER   8
 #define STATUS_ICON_QUEST_PROVIDER    9
+#define STATUS_ICON_PORTAL            10
+#define STATUS_ICON_PORTAL_RANDOM     11
 
 #define BOT_QUEST_CODES_MAX           8
 
