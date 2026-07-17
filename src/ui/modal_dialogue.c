@@ -370,8 +370,7 @@ void modal_dialogue_draw(void) {
         DrawRectangleLinesEx(card, 2.0f, (Color){ 230, 200, 60, 230 });
         int qs = 22;
         /* The fullscreen reader's close button owns the top-left corner. */
-        float qx_off = (viewport_is_mobile() && s_fullscreen) ? 42.0f : 0.0f;
-        ui_icon_draw("quest", card.x + 22 + qx_off, card.y + qs + 3, qs, false, 0.0f);
+        ui_icon_draw("quest", card.x + 22, card.y + qs + 3, qs, false, 0.0f);
     } else {
         DrawLine((int)card.x, (int)card.y,
                  (int)(card.x + card.width), (int)card.y, C_CARD_BORD);
@@ -406,8 +405,8 @@ void modal_dialogue_draw(void) {
     bool fs_close = viewport_is_mobile() && s_fullscreen;
     float fs_close_sz = 34.0f;
     if (fs_close) {
-        s_fs_close_rect = (Rectangle){ card.x + 8.0f, card.y + 8.0f,
-                                       fs_close_sz, fs_close_sz };
+        s_fs_close_rect = (Rectangle){ card.x + card.width - fs_close_sz - 8.0f,
+                                       card.y + 8.0f, fs_close_sz, fs_close_sz };
         UIButtonStyle cb = { .icon_id = "close-yellow", .no_fill = true };
         ui_button_draw(s_fs_close_rect, &cb, UI_BUTTON_NORMAL);
     }
@@ -428,7 +427,9 @@ void modal_dialogue_draw(void) {
         snprintf(prog, sizeof(prog), "%d / %d", s_current + 1, s_line_count);
         int pfs = DLG_FONT_HINT;
         int pw  = MeasureText(prog, pfs);
-        float prog_right = card.x + card.width - pad;
+        /* Reserve the fullscreen close button's slot so they never overlap. */
+        float prog_right = card.x + card.width - pad
+                         - (fs_close ? fs_close_sz + 10.0f : 0.0f);
         DrawText(prog, (int)(prog_right - pw), (int)(ty + 2), pfs, C_HINT);
     }
 
