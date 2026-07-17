@@ -5,6 +5,7 @@
 #include "quest_cache.h"
 #include "quest_progress_store.h"
 #include "toolbar.h"
+#include "ui_button.h"
 #include "ui_icon.h"
 #include "ui_toggle.h"
 
@@ -161,17 +162,29 @@ static bool journal_walk(int mode, int mx, int my) {
     float w = panel.width;
     float y = panel.y;
 
-    float header_h = ui_toggle_header(&s_panel, x, y, w, "Quest Journal", QJ_FONT_TITLE,
+    /* Header: collapsible title (chevron shifted left of the close button)
+     * plus a close-yellow button that hides the journal. */
+    float close_sz = 24.0f;
+    float title_w  = w - close_sz - 6.0f;
+    float header_h = ui_toggle_header(&s_panel, x, y, title_w, "Quest Journal", QJ_FONT_TITLE,
                                       C_TEXT, UI_TOGGLE_HEADER_RIGHT, QJ_HEADER_PAD, 0.0f,
                                       UI_TOGGLE_HDR_CHEVRON, false);
     Rectangle header = { x, y, w, header_h };
+    Rectangle close_r = { x + w - close_sz - 4.0f, y + (header_h - close_sz) * 0.5f,
+                          close_sz, close_sz };
     if (JW_DRAW == mode) {
         DrawRectangleRec(header, C_HEADER);
-        ui_toggle_header(&s_panel, x, y, w, "Quest Journal", QJ_FONT_TITLE,
+        ui_toggle_header(&s_panel, x, y, title_w, "Quest Journal", QJ_FONT_TITLE,
                          C_TEXT, UI_TOGGLE_HEADER_RIGHT, QJ_HEADER_PAD, 0.0f,
                          UI_TOGGLE_HDR_CHEVRON, true);
+        UIButtonStyle cb = { .icon_id = "close-yellow", .no_fill = true };
+        ui_button_draw(close_r, &cb, UI_BUTTON_NORMAL);
     } else if (JW_CLICK == mode && hit(mx, my, header)) {
-        s_panel.expanded = !s_panel.expanded; /* tap anywhere on header */
+        if (hit(mx, my, close_r)) {
+            s_visible = false;
+            return true;
+        }
+        s_panel.expanded = !s_panel.expanded; /* tap anywhere else on header */
         return true;
     }
 
