@@ -255,11 +255,13 @@ static bool quest_tab_visible(void) {
 }
 
 /* Fill `out` with the visible tab IDs in strip order; returns the count. */
+/* Quest leads the row when the entity offers missions — it is also the
+ * default active tab in that case. */
 static int visible_tabs(int out[MI_TAB_COUNT]) {
     int n = 0;
+    if (quest_tab_visible())  out[n++] = MI_TAB_QUEST;
     out[n++] = MI_TAB_STACK;
     out[n++] = MI_TAB_STATS;
-    if (quest_tab_visible())  out[n++] = MI_TAB_QUEST;
     return n;
 }
 
@@ -310,6 +312,12 @@ static Rectangle bar_rect(Rectangle card) {
 }
 
 /* Mobile adds a Dialog entry alongside the Chat and Integration controls. */
+/* Mobile shows the Dialog button only while the entity has an active
+ * dialogue; the row re-packs to two buttons otherwise. */
+static bool dialog_btn_visible(void) {
+    return viewport_is_mobile() && s_has_dialogue;
+}
+
 static void bar_buttons(Rectangle card, Rectangle* dialog, Rectangle* chat,
                         Rectangle* integration) {
     Rectangle bar = bar_rect(card);
@@ -317,11 +325,17 @@ static void bar_buttons(Rectangle card, Rectangle* dialog, Rectangle* chat,
     float button_h = mi_bar_btn_h();
     float by = bar.y + (bar.height - button_h) * 0.5f;
     if (viewport_is_mobile()) {
-        float bw = (bar.width - 2.0f * pad - 2.0f * MI_BAR_BTN_GAP) / 3.0f;
+        int   count = dialog_btn_visible() ? 3 : 2;
+        float bw = (bar.width - 2.0f * pad - (float)(count - 1) * MI_BAR_BTN_GAP)
+                   / (float)count;
         float x = bar.x + pad;
-        *dialog      = (Rectangle){ x, by, bw, button_h };
-        *chat        = (Rectangle){ x + bw + MI_BAR_BTN_GAP, by, bw, button_h };
-        *integration = (Rectangle){ x + 2.0f * (bw + MI_BAR_BTN_GAP), by, bw, button_h };
+        *dialog = (Rectangle){ 0 };
+        if (dialog_btn_visible()) {
+            *dialog = (Rectangle){ x, by, bw, button_h };
+            x += bw + MI_BAR_BTN_GAP;
+        }
+        *chat        = (Rectangle){ x, by, bw, button_h };
+        *integration = (Rectangle){ x + bw + MI_BAR_BTN_GAP, by, bw, button_h };
         return;
     }
 
@@ -528,6 +542,9 @@ void modal_interact_open(const char* entity_id, const char* display_name,
             }
         }
     }
+
+    /* The Quest tab, when offered, opens as the active tab. */
+    if (quest_tab_visible()) s_tab = MI_TAB_QUEST;
 
     /* The paired dialogue uses the pending quest dialogue when present, else
      * the skin greeting, else render-only content. Text resolves async. */
@@ -1215,7 +1232,7 @@ void modal_interact_draw(void) {
     Rectangle dialog, chat, integration;
     bar_buttons(card, &dialog, &chat, &integration);
 
-    if (viewport_is_mobile()) {
+    if (dialog_btn_visible()) {
         UIButtonStyle dialog_btn = { .text = "dialog", .icon_id = "chat",
                                      .font_size = 12, .padding = 2.0f, .gap = 2.0f,
                                      .bg = C_BTN, .text_color = C_TEXT };
@@ -1281,7 +1298,7 @@ bool modal_interact_handle_click(int mx, int my) {
     /* Bottom bar integration buttons */
     Rectangle dialog, chat, integration;
     bar_buttons(card, &dialog, &chat, &integration);
-    if (viewport_is_mobile() && ui_button_hit(dialog, mx, my)) {
+    if (dialog_btn_visible() && ui_button_hit(dialog, mx, my)) {
         if (s_dialogue_opened)
             modal_dialogue_show_fullscreen();
         else
