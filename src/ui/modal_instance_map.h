@@ -8,9 +8,8 @@
  * Renders inside modal_map's container: toggling the Map button morphs the
  * compact corner readout into a full-screen translucent panel (and retracts
  * it on close), so the two modes read as one integrated widget. This module
- * owns only the expanded content — a stylised pseudo-3D graph where maps are
- * glowing nodes, portals are animated edges, and strategic POIs (quest
- * providers, action providers, the local player) are badges on the nodes.
+ * owns only the expanded content — a packed rotatable map-card grid with
+ * animated portal edges and static presence POIs on their authored cells.
  * The world keeps rendering behind the translucent container.
  *
  * Fully independent from the gameplay renderer and camera: it owns its own

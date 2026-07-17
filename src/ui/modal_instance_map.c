@@ -4,32 +4,32 @@
 #include "modal_map.h"
 #include "text.h"
 #include "toolbar.h"
-#include "ui_button.h"
+#include "ui_icon.h"
 
+#include "domain/presentation_runtime.h"
 #include "game_state.h"
 #include "input/input.h"
 #include "texture_cache.h"
+#include "world_types.h"
 
 #include <assert.h>
+#include <limits.h>
 #include <math.h>
 #include <raylib.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 
-/* ── Presentation constants ──────────────────────────────────────────────
- * Stylised strategic view: tilted (isometric-flavoured) graph plane with
- * glowing connections. Clarity over realism — no 3D rendering. Nodes are
- * square map cards: the preview capture fills the card and strategic POIs
- * (quest/action providers, portals, player) sit at their real map cells.  */
-#define IMAP_ISO_Y          0.56f   /* vertical squash of the graph plane   */
-#define IMAP_WORLD_SCALE    250.0f  /* graph units → px at zoom 1           */
-#define IMAP_NODE_RADIUS    40.0f   /* half of the square card side at zoom 1 */
+/* ── Presentation constants ────────────────────────────────────────────── */
+#define IMAP_NODE_SIDE      88.0f
+#define IMAP_CAPABILITY_REVEAL_SIDE 320.0f
 #define IMAP_ZOOM_MIN       0.45f
-#define IMAP_ZOOM_INIT      1.5f
+#define IMAP_ZOOM_INIT      3.5f    /* several wheel steps above the old 1.5 */
 #define IMAP_ZOOM_MAX_FLOOR 3.2f
 #define IMAP_ZOOM_STEP      1.15f
 #define IMAP_DRAG_SLOP_PX   9.0f
 #define IMAP_CAM_LAMBDA     11.0f   /* exp smoothing rate for pan/zoom      */
+#define IMAP_ROTATE_DURATION 0.42f
 
 static const Color IMAP_BG        = { 6, 10, 22, 205 };
 static const Color IMAP_GRID_LINE = { 60, 140, 190, 26 };
@@ -71,6 +71,14 @@ typedef struct {
 
 static ModalInstanceMap s_m = {0};
 
+/* Quarter-turn rotation keeps the packed map-card grid flush. */
+static int       s_grid_rotation = 0;  /* settled target orientation */
+static int       s_rotation_from = 0;
+static int       s_rotation_to = 0;
+static int       s_rotation_step = 0;
+static float     s_rotation_age = IMAP_ROTATE_DURATION;
+static Rectangle s_rotate_left_btn, s_rotate_right_btn;
+
 /* Node preview backgrounds: each map's auto-captured Object Layer render,
  * fetched lazily from /api/file/blob/:id through the engine fetch pipeline. */
 static TextureCache* s_preview_cache = NULL;
@@ -85,6 +93,11 @@ void modal_instance_map_init(void) {
     memset(&s_m, 0, sizeof(s_m));
     s_m.zoom = s_m.zoom_target = IMAP_ZOOM_INIT;
     s_m.selected_node = -1;
+    s_grid_rotation = 0;
+    s_rotation_from = 0;
+    s_rotation_to = 0;
+    s_rotation_step = 0;
+    s_rotation_age = IMAP_ROTATE_DURATION;
     s_preview_cache = texture_cache_create(IMAP_MAX_NODES, "imap-preview", on_preview_blob);
 }
 
@@ -112,6 +125,10 @@ void modal_instance_map_toggle(void) {
     s_m.open = true;
     s_m.selected_node = -1;
     s_m.pressed = s_m.dragging = s_m.pinching = false;
+    s_rotation_from = s_grid_rotation;
+    s_rotation_to = s_grid_rotation;
+    s_rotation_step = 0;
+    s_rotation_age = IMAP_ROTATE_DURATION;
     reset_camera();
     instance_map_data_open();
     modal_map_set_expanded(true);      /* container morphs to full screen */
@@ -133,29 +150,56 @@ static Vector2 panel_center(void) {
                       s_m.panel.y + s_m.panel.height * 0.5f };
 }
 
-/* Graph space ([-1,1]²) → screen px, tilted plane + camera. */
-static Vector2 graph_to_screen(Vector2 g) {
+static float node_screen_side(void) {
+    return IMAP_NODE_SIDE * s_m.zoom;
+}
+
+static bool grid_rotation_animating(void) {
+    return s_rotation_age < IMAP_ROTATE_DURATION;
+}
+
+static float grid_rotation_progress(void) {
+    if (!grid_rotation_animating()) return 1.0f;
+    float t = s_rotation_age / IMAP_ROTATE_DURATION;
+    return t * t * (3.0f - 2.0f * t);
+}
+
+static float grid_rotation_angle(void) {
+    float base = (float)s_rotation_from * PI * 0.5f;
+    return base + (float)s_rotation_step * PI * 0.5f * grid_rotation_progress();
+}
+
+static float grid_rotation_card_scale(void) {
+    if (!grid_rotation_animating()) return 1.0f;
+    return 1.0f - (1.0f - 0.70710678f) * sinf(PI * grid_rotation_progress());
+}
+
+static Vector2 node_grid_offset(const ImapNode* n, float angle) {
+    const ImapGraph* gr = instance_map_data_graph();
+    float x = (float)n->grid_col - ((float)gr->grid_cols - 1.0f) * 0.5f;
+    float y = (float)n->grid_row - ((float)gr->grid_rows - 1.0f) * 0.5f;
+    float cs = cosf(angle);
+    float sn = sinf(angle);
+    return (Vector2){ x * cs - y * sn, x * sn + y * cs };
+}
+
+static Vector2 node_center(const ImapNode* n) {
     Vector2 c = panel_center();
+    Vector2 offset = node_grid_offset(n, grid_rotation_angle());
+    float side = node_screen_side();
     return (Vector2){
-        c.x + s_m.pan.x + g.x * IMAP_WORLD_SCALE * s_m.zoom,
-        c.y + s_m.pan.y + g.y * IMAP_WORLD_SCALE * IMAP_ISO_Y * s_m.zoom,
+        c.x + s_m.pan.x + offset.x * side,
+        c.y + s_m.pan.y + offset.y * side,
     };
 }
 
-/* Depth cue: nodes lower on the tilted plane render slightly larger. */
-static float node_depth_scale(Vector2 g) {
-    return 0.88f + (g.y + 1.0f) * 0.5f * 0.28f;
+static float node_screen_radius(void) {
+    return node_screen_side() * grid_rotation_card_scale() * 0.5f;
 }
 
-/* Half of the node card side, screen px. */
-static float node_screen_radius(const ImapNode* n) {
-    return IMAP_NODE_RADIUS * s_m.zoom * node_depth_scale(n->pos);
-}
-
-/* Square map card, centered on the node's layout position. */
 static Rectangle node_rect(const ImapNode* n) {
-    Vector2 p = graph_to_screen(n->pos);
-    float   h = node_screen_radius(n);
+    Vector2 p = node_center(n);
+    float   h = node_screen_radius();
     return (Rectangle){ p.x - h, p.y - h, h * 2.0f, h * 2.0f };
 }
 
@@ -164,9 +208,8 @@ static int node_at_point(float x, float y) {
     int hit = -1;
     float best = 1e9f;
     for (int i = 0; i < gr->node_count; ++i) {
-        Vector2 p = graph_to_screen(gr->nodes[i].pos);
+        Vector2 p = node_center(&gr->nodes[i]);
         Rectangle r = node_rect(&gr->nodes[i]);
-        r.x -= 6.0f; r.y -= 6.0f; r.width += 12.0f; r.height += 12.0f;
         if (!CheckCollisionPointRec((Vector2){ x, y }, r)) continue;
         float dx = x - p.x, dy = y - p.y;
         float d2 = dx * dx + dy * dy;
@@ -181,11 +224,9 @@ static float clampf(float v, float lo, float hi) {
     return v < lo ? lo : (v > hi ? hi : v);
 }
 
-/* Zooming in may continue until 1/8 of a node card spans the full panel
- * width — close enough to inspect individual POI cells on the map. */
 static float imap_zoom_max(void) {
     float w = s_m.panel.width > 4.0f ? s_m.panel.width : (float)GetScreenWidth();
-    float max = 8.0f * w / (2.0f * IMAP_NODE_RADIUS);
+    float max = 4.0f * w / IMAP_NODE_SIDE;
     return max > IMAP_ZOOM_MAX_FLOOR ? max : IMAP_ZOOM_MAX_FLOOR;
 }
 
@@ -209,8 +250,26 @@ bool modal_instance_map_handle_wheel(float wheel_delta) {
     return true;
 }
 
+static void begin_grid_rotation(int step) {
+    if (grid_rotation_animating()) return;
+    s_rotation_from = s_grid_rotation;
+    s_rotation_step = step;
+    s_grid_rotation = (s_grid_rotation + step + 4) % 4;
+    s_rotation_to = s_grid_rotation;
+    s_rotation_age = 0.0f;
+}
+
 /* Release resolution: a clean (non-drag) press acts on what it landed on. */
 static void resolve_click(Vector2 at) {
+    if (CheckCollisionPointRec(at, s_rotate_left_btn)) {
+        begin_grid_rotation(-1);
+        return;
+    }
+    if (CheckCollisionPointRec(at, s_rotate_right_btn)) {
+        begin_grid_rotation(1);
+        return;
+    }
+    if (grid_rotation_animating()) return;
     int hit = node_at_point(at.x, at.y);
     s_m.selected_node = hit; /* tapping empty space deselects */
 }
@@ -274,6 +333,15 @@ void modal_instance_map_update(float dt) {
 
     instance_map_data_update(dt);
 
+    if (grid_rotation_animating()) {
+        s_rotation_age += dt;
+        if (s_rotation_age > IMAP_ROTATE_DURATION) {
+            s_rotation_age = IMAP_ROTATE_DURATION;
+            s_rotation_from = s_rotation_to;
+            s_rotation_step = 0;
+        }
+    }
+
     /* Refetched graph → stale selection. */
     if (instance_map_data_generation() != s_m.layout_generation) {
         s_m.layout_generation = instance_map_data_generation();
@@ -311,32 +379,123 @@ static Color fade_c(Color c, float f) {
 }
 
 static void shadow_label(const char* s, int x, int y, int fs, Color c) {
-    DrawText(s, x + 1, y + 1, fs, (Color){ 0, 0, 0, (unsigned char)(150.0f * (c.a / 255.0f)) });
+    Color outline = { 0, 0, 0, c.a };
+    for (int dy = -1; dy <= 1; dy++) {
+        for (int dx = -1; dx <= 1; dx++) {
+            if (0 == dx && 0 == dy) continue;
+            DrawText(s, x + dx, y + dy, fs, outline);
+        }
+    }
     DrawText(s, x, y, fs, c);
 }
 
-/* Tilted background lattice — parallax slower than the graph for depth. */
+static Color unfiltered_icon_color(float fade) {
+    return (Color){ 255, 255, 255, (unsigned char)(255.0f * fade) };
+}
+
+static Rectangle pixel_inner(Rectangle bounds, float inset) {
+    return (Rectangle){ bounds.x + inset, bounds.y + inset,
+                        bounds.width - 2.0f * inset, bounds.height - 2.0f * inset };
+}
+
+static void draw_pixel_border(Rectangle bounds, Color accent, bool focused, float fade) {
+    if (bounds.width < 8.0f || bounds.height < 8.0f) {
+        DrawRectangleRec(bounds, fade_c(accent, fade));
+        return;
+    }
+    Color dark = fade_c((Color){ 4, 8, 16, 255 }, fade);
+    Color light = fade_c(focused ? WHITE : (Color){ 110, 140, 180, 220 }, fade);
+    Color shade = fade_c((Color){ 2, 4, 10, 255 }, fade);
+    Color edge = fade_c(accent, fade);
+    int width = (int)bounds.width;
+    int height = (int)bounds.height;
+
+    DrawRectangle((int)bounds.x, (int)bounds.y, width, 2, light);
+    DrawRectangle((int)bounds.x, (int)bounds.y, 2, height, light);
+    DrawRectangle((int)bounds.x, (int)(bounds.y + bounds.height - 2.0f), width, 2, shade);
+    DrawRectangle((int)(bounds.x + bounds.width - 2.0f), (int)bounds.y, 2, height, shade);
+    DrawRectangle((int)bounds.x, (int)(bounds.y + 4.0f), 2, height - 8, edge);
+    if (focused) {
+        DrawRectangleLinesEx(bounds, 1.0f, fade_c(WHITE, fade));
+        DrawRectangle((int)bounds.x, (int)bounds.y, 4, 4, dark);
+        DrawRectangle((int)(bounds.x + bounds.width - 4.0f), (int)bounds.y, 4, 4, dark);
+        DrawRectangle((int)bounds.x, (int)(bounds.y + bounds.height - 4.0f), 4, 4, dark);
+        DrawRectangle((int)(bounds.x + bounds.width - 4.0f),
+                      (int)(bounds.y + bounds.height - 4.0f), 4, 4, dark);
+    }
+}
+
+static void draw_pixel_panel(Rectangle bounds, Color fill, Color accent, bool focused, float fade) {
+    if (bounds.width < 4.0f || bounds.height < 4.0f) {
+        DrawRectangleRec(bounds, fade_c(fill, fade));
+        return;
+    }
+    DrawRectangleRec(bounds, fade_c(BLACK, fade));
+    Rectangle inner = pixel_inner(bounds, 2.0f);
+    DrawRectangleRec(inner, fade_c(fill, fade));
+    draw_pixel_border(bounds, accent, focused, fade);
+}
+
+static void draw_pixel_outline(Rectangle bounds, int thickness, Color color) {
+    if (bounds.width <= 0.0f || bounds.height <= 0.0f) return;
+    DrawRectangle((int)bounds.x, (int)bounds.y, (int)bounds.width, thickness, color);
+    DrawRectangle((int)bounds.x, (int)bounds.y, thickness, (int)bounds.height, color);
+    DrawRectangle((int)bounds.x, (int)(bounds.y + bounds.height - thickness),
+                  (int)bounds.width, thickness, color);
+    DrawRectangle((int)(bounds.x + bounds.width - thickness), (int)bounds.y,
+                  thickness, (int)bounds.height, color);
+}
+
+static void draw_pixel_active_pulse(Rectangle bounds, Color accent, float fade, double time) {
+    float wave = 0.5f + 0.5f * sinf((float)time * 5.0f);
+    int offset = 5 + (int)(wave * 6.0f);
+    Rectangle outer = { floorf(bounds.x) - offset, floorf(bounds.y) - offset,
+                        floorf(bounds.width) + offset * 2.0f,
+                        floorf(bounds.height) + offset * 2.0f };
+    Color outer_color = accent;
+    outer_color.a = (unsigned char)(120.0f * wave * fade);
+    Color inner_color = accent;
+    inner_color.a = (unsigned char)(220.0f * (0.55f + 0.45f * wave) * fade);
+    draw_pixel_outline(outer, 3, outer_color);
+    draw_pixel_outline(bounds, 3, inner_color);
+    DrawRectangle((int)outer.x, (int)outer.y, 4, 4, inner_color);
+    DrawRectangle((int)(outer.x + outer.width - 4.0f), (int)outer.y, 4, 4, inner_color);
+    DrawRectangle((int)outer.x, (int)(outer.y + outer.height - 4.0f), 4, 4, inner_color);
+    DrawRectangle((int)(outer.x + outer.width - 4.0f),
+                  (int)(outer.y + outer.height - 4.0f), 4, 4, inner_color);
+}
+
+static void draw_pixel_icon_button(Rectangle button, const char* icon_id, bool enabled,
+                                   int mx, int my, float fade) {
+    bool hovered = enabled && CheckCollisionPointRec((Vector2){ (float)mx, (float)my }, button);
+    Color fill = enabled ? (hovered ? (Color){ 60, 88, 124, 255 }
+                                    : (Color){ 30, 44, 68, 255 })
+                         : (Color){ 34, 38, 48, 255 };
+    Color accent = enabled ? (hovered ? IMAP_SELECTED : IMAP_NODE_LINE)
+                           : IMAP_TEXT_DIM;
+    draw_pixel_panel(button, fill, accent, hovered, fade);
+    if (enabled) {
+        float size = button.width < button.height ? button.width : button.height;
+        ui_icon_draw_ex(icon_id, button.x + button.width * 0.5f,
+                        button.y + button.height * 0.5f, size * 0.56f, 0.0f,
+                        unfiltered_icon_color(fade));
+    }
+}
+
+/* Background grid follows the packed map-card tile scale. */
 static void draw_backdrop(float fade) {
     Color line = fade_c(IMAP_GRID_LINE, fade);
-    float step = 46.0f * s_m.zoom;
+    float step = node_screen_side();
     if (step < 18.0f) step = 18.0f;
-    Vector2 c = panel_center();
-    float par = 0.35f; /* parallax factor */
-    float ox = fmodf(s_m.pan.x * par, step);
-    float oy = fmodf(s_m.pan.y * par, step * IMAP_ISO_Y);
+    float ox = fmodf(s_m.pan.x, step);
+    float oy = fmodf(s_m.pan.y, step);
 
     for (float x = s_m.panel.x + ox - step; x < s_m.panel.x + s_m.panel.width + step; x += step) {
-        DrawLineEx((Vector2){ x, s_m.panel.y }, (Vector2){ x + 26.0f, s_m.panel.y + s_m.panel.height },
-                   1.0f, line);
+        DrawRectangle((int)x, (int)s_m.panel.y, 1, (int)s_m.panel.height, line);
     }
-    for (float y = s_m.panel.y + oy - step; y < s_m.panel.y + s_m.panel.height + step; y += step * IMAP_ISO_Y) {
-        DrawLineEx((Vector2){ s_m.panel.x, y }, (Vector2){ s_m.panel.x + s_m.panel.width, y },
-                   1.0f, line);
+    for (float y = s_m.panel.y + oy - step; y < s_m.panel.y + s_m.panel.height + step; y += step) {
+        DrawRectangle((int)s_m.panel.x, (int)y, (int)s_m.panel.width, 1, line);
     }
-    /* Soft radial focus glow at the plane centre. */
-    DrawCircleGradient((Vector2){ c.x + s_m.pan.x, c.y + s_m.pan.y },
-                       260.0f * s_m.zoom,
-                       fade_c((Color){ 40, 90, 160, 26 }, fade), BLANK);
 }
 
 /* Forward decls — edge endpoints anchor to positions on the node cards. */
@@ -351,21 +510,50 @@ static Vector2 edge_endpoint(const ImapNode* n, int cell_x, int cell_y, double t
     Rectangle card = node_rect(n);
     if (cell_x < 0 || cell_y < 0) {
         float sx = (float)salt * 2.1f, sy = (float)salt * 1.3f;
-        /* Slow incommensurate-frequency roam covering the card area... */
         float fx = 0.5f + 0.36f * sinf((float)t * 0.83f + sx) * cosf((float)t * 0.31f + sy * 0.7f);
         float fy = 0.5f + 0.36f * sinf((float)t * 0.67f + sy) * cosf((float)t * 0.41f + sx * 1.9f);
-        /* ...plus a fast vibration on top. */
-        fx += sinf((float)t * 29.0f + sx) * 0.012f;
-        fy += cosf((float)t * 23.0f + sy) * 0.012f;
+        fx = floorf(fx * 8.0f + 0.5f) / 8.0f;
+        fy = floorf(fy * 8.0f + 0.5f) / 8.0f;
         return (Vector2){ card.x + fx * card.width, card.y + fy * card.height };
     }
     return cell_to_card(card, n, (float)cell_x + 0.5f, (float)cell_y + 0.5f);
 }
 
-/* Glowing connection: layered strokes + a travelling pulse dot, anchored at
- * the real portal positions on the map cards. Multiple portals between the
- * same pair of maps produce visibly distinct lines; intra-map links run
- * inside their own card. */
+static void draw_pixel_diagonal(Vector2 a, Vector2 b, Color color, float fade) {
+    float dx = b.x - a.x;
+    float dy = b.y - a.y;
+    int steps = (int)(fmaxf(fabsf(dx), fabsf(dy)) / 4.0f) + 1;
+    if (steps > 384) steps = 384;
+    Color shadow = fade_c((Color){ 0, 0, 0, 215 }, fade);
+    Color core = fade_c(color, fade);
+    Color light = fade_c((Color){ 225, 245, 255, 210 }, fade);
+    DrawLineEx(a, b, 7.0f, shadow);
+    DrawLineEx(a, b, 3.0f, core);
+    DrawLineEx(a, b, 1.0f, light);
+    int last_x = INT_MIN;
+    int last_y = INT_MIN;
+    for (int i = 0; i <= steps; i++) {
+        float progress = (float)i / (float)steps;
+        int x = (int)roundf(a.x + dx * progress);
+        int y = (int)roundf(a.y + dy * progress);
+        if (x == last_x && y == last_y) continue;
+        DrawRectangle(x - 3, y - 3, 7, 7, shadow);
+        DrawRectangle(x - 1, y - 1, 3, 3, core);
+        DrawRectangle(x - 1, y - 1, 1, 1, light);
+        last_x = x;
+        last_y = y;
+    }
+}
+
+static Vector2 pixel_path_point(Vector2 a, Vector2 b, float progress) {
+    Vector2 point = { a.x + (b.x - a.x) * progress,
+                      a.y + (b.y - a.y) * progress };
+    point.x = floorf(point.x + 0.5f);
+    point.y = floorf(point.y + 0.5f);
+    return point;
+}
+
+/* Direct diagonal pixel connection with a thicker travelling energy block. */
 static void draw_edge(const ImapEdge* e, int idx, float fade, double t) {
     const ImapGraph* gr = instance_map_data_graph();
     Color base = e->intra ? IMAP_EDGE_INTRA : IMAP_EDGE;
@@ -375,43 +563,25 @@ static void draw_edge(const ImapEdge* e, int idx, float fade, double t) {
     Vector2 b = edge_endpoint(&gr->nodes[e->target_node], e->target_cell_x, e->target_cell_y,
                               t, idx * 2 + 1);
 
-    /* Degenerate link (both endpoints random on the same map): a vibrating
-     * pulse ring at the card centre instead of a zero-length line. */
     float dx = b.x - a.x, dy = b.y - a.y;
     if (dx * dx + dy * dy < 16.0f) {
-        float pr = 6.0f + 2.0f * sinf((float)t * 5.0f + (float)idx);
-        DrawRing(a, pr - 1.5f, pr + 1.5f, 0, 360, 24, fade_c(base, fade * 0.8f));
+        int px = (int)roundf(a.x);
+        int py = (int)roundf(a.y);
+        DrawRectangle(px - 8, py - 8, 17, 17, fade_c(BLACK, fade));
+        DrawRectangle(px - 5, py - 5, 11, 11, fade_c(base, fade));
+        DrawRectangle(px - 2, py - 2, 5, 5, unfiltered_icon_color(fade));
         return;
     }
 
-    float pulse = 0.75f + 0.25f * sinf((float)t * 2.2f + (float)idx * 1.7f);
-    DrawLineEx(a, b, 7.0f, fade_c((Color){ base.r, base.g, base.b, 24 }, fade * pulse));
-    DrawLineEx(a, b, 3.6f, fade_c((Color){ base.r, base.g, base.b, 65 }, fade * pulse));
-    DrawLineEx(a, b, 1.7f, fade_c((Color){ base.r, base.g, base.b, 175 }, fade));
+    draw_pixel_diagonal(a, b, base, fade);
 
-    /* Travelling energy dot — directional flow along the portal. */
-    float ft = (float)fmod(t * 0.45 + idx * 0.19, 1.0);
-    Vector2 d = { a.x + (b.x - a.x) * ft, a.y + (b.y - a.y) * ft };
-    DrawCircleV(d, 7.0f, fade_c((Color){ base.r, base.g, base.b, 55 }, fade));
-    DrawCircleV(d, 3.2f, fade_c((Color){ 255, 255, 255, 210 }, fade));
-}
-
-static void draw_provider_badge(Vector2 at, float r, int active, int total,
-                                Color color, bool diamond, float fade, double t) {
-    if (0 == total) return;
-    bool  lit   = active > 0;
-    float pulse = lit ? 0.8f + 0.2f * sinf((float)t * 3.0f) : 1.0f;
-    Color c     = lit ? color : (Color){ 110, 120, 140, 160 };
-    if (lit) DrawCircleV(at, r + 5.0f, fade_c((Color){ c.r, c.g, c.b, 45 }, fade * pulse));
-    if (diamond) DrawPoly(at, 4, r + 2.0f, 45.0f, fade_c(c, fade));
-    else         DrawCircleV(at, r, fade_c(c, fade));
-
-    char txt[8];
-    snprintf(txt, sizeof(txt), "%d", lit ? active : total);
-    int fs = (int)(r * 1.15f);
-    int w  = MeasureText(txt, fs);
-    shadow_label(txt, (int)(at.x - w / 2.0f), (int)(at.y - fs / 2.0f), fs,
-                 fade_c((Color){ 10, 14, 24, 255 }, fade));
+    float phase = (float)fmod(t * 0.55 + idx * 0.19, 1.0);
+    Vector2 pulse = pixel_path_point(a, b, phase);
+    int px = (int)pulse.x;
+    int py = (int)pulse.y;
+    DrawRectangle(px - 7, py - 7, 15, 15, fade_c(BLACK, fade));
+    DrawRectangle(px - 5, py - 5, 11, 11, fade_c(base, fade));
+    DrawRectangle(px - 2, py - 2, 5, 5, unfiltered_icon_color(fade));
 }
 
 /* Map cell → screen position inside the node card (the preview capture and
@@ -431,144 +601,258 @@ static float poi_radius(float half_side) {
     return r < 7.0f ? 7.0f : r;
 }
 
-/* Card pass: shadow, halo, fill, preview, borders. Runs before the edges so
- * the link lines land ON the map surface, under the POI overlays. */
-static void draw_node_card(int idx, float fade, double t) {
+static uint8_t presence_status_icon(ImapPresenceStatus presence) {
+    switch (presence) {
+        case IMAP_PRESENCE_PASSIVE:       return STATUS_ICON_PASSIVE;
+        case IMAP_PRESENCE_HOSTILE:       return STATUS_ICON_HOSTILE;
+        case IMAP_PRESENCE_RESOURCE:      return STATUS_ICON_RESOURCE;
+        case IMAP_PRESENCE_PORTAL:        return STATUS_ICON_PORTAL;
+        case IMAP_PRESENCE_PORTAL_RANDOM: return STATUS_ICON_PORTAL_RANDOM;
+        case IMAP_PRESENCE_NONE:
+        default:                          return STATUS_ICON_NONE;
+    }
+}
+
+static Color presence_color(ImapPresenceStatus presence) {
+    switch (presence) {
+        case IMAP_PRESENCE_HOSTILE:       return (Color){ 220, 76, 70, 255 };
+        case IMAP_PRESENCE_RESOURCE:      return (Color){ 105, 200, 105, 255 };
+        case IMAP_PRESENCE_PORTAL:        return IMAP_EDGE;
+        case IMAP_PRESENCE_PORTAL_RANDOM: return IMAP_EDGE_INTRA;
+        case IMAP_PRESENCE_PASSIVE:       return IMAP_TEXT;
+        case IMAP_PRESENCE_NONE:
+        default:                          return IMAP_TEXT_DIM;
+    }
+}
+
+static void draw_presence_marker(Vector2 at, const char* icon, Color tint,
+                                 float size, float fade) {
+    float shell_size = floorf(size) + 6.0f;
+    Rectangle shell = { floorf(at.x - shell_size * 0.5f), floorf(at.y - shell_size * 0.5f),
+                        shell_size, shell_size };
+    draw_pixel_panel(shell, (Color){ 10, 16, 30, 220 }, tint, false, fade);
+    if (icon && '\0' != icon[0]) {
+        ui_icon_draw_ex(icon, at.x, at.y, size, 0.0f, unfiltered_icon_color(fade));
+        return;
+    }
+    float fallback_size = floorf(size * 0.55f);
+    DrawRectangle((int)(at.x - fallback_size * 0.5f), (int)(at.y - fallback_size * 0.5f),
+                  (int)fallback_size, (int)fallback_size, fade_c(tint, fade));
+}
+
+static void draw_zoomed_capability_tab(Vector2 at, const char* status_icon,
+                                       uint8_t capabilities, bool action_active,
+                                       bool quest_active, bool show_stats,
+                                       int stats_sum, Color icon_tint,
+                                       Color pulse_accent, float fade,
+                                       double time) {
+    int icon_size = 24;
+    int font_size = 16;
+    int stats_width = 0;
+    bool show_status = status_icon && '\0' != status_icon[0];
+    const char* capability_icons[2] = { 0 };
+    Color capability_colors[2] = { 0 };
+    int capability_count = 0;
+    if (capabilities & IMAP_CAPABILITY_ACTION) {
+        capability_icons[capability_count] =
+            presentation_runtime_status_icon(STATUS_ICON_ACTION_PROVIDER);
+        capability_colors[capability_count++] = action_active ? WHITE : IMAP_TEXT_DIM;
+    }
+    if (capabilities & IMAP_CAPABILITY_QUEST) {
+        capability_icons[capability_count] =
+            presentation_runtime_status_icon(STATUS_ICON_QUEST_PROVIDER);
+        capability_colors[capability_count++] = quest_active ? IMAP_QUEST : IMAP_TEXT_DIM;
+    }
+    char stats[16] = { 0 };
+    if (show_stats) {
+        snprintf(stats, sizeof(stats), "%d", stats_sum);
+        stats_width = MeasureText(stats, font_size);
+    }
+
+    float width = 0.0f;
+    bool has_item = false;
+    if (show_stats) {
+        width += icon_size + 4.0f + stats_width;
+        has_item = true;
+    }
+    if (show_status) {
+        if (has_item) width += 6.0f;
+        width += icon_size;
+        has_item = true;
+    }
+    for (int i = 0; i < capability_count; ++i) {
+        if (has_item) width += 4.0f;
+        width += icon_size;
+        has_item = true;
+    }
+    if (width < 30.0f) width = 30.0f;
+    Rectangle tab = { floorf(at.x - width * 0.5f - 5.0f), floorf(at.y - icon_size * 0.5f - 5.0f),
+                      width + 10.0f, icon_size + 10.0f };
+    draw_pixel_panel(tab, (Color){ 12, 18, 34, 238 }, icon_tint, false, fade);
+    if (action_active || quest_active)
+        draw_pixel_active_pulse(tab, action_active ? IMAP_ACTION : IMAP_QUEST, fade, time);
+    else if (0 != pulse_accent.a)
+        draw_pixel_active_pulse(tab, pulse_accent, fade, time);
+
+    float x = tab.x + 5.0f;
+    has_item = false;
+    if (show_stats) {
+        ui_icon_draw_ex("stats", x + icon_size * 0.5f, at.y, (float)icon_size, 0.0f,
+                        unfiltered_icon_color(fade));
+        x += icon_size + 4.0f;
+        shadow_label(stats, (int)x, (int)(at.y - font_size * 0.5f), font_size,
+                     fade_c(IMAP_TEXT, fade));
+        x += stats_width;
+        has_item = true;
+    }
+    if (show_status) {
+        if (has_item) x += 6.0f;
+        ui_icon_draw_ex(status_icon, x + icon_size * 0.5f, at.y, (float)icon_size, 0.0f,
+                        unfiltered_icon_color(fade));
+        x += icon_size;
+        has_item = true;
+    }
+    for (int i = 0; i < capability_count; ++i) {
+        if (has_item) x += 4.0f;
+        const char* icon = capability_icons[i];
+        if (icon && '\0' != icon[0]) {
+            ui_icon_draw_ex(icon, x + icon_size * 0.5f, at.y, (float)icon_size, 0.0f,
+                            unfiltered_icon_color(fade));
+        }
+        DrawRectangle((int)(x + icon_size * 0.5f - 2.0f), (int)(at.y + icon_size * 0.5f - 3.0f),
+                      4, 3, fade_c(capability_colors[i], fade));
+        x += icon_size;
+        has_item = true;
+    }
+}
+
+/* Card pass runs before edges so links land on the map surface. */
+static void draw_node_card(int idx, float fade, double time) {
     const ImapGraph* gr = instance_map_data_graph();
     const ImapNode*  n  = &gr->nodes[idx];
-    Vector2   p    = graph_to_screen(n->pos);
-    float     h    = node_screen_radius(n);
     Rectangle card = node_rect(n);
 
     bool selected = idx == s_m.selected_node;
-
-    /* Ground shadow sells the tilt: squashed ellipse below the card. */
-    DrawEllipse((int)p.x, (int)(card.y + card.height + h * 0.10f), h * 1.05f, h * 0.30f,
-                fade_c((Color){ 0, 0, 0, 70 }, fade));
-
-    /* Halo behind the card. */
-    Color line = selected ? IMAP_SELECTED : IMAP_NODE_LINE;
-    float halo = selected ? 0.9f + 0.1f * sinf((float)t * 4.0f) : 0.55f;
-    Rectangle halo_r = { card.x - 7.0f, card.y - 7.0f, card.width + 14.0f, card.height + 14.0f };
-    DrawRectangleRounded(halo_r, 0.10f, 6, fade_c((Color){ line.r, line.g, line.b, 26 }, fade * halo));
-
-    /* Square map card: dark fill + the preview capture filling the card. */
-    DrawRectangleRounded(card, 0.06f, 6, fade_c(IMAP_NODE_FILL, fade));
+    bool hovered = !grid_rotation_animating() &&
+        CheckCollisionPointRec(GetMousePosition(), card);
+    Color accent = selected ? IMAP_SELECTED : hovered ? (Color){ 120, 220, 255, 255 } : IMAP_NODE_LINE;
+    Color fill = selected ? (Color){ 55, 44, 24, 245 }
+               : hovered ? (Color){ 32, 48, 74, 245 }
+                         : IMAP_NODE_FILL;
+    draw_pixel_panel(card, fill, accent, selected || hovered, fade);
+    if (selected) draw_pixel_active_pulse(card, IMAP_SELECTED, fade, time);
     if ('\0' != n->preview_file_id[0]) {
         char url[128];
         snprintf(url, sizeof(url), "/api/file/blob/%s", n->preview_file_id);
         Texture2D tex = texture_cache_get(s_preview_cache, url);
         if (0 != tex.id) {
             Rectangle src  = { 0, 0, (float)tex.width, (float)tex.height };
-            Rectangle dest = { card.x + 1.5f, card.y + 1.5f, card.width - 3.0f, card.height - 3.0f };
+            Rectangle dest = pixel_inner(card, 4.0f);
             DrawTexturePro(tex, src, dest, (Vector2){ 0, 0 }, 0.0f,
-                           fade_c((Color){ 215, 225, 240, 245 }, fade));
+                           unfiltered_icon_color(fade));
         }
     }
-
-    DrawRectangleRoundedLines(card, 0.06f, 6, fade_c(line, fade));
-    Rectangle inner = { card.x + 4.0f, card.y + 4.0f, card.width - 8.0f, card.height - 8.0f };
-    DrawRectangleRoundedLines(inner, 0.06f, 6, fade_c((Color){ line.r, line.g, line.b, 60 }, fade));
+    draw_pixel_border(card, accent, selected || hovered, fade);
+    if (selected || hovered) {
+        Color spark = fade_c(selected ? IMAP_SELECTED : WHITE, fade);
+        DrawRectangle((int)(card.x + card.width - 7.0f), (int)(card.y + 3.0f), 3, 3, spark);
+        DrawRectangle((int)(card.x + card.width - 4.0f), (int)(card.y + 6.0f), 2, 2, spark);
+    }
 }
 
-/* Overlay pass: POIs, player, badges, name — above the edge lines so links
- * appear to plug into the portal icons. */
+static void draw_node_name(const ImapNode* n, Rectangle card, bool selected, float fade) {
+    int font_size = card.width >= 150.0f ? 15 : 11;
+    int max_width = (int)card.width - 8;
+    char label[IMAP_NAME_MAX];
+    strncpy(label, n->name, sizeof(label) - 1);
+    label[sizeof(label) - 1] = '\0';
+    int length = (int)strlen(label);
+    while (length > 3 && MeasureText(label, font_size) > max_width) {
+        label[--length] = '\0';
+    }
+    if (length < (int)strlen(n->name) && length >= 3) {
+        label[length - 3] = '.';
+        label[length - 2] = '.';
+        label[length - 1] = '.';
+    }
+    float label_height = (float)text_line_height(font_size) + 4.0f;
+    Rectangle strip = { card.x, card.y + card.height - label_height, card.width, label_height };
+    DrawRectangleRec(strip, fade_c((Color){ 4, 8, 16, 220 }, fade));
+    DrawRectangle((int)strip.x, (int)strip.y, (int)strip.width, 1,
+                  fade_c(selected ? IMAP_SELECTED : IMAP_NODE_LINE, fade));
+    int width = MeasureText(label, font_size);
+    shadow_label(label, (int)(card.x + (card.width - width) * 0.5f),
+                 (int)(strip.y + 2.0f), font_size,
+                 fade_c(selected ? IMAP_SELECTED : IMAP_TEXT, fade));
+}
+
+/* Overlay pass: static presence is always shown; capability tabs appear only
+ * once the card has reached the high-zoom inspection size. */
 static void draw_node_overlay(int idx, float fade, double t) {
     const ImapGraph* gr = instance_map_data_graph();
     const ImapNode*  n  = &gr->nodes[idx];
-    Vector2   p    = graph_to_screen(n->pos);
-    float     h    = node_screen_radius(n);
     Rectangle card = node_rect(n);
 
     bool selected  = idx == s_m.selected_node;
     bool is_player = 0 == strcmp(n->map_code, g_game_state.player.map_code);
 
-    /* ── POIs at their real map cells (init-spawn positions) ─────────── */
-    float pr = poi_radius(h);
-
-    /* Portal landmarks: violet ring + core. */
-    for (int i = 0; i < gr->portal_poi_count; ++i) {
-        const ImapPortalPoi* poi = &gr->portal_pois[i];
+    bool zoomed = card.width >= IMAP_CAPABILITY_REVEAL_SIDE;
+    float icon_size = zoomed ? poi_radius(node_screen_radius()) * 2.2f : 24.0f;
+    for (int i = 0; i < gr->presence_poi_count; ++i) {
+        const ImapPresencePoi* poi = &gr->presence_pois[i];
         if (poi->node != idx) continue;
         Vector2 at = cell_to_card(card, n, poi->cell_x + 0.5f, poi->cell_y + 0.5f);
-        Color pc   = poi->intra ? IMAP_EDGE_INTRA : IMAP_EDGE;
-        float spin = 0.85f + 0.15f * sinf((float)t * 2.6f + (float)i);
-        DrawRing(at, pr * 0.55f, pr * 0.85f, 0, 360, 24, fade_c(pc, fade * spin));
-        DrawCircleV(at, pr * 0.30f, fade_c((Color){ 255, 255, 255, 200 }, fade));
-    }
-
-    /* Quest providers: gold circle + "!". */
-    for (int i = 0; i < gr->quest_provider_count; ++i) {
-        const ImapProvider* qp = &gr->quest_providers[i];
-        if (qp->node != idx) continue;
-        Vector2 at  = cell_to_card(card, n, qp->cell_x + 0.5f, qp->cell_y + 0.5f);
-        bool    lit = qp->active;
-        Color   c   = lit ? IMAP_QUEST : (Color){ 130, 125, 105, 170 };
-        if (lit) {
-            float pulse = 0.75f + 0.25f * sinf((float)t * 3.4f + (float)i);
-            DrawCircleV(at, pr * 1.5f, fade_c((Color){ c.r, c.g, c.b, 50 }, fade * pulse));
+        uint8_t status = presence_status_icon(poi->presence_status);
+        const char* icon = presentation_runtime_status_icon(status);
+        Color tint = presence_color(poi->presence_status);
+        if (zoomed) {
+            /* Sum-stats readout only for plain living presence — never
+             * portals, quest/action provider cells, or provider/static
+             * behaviors (the engine zeroes those, so a 0 means "hidden"). */
+            bool living = IMAP_PRESENCE_PASSIVE == poi->presence_status ||
+                          IMAP_PRESENCE_HOSTILE == poi->presence_status ||
+                          IMAP_PRESENCE_RESOURCE == poi->presence_status;
+            bool show_stats = poi->show_stats_value && living &&
+                              0 == poi->capabilities;
+            draw_zoomed_capability_tab(at, icon, poi->capabilities, poi->action_active,
+                                       poi->quest_active, show_stats, poi->stats_sum,
+                                       tint, (Color){ 0 }, fade, t);
+        } else {
+            draw_presence_marker(at, icon, tint, icon_size, fade);
         }
-        DrawCircleV(at, pr, fade_c(c, fade));
-        int fs = (int)(pr * 1.5f);
-        int w  = MeasureText("!", fs);
-        shadow_label("!", (int)(at.x - w / 2.0f), (int)(at.y - fs / 2.0f), fs,
-                     fade_c((Color){ 20, 16, 8, 255 }, fade));
     }
 
-    /* Action providers: cyan diamond. */
-    for (int i = 0; i < gr->action_provider_count; ++i) {
-        const ImapProvider* ap = &gr->action_providers[i];
-        if (ap->node != idx) continue;
-        Vector2 at  = cell_to_card(card, n, ap->cell_x + 0.5f, ap->cell_y + 0.5f);
-        bool    lit = ap->active;
-        Color   c   = lit ? IMAP_ACTION : (Color){ 105, 130, 135, 170 };
-        if (lit) {
-            float pulse = 0.75f + 0.25f * sinf((float)t * 3.4f + (float)i);
-            DrawPoly(at, 4, pr * 1.6f, 45.0f, fade_c((Color){ c.r, c.g, c.b, 50 }, fade * pulse));
-        }
-        DrawPoly(at, 4, pr * 1.1f, 45.0f, fade_c(c, fade));
-    }
-
-    /* Local player: presence outline + marker at the live map cell. */
+    /* Local player: presence outline on the card + the same POI label as the
+     * rest at the live map cell — presence status, capabilities, and sum
+     * stats fed from the player's real state — wrapped in a green pulse. */
     if (is_player) {
         float grow = 9.0f + 3.0f * sinf((float)t * 3.2f);
         Rectangle ring = { card.x - grow, card.y - grow, card.width + grow * 2.0f, card.height + grow * 2.0f };
-        DrawRectangleRoundedLines(ring, 0.10f, 6, fade_c(IMAP_PLAYER, fade * 0.85f));
+        draw_pixel_outline(ring, 3, fade_c(IMAP_PLAYER, fade * 0.85f));
         Vector2 mp = cell_to_card(card, n,
                                   g_game_state.player.base.interp_pos.x,
                                   g_game_state.player.base.interp_pos.y);
-        DrawCircleV(mp, pr * 1.4f, fade_c((Color){ IMAP_PLAYER.r, IMAP_PLAYER.g, IMAP_PLAYER.b, 60 }, fade));
-        DrawCircleV(mp, pr * 0.65f, fade_c(IMAP_PLAYER, fade));
+        uint8_t self_status = 0 != g_game_state.player.base.status_icon
+            ? g_game_state.player.base.status_icon : STATUS_ICON_PLAYER;
+        const char* self_ic = presentation_runtime_status_icon(self_status);
+        if (zoomed) {
+            draw_zoomed_capability_tab(mp, self_ic, 0, false, false, true,
+                                       g_game_state.player.base.stats_sum,
+                                       IMAP_PLAYER, IMAP_PLAYER, fade, t);
+        } else {
+            float shell = floorf(icon_size) + 6.0f;
+            Rectangle marker = { floorf(mp.x - shell * 0.5f), floorf(mp.y - shell * 0.5f),
+                                 shell, shell };
+            draw_pixel_active_pulse(marker, IMAP_PLAYER, fade, t);
+            draw_presence_marker(mp, self_ic, IMAP_PLAYER, icon_size, fade);
+        }
     }
-
-    /* Strategic count badges pinned to the card's top corners. */
-    draw_provider_badge((Vector2){ card.x, card.y }, 12.0f,
-                        instance_map_data_node_active_quests(idx), n->quest_provider_count,
-                        IMAP_QUEST, false, fade, t);
-    draw_provider_badge((Vector2){ card.x + card.width, card.y }, 12.0f,
-                        instance_map_data_node_active_actions(idx), n->action_provider_count,
-                        IMAP_ACTION, true, fade, t);
-
-    /* Name plate. */
-    int fs = 16;
-    int w  = MeasureText(n->name, fs);
-    shadow_label(n->name, (int)(p.x - w / 2.0f), (int)(card.y + card.height + 10.0f), fs,
-                 fade_c(selected ? IMAP_SELECTED : IMAP_TEXT, fade));
+    draw_node_name(n, card, selected, fade);
 }
 
-/* Painter order: higher on the tilted plane (smaller y) draws first. */
+/* Packed cards share grid edges, so declaration order is the stable painter order. */
 static void sorted_node_order(int* order, int n) {
-    const ImapGraph* gr = instance_map_data_graph();
     for (int i = 0; i < n; ++i) order[i] = i;
-    for (int i = 1; i < n; ++i) {
-        int v = order[i];
-        int j = i - 1;
-        while (j >= 0 && gr->nodes[order[j]].pos.y > gr->nodes[v].pos.y) {
-            order[j + 1] = order[j];
-            j--;
-        }
-        order[j + 1] = v;
-    }
 }
 
 static void draw_info_panel(float fade) {
@@ -576,32 +860,109 @@ static void draw_info_panel(float fade) {
     if (s_m.selected_node < 0 || s_m.selected_node >= gr->node_count) return;
     const ImapNode* n = &gr->nodes[s_m.selected_node];
 
-    float w = 240.0f, h = 118.0f, pad = 12.0f;
-    Rectangle r = { s_m.panel.x + 14.0f, s_m.panel.y + s_m.panel.height - h - 14.0f, w, h };
-    DrawRectangleRounded(r, 0.14f, 8, fade_c((Color){ 10, 18, 32, 235 }, fade));
-    DrawRectangleRoundedLines(r, 0.14f, 8, fade_c(IMAP_SELECTED, fade * 0.8f));
+    float panel_w = 280.0f;
+    float pad = 12.0f;
+    float line_h = 20.0f;
+    int name_font = 14;
+    int sub_font = 10;
+    int stat_font = 12;
+    int icon_sz = 14;
 
-    int x = (int)(r.x + pad), y = (int)(r.y + pad);
-    shadow_label(n->name, x, y, 15, fade_c(IMAP_SELECTED, fade));
-    y += text_line_height(15) + 2;
+    /* Count lines to compute dynamic height. */
+    int lines = 1; /* name */
+    lines++;        /* sector line */
 
-    char line[96];
-    snprintf(line, sizeof(line), "SECTOR %s  ·  %dx%d", n->map_code, n->grid_x, n->grid_y);
-    shadow_label(line, x, y, 10, fade_c(IMAP_TEXT_DIM, fade));
-    y += text_line_height(10) + 5;
-
-    snprintf(line, sizeof(line), "Quest Providers   %d active / %d",
+    char quest_buf[96];
+    snprintf(quest_buf, sizeof(quest_buf), "%d active / %d",
              instance_map_data_node_active_quests(s_m.selected_node), n->quest_provider_count);
-    shadow_label(line, x, y, 12, fade_c(IMAP_QUEST, fade));
-    y += text_line_height(12) + 2;
+    if (n->quest_provider_count > 0) lines++; /* quest row */
 
-    snprintf(line, sizeof(line), "Action Providers  %d active / %d",
+    char action_buf[96];
+    snprintf(action_buf, sizeof(action_buf), "%d active / %d",
              instance_map_data_node_active_actions(s_m.selected_node), n->action_provider_count);
-    shadow_label(line, x, y, 12, fade_c(IMAP_ACTION, fade));
-    y += text_line_height(12) + 2;
+    if (n->action_provider_count > 0) lines++; /* action row */
 
-    snprintf(line, sizeof(line), "Portal Links      %d", n->portal_count);
-    shadow_label(line, x, y, 12, fade_c(IMAP_TEXT, fade));
+    if (n->portal_count > 0) lines++; /* portal row */
+
+    float content_h = pad * 2.0f + (float)lines * line_h;
+    float panel_h = content_h < 90.0f ? 90.0f : content_h;
+    float rx = s_m.panel.x + 14.0f;
+    float ry = s_m.panel.y + s_m.panel.height - panel_h - 14.0f;
+    Rectangle r = { rx, ry, panel_w, panel_h };
+
+    /* ── Panel background with pixel border ── */
+    Color fill = (Color){ 12, 20, 38, 240 };
+    draw_pixel_panel(r, fill, IMAP_SELECTED, true, fade);
+
+    /* Left accent strip (3px) like the quest grid buttons. */
+    DrawRectangle((int)r.x, (int)(r.y + 4.0f), 3, (int)(r.height - 8.0f),
+                  fade_c(IMAP_SELECTED, fade));
+
+    int x = (int)(r.x + pad + 6.0f); /* offset for accent strip */
+    int y = (int)(r.y + pad);
+
+    /* ── Node name ── */
+    {
+        int max_name_w = (int)(panel_w - pad * 2.0f - 6.0f - 8.0f);
+        char name_buf[IMAP_NAME_MAX + 4];
+        strncpy(name_buf, n->name, sizeof(name_buf) - 1);
+        name_buf[sizeof(name_buf) - 1] = '\0';
+        while ((int)strlen(name_buf) > 3 && MeasureText(name_buf, name_font) > max_name_w) {
+            name_buf[strlen(name_buf) - 1] = '\0';
+        }
+        int nlen = (int)strlen(name_buf);
+        if (nlen < (int)strlen(n->name) && nlen >= 3) {
+            name_buf[nlen - 3] = '.';
+            name_buf[nlen - 2] = '.';
+            name_buf[nlen - 1] = '.';
+            name_buf[nlen] = '\0';
+        }
+        shadow_label(name_buf, x, y, name_font, fade_c(IMAP_SELECTED, fade));
+    }
+    y += line_h;
+
+    /* ── Sector code + grid dimensions ── */
+    {
+        char line[96];
+        snprintf(line, sizeof(line), "SECTOR %s  ·  %dx%d", n->map_code, n->grid_x, n->grid_y);
+        shadow_label(line, x, y, sub_font, fade_c(IMAP_TEXT_DIM, fade));
+    }
+    y += line_h;
+
+    /* ── Quest providers ── */
+    if (n->quest_provider_count > 0) {
+        ui_icon_draw_ex("quest", (float)x + (float)icon_sz * 0.5f,
+                        (float)y + (float)line_h * 0.5f, (float)icon_sz, 0.0f,
+                        fade_c(IMAP_QUEST, fade));
+        shadow_label(quest_buf, x + icon_sz + 6, y, stat_font, fade_c(IMAP_QUEST, fade));
+        y += line_h;
+    }
+
+    /* ── Action providers ── */
+    if (n->action_provider_count > 0) {
+        const char* action_icon = presentation_runtime_status_icon(STATUS_ICON_ACTION_PROVIDER);
+        if (action_icon && '\0' != action_icon[0]) {
+            ui_icon_draw_ex(action_icon, (float)x + (float)icon_sz * 0.5f,
+                            (float)y + (float)line_h * 0.5f, (float)icon_sz, 0.0f,
+                            fade_c(IMAP_ACTION, fade));
+        }
+        shadow_label(action_buf, x + icon_sz + 6, y, stat_font, fade_c(IMAP_ACTION, fade));
+        y += line_h;
+    }
+
+    /* ── Portal links ── */
+    if (n->portal_count > 0) {
+        const char* portal_icon = presentation_runtime_status_icon(STATUS_ICON_PORTAL);
+        if (portal_icon && '\0' != portal_icon[0]) {
+            ui_icon_draw_ex(portal_icon, (float)x + (float)icon_sz * 0.5f,
+                            (float)y + (float)line_h * 0.5f, (float)icon_sz, 0.0f,
+                            fade_c(IMAP_TEXT, fade));
+        }
+        char line[48];
+        snprintf(line, sizeof(line), "%d portal%s", n->portal_count,
+                 n->portal_count == 1 ? "" : "s");
+        shadow_label(line, x + icon_sz + 6, y, stat_font, fade_c(IMAP_TEXT, fade));
+    }
 }
 
 static void draw_header(float fade) {
@@ -629,7 +990,27 @@ static void draw_header(float fade) {
                  (int)title_y + text_line_height(16) + 1, 11,
                  fade_c(IMAP_TEXT_DIM, fade));
 
-    const char* hint = "DRAG PAN · WHEEL / PINCH ZOOM · TAP NODE";
+    /* Grid rotation controls keep all map cards on the same packed tile plane. */
+    float ab = 30.0f;
+    float rotate_x = s_m.panel.x + s_m.panel.width - 2.0f * ab - 16.0f;
+    float rotate_y = s_m.panel.y + s_m.panel.height * 0.5f - ab * 0.5f;
+    s_rotate_left_btn  = (Rectangle){ rotate_x, rotate_y, ab, ab };
+    s_rotate_right_btn = (Rectangle){ rotate_x + ab + 6.0f, rotate_y, ab, ab };
+    int mx = GetMouseX();
+    int my = GetMouseY();
+    bool enabled = !grid_rotation_animating();
+    draw_pixel_icon_button(s_rotate_left_btn, "arrow-left", enabled, mx, my, fade);
+    draw_pixel_icon_button(s_rotate_right_btn, "arrow-right", enabled, mx, my, fade);
+    if (grid_rotation_animating()) {
+        int blocks = (int)(grid_rotation_progress() * 5.0f);
+        for (int i = 0; i < blocks; i++) {
+            DrawRectangle((int)(s_rotate_left_btn.x + 4.0f + i * 4.0f),
+                          (int)(s_rotate_left_btn.y + s_rotate_left_btn.height - 5.0f),
+                          3, 2, fade_c(IMAP_SELECTED, fade));
+        }
+    }
+
+    const char* hint = "DRAG PAN · WHEEL / PINCH ZOOM · ROTATE GRID · TAP NODE";
     int hw = MeasureText(hint, 10);
     shadow_label(hint, (int)(s_m.panel.x + s_m.panel.width - hw - 14.0f),
                  (int)(s_m.panel.y + s_m.panel.height - 20.0f), 10,
@@ -664,13 +1045,8 @@ void modal_instance_map_draw(int screen_width, int screen_height) {
     if (content < 0.0f) content = 0.0f;
     if (content > 1.0f) content = 1.0f;
 
-    /* Translucent panel — the gameplay grid stays visible behind it. */
-    float roundness = 0.30f * (1.0f - mt) + 0.02f * mt;
-    DrawRectangleRounded(s_m.panel, roundness, 10, fade_c(IMAP_BG, chrome));
-    DrawRectangleRoundedLines(s_m.panel, roundness, 10,
-                              fade_c((Color){ 70, 190, 240, 120 }, chrome));
-
     if (s_m.panel.width < 4.0f || s_m.panel.height < 4.0f) return;
+    draw_pixel_panel(s_m.panel, IMAP_BG, (Color){ 70, 190, 240, 180 }, false, chrome);
     BeginScissorMode((int)s_m.panel.x, (int)s_m.panel.y,
                      (int)s_m.panel.width, (int)s_m.panel.height);
 
