@@ -1,8 +1,8 @@
 #ifndef CYBERIA_UI_INSTANCE_MAP_DATA_H
 #define CYBERIA_UI_INSTANCE_MAP_DATA_H
 
-#include <raylib.h>
 #include <stdbool.h>
+#include <stdint.h>
 
 /* instance_map_data — data layer for the expanded Instance Map modal.
  *
@@ -13,16 +13,29 @@
  *   open  → GET /api/cyberia-instance/instance-map/:code/dynamic  (~1/s)
  *   close → polling stops immediately; late responses are discarded.
  *
- * Live player position never travels through this API — engine-cyberia holds
- * no simulation state. The modal overlays g_game_state's predicted position.
+ * Static POIs carry authored presence, baseline ObjectLayer stats, and
+ * capability membership. Live player position and stats remain client-side.
  */
 
 #define IMAP_MAX_NODES       48
 #define IMAP_MAX_EDGES       128
-#define IMAP_MAX_PROVIDERS   96
-#define IMAP_MAX_PORTAL_POIS 192
+#define IMAP_MAX_PRESENCE_POIS 512
 #define IMAP_CODE_MAX        64
 #define IMAP_NAME_MAX        64
+
+enum {
+    IMAP_CAPABILITY_ACTION = 1u << 0,
+    IMAP_CAPABILITY_QUEST  = 1u << 1,
+};
+
+typedef enum {
+    IMAP_PRESENCE_NONE = 0,
+    IMAP_PRESENCE_PASSIVE,
+    IMAP_PRESENCE_HOSTILE,
+    IMAP_PRESENCE_RESOURCE,
+    IMAP_PRESENCE_PORTAL,
+    IMAP_PRESENCE_PORTAL_RANDOM,
+} ImapPresenceStatus;
 
 typedef enum {
     IMAP_DATA_IDLE = 0,     /* modal closed, nothing fetched          */
@@ -40,7 +53,7 @@ typedef struct {
     int     quest_provider_count;   /* static totals bound to this map */
     int     action_provider_count;
     int     portal_count;           /* edges touching this node        */
-    Vector2 pos;                    /* layout position, graph units    */
+    int     grid_col, grid_row;     /* packed instance-map tile        */
 } ImapNode;
 
 typedef struct {
@@ -55,22 +68,16 @@ typedef struct {
 } ImapEdge;
 
 typedef struct {
-    char code[IMAP_CODE_MAX];
-    char label[IMAP_NAME_MAX];
     int  node;
     int  cell_x, cell_y;
-    /* dynamic (poll-refreshed) */
-    bool active;
-    bool acceptable;                /* quest providers: never started  */
-} ImapProvider;
-
-/* Portal landmark on a node's map: an edge endpoint with a known cell
- * (init spawn position). Random-cell endpoints carry no POI. */
-typedef struct {
-    int  node;
-    int  cell_x, cell_y;
-    bool intra;                     /* same-map portal                 */
-} ImapPortalPoi;
+    int  stats_sum;                 /* living presence only; 0 for portals */
+    bool show_stats_value;
+    ImapPresenceStatus presence_status;
+    uint8_t capabilities;
+    bool action_active;
+    bool quest_active;
+    bool quest_acceptable;
+} ImapPresencePoi;
 
 typedef struct {
     char instance_code[IMAP_CODE_MAX];
@@ -78,18 +85,13 @@ typedef struct {
 
     ImapNode nodes[IMAP_MAX_NODES];
     int      node_count;
+    int      grid_cols, grid_rows;
 
     ImapEdge edges[IMAP_MAX_EDGES];
     int      edge_count;
 
-    ImapProvider quest_providers[IMAP_MAX_PROVIDERS];
-    int          quest_provider_count;
-
-    ImapProvider action_providers[IMAP_MAX_PROVIDERS];
-    int          action_provider_count;
-
-    ImapPortalPoi portal_pois[IMAP_MAX_PORTAL_POIS];
-    int           portal_poi_count;
+    ImapPresencePoi presence_pois[IMAP_MAX_PRESENCE_POIS];
+    int             presence_poi_count;
 } ImapGraph;
 
 /* Begin the static fetch and enable dynamic polling. Requires the metadata
