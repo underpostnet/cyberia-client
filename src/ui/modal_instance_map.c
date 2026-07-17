@@ -181,10 +181,11 @@ static float clampf(float v, float lo, float hi) {
     return v < lo ? lo : (v > hi ? hi : v);
 }
 
-/* Zooming in may continue until one node card spans the full panel width. */
+/* Zooming in may continue until 1/8 of a node card spans the full panel
+ * width — close enough to inspect individual POI cells on the map. */
 static float imap_zoom_max(void) {
     float w = s_m.panel.width > 4.0f ? s_m.panel.width : (float)GetScreenWidth();
-    float max = w / (2.0f * IMAP_NODE_RADIUS);
+    float max = 8.0f * w / (2.0f * IMAP_NODE_RADIUS);
     return max > IMAP_ZOOM_MAX_FLOOR ? max : IMAP_ZOOM_MAX_FLOOR;
 }
 
