@@ -400,16 +400,13 @@ void modal_dialogue_draw(void) {
     /* Render-only: no dialogue lines → show the entity, no text. */
     if (s_line_count == 0) return;
 
-    /* Fullscreen reader close returns to the full interact modal. Pinned to
-     * the top-left corner — the top-right belongs to the corner HUD. */
-    bool fs_close = viewport_is_mobile() && s_fullscreen;
+    /* Close button in the top-right corner of the card. Always visible so the
+     * player can dismiss the dialogue without completing all lines. */
     float fs_close_sz = 34.0f;
-    if (fs_close) {
-        s_fs_close_rect = (Rectangle){ card.x + card.width - fs_close_sz - 8.0f,
-                                       card.y + 8.0f, fs_close_sz, fs_close_sz };
-        UIButtonStyle cb = { .icon_id = "close-yellow", .no_fill = true };
-        ui_button_draw(s_fs_close_rect, &cb, UI_BUTTON_NORMAL);
-    }
+    s_fs_close_rect = (Rectangle){ card.x + card.width - fs_close_sz - 8.0f,
+                                   card.y + 8.0f, fs_close_sz, fs_close_sz };
+    UIButtonStyle cb = { .icon_id = "close-yellow", .no_fill = true };
+    ui_button_draw(s_fs_close_rect, &cb, UI_BUTTON_NORMAL);
 
     /* Speaker name + progress — right of sprite column */
     const DialogueLine* line = &s_lines[s_current];
@@ -427,9 +424,8 @@ void modal_dialogue_draw(void) {
         snprintf(prog, sizeof(prog), "%d / %d", s_current + 1, s_line_count);
         int pfs = DLG_FONT_HINT;
         int pw  = MeasureText(prog, pfs);
-        /* Reserve the fullscreen close button's slot so they never overlap. */
-        float prog_right = card.x + card.width - pad
-                         - (fs_close ? fs_close_sz + 10.0f : 0.0f);
+        /* Reserve the close button's slot so they never overlap. */
+        float prog_right = card.x + card.width - pad - fs_close_sz - 10.0f;
         DrawText(prog, (int)(prog_right - pw), (int)(ty + 2), pfs, C_HINT);
     }
 
@@ -450,11 +446,11 @@ void modal_dialogue_draw(void) {
         strncpy(copy, partial, sizeof(copy) - 1);
         copy[sizeof(copy) - 1] = '\0';
 
-        char line_buf[256] = {0};
+        char line_buf[512] = {0};
         float cur_y = text_y;
         char* tok = strtok(copy, " ");
         while (tok) {
-            char test[256];
+            char test[512];
             if (line_buf[0] == '\0')
                 snprintf(test, sizeof(test), "%s", tok);
             else
@@ -503,13 +499,15 @@ bool modal_dialogue_handle_click(int mx, int my) {
     int sh = GetScreenHeight();
     Rectangle card = panel_rect(sw, sh);
 
-    /* Fullscreen reader: close-yellow returns to the interact modal. */
-    if (viewport_is_mobile() && s_fullscreen) {
-        if (hit_rect(mx, my, s_fs_close_rect)) {
+    /* Close button: dismiss the dialogue immediately. */
+    if (hit_rect(mx, my, s_fs_close_rect)) {
+        if (viewport_is_mobile() && s_fullscreen) {
             s_fullscreen = false;
-            s_age = 0.0f; /* replay the modal pop for the mode change */
-            return true;
+            s_age = 0.0f;
+        } else {
+            modal_dialogue_finish(false);
         }
+        return true;
     }
 
     bool inside = hit_rect(mx, my, card);
