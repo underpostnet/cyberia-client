@@ -22,12 +22,31 @@
 #include "util/log.h"
 #include "ui/ui_dispatch.h"
 #include "ui/fx_tap.h"
+#include "ui/interaction_bubble.h"
 #include "ui/text.h"
 #include "domain/local_player.h"
 #include "domain/local_player_view.h"
 
 static const double fixed_step = 1.0/(double)TICK_RATE_HZ;
 static double sim_acc = 0.0;
+
+/* True when the world-px tap position lands within a finger-sized radius of
+ * a quest/action provider bot. */
+static bool tap_hits_provider(Vector2 world_pos) {
+    float cell = g_game_state.cell_size > 0.0f ? g_game_state.cell_size : 12.0f;
+    for (int i = 0; i < g_game_state.bot_count; i++) {
+        const BotState* bot = &g_game_state.bots[i];
+        if ('\0' == bot->action_code[0] && 0 == bot->quest_code_count) continue;
+        float half_w = bot->base.dims.x * 0.5f;
+        float half_h = bot->base.dims.y * 0.5f;
+        float cx = (bot->base.interp_pos.x + half_w) * cell;
+        float cy = (bot->base.interp_pos.y + half_h) * cell;
+        float reach = cell * (0.9f + (half_w > half_h ? half_w : half_h));
+        float dx = world_pos.x - cx, dy = world_pos.y - cy;
+        if (dx * dx + dy * dy <= reach * reach) return true;
+    }
+    return false;
+}
 static void gameloop(void) {
     float frame_dt = GetFrameTime();
 #ifndef CYBERIA_DEBUG
@@ -81,7 +100,13 @@ static void gameloop(void) {
                 fx.scale = 1.15f;
                 fx.duration = 0.70f;
                 fx.intensity = 1.25f;
-                fx_tap_spawn(evt.screen_position, &fx);
+                fx_tap_spawn(evt.world_position, &fx);
+                /* A tap landing on a quest/action provider auto-opens the
+                 * collapsed bubble column so the interaction is reachable. */
+                if (interaction_bubble_is_collapsed() &&
+                    tap_hits_provider(evt.world_position)) {
+                    interaction_bubble_expand();
+                }
                 consumed = false; // TAP EFFECTS DON'T CONSUME THE INPUT, BUT ALSO SHOULDN'T HAPPEN BEFORE PROCESS
             }
              // unconsumed event back to the queue

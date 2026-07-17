@@ -68,6 +68,11 @@ void interaction_bubble_init(void);
 void interaction_bubble_update(void);
 void interaction_bubble_draw(void);
 bool interaction_bubble_handle_click(int mx, int my);
+
+/* Collapsed-column state + programmatic expand (e.g. a world tap landing on
+ * a quest/action provider auto-opens the column). */
+bool interaction_bubble_is_collapsed(void);
+void interaction_bubble_expand(void);
 bool interaction_bubble_handle_wheel(float wheel_delta);
 int  interaction_bubble_slot_count(void);
 

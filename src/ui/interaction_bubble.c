@@ -36,6 +36,7 @@
 #include "util/log.h"
 
 #include <assert.h>
+#include <math.h>
 #include <raylib.h>
 #include <stdio.h>
 #include <string.h>
@@ -121,6 +122,15 @@ static Rectangle column_scrollbar_bounds(Rectangle view) {
 static float column_content_height(void) {
     return (float)IBUBBLE_MARGIN_Y +
            (float)s_slot_count * (float)(IBUBBLE_ICON_SIZE + IBUBBLE_GAP);
+}
+
+bool interaction_bubble_is_collapsed(void) {
+    return s_col_init && !s_col_toggle.expanded;
+}
+
+void interaction_bubble_expand(void) {
+    if (!s_col_init) return;
+    s_col_toggle.expanded = true;
 }
 
 static void column_ensure_toggle(void) {
@@ -447,6 +457,26 @@ void interaction_bubble_draw(void) {
 
         Color border = status_border_color(slot, is_self);
         float thick = 3.0f;
+
+        /* Quest/action providers get a pulsing glow border: an animated halo
+         * behind the slot plus a breathing border thickness, gold for quest
+         * providers and cyan for action providers. */
+        uint8_t provider = slot->interaction_flags &
+                           (INTERACTION_FLAG_QUEST | INTERACTION_FLAG_ACTION);
+        if (0 != provider) {
+            float pulse = 0.5f + 0.5f * sinf((float)GetTime() * 4.2f + (float)i * 0.9f);
+            Color glow = 0 != (provider & INTERACTION_FLAG_QUEST)
+                             ? (Color){ 250, 205, 70, 255 }
+                             : (Color){ 90, 230, 235, 255 };
+            float reach = thick + 3.0f + 4.0f * pulse;
+            Rectangle halo = { r.x - reach, r.y - reach,
+                               r.width + 2.0f * reach, r.height + 2.0f * reach };
+            Color halo_c = glow;
+            halo_c.a = (unsigned char)(60.0f + 110.0f * pulse);
+            DrawRectangleRounded(halo, 0.22f, 4, halo_c);
+            border = glow;
+            thick += 1.5f * pulse;
+        }
 
         /* Draw border as a slightly larger filled rounded rect behind the slot.
          * DrawRectangleRoundedLinesEx uses GL line primitives which are
