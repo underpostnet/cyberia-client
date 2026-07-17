@@ -1,12 +1,13 @@
-// Screen-space tap feedback for the Cyberia C client.
+// Tap feedback for the Cyberia C client. Crosses are anchored at WORLD
+// positions so they stay pinned to their grid cell while the camera moves;
+// draw converts through the live camera each frame.
 //
-// Owns a small fixed pool of short-lived crosses that can be spawned at any
-// screen position by existing input or UI systems. No input handling lives here.
+// Owns a small fixed pool of short-lived crosses. No input handling here.
 //
 // Integration pattern:
 //   init:    fx_tap_init();
 //   update:  fx_tap_update(delta_time);
-//   draw:    fx_tap_draw();   // screen-space, outside BeginMode2D
+//   draw:    fx_tap_draw();   // outside BeginMode2D (converts internally)
 
 #ifndef FX_TAP_H
 #define FX_TAP_H
@@ -26,7 +27,7 @@ typedef struct {
 void fx_tap_init(void);
 void fx_tap_reset(void);
 FxTapParams fx_tap_default_params(void);
-void fx_tap_spawn(Vector2 screen_position, const FxTapParams* params);
+void fx_tap_spawn(Vector2 world_position, const FxTapParams* params);
 void fx_tap_update(float dt);
 void fx_tap_draw(void);
 

@@ -1,9 +1,12 @@
-// Screen-space tap feedback: a single electric-yellow cross with a wide black
-// border that forms at the tap center. Fixed pool, no heap allocation.
+// Tap feedback: a single electric-yellow cross with a wide black border that
+// forms at the tap's WORLD position — it stays pinned to the grid cell while
+// the camera moves. Fixed pool, no heap allocation.
 
 #include "fx_tap.h"
 
 #include "fx_shapes.h"
+
+#include "domain/camera.h"
 
 #include <math.h>
 #include <string.h>
@@ -61,7 +64,7 @@ static FxTapEntry* fx_tap_alloc_entry(void) {
     return slot;
 }
 
-static void fx_tap_draw_cross(const FxTapEntry* entry, float t) {
+static void fx_tap_draw_cross(const FxTapEntry* entry, Vector2 screen_pos, float t) {
     float grow = fx_tap_ease_out_quart(fx_tap_clampf(t / 0.22f, 0.0f, 1.0f));
     float pulse = 1.0f + 0.20f * sinf(t * FX_TAP_TAU * FX_TAP_PULSE_CYCLES);
     float size = fx_tap_snapf((14.0f + 14.0f * grow) * entry->scale * (0.90f + 0.22f * entry->intensity) * pulse);
@@ -69,8 +72,8 @@ static void fx_tap_draw_cross(const FxTapEntry* entry, float t) {
     float thickness = fx_tap_snapf(fmaxf(5.0f, size * 0.16f));
     float gap = fx_tap_snapf(fmaxf(6.0f, size * 0.30f));
     float border = fx_tap_snapf(fmaxf(3.0f, thickness * 0.60f));
-    float x = fx_tap_snapf(entry->position.x);
-    float y = fx_tap_snapf(entry->position.y);
+    float x = fx_tap_snapf(screen_pos.x);
+    float y = fx_tap_snapf(screen_pos.y);
     float half = fx_tap_snapf(thickness * 0.5f);
     Color body = entry->color;
 
@@ -100,7 +103,7 @@ FxTapParams fx_tap_default_params(void) {
     return params;
 }
 
-void fx_tap_spawn(Vector2 screen_position, const FxTapParams* params) {
+void fx_tap_spawn(Vector2 world_position, const FxTapParams* params) {
     if (!s_fx_tap_ready) fx_tap_init();
 
     FxTapParams cfg = params ? *params : fx_tap_default_params();
@@ -110,8 +113,7 @@ void fx_tap_spawn(Vector2 screen_position, const FxTapParams* params) {
     if (0 == cfg.color.a) cfg.color = fx_tap_default_params().color;
 
     FxTapEntry* entry = fx_tap_alloc_entry();
-    entry->position.x = fx_tap_snapf(screen_position.x);
-    entry->position.y = fx_tap_snapf(screen_position.y);
+    entry->position = world_position;
     entry->duration = cfg.duration;
     entry->scale = cfg.scale;
     entry->intensity = cfg.intensity;
@@ -133,11 +135,13 @@ void fx_tap_update(float dt) {
 void fx_tap_draw(void) {
     if (!s_fx_tap_ready) return;
 
+    Camera2D cam = camera_get();
     for (int i = 0; i < FX_TAP_MAX_ENTRIES; i++) {
         const FxTapEntry* entry = &s_entries[i];
         if (!entry->active || entry->duration <= 0.0f) continue;
 
+        Vector2 screen_pos = GetWorldToScreen2D(entry->position, cam);
         float t = fx_tap_clampf(entry->age / entry->duration, 0.0f, 1.0f);
-        fx_tap_draw_cross(entry, t);
+        fx_tap_draw_cross(entry, screen_pos, t);
     }
 }
