@@ -69,11 +69,12 @@ static bool  s_dlg_context = false;
 /* Max reward icons rendered per mission card. */
 #define MI_REWARD_SLOT_MAX 8
 
-/* Multi-mission quest tab: a two-column grid of wrapped mission buttons.
- * Tapping one expands that mission's full detail; its close button returns to
- * the grid. */
+/* Multi-mission quest tab: a two-column grid of summary cards. Each card has
+ * independent Expand and direct quest-action controls. */
 #define MI_QUEST_MAX 8
-static Rectangle s_q_grid_btn[MI_QUEST_MAX]; /* grid-mode mission buttons   */
+static Rectangle s_q_grid_btn[MI_QUEST_MAX]; /* grid-mode Expand buttons    */
+static Rectangle s_q_grid_action_btn[MI_QUEST_MAX];
+static int       s_q_grid_action_kind[MI_QUEST_MAX]; /* 0 none, 1 accept, 2 abandon */
 static int       s_q_expanded = -1;          /* -1 = grid of mission buttons */
 static float     s_q_expand_age = MODAL_POP_DURATION;
 static Rectangle s_q_close;                  /* detail-mode close button    */
@@ -197,6 +198,9 @@ static void es_clear(void) {
 #define MI_Q_GRID_MIN_H_MOBILE 64.0f
 #define MI_Q_GRID_MIN_H_DESKTOP 70.0f
 #define MI_FONT_QGRID_MOBILE 15
+#define MI_Q_CARD_ACTION_H_MOBILE 28.0f
+#define MI_Q_CARD_ACTION_H_DESKTOP 32.0f
+#define MI_Q_CARD_ACTION_GAP 6.0f
 
 /* Quest tab desktop enlargement. The mission cards, reward slots, toggle
  * chevrons and Accept/Abandon button read too small at the base sizes above
@@ -893,54 +897,98 @@ static float quest_grid_button_height(const char* title, float button_width,
     float content_height = text_height > icon_size ? text_height : icon_size;
     float min_height = viewport_is_mobile() ? MI_Q_GRID_MIN_H_MOBILE
                                              : MI_Q_GRID_MIN_H_DESKTOP;
-    float button_height = content_height + 2.0f * MI_Q_GRID_PAD;
+    float action_height = viewport_is_mobile() ? MI_Q_CARD_ACTION_H_MOBILE
+                                                : MI_Q_CARD_ACTION_H_DESKTOP;
+    float button_height = content_height + 2.0f * MI_Q_GRID_PAD +
+                          MI_Q_CARD_ACTION_GAP + action_height;
     return button_height > min_height ? button_height : min_height;
 }
 
-static void draw_quest_grid_button(Rectangle button, const QuestCardInfo* info,
-                                   int font, int mx, int my) {
-    bool hovered = ui_button_hit(button, mx, my);
-    Color fill = hovered ? (Color){ 255, 220, 42, 255 } : (Color){ 225, 191, 5, 255 };
-    Color highlight = hovered ? (Color){ 255, 250, 180, 255 } : (Color){ 255, 235, 110, 255 };
-    Color shadow = hovered ? (Color){ 166, 123, 0, 255 } : (Color){ 128, 92, 0, 255 };
+static int quest_grid_action_font(const char* label, float button_width) {
+    int font = viewport_is_mobile() ? 12 : 14;
+    while (font > 9 && MeasureText(label, font) > (int)button_width - 8) font--;
+    return font;
+}
+
+static void draw_quest_grid_action_button(Rectangle button, const char* label,
+                                          Color color, bool enabled, int mx, int my) {
+    bool hovered = enabled && ui_button_hit(button, mx, my);
+    Color fill = enabled ? color : (Color){ 58, 62, 76, 255 };
+    Color light = hovered ? (Color){ 255, 255, 220, 255 } : (Color){ 220, 225, 235, 190 };
+    Color shade = enabled ? (Color){ 10, 14, 24, 255 } : (Color){ 28, 30, 38, 255 };
     Rectangle inner = { button.x + 2.0f, button.y + 2.0f,
                         button.width - 4.0f, button.height - 4.0f };
 
-    DrawRectangleRounded(button, 0.18f, 6, BLACK);
-    DrawRectangleRounded(inner, 0.18f, 6, fill);
-    DrawRectangle((int)(inner.x + 6.0f), (int)inner.y,
-                  (int)(inner.width - 12.0f), 2, highlight);
-    DrawRectangle((int)inner.x, (int)(inner.y + 6.0f), 2,
-                  (int)(inner.height - 12.0f), highlight);
-    DrawRectangle((int)(inner.x + 6.0f), (int)(inner.y + inner.height - 2.0f),
-                  (int)(inner.width - 12.0f), 2, shadow);
-    DrawRectangle((int)(inner.x + inner.width - 2.0f), (int)(inner.y + 6.0f), 2,
-                  (int)(inner.height - 12.0f), shadow);
-    DrawRectangle((int)(inner.x + 6.0f), (int)(inner.y + inner.height - 4.0f),
-                  (int)(inner.width - 12.0f), 1, info->color);
-    if (hovered) {
-        DrawRectangleRoundedLinesEx(inner, 0.18f, 6, 1.0f, WHITE);
-        DrawRectangle((int)(inner.x + inner.width - 9.0f), (int)(inner.y + 5.0f), 3, 3, WHITE);
-        DrawRectangle((int)(inner.x + inner.width - 6.0f), (int)(inner.y + 8.0f), 2, 2, WHITE);
-    }
+    DrawRectangleRec(button, BLACK);
+    DrawRectangleRec(inner, fill);
+    DrawRectangle((int)inner.x, (int)inner.y, (int)inner.width, 2, light);
+    DrawRectangle((int)inner.x, (int)(inner.y + inner.height - 2.0f),
+                  (int)inner.width, 2, shade);
+    if (hovered) DrawRectangleLinesEx(inner, 1.0f, WHITE);
 
-    float icon_size = quest_grid_icon_size(button.width);
-    float icon_x = button.x + MI_Q_GRID_PAD + icon_size * 0.5f;
-    float icon_y = button.y + button.height * 0.5f;
+    int font = quest_grid_action_font(label, button.width);
+    int label_y = (int)(button.y + (button.height - text_line_height(font)) * 0.5f);
+    draw_quest_grid_title_line(label, (int)button.x, label_y, (int)button.width, font);
+}
+
+static void draw_quest_grid_button(Rectangle card, const QuestCardInfo* info,
+                                   int slot, int font, int mx, int my) {
+    bool hovered = ui_button_hit(card, mx, my);
+    Color fill = hovered ? (Color){ 35, 48, 72, 255 } : (Color){ 24, 32, 50, 255 };
+    Color highlight = hovered ? (Color){ 86, 112, 152, 255 } : (Color){ 58, 78, 110, 255 };
+    Color shadow = (Color){ 8, 12, 22, 255 };
+    Rectangle inner = { card.x + 2.0f, card.y + 2.0f,
+                        card.width - 4.0f, card.height - 4.0f };
+    float action_height = viewport_is_mobile() ? MI_Q_CARD_ACTION_H_MOBILE
+                                                : MI_Q_CARD_ACTION_H_DESKTOP;
+    float action_y = card.y + card.height - MI_Q_GRID_PAD - action_height;
+    float action_width = (card.width - 2.0f * MI_Q_GRID_PAD - MI_Q_CARD_ACTION_GAP) * 0.5f;
+
+    DrawRectangleRec(card, BLACK);
+    DrawRectangleRec(inner, fill);
+    DrawRectangle((int)inner.x, (int)inner.y, (int)inner.width, 2, highlight);
+    DrawRectangle((int)inner.x, (int)(inner.y + inner.height - 2.0f),
+                  (int)inner.width, 2, shadow);
+    DrawRectangle((int)inner.x, (int)(action_y - MI_Q_CARD_ACTION_GAP * 0.5f),
+                  (int)inner.width, 1, info->color);
+    DrawRectangle((int)inner.x, (int)inner.y, 3, (int)inner.height, info->color);
+    if (hovered) DrawRectangleLinesEx(inner, 1.0f, WHITE);
+
+    float icon_size = quest_grid_icon_size(card.width);
+    float icon_x = card.x + MI_Q_GRID_PAD + icon_size * 0.5f;
+    float content_top = card.y + MI_Q_GRID_PAD;
+    float content_bottom = action_y - MI_Q_CARD_ACTION_GAP;
+    float icon_y = content_top + (content_bottom - content_top) * 0.5f;
     ui_icon_draw_ex("quest", icon_x + 1.0f, icon_y + 1.0f, icon_size, 0.0f, BLACK);
     ui_icon_draw_ex("quest", icon_x, icon_y, icon_size, 0.0f, WHITE);
 
-    int title_x = (int)(button.x + MI_Q_GRID_PAD + icon_size + MI_Q_GRID_ICON_GAP);
-    int title_width = quest_grid_title_width(button.width);
+    int title_x = (int)(card.x + MI_Q_GRID_PAD + icon_size + MI_Q_GRID_ICON_GAP);
+    int title_width = quest_grid_title_width(card.width);
     int title_height = quest_grid_title_wrap(info->title, title_x, 0,
                                               title_width, font, false);
     int status_font = quest_grid_status_font(font);
     int status_height = text_line_height(status_font);
     int text_height = title_height + 2 + status_height;
-    int title_y = (int)(button.y + (button.height - text_height) * 0.5f);
+    int title_y = (int)(content_top + (content_bottom - content_top - text_height) * 0.5f);
     quest_grid_title_wrap(info->title, title_x, title_y, title_width, font, true);
     draw_quest_grid_status_line(info->word, title_x, title_y + title_height + 2,
                                 title_width, status_font, info->color);
+
+    s_q_grid_btn[slot] = (Rectangle){ card.x + MI_Q_GRID_PAD, action_y,
+                                       action_width, action_height };
+    const char* action_label = info->acceptable ? "Accept"
+                             : info->active ? "Abandon" : info->word;
+    Color action_color = info->acceptable ? (Color){ 38, 138, 76, 255 }
+                       : info->active ? (Color){ 150, 48, 52, 255 }
+                       : (Color){ 70, 74, 88, 255 };
+    s_q_grid_action_kind[slot] = info->acceptable ? 1 : info->active ? 2 : 0;
+    s_q_grid_action_btn[slot] = (Rectangle){ s_q_grid_btn[slot].x + action_width +
+                                              MI_Q_CARD_ACTION_GAP, action_y,
+                                              action_width, action_height };
+    draw_quest_grid_action_button(s_q_grid_btn[slot], "Expand",
+                                  (Color){ 44, 96, 156, 255 }, true, mx, my);
+    draw_quest_grid_action_button(s_q_grid_action_btn[slot], action_label, action_color,
+                                  0 != s_q_grid_action_kind[slot], mx, my);
 }
 
 /* Expanded mission detail at (x, w): title row, then its primary action,
@@ -1094,13 +1142,12 @@ static void draw_quest_tab(Rectangle content, int mx, int my) {
             }
 
             Rectangle left_button = { content.x, y, column_width, row_height };
-            s_q_grid_btn[first_slot] = left_button;
-            draw_quest_grid_button(left_button, &left, qfont, mx, my);
+            draw_quest_grid_button(left_button, &left, first_slot, qfont, mx, my);
             if (has_right) {
                 Rectangle right_button = { content.x + column_width + MI_Q_GRID_GAP,
                                            y, column_width, row_height };
-                s_q_grid_btn[first_slot + 1] = right_button;
-                draw_quest_grid_button(right_button, &right, qfont, mx, my);
+                draw_quest_grid_button(right_button, &right, first_slot + 1,
+                                       qfont, mx, my);
             }
 
             y += row_height;
@@ -1111,6 +1158,14 @@ static void draw_quest_tab(Rectangle content, int mx, int my) {
 
     s_q_content_height = y - content_y + 4.0f;
     ui_scroll_end(&s_q_scroll);
+}
+
+static void request_quest_action(int kind, const char* code) {
+    if (1 == kind) {
+        local_player_request_quest_accept(s_entity_id, code);
+    } else if (2 == kind) {
+        local_player_request_quest_abandon(code);
+    }
 }
 
 static void handle_quest_click(int mx, int my) {
@@ -1126,11 +1181,7 @@ static void handle_quest_click(int mx, int my) {
         }
         int i = s_q_expanded;
         if (0 != s_q_btn_kind[i] && ui_button_hit(s_q_btn[i], mx, my)) {
-            if (1 == s_q_btn_kind[i]) {
-                local_player_request_quest_accept(s_entity_id, s_q_btn_code[i]);
-            } else {
-                local_player_request_quest_abandon(s_q_btn_code[i]);
-            }
+            request_quest_action(s_q_btn_kind[i], s_q_btn_code[i]);
             return;
         }
         for (int r = 0; r < s_reward_slot_count; r++) {
@@ -1146,8 +1197,13 @@ static void handle_quest_click(int mx, int my) {
         return;
     }
 
-    /* Grid mode: tapping a mission button expands its detail. */
+    /* Grid mode: direct action controls precede their Expand targets. */
     for (int i = 0; i < s_q_count; i++) {
+        if (0 != s_q_grid_action_kind[i] &&
+            ui_button_hit(s_q_grid_action_btn[i], mx, my)) {
+            request_quest_action(s_q_grid_action_kind[i], s_quest_codes[i]);
+            return;
+        }
         if (ui_button_hit(s_q_grid_btn[i], mx, my)) {
             s_q_expanded = i;
             s_q_expand_age = 0.0f;
