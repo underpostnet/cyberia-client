@@ -108,15 +108,16 @@ void modal_map_draw(int screen_width, int screen_height) {
     int w2  = MeasureText(line2, fs);
     int box_w  = (w1 > w2 ? w1 : w2) + pad * 2 + 10; /* +10 for dot */
     int box_h  = lsp * 2 + pad * 2 - 2;
-    /* Left-aligned inside the top toolbar, vertically centred on the strip. */
-    int bx = 10;
-    int by = (int)((toolbar_height() - (float)box_h) * 0.5f);
+    /* Inside the top toolbar, right of the pinned hide/show toggle,
+     * vertically centred on the strip; rides the strip's hide/show slide. */
+    int bx = (int)(TOOLBAR_BTN_MARGIN * 2.0f + TOOLBAR_BTN_SIZE);
+    int by = (int)(toolbar_offset_y() + (TOOLBAR_H - (float)box_h) * 0.5f);
 
     g_modal_map.bounds = (Rectangle){ (float)bx, (float)by, (float)box_w, (float)box_h };
 
-    /* The compact readout fades out while the container expands into the
-     * Instance Map (modal_instance_map draws the expanded content). */
-    float fade = modal_pop_alpha(g_modal_map.age) * (1.0f - modal_map_expand_progress());
+    /* The readout stays visible while the Instance Map is expanded — it is
+     * also a tap target that toggles the expansion (see ui/toolbar). */
+    float fade = modal_pop_alpha(g_modal_map.age);
     if (fade > 0.01f) {
         /* ── Background: rounded rect, no border, shared fade-in ──────── */
         DrawRectangleRounded(

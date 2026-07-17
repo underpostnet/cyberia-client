@@ -3,6 +3,7 @@
 #include "instance_map_data.h"
 #include "modal_map.h"
 #include "text.h"
+#include "toolbar.h"
 #include "ui_button.h"
 
 #include "game_state.h"
@@ -605,8 +606,13 @@ static void draw_info_panel(float fade) {
 static void draw_header(float fade) {
     const ImapGraph* gr = instance_map_data_graph();
 
+    /* Title sits below the toolbar strip (which keeps the map readout) —
+     * reclaims the space when the strip is hidden. */
+    float title_y = s_m.panel.y + toolbar_height() + 12.0f;
     const char* title = "INSTANCE MAP";
-    shadow_label(title, (int)(s_m.panel.x + 16.0f), (int)(s_m.panel.y + 12.0f), 16,
+    /* Left inset clears the toolbar's pinned top-left toggle. */
+    float title_x = s_m.panel.x + TOOLBAR_BTN_SIZE + 12.0f;
+    shadow_label(title, (int)title_x, (int)title_y, 16,
                  fade_c((Color){ 140, 230, 255, 240 }, fade));
 
     char sub[IMAP_NAME_MAX + 24];
@@ -618,8 +624,8 @@ static void draw_header(float fade) {
         case IMAP_DATA_ERROR:   snprintf(sub, sizeof(sub), "UPLINK UNAVAILABLE");   break;
         default:                sub[0] = '\0';                                       break;
     }
-    shadow_label(sub, (int)(s_m.panel.x + 16.0f),
-                 (int)(s_m.panel.y + 12.0f) + text_line_height(16) + 1, 11,
+    shadow_label(sub, (int)title_x,
+                 (int)title_y + text_line_height(16) + 1, 11,
                  fade_c(IMAP_TEXT_DIM, fade));
 
     const char* hint = "DRAG PAN · WHEEL / PINCH ZOOM · TAP NODE";
