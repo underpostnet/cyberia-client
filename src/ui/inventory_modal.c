@@ -32,6 +32,7 @@
 #include "object_layer.h"
 #include "object_layers_management.h"
 #include "ol_as_animated_ico.h"
+#include "ui_icon.h"
 #include "serial.h"
 #include "toolbar.h"
 #include "ui_button.h"
@@ -569,20 +570,21 @@ void inventory_modal_draw(void) {
     if (s_ol_manager && ols->item_id[0] != '\0')
         atlas = get_or_fetch_atlas_data(ols->item_id);
 
-    /* 4. Animated sprite via ol_as_animated_ico */
-    int sprite_sz = modal_sprite_size(pane_w, card.height);
+    /* 4. Animated sprite via ol_as_animated_ico
+     * Size is dynamic: fills the full column width in wide (landscape) layout,
+     * or uses the standard fraction-based sizing in stacked layout. */
+    int sprite_sz;
     if (wide) {
-        /* The left pane is dedicated to the preview — let the sprite fill
-         * most of it instead of keeping the stacked-layout size. */
-        int s = (int)(pane_w * 0.66f);
-        int max_h = (int)(card.height * 0.52f);
+        /* The left pane is dedicated to the preview — fill it dynamically. */
+        int s = (int)(pane_w * 0.78f);
+        int max_h = (int)(card.height * 0.56f);
         if (s > max_h) s = max_h;
-        if (s > sprite_sz) sprite_sz = s;
+        sprite_sz = s;
+    } else {
+        sprite_sz = modal_sprite_size(pane_w, card.height);
     }
     float sprite_x = cx + pane_w * 0.5f - sprite_sz * 0.5f;
     float sprite_y = cy + (inventory_modal_compact() ? 8.0f : 14.0f);
-    Rectangle sprite_dst = { sprite_x, sprite_y,
-                              (float)sprite_sz, (float)sprite_sz };
     float preview_bottom = sprite_y + sprite_sz;
 
     if (ols->item_id[0] != '\0') {
@@ -590,7 +592,6 @@ void inventory_modal_draw(void) {
                        (int)sprite_x, (int)sprite_y, sprite_sz,
                        s_dir_str, 0, WHITE);
     }
-    DrawRectangleLinesEx(sprite_dst, 1.0f, C_CARD_BORDER);
 
     /* 5. Direction / mode buttons — placed right below the sprite ──────
      * Only directions with atlas frames for the current mode are rendered.
@@ -748,13 +749,13 @@ void inventory_modal_draw(void) {
     {
         int fs_s  = stat_font;
         int col_w = (int)(info_w * 0.5f) - pad;
-        struct { const char* label; int val; } rows[6] = {
-            { "Effect",       st_effect  },
-            { "Resistance",   st_resist  },
-            { "Agility",      st_agility },
-            { "Range",        st_range   },
-            { "Intelligence", st_intel   },
-            { "Utility",      st_utility },
+        struct { const char* label; const char* icon_id; int val; } rows[6] = {
+            { "Effect",       "stat-effect",       st_effect  },
+            { "Resistance",   "stat-resistance",   st_resist  },
+            { "Agility",      "stat-agility",      st_agility },
+            { "Range",        "stat-range",        st_range   },
+            { "Intelligence", "stat-intelligence", st_intel   },
+            { "Utility",      "stat-utility",      st_utility },
         };
         DrawText("Stats", (int)(info_x + pad), (int)y_cursor, fs_s,
                  (Color){ 160, 180, 255, 220 });
@@ -764,7 +765,10 @@ void inventory_modal_draw(void) {
                 int si = r * 2 + col;
                 int sx = (int)(info_x + pad + col * col_w);
                 int sy = (int)y_cursor;
-                DrawText(rows[si].label, sx, sy, fs_s, C_STAT_LABEL);
+                /* Draw stat icon before the label */
+                int icon_sz = fs_s * 2;
+                ui_icon_draw(rows[si].icon_id, (float)(sx + icon_sz / 2), (float)(sy + icon_sz / 2), icon_sz, false, 0.0f);
+                DrawText(rows[si].label, sx + icon_sz + 4, sy, fs_s, C_STAT_LABEL);
                 char vbuf[16];
                 snprintf(vbuf, sizeof(vbuf), "%+d", rows[si].val);
                 int vw = MeasureText(vbuf, fs_s);
