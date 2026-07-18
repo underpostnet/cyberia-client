@@ -121,14 +121,31 @@ static bool dlg_hidden_on_mobile(void) {
            !s_fullscreen;
 }
 
+/* Desktop paired dialogue collapsed by its close button — the interact modal
+ * reclaims the bottom half until the Dialog button restores it. */
+static bool s_collapsed = false;
+
+static bool dlg_hidden(void) {
+    if (dlg_hidden_on_mobile()) return true;
+    return !viewport_is_mobile() && MODAL_DIALOGUE_RENDER_ENTITY == s_render &&
+           s_collapsed;
+}
+
+bool modal_dialogue_is_collapsed(void) {
+    return s_open && !viewport_is_mobile() &&
+           MODAL_DIALOGUE_RENDER_ENTITY == s_render && s_collapsed;
+}
+
 bool modal_dialogue_is_fullscreen(void) {
     return s_open && dlg_fullscreen();
 }
 
+/* Mobile: open the fullscreen reader. Desktop: restore the collapsed paired
+ * dialogue to its bottom-half panel. */
 void modal_dialogue_show_fullscreen(void) {
-    if (!s_open || !viewport_is_mobile() ||
-        MODAL_DIALOGUE_RENDER_ENTITY != s_render || s_line_count <= 0) return;
-    s_fullscreen = true;
+    if (!s_open || MODAL_DIALOGUE_RENDER_ENTITY != s_render || s_line_count <= 0) return;
+    if (viewport_is_mobile()) s_fullscreen = true;
+    else                      s_collapsed  = false;
     s_age = 0.0f;
 }
 
@@ -174,6 +191,45 @@ static int dlg_sprite_size(float card_w) {
 static bool hit_rect(int mx, int my, Rectangle r) {
     return ((float)mx >= r.x && (float)mx < r.x + r.width &&
             (float)my >= r.y && (float)my < r.y + r.height);
+}
+
+/* Quest-talk switcher button — pixel-art chrome matching the quest tab's
+ * card buttons: black outer, gold fill, highlight/shadow edges, quest icon. */
+static Rectangle s_qt_btn_rect;
+
+/* Pixel-art quest-talk button: quest icon on the left, wrapped objective /
+ * step label filling the rest. Black text outline keeps it legible on gold. */
+static void draw_quest_talk_btn(Rectangle r, bool selected, const char* label, int font) {
+    bool hovered = hit_rect(GetMouseX(), GetMouseY(), r);
+    Color fill      = hovered ? (Color){ 255, 220, 42, 255 } : (Color){ 225, 191, 5, 255 };
+    Color highlight = (Color){ 255, 235, 110, 255 };
+    Color shadow    = (Color){ 128, 92, 0, 255 };
+    Rectangle inner = { r.x + 2.0f, r.y + 2.0f, r.width - 4.0f, r.height - 4.0f };
+
+    DrawRectangleRounded(r, 0.18f, 6, BLACK);
+    DrawRectangleRounded(inner, 0.18f, 6, fill);
+    DrawRectangle((int)(inner.x + 4.0f), (int)inner.y, (int)(inner.width - 8.0f), 2, highlight);
+    DrawRectangle((int)(inner.x + 4.0f), (int)(inner.y + inner.height - 2.0f),
+                  (int)(inner.width - 8.0f), 2, shadow);
+    if (selected) DrawRectangleRoundedLinesEx(inner, 0.18f, 6, 1.0f, WHITE);
+
+    float icon_sz = r.height - 12.0f;
+    float icon_cx = r.x + 8.0f + icon_sz * 0.5f;
+    float icon_cy = r.y + r.height * 0.5f;
+    ui_icon_draw_ex("quest", icon_cx + 1.0f, icon_cy + 1.0f, icon_sz, 0.0f, BLACK);
+    ui_icon_draw_ex("quest", icon_cx, icon_cy, icon_sz, 0.0f, WHITE);
+
+    if (label && '\0' != label[0]) {
+        int   tx = (int)(r.x + 12.0f + icon_sz + 6.0f);
+        int   tw = (int)(r.x + r.width - 8.0f) - tx;
+        if (tw < 20) tw = 20;
+        int   th = text_wrap(label, tx, 0, tw, font, WHITE, false, false);
+        int   ty = (int)(r.y + (r.height - th) * 0.5f);
+        for (int oy = -1; oy <= 1; oy++)
+            for (int ox = -1; ox <= 1; ox++)
+                if (ox || oy) text_wrap(label, tx + ox, ty + oy, tw, font, BLACK, false, true);
+        text_wrap(label, tx, ty, tw, font, WHITE, false, true);
+    }
 }
 
 /* Draw the left-column sprite: a single item (inventory lore) or the
@@ -244,6 +300,7 @@ void modal_dialogue_open(const char* entity_id, const char* item_id,
     s_line_complete = false;
     s_ended         = false;
     s_fullscreen    = false;
+    s_collapsed     = false;
     s_open          = true;
 
     LOG_INFO("[MODAL_DIALOGUE] Open: entity=%s item=%s code=%s lines=%d\n",
@@ -275,6 +332,11 @@ static void modal_dialogue_finish(bool completed) {
     if (cb) cb();
 
     if (s_dlg_started) {
+        /* Interact session still open: re-bridge the freeze to "interact"
+         * before the dlg frame so the dialogue thaw is rejected and the
+         * player stays protected for the rest of the session. */
+        if (modal_interact_is_open())
+            local_player_request_freeze(true, "interact");
         if (completed)
             local_player_request_dialogue_complete(s_entity_id, s_item_id, s_dialog_code);
         else
@@ -286,6 +348,7 @@ static void modal_dialogue_finish(bool completed) {
     s_current     = 0;
     s_quest_style = false;
     s_fullscreen  = false;
+    s_collapsed   = false;
 }
 
 void modal_dialogue_set_quest_style(bool on) {
@@ -297,6 +360,10 @@ void modal_dialogue_set_quest_style(bool on) {
 static void emit_dlg_complete(void) {
     if (!s_dlg_started) return;
     s_dlg_started = false;
+    /* Same re-bridge as modal_dialogue_finish: the interact session keeps
+     * the freeze across the completion frame. */
+    if (modal_interact_is_open())
+        local_player_request_freeze(true, "interact");
     local_player_request_dialogue_complete(s_entity_id, s_item_id, s_dialog_code);
 }
 
@@ -312,7 +379,7 @@ bool modal_dialogue_is_open(void) { return s_open; }
 
 void modal_dialogue_update(float dt) {
     if (!s_open) return;
-    if (dlg_hidden_on_mobile()) return;
+    if (dlg_hidden()) return;
     s_age += dt;
 
     /* Typewriter: reveal one character at a time */
@@ -330,7 +397,7 @@ void modal_dialogue_update(float dt) {
 }
 
 void modal_dialogue_draw(void) {
-    if (!s_open || dlg_hidden_on_mobile()) return;
+    if (!s_open || dlg_hidden()) return;
 
     int sw = GetScreenWidth();
     int sh = GetScreenHeight();
@@ -415,6 +482,29 @@ void modal_dialogue_draw(void) {
     float txt_max  = card.x + card.width - txt_x - pad;
     float ty       = y0 + pad;
 
+    /* Quest-talk switcher bar: one pixel-art quest button per available
+     * quest-talk above the title; pressing swaps the dialogue between the
+     * default greeting and the mapped quest-talk. */
+    s_qt_btn_rect = (Rectangle){ 0 };
+    if (MODAL_DIALOGUE_RENDER_ENTITY == s_render &&
+        modal_interact_quest_talk_count() > 0) {
+        const char* qt_label = modal_interact_quest_talk_label();
+        int   qt_font = viewport_is_mobile() ? DLG_FONT_HINT : DLG_FONT_TEXT;
+        /* Reserve the top-right close button so the wide button clears it. */
+        float bw = txt_max - (fs_close_sz + 8.0f);
+        if (bw < 60.0f) bw = 60.0f;
+        int   label_w = (int)bw - (int)(DLG_FONT_SPEAKER + 6.0f + 18.0f);
+        if (label_w < 20) label_w = 20;
+        int   lh = text_wrap(qt_label, 0, 0, label_w, qt_font, WHITE, false, false);
+        float bh = (float)lh + 16.0f;
+        float min_bh = (float)DLG_FONT_SPEAKER + 20.0f;
+        if (bh < min_bh) bh = min_bh;
+        s_qt_btn_rect = (Rectangle){ txt_x, ty, bw, bh };
+        draw_quest_talk_btn(s_qt_btn_rect, modal_interact_quest_talk_active(),
+                            qt_label, qt_font);
+        ty += bh + 6.0f;
+    }
+
     if (line->speaker[0] != '\0') {
         DrawText(line->speaker, (int)txt_x, (int)ty, fs_speaker, C_SPEAKER);
     }
@@ -492,21 +582,32 @@ void modal_dialogue_draw(void) {
 }
 
 bool modal_dialogue_handle_click(int mx, int my) {
-    if (!s_open || dlg_hidden_on_mobile()) return false;
+    if (!s_open || dlg_hidden()) return false;
     if (s_age < 0.12f) return true;  /* block during pop-in */
 
     int sw = GetScreenWidth();
     int sh = GetScreenHeight();
     Rectangle card = panel_rect(sw, sh);
 
-    /* Close button: dismiss the dialogue immediately. */
+    /* Close button: the mobile reader collapses to the hidden state; a
+     * desktop paired dialogue collapses so the interact modal reclaims its
+     * space (the Dialog button restores it); anything else dismisses. */
     if (hit_rect(mx, my, s_fs_close_rect)) {
         if (viewport_is_mobile() && s_fullscreen) {
             s_fullscreen = false;
             s_age = 0.0f;
+        } else if (!viewport_is_mobile() && MODAL_DIALOGUE_RENDER_ENTITY == s_render &&
+                   modal_interact_is_open()) {
+            s_collapsed = true;
         } else {
             modal_dialogue_finish(false);
         }
+        return true;
+    }
+
+    /* Quest-talk switcher: swap between greeting and quest-talk dialogue. */
+    if (s_qt_btn_rect.width > 0.0f && hit_rect(mx, my, s_qt_btn_rect)) {
+        modal_interact_set_quest_talk(!modal_interact_quest_talk_active());
         return true;
     }
 

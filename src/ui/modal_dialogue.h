@@ -111,7 +111,12 @@ bool modal_dialogue_is_open(void);
  * its duration. */
 bool modal_dialogue_is_fullscreen(void);
 
-/* Show a paired entity dialogue in the mobile fullscreen reader. */
+/* Desktop: paired dialogue collapsed by its close button — the interact
+ * modal reclaims the space and shows a Dialog button to restore it. */
+bool modal_dialogue_is_collapsed(void);
+
+/* Mobile: open the fullscreen reader. Desktop: restore a collapsed paired
+ * dialogue to its bottom-half panel. */
 void modal_dialogue_show_fullscreen(void);
 
 /**

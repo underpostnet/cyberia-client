@@ -52,9 +52,13 @@ static uint8_t s_interaction_flags = 0;
 static Color s_border = { 80, 160, 220, 240 };
 
 /* Per-player pending action-talk-quest dialogue code (from AOI), "" when none.
- * When set, the paired dialogue shows this mapped dialogue (quest-framed) in
- * place of the default greeting. */
+ * Offered through the paired dialogue's quest button; shown directly only
+ * when the entity has no default greeting. */
 static char  s_action_dialog_code[64] = {0};
+
+/* True while the paired dialogue shows the mapped quest-talk instead of the
+ * default greeting — the dialogue's quest button toggles it. */
+static bool  s_quest_talk_active = false;
 
 /* Authoritative quest codes this NPC provides to the player (from AOI). The
  * Quest tab renders one mission card per code; metadata is fetched by code. */
@@ -121,6 +125,7 @@ typedef struct {
     char  dlg_item[128];
     char  action_dialog_code[64];
     bool  has_dialogue;
+    bool  quest_talk_active;
     uint8_t interaction_flags;
     Color border;
     ObjectLayerState layers[IBUBBLE_MAX_LAYERS];
@@ -139,6 +144,7 @@ static void es_push(void) {
     strncpy(f->dlg_item, s_dlg_item, sizeof(f->dlg_item) - 1);
     strncpy(f->action_dialog_code, s_action_dialog_code, sizeof(f->action_dialog_code) - 1);
     f->has_dialogue       = s_has_dialogue;
+    f->quest_talk_active  = s_quest_talk_active;
     f->interaction_flags  = s_interaction_flags;
     f->border             = s_border;
     f->layer_count        = s_cached_layer_count;
@@ -157,6 +163,7 @@ static void es_pop(void) {
     strncpy(s_dlg_item, f->dlg_item, sizeof(s_dlg_item) - 1);
     strncpy(s_action_dialog_code, f->action_dialog_code, sizeof(s_action_dialog_code) - 1);
     s_has_dialogue       = f->has_dialogue;
+    s_quest_talk_active  = f->quest_talk_active;
     s_interaction_flags  = f->interaction_flags;
     s_border             = f->border;
     s_tab                = f->tab;
@@ -258,6 +265,32 @@ static bool quest_tab_visible(void) {
     return s_quest_code_count > 0;
 }
 
+/* Re-read the per-player bot capability snapshot (pending quest-talk dialogue
+ * code, quest codes, interaction flags) from live AOI so the quest-talk button
+ * and quest tab track server events without a modal reopen. Keeps the last
+ * snapshot when the bot has left the AOI. Returns true when the pending
+ * quest-talk dialogue code changed. */
+static bool refresh_bot_snapshot(void) {
+    const BotState* bot = game_state_find_bot(s_entity_id);
+    if (!bot) return false;
+
+    char prev_code[64];
+    strncpy(prev_code, s_action_dialog_code, sizeof(prev_code) - 1);
+    prev_code[sizeof(prev_code) - 1] = '\0';
+
+    s_interaction_flags = bot->interaction_flags;
+    strncpy(s_action_dialog_code, bot->action_dialog_code, sizeof(s_action_dialog_code) - 1);
+    s_action_dialog_code[sizeof(s_action_dialog_code) - 1] = '\0';
+    s_quest_code_count = 0;
+    for (int i = 0; i < bot->quest_code_count && i < BOT_QUEST_CODES_MAX; i++) {
+        strncpy(s_quest_codes[s_quest_code_count], bot->quest_codes[i], 63);
+        s_quest_codes[s_quest_code_count][63] = '\0';
+        quest_cache_fetch(s_quest_codes[s_quest_code_count]);
+        s_quest_code_count++;
+    }
+    return 0 != strcmp(prev_code, s_action_dialog_code);
+}
+
 /* Fill `out` with the visible tab IDs in strip order; returns the count. */
 /* Quest leads the row when the entity offers missions — it is also the
  * default active tab in that case. */
@@ -273,6 +306,10 @@ static int visible_tabs(int out[MI_TAB_COUNT]) {
  * otherwise reserved for the paired dialogue. */
 #define MI_TOP_FRAC 0.56f
 
+/* Desktop dialogue-collapse expansion: 0 = half-height (paired dialogue
+ * below), 1 = the card owns the dialogue's space. Animated in update. */
+static float s_dlg_collapse_t = 0.0f;
+
 static Rectangle card_rect(void) {
     int sw = GetScreenWidth();
     int sh = GetScreenHeight();
@@ -281,9 +318,15 @@ static Rectangle card_rect(void) {
     float hidden_bar_h = inventory_bar_full_height() - inventory_bar_visible_height();
     float max_bottom = sh - inventory_bar_visible_height() -
         (viewport_is_mobile() ? 0.0f : pad);
-    float bottom = viewport_is_mobile()
-        ? max_bottom
-        : sh * MI_TOP_FRAC - pad * 0.5f + hidden_bar_h;
+    float bottom;
+    if (viewport_is_mobile()) {
+        bottom = max_bottom;
+    } else {
+        float half = sh * MI_TOP_FRAC - pad * 0.5f + hidden_bar_h;
+        if (half > max_bottom) half = max_bottom;
+        float e = s_dlg_collapse_t * s_dlg_collapse_t * (3.0f - 2.0f * s_dlg_collapse_t);
+        bottom = half + (max_bottom - half) * e;
+    }
     if (bottom > max_bottom) bottom = max_bottom;
     if (bottom < top + 120.0f) bottom = top + 120.0f;
     return (Rectangle){ pad, top, (float)sw - 2.0f * pad, bottom - top };
@@ -316,10 +359,12 @@ static Rectangle bar_rect(Rectangle card) {
 }
 
 /* Mobile adds a Dialog entry alongside the Chat and Integration controls. */
-/* Mobile shows the Dialog button only while the entity has an active
- * dialogue; the row re-packs to two buttons otherwise. */
+/* Mobile shows the Dialog button while the entity has an active dialogue;
+ * desktop shows it only while the paired dialogue is collapsed (its close
+ * button handed the space to this modal). The row re-packs otherwise. */
 static bool dialog_btn_visible(void) {
-    return viewport_is_mobile() && s_has_dialogue;
+    if (viewport_is_mobile()) return s_has_dialogue;
+    return modal_dialogue_is_collapsed();
 }
 
 static void bar_buttons(Rectangle card, Rectangle* dialog, Rectangle* chat,
@@ -349,6 +394,8 @@ static void bar_buttons(Rectangle card, Rectangle* dialog, Rectangle* chat,
     float ix = bar.x + bar.width - pad - bw;
     *integration = (Rectangle){ ix, by, bw, button_h };
     *chat        = (Rectangle){ ix - MI_BAR_BTN_GAP - bw, by, bw, button_h };
+    if (dialog_btn_visible())
+        *dialog = (Rectangle){ chat->x - MI_BAR_BTN_GAP - bw, by, bw, button_h };
 }
 
 static Rectangle slot_rect_in(Rectangle content, int i) {
@@ -388,27 +435,28 @@ static Stats stack_stats(void) {
     return t;
 }
 
-/* The active dialogue key: a pending action-talk-quest dialogue code (shown
- * quest-framed in place of the greeting) when present, else the skin greeting. */
+/* The active dialogue key: the quest-talk dialogue code when selected, else
+ * the skin greeting. */
 static const char* active_dlg_key(void) {
-    return s_action_dialog_code[0] != '\0' ? s_action_dialog_code : s_dlg_item;
+    return s_quest_talk_active && '\0' != s_action_dialog_code[0]
+               ? s_action_dialog_code : s_dlg_item;
 }
 
-/* Open the paired dialogue. A pending action-talk-quest shows its mapped
- * dialogue by full code; otherwise the entity's "default-<skin>" greeting.
- * The server validates talk objectives by the NPC's skin, not this code, so the
- * code is reported on dlg_complete only for traceability. */
+/* Open the paired dialogue with the currently selected content: the mapped
+ * quest-talk dialogue by full code, or the entity's "default-<skin>"
+ * greeting. The server validates talk objectives by the NPC's skin, not this
+ * code, so the code is reported on dlg_complete only for traceability. */
 static void open_dialogue(const DialogueLine* lines, int count) {
+    bool quest_talk = s_quest_talk_active && '\0' != s_action_dialog_code[0];
     char code[96];
-    if (s_action_dialog_code[0] != '\0')
+    if (quest_talk)
         snprintf(code, sizeof(code), "%s", s_action_dialog_code);
     else
         snprintf(code, sizeof(code), "default-%s", s_dlg_item);
     modal_dialogue_open(s_entity_id, s_dlg_item, code,
                         MODAL_DIALOGUE_RENDER_ENTITY, lines, count);
-    /* Yellow quest frame only for a pending action-talk-quest — not for every NPC
-     * and not merely because the NPC offers a quest. */
-    modal_dialogue_set_quest_style(s_action_dialog_code[0] != '\0');
+    /* Yellow quest frame only while the quest-talk dialogue is selected. */
+    modal_dialogue_set_quest_style(quest_talk);
     s_dialogue_opened = true;
     if (s_dialogue_open_requested) {
         s_dialogue_open_requested = false;
@@ -416,13 +464,54 @@ static void open_dialogue(const DialogueLine* lines, int count) {
     }
 }
 
-/* Kick off the fetch for the active dialogue (pending quest dialogue by code, or
- * the skin greeting). Render-only when the skin has no greeting and there is no
- * pending dialogue. */
+/* Kick off the fetch for the selected dialogue. Render-only when the skin
+ * has no greeting and there is no pending quest-talk. */
 static void request_active_dialogue(void) {
-    if (s_action_dialog_code[0] != '\0') dialogue_data_request_code(s_action_dialog_code);
-    else if (s_has_dialogue)             dialogue_data_request(s_dlg_item);
-    else                                 open_dialogue(NULL, 0);
+    if (s_quest_talk_active && '\0' != s_action_dialog_code[0])
+        dialogue_data_request_code(s_action_dialog_code);
+    else if (s_has_dialogue)
+        dialogue_data_request(s_dlg_item);
+    else if ('\0' != s_action_dialog_code[0]) {
+        s_quest_talk_active = true;
+        dialogue_data_request_code(s_action_dialog_code);
+    } else {
+        open_dialogue(NULL, 0);
+    }
+}
+
+int modal_interact_quest_talk_count(void) {
+    return s_open && '\0' != s_action_dialog_code[0] ? 1 : 0;
+}
+
+/* Label for the quest-talk button: the active quest's live objective, else
+ * its current step text — so the player sees what the talk advances. */
+const char* modal_interact_quest_talk_label(void) {
+    for (int i = 0; i < s_quest_code_count; i++) {
+        const QuestProgressEntry* q = quest_progress_store_find(s_quest_codes[i]);
+        if (!q || QUEST_ACTIVE != q->status) continue;
+        if ('\0' != q->objectives[0]) return q->objectives;
+        if ('\0' != q->active_step[0]) return q->active_step;
+        if ('\0' != q->title[0])       return q->title;
+    }
+    return "Quest Dialogue";
+}
+
+bool modal_interact_quest_talk_active(void) {
+    return s_quest_talk_active;
+}
+
+void modal_interact_set_quest_talk(bool active) {
+    if (!s_open || active == s_quest_talk_active) return;
+    if (active && '\0' == s_action_dialog_code[0]) return;
+    if (!active && !s_has_dialogue) return; /* no greeting to fall back to */
+    /* Preserve the mobile fullscreen reader across the swap: reopen expanded
+     * instead of dropping back to the collapsed footer state. */
+    bool was_fullscreen = modal_dialogue_is_fullscreen();
+    s_quest_talk_active = active;
+    if (modal_dialogue_is_open()) modal_dialogue_close();
+    s_dialogue_opened = false;
+    s_dialogue_open_requested = was_fullscreen;
+    request_active_dialogue();
 }
 
 static void open_overlay(int tab) {
@@ -442,6 +531,7 @@ static void modal_interact_reopen(void) {
     s_dialogue_opened  = false;
     s_dialogue_open_requested = false;
     s_overlay_open     = false;
+    local_player_request_freeze(true, "interact");
 
     /* The paired dialogue key was restored by es_pop. Text resolves async in
      * update; mobile renders it only after the footer opens the reader. */
@@ -518,6 +608,7 @@ void modal_interact_open(const char* entity_id, const char* display_name,
     s_q_content_height = 0.0f;
     s_q_expanded = -1;
     s_q_expand_age = MODAL_POP_DURATION;
+    s_dlg_collapse_t = 0.0f;
 
     /* Only snapshot layers from AOI when we don't already have a cached
      * copy from the ephemeral session.  This way, returning from the
@@ -532,26 +623,21 @@ void modal_interact_open(const char* entity_id, const char* display_name,
      * dialogue (and frame style) the paired panel opens. */
     s_action_dialog_code[0] = '\0';
     s_quest_code_count = 0;
-    {
-        const BotState* bot = game_state_find_bot(s_entity_id);
-        if (bot) {
-            s_interaction_flags = bot->interaction_flags;
-            strncpy(s_action_dialog_code, bot->action_dialog_code, sizeof(s_action_dialog_code) - 1);
-            s_action_dialog_code[sizeof(s_action_dialog_code) - 1] = '\0';
-            for (int i = 0; i < bot->quest_code_count && i < BOT_QUEST_CODES_MAX; i++) {
-                strncpy(s_quest_codes[s_quest_code_count], bot->quest_codes[i], 63);
-                s_quest_codes[s_quest_code_count][63] = '\0';
-                quest_cache_fetch(s_quest_codes[s_quest_code_count]);
-                s_quest_code_count++;
-            }
-        }
-    }
+    refresh_bot_snapshot();
 
     /* The Quest tab, when offered, opens as the active tab. */
     if (quest_tab_visible()) s_tab = MI_TAB_QUEST;
 
-    /* The paired dialogue uses the pending quest dialogue when present, else
-     * the skin greeting, else render-only content. Text resolves async. */
+    /* The paired dialogue always opens on the default greeting; a pending
+     * quest-talk is offered through the dialogue's quest button instead
+     * (only when there is no greeting does the quest-talk open directly). */
+    s_quest_talk_active = !s_has_dialogue && '\0' != s_action_dialog_code[0];
+
+    /* Interaction freeze for the whole modal session: the server blocks
+     * damage/targeting while the reason chain interact→dialogue→interact
+     * stays unbroken (dlg_start bridges it; dialogue teardown re-bridges). */
+    local_player_request_freeze(true, "interact");
+
     request_active_dialogue();
 
     /* The dialogue modal (paired with this interact modal) already sends its own
@@ -571,6 +657,7 @@ void modal_interact_close(void) {
     s_dialogue_open_requested = false;
     es_clear();
     if (modal_dialogue_is_open()) modal_dialogue_close();
+    local_player_request_freeze(false, "interact");
     /* Release the interaction context/freeze established on open. Dropped by the
      * server if the dialogue already completed/cancelled it. */
     if (s_dlg_context) {
@@ -597,6 +684,33 @@ bool modal_interact_handle_wheel(float wheel_delta) {
 void modal_interact_update(float dt) {
     if (!s_open) return;
     s_age += dt;
+
+    /* Track the bot's live quest-talk state: the button appears the instant
+     * the server posts a pending quest-talk (e.g. right after accepting the
+     * mission) and disappears once it resolves — no modal reopen. */
+    if (refresh_bot_snapshot() && s_quest_talk_active &&
+        '\0' == s_action_dialog_code[0]) {
+        /* The quest-talk we were showing was consumed server-side: fall back
+         * to the greeting (preserving the mobile fullscreen reader). */
+        bool was_fullscreen = modal_dialogue_is_fullscreen();
+        s_quest_talk_active = false;
+        if (modal_dialogue_is_open()) modal_dialogue_close();
+        s_dialogue_opened = false;
+        s_dialogue_open_requested = was_fullscreen;
+        request_active_dialogue();
+    }
+
+    /* Slide between half-height and full-height as the paired dialogue
+     * collapses/restores (desktop only; mobile is always full). */
+    float target = !viewport_is_mobile() && modal_dialogue_is_collapsed() ? 1.0f : 0.0f;
+    float step = dt / 0.25f;
+    if (s_dlg_collapse_t < target) {
+        s_dlg_collapse_t += step;
+        if (s_dlg_collapse_t > target) s_dlg_collapse_t = target;
+    } else if (s_dlg_collapse_t > target) {
+        s_dlg_collapse_t -= step;
+        if (s_dlg_collapse_t < target) s_dlg_collapse_t = target;
+    }
     if (0 <= s_q_expanded && s_q_expand_age < MODAL_POP_DURATION) {
         s_q_expand_age += dt;
         if (s_q_expand_age > MODAL_POP_DURATION)
@@ -1289,9 +1403,13 @@ void modal_interact_draw(void) {
     bar_buttons(card, &dialog, &chat, &integration);
 
     if (dialog_btn_visible()) {
-        UIButtonStyle dialog_btn = { .text = "dialog", .icon_id = "chat",
-                                     .font_size = 12, .padding = 2.0f, .gap = 2.0f,
-                                     .bg = C_BTN, .text_color = C_TEXT };
+        UIButtonStyle dialog_btn = { .text = "Dialog", .icon_id = "chat",
+                                     .font_size = mi_font_btn(), .bg = C_BTN, .text_color = C_TEXT };
+        if (viewport_is_mobile()) {
+            dialog_btn.font_size = 12;
+            dialog_btn.padding = 2.0f;
+            dialog_btn.gap = 2.0f;
+        }
         ui_button_draw(dialog, &dialog_btn,
                        ui_button_resolve_state(true, false, ui_button_hit(dialog, mx, my)));
     }

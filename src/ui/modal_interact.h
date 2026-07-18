@@ -35,6 +35,14 @@ void modal_interact_open(const char* entity_id, const char* display_name,
 void modal_interact_close(void);
 bool modal_interact_is_open(void);
 float modal_interact_layout_bottom(void);
+
+/* Quest-talk switcher for the paired dialogue: the dialogue draws a quest
+ * button bar above its title and toggles between the default greeting and
+ * the mapped quest-talk dialogue through these. */
+int  modal_interact_quest_talk_count(void);
+const char* modal_interact_quest_talk_label(void);
+bool modal_interact_quest_talk_active(void);
+void modal_interact_set_quest_talk(bool active);
 void modal_interact_update(float dt);
 void modal_interact_draw(void);
 bool modal_interact_handle_click(int mx, int my);
