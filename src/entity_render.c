@@ -4,6 +4,7 @@
 #include "layer_z_order.h"
 #include "hash_table.h"
 #include <raylib.h>
+#include <math.h>
 #include <stdlib.h>
 #include <string.h>
 #include <stdio.h>
@@ -13,11 +14,21 @@
 #define MAX_LAYERS_PER_ENTITY 20
 #define DEFAULT_FRAME_DURATION_MS 100
 
-/* Ground-shadow tuning — a small flat ellipse under the feet, not a puddle. */
+/* Ground-shadow tuning — a small flat ellipse under the feet, not a puddle.
+ * Pixel-art style: drawn as stacked horizontal pixel rows with multiple gray
+ * shades for a dithered gradient effect and blocky (pixelated) edges. */
 #define ENTITY_SHADOW_RADIUS_RATIO 0.34f
 #define ENTITY_SHADOW_SQUASH 0.45f
+#define ENTITY_SHADOW_PIXEL_SIZE 3.0f   /* size of each "pixel" in the shadow */
 
-static const Color ENTITY_SHADOW_COLOR = { 10, 8, 6, 130 };
+/* Gray shades for pixel-art shadow gradient (outer → inner).
+ * Grayish undertones with soft transparency for a subtle pixel-art shadow. */
+static const Color ENTITY_SHADOW_GRAYS[4] = {
+    { 80, 80, 80, 30 },   /* outermost — very faint gray */
+    { 70, 70, 70, 55 },   /* mid-outer — light gray */
+    { 60, 60, 60, 85 },   /* mid-inner — medium gray */
+    { 50, 50, 50, 120 },  /* innermost — darkest gray, still transparent */
+};
 
 /* Animation states untouched for this long are assumed to belong to entities
  * that left the AOI and are evicted by entity_render_gc(). */
@@ -513,6 +524,62 @@ void draw_entity_shadow(float pos_x, float pos_y, float width, float height, flo
     float feet_y = (pos_y + height) * cell_size;
     float rx = width * cell_size * ENTITY_SHADOW_RADIUS_RATIO;
     float ry = rx * ENTITY_SHADOW_SQUASH;
+    float ps = ENTITY_SHADOW_PIXEL_SIZE;  /* pixel size */
 
-    DrawEllipse((int)center_x, (int)feet_y, rx, ry, ENTITY_SHADOW_COLOR);
+    /* Draw a pixel-art oval shadow using stacked horizontal pixel rows.
+     * For each row (y offset from center), compute the half-width of the
+     * ellipse at that row, then snap to pixel grid and draw rectangles
+     * with varying gray shades for a dithered gradient effect. */
+    int num_layers = sizeof(ENTITY_SHADOW_GRAYS) / sizeof(ENTITY_SHADOW_GRAYS[0]);
+
+    for (int layer = 0; layer < num_layers; layer++) {
+        /* Each layer is a slightly smaller ellipse (scaled down).
+         * The innermost layer is 70% of the full radius so the dark
+         * core expands well toward the edges. */
+        float t = (float)layer / (float)num_layers;
+        float layer_scale = 1.0f - t * t * 0.3f;  /* quadratic falloff — stays wide longer */
+        float lrx = rx * layer_scale;
+        float lry = ry * layer_scale;
+
+        /* Iterate over vertical pixel rows within the ellipse bounds. */
+        int row_start = (int)(-lry / ps);
+        int row_end   = (int)( lry / ps);
+
+        for (int row = row_start; row <= row_end; row++) {
+            float y_off = (float)row * ps + ps * 0.5f;
+            /* Ellipse equation: (x/rx)^2 + (y/ry)^2 = 1 */
+            float half_w = lrx * sqrtf(1.0f - (y_off * y_off) / (lry * lry));
+
+            if (half_w <= 0.0f) continue;
+
+            /* Snap to pixel grid for blocky edges. */
+            int px_left  = (int)((center_x - half_w) / ps);
+            int px_right = (int)((center_x + half_w) / ps);
+
+            float draw_x = (float)px_left * ps;
+            float draw_y = feet_y + (float)row * ps;
+            float draw_w = (float)(px_right - px_left + 1) * ps;
+
+            /* Apply a simple dither: skip some pixels on outer layers
+             * to create a gradient feel. */
+            if (layer < num_layers - 1) {
+                /* Checkerboard dither for mid layers. */
+                if ((px_left + row) % 2 == 0) {
+                    /* Draw only half the blocks in a checker pattern */
+                    for (int bx = px_left; bx <= px_right; bx += 2) {
+                        float bx_f = (float)bx * ps;
+                        DrawRectangle((int)bx_f, (int)draw_y, (int)ps, (int)ps, ENTITY_SHADOW_GRAYS[layer]);
+                    }
+                } else {
+                    for (int bx = px_left + 1; bx <= px_right; bx += 2) {
+                        float bx_f = (float)bx * ps;
+                        DrawRectangle((int)bx_f, (int)draw_y, (int)ps, (int)ps, ENTITY_SHADOW_GRAYS[layer]);
+                    }
+                }
+            } else {
+                /* Innermost layer: solid fill. */
+                DrawRectangle((int)draw_x, (int)draw_y, (int)draw_w, (int)ps, ENTITY_SHADOW_GRAYS[layer]);
+            }
+        }
+    }
 }
