@@ -1238,7 +1238,7 @@ void modal_interact_draw(void) {
     if (s_display_name[0] != '\0') {
         int name_font = mi_font_name();
         /* Clears the toolbar's pinned top-left toggle when the strip hides. */
-        DrawText(s_display_name, (int)(card.x + TOOLBAR_BTN_SIZE + 12.0f),
+        DrawText(s_display_name, (int)toolbar_toggle_right(),
                  (int)(card.y + (mi_header_h() - name_font) * 0.5f), name_font, C_TEXT);
     }
     UIButtonStyle close_btn = { .icon_id = "close-yellow", .no_fill = true };

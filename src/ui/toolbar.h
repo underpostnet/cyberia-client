@@ -15,9 +15,17 @@
  * panels reclaim the space dynamically.
  */
 
-#define TOOLBAR_H          48.0f
-#define TOOLBAR_BTN_SIZE   32.0f
-#define TOOLBAR_BTN_MARGIN 8.0f
+#define TOOLBAR_H              48.0f
+#define TOOLBAR_BTN_SIZE       32.0f
+#define TOOLBAR_BTN_MARGIN     8.0f
+#define TOGGLE_EDGE_MARGIN      3.0f   /* internal toggle edge margin       */
+#define TOOLBAR_TOGGLE_GAP    12.0f   /* gap after toggle for header text  */
+
+/* Right edge of the pinned top-left toggle button. Modals offset their
+ * header text past this so the toggle is never covered. */
+static inline float toolbar_toggle_right(void) {
+    return TOGGLE_EDGE_MARGIN + (TOOLBAR_H - 2.0f * TOGGLE_EDGE_MARGIN) + TOOLBAR_TOGGLE_GAP;
+}
 
 /* Effective strip height this frame: TOOLBAR_H → 0 while sliding hidden. */
 float toolbar_height(void);

@@ -940,10 +940,11 @@ void inventory_modal_draw(void) {
     s_content_height = content_bottom - content_origin_y + 8.0f;
     ui_scroll_end(&s_content_scroll);
 
-    /* Item name stays fixed in the header while the main column scrolls. */
+    /* Item name stays fixed in the header while the main column scrolls.
+     * Left inset clears the toolbar's pinned top-left toggle. */
     {
         int tfs = 18;
-        DrawText(item_name, (int)(card.x + 10.0f),
+        DrawText(item_name, (int)toolbar_toggle_right(),
                  (int)(card.y + (IM_HEADER_H - tfs) * 0.5f), tfs, C_TITLE);
     }
 

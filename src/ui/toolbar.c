@@ -11,6 +11,7 @@
 #include <raylib.h>
 
 #define TOOLBAR_SLIDE_DURATION 0.22f
+#define TOGGLE_EDGE_MARGIN     3.0f   /* minimal margin around the toggle icon */
 
 static const Color TB_BG   = { 8, 12, 24, 150 };
 static const Color TB_LINE = { 70, 190, 240, 60 };
@@ -37,11 +38,14 @@ static Rectangle btn_rect(int index_from_right) {
     return (Rectangle){ x, y, TOOLBAR_BTN_SIZE, TOOLBAR_BTN_SIZE };
 }
 
-/* Hide/show toggle — top-left corner, before the map readout, pinned to the
- * screen so the strip can always be brought back. */
+/* Hide/show toggle — top-left corner, pinned to the screen so the strip can
+ * always be brought back.  Nearly full toolbar height with minimal edge
+ * margin so the main logo icon has maximum presence. */
 static Rectangle toggle_rect(void) {
-    return (Rectangle){ TOOLBAR_BTN_MARGIN, (TOOLBAR_H - TOOLBAR_BTN_SIZE) * 0.5f,
-                        TOOLBAR_BTN_SIZE, TOOLBAR_BTN_SIZE };
+    float sz = TOOLBAR_H - TOGGLE_EDGE_MARGIN * 2.0f;
+    return (Rectangle){ TOGGLE_EDGE_MARGIN,
+                        TOGGLE_EDGE_MARGIN,
+                        sz, sz };
 }
 
 static void draw_btn(Rectangle r, const char* icon, bool selected, Vector2 mouse) {
@@ -57,9 +61,26 @@ static void draw_btn(Rectangle r, const char* icon, bool selected, Vector2 mouse
                    ui_button_resolve_state(true, selected, CheckCollisionPointRec(mouse, r)));
 }
 
+/* Draw the main-logo toggle button — large icon with a subtle background. */
+static void draw_toggle_btn(Rectangle r, const char* icon, Vector2 mouse) {
+    float sz = r.height - 4.0f;
+    int icon_sz = (int)sz;
+    if (icon_sz < 8) icon_sz = 8;
+
+    UIButtonStyle style = {
+        .icon_id    = icon,
+        .icon_size  = icon_sz,
+        .bg         = { 20, 20, 35, 200 },
+        .bg_hover   = { 50, 50, 70, 220 },
+    };
+    ui_button_draw(r, &style,
+                   ui_button_resolve_state(true, false, CheckCollisionPointRec(mouse, r)));
+}
+
 void toolbar_draw(int screen_width) {
     /* Advance the slide (draw runs once per frame). */
-    float step = GetFrameTime() / TOOLBAR_SLIDE_DURATION;
+    float dt = GetFrameTime();
+    float step = dt / TOOLBAR_SLIDE_DURATION;
     s_slide_t += s_hidden ? step : -step;
     if (s_slide_t < 0.0f) s_slide_t = 0.0f;
     if (s_slide_t > 1.0f) s_slide_t = 1.0f;
@@ -78,7 +99,7 @@ void toolbar_draw(int screen_width) {
         draw_btn(btn_rect(2), "quest", quest_journal_is_visible(), mp);
     }
 
-    draw_btn(toggle_rect(), s_hidden ? "arrow-down" : "arrow-up", false, mp);
+    draw_toggle_btn(toggle_rect(), s_hidden ? "cyberia-white-0" : "cyberia-yellow-1", mp);
 }
 
 bool toolbar_handle_click(int mx, int my) {
