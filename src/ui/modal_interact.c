@@ -51,14 +51,17 @@ static bool  s_has_dialogue = false;
 static uint8_t s_interaction_flags = 0;
 static Color s_border = { 80, 160, 220, 240 };
 
-/* Per-player pending action-talk-quest dialogue code (from AOI), "" when none.
- * Offered through the paired dialogue's quest button; shown directly only
- * when the entity has no default greeting. */
-static char  s_action_dialog_code[64] = {0};
+/* Per-player pending quest-talks (from AOI): one entry per active quest whose
+ * current step has an incomplete talk objective this NPC's action maps to a
+ * dialogue. Each is offered as its own quest-talk button on the paired
+ * dialogue; the greeting stays the default content. */
+static char s_talk_quest_codes[BOT_QUEST_CODES_MAX][64] = {{0}};
+static char s_talk_dialog_codes[BOT_QUEST_CODES_MAX][64] = {{0}};
+static int  s_talk_count = 0;
 
-/* True while the paired dialogue shows the mapped quest-talk instead of the
- * default greeting — the dialogue's quest button toggles it. */
-static bool  s_quest_talk_active = false;
+/* Index of the quest-talk currently shown in the paired dialogue, or -1 while
+ * the default greeting is shown. */
+static int  s_talk_sel = -1;
 
 /* Authoritative quest codes this NPC provides to the player (from AOI). The
  * Quest tab renders one mission card per code; metadata is fetched by code. */
@@ -123,9 +126,11 @@ typedef struct {
     char  entity_id[64];
     char  display_name[64];
     char  dlg_item[128];
-    char  action_dialog_code[64];
+    char  talk_quest_codes[BOT_QUEST_CODES_MAX][64];
+    char  talk_dialog_codes[BOT_QUEST_CODES_MAX][64];
+    int   talk_count;
+    int   talk_sel;
     bool  has_dialogue;
-    bool  quest_talk_active;
     uint8_t interaction_flags;
     Color border;
     ObjectLayerState layers[IBUBBLE_MAX_LAYERS];
@@ -142,9 +147,11 @@ static void es_push(void) {
     strncpy(f->entity_id, s_entity_id, sizeof(f->entity_id) - 1);
     strncpy(f->display_name, s_display_name, sizeof(f->display_name) - 1);
     strncpy(f->dlg_item, s_dlg_item, sizeof(f->dlg_item) - 1);
-    strncpy(f->action_dialog_code, s_action_dialog_code, sizeof(f->action_dialog_code) - 1);
+    memcpy(f->talk_quest_codes, s_talk_quest_codes, sizeof(s_talk_quest_codes));
+    memcpy(f->talk_dialog_codes, s_talk_dialog_codes, sizeof(s_talk_dialog_codes));
+    f->talk_count         = s_talk_count;
+    f->talk_sel           = s_talk_sel;
     f->has_dialogue       = s_has_dialogue;
-    f->quest_talk_active  = s_quest_talk_active;
     f->interaction_flags  = s_interaction_flags;
     f->border             = s_border;
     f->layer_count        = s_cached_layer_count;
@@ -161,9 +168,11 @@ static void es_pop(void) {
     strncpy(s_entity_id, f->entity_id, sizeof(s_entity_id) - 1);
     strncpy(s_display_name, f->display_name, sizeof(s_display_name) - 1);
     strncpy(s_dlg_item, f->dlg_item, sizeof(s_dlg_item) - 1);
-    strncpy(s_action_dialog_code, f->action_dialog_code, sizeof(s_action_dialog_code) - 1);
+    memcpy(s_talk_quest_codes, f->talk_quest_codes, sizeof(s_talk_quest_codes));
+    memcpy(s_talk_dialog_codes, f->talk_dialog_codes, sizeof(s_talk_dialog_codes));
+    s_talk_count         = f->talk_count;
+    s_talk_sel           = f->talk_sel;
     s_has_dialogue       = f->has_dialogue;
-    s_quest_talk_active  = f->quest_talk_active;
     s_interaction_flags  = f->interaction_flags;
     s_border             = f->border;
     s_tab                = f->tab;
@@ -265,30 +274,57 @@ static bool quest_tab_visible(void) {
     return s_quest_code_count > 0;
 }
 
-/* Re-read the per-player bot capability snapshot (pending quest-talk dialogue
- * code, quest codes, interaction flags) from live AOI so the quest-talk button
- * and quest tab track server events without a modal reopen. Keeps the last
- * snapshot when the bot has left the AOI. Returns true when the pending
- * quest-talk dialogue code changed. */
+/* Re-read the per-player bot capability snapshot (pending quest-talks, quest
+ * codes, interaction flags) from live AOI so the quest-talk buttons and quest
+ * tab track server events without a modal reopen. Keeps the last snapshot when
+ * the bot has left the AOI. Returns true when the pending quest-talk set
+ * changed. The selected quest-talk is re-resolved by quest code, so it survives
+ * the set growing or shrinking around it. */
 static bool refresh_bot_snapshot(void) {
     const BotState* bot = game_state_find_bot(s_entity_id);
     if (!bot) return false;
 
-    char prev_code[64];
-    strncpy(prev_code, s_action_dialog_code, sizeof(prev_code) - 1);
-    prev_code[sizeof(prev_code) - 1] = '\0';
+    char prev_sel[64] = {0};
+    if (0 <= s_talk_sel && s_talk_sel < s_talk_count) {
+        strncpy(prev_sel, s_talk_quest_codes[s_talk_sel], sizeof(prev_sel) - 1);
+    }
+    int  prev_count = s_talk_count;
+    char prev_dialogs[BOT_QUEST_CODES_MAX][64];
+    memcpy(prev_dialogs, s_talk_dialog_codes, sizeof(prev_dialogs));
 
     s_interaction_flags = bot->interaction_flags;
-    strncpy(s_action_dialog_code, bot->action_dialog_code, sizeof(s_action_dialog_code) - 1);
-    s_action_dialog_code[sizeof(s_action_dialog_code) - 1] = '\0';
     s_quest_code_count = 0;
+    s_talk_count = 0;
     for (int i = 0; i < bot->quest_code_count && i < BOT_QUEST_CODES_MAX; i++) {
         strncpy(s_quest_codes[s_quest_code_count], bot->quest_codes[i], 63);
         s_quest_codes[s_quest_code_count][63] = '\0';
         quest_cache_fetch(s_quest_codes[s_quest_code_count]);
         s_quest_code_count++;
+
+        /* Parallel entry: non-empty only for a quest with a pending talk. */
+        if ('\0' == bot->quest_talk_dialog_codes[i][0] || s_talk_count >= BOT_QUEST_CODES_MAX) continue;
+        strncpy(s_talk_quest_codes[s_talk_count], bot->quest_codes[i], 63);
+        s_talk_quest_codes[s_talk_count][63] = '\0';
+        strncpy(s_talk_dialog_codes[s_talk_count], bot->quest_talk_dialog_codes[i], 63);
+        s_talk_dialog_codes[s_talk_count][63] = '\0';
+        s_talk_count++;
     }
-    return 0 != strcmp(prev_code, s_action_dialog_code);
+
+    /* Re-point the selection at the same quest; -1 once it is gone. */
+    if ('\0' != prev_sel[0]) {
+        s_talk_sel = -1;
+        for (int i = 0; i < s_talk_count; i++) {
+            if (0 == strcmp(s_talk_quest_codes[i], prev_sel)) { s_talk_sel = i; break; }
+        }
+    } else if (s_talk_sel >= s_talk_count) {
+        s_talk_sel = -1;
+    }
+
+    if (prev_count != s_talk_count) return true;
+    for (int i = 0; i < s_talk_count; i++) {
+        if (0 != strcmp(prev_dialogs[i], s_talk_dialog_codes[i])) return true;
+    }
+    return false;
 }
 
 /* Fill `out` with the visible tab IDs in strip order; returns the count. */
@@ -435,27 +471,28 @@ static Stats stack_stats(void) {
     return t;
 }
 
-/* The active dialogue key: the quest-talk dialogue code when selected, else
- * the skin greeting. */
+/* The active dialogue key: the selected quest-talk dialogue code, else the
+ * skin greeting. */
 static const char* active_dlg_key(void) {
-    return s_quest_talk_active && '\0' != s_action_dialog_code[0]
-               ? s_action_dialog_code : s_dlg_item;
+    return 0 <= s_talk_sel && s_talk_sel < s_talk_count
+               ? s_talk_dialog_codes[s_talk_sel] : s_dlg_item;
 }
 
 /* Open the paired dialogue with the currently selected content: the mapped
  * quest-talk dialogue by full code, or the entity's "default-<skin>"
- * greeting. The server validates talk objectives by the NPC's skin, not this
- * code, so the code is reported on dlg_complete only for traceability. */
+ * greeting. The server validates a talk objective only when this code matches
+ * the action's questDialogueCodes mapping for that quest, so the greeting can
+ * never satisfy one. */
 static void open_dialogue(const DialogueLine* lines, int count) {
-    bool quest_talk = s_quest_talk_active && '\0' != s_action_dialog_code[0];
+    bool quest_talk = 0 <= s_talk_sel && s_talk_sel < s_talk_count;
     char code[96];
     if (quest_talk)
-        snprintf(code, sizeof(code), "%s", s_action_dialog_code);
+        snprintf(code, sizeof(code), "%s", s_talk_dialog_codes[s_talk_sel]);
     else
         snprintf(code, sizeof(code), "default-%s", s_dlg_item);
     modal_dialogue_open(s_entity_id, s_dlg_item, code,
                         MODAL_DIALOGUE_RENDER_ENTITY, lines, count);
-    /* Yellow quest frame only while the quest-talk dialogue is selected. */
+    /* Yellow quest frame only while a quest-talk dialogue is selected. */
     modal_dialogue_set_quest_style(quest_talk);
     s_dialogue_opened = true;
     if (s_dialogue_open_requested) {
@@ -464,50 +501,61 @@ static void open_dialogue(const DialogueLine* lines, int count) {
     }
 }
 
-/* Kick off the fetch for the selected dialogue. Render-only when the skin
- * has no greeting and there is no pending quest-talk. */
+/* Kick off the fetch for the selected dialogue. Render-only when the skin has
+ * no greeting and no quest-talk is selected. */
 static void request_active_dialogue(void) {
-    if (s_quest_talk_active && '\0' != s_action_dialog_code[0])
-        dialogue_data_request_code(s_action_dialog_code);
+    if (0 <= s_talk_sel && s_talk_sel < s_talk_count)
+        dialogue_data_request_code(s_talk_dialog_codes[s_talk_sel]);
     else if (s_has_dialogue)
         dialogue_data_request(s_dlg_item);
-    else if ('\0' != s_action_dialog_code[0]) {
-        s_quest_talk_active = true;
-        dialogue_data_request_code(s_action_dialog_code);
+    else if (s_talk_count > 0) {
+        /* No greeting to fall back to — show the first quest-talk. */
+        s_talk_sel = 0;
+        dialogue_data_request_code(s_talk_dialog_codes[0]);
     } else {
         open_dialogue(NULL, 0);
     }
 }
 
 int modal_interact_quest_talk_count(void) {
-    return s_open && '\0' != s_action_dialog_code[0] ? 1 : 0;
+    return s_open ? s_talk_count : 0;
 }
 
-/* Label for the quest-talk button: the active quest's live objective, else
- * its current step text — so the player sees what the talk advances. */
-const char* modal_interact_quest_talk_label(void) {
-    for (int i = 0; i < s_quest_code_count; i++) {
-        const QuestProgressEntry* q = quest_progress_store_find(s_quest_codes[i]);
-        if (!q || QUEST_ACTIVE != q->status) continue;
-        if ('\0' != q->objectives[0]) return q->objectives;
+/* Label for quest-talk button `index`: that quest's live objective, else its
+ * current step text, else its title — so each button says what it advances. */
+const char* modal_interact_quest_talk_label(int index) {
+    if (index < 0 || index >= s_talk_count) return "";
+    const char* code = s_talk_quest_codes[index];
+    const QuestProgressEntry* q = quest_progress_store_find(code);
+    if (q) {
+        if ('\0' != q->objectives[0])  return q->objectives;
         if ('\0' != q->active_step[0]) return q->active_step;
         if ('\0' != q->title[0])       return q->title;
     }
-    return "Quest Dialogue";
+    const QuestMetadataEntry* qm = quest_cache_get(code);
+    if (qm && '\0' != qm->title[0]) return qm->title;
+    return code;
 }
 
-bool modal_interact_quest_talk_active(void) {
-    return s_quest_talk_active;
+/* Index of the quest-talk shown in the paired dialogue, or -1 for the
+ * greeting. */
+int modal_interact_quest_talk_selected(void) {
+    return s_talk_sel;
 }
 
-void modal_interact_set_quest_talk(bool active) {
-    if (!s_open || active == s_quest_talk_active) return;
-    if (active && '\0' == s_action_dialog_code[0]) return;
-    if (!active && !s_has_dialogue) return; /* no greeting to fall back to */
+/* Select quest-talk `index` (-1 = default greeting) and reopen the paired
+ * dialogue on it. */
+void modal_interact_set_quest_talk(int index) {
+    if (!s_open || index == s_talk_sel) return;
+    if (index >= s_talk_count) return;
+    if (index < 0) {
+        index = -1;
+        if (!s_has_dialogue) return; /* no greeting to fall back to */
+    }
     /* Preserve the mobile fullscreen reader across the swap: reopen expanded
      * instead of dropping back to the collapsed footer state. */
     bool was_fullscreen = modal_dialogue_is_fullscreen();
-    s_quest_talk_active = active;
+    s_talk_sel = index;
     if (modal_dialogue_is_open()) modal_dialogue_close();
     s_dialogue_opened = false;
     s_dialogue_open_requested = was_fullscreen;
@@ -617,21 +665,20 @@ void modal_interact_open(const char* entity_id, const char* display_name,
         snapshot_alive_layers();
     }
 
-    /* The bot carries, per player, the capability bitmask, the authoritative quest
-     * codes it provides, and any pending action-talk-quest dialogue code. Read
-     * these BEFORE requesting the dialogue, since the pending code decides which
-     * dialogue (and frame style) the paired panel opens. */
-    s_action_dialog_code[0] = '\0';
+    /* The bot carries, per player, the capability bitmask, the authoritative
+     * quest codes it provides, and the pending quest-talk mapped to each. Read
+     * these BEFORE requesting the dialogue, since they decide what the paired
+     * panel opens on. */
     s_quest_code_count = 0;
+    s_talk_count = 0;
+    /* The paired dialogue always opens on the default greeting; pending
+     * quest-talks are offered through the dialogue's quest buttons instead
+     * (request_active_dialogue picks one only when there is no greeting). */
+    s_talk_sel = -1;
     refresh_bot_snapshot();
 
     /* The Quest tab, when offered, opens as the active tab. */
     if (quest_tab_visible()) s_tab = MI_TAB_QUEST;
-
-    /* The paired dialogue always opens on the default greeting; a pending
-     * quest-talk is offered through the dialogue's quest button instead
-     * (only when there is no greeting does the quest-talk open directly). */
-    s_quest_talk_active = !s_has_dialogue && '\0' != s_action_dialog_code[0];
 
     /* Interaction freeze for the whole modal session: the server blocks
      * damage/targeting while the reason chain interact→dialogue→interact
@@ -685,15 +732,14 @@ void modal_interact_update(float dt) {
     if (!s_open) return;
     s_age += dt;
 
-    /* Track the bot's live quest-talk state: the button appears the instant
-     * the server posts a pending quest-talk (e.g. right after accepting the
+    /* Track the bot's live quest-talk set: a button appears the instant the
+     * server posts a pending quest-talk (e.g. right after accepting the
      * mission) and disappears once it resolves — no modal reopen. */
-    if (refresh_bot_snapshot() && s_quest_talk_active &&
-        '\0' == s_action_dialog_code[0]) {
+    int prev_sel = s_talk_sel;
+    if (refresh_bot_snapshot() && 0 <= prev_sel && s_talk_sel < 0) {
         /* The quest-talk we were showing was consumed server-side: fall back
          * to the greeting (preserving the mobile fullscreen reader). */
         bool was_fullscreen = modal_dialogue_is_fullscreen();
-        s_quest_talk_active = false;
         if (modal_dialogue_is_open()) modal_dialogue_close();
         s_dialogue_opened = false;
         s_dialogue_open_requested = was_fullscreen;

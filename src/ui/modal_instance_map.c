@@ -80,7 +80,8 @@ static float     s_rotation_age = IMAP_ROTATE_DURATION;
 static Rectangle s_rotate_left_btn, s_rotate_right_btn;
 
 /* Node preview backgrounds: each map's auto-captured Object Layer render,
- * fetched lazily from /api/file/blob/:id through the engine fetch pipeline. */
+ * fetched lazily from the server-supplied previewUrl through the engine
+ * fetch pipeline (File blob for persisted maps, cached render for fallback). */
 static TextureCache* s_preview_cache = NULL;
 
 static void on_preview_blob(const FetchResponse* r) {
@@ -741,10 +742,8 @@ static void draw_node_card(int idx, float fade, double time) {
                          : IMAP_NODE_FILL;
     draw_pixel_panel(card, fill, accent, selected || hovered, fade);
     if (selected) draw_pixel_active_pulse(card, IMAP_SELECTED, fade, time);
-    if ('\0' != n->preview_file_id[0]) {
-        char url[128];
-        snprintf(url, sizeof(url), "/api/file/blob/%s", n->preview_file_id);
-        Texture2D tex = texture_cache_get(s_preview_cache, url);
+    if ('\0' != n->preview_url[0]) {
+        Texture2D tex = texture_cache_get(s_preview_cache, n->preview_url);
         if (0 != tex.id) {
             Rectangle src  = { 0, 0, (float)tex.width, (float)tex.height };
             Rectangle dest = pixel_inner(card, 4.0f);

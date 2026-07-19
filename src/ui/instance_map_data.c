@@ -172,7 +172,7 @@ static bool parse_static_doc(const cJSON* doc) {
         copy_str(node->map_code, IMAP_CODE_MAX, json_str(nd, "mapCode"));
         const char* name = json_str(nd, "name");
         copy_str(node->name, IMAP_NAME_MAX, name ? name : node->map_code);
-        copy_str(node->preview_file_id, IMAP_CODE_MAX, json_str(nd, "preview"));
+        copy_str(node->preview_url, IMAP_URL_MAX, json_str(nd, "previewUrl"));
         node->grid_x = json_int(nd, "gridX", 16);
         node->grid_y = json_int(nd, "gridY", 16);
     }

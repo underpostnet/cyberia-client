@@ -22,6 +22,7 @@
 #define IMAP_MAX_PRESENCE_POIS 512
 #define IMAP_CODE_MAX        64
 #define IMAP_NAME_MAX        64
+#define IMAP_URL_MAX         160
 
 enum {
     IMAP_CAPABILITY_ACTION = 1u << 0,
@@ -47,7 +48,7 @@ typedef enum {
 typedef struct {
     char    map_code[IMAP_CODE_MAX];
     char    name[IMAP_NAME_MAX];
-    char    preview_file_id[IMAP_CODE_MAX]; /* File id of the map's Object
+    char    preview_url[IMAP_URL_MAX];      /* API path of the map's Object
                                              * Layer capture ("" = none)  */
     int     grid_x, grid_y;
     int     quest_provider_count;   /* static totals bound to this map */

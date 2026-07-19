@@ -195,7 +195,9 @@ static bool hit_rect(int mx, int my, Rectangle r) {
 
 /* Quest-talk switcher button — pixel-art chrome matching the quest tab's
  * card buttons: black outer, gold fill, highlight/shadow edges, quest icon. */
-static Rectangle s_qt_btn_rect;
+#define DLG_QT_MAX 8
+static Rectangle s_qt_btn_rect[DLG_QT_MAX];
+static int       s_qt_btn_count = 0;
 
 /* Pixel-art quest-talk button: quest icon on the left, wrapped objective /
  * step label filling the rest. Black text outline keeps it legible on gold. */
@@ -485,24 +487,28 @@ void modal_dialogue_draw(void) {
     /* Quest-talk switcher bar: one pixel-art quest button per available
      * quest-talk above the title; pressing swaps the dialogue between the
      * default greeting and the mapped quest-talk. */
-    s_qt_btn_rect = (Rectangle){ 0 };
-    if (MODAL_DIALOGUE_RENDER_ENTITY == s_render &&
-        modal_interact_quest_talk_count() > 0) {
-        const char* qt_label = modal_interact_quest_talk_label();
-        int   qt_font = viewport_is_mobile() ? DLG_FONT_HINT : DLG_FONT_TEXT;
-        /* Reserve the top-right close button so the wide button clears it. */
+    s_qt_btn_count = 0;
+    if (MODAL_DIALOGUE_RENDER_ENTITY == s_render) {
+        int qt_n = modal_interact_quest_talk_count();
+        if (qt_n > DLG_QT_MAX) qt_n = DLG_QT_MAX;
+        int qt_sel = modal_interact_quest_talk_selected();
+        int qt_font = viewport_is_mobile() ? DLG_FONT_HINT : DLG_FONT_TEXT;
+        /* Reserve the top-right close button so the wide buttons clear it. */
         float bw = txt_max - (fs_close_sz + 8.0f);
         if (bw < 60.0f) bw = 60.0f;
-        int   label_w = (int)bw - (int)(DLG_FONT_SPEAKER + 6.0f + 18.0f);
+        int label_w = (int)bw - (int)(DLG_FONT_SPEAKER + 6.0f + 18.0f);
         if (label_w < 20) label_w = 20;
-        int   lh = text_wrap(qt_label, 0, 0, label_w, qt_font, WHITE, false, false);
-        float bh = (float)lh + 16.0f;
-        float min_bh = (float)DLG_FONT_SPEAKER + 20.0f;
-        if (bh < min_bh) bh = min_bh;
-        s_qt_btn_rect = (Rectangle){ txt_x, ty, bw, bh };
-        draw_quest_talk_btn(s_qt_btn_rect, modal_interact_quest_talk_active(),
-                            qt_label, qt_font);
-        ty += bh + 6.0f;
+        for (int i = 0; i < qt_n; i++) {
+            const char* qt_label = modal_interact_quest_talk_label(i);
+            int   lh = text_wrap(qt_label, 0, 0, label_w, qt_font, WHITE, false, false);
+            float bh = (float)lh + 16.0f;
+            float min_bh = (float)DLG_FONT_SPEAKER + 20.0f;
+            if (bh < min_bh) bh = min_bh;
+            s_qt_btn_rect[s_qt_btn_count++] = (Rectangle){ txt_x, ty, bw, bh };
+            draw_quest_talk_btn(s_qt_btn_rect[i], i == qt_sel, qt_label, qt_font);
+            ty += bh + 4.0f;
+        }
+        if (qt_n > 0) ty += 2.0f;
     }
 
     if (line->speaker[0] != '\0') {
@@ -606,8 +612,10 @@ bool modal_dialogue_handle_click(int mx, int my) {
     }
 
     /* Quest-talk switcher: swap between greeting and quest-talk dialogue. */
-    if (s_qt_btn_rect.width > 0.0f && hit_rect(mx, my, s_qt_btn_rect)) {
-        modal_interact_set_quest_talk(!modal_interact_quest_talk_active());
+    for (int i = 0; i < s_qt_btn_count; i++) {
+        if (!hit_rect(mx, my, s_qt_btn_rect[i])) continue;
+        /* Tapping the selected quest-talk returns to the default greeting. */
+        modal_interact_set_quest_talk(i == modal_interact_quest_talk_selected() ? -1 : i);
         return true;
     }
 

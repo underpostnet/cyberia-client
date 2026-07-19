@@ -117,6 +117,11 @@ bool toolbar_handle_click(int mx, int my) {
          * up, dismiss them all and surface the Quest Journal instead of
          * toggling it. Otherwise it toggles the journal as usual. */
         if (modal_interact_is_open() || inventory_modal_is_open() || modal_instance_map_is_open()) {
+            /* Clear the inventory modal's on-close callback before closing it,
+             * so that a pending modal_interact_reopen (set when the inventory
+             * modal was opened from the interact modal's stack/quest tab) does
+             * not re-open the interact modal after we close it here. */
+            inventory_modal_set_on_close(NULL);
             modal_interact_close();
             inventory_modal_close();
             modal_instance_map_close();
