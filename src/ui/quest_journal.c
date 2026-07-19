@@ -1,12 +1,14 @@
 #include "quest_journal.h"
 #include "text.h"
 
+#include "inventory_bar.h"
 #include "modal.h"
 #include "quest_cache.h"
 #include "quest_progress_store.h"
 #include "toolbar.h"
 #include "ui_button.h"
 #include "ui_icon.h"
+#include "ui_scroll.h"
 #include "ui_toggle.h"
 
 #include <raylib.h>
@@ -36,6 +38,7 @@
 #define QJ_CARD_MX        6    /* card horizontal margin inside the panel */
 #define QJ_CARD_PAD       7    /* card inner padding                      */
 #define QJ_CARD_GAP       6    /* vertical gap between cards              */
+#define QJ_BOTTOM_MARGIN  8    /* gap kept above the inventory bar        */
 
 /* Header / cards sit on top of the shared MODAL_PANEL_BG fill. */
 static const Color C_HEADER   = {  24,  30,  48, 255 };
@@ -60,10 +63,14 @@ static const char* C_SECTION_LABEL[QUEST_STATUS_COUNT] = {
 
 enum { JW_DRAW, JW_CLICK, JW_MEASURE };
 
-static bool     s_init    = false;
-static bool     s_visible = false;   /* toolbar quest button toggles */
-static float    s_age     = 0.0f;
-static float    s_panel_h = QJ_HEADER_H;
+static bool     s_init      = false;
+static bool     s_visible   = false; /* toolbar quest button toggles */
+static float    s_age       = 0.0f;
+static float    s_panel_h   = QJ_HEADER_H;
+static float    s_header_h  = QJ_HEADER_H; /* fixed header height (never scrolls) */
+static float    s_content_h = 0.0f;  /* full section height below the header      */
+static Rectangle s_view     = { 0 };  /* scroll viewport captured for update       */
+static UIScroll s_scroll;             /* clips + scrolls the section content       */
 static UIToggle s_panel;
 static UIToggle s_section[QUEST_STATUS_COUNT];
 static int      s_page[QUEST_STATUS_COUNT]   = { 0, 0, 0 };
@@ -97,7 +104,18 @@ static void ensure_init(void) {
     for (int i = 0; i < QUEST_STATUS_COUNT; ++i) {
         ui_toggle_init(&s_section[i], z, i == QUEST_ACTIVE, UI_TOGGLE_CHEVRON_DOWN);
     }
+    ui_scroll_reset(&s_scroll);
     s_init = true;
+}
+
+/* Height available to the whole panel: from its top down to the inventory
+ * bar, whose top edge moves as the bar shows/hides. Always leaves room for
+ * the header so the close/collapse controls stay reachable. */
+static float available_height(void) {
+    float inv_top = (float)GetScreenHeight() - inventory_bar_visible_height();
+    float avail = inv_top - QJ_BOTTOM_MARGIN - panel_top();
+    if (avail < QJ_HEADER_H) avail = QJ_HEADER_H;
+    return avail;
 }
 
 /* Render (or measure) one quest as a single flat card — no nested expand:
@@ -147,23 +165,15 @@ static int quest_card_layout(bool draw, const QuestProgressEntry* e, QuestStatus
     return (cy - y) + QJ_CARD_PAD;
 }
 
-/* ── Unified layout walk (single source of truth) ─────────────────────── */
-/*
- * JW_DRAW renders, JW_CLICK hit-tests + applies actions, JW_MEASURE only
- * advances the y cursor to size the panel (so the shared background can be
- * filled before the content is drawn). Returns true in JW_CLICK when a tap
- * was consumed. Always records the final panel height in s_panel_h.
- */
-static bool journal_walk(int mode, int mx, int my) {
-    ensure_init();
+/* ── Layout walks (single source of truth) ────────────────────────────── */
+/* JW_DRAW renders, JW_CLICK hit-tests + applies actions, JW_MEASURE only
+ * advances the y cursor to size the region. The header is fixed; the sections
+ * scroll inside the clipped viewport. */
 
-    Rectangle panel = panel_rect();
-    float x = panel.x;
-    float w = panel.width;
-    float y = panel.y;
-
-    /* Header: collapsible title (chevron shifted left of the close button)
-     * plus a close-yellow button that hides the journal. */
+/* Collapsible title (chevron left of the close button) plus a close-yellow
+ * button that hides the journal. Returns the header height; JW_CLICK toggles
+ * collapse or hides on the close button. */
+static float header_walk(int mode, int mx, int my, float x, float y, float w) {
     float close_sz = 24.0f;
     float title_w  = w - close_sz - 6.0f;
     float header_h = ui_toggle_header(&s_panel, x, y, title_w, "Quest Journal", QJ_FONT_TITLE,
@@ -180,21 +190,16 @@ static bool journal_walk(int mode, int mx, int my) {
         UIButtonStyle cb = { .icon_id = "close-yellow", .no_fill = true };
         ui_button_draw(close_r, &cb, UI_BUTTON_NORMAL);
     } else if (JW_CLICK == mode && hit(mx, my, header)) {
-        if (hit(mx, my, close_r)) {
-            s_visible = false;
-            return true;
-        }
-        s_panel.expanded = !s_panel.expanded; /* tap anywhere else on header */
-        return true;
+        if (hit(mx, my, close_r)) s_visible = false;
+        else s_panel.expanded = !s_panel.expanded; /* tap anywhere else on header */
     }
+    return header_h;
+}
 
-    y += header_h;
-
-    if (!s_panel.expanded) {
-        s_panel_h = y - panel.y;
-        return false;
-    }
-
+/* Walk the three status sections starting at y0 (already shifted by the scroll
+ * offset in draw/click). Returns the bottom y so callers can size content. */
+static float sections_walk(int mode, int mx, int my, float x, float y0, float w) {
+    float y = y0;
     for (int sec = 0; sec < QUEST_STATUS_COUNT; ++sec) {
         int count = quest_progress_store_count((QuestStatus)sec);
 
@@ -206,7 +211,7 @@ static bool journal_walk(int mode, int mx, int my) {
         Rectangle srow = { x, y, w, srow_h };
         if (JW_CLICK == mode && hit(mx, my, srow)) {
             s_section[sec].expanded = !s_section[sec].expanded;
-            return true;
+            return y;
         }
         y += srow_h;
 
@@ -257,17 +262,15 @@ static bool journal_walk(int mode, int mx, int my) {
                 DrawText(ctr, (int)(x + (w - cw) / 2), (int)(y + 4), QJ_FONT_SMALL, C_DIM);
             } else if (JW_CLICK == mode && can_prev && hit(mx, my, prev)) {
                 s_page[sec]--;
-                return true;
+                return y;
             } else if (JW_CLICK == mode && can_next && hit(mx, my, next)) {
                 s_page[sec]++;
-                return true;
+                return y;
             }
             y += QJ_PAGER_H;
         }
     }
-
-    s_panel_h = y - panel.y;
-    return false;
+    return y;
 }
 
 /* ── Public API ───────────────────────────────────────────────────────── */
@@ -283,7 +286,10 @@ void quest_journal_init(void) {
 
 void quest_journal_toggle(void) {
     s_visible = !s_visible;
-    if (s_visible) s_age = 0.0f; /* replay the panel pop on each open */
+    if (s_visible) {
+        s_age = 0.0f;            /* replay the panel pop on each open */
+        ui_scroll_reset(&s_scroll); /* start scrolled to the top      */
+    }
 }
 
 bool quest_journal_is_visible(void) {
@@ -296,6 +302,16 @@ void quest_journal_update(float dt) {
     ui_toggle_update(&s_panel, dt);
     for (int i = 0; i < QUEST_STATUS_COUNT; ++i) {
         ui_toggle_update(&s_section[i], dt);
+    }
+
+    /* Advance the section scroll (drag/glide/clamp) against last frame's
+     * measure, then activate a section tap only on a clean, drag-less release. */
+    ui_scroll_update(&s_scroll, s_view, s_content_h, dt);
+    int cx, cy;
+    if (ui_scroll_take_click(&s_scroll, &cx, &cy)) {
+        Rectangle panel = panel_rect();
+        sections_walk(JW_CLICK, cx, cy, panel.x,
+                      panel.y + s_header_h - ui_scroll_offset(&s_scroll), panel.width);
     }
 
     /* Ensure every tracked quest has its metadata — the store seeds from the
@@ -315,10 +331,40 @@ void quest_journal_draw(void) {
     if (!s_visible) return;
     ensure_init();
     Rectangle panel = panel_rect();
-    journal_walk(JW_MEASURE, 0, 0);                       /* size the panel */
-    Rectangle full = { panel.x, panel.y, panel.width, s_panel_h };
-    modal_draw_panel(full, s_age);                        /* shared dark fill + fade-in */
-    journal_walk(JW_DRAW, 0, 0);                          /* content on top */
+    float x = panel.x, w = panel.width, y = panel.y;
+
+    /* Measure: fixed header, then the full (unclipped) section height. */
+    s_header_h = header_walk(JW_MEASURE, 0, 0, x, y, w);
+    s_content_h = s_panel.expanded
+                      ? sections_walk(JW_MEASURE, 0, 0, x, y + s_header_h, w) - (y + s_header_h)
+                      : 0.0f;
+
+    /* Clamp the scroll viewport to the room between the header and the
+     * inventory bar; the panel only grows as tall as it needs within that. */
+    float view_h_avail = available_height() - s_header_h;
+    if (view_h_avail < 0.0f) view_h_avail = 0.0f;
+    float view_h = s_content_h < view_h_avail ? s_content_h : view_h_avail;
+    s_view = (Rectangle){ x, y + s_header_h, w, view_h };
+    s_panel_h = s_header_h + view_h;
+
+    /* Translucent fill so the grid reads through the journal, plus the shared
+     * border and fade-in. */
+    Rectangle full = { x, y, w, s_panel_h };
+    float a = modal_pop_alpha(s_age);
+    Color bg = { 14, 14, 22, 180 };
+    bg.a = (unsigned char)(bg.a * a);
+    DrawRectangleRec(full, bg);
+    Color bc = MODAL_PANEL_BORDER;
+    bc.a = (unsigned char)(bc.a * a);
+    DrawRectangleLinesEx(full, 1.5f, bc);
+
+    header_walk(JW_DRAW, 0, 0, x, y, w);
+
+    if (s_panel.expanded && view_h > 0.0f) {
+        ui_scroll_begin(&s_scroll);
+        sections_walk(JW_DRAW, 0, 0, x, y + s_header_h - ui_scroll_offset(&s_scroll), w);
+        ui_scroll_end(&s_scroll);
+    }
 }
 
 bool quest_journal_handle_click(int mx, int my) {
@@ -326,5 +372,19 @@ bool quest_journal_handle_click(int mx, int my) {
     Rectangle panel = panel_rect();
     Rectangle bounds = { panel.x, panel.y, panel.width, s_panel_h };
     if (!hit(mx, my, bounds)) return false;
-    return journal_walk(JW_CLICK, mx, my);
+
+    /* The header is fixed and handled immediately; taps in the section area
+     * arm the scroll gesture, with activation deferred to a clean release. */
+    Rectangle header = { panel.x, panel.y, panel.width, s_header_h };
+    if (hit(mx, my, header)) {
+        header_walk(JW_CLICK, mx, my, panel.x, panel.y, panel.width);
+        return true;
+    }
+    ui_scroll_on_press(&s_scroll, mx, my);
+    return true;
+}
+
+bool quest_journal_handle_wheel(float wheel_delta) {
+    if (!s_visible) return false;
+    return ui_scroll_on_wheel(&s_scroll, s_view, s_content_h, wheel_delta);
 }

@@ -9,6 +9,7 @@
 #include "inventory_modal.h"
 #include "modal_instance_map.h"
 #include "modal_interact.h"
+#include "quest_journal.h"
 
 
 /* UI tap dispatcher.
@@ -51,6 +52,9 @@ static void ui_on_tick(input_queue_t* input_queue, double dt) {
         }
         if(!consumed && INPUT_ZOOM == evt.type) {
             if (modal_interact_handle_wheel(evt.wheel_delta)) { consumed = true; }
+        }
+        if(!consumed && INPUT_ZOOM == evt.type) {
+            if (quest_journal_handle_wheel(evt.wheel_delta)) { consumed = true; }
         }
         if(!consumed && INPUT_ZOOM == evt.type) {
             if (!modal_interact_is_open() &&

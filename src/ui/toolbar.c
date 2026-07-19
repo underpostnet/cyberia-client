@@ -1,6 +1,8 @@
 #include "toolbar.h"
 
+#include "inventory_modal.h"
 #include "modal_instance_map.h"
+#include "modal_interact.h"
 #include "modal_map.h"
 #include "quest_journal.h"
 #include "ui_button.h"
@@ -110,7 +112,20 @@ bool toolbar_handle_click(int mx, int my) {
     if (s_hidden) return false;
     if (ui_button_hit(btn_rect(0), mx, my)) { fullscreen_bridge_toggle(); return true; }
     if (ui_button_hit(btn_rect(1), mx, my)) { modal_instance_map_toggle(); return true; }
-    if (ui_button_hit(btn_rect(2), mx, my)) { quest_journal_toggle(); return true; }
+    if (ui_button_hit(btn_rect(2), mx, my)) {
+        /* The quest button returns to the grid: if any world-covering modal is
+         * up, dismiss them all and surface the Quest Journal instead of
+         * toggling it. Otherwise it toggles the journal as usual. */
+        if (modal_interact_is_open() || inventory_modal_is_open() || modal_instance_map_is_open()) {
+            modal_interact_close();
+            inventory_modal_close();
+            modal_instance_map_close();
+            if (!quest_journal_is_visible()) quest_journal_toggle();
+        } else {
+            quest_journal_toggle();
+        }
+        return true;
+    }
     /* Tapping the map readout expands/retracts the Instance Map too. */
     if (ui_button_hit(modal_map_bounds(), mx, my)) {
         modal_instance_map_toggle();
