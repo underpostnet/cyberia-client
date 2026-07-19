@@ -24,10 +24,10 @@
 /* Gray shades for pixel-art shadow gradient (outer → inner).
  * Grayish undertones with soft transparency for a subtle pixel-art shadow. */
 static const Color ENTITY_SHADOW_GRAYS[4] = {
-    { 80, 80, 80, 30 },   /* outermost — very faint gray */
-    { 70, 70, 70, 55 },   /* mid-outer — light gray */
-    { 60, 60, 60, 85 },   /* mid-inner — medium gray */
-    { 50, 50, 50, 120 },  /* innermost — darkest gray, still transparent */
+    { 70, 70, 70, 50 },   /* outermost — dark gray */
+    { 60, 60, 60, 70 },   /* mid-outer — darker gray */
+    { 40, 40, 20, 120 },  /* mid-inner — very dark gray */
+    { 20, 20, 20, 140 },     /* innermost — near-black */
 };
 
 /* Animation states untouched for this long are assumed to belong to entities
