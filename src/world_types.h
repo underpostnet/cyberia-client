@@ -92,16 +92,16 @@ struct BotState {
      * action metadata (label, dialogue map) by this code via REST.
      * Position-independent, so a wandering NPC keeps it. */
     char action_code[MAX_ID_LENGTH];
-    /* Per-player pending action-talk-quest dialogue code, "" when none. Non-empty
-     * means an active talk step this NPC advances; the interact modal shows this
-     * dialogue (quest-framed) in place of the default greeting. */
-    char action_dialog_code[MAX_ID_LENGTH];
     /* Per-player interaction capability bitmask (INTERACTION_FLAG_*). */
     uint8_t interaction_flags;
     /* Authoritative quest codes this NPC provides to the local player; metadata
      * is fetched by code only when not already cached. */
     char quest_codes[BOT_QUEST_CODES_MAX][MAX_ID_LENGTH];
     int  quest_code_count;
+    /* Per-player pending quest-talk dialogue code for quest_codes[i], "" when
+     * that quest has no talk objective to advance here. The interact modal
+     * offers one quest-talk button per non-empty entry. */
+    char quest_talk_dialog_codes[BOT_QUEST_CODES_MAX][MAX_ID_LENGTH];
 };
 
 typedef struct WorldObject {

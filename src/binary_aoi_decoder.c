@@ -290,7 +290,20 @@ static void decode_bot_entity(BinReader* r, uint8_t flags) {
             memcpy(b->quest_codes[b->quest_code_count++], code, MAX_ID_LENGTH);
         }
     }
-    br_string(r, b->action_dialog_code, MAX_ID_LENGTH); /* pending talk-quest dialogue */
+    /* Pending quest-talk dialogue codes, parallel to quest_codes: entry i is
+     * non-empty when quest_codes[i] has an incomplete talk objective mapped by
+     * this NPC's action. */
+    uint8_t tn = br_u8(r);
+    for (uint8_t i = 0; i < tn; i++) {
+        char code[MAX_ID_LENGTH];
+        br_string(r, code, MAX_ID_LENGTH);
+        if (i < BOT_QUEST_CODES_MAX) {
+            memcpy(b->quest_talk_dialog_codes[i], code, MAX_ID_LENGTH);
+        }
+    }
+    for (uint8_t i = tn; i < BOT_QUEST_CODES_MAX; i++) {
+        b->quest_talk_dialog_codes[i][0] = '\0';
+    }
 }
 
 static void decode_floor_entity(BinReader* r, uint8_t flags) {
