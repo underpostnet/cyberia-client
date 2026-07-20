@@ -1,6 +1,7 @@
 #include "game_client.h"
 #include "network/socket.h"
 #include "config.h"
+#include "runtime_config.h"
 #include "game_state.h"
 #include "message_parser.h"
 #include "binary_aoi_decoder.h"
@@ -48,7 +49,7 @@ bool connection_open(void) {
         .on_error_cb   = on_websocket_error,
         .on_close_cb   = on_websocket_close,
     };
-    if (!ws_open(&g_client.ws_client, WS_URL, &g_client, callbacks)) {
+    if (!ws_open(&g_client.ws_client, runtime_config_ws_url(), &g_client, callbacks)) {
         LOG_ERROR("WebSocket open failed");
         return false;
     }

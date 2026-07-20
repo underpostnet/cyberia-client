@@ -12,6 +12,24 @@ Usage
   port        TCP port
   directory   Directory to serve (default: current directory)
 
+Multi-instance routing
+----------------------
+  One image serves every world instance; the instance is the first path
+  segment (/FOREST/, /TEST/, ...).  The bundle lives flat in <directory>, so
+  the leading instance segment is stripped before the file lookup and the same
+  index.html/wasm is served under every instance path.
+
+  The browser keeps the original URL, which is what the client reads to resolve
+  its instance.  These env vars parameterise that resolution and are injected
+  into index.html as window.* globals:
+
+    CYBERIA_WS_ORIGIN          websocket origin, e.g. wss://server.cyberiaonline.com
+    CYBERIA_ENGINE_API_ORIGIN  engine REST origin, e.g. https://www.cyberiaonline.com
+    CYBERIA_DEFAULT_INSTANCE   instance used when served from the root path
+
+  Unset vars are simply not injected and the client falls back to the values
+  compiled into the WASM.
+
 Container status reporting
 --------------------------
   Set CONTAINER_DEPLOY_ID in the instance env file (e.g.
@@ -29,8 +47,30 @@ Container status reporting
 
 import sys
 import os
+import io
+import json
+import posixpath
 import subprocess
 from http.server import HTTPServer, SimpleHTTPRequestHandler
+
+RUNTIME_CONFIG_ENV_KEYS = (
+    "CYBERIA_WS_ORIGIN",
+    "CYBERIA_ENGINE_API_ORIGIN",
+    "CYBERIA_DEFAULT_INSTANCE",
+)
+
+
+def runtime_config_script() -> bytes:
+    """<script> assigning the configured env vars to window.*, or b'' if none."""
+
+    assignments = "".join(
+        f"window.{key}={json.dumps(os.environ[key])};"
+        for key in RUNTIME_CONFIG_ENV_KEYS
+        if os.environ.get(key)
+    )
+    if not assignments:
+        return b""
+    return f"<script>{assignments}</script>".encode("utf-8")
 
 
 def call_underpost(key: str, value: str) -> None:
@@ -62,7 +102,7 @@ def report_container_status(container_id: str, status: str) -> None:
 
 
 class CyberiaHandler(SimpleHTTPRequestHandler):
-    """Suppresses per-request noise — suitable for container stdout."""
+    """Serves the flat bundle under any /<instance>/ prefix. Silent logging."""
 
     def end_headers(self):
         self.send_header("Cache-Control", "no-store, no-cache, must-revalidate")
@@ -72,6 +112,44 @@ class CyberiaHandler(SimpleHTTPRequestHandler):
 
     def log_message(self, fmt, *args):
         pass
+
+    def translate_path(self, path):
+        """Drops a leading /<instance>/ segment so the flat bundle resolves.
+
+        A segment is treated as an instance prefix only when it does not name an
+        existing file, so real bundle paths always win.
+        """
+
+        stripped = path.split("?", 1)[0].split("#", 1)[0]
+        segments = [s for s in posixpath.normpath(stripped).split("/") if s and s != "."]
+        if segments and not os.path.exists(os.path.join(os.getcwd(), segments[0])):
+            path = "/" + "/".join(segments[1:])
+        return super().translate_path(path)
+
+    def send_head(self):
+        """Injects runtime config into index.html; everything else unchanged."""
+
+        served = self.translate_path(self.path)
+        if os.path.isdir(served):
+            served = os.path.join(served, "index.html")
+        if not served.endswith("index.html") or not os.path.isfile(served):
+            return super().send_head()
+
+        script = runtime_config_script()
+        with open(served, "rb") as handle:
+            body = handle.read()
+        if script:
+            marker = b"</head>"
+            if marker in body:
+                body = body.replace(marker, script + marker, 1)
+            else:
+                body = script + body
+
+        self.send_response(200)
+        self.send_header("Content-type", "text/html")
+        self.send_header("Content-Length", str(len(body)))
+        self.end_headers()
+        return io.BytesIO(body)
 
 
 if __name__ == "__main__":

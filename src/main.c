@@ -9,6 +9,7 @@
 #include "network/game_client.h"
 #include "network/replication.h"
 #include "config.h"
+#include "runtime_config.h"
 
 #include <raylib.h>
 #include <emscripten/emscripten.h>
@@ -281,6 +282,10 @@ int main(void) {
     InitWindow(vp_w, vp_h, NULL);
     SetTargetFPS(TICK_RATE_HZ);
 
+    // Resolves the instance code and endpoint origins from the URL + injected
+    // runtime config. Must precede any connection or engine API call.
+    runtime_config_init();
+
     // Connects to Game Server
     connection_open();
 
@@ -289,7 +294,7 @@ int main(void) {
     text_font_init(); // main UI font (loaded async once client-hints name a fontFamily)
 
     // [preload] start loading step, fetch from Data Server (Engine)
-    js_init_engine_api(API_BASE_URL);
+    js_init_engine_api(runtime_config_api_base_url());
 
     // NOTE: Do not mix the start fetch loop with the running game loop
     // if need to be non blocking then wait in a loading screen before starting main_loop
