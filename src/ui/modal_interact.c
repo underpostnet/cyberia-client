@@ -798,17 +798,22 @@ static void draw_stack_tab(Rectangle content) {
 static void draw_stats_tab(Rectangle content) {
     Stats t = stack_stats();
     const char* names[6] = { "Effect", "Resistance", "Agility", "Range", "Intelligence", "Utility" };
+    const char* icon_ids[6] = { "stat-effect", "stat-resistance", "stat-agility", "stat-range", "stat-intelligence", "stat-utility" };
     int values[6] = { t.effect, t.resistance, t.agility, t.range, t.intelligence, t.utility };
     float row_h = MI_FONT_STAT + 8.0f;
     float col_w = content.width * 0.5f;
+    int icon_sz = MI_FONT_STAT * 2;
     for (int i = 0; i < 6; i++) {
         float cx = content.x + (i % 2) * col_w;
         float cy = content.y + (i / 2) * row_h;
-        DrawText(names[i], (int)cx, (int)cy, MI_FONT_STAT, C_LABEL);
+        /* Draw stat icon before the label, matching the inventory modal pattern */
+        ui_icon_draw(icon_ids[i], cx + icon_sz / 2.0f, cy + icon_sz / 2.0f, icon_sz, false, 0.0f);
+        DrawText(names[i], (int)(cx + icon_sz + 4), (int)cy, MI_FONT_STAT, C_LABEL);
         char val[16];
-        snprintf(val, sizeof(val), "%d", values[i]);
+        snprintf(val, sizeof(val), "%+d", values[i]);
         int vw = MeasureText(val, MI_FONT_STAT);
-        DrawText(val, (int)(cx + col_w - vw - mi_pad()), (int)cy, MI_FONT_STAT, C_STAT);
+        DrawText(val, (int)(cx + col_w - vw - mi_pad()), (int)cy, MI_FONT_STAT,
+                 values[i] > 0 ? C_STAT : (Color){ 200, 80, 80, 220 });
     }
 }
 
