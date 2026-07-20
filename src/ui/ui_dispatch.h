@@ -6,7 +6,9 @@
 #include "domain/presentation_runtime.h"
 #include "domain/camera.h"
 #include "interaction_bubble.h"
+#include "inventory_bar.h"
 #include "inventory_modal.h"
+#include "modal_dialogue.h"
 #include "modal_instance_map.h"
 #include "modal_interact.h"
 #include "quest_journal.h"
@@ -29,6 +31,15 @@ bool ui_dispatch_covers_point(int screen_x, int screen_y);
 
 static void ui_on_tick(input_queue_t* input_queue, double dt) {
     input_queue_t bkp_queue = { 0 };
+
+    /* Inventory-bar slots activate on a clean release, so a horizontal drag
+     * scrolls the strip instead of opening a modal. A standalone dialogue keeps
+     * the slots read-only. */
+    int inv_tap = -1;
+    if (inventory_bar_take_tap(&inv_tap) && 0 <= inv_tap) {
+        if (modal_interact_is_open())        modal_interact_stack_player_item(inv_tap);
+        else if (!modal_dialogue_is_open())  inventory_modal_open(inv_tap);
+    }
 
     input_event_t evt = { 0 };
     while (input_pop(input_queue, &evt)) {

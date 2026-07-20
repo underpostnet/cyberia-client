@@ -30,13 +30,8 @@ bool ui_dispatch_tap(int x, int y) {
      * keeps the slots read-only. */
     if (modal_dialogue_is_open() || modal_interact_is_open()) {
         if (inventory_bar_handle_toggle_click(x, y)) return true;
-        if (modal_interact_is_open()) {
-            int bar_hit = -1;
-            if (inventory_bar_handle_click(x, y, &bar_hit)) {
-                if (bar_hit >= 0) modal_interact_stack_player_item(bar_hit);
-                return true;
-            }
-        }
+        /* Arms the drag; the slot activates on release via ui_on_tick. */
+        if (modal_interact_is_open() && inventory_bar_handle_click(x, y, NULL)) return true;
         if (inventory_bar_point_covered(x, y)) return true;
     }
 
@@ -58,11 +53,8 @@ bool ui_dispatch_tap(int x, int y) {
 
     if (interaction_bubble_handle_click(x, y)) return true;
 
-    int bar_hit = -1;
-    if (inventory_bar_handle_click(x, y, &bar_hit)) {
-        if (bar_hit >= 0) inventory_modal_open(bar_hit);
-        return true;
-    }
+    /* Arms the drag; the slot activates on release via ui_on_tick. */
+    if (inventory_bar_handle_click(x, y, NULL)) return true;
 
     return false;
 }

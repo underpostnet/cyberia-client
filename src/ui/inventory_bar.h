@@ -21,15 +21,16 @@
  *     inactive → dim grey border
  *
  * User interaction:
- *   Touch / click a slot → opens the inventory modal (inventory_modal.h).
- *   Scrolling: swipe left/right or use PageLeft / PageRight buttons when
- *   the inventory is wider than the visible area.
+ *   Press and slide left/right (finger or mouse) scrolls the strip 1:1 and
+ *   releases into an inertial glide. A press that never became a drag taps the
+ *   slot under it, so scrolling never opens a modal.
  *
  * Call sequence (each frame):
- *   1. inventory_bar_update(dt);       — advance scroll animation
+ *   1. inventory_bar_update(dt);       — advance drag, glide and animations
  *   2. inventory_bar_draw();           — render the bar (screen space)
- *   3. int idx = -1;
- *      if (inventory_bar_handle_click(mx, my, &idx) && idx >= 0) {
+ *   3. inventory_bar_handle_click(mx, my, NULL);  — on press: arm the gesture
+ *   4. int idx = -1;
+ *      if (inventory_bar_take_tap(&idx) && idx >= 0) {
  *          ... open modal ...
  *      }
  */
@@ -110,9 +111,14 @@ Rectangle inventory_bar_toggle_bounds(void);
  * companion surface. */
 bool inventory_bar_handle_toggle_click(int mx, int my);
 
-/* Handle a tap on the bar or its persistent toggle. Returns true when the UI
- * consumed the tap; `out_slot` receives an inventory index for a slot tap. */
+/* Handle a press on the bar or its persistent toggle. Returns true when the UI
+ * consumed it. A press on the strip arms the horizontal drag, so `out_slot` is
+ * always -1 — slot activation arrives later through inventory_bar_take_tap. */
 bool inventory_bar_handle_click(int mx, int my, int* out_slot);
+
+/* One-shot: the deferred slot activation from a clean (drag-less) release.
+ * `out_slot` receives a full_inventory index, or -1 when the tap hit no slot. */
+bool inventory_bar_take_tap(int* out_slot);
 
 /* True for the visible bar or its persistent bottom toggle. */
 bool inventory_bar_point_covered(int mx, int my);
@@ -128,16 +134,6 @@ bool inventory_bar_point_covered(int mx, int my);
  * @return    full_inventory index (0-based), or -1.
  */
 int inventory_bar_get_tapped_slot(int mx, int my);
-
-/**
- * @brief Scroll the bar by a signed number of slots.
- *
- * Positive = scroll right (show later items); negative = left.
- * Clamped to valid range.
- *
- * @param delta Number of slots to scroll.
- */
-void inventory_bar_scroll(int delta);
 
 /**
  * @brief Get the screen-space center of the slot holding a given item.

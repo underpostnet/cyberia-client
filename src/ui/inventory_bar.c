@@ -3,7 +3,12 @@
  * @brief Horizontal inventory bottom bar implementation.
  *
  * Layout (left → right):
- *   [<]  [ scrollable items ... ]  [coin slot]  [>]
+ *   [ drag-scrollable items ... ]  [coin slot]
+ *
+ * The strip scrolls by a continuous pixel offset: press and slide left/right
+ * (finger or mouse) moves it 1:1 and releases into an inertial glide. A press
+ * only activates a slot when it never became a drag, so scrolling never opens
+ * a modal — activation is deferred to release via inventory_bar_take_tap().
  *
  * The coin slot is always the rightmost slot, pinned outside the scrollable
  * region.  Coins cannot be activated (non-activable), so they never get the
@@ -36,17 +41,32 @@
 
 static ObjectLayersManager* s_ol_manager = NULL;
 
-static int   s_scroll_offset = 0;
-static float s_scroll_anim   = 0.0f;
 static UIToggle s_bar_toggle;
 static bool     s_bar_toggle_init = false;
+
+/* Horizontal drag scroll: offset in px, plus gesture + inertia tracking. */
+static float s_scroll_px  = 0.0f;
+static float s_scroll_vel = 0.0f;
+static bool  s_press_armed = false;      /* press landed on the bar          */
+static bool  s_dragging    = false;      /* passed the slop — suppress a tap */
+static bool  s_pointer_was_down = false;
+static float s_press_x = 0.0f;
+static float s_press_y = 0.0f;
+static float s_last_x  = 0.0f;
+static bool  s_tap_pending = false;      /* clean release awaiting activation */
+static int   s_tap_x = 0;
+static int   s_tap_y = 0;
+
+/* Pointer travel that turns a press into a scroll instead of a tap. */
+#define INV_DRAG_SLOP_PX 6.0f
+/* Glide below this speed (px/s) is not worth animating. */
+#define INV_MIN_GLIDE_PX 8.0f
 
 /* ── Internal colours ──────────────────────────────────────────────────── */
 
 static const Color C_BAR_BG        = {  10,  10,  20, INV_BAR_ALPHA };
 static const Color C_COIN_BORDER   = { 230, 190,  60, 200 };  /* gold border for coin slot */
 static const Color C_COIN_QTY_TEXT = { 255, 215,   0, 255 };
-static const Color C_SCROLL_ARROW  = { 180, 180, 200, 220 };
 
 /* ── Internal helpers ─────────────────────────────────────────────────── */
 
@@ -146,35 +166,52 @@ static Rectangle scale_rect(Rectangle r, float s) {
     return (Rectangle){ r.x - (w - r.width) * 0.5f, r.y - (h - r.height) * 0.5f, w, h };
 }
 
-/* visible_slot_count returns how many scrollable-slots fit in the usable width.
- * The coin slot and both arrows each occupy one slot-width on the right/sides. */
+static int slot_pitch(void) { return bar_slot_size() + bar_slot_gap(); }
+
+/* The coin slot is pinned to the right edge, outside the scroll strip. */
+static float coin_slot_x(int screen_w) {
+    return (float)(screen_w - bar_slot_size() - bar_slot_gap());
+}
+
+/* Scrollable strip bounds — everything left of the pinned coin slot. */
+static float strip_left(void)             { return (float)bar_slot_gap(); }
+static float strip_right(int screen_w)    { return coin_slot_x(screen_w) - (float)bar_slot_gap(); }
+
+/* visible_slot_count returns how many scrollable slots fit in the strip. */
 static int visible_slot_count(int screen_w) {
-    int arrow_w  = bar_slot_size() + bar_slot_gap();
-    int coin_w   = bar_slot_size() + bar_slot_gap();
-    int usable   = screen_w - arrow_w * 2 - coin_w;
-    int per_slot = bar_slot_size() + bar_slot_gap();
-    int n = usable / per_slot;
+    int usable = (int)(strip_right(screen_w) - strip_left());
+    int n = usable / slot_pitch();
     return (n < 1) ? 1 : n;
 }
 
-/* slot_rect returns the screen rect for the vis_idx-th scrollable slot. */
-static Rectangle slot_rect(int vis_idx, float bar_top) {
-    float arrow_w  = (float)(bar_slot_size() + bar_slot_gap());
-    float per_slot = (float)(bar_slot_size() + bar_slot_gap());
+/* Furthest the strip may slide before its last slot reaches the right edge. */
+static float max_scroll_px(int screen_w, int scroll_count) {
+    float content = scroll_count > 0 ? (float)(scroll_count * slot_pitch() - bar_slot_gap()) : 0.0f;
+    float max = content - (strip_right(screen_w) - strip_left());
+    return max > 0.0f ? max : 0.0f;
+}
+
+/* slot_rect returns the screen rect for the si-th scrollable slot. */
+static Rectangle slot_rect(int si, float bar_top) {
     float slot_top = bar_top + (bar_height() - bar_slot_size()) * 0.5f;
-
-    float x = arrow_w + (float)vis_idx * per_slot
-            - (s_scroll_anim - (float)s_scroll_offset) * per_slot;
-
+    float x = strip_left() + (float)si * (float)slot_pitch() - s_scroll_px;
     return (Rectangle){ x, slot_top, (float)bar_slot_size(), (float)bar_slot_size() };
 }
 
 /* coin_slot_rect returns the rect for the pinned coin slot (right of scrollable area). */
 static Rectangle coin_slot_rect(int screen_w, float bar_top) {
-    float arrow_w  = (float)(bar_slot_size() + bar_slot_gap());
     float slot_top = bar_top + (bar_height() - bar_slot_size()) * 0.5f;
-    float cx       = (float)(screen_w - arrow_w - bar_slot_size() - bar_slot_gap() + bar_slot_gap() / 2);
-    return (Rectangle){ cx, slot_top, (float)bar_slot_size(), (float)bar_slot_size() };
+    return (Rectangle){ coin_slot_x(screen_w), slot_top,
+                        (float)bar_slot_size(), (float)bar_slot_size() };
+}
+
+/* Hold the offset inside range, killing any glide that runs into an edge. */
+static void clamp_scroll(void) {
+    int map[MAX_OBJECT_LAYERS];
+    int count = build_scroll_map(find_coin_slot(), map, false);
+    float max = max_scroll_px(GetScreenWidth(), count);
+    if (s_scroll_px < 0.0f) { s_scroll_px = 0.0f; s_scroll_vel = 0.0f; }
+    if (s_scroll_px > max)  { s_scroll_px = max;  s_scroll_vel = 0.0f; }
 }
 
 /* draw_coin_slot renders the pinned right coin slot. `coin_idx` is the
@@ -222,26 +259,71 @@ static void draw_coin_slot(Rectangle r, int coin_idx, ObjectLayersManager* mgr) 
     DrawText("-", (int)r.x + 3, (int)r.y + 2, lfs, (Color){255, 165, 0, 200});
 }
 
-/* draw_arrow draws a scroll arrow button. */
-static void draw_arrow(int x, int y, int w, int h, bool left, bool enabled) {
-    UIButtonStyle style = {
-        .text          = left ? "<" : ">",
-        .font_size     = viewport_is_mobile() ? 16 : 18,
-        .bg            = { 20, 20, 35, 180 },
-        .bg_disabled   = { 20, 20, 35, 180 },
-        .text_color    = C_SCROLL_ARROW,
-        .text_disabled = { 60, 60, 80, 100 },
-    };
-    ui_button_draw((Rectangle){ (float)x, (float)y, (float)w, (float)h }, &style,
-                   ui_button_resolve_state(enabled, false, false));
+/* Touch drives the gesture when present; mouse otherwise. */
+static Vector2 pointer_position(void) {
+    if (GetTouchPointCount() > 0) return GetTouchPosition(0);
+    return GetMousePosition();
+}
+
+static bool pointer_down(void) {
+    return GetTouchPointCount() > 0 || IsMouseButtonDown(MOUSE_BUTTON_LEFT);
+}
+
+/* Track the press-drag gesture and the inertial glide that follows it. */
+static void update_drag(float dt) {
+    if (!bar_slots_settled()) {
+        s_press_armed = false;
+        s_dragging    = false;
+        s_scroll_vel  = 0.0f;
+        return;
+    }
+
+    bool down = pointer_down();
+    Vector2 p = pointer_position();
+
+    if (down && s_press_armed) {
+        if (!s_dragging && fabsf(p.x - s_press_x) > INV_DRAG_SLOP_PX) s_dragging = true;
+        if (s_dragging) {
+            float dx = p.x - s_last_x;
+            s_scroll_px -= dx;                       /* content follows the pointer 1:1 */
+            if (dt > 0.0f) s_scroll_vel = -dx / dt;
+        }
+        s_last_x = p.x;
+    }
+
+    if (!down && s_pointer_was_down) {
+        /* A press that never became a drag activates the slot under it. */
+        if (s_press_armed && !s_dragging) {
+            s_tap_pending = true;
+            s_tap_x = (int)s_press_x;
+            s_tap_y = (int)s_press_y;
+        }
+        s_press_armed = false;
+        s_dragging    = false;
+    }
+    s_pointer_was_down = down;
+
+    if (!s_dragging) {
+        if (fabsf(s_scroll_vel) > INV_MIN_GLIDE_PX) {
+            s_scroll_px  += s_scroll_vel * dt;
+            s_scroll_vel *= powf(0.02f, dt);
+        } else {
+            s_scroll_vel = 0.0f;
+        }
+    }
+    clamp_scroll();
 }
 
 /* ── Public API ─────────────────────────────────────────────────────────── */
 
 void inventory_bar_init(ObjectLayersManager* ol_manager) {
     s_ol_manager    = ol_manager;
-    s_scroll_offset = 0;
-    s_scroll_anim   = 0.0f;
+    s_scroll_px     = 0.0f;
+    s_scroll_vel    = 0.0f;
+    s_press_armed   = false;
+    s_dragging      = false;
+    s_pointer_was_down = false;
+    s_tap_pending   = false;
     s_bar_toggle_init = false;
     ensure_bar_toggle();
     fx_inventory_bar_qty_init();
@@ -253,14 +335,7 @@ void inventory_bar_update(float dt) {
     ui_toggle_set_anchor(&s_bar_toggle,
                          bar_toggle_anchor(GetScreenHeight()));
     fx_inventory_bar_qty_update(dt);
-
-    float target = (float)s_scroll_offset;
-    float diff   = target - s_scroll_anim;
-    if (fabsf(diff) < 0.01f) {
-        s_scroll_anim = target;
-    } else {
-        s_scroll_anim += diff * (1.0f - powf(0.2f, dt * 10.0f));
-    }
+    update_drag(dt);
 }
 
 float inventory_bar_visible_height(void) {
@@ -295,25 +370,17 @@ void inventory_bar_draw(void) {
 
         int coin_idx = find_coin_slot();
         int vis      = visible_slot_count(screen_w);
-        int arrow_w  = bar_slot_size() + bar_slot_gap();
         int scroll_map[MAX_OBJECT_LAYERS];
         int scroll_count = build_scroll_map(coin_idx, scroll_map, false);
+        float left  = strip_left();
+        float right = strip_right(screen_w);
 
-        draw_arrow(0, (int)current_bar_top, arrow_w, bar_height(), true,
-                   s_scroll_offset > 0);
-        draw_arrow(screen_w - arrow_w, (int)current_bar_top, arrow_w, bar_height(), false,
-                   s_scroll_offset + vis < scroll_count);
-
-        for (int vi = 0; vi < vis; vi++) {
-            int si = s_scroll_offset + vi;
-            if (si >= scroll_count) break;
+        for (int si = 0; si < scroll_count; si++) {
+            Rectangle r = slot_rect(si, current_bar_top);
+            if (r.x + r.width <= left) continue;
+            if (r.x >= right)          break;
 
             int inv_idx = scroll_map[si];
-            Rectangle r = slot_rect(vi, current_bar_top);
-            float coin_left = coin_slot_rect(screen_w, current_bar_top).x;
-            if (r.x + r.width <= (float)arrow_w) continue;
-            if (r.x >= coin_left)                continue;
-
             ObjectLayerState ol = g_game_state.full_inventory[inv_idx];
             ol.quantity = fx_inventory_bar_qty_display(ol.item_id, ol.quantity);
             /* During the arrival pulse the sprite renders in full colour. */
@@ -330,6 +397,7 @@ void inventory_bar_draw(void) {
         if (bar_slots_settled()) fx_inventory_bar_qty_draw(cr, coin_key);
 
         if (scroll_count > vis) {
+            int first     = (int)((s_scroll_px + (float)slot_pitch() * 0.5f) / (float)slot_pitch());
             int dot_count = scroll_count > 40 ? 40 : scroll_count;
             int dot_r     = 3;
             int dot_gap   = 4;
@@ -337,7 +405,7 @@ void inventory_bar_draw(void) {
             int dot_x     = (screen_w / 2 - total_w / 2);
             int dot_y     = (int)current_bar_top + 4;
             for (int i = 0; i < dot_count; i++) {
-                bool on = (i >= s_scroll_offset && i < s_scroll_offset + vis);
+                bool on = (i >= first && i < first + vis);
                 Color dc = on ? (Color){180, 200, 255, 220} : (Color){60, 60, 90, 140};
                 DrawCircle(dot_x + i * (dot_r * 2 + dot_gap) + dot_r, dot_y, (float)dot_r, dc);
             }
@@ -350,6 +418,7 @@ void inventory_bar_draw(void) {
 
 bool inventory_bar_handle_click(int mx, int my, int* out_slot) {
     ensure_bar_toggle();
+    /* Activation is deferred to a clean release — see inventory_bar_take_tap. */
     if (out_slot) *out_slot = -1;
     if (inventory_bar_handle_toggle_click(mx, my)) return true;
 
@@ -357,7 +426,19 @@ bool inventory_bar_handle_click(int mx, int my, int* out_slot) {
     if ((float)my < current_bar_top || my >= GetScreenHeight()) return false;
     if (!s_bar_toggle.expanded) return s_bar_toggle.anim_t > 0.0f;
 
-    int slot = inventory_bar_get_tapped_slot(mx, my);
+    s_press_armed = true;
+    s_dragging    = false;
+    s_press_x     = (float)mx;
+    s_press_y     = (float)my;
+    s_last_x      = (float)mx;
+    s_scroll_vel  = 0.0f;   /* catch a gliding strip */
+    return true;
+}
+
+bool inventory_bar_take_tap(int* out_slot) {
+    if (!s_tap_pending) return false;
+    s_tap_pending = false;
+    int slot = inventory_bar_get_tapped_slot(s_tap_x, s_tap_y);
     if (out_slot) *out_slot = slot;
     return true;
 }
@@ -375,21 +456,10 @@ int inventory_bar_get_tapped_slot(int mx, int my) {
     int screen_w = GetScreenWidth();
     int screen_h = GetScreenHeight();
     float current_bar_top = bar_top(screen_h);
-    int arrow_w  = bar_slot_size() + bar_slot_gap();
 
     if ((float)my < current_bar_top || my > screen_h) return -1;
 
     int coin_idx = find_coin_slot();
-    int scroll_map[MAX_OBJECT_LAYERS];
-    int scroll_count = build_scroll_map(coin_idx, scroll_map, false);
-
-    int vis = visible_slot_count(screen_w);
-
-    /* Left arrow: scroll back */
-    if (mx < arrow_w) {
-        if (s_scroll_offset > 0) inventory_bar_scroll(-1);
-        return -1;
-    }
 
     /* Coin slot: return coin idx so modal can show it */
     Rectangle cr = coin_slot_rect(screen_w, current_bar_top);
@@ -398,36 +468,21 @@ int inventory_bar_get_tapped_slot(int mx, int my) {
         return (coin_idx >= 0) ? coin_idx : -1;
     }
 
-    /* Right arrow: scroll forward */
-    if (mx > screen_w - arrow_w) {
-        if (s_scroll_offset + vis < scroll_count) inventory_bar_scroll(1);
-        return -1;
-    }
+    int scroll_map[MAX_OBJECT_LAYERS];
+    int scroll_count = build_scroll_map(coin_idx, scroll_map, false);
+    float left  = strip_left();
+    float right = strip_right(screen_w);
 
-    /* Scrollable slot hit-test */
-    for (int vi = 0; vi < vis; vi++) {
-        int si = s_scroll_offset + vi;
-        if (si >= scroll_count) break;
-        Rectangle r = slot_rect(vi, current_bar_top);
+    for (int si = 0; si < scroll_count; si++) {
+        Rectangle r = slot_rect(si, current_bar_top);
+        if (r.x + r.width <= left) continue;
+        if (r.x >= right)          break;
         if ((float)mx >= r.x && (float)mx < r.x + r.width &&
             (float)my >= r.y && (float)my < r.y + r.height) {
             return scroll_map[si];
         }
     }
     return -1;
-}
-
-void inventory_bar_scroll(int delta) {
-    int screen_w = GetScreenWidth();
-    int n_inv    = g_game_state.full_inventory_count;
-    int coin_idx = find_coin_slot();
-    int scroll_count = n_inv - (coin_idx >= 0 ? 1 : 0);
-    int vis      = visible_slot_count(screen_w);
-    int max_off  = scroll_count - vis;
-    if (max_off < 0) max_off = 0;
-    s_scroll_offset += delta;
-    if (s_scroll_offset < 0)       s_scroll_offset = 0;
-    if (s_scroll_offset > max_off) s_scroll_offset = max_off;
 }
 
 bool inventory_bar_item_slot_center(const char* item_id, Vector2* out) {
@@ -469,11 +524,11 @@ bool inventory_bar_item_slot_center(const char* item_id, Vector2* out) {
             if (scroll_map[k] == inv_idx) { si = k; break; }
         }
         if (si >= 0) {
-            int vis = visible_slot_count(screen_w);
-            int vi  = si - s_scroll_offset;
-            if (vi < 0)        vi = 0;
-            if (vi > vis - 1)  vi = vis - 1;
-            Rectangle r = slot_rect(vi, current_bar_top);
+            Rectangle r = slot_rect(si, current_bar_top);
+            float left  = strip_left();
+            float right = strip_right(screen_w);
+            if (r.x < left)                 r.x = left;
+            if (r.x + r.width > right)      r.x = right - r.width;
             *out = (Vector2){ r.x + r.width * 0.5f, r.y + r.height * 0.5f };
             return true;
         }
