@@ -8,12 +8,13 @@
             content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"
         />
         <title>Cyberia Client</title>
-        <!-- Retro pixel-art font for the loading screen -->
-        <link
-            href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap"
-            rel="stylesheet"
-        />
-        <style>
+        <style>     
+           
+            @font-face {
+                font-family: 'retro-font-title';
+                src: URL('fonts/Jersey15-Regular.ttf') format('truetype');
+            }
+ 
             :root {
                 --color-bg: #050505;
                 --color-gold: #ffcc00;
@@ -67,7 +68,7 @@
                 height: 100%;
                 background-color: var(--color-bg);
                 color: white;
-                font-family: "Press Start 2P", monospace;
+                font-family: "retro-font-title", monospace;
                 display: flex;
                 flex-direction: column;
                 justify-content: center;
@@ -191,7 +192,7 @@
 
             #loading .title {
                 color: var(--color-gold);
-                font-size: 24px;
+                font-size: 40px;
                 margin-bottom: 15px;
                 text-shadow: 0 0 10px var(--color-gold-glow);
                 letter-spacing: 2px;
@@ -199,9 +200,8 @@
 
             #loading .module-text {
                 color: #aaaaaa;
-                font-size: 10px;
+                font-size: 18px;
                 margin-bottom: 20px;
-                height: 12px; /* fixed height so the layout does not jump */
                 max-width: 100%;
                 white-space: nowrap;
                 overflow: hidden;
@@ -253,7 +253,7 @@
                 right: 10px;
                 top: 50%;
                 transform: translateY(-50%);
-                font-size: 13px;
+                font-size: 25px;
                 font-weight: 700;
                 color: #fff;
                 text-shadow:
@@ -278,7 +278,7 @@
             #loading .ready-text {
                 visibility: hidden;
                 color: #fff;
-                font-size: 12px;
+                font-size: 30px;
                 margin-top: 20px;
                 animation: blink 1s infinite;
                 text-shadow: 0 0 8px rgba(255, 255, 255, 0.8);
