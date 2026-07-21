@@ -10,24 +10,6 @@ spec:
     fqdn: client.cyberiaonline.com
   routes:
     - conditions:
-        - prefix: /FOREST
-      
-      enableWebsockets: true
-      services:
-        - name: dd-cyberia-mmo-client-forest-development-blue-service
-          port: 8082
-          weight: 100
-    
-    - conditions:
-        - prefix: /TEST
-      
-      enableWebsockets: true
-      services:
-        - name: dd-cyberia-mmo-client-test-development-blue-service
-          port: 8082
-          weight: 100
-    
-    - conditions:
         - prefix: /
       
       enableWebsockets: true

@@ -12,24 +12,6 @@ spec:
       secretName: client.cyberiaonline.com
   routes:
     - conditions:
-        - prefix: /FOREST
-      
-      enableWebsockets: true
-      services:
-        - name: dd-cyberia-mmo-client-forest-production-blue-service
-          port: 8081
-          weight: 100
-    
-    - conditions:
-        - prefix: /TEST
-      
-      enableWebsockets: true
-      services:
-        - name: dd-cyberia-mmo-client-test-production-blue-service
-          port: 8081
-          weight: 100
-    
-    - conditions:
         - prefix: /
       
       enableWebsockets: true

@@ -18,21 +18,3 @@ spec:
           port: 8082
           weight: 100
     
-    - conditions:
-        - prefix: /TEST
-      
-      enableWebsockets: true
-      services:
-        - name: dd-cyberia-mmo-client-test-development-blue-service
-          port: 8082
-          weight: 100
-    
-    - conditions:
-        - prefix: /
-      
-      enableWebsockets: true
-      services:
-        - name: dd-cyberia-mmo-client-development-blue-service
-          port: 8082
-          weight: 100
-    
