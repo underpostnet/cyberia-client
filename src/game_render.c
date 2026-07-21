@@ -1008,16 +1008,16 @@ void game_render_aoi_circle(void) {
     DrawCircleLines(center.x, center.y, aoi_radius, (Color){ 180, 180, 255, 120 });
 }
 
-/* Inventory bar + the screen-space loot FX that land on its slots: delivery
- * sparks, then the delivered item's icon riding above them into the slot. */
-static void draw_inventory_bar_with_loot_fx(void) {
-    inventory_bar_draw();
-
+/* Screen-space loot FX (slot delivery sparks + the reduction "expend" spray, and
+ * the item icon riding either stream). Drawn in a top pass above the HUD/modals
+ * so both the pickup delivery and the outward reduction parabola read clearly;
+ * the notification toast still draws after this, staying top-most. */
+static void draw_loot_screen_fx(void) {
     int loot_scr = loot_fx_screen_particle_slot_count();
     for (int i = 0; i < loot_scr; i++) {
         LootFxScreenParticle sp;
         if (!loot_fx_screen_particle_at(i, &sp)) continue;
-        fx_shape_spark(sp.x, sp.y, sp.size, FX_SPARK_GOLD, 1.0f);
+        fx_shape_spark(sp.x, sp.y, sp.size, FX_SPARK_GOLD, sp.alpha);
     }
 
     int loot_tok = loot_fx_delivery_token_slot_count();
@@ -1044,7 +1044,7 @@ void game_render_ui(void) {
 
     bool inventory_companion = modal_interact_is_open() || modal_dialogue_is_open();
     if (!inventory_companion) {
-        draw_inventory_bar_with_loot_fx();
+        inventory_bar_draw();
     }
 
     // Portal hold progress bar (centered above the inventory bar; only while
@@ -1068,7 +1068,7 @@ void game_render_ui(void) {
     }
 
     if (inventory_companion) {
-        draw_inventory_bar_with_loot_fx();
+        inventory_bar_draw();
     }
 
     // Instance Map content inside the modal_map container — independent
@@ -1085,7 +1085,11 @@ void game_render_ui(void) {
         dev_ui_draw(g_renderer.screen_width, g_renderer.screen_height, 0);
     }
 
-    // Transient notification toast — top-most, above every modal.
+    // Screen-space loot FX (pickup delivery + the reduction "expend" spray) draw
+    // above the HUD and modals so they read clearly, but below the notification.
+    draw_loot_screen_fx();
+
+    // Transient notification toast — top-most, above every modal and the loot FX.
     modal_notification_draw();
 }
 

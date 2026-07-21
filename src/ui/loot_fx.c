@@ -78,6 +78,17 @@
 #define DELIVER_SIZE_MIN     6.0f    /* px squares                                */
 #define DELIVER_SIZE_MAX     12.0f
 
+/* Screen-space slot expend — the reverse of delivery. Large particles + the item
+ * icon fly OUT of the slot to random on-screen points along the same parabola,
+ * slow enough to read clearly. */
+#define EXPEND_COUNT         11
+#define EXPEND_TTL           1.15f   /* seconds, slot → outward (slow, legible)   */
+#define EXPEND_DIST_MIN      120.0f  /* px travelled from the slot                */
+#define EXPEND_DIST_MAX      280.0f
+#define EXPEND_SIZE_MIN      12.0f   /* visible squares, a touch smaller          */
+#define EXPEND_SIZE_MAX      22.0f
+#define EXPEND_EDGE_PAD      10.0f   /* keep targets this far inside the screen   */
+
 /* Delivery token — the item icon riding the stream, above the particles. */
 #define TOKEN_MAX            16      /* concurrent delivery tokens               */
 #define TOKEN_SIZE_START     36.0f   /* px at launch                             */
@@ -383,16 +394,16 @@ static void spawn_slot_arrival(float sx, float sy) {
     }
 }
 
-/* The item icon riding the delivery stream, drawn above the particles. */
+/* The item icon riding a stream, drawn above the particles. */
 static void spawn_delivery_token(float from_x, float from_y, float to_x, float to_y,
-                                 const char* item_id) {
+                                 const char* item_id, float ttl) {
     DeliveryToken* t = NULL;
     for (int i = 0; i < TOKEN_MAX; i++) {
         if (!s_tokens[i].active) { t = &s_tokens[i]; break; }
     }
     if (!t) return;
     *t = (DeliveryToken){ .sx = from_x, .sy = from_y, .tx = to_x, .ty = to_y,
-                          .ttl = DELIVER_TTL, .active = true };
+                          .ttl = ttl, .active = true };
     if (item_id) strncpy(t->item_id, item_id, MAX_ITEM_ID_LENGTH - 1);
 }
 
@@ -400,7 +411,7 @@ static void spawn_delivery_token(float from_x, float from_y, float to_x, float t
  * scheduled arrival burst when they land. */
 static void spawn_slot_delivery(float from_x, float from_y, float to_x, float to_y,
                                 const char* item_id) {
-    spawn_delivery_token(from_x, from_y, to_x, to_y, item_id);
+    spawn_delivery_token(from_x, from_y, to_x, to_y, item_id, DELIVER_TTL);
     for (int n = 0; n < DELIVER_COUNT; n++) {
         ScrParticle* p = scr_alloc();
         if (!p) break;
@@ -451,6 +462,57 @@ void loot_fx_reward_delivery(const char* item_id, float from_x, float from_y) {
     Vector2 slot;
     if (!inventory_bar_item_slot_center(item_id, &slot)) return;
     spawn_slot_delivery(from_x, from_y, slot.x, slot.y, item_id);
+}
+
+/* A random on-screen point EXPEND_DIST away from the slot, clamped inside. */
+static void expend_target(float from_x, float from_y, float* tx, float* ty) {
+    float ang  = lcg_range(0.0f, 6.2831853f);
+    float dist = lcg_range(EXPEND_DIST_MIN, EXPEND_DIST_MAX);
+    float x = from_x + cosf(ang) * dist;
+    float y = from_y + sinf(ang) * dist;
+    float sw = (float)GetScreenWidth();
+    float sh = (float)GetScreenHeight();
+    if (x < EXPEND_EDGE_PAD)       x = EXPEND_EDGE_PAD;
+    else if (x > sw - EXPEND_EDGE_PAD) x = sw - EXPEND_EDGE_PAD;
+    if (y < EXPEND_EDGE_PAD)       y = EXPEND_EDGE_PAD;
+    else if (y > sh - EXPEND_EDGE_PAD) y = sh - EXPEND_EDGE_PAD;
+    *tx = x;
+    *ty = y;
+}
+
+void loot_fx_slot_expend_at(const char* item_id, float from_x, float from_y) {
+    if (!item_id || item_id[0] == '\0') return;
+
+    float ttx, tty;
+    expend_target(from_x, from_y, &ttx, &tty);
+    spawn_delivery_token(from_x, from_y, ttx, tty, item_id, EXPEND_TTL);
+
+    for (int n = 0; n < EXPEND_COUNT; n++) {
+        ScrParticle* p = scr_alloc();
+        if (!p) break;
+        float tx, ty;
+        expend_target(from_x, from_y, &tx, &ty);
+        *p = (ScrParticle){
+            .mode   = 0,
+            .x      = from_x,
+            .y      = from_y,
+            .sx     = from_x,
+            .sy     = from_y,
+            .tx     = tx,
+            .ty     = ty,
+            .ttl    = EXPEND_TTL * lcg_range(0.9f, 1.1f),
+            .size   = lcg_range(EXPEND_SIZE_MIN, EXPEND_SIZE_MAX),
+            .tint   = LOOT_FX_TINT_GOLD,
+            .active = true,
+        };
+    }
+}
+
+void loot_fx_slot_expend(const char* item_id) {
+    if (!item_id || item_id[0] == '\0') return;
+    Vector2 slot;
+    if (!inventory_bar_item_slot_center(item_id, &slot)) return;
+    loot_fx_slot_expend_at(item_id, slot.x, slot.y);
 }
 
 /* ── Vacuum flight (stage 3) ───────────────────────────────────────────── */

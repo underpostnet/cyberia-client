@@ -1,6 +1,7 @@
 #include "ui/fx_inventory_bar_qty.h"
 
 #include "game_state.h"
+#include "inventory_bar.h"
 #include "loot_fx.h"
 #include "object_layer.h"
 #include "text.h"
@@ -45,6 +46,9 @@ typedef struct {
     float  pulse_age;     /* seconds since the slot pulse fired; < 0 = at rest  */
     bool   hidden;        /* first-copy slot held invisible until pickup lands  */
     bool   held;          /* external hold (reward delivery) — long fallback    */
+    bool   present;       /* item was in full_inventory this frame              */
+    float  slot_x, slot_y;/* last-known slot center (for the expend after removal) */
+    bool   has_slot;      /* slot center has been captured at least once        */
     double last_seen;     /* eviction sentinel                                  */
     bool   used;
 } FqEntry;
@@ -88,12 +92,22 @@ static FqEntry* alloc_entry(const char* id) {
 }
 
 /* Fire the held change as a visible popup; a gain (or a first-copy reveal)
- * also pulses the slot so the number and the scale pop read as one event. */
+ * also pulses the slot so the number and the scale pop read as one event. A
+ * reduction additionally sprays the item outward — the reverse of the pickup
+ * delivery parabola — so a loss reads as the item leaving the slot. */
 static void release_pending(FqEntry* e) {
     if (e->pending_delta != 0) {
         e->delta = e->pending_delta;
         e->popup_age = 0.0f;
         if (e->pending_delta > 0 || e->hidden) e->pulse_age = 0.0f;
+        /* A reduction sprays outward from the slot. If the last copy was consumed
+         * the slot is gone, so launch from its captured last-known center. */
+        if (e->pending_delta < 0) {
+            if (!e->present && e->has_slot)
+                loot_fx_slot_expend_at(e->item_id, e->slot_x, e->slot_y);
+            else
+                loot_fx_slot_expend(e->item_id);
+        }
     }
     e->hidden = false;
     e->held = false;
@@ -127,6 +141,8 @@ void fx_inventory_bar_qty_notify_arrival(const char* item_id) {
 void fx_inventory_bar_qty_update(float dt) {
     s_clock += dt;
 
+    for (int i = 0; i < FQ_MAX; i++) s_e[i].present = false;
+
     const GameState* gs = &g_game_state;
     for (int i = 0; i < gs->full_inventory_count; i++) {
         const char* id = gs->full_inventory[i].item_id;
@@ -155,12 +171,30 @@ void fx_inventory_bar_qty_update(float dt) {
             e->pending_delta += qty - e->actual;
             e->actual = qty;
         }
+        e->present   = true;
         e->last_seen = s_clock;
+        /* Remember where the slot sits while it exists, so the expend can launch
+         * from there once the last copy is consumed and the slot is gone. */
+        Vector2 sc;
+        if (inventory_bar_item_slot_center(id, &sc)) {
+            e->slot_x = sc.x;
+            e->slot_y = sc.y;
+            e->has_slot = true;
+        }
     }
 
     for (int i = 0; i < FQ_MAX; i++) {
         FqEntry* e = &s_e[i];
         if (!e->used) continue;
+
+        /* Last copy consumed (qty 1→0 drops the stack server-side, so the item
+         * leaves full_inventory): synthesize the decrement to 0 so it fires the
+         * same -N popup + expend as any in-place reduction. */
+        if (!e->present && e->actual > 0 && !e->hidden && !e->held) {
+            if (!e->pending) { e->pending = true; e->pending_since = s_clock; }
+            e->pending_delta += -e->actual;
+            e->actual = 0;
+        }
 
         /* Fallback: fire even without a pickup animation (quests, coins, etc.). */
         double wait = e->held ? FQ_HELD_WAIT : FQ_RELEASE_WAIT;
