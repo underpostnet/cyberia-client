@@ -55,6 +55,7 @@ link: $(OBJS)
 	@mkdir -p $(OUTPUT_DIR)/fonts
 	@cp $(ASSETS_DIR)/favicon.ico $(OUTPUT_DIR)/favicon.ico
 	@cp $(ASSETS_DIR)/fonts/Jersey15-Regular.ttf $(OUTPUT_DIR)/fonts/Jersey15-Regular.ttf
+	@cp public/404.html $(OUTPUT_DIR)/404.html
 	$(CC) -o $(OUTPUT) $(OBJS) $(LDFLAGS) $(LDFLAGS_RELEASE) \
 		-s USE_GLFW=3 \
 		--shell-file $(WEB_SHELL) \
