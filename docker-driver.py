@@ -57,6 +57,10 @@ RUNTIME_CONFIG_ENV_KEYS = (
     "CYBERIA_WS_ORIGIN",
     "CYBERIA_ENGINE_API_ORIGIN",
     "CYBERIA_DEFAULT_INSTANCE",
+    # This instance's URL sub-path ("/FOREST", "/TEST", "" for default). The
+    # reverse proxy strips it before this server sees the request, so only the
+    # injected env tells the 404 page which instance it belongs to.
+    "CYBERIA_BASE_PATH",
 )
 
 
@@ -114,42 +118,55 @@ class CyberiaHandler(SimpleHTTPRequestHandler):
         pass
 
     def translate_path(self, path):
-        """Drops a leading /<instance>/ segment so the flat bundle resolves.
-
-        A segment is treated as an instance prefix only when it does not name an
-        existing file, so real bundle paths always win.
-        """
+        """Drops this instance's own /<CYBERIA_BASE_PATH>/ prefix so the flat
+        bundle resolves. Only the container's own prefix is stripped, so an
+        unrelated first segment (a genuinely bad path) is NOT mistaken for an
+        instance prefix and instead falls through to the 404 page."""
 
         stripped = path.split("?", 1)[0].split("#", 1)[0]
-        segments = [s for s in posixpath.normpath(stripped).split("/") if s and s != "."]
-        if segments and not os.path.exists(os.path.join(os.getcwd(), segments[0])):
+        segments = [seg for seg in posixpath.normpath(stripped).split("/") if seg and seg != "."]
+        base_seg = os.environ.get("CYBERIA_BASE_PATH", "").strip("/")
+        if base_seg and segments and segments[0] == base_seg:
             path = "/" + "/".join(segments[1:])
         return super().translate_path(path)
 
+    def _serve_html(self, filepath, status):
+        """Serve an HTML file at `status` with the runtime config injected."""
+        script = runtime_config_script()
+        with open(filepath, "rb") as handle:
+            body = handle.read()
+        if script:
+            marker = b"</head>"
+            body = body.replace(marker, script + marker, 1) if marker in body else script + body
+        self.send_response(status)
+        self.send_header("Content-type", "text/html; charset=utf-8")
+        self.send_header("Content-Length", str(len(body)))
+        self.end_headers()
+        return io.BytesIO(body)
+
     def send_head(self):
-        """Injects runtime config into index.html; everything else unchanged."""
+        """Serve the bundle. HTML gets the runtime config injected; an unmatched
+        path serves the instance's 404 page (404.html) with a 404 status, so
+        /FOREST/<bad> and /TEST/<bad> land on their own instance's 404 (the
+        sub-path is already stripped by translate_path)."""
 
         served = self.translate_path(self.path)
         if os.path.isdir(served):
             served = os.path.join(served, "index.html")
-        if not served.endswith("index.html") or not os.path.isfile(served):
+        if os.path.isfile(served):
+            if served.endswith(".html"):
+                return self._serve_html(served, 200)
             return super().send_head()
 
-        script = runtime_config_script()
-        with open(served, "rb") as handle:
-            body = handle.read()
-        if script:
-            marker = b"</head>"
-            if marker in body:
-                body = body.replace(marker, script + marker, 1)
-            else:
-                body = script + body
-
-        self.send_response(200)
-        self.send_header("Content-type", "text/html")
-        self.send_header("Content-Length", str(len(body)))
-        self.end_headers()
-        return io.BytesIO(body)
+        # Unknown path → the instance 404 page (config injected, incl. base path).
+        # Prod ships 404.html inside the served bundle (bin/404.html via the
+        # Dockerfile COPY); local dev serves bin/ but the generated page sits at
+        # the repo root next to this script, so fall back there too.
+        script_dir = os.path.dirname(os.path.abspath(__file__))
+        for fallback in (os.path.join(os.getcwd(), "404.html"), os.path.join(script_dir, "404.html")):
+            if os.path.isfile(fallback):
+                return self._serve_html(fallback, 404)
+        return super().send_head()
 
 
 if __name__ == "__main__":
