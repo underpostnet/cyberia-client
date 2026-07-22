@@ -7,7 +7,23 @@
             name="viewport"
             content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"
         />
-        <title>Cyberia Client</title>
+        <title>CYBERIA MMO</title>
+        <script>
+            // raylib/GLFW (emscripten USE_GLFW=3) assigns document.title from the
+            // InitWindow title during startup. main.c passes NULL, so that write
+            // blanks the title and the browser falls back to the URL. Pin the
+            // title declared above as the single source of truth and restore it
+            // whenever the WASM runtime overwrites it.
+            (function () {
+                var titleEl = document.querySelector('title');
+                var TITLE = (titleEl && titleEl.textContent.trim()) || 'Cyberia Client';
+                var pin = function () {
+                    if (document.title !== TITLE) document.title = TITLE;
+                };
+                pin();
+                if (titleEl) new MutationObserver(pin).observe(titleEl, { childList: true });
+            })();
+        </script>
         <style>     
            
             @font-face {
