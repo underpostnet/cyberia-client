@@ -59,6 +59,10 @@ void modal_interact_overlay_closed(void);
  * inventory modal on top of the session; closing it returns here. */
 void modal_interact_stack_player_item(int inv_idx);
 
+/* Discard any pending interact session on the ephemeral stack (so it is not
+ * reopened). Called when the inventory modal switches straight to a bar slot. */
+void modal_interact_discard_stack(void);
+
 /* Returns the cached alive layer snapshot (persists across AOI changes). */
 const ObjectLayerState* modal_interact_get_cached_layers(int* out_count);
 

@@ -20,6 +20,7 @@
 #include "quest_progress_store.h"
 #include "quest_cache.h"
 #include "ui_button.h"
+#include "ui_button_pixel_retro.h"
 #include "ui_scroll.h"
 #include "ui_icon.h"
 #include "util/log.h"
@@ -80,6 +81,7 @@ static bool  s_dlg_context = false;
  * independent Expand and direct quest-action controls. */
 #define MI_QUEST_MAX 8
 static Rectangle s_q_grid_btn[MI_QUEST_MAX]; /* grid-mode Expand buttons    */
+static Rectangle s_q_grid_header[MI_QUEST_MAX]; /* card header (icon+title+stats) */
 static Rectangle s_q_grid_action_btn[MI_QUEST_MAX];
 static int       s_q_grid_action_kind[MI_QUEST_MAX]; /* 0 none, 1 accept, 2 abandon */
 static int       s_q_expanded = -1;          /* -1 = grid of mission buttons */
@@ -601,6 +603,13 @@ void modal_interact_stack_player_item(int inv_idx) {
     modal_interact_close();
     inventory_modal_open(inv_idx);
     inventory_modal_set_on_close(modal_interact_reopen);
+}
+
+/* Drop the pending interact session(s) pushed onto the ephemeral stack so a
+ * closed context is not reopened. Used when the inventory modal switches
+ * directly to a bar slot instead of returning through the opener chain. */
+void modal_interact_discard_stack(void) {
+    es_clear();
 }
 
 /* ── Public API ───────────────────────────────────────────────────────── */
@@ -1139,6 +1148,10 @@ static void draw_quest_grid_button(Rectangle card, const QuestCardInfo* info,
     draw_quest_grid_status_line(info->word, title_x, title_y + title_height + 2,
                                 title_width, status_font, info->color);
 
+    /* The header area (icon + title + stats, above the action row) also
+     * expands the card when tapped. */
+    s_q_grid_header[slot] = (Rectangle){ card.x, card.y, card.width,
+                                         action_y - MI_Q_CARD_ACTION_GAP - card.y };
     s_q_grid_btn[slot] = (Rectangle){ card.x + MI_Q_GRID_PAD, action_y,
                                        action_width, action_height };
     const char* action_label = info->acceptable ? "Accept"
@@ -1194,21 +1207,18 @@ static void draw_quest_detail(int slot, const char* code, float x, float w,
     if (active || acceptable) {
         bool desktop = !viewport_is_mobile();
         int bfont = desktop ? MI_FONT_QBTN_DESKTOP : (MI_FONT_BTN - 3);
-        UIButtonStyle st = active
-            ? (UIButtonStyle){ .text = "Abandon quest", .font_size = bfont,
-                               .bg = (Color){ 120, 44, 44, 255 },
-                               .bg_hover = (Color){ 160, 60, 60, 255 }, .text_color = C_TEXT,
-                               .rounded = true, .roundness = 0.18f }
-            : (UIButtonStyle){ .text = "Accept quest", .font_size = bfont,
-                               .bg = (Color){ 30, 110, 70, 255 },
-                               .bg_hover = (Color){ 45, 145, 90, 255 }, .text_color = C_TEXT,
-                               .rounded = true, .roundness = 0.18f };
-        Vector2 button_size = ui_button_measure(&st);
-        float button_width = button_size.x < iw ? button_size.x : (float)iw;
+        const char* label = active ? "Abandon quest" : "Accept quest";
+        UIButtonPixelRetroStyle st = {
+            .bg = active ? (Color){ 150, 46, 46, 255 } : (Color){ 38, 138, 76, 255 },
+            .icon_id = active ? "close" : "arrow-right",
+            .label = label, .font_size = bfont, .enabled = true,
+        };
+        /* Content-fit width: icon + gap + label + padding. */
+        float button_width = (float)MeasureText(label, bfont) + bfont + 6.0f + 28.0f;
+        if (button_width > (float)iw) button_width = (float)iw;
         float button_height = desktop ? MI_Q_BTN_H_DESKTOP : 32.0f;
-        if (button_size.y > button_height) button_height = button_size.y;
         Rectangle btn = { ix, *y, button_width, button_height };
-        ui_button_draw(btn, &st, ui_button_resolve_state(true, false, ui_button_hit(btn, mx, my)));
+        ui_button_pixel_retro_draw(btn, &st, ui_button_hit(btn, mx, my));
         s_q_btn[slot] = btn;
         s_q_btn_kind[slot] = active ? 2 : 1;
         strncpy(s_q_btn_code[slot], code, 63);
@@ -1369,7 +1379,9 @@ static void handle_quest_click(int mx, int my) {
             request_quest_action(s_q_grid_action_kind[i], s_quest_codes[i]);
             return;
         }
-        if (ui_button_hit(s_q_grid_btn[i], mx, my)) {
+        /* Expand button or a tap anywhere on the card header expands it. */
+        if (ui_button_hit(s_q_grid_btn[i], mx, my) ||
+            ui_button_hit(s_q_grid_header[i], mx, my)) {
             s_q_expanded = i;
             s_q_expand_age = 0.0f;
             ui_scroll_reset(&s_q_scroll);
@@ -1421,7 +1433,7 @@ void modal_interact_draw(void) {
 
     /* Tab strip — inactive tabs are transparent with a dimmed icon+label;
      * the active tab gets a clearly visible fill so it reads as selected. Only
-     * the capability tabs the entity exposes are drawn. */
+     * the capability tabs the entity exposes are drawn. Pixel retro style. */
     int tabs[MI_TAB_COUNT];
     int tabs_n = visible_tabs(tabs);
     bool tab_shown = false;
@@ -1430,17 +1442,30 @@ void modal_interact_draw(void) {
     for (int k = 0; k < tabs_n; k++) {
         int t = tabs[k];
         Rectangle r = tab_rect(card, k);
-        UIButtonStyle tb;
+        bool hovered = ui_button_hit(r, mx, my);
         if (t == s_tab) {
-            tb = (UIButtonStyle){ .text = MI_TAB_LABEL[t], .icon_id = MI_TAB_ICON[t],
-                                  .font_size = mi_font_label(), .bg = C_TAB_ACTIVE,
-                                  .text_color = C_TEXT, .rounded = true, .roundness = 0.25f };
+            UIButtonPixelRetroStyle st = {
+                .bg = C_TAB_ACTIVE,
+                .icon_id = MI_TAB_ICON[t],
+                .label = MI_TAB_LABEL[t],
+                .font_size = mi_font_label(),
+                .text_color = C_TEXT,
+                .selected = true,
+                .enabled = true,
+            };
+            ui_button_pixel_retro_draw(r, &st, hovered);
         } else {
-            tb = (UIButtonStyle){ .text = MI_TAB_LABEL[t], .icon_id = MI_TAB_ICON[t],
-                                  .font_size = mi_font_label(), .no_fill = true,
-                                  .text_color = C_TAB_DIM };
+            UIButtonPixelRetroStyle st = {
+                .bg = (Color){ 24, 30, 48, 255 },
+                .icon_id = MI_TAB_ICON[t],
+                .label = MI_TAB_LABEL[t],
+                .font_size = mi_font_label(),
+                .text_color = C_TAB_DIM,
+                .selected = false,
+                .enabled = true,
+            };
+            ui_button_pixel_retro_draw(r, &st, hovered);
         }
-        ui_button_draw(r, &tb, UI_BUTTON_NORMAL);
     }
 
     if (s_tab == MI_TAB_STACK)       draw_stack_tab(content);
@@ -1454,25 +1479,36 @@ void modal_interact_draw(void) {
     bar_buttons(card, &dialog, &chat, &integration);
 
     if (dialog_btn_visible()) {
-        UIButtonStyle dialog_btn = { .text = "Dialog", .icon_id = "chat",
-                                     .font_size = mi_font_btn(), .bg = C_BTN, .text_color = C_TEXT };
-        if (viewport_is_mobile()) {
-            dialog_btn.font_size = 12;
-            dialog_btn.padding = 2.0f;
-            dialog_btn.gap = 2.0f;
-        }
-        ui_button_draw(dialog, &dialog_btn,
-                       ui_button_resolve_state(true, false, ui_button_hit(dialog, mx, my)));
+        /* A pending quest-talk marks the Dialog button: quest icon + yellow
+         * border so the mission entry stands out among Chat / Integration. */
+        bool pending_quest_talk = modal_interact_quest_talk_count() > 0;
+        int dfont = viewport_is_mobile() ? 12 : mi_font_btn();
+        UIButtonPixelRetroStyle dialog_st = {
+            .bg = C_BTN,
+            .icon_id = pending_quest_talk ? "quest" : "chat",
+            .label = "Dialog",
+            .font_size = dfont,
+            .text_color = C_TEXT,
+            .selected = false,
+            .enabled = true,
+        };
+        ui_button_pixel_retro_draw(dialog, &dialog_st, ui_button_hit(dialog, mx, my));
+        /* Yellow border overlay for quest-talk active state. */
+        if (pending_quest_talk)
+            DrawRectangleRoundedLinesEx(dialog, 0.18f, 6, 2.0f, (Color){ 230, 200, 60, 230 });
     }
 
-    UIButtonStyle chat_btn = { .text = "Chat", .icon_id = "chat",
-                               .font_size = mi_font_btn(), .bg = C_BTN, .text_color = C_TEXT };
-    if (viewport_is_mobile()) {
-        chat_btn.font_size = 12;
-        chat_btn.padding = 2.0f;
-        chat_btn.gap = 2.0f;
-    }
-    ui_button_draw(chat, &chat_btn, ui_button_resolve_state(true, false, ui_button_hit(chat, mx, my)));
+    int cfont = viewport_is_mobile() ? 12 : mi_font_btn();
+    UIButtonPixelRetroStyle chat_st = {
+        .bg = C_BTN,
+        .icon_id = "chat",
+        .label = "Chat",
+        .font_size = cfont,
+        .text_color = C_TEXT,
+        .selected = false,
+        .enabled = true,
+    };
+    ui_button_pixel_retro_draw(chat, &chat_st, ui_button_hit(chat, mx, my));
 
     int unread = notification_count(NOTIF_CHAT, s_entity_id);
     if (unread > 0) {
@@ -1486,15 +1522,17 @@ void modal_interact_draw(void) {
         DrawText(txt, (int)(bx - tw * 0.5f), (int)(by - 5.5f), 11, (Color){ 255, 255, 255, 245 });
     }
 
-    UIButtonStyle integration_btn = { .text = "Integration", .icon_id = "reload",
-                                      .font_size = mi_font_btn(), .bg = C_BTN, .text_color = C_TEXT };
-    if (viewport_is_mobile()) {
-        integration_btn.font_size = 12;
-        integration_btn.padding = 2.0f;
-        integration_btn.gap = 2.0f;
-    }
-    ui_button_draw(integration, &integration_btn,
-                   ui_button_resolve_state(true, false, ui_button_hit(integration, mx, my)));
+    int ifont = viewport_is_mobile() ? 12 : mi_font_btn();
+    UIButtonPixelRetroStyle integration_st = {
+        .bg = C_BTN,
+        .icon_id = "reload",
+        .label = "Integration",
+        .font_size = ifont,
+        .text_color = C_TEXT,
+        .selected = false,
+        .enabled = true,
+    };
+    ui_button_pixel_retro_draw(integration, &integration_st, ui_button_hit(integration, mx, my));
 }
 
 /* ── Click ────────────────────────────────────────────────────────────── */
