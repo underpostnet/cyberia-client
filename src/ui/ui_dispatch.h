@@ -37,7 +37,21 @@ static void ui_on_tick(input_queue_t* input_queue, double dt) {
      * the slots read-only. */
     int inv_tap = -1;
     if (inventory_bar_take_tap(&inv_tap) && 0 <= inv_tap) {
-        if (modal_interact_is_open())        modal_interact_stack_player_item(inv_tap);
+        /* Modal already open → switch it straight to the tapped slot (closing
+         * any opener chain). Interact open → stack the item on top. An
+         * inventory-lore dialogue (opened from the inventory modal) → close
+         * the dialogue chain and open the new slot. Otherwise open a fresh
+         * modal, unless a standalone entity dialogue keeps slots read-only. */
+        if (inventory_modal_is_open())       inventory_modal_switch_slot(inv_tap);
+        else if (modal_interact_is_open())   modal_interact_stack_player_item(inv_tap);
+        else if (modal_dialogue_is_item_lore()) {
+            /* Open the new modal first so its "inventory" freeze bridges over
+             * the dialogue's before the dialogue's thaw fires; drop the
+             * dialogue's reopen callback so the old chain does not return. */
+            modal_dialogue_set_on_close(NULL);
+            inventory_modal_open(inv_tap);
+            modal_dialogue_close();
+        }
         else if (!modal_dialogue_is_open())  inventory_modal_open(inv_tap);
     }
 

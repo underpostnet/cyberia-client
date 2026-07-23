@@ -1042,8 +1042,12 @@ void game_render_ui(void) {
     // Quest Journal (right side) — grid-level HUD, below every modal.
     quest_journal_draw();
 
-    bool inventory_companion = modal_interact_is_open() || modal_dialogue_is_open();
-    if (!inventory_companion) {
+    // The inventory bar stays live and on top while any bottom modal is open
+    // (interact, dialogue, or the inventory modal itself), so slots remain
+    // clickable and never sit under a dim overlay.
+    bool bar_on_top = modal_interact_is_open() || modal_dialogue_is_open() ||
+                      inventory_modal_is_open();
+    if (!bar_on_top) {
         inventory_bar_draw();
     }
 
@@ -1067,7 +1071,7 @@ void game_render_ui(void) {
         modal_dialogue_draw();
     }
 
-    if (inventory_companion) {
+    if (bar_on_top) {
         inventory_bar_draw();
     }
 

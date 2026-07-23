@@ -29,6 +29,7 @@
 #include "inventory_bar.h"
 #include "modal.h"
 #include "modal_dialogue.h"
+#include "modal_interact.h"
 #include "object_layer.h"
 #include "object_layers_management.h"
 #include "ol_as_animated_ico.h"
@@ -36,6 +37,7 @@
 #include "serial.h"
 #include "toolbar.h"
 #include "ui_button.h"
+#include "ui_button_pixel_retro.h"
 #include "ui_scroll.h"
 #include "ui_state.h"
 #include "world_types.h"
@@ -405,6 +407,23 @@ void inventory_modal_open(int inv_idx) {
     send_freeze(true);
 }
 
+void inventory_modal_switch_slot(int inv_idx) {
+    if (!s_open) return;
+    if (inv_idx < 0 || inv_idx >= g_game_state.full_inventory_count) return;
+    if (!s_is_external && inv_idx == s_inv_idx) return; /* already showing it */
+
+    /* Switching straight to a bar slot closes the opener chain rather than
+     * returning to it: drop the on-close callback and discard any pending
+     * interact session so nothing reopens behind this modal. */
+    s_on_close = NULL;
+    modal_interact_discard_stack();
+
+    s_inv_idx     = inv_idx;
+    s_is_external = false;
+    reset_view_state();          /* replays the pop-in transition */
+    /* Already frozen under "inventory"; the slot swap keeps that context. */
+}
+
 void inventory_modal_open_external(const ObjectLayerState* ols) {
     if (!ols || '\0' == ols->item_id[0]) return;
     s_external    = *ols;
@@ -508,9 +527,13 @@ void inventory_modal_draw(void) {
     int screen_w = GetScreenWidth();
     int screen_h = GetScreenHeight();
 
-    /* 2. Card — interact-style container: dim overlay, translucent panel,
-     * 1px border, and a header strip with close button + item title. */
-    modal_draw_overlay(screen_w, screen_h, s_age);
+    /* 2. Card — interact-style container: translucent panel, 1px border, and
+     * a header strip with close button + item title. The dim overlay stops at
+     * the inventory bar so the bar stays fully readable and interactive. */
+    float dim_h = (float)screen_h - inventory_bar_visible_height();
+    Color overlay = MODAL_OVERLAY_BG;
+    overlay.a = (unsigned char)(overlay.a * modal_pop_alpha(s_age));
+    DrawRectangle(0, 0, screen_w, (int)dim_h, overlay);
     Rectangle card = card_rect(screen_w, screen_h, modal_pop_scale(s_age));
     float alpha = modal_pop_alpha(s_age);
     Color card_bg = MODAL_PANEL_BG;
@@ -962,11 +985,10 @@ void inventory_modal_draw(void) {
         s_lore_btn_rect = inventory_lore_button_rect(card, layout, button_h,
                                                       lore_button_w, lore_button_h);
         int mx = GetMouseX(), my = GetMouseY();
-        UIButtonStyle lore_btn = { .text = "Dialog", .icon_id = "chat",
-                                   .font_size = body_font, .bg = C_LORE_BTN,
-                                   .text_color = C_BTN_TEXT, .rounded = true, .roundness = 0.12f };
-        ui_button_draw(s_lore_btn_rect, &lore_btn,
-                       ui_button_resolve_state(true, false, hit_rect(mx, my, s_lore_btn_rect)));
+        UIButtonPixelRetroStyle lore_btn = { .label = "Dialog", .icon_id = "chat",
+                                             .font_size = body_font, .bg = C_LORE_BTN,
+                                             .text_color = C_BTN_TEXT, .enabled = true };
+        ui_button_pixel_retro_draw(s_lore_btn_rect, &lore_btn, hit_rect(mx, my, s_lore_btn_rect));
     }
 
     /* 12. Activate / Deactivate button — only for the player's own items. */
@@ -1000,11 +1022,10 @@ void inventory_modal_draw(void) {
         s_activate_btn_rect = btn_r;
         s_activate_btn_visible = true;
         int mx = GetMouseX(), my = GetMouseY();
-        UIButtonStyle act_btn = { .text = btn_label, .icon_id = btn_icon,
-                                  .font_size = body_font + 2, .bg = btn_color,
-                                  .text_color = txt_color, .rounded = true, .roundness = 0.12f };
-        ui_button_draw(btn_r, &act_btn,
-                       ui_button_resolve_state(btn_enabled, false, hit_rect(mx, my, btn_r)));
+        UIButtonPixelRetroStyle act_btn = { .label = btn_label, .icon_id = btn_icon,
+                                            .font_size = body_font + 2, .bg = btn_color,
+                                            .text_color = txt_color, .enabled = btn_enabled };
+        ui_button_pixel_retro_draw(btn_r, &act_btn, hit_rect(mx, my, btn_r));
     }
 }
 

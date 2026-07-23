@@ -64,6 +64,11 @@ void inventory_modal_init(ObjectLayersManager* ol_manager);
  */
 void inventory_modal_open(int inv_idx);
 
+/* Switch an already-open modal to a different inventory slot (the inventory
+ * bar remains live under the modal). Replays the pop-in transition and closes
+ * any opener chain so the modal becomes a standalone view of the new slot. */
+void inventory_modal_switch_slot(int inv_idx);
+
 /**
  * @brief Open a read-only inspection view for an item (another entity's or
  *        the player's own layer seen from the interaction modal). No
