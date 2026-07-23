@@ -20,7 +20,7 @@ spec:
     spec:
       containers:
         - name: dd-cyberia-mmo-client-production-blue
-          image: underpost/cyberia-client:v3.2.70
+          image: underpost/cyberia-client:v3.2.80
           imagePullPolicy: Always
           envFrom:
             - secretRef:
