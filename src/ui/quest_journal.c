@@ -27,7 +27,6 @@
 #define QJ_DETAIL_H       54
 #define QJ_PAGER_H        22
 #define QJ_CHEVRON        32
-#define QJ_SMALL_SCREEN_BREAKPOINT_PX 600
 
 #define QJ_FONT_TITLE     16
 #define QJ_FONT_SECTION   14
@@ -71,7 +70,6 @@ static float    s_header_h  = QJ_HEADER_H; /* fixed header height (never scrolls
 static float    s_content_h = 0.0f;  /* full section height below the header      */
 static Rectangle s_view     = { 0 };  /* scroll viewport captured for update       */
 static UIScroll s_scroll;             /* clips + scrolls the section content       */
-static UIToggle s_panel;
 static UIToggle s_section[QUEST_STATUS_COUNT];
 static int      s_page[QUEST_STATUS_COUNT]   = { 0, 0, 0 };
 
@@ -98,9 +96,7 @@ static bool hit(int mx, int my, Rectangle r) {
 
 static void ensure_init(void) {
     if (s_init) return;
-    bool expanded = GetScreenWidth() >= QJ_SMALL_SCREEN_BREAKPOINT_PX;
     Rectangle z = { 0, 0, QJ_CHEVRON, QJ_CHEVRON };
-    ui_toggle_init(&s_panel, z, expanded, UI_TOGGLE_CHEVRON_UP);
     for (int i = 0; i < QUEST_STATUS_COUNT; ++i) {
         ui_toggle_init(&s_section[i], z, i == QUEST_ACTIVE, UI_TOGGLE_CHEVRON_DOWN);
     }
@@ -170,28 +166,22 @@ static int quest_card_layout(bool draw, const QuestProgressEntry* e, QuestStatus
  * advances the y cursor to size the region. The header is fixed; the sections
  * scroll inside the clipped viewport. */
 
-/* Collapsible title (chevron left of the close button) plus a close-yellow
- * button that hides the journal. Returns the header height; JW_CLICK toggles
- * collapse or hides on the close button. */
+/* Fixed title bar (no collapse) with a close-yellow button that hides the
+ * journal. The panel is always open; only the close button acts. */
 static float header_walk(int mode, int mx, int my, float x, float y, float w) {
+    float header_h = QJ_HEADER_H;
     float close_sz = 24.0f;
-    float title_w  = w - close_sz - 6.0f;
-    float header_h = ui_toggle_header(&s_panel, x, y, title_w, "Quest Journal", QJ_FONT_TITLE,
-                                      C_TEXT, UI_TOGGLE_HEADER_RIGHT, QJ_HEADER_PAD, 0.0f,
-                                      UI_TOGGLE_HDR_CHEVRON, false);
-    Rectangle header = { x, y, w, header_h };
     Rectangle close_r = { x + w - close_sz - 4.0f, y + (header_h - close_sz) * 0.5f,
                           close_sz, close_sz };
     if (JW_DRAW == mode) {
+        Rectangle header = { x, y, w, header_h };
         DrawRectangleRec(header, C_HEADER);
-        ui_toggle_header(&s_panel, x, y, title_w, "Quest Journal", QJ_FONT_TITLE,
-                         C_TEXT, UI_TOGGLE_HEADER_RIGHT, QJ_HEADER_PAD, 0.0f,
-                         UI_TOGGLE_HDR_CHEVRON, true);
+        DrawText("Quest Journal", (int)(x + QJ_HEADER_PAD),
+                 (int)(y + (header_h - QJ_FONT_TITLE) * 0.5f), QJ_FONT_TITLE, C_TEXT);
         UIButtonStyle cb = { .icon_id = "close-yellow", .no_fill = true };
         ui_button_draw(close_r, &cb, UI_BUTTON_NORMAL);
-    } else if (JW_CLICK == mode && hit(mx, my, header)) {
-        if (hit(mx, my, close_r)) s_visible = false;
-        else s_panel.expanded = !s_panel.expanded; /* tap anywhere else on header */
+    } else if (JW_CLICK == mode && hit(mx, my, close_r)) {
+        s_visible = false;
     }
     return header_h;
 }
@@ -287,8 +277,10 @@ void quest_journal_init(void) {
 void quest_journal_toggle(void) {
     s_visible = !s_visible;
     if (s_visible) {
-        s_age = 0.0f;            /* replay the panel pop on each open */
-        ui_scroll_reset(&s_scroll); /* start scrolled to the top      */
+        ensure_init();
+        s_age = 0.0f;                          /* replay the panel pop on each open */
+        ui_scroll_reset(&s_scroll);            /* start scrolled to the top         */
+        s_section[QUEST_ACTIVE].expanded = true; /* Active quests open by default   */
     }
 }
 
@@ -299,7 +291,6 @@ bool quest_journal_is_visible(void) {
 void quest_journal_update(float dt) {
     ensure_init();
     s_age += dt;
-    ui_toggle_update(&s_panel, dt);
     for (int i = 0; i < QUEST_STATUS_COUNT; ++i) {
         ui_toggle_update(&s_section[i], dt);
     }
@@ -335,9 +326,7 @@ void quest_journal_draw(void) {
 
     /* Measure: fixed header, then the full (unclipped) section height. */
     s_header_h = header_walk(JW_MEASURE, 0, 0, x, y, w);
-    s_content_h = s_panel.expanded
-                      ? sections_walk(JW_MEASURE, 0, 0, x, y + s_header_h, w) - (y + s_header_h)
-                      : 0.0f;
+    s_content_h = sections_walk(JW_MEASURE, 0, 0, x, y + s_header_h, w) - (y + s_header_h);
 
     /* Clamp the scroll viewport to the room between the header and the
      * inventory bar; the panel only grows as tall as it needs within that. */
@@ -360,7 +349,7 @@ void quest_journal_draw(void) {
 
     header_walk(JW_DRAW, 0, 0, x, y, w);
 
-    if (s_panel.expanded && view_h > 0.0f) {
+    if (view_h > 0.0f) {
         ui_scroll_begin(&s_scroll);
         sections_walk(JW_DRAW, 0, 0, x, y + s_header_h - ui_scroll_offset(&s_scroll), w);
         ui_scroll_end(&s_scroll);
