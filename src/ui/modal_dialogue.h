@@ -107,6 +107,10 @@ void modal_dialogue_set_on_close(ModalDialogueOnClose cb);
  */
 bool modal_dialogue_is_open(void);
 
+/* True while an inventory-lore dialogue (opened from the inventory modal's
+ * Dialog button) is up. */
+bool modal_dialogue_is_item_lore(void);
+
 /* True while the mobile fullscreen reader is up. The interact modal hides for
  * its duration. */
 bool modal_dialogue_is_fullscreen(void);

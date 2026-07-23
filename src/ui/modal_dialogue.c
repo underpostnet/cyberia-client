@@ -26,6 +26,7 @@
 #include "ol_as_animated_ico.h"
 #include "ol_stack_ico.h"
 #include "ui_button.h"
+#include "ui_button_pixel_retro.h"
 #include "ui_icon.h"
 #include "util/log.h"
 
@@ -131,6 +132,13 @@ static bool dlg_hidden(void) {
            s_collapsed;
 }
 
+/* True while an inventory-lore dialogue is up (RENDER_ITEM) — the one opened
+ * from the inventory modal's Dialog button. Lets the bar switch straight to a
+ * new slot, closing this dialogue chain. */
+bool modal_dialogue_is_item_lore(void) {
+    return s_open && MODAL_DIALOGUE_RENDER_ITEM == s_render;
+}
+
 bool modal_dialogue_is_collapsed(void) {
     return s_open && !viewport_is_mobile() &&
            MODAL_DIALOGUE_RENDER_ENTITY == s_render && s_collapsed;
@@ -193,45 +201,22 @@ static bool hit_rect(int mx, int my, Rectangle r) {
             (float)my >= r.y && (float)my < r.y + r.height);
 }
 
-/* Quest-talk switcher button — pixel-art chrome matching the quest tab's
- * card buttons: black outer, gold fill, highlight/shadow edges, quest icon. */
+/* Quest-talk switcher button — gold pixel-retro (ui_button_pixel_retro):
+ * `icon_id` on the left (quest for a mission, close for the "Cancel Dialog"
+ * state), wrapped label filling the rest. */
 #define DLG_QT_MAX 8
 static Rectangle s_qt_btn_rect[DLG_QT_MAX];
+static int       s_qt_btn_index[DLG_QT_MAX]; /* drawn slot → quest-talk index */
 static int       s_qt_btn_count = 0;
 
-/* Pixel-art quest-talk button: quest icon on the left, wrapped objective /
- * step label filling the rest. Black text outline keeps it legible on gold. */
-static void draw_quest_talk_btn(Rectangle r, bool selected, const char* label, int font) {
-    bool hovered = hit_rect(GetMouseX(), GetMouseY(), r);
-    Color fill      = hovered ? (Color){ 255, 220, 42, 255 } : (Color){ 225, 191, 5, 255 };
-    Color highlight = (Color){ 255, 235, 110, 255 };
-    Color shadow    = (Color){ 128, 92, 0, 255 };
-    Rectangle inner = { r.x + 2.0f, r.y + 2.0f, r.width - 4.0f, r.height - 4.0f };
-
-    DrawRectangleRounded(r, 0.18f, 6, BLACK);
-    DrawRectangleRounded(inner, 0.18f, 6, fill);
-    DrawRectangle((int)(inner.x + 4.0f), (int)inner.y, (int)(inner.width - 8.0f), 2, highlight);
-    DrawRectangle((int)(inner.x + 4.0f), (int)(inner.y + inner.height - 2.0f),
-                  (int)(inner.width - 8.0f), 2, shadow);
-    if (selected) DrawRectangleRoundedLinesEx(inner, 0.18f, 6, 1.0f, WHITE);
-
-    float icon_sz = r.height - 12.0f;
-    float icon_cx = r.x + 8.0f + icon_sz * 0.5f;
-    float icon_cy = r.y + r.height * 0.5f;
-    ui_icon_draw_ex("quest", icon_cx + 1.0f, icon_cy + 1.0f, icon_sz, 0.0f, BLACK);
-    ui_icon_draw_ex("quest", icon_cx, icon_cy, icon_sz, 0.0f, WHITE);
-
-    if (label && '\0' != label[0]) {
-        int   tx = (int)(r.x + 12.0f + icon_sz + 6.0f);
-        int   tw = (int)(r.x + r.width - 8.0f) - tx;
-        if (tw < 20) tw = 20;
-        int   th = text_wrap(label, tx, 0, tw, font, WHITE, false, false);
-        int   ty = (int)(r.y + (r.height - th) * 0.5f);
-        for (int oy = -1; oy <= 1; oy++)
-            for (int ox = -1; ox <= 1; ox++)
-                if (ox || oy) text_wrap(label, tx + ox, ty + oy, tw, font, BLACK, false, true);
-        text_wrap(label, tx, ty, tw, font, WHITE, false, true);
-    }
+static void draw_quest_talk_btn(Rectangle r, bool selected, const char* icon_id,
+                                const char* label, int font) {
+    UIButtonPixelRetroStyle st = {
+        .bg = (Color){ 225, 191, 5, 255 }, /* gold */
+        .icon_id = icon_id, .label = label, .font_size = font,
+        .selected = selected, .enabled = true, .wrap_label = true,
+    };
+    ui_button_pixel_retro_draw(r, &st, hit_rect(GetMouseX(), GetMouseY(), r));
 }
 
 /* Draw the left-column sprite: a single item (inventory lore) or the
@@ -431,15 +416,13 @@ void modal_dialogue_draw(void) {
     card = modal_scale_rect(card, modal_pop_scale(s_age));
 
     /* Card background — translucent so the world reads through. Quest-talk
-     * dialogues get a yellow frame + quest icon to mark the mission context. */
+     * dialogues get a yellow frame to mark the mission context; the quest icon
+     * sits inline before the speaker label (below). */
     Color bg = MODAL_PANEL_BG;
     bg.a = 190;
     DrawRectangleRec(card, bg);
     if (s_quest_style) {
         DrawRectangleLinesEx(card, 2.0f, (Color){ 230, 200, 60, 230 });
-        int qs = 22;
-        /* The fullscreen reader's close button owns the top-left corner. */
-        ui_icon_draw("quest", card.x + 22, card.y + qs + 3, qs, false, 0.0f);
     } else {
         DrawLine((int)card.x, (int)card.y,
                  (int)(card.x + card.width), (int)card.y, C_CARD_BORD);
@@ -484,9 +467,10 @@ void modal_dialogue_draw(void) {
     float txt_max  = card.x + card.width - txt_x - pad;
     float ty       = y0 + pad;
 
-    /* Quest-talk switcher bar: one pixel-art quest button per available
-     * quest-talk above the title; pressing swaps the dialogue between the
-     * default greeting and the mapped quest-talk. */
+    /* Quest-talk switcher bar. On the default greeting, one pixel-art button
+     * per available quest-talk (labelled with what it advances). Once a
+     * quest-talk is selected, only that button remains — labelled "Cancel
+     * Dialog" — so pressing it returns to the greeting and the full list. */
     s_qt_btn_count = 0;
     if (MODAL_DIALOGUE_RENDER_ENTITY == s_render) {
         int qt_n = modal_interact_quest_talk_count();
@@ -498,21 +482,34 @@ void modal_dialogue_draw(void) {
         if (bw < 60.0f) bw = 60.0f;
         int label_w = (int)bw - (int)(DLG_FONT_SPEAKER + 6.0f + 18.0f);
         if (label_w < 20) label_w = 20;
-        for (int i = 0; i < qt_n; i++) {
-            const char* qt_label = modal_interact_quest_talk_label(i);
+        int   lo = qt_sel >= 0 ? qt_sel : 0;
+        int   hi = qt_sel >= 0 ? qt_sel + 1 : qt_n;
+        for (int i = lo; i < hi; i++) {
+            bool        cancel   = qt_sel >= 0;
+            const char* qt_label = cancel ? "Cancel Dialog" : modal_interact_quest_talk_label(i);
+            const char* qt_icon  = cancel ? "close" : "quest";
             int   lh = text_wrap(qt_label, 0, 0, label_w, qt_font, WHITE, false, false);
             float bh = (float)lh + 16.0f;
             float min_bh = (float)DLG_FONT_SPEAKER + 20.0f;
             if (bh < min_bh) bh = min_bh;
-            s_qt_btn_rect[s_qt_btn_count++] = (Rectangle){ txt_x, ty, bw, bh };
-            draw_quest_talk_btn(s_qt_btn_rect[i], i == qt_sel, qt_label, qt_font);
+            int slot = s_qt_btn_count++;
+            s_qt_btn_rect[slot]  = (Rectangle){ txt_x, ty, bw, bh };
+            s_qt_btn_index[slot] = i;
+            draw_quest_talk_btn(s_qt_btn_rect[slot], i == qt_sel, qt_icon, qt_label, qt_font);
             ty += bh + 4.0f;
         }
-        if (qt_n > 0) ty += 2.0f;
+        if (s_qt_btn_count > 0) ty += 2.0f;
     }
 
     if (line->speaker[0] != '\0') {
-        DrawText(line->speaker, (int)txt_x, (int)ty, fs_speaker, C_SPEAKER);
+        /* Quest-talk dialogues prefix the speaker label with the quest icon. */
+        int name_x = (int)txt_x;
+        if (s_quest_style) {
+            float qs = (float)fs_speaker;
+            ui_icon_draw_ex("quest", txt_x + qs * 0.5f, ty + qs * 0.5f, qs, 0.0f, WHITE);
+            name_x = (int)(txt_x + qs + 6.0f);
+        }
+        DrawText(line->speaker, name_x, (int)ty, fs_speaker, C_SPEAKER);
     }
 
     if (s_line_count > 1) {
@@ -611,11 +608,12 @@ bool modal_dialogue_handle_click(int mx, int my) {
         return true;
     }
 
-    /* Quest-talk switcher: swap between greeting and quest-talk dialogue. */
+    /* Quest-talk switcher: select a quest-talk, or (when one is selected) the
+     * lone "Cancel Dialog" button returns to the greeting. */
     for (int i = 0; i < s_qt_btn_count; i++) {
         if (!hit_rect(mx, my, s_qt_btn_rect[i])) continue;
-        /* Tapping the selected quest-talk returns to the default greeting. */
-        modal_interact_set_quest_talk(i == modal_interact_quest_talk_selected() ? -1 : i);
+        int qt = s_qt_btn_index[i];
+        modal_interact_set_quest_talk(qt == modal_interact_quest_talk_selected() ? -1 : qt);
         return true;
     }
 
