@@ -5,6 +5,7 @@
 #include "game_state.h"
 #include "ol_as_animated_ico.h"
 #include "world_types.h"
+#include "ui_button.h"
 
 #include <stdio.h>
 
@@ -41,11 +42,6 @@ void item_slot_draw_ex(Rectangle r, const ObjectLayerState* ols, ObjectLayersMan
     int fs = (int)(r.width * 0.26f);
     if (fs < 13) fs = 13;
 
-    /* highlight_t blends the slot's neutral bg/border toward `highlight` — used
-     * to briefly "color" a slot (e.g. a fresh reward settling in). */
-    Color slot_bg = lerp_color(C_SLOT_BG, (Color){ highlight.r, highlight.g, highlight.b, C_SLOT_BG.a }, highlight_t);
-    DrawRectangleRec(r, slot_bg);
-
     bool active    = ols->active;
     bool activable = true;
     if (mgr && ols->item_id[0] != '\0') {
@@ -57,9 +53,47 @@ void item_slot_draw_ex(Rectangle r, const ObjectLayerState* ols, ObjectLayersMan
     if (game_state_is_dead_item(ols->item_id) &&
         STATUS_ICON_DEAD != local_player_status_icon())
         activable = false;
-    Color border = (active && activable) ? C_ACTIVE_GLOW : C_SLOT_BORDER;
-    border = lerp_color(border, highlight, highlight_t);
-    DrawRectangleLinesEx(r, 2.0f, border);
+
+    /* Pixel-retro style: black outer border, flat fill, highlight/shadow edges,
+     * white inner outline on hover/active. */
+    bool hovered = CheckCollisionPointRec(GetMousePosition(), r);
+    Color base = (active && activable) ? (Color){ 40, 60, 100, 235 } : C_SLOT_BG;
+    Color fill = hovered ? (Color){
+        (unsigned char)(base.r + (255 - base.r) * 0.14f),
+        (unsigned char)(base.g + (255 - base.g) * 0.14f),
+        (unsigned char)(base.b + (255 - base.b) * 0.14f),
+        base.a
+    } : base;
+    Color highlight_edge = (Color){
+        (unsigned char)(fill.r + (255 - fill.r) * 0.45f),
+        (unsigned char)(fill.g + (255 - fill.g) * 0.45f),
+        (unsigned char)(fill.b + (255 - fill.b) * 0.45f),
+        fill.a
+    };
+    Color shadow_edge = (Color){
+        (unsigned char)(fill.r * 0.55f),
+        (unsigned char)(fill.g * 0.55f),
+        (unsigned char)(fill.b * 0.55f),
+        fill.a
+    };
+
+    /* highlight_t blends the slot's neutral bg/border toward `highlight` — used
+     * to briefly "color" a slot (e.g. a fresh reward settling in). */
+    Color slot_bg = lerp_color(fill, (Color){ highlight.r, highlight.g, highlight.b, fill.a }, highlight_t);
+
+    /* Black outer border */
+    DrawRectangleRec(r, BLACK);
+    /* Inner fill */
+    Rectangle inner = { r.x + 2.0f, r.y + 2.0f, r.width - 4.0f, r.height - 4.0f };
+    DrawRectangleRec(inner, slot_bg);
+    /* Top highlight edge */
+    DrawRectangle((int)(inner.x + 4.0f), (int)inner.y, (int)(inner.width - 8.0f), 2, highlight_edge);
+    /* Bottom shadow edge */
+    DrawRectangle((int)(inner.x + 4.0f), (int)(inner.y + inner.height - 2.0f),
+                  (int)(inner.width - 8.0f), 2, shadow_edge);
+    /* White inner outline on hover or active+activable */
+    if (hovered || (active && activable))
+        DrawRectangleLinesEx(inner, 1.0f, (active && activable) ? C_ACTIVE_GLOW : WHITE);
 
     if (ols->item_id[0] == '\0') {
         DrawCircle((int)(r.x + r.width * 0.5f), (int)(r.y + r.height * 0.5f),
@@ -69,9 +103,9 @@ void item_slot_draw_ex(Rectangle r, const ObjectLayerState* ols, ObjectLayersMan
 
     Color tint = (sprite_full_color || (active && activable))
                ? WHITE : (Color){ 180, 180, 180, 160 };
-    int inner  = (int)r.width - pad * 2;
+    int inner_sprite = (int)r.width - pad * 2;
     ol_as_ico_draw(mgr, ols->item_id,
-                   (int)(r.x + pad), (int)(r.y + pad), inner,
+                   (int)(r.x + pad), (int)(r.y + pad), inner_sprite,
                    OL_ICO_DEFAULT_DIR, 0, tint);
 
     if (ols->quantity > 1) {

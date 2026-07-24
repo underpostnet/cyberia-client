@@ -29,4 +29,7 @@ void modal_notification_draw(void);
  * (e.g. the OK button was tapped).  Call from the main click dispatch. */
 bool modal_notification_handle_click(int mx, int my);
 
+/* Returns true while a notification is visible. */
+bool modal_notification_is_open(void);
+
 #endif /* MODAL_NOTIFICATION_H */

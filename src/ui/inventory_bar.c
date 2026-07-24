@@ -218,10 +218,34 @@ static void clamp_scroll(void) {
  * matched full_inventory entry (from find_coin_slot()), so the sprite
  * reflects the player's actual coin skin variant when one is owned. */
 static void draw_coin_slot(Rectangle r, int coin_idx, ObjectLayersManager* mgr) {
-    /* Gold-tinted background to distinguish from normal slots */
-    DrawRectangleRec(r, (Color){ 35, 28, 10, 210 });
+    /* Pixel-retro coin slot: black outer border, gold inner fill with
+     * highlight/shadow edges, gold border overlay, hover brightens fill. */
+    bool hovered = CheckCollisionPointRec(GetMousePosition(), r);
+    Color gold_fill = hovered ? (Color){ 55, 44, 20, 230 } : (Color){ 35, 28, 10, 210 };
+    Color gold_highlight = (Color){
+        (unsigned char)(gold_fill.r + (255 - gold_fill.r) * 0.45f),
+        (unsigned char)(gold_fill.g + (255 - gold_fill.g) * 0.45f),
+        (unsigned char)(gold_fill.b + (255 - gold_fill.b) * 0.45f),
+        gold_fill.a
+    };
+    Color gold_shadow = (Color){
+        (unsigned char)(gold_fill.r * 0.55f),
+        (unsigned char)(gold_fill.g * 0.55f),
+        (unsigned char)(gold_fill.b * 0.55f),
+        gold_fill.a
+    };
 
-    /* Gold border — always visible, slightly thicker */
+    /* Black outer border via rounded rect */
+    DrawRectangleRec(r, BLACK);
+    /* Inner fill */
+    Rectangle inner = { r.x + 2.0f, r.y + 2.0f, r.width - 4.0f, r.height - 4.0f };
+    DrawRectangleRec(inner, gold_fill);
+    /* Top highlight edge */
+    DrawRectangle((int)(inner.x + 4.0f), (int)inner.y, (int)(inner.width - 8.0f), 2, gold_highlight);
+    /* Bottom shadow edge */
+    DrawRectangle((int)(inner.x + 4.0f), (int)(inner.y + inner.height - 2.0f),
+                  (int)(inner.width - 8.0f), 2, gold_shadow);
+    /* Gold border overlay */
     DrawRectangleLinesEx(r, 2.0f, C_COIN_BORDER);
 
     /* Coin sprite (animated, down_idle) */

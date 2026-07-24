@@ -27,6 +27,9 @@
 #include "notify_store.h"
 #include "layer_z_order.h"
 #include "inventory_bar.h"
+#include "inventory_modal.h"
+#include "modal_dialogue.h"
+#include "modal_instance_map.h"
 #include "ui_toggle.h"
 #include "ui_scroll.h"
 #include "nameplate.h"
@@ -88,6 +91,14 @@ static float column_slide_width(void) {
 /* Fully off screen: collapsed and the slide has finished. */
 static bool column_hidden(void) {
     return !s_col_toggle.expanded && 0.0f >= s_col_slide_t;
+}
+
+/* A modal on top of the column (interact / inventory / dialogue / instance
+ * map) blocks all bubble interaction: presses, releases, and the toggle. The
+ * column area behind a modal must never open or change a bubble. */
+static bool modals_block_bubbles(void) {
+    return modal_interact_is_open() || inventory_modal_is_open() ||
+           modal_dialogue_is_open() || modal_instance_map_is_open();
 }
 
 /* Fixed screen-space anchor: top-left corner with small padding.
@@ -398,7 +409,9 @@ void interaction_bubble_update(void) {
 
     /* Keep the scroll geometry (the draw scissor's view) current whenever the
      * column is visible — including the slide-out — so it is never clipped by
-     * a stale rect. Clicks are consumed only while expanded. */
+     * a stale rect. Clicks are consumed only while expanded. Do not open
+     * slots while an interact modal or inventory modal is open — the bubble
+     * column area behind the modal must not respond to clicks. */
     if (!column_hidden()) {
         Rectangle view = column_scroll_view();
         ui_scroll_set_input_bounds(&s_col_scroll, column_input_bounds(view));
@@ -406,7 +419,7 @@ void interaction_bubble_update(void) {
         ui_scroll_update(&s_col_scroll, view, column_content_height(), GetFrameTime());
         int click_x, click_y;
         if (ui_scroll_take_click(&s_col_scroll, &click_x, &click_y) &&
-            s_col_toggle.expanded) {
+            s_col_toggle.expanded && !modals_block_bubbles()) {
             open_slot_at(click_x, click_y);
         }
     }
@@ -455,37 +468,69 @@ void interaction_bubble_draw(void) {
         bool hovered = hit_rect(mx, my, r);
         bool is_self = (strcmp(slot->entity_id, g_game_state.player_id) == 0);
 
-        Color border = status_border_color(slot, is_self);
-        float thick = 3.0f;
-
-        /* Quest/action providers get a pulsing glow border: an animated halo
-         * behind the slot plus a breathing border thickness, gold for quest
-         * providers and cyan for action providers. */
+        /* Pixel-retro quest/action provider effect: animated pixel particles
+         * that orbit the slot in a retro pattern. Gold for quest providers,
+         * cyan for action providers. Larger particles for visibility. */
         uint8_t provider = slot->interaction_flags &
                            (INTERACTION_FLAG_QUEST | INTERACTION_FLAG_ACTION);
+        Color retro_pulse_color = { 0 };
         if (0 != provider) {
+            retro_pulse_color = 0 != (provider & INTERACTION_FLAG_QUEST)
+                                ? (Color){ 250, 205, 70, 255 }
+                                : (Color){ 90, 230, 235, 255 };
             float pulse = 0.5f + 0.5f * sinf((float)GetTime() * 4.2f + (float)i * 0.9f);
-            Color glow = 0 != (provider & INTERACTION_FLAG_QUEST)
-                             ? (Color){ 250, 205, 70, 255 }
-                             : (Color){ 90, 230, 235, 255 };
-            float reach = thick + 3.0f + 4.0f * pulse;
-            Rectangle halo = { r.x - reach, r.y - reach,
-                               r.width + 2.0f * reach, r.height + 2.0f * reach };
-            Color halo_c = glow;
-            halo_c.a = (unsigned char)(60.0f + 110.0f * pulse);
-            DrawRectangleRounded(halo, 0.22f, 4, halo_c);
-            border = glow;
-            thick += 1.5f * pulse;
+            int pp_size = 6;
+            int pp_count = 10;
+            float pp_radius = r.width * 0.5f + 8.0f + 6.0f * pulse;
+            float cx = r.x + r.width * 0.5f;
+            float cy = r.y + r.height * 0.5f;
+            Color pp_c = retro_pulse_color;
+            pp_c.a = (unsigned char)(140.0f + 100.0f * pulse);
+            for (int pi = 0; pi < pp_count; pi++) {
+                float angle = 6.2832f * (float)pi / (float)pp_count + (float)GetTime() * 1.5f;
+                float px = cx + cosf(angle) * pp_radius;
+                float py = cy + sinf(angle) * pp_radius;
+                /* Black border behind each particle */
+                DrawRectangle((int)(px - pp_size * 0.5f - 1), (int)(py - pp_size * 0.5f - 1),
+                              pp_size + 2, pp_size + 2, BLACK);
+                DrawRectangle((int)(px - pp_size * 0.5f), (int)(py - pp_size * 0.5f),
+                              pp_size, pp_size, pp_c);
+            }
         }
 
-        /* Draw border as a slightly larger filled rounded rect behind the slot.
-         * DrawRectangleRoundedLinesEx uses GL line primitives which are
-         * unreliable / invisible in many WebGL contexts, so we simulate
-         * the border with two filled rounded rects instead. */
-        Rectangle outer = { r.x - thick, r.y - thick,
-                            r.width + 2*thick, r.height + 2*thick };
-        DrawRectangleRounded(outer, 0.15f, 4, border);
-        DrawRectangleRounded(r, 0.15f, 4, hovered ? C_SLOT_HOVER : C_SLOT_BG);
+        /* Pixel-retro slot button: black rounded rect outer border, flat inner
+         * fill with highlight/shadow edges, status border colour overlay,
+         * white outline on hover. */
+        Color border = status_border_color(slot, is_self);
+        Color slot_fill = hovered ? (Color){ 35, 45, 75, 230 } : C_SLOT_BG;
+        Color slot_highlight = (Color){
+            (unsigned char)(slot_fill.r + (255 - slot_fill.r) * 0.45f),
+            (unsigned char)(slot_fill.g + (255 - slot_fill.g) * 0.45f),
+            (unsigned char)(slot_fill.b + (255 - slot_fill.b) * 0.45f),
+            slot_fill.a
+        };
+        Color slot_shadow = (Color){
+            (unsigned char)(slot_fill.r * 0.55f),
+            (unsigned char)(slot_fill.g * 0.55f),
+            (unsigned char)(slot_fill.b * 0.55f),
+            slot_fill.a
+        };
+
+        float rrd = 0.15f;
+        DrawRectangleRounded(r, rrd, 4, BLACK);
+        Rectangle slot_inner = { r.x + 2.0f, r.y + 2.0f, r.width - 4.0f, r.height - 4.0f };
+        DrawRectangleRounded(slot_inner, rrd, 4, slot_fill);
+        DrawRectangle((int)(slot_inner.x + 4.0f), (int)slot_inner.y,
+                      (int)(slot_inner.width - 8.0f), 2, slot_highlight);
+        DrawRectangle((int)(slot_inner.x + 4.0f), (int)(slot_inner.y + slot_inner.height - 2.0f),
+                      (int)(slot_inner.width - 8.0f), 2, slot_shadow);
+        if (hovered)
+            DrawRectangleRoundedLinesEx(slot_inner, rrd, 4, 1.0f, WHITE);
+        /* Status border colour applied as overlay on the retro slot. */
+        DrawRectangleRoundedLinesEx(r, rrd, 4, 2.0f, border);
+        /* For quest/action providers, overlay the provider colour on top. */
+        if (0 != provider)
+            DrawRectangleRoundedLinesEx(r, rrd, 4, 2.0f, retro_pulse_color);
 
         /* Always render the alive OL stack so the entity is recognisable
          * even when dead (ghost state is indicated by the status icon). */
@@ -633,6 +678,8 @@ static bool open_slot_at(int mx, int my) {
 
 bool interaction_bubble_handle_click(int mx, int my) {
     column_ensure_toggle();
+    /* A modal over the column blocks every bubble interaction, toggle included. */
+    if (modals_block_bubbles()) return false;
     if (ui_toggle_handle_click(&s_col_toggle, mx, my)) {
         /* Reset the scroll only when opening. Resetting on collapse would
          * zero the scroll's stored view — a 0×0 scissor — and scissor the

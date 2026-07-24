@@ -271,21 +271,34 @@ void modal_notification_draw(void) {
         item_slot_draw_ex(pop_slot, &ol, obj_layers_mgr_get(), s_accent, tint_t, true);
     }
 
-    /* OK button — bottom centre. */
+    /* OK button — bottom centre, pixel-retro style with check icon. */
     int mx = GetMouseX(), my = GetMouseY();
     Rectangle ok_r = notif_ok(card);
     bool hit = ((float)mx >= ok_r.x && (float)mx < ok_r.x + ok_r.width &&
                 (float)my >= ok_r.y && (float)my < ok_r.y + ok_r.height);
-    UIButtonStyle ok_btn = { .text = "OK", .font_size = 15,
-                             .bg = { 50, 55, 80, 235 },
-                             .text_color = C_TITLE, .rounded = true, .roundness = 0.25f };
-    ui_button_draw(ok_r, &ok_btn, ui_button_resolve_state(true, false, hit));
+    UIButtonPixelRetroStyle ok_btn = {
+        .bg = (Color){ 50, 55, 80, 235 },
+        .icon_id = "check",
+        .label = "OK",
+        .font_size = 15,
+        .text_color = C_TITLE,
+        .selected = false,
+        .enabled = true,
+    };
+    ui_button_pixel_retro_draw(ok_r, &ok_btn, hit);
+}
+
+bool modal_notification_is_open(void) {
+    return s_open;
 }
 
 bool modal_notification_handle_click(int mx, int my) {
     if (!s_open) return false;
     Rectangle card = notif_card();
     Rectangle ok_r = notif_ok(card);
+    /* Only the OK button is clickable; all other clicks are swallowed
+     * so buttons behind the notification modal are not accidentally
+     * triggered. */
     if ((float)mx >= ok_r.x && (float)mx < ok_r.x + ok_r.width &&
         (float)my >= ok_r.y && (float)my < ok_r.y + ok_r.height) {
         /* Reward arrival — the same presentation as a world pickup, launched
@@ -300,5 +313,5 @@ bool modal_notification_handle_click(int mx, int my) {
         show_next();
         return true;
     }
-    return true; /* swallow clicks while a notification is up (modal) */
+    return true; /* swallow all clicks while a notification is up */
 }

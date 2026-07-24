@@ -37,7 +37,6 @@
 #include "serial.h"
 #include "toolbar.h"
 #include "ui_button.h"
-#include "ui_button_pixel_retro.h"
 #include "ui_scroll.h"
 #include "ui_state.h"
 #include "world_types.h"
@@ -306,26 +305,22 @@ static Color lighten(Color c, int d) {
                     (uint8_t)(b > 255 ? 255 : b), c.a };
 }
 
-/* draw_small_btn draws direction/mode buttons (icon, label, or both). */
+/* draw_small_btn draws direction/mode buttons (icon, label, or both) using
+ * pixel-retro style. */
 static void draw_small_btn(Rectangle r, const char* label, const char* icon_id,
                            Color bg, bool selected, bool enabled, int mx, int my) {
-    Color base_bg = selected ? C_DIR_BTN_SEL : bg;
-    if (enabled && hit_rect(mx, my, r)) base_bg = lighten(base_bg, 18);
-    UIButtonStyle style = {
-        .text            = label,
-        .icon_id         = icon_id,
-        .font_size       = im_font_stat(),
-        .bg              = base_bg,
-        .bg_selected     = base_bg,
-        .bg_disabled     = C_DIR_BTN_DIS,
-        .border          = { 60, 65, 90, 160 },
-        .border_selected = { 120, 160, 255, 200 },
-        .border_width    = 1.0f,
-        .text_color      = { 160, 170, 190, 220 },
-        .text_selected   = { 220, 230, 255, 255 },
-        .text_disabled   = { 60, 65, 75, 140 },
+    UIButtonPixelRetroStyle st = {
+        .bg = selected ? C_DIR_BTN_SEL : bg,
+        .icon_id = icon_id,
+        .label = label,
+        .font_size = im_font_stat(),
+        .text_color = selected ? (Color){ 220, 230, 255, 255 }
+                     : enabled ? (Color){ 160, 170, 190, 220 }
+                     : (Color){ 60, 65, 75, 140 },
+        .selected = selected,
+        .enabled = enabled,
     };
-    ui_button_draw(r, &style, ui_button_resolve_state(enabled, selected, false));
+    ui_button_pixel_retro_draw(r, &st, enabled && hit_rect(mx, my, r));
 }
 
 /* dir_has_frames checks if the atlas has any frames for dir+mode combo. */
