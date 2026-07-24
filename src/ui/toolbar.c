@@ -6,6 +6,7 @@
 #include "modal_map.h"
 #include "quest_journal.h"
 #include "ui_button.h"
+#include "ui_icon.h"
 
 #include "js/fullscreen_bridge.h"
 
@@ -51,32 +52,26 @@ static Rectangle toggle_rect(void) {
 }
 
 static void draw_btn(Rectangle r, const char* icon, bool selected, Vector2 mouse) {
-    UIButtonStyle style = {
-        .icon_id    = icon,
-        .icon_size  = (int)TOOLBAR_BTN_SIZE - 12,
-        .bg         = { 20, 20, 35, 200 },
-        .bg_hover   = { 50, 50, 70, 220 },
-        .border     = { 80, 80, 120, 180 },
-        .border_selected = { 90, 210, 250, 220 },
-    };
-    ui_button_draw(r, &style,
-                   ui_button_resolve_state(true, selected, CheckCollisionPointRec(mouse, r)));
+    /* Clean icon-only button: draw the icon directly with no background,
+     * no border, no shadow. White hover outline for the pixel-retro feel. */
+    float sz = r.width < r.height ? r.width : r.height;
+    float cx = r.x + r.width * 0.5f;
+    float cy = r.y + r.height * 0.5f;
+    ui_icon_draw(icon, cx, cy, (int)(sz * 0.65f), false, 0.0f);
+    if (selected || CheckCollisionPointRec(mouse, r))
+        DrawRectangleRoundedLinesEx(r, 0.18f, 6, 1.0f, WHITE);
 }
 
 /* Draw the main-logo toggle button — large icon with a subtle background. */
 static void draw_toggle_btn(Rectangle r, const char* icon, Vector2 mouse) {
-    float sz = r.height - 4.0f;
-    int icon_sz = (int)sz;
-    if (icon_sz < 8) icon_sz = 8;
-
-    UIButtonStyle style = {
-        .icon_id    = icon,
-        .icon_size  = icon_sz,
-        .bg         = { 20, 20, 35, 200 },
-        .bg_hover   = { 50, 50, 70, 220 },
-    };
-    ui_button_draw(r, &style,
-                   ui_button_resolve_state(true, false, CheckCollisionPointRec(mouse, r)));
+    /* Clean icon-only button: draw the icon directly with no background,
+     * no border, no shadow. White hover outline for the pixel-retro feel. */
+    float sz = r.width < r.height ? r.width : r.height;
+    float cx = r.x + r.width * 0.5f;
+    float cy = r.y + r.height * 0.5f;
+    ui_icon_draw(icon, cx, cy, (int)(sz * 0.65f), false, 0.0f);
+    if (CheckCollisionPointRec(mouse, r))
+        DrawRectangleRoundedLinesEx(r, 0.18f, 6, 1.0f, WHITE);
 }
 
 void toolbar_draw(int screen_width) {
