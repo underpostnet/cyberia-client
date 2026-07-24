@@ -66,7 +66,14 @@ bool ui_dispatch_tap(int x, int y) {
     /* Quest Journal (right side) before the bubble column (left side). */
     if (quest_journal_handle_click(x, y)) return true;
 
-    if (interaction_bubble_handle_click(x, y)) return true;
+    /* Interaction bubbles are blocked whenever a modal is open on top of them
+     * (interact / inventory / dialogue / instance map). A click within the
+     * bubble column area behind a modal must never open or change a bubble. */
+    bool modal_over_bubbles = modal_interact_is_open() || inventory_modal_is_open() ||
+                              modal_dialogue_is_open() || modal_instance_map_is_open();
+    if (!modal_over_bubbles) {
+        if (interaction_bubble_handle_click(x, y)) return true;
+    }
 
     /* Arms the drag; the slot activates on release via ui_on_tick. */
     if (inventory_bar_handle_click(x, y, NULL)) return true;

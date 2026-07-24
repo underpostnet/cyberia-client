@@ -20,7 +20,6 @@
 #include "quest_progress_store.h"
 #include "quest_cache.h"
 #include "ui_button.h"
-#include "ui_button_pixel_retro.h"
 #include "ui_scroll.h"
 #include "ui_icon.h"
 #include "util/log.h"
@@ -775,7 +774,8 @@ void modal_interact_update(float dt) {
     if (s_tab == MI_TAB_QUEST) {
         ui_scroll_update(&s_q_scroll, content_rect(card_rect()), s_q_content_height, dt);
         int click_x, click_y;
-        if (ui_scroll_take_click(&s_q_scroll, &click_x, &click_y)) {
+        if (ui_scroll_take_click(&s_q_scroll, &click_x, &click_y) &&
+            !modal_notification_is_open()) {
             handle_quest_click(click_x, click_y);
             if (!s_open) return;
         }
@@ -1548,12 +1548,19 @@ bool modal_interact_handle_click(int mx, int my) {
         return true;
     }
 
-    /* Tab strip */
+    /* Tab strip — clicking the already-active quest tab while a quest is
+     * expanded returns to the grid view. */
     int tabs[MI_TAB_COUNT];
     int tabs_n = visible_tabs(tabs);
     for (int k = 0; k < tabs_n; k++) {
         if (ui_button_hit(tab_rect(card, k), mx, my)) {
-            s_tab = tabs[k];
+            int new_tab = tabs[k];
+            if (new_tab == MI_TAB_QUEST && new_tab == s_tab && s_q_expanded >= 0) {
+                s_q_expanded = -1;
+                s_q_expand_age = MODAL_POP_DURATION;
+                ui_scroll_reset(&s_q_scroll);
+            }
+            s_tab = new_tab;
             return true;
         }
     }

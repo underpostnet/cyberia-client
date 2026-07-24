@@ -26,7 +26,6 @@
 #include "ol_as_animated_ico.h"
 #include "ol_stack_ico.h"
 #include "ui_button.h"
-#include "ui_button_pixel_retro.h"
 #include "ui_icon.h"
 #include "util/log.h"
 
@@ -625,6 +624,20 @@ bool modal_dialogue_handle_click(int mx, int my) {
         /* Inventory lore dismisses itself; the paired interaction view lets
          * modal_interact own dismissal, so let the tap fall through. */
         if (!s_auto_dismiss) return false;
+        /* On desktop the dialogue only occupies the bottom half. If the click
+         * is on an interaction bubble NOT covered by the dialogue card, let
+         * the tap fall through so the bubble can be clicked. Clear the
+         * on_close callback so the inventory modal is not reopened. */
+        if (interaction_bubble_point_covered(mx, my)) {
+            Rectangle dlg_card = panel_rect(GetScreenWidth(), GetScreenHeight());
+            if (hit_rect(mx, my, dlg_card)) return true;
+            /* Bubble click outside dialogue card: clear on_close so the
+             * inventory modal is not reopened, then dismiss the dialogue
+             * and let the tap fall through to the bubble handler. */
+            s_on_close = NULL;
+            modal_dialogue_finish(false);
+            return false;
+        }
         modal_dialogue_finish(false);
         return true;
     }
