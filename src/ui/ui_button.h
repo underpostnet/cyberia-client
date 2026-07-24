@@ -13,6 +13,10 @@
  *
  * `ui_button_measure` returns the content-fit size so callers can grow or
  * shrink a button to its content instead of hardcoding dimensions.
+ *
+ * Also provides ui_button_pixel_retro_draw — a pixel-art retro button chrome
+ * with black outer border, flat fill, lighter top edge, darker bottom edge,
+ * optional left icon, and outlined label. Used for retro-styled tap targets.
  */
 
 #ifndef UI_BUTTON_H
@@ -72,5 +76,23 @@ void ui_button_draw(Rectangle bounds, const UIButtonStyle* style, UIButtonState 
 UIButtonState ui_button_resolve_state(bool enabled, bool selected, bool hovered);
 
 bool ui_button_hit(Rectangle bounds, int mx, int my);
+
+/* ── Pixel-retro button style ────────────────────────────────────────── */
+
+typedef struct {
+    Color       bg;         /* main fill; hover brightens it, disabled mutes it */
+    const char* icon_id;    /* ui-icon stem; NULL/"" = no icon                  */
+    const char* label;      /* NULL/"" = no label                              */
+    int         font_size;
+    Color       text_color; /* alpha 0 → white                                 */
+    bool        selected;   /* white inner outline (also drawn on hover)        */
+    bool        enabled;    /* false → no hover response, caller mutes bg       */
+    bool        wrap_label; /* true → left icon + wrapped label; else centered  */
+    bool        flat;       /* clean icon button: no black border, no bevel
+                             * edges, no icon drop-shadow — just fill + icon
+                             * (toggle arrows, toolbar)                         */
+} UIButtonPixelRetroStyle;
+
+void ui_button_pixel_retro_draw(Rectangle bounds, const UIButtonPixelRetroStyle* style, bool hovered);
 
 #endif /* UI_BUTTON_H */

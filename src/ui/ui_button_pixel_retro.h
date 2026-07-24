@@ -27,6 +27,8 @@ typedef struct {
     bool        selected;   /* white inner outline (also drawn on hover)        */
     bool        enabled;    /* false → no hover response, caller mutes bg       */
     bool        wrap_label; /* true → left icon + wrapped label; else centered  */
+    bool        no_icon_shadow; /* skip the black icon drop-shadow (icon-only
+                                 * buttons: toggle arrows, toolbar)             */
 } UIButtonPixelRetroStyle;
 
 void ui_button_pixel_retro_draw(Rectangle bounds, const UIButtonPixelRetroStyle* style, bool hovered);
