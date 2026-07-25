@@ -51,7 +51,7 @@ static EM_BOOL on_window_resize(int eventType, const EmscriptenUiEvent* uiEvent,
 }
 
 void render_init(int width, int height) {
-    render_state.splash_texture = LoadTexture("splash.png");
+    render_state.splash_texture = LoadTexture("assets/splash.png");
 
     emscripten_set_resize_callback(EMSCRIPTEN_EVENT_TARGET_WINDOW, NULL, EM_FALSE, on_window_resize);
 

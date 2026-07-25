@@ -30,7 +30,6 @@ LDFLAGS += -sEXPORTED_FUNCTIONS='["_main","_c_send_chat_binary"]'
 WEB_SHELL := $(SRC_DIR)/shell.html
 
 OUTPUT := $(OUTPUT_DIR)/index.html
-ASSETS := $(ASSETS_DIR)/splash.png@splash.png
 
 #---------------------------------------------------------------------------------------------
 # Util variables
@@ -55,14 +54,14 @@ link: $(OBJS)
 	@mkdir -p $(OUTPUT_DIR)/fonts
 	@cp $(ASSETS_DIR)/favicon.ico $(OUTPUT_DIR)/favicon.ico
 	@cp $(ASSETS_DIR)/fonts/Jersey15-Regular.ttf $(OUTPUT_DIR)/fonts/Jersey15-Regular.ttf
-	@cp public/404.html $(OUTPUT_DIR)/404.html
+#	@cp public/404.html $(OUTPUT_DIR)/404.html
 	$(CC) -o $(OUTPUT) $(OBJS) $(LDFLAGS) $(LDFLAGS_RELEASE) \
 		-s USE_GLFW=3 \
 		--shell-file $(WEB_SHELL) \
 		-s ALLOW_MEMORY_GROWTH=1 \
 		-s INITIAL_MEMORY=67108864 \
 		-s STACK_SIZE=16777216 \
-		--preload-file $(ASSETS)
+		--preload-file $(ASSETS_DIR)@assets
 
 $(target_build_dir)/%.c.o: $(SRC_DIR)/%.c
 	@mkdir -p $(@D)
