@@ -57,9 +57,7 @@ RUNTIME_CONFIG_ENV_KEYS = (
     "CYBERIA_WS_ORIGIN",
     "CYBERIA_ENGINE_API_ORIGIN",
     "CYBERIA_DEFAULT_INSTANCE",
-    # This instance's URL sub-path ("/FOREST", "/TEST", "" for default). The
-    # reverse proxy strips it before this server sees the request, so only the
-    # injected env tells the 404 page which instance it belongs to.
+    # This instance's URL sub-path ("/FOREST", "/TEST", "" for default).
     "CYBERIA_BASE_PATH",
 )
 
@@ -120,8 +118,7 @@ class CyberiaHandler(SimpleHTTPRequestHandler):
     def translate_path(self, path):
         """Drops this instance's own /<CYBERIA_BASE_PATH>/ prefix so the flat
         bundle resolves. Only the container's own prefix is stripped, so an
-        unrelated first segment (a genuinely bad path) is NOT mistaken for an
-        instance prefix and instead falls through to the 404 page."""
+        unrelated first segment is not mistaken for an instance prefix."""
 
         stripped = path.split("?", 1)[0].split("#", 1)[0]
         segments = [seg for seg in posixpath.normpath(stripped).split("/") if seg and seg != "."]
@@ -145,10 +142,12 @@ class CyberiaHandler(SimpleHTTPRequestHandler):
         return io.BytesIO(body)
 
     def send_head(self):
-        """Serve the bundle. HTML gets the runtime config injected; an unmatched
-        path serves the instance's 404 page (404.html) with a 404 status, so
-        /FOREST/<bad> and /TEST/<bad> land on their own instance's 404 (the
-        sub-path is already stripped by translate_path)."""
+        """Serve the bundle. HTML gets the runtime config injected.
+
+        Status pages are deliberately not handled here: Envoy owns unmatched
+        requests and serves the configured response before they reach this
+        application container.
+        """
 
         served = self.translate_path(self.path)
         if os.path.isdir(served):
@@ -158,14 +157,8 @@ class CyberiaHandler(SimpleHTTPRequestHandler):
                 return self._serve_html(served, 200)
             return super().send_head()
 
-        # Unknown path → the instance 404 page (config injected, incl. base path).
-        # Prod ships 404.html inside the served bundle (bin/404.html via the
-        # Dockerfile COPY); local dev serves bin/ but the generated page sits at
-        # the repo root next to this script, so fall back there too.
-        script_dir = os.path.dirname(os.path.abspath(__file__))
-        for fallback in (os.path.join(os.getcwd(), "404.html"), os.path.join(script_dir, "404.html")):
-            if os.path.isfile(fallback):
-                return self._serve_html(fallback, 404)
+        # Preserve the standard static-server response for a path that Envoy did
+        # not route. Do not substitute an application-owned error page.
         return super().send_head()
 
 
