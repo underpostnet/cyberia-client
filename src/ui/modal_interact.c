@@ -92,6 +92,8 @@ static char      s_q_btn_code[MI_QUEST_MAX][64];
 static int       s_q_count = 0;
 static UIScroll  s_q_scroll;
 static float     s_q_content_height = 0.0f;
+static UIScroll  s_s_scroll;
+static float     s_s_content_height = 0.0f;
 
 /* Reward icon hit-boxes captured across all visible cards during the draw, so
  * the click handler can open the same read-only inspection the stack tab uses. */
@@ -619,6 +621,8 @@ void modal_interact_init(void) {
     s_dialogue_open_requested = false;
     ui_scroll_reset(&s_q_scroll);
     s_q_content_height = 0.0f;
+    ui_scroll_reset(&s_s_scroll);
+    s_s_content_height = 0.0f;
     s_q_expanded = -1;
     s_q_expand_age = MODAL_POP_DURATION;
     es_clear();
@@ -730,10 +734,17 @@ float modal_interact_layout_bottom(void) {
 }
 
 bool modal_interact_handle_wheel(float wheel_delta) {
-    if (!s_open || s_age < MODAL_POP_DURATION || s_tab != MI_TAB_QUEST) return false;
-    if (0 <= s_q_expanded && s_q_expand_age < MODAL_POP_DURATION) return true;
-    return ui_scroll_on_wheel(&s_q_scroll, content_rect(card_rect()),
-                              s_q_content_height, wheel_delta);
+    if (!s_open || s_age < MODAL_POP_DURATION) return false;
+    if (s_tab == MI_TAB_QUEST) {
+        if (0 <= s_q_expanded && s_q_expand_age < MODAL_POP_DURATION) return true;
+        return ui_scroll_on_wheel(&s_q_scroll, content_rect(card_rect()),
+                                  s_q_content_height, wheel_delta);
+    }
+    if (s_tab == MI_TAB_STATS) {
+        return ui_scroll_on_wheel(&s_s_scroll, content_rect(card_rect()),
+                                  s_s_content_height, wheel_delta);
+    }
+    return false;
 }
 
 void modal_interact_update(float dt) {
@@ -791,6 +802,8 @@ void modal_interact_update(float dt) {
             handle_quest_click(click_x, click_y);
             if (!s_open) return;
         }
+    } else if (s_tab == MI_TAB_STATS) {
+        ui_scroll_update(&s_s_scroll, content_rect(card_rect()), s_s_content_height, dt);
     }
 
     if (!s_dialogue_opened) {
@@ -818,16 +831,52 @@ static void draw_stack_tab(Rectangle content) {
 
 static void draw_stats_tab(Rectangle content) {
     Stats t = stack_stats();
+    int sum = t.effect + t.resistance + t.agility + t.range + t.intelligence + t.utility;
+
+    float pad = mi_pad();
+    float content_y = content.y - ui_scroll_offset(&s_s_scroll);
+    float y = content_y;
+
+    ui_scroll_begin(&s_s_scroll);
+
+    /* ── Sum stat container (scrolls with content) ─────────────────────── */
+    float header_h = 56.0f;
+    Rectangle header_rect = { content.x, y, content.width, header_h };
+    Color header_bg = { 50, 70, 120, 50 };
+    DrawRectangleRec(header_rect, header_bg);
+    DrawRectangleLinesEx(header_rect, 1.0f, (Color){ 80, 110, 170, 80 });
+
+    int sum_icon_sz = 28;
+    float sum_cx = content.x + pad + sum_icon_sz * 0.5f;
+    float sum_cy = y + header_h * 0.5f;
+    ui_icon_draw("stats", sum_cx, sum_cy, sum_icon_sz, false, 0.0f);
+
+    int sum_font = 22;
+    char sum_label[16];
+    snprintf(sum_label, sizeof(sum_label), "%+d", sum);
+    int sum_tw = MeasureText(sum_label, sum_font);
+    float sum_tx = content.x + pad + sum_icon_sz + 8.0f;
+    float sum_ty = y + (header_h - sum_font) * 0.5f;
+    DrawText(sum_label, (int)sum_tx, (int)sum_ty, sum_font, C_STAT);
+
+    int total_font = 12;
+    float total_tx = sum_tx + sum_tw + 8.0f;
+    float total_ty = y + (header_h - total_font) * 0.5f;
+    DrawText("Total Stats", (int)total_tx, (int)total_ty, total_font, C_LABEL);
+
+    y += header_h + pad;
+
+    /* ── Per-stat rows ─────────────────────────────────────────────────── */
     const char* names[6] = { "Effect", "Resistance", "Agility", "Range", "Intelligence", "Utility" };
     const char* icon_ids[6] = { "stat-effect", "stat-resistance", "stat-agility", "stat-range", "stat-intelligence", "stat-utility" };
     int values[6] = { t.effect, t.resistance, t.agility, t.range, t.intelligence, t.utility };
     float row_h = MI_FONT_STAT + 8.0f;
     float col_w = content.width * 0.5f;
     int icon_sz = MI_FONT_STAT * 2;
+
     for (int i = 0; i < 6; i++) {
         float cx = content.x + (i % 2) * col_w;
-        float cy = content.y + (i / 2) * row_h;
-        /* Draw stat icon before the label, matching the inventory modal pattern */
+        float cy = y + (i / 2) * row_h;
         ui_icon_draw(icon_ids[i], cx + icon_sz / 2.0f, cy + icon_sz / 2.0f, icon_sz, false, 0.0f);
         DrawText(names[i], (int)(cx + icon_sz + 4), (int)cy, MI_FONT_STAT, C_LABEL);
         char val[16];
@@ -836,6 +885,9 @@ static void draw_stats_tab(Rectangle content) {
         DrawText(val, (int)(cx + col_w - vw - mi_pad()), (int)cy, MI_FONT_STAT,
                  values[i] > 0 ? C_STAT : (Color){ 200, 80, 80, 220 });
     }
+    y += 3 * row_h + pad;
+    s_s_content_height = y - content_y + pad;
+    ui_scroll_end(&s_s_scroll);
 }
 
 /* ── Quest tab: show the entity's active-quest description + rewards ──── */
@@ -1603,6 +1655,12 @@ bool modal_interact_handle_click(int mx, int my) {
         CheckCollisionPointRec((Vector2){ (float)mx, (float)my }, content)) {
         if (0 <= s_q_expanded && s_q_expand_age < MODAL_POP_DURATION) return true;
         ui_scroll_on_press(&s_q_scroll, mx, my);
+        return true;
+    }
+
+    if (s_tab == MI_TAB_STATS &&
+        CheckCollisionPointRec((Vector2){ (float)mx, (float)my }, content)) {
+        ui_scroll_on_press(&s_s_scroll, mx, my);
         return true;
     }
 
