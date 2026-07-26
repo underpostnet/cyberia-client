@@ -97,6 +97,8 @@ static void ensure_bar_toggle(void) {
     int screen_h = GetScreenHeight();
     if (!s_bar_toggle_init) {
         ui_toggle_init(&s_bar_toggle, (Rectangle){ 0 }, true, UI_TOGGLE_CHEVRON_DOWN);
+        s_bar_toggle.icon_expanded  = "close-yellow";
+        s_bar_toggle.icon_collapsed = "bag";
         s_bar_toggle_init = true;
     }
     ui_toggle_set_anchor(&s_bar_toggle, bar_toggle_anchor(screen_h));

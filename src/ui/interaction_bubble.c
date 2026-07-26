@@ -152,6 +152,8 @@ static void column_ensure_toggle(void) {
     /* Chevron points LEFT when expanded ("tap to collapse"); flips to RIGHT
      * when collapsed via resolve_chevron so it means "tap to expand". */
     ui_toggle_init(&s_col_toggle, toggle_anchor(), expanded, UI_TOGGLE_CHEVRON_LEFT);
+    s_col_toggle.icon_expanded  = "close-yellow";
+    s_col_toggle.icon_collapsed = "stack";
     ui_scroll_reset(&s_col_scroll);
     s_col_init = true;
 }

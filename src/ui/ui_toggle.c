@@ -3,6 +3,8 @@
 #include "ui_icon.h"
 #include "text.h"
 
+#include <stddef.h>
+
 #define UI_TOGGLE_ANIM_SPEED 6.667f /* ~150 ms 0..1 */
 
 /* Header row geometry — uniform across every collapsible list except the
@@ -17,6 +19,8 @@ void ui_toggle_init(UIToggle* t, Rectangle anchor, bool initial_expanded,
     t->anchor   = anchor;
     t->anim_t   = initial_expanded ? 1.0f : 0.0f;
     t->chevron  = chevron;
+    t->icon_expanded  = NULL;
+    t->icon_collapsed = NULL;
 }
 
 void ui_toggle_set_anchor(UIToggle* t, Rectangle anchor) {
@@ -59,10 +63,21 @@ static const char* chevron_icon_id(UIToggleChevron ch) {
 }
 
 void ui_toggle_draw(const UIToggle* t) {
-    /* Clean icon-only toggle: draw the arrow icon directly with no background
+    /* Clean icon-only toggle: draw the icon directly with no background
      * fill, no black border, no bevel edges, no icon shadow. White rounded
-     * rect outline on hover for the pixel-retro feel. */
-    const char* icon = chevron_icon_id(resolve_chevron(t));
+     * rect outline on hover for the pixel-retro feel.
+     *
+     * When icon_expanded / icon_collapsed are set they override the chevron
+     * glyph — used by the interaction column and inventory bar to show
+     * close-yellow / stack / bag icons instead of arrows. */
+    const char* icon = NULL;
+    if (t->expanded && t->icon_expanded) {
+        icon = t->icon_expanded;
+    } else if (!t->expanded && t->icon_collapsed) {
+        icon = t->icon_collapsed;
+    } else {
+        icon = chevron_icon_id(resolve_chevron(t));
+    }
     float sz = t->anchor.width < t->anchor.height ? t->anchor.width : t->anchor.height;
     float cx = t->anchor.x + t->anchor.width * 0.5f;
     float cy = t->anchor.y + t->anchor.height * 0.5f;

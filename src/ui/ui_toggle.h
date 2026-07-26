@@ -29,6 +29,8 @@ typedef struct {
     Rectangle       anchor;   /* screen-space hit area */
     float           anim_t;   /* 0..1 eased toward expanded */
     UIToggleChevron chevron;  /* glyph orientation when expanded */
+    const char*     icon_expanded;   /* overrides chevron when expanded (NULL = use chevron) */
+    const char*     icon_collapsed;  /* overrides chevron when collapsed (NULL = use chevron) */
 } UIToggle;
 
 void ui_toggle_init(UIToggle* t, Rectangle anchor, bool initial_expanded,
