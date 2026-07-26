@@ -740,6 +740,17 @@ void modal_interact_update(float dt) {
     if (!s_open) return;
     s_age += dt;
 
+    /* Refresh the stacked layers from the live AOI every frame so the Stack
+     * tab reflects equipment changes in real time (e.g. a weapon unequipped
+     * by the other player). If the entity has left the AOI we keep the last
+     * cached snapshot so the modal still renders.
+     *
+     * snapshot_alive_layers() reads from interaction_bubble_get_alive_layers()
+     * which is populated by interaction_bubble_update() for both players and
+     * bots. When the entity is not found it returns NULL and the cache is
+     * preserved — safe to call unconditionally. */
+    snapshot_alive_layers();
+
     /* Track the bot's live quest-talk set: a button appears the instant the
      * server posts a pending quest-talk (e.g. right after accepting the
      * mission) and disappears once it resolves — no modal reopen. */
