@@ -6,6 +6,7 @@
 #include "ol_as_animated_ico.h"
 #include "world_types.h"
 #include "ui_button.h"
+#include "ui_icon.h"
 
 #include <stdio.h>
 
@@ -123,5 +124,39 @@ void item_slot_draw_ex(Rectangle r, const ObjectLayerState* ols, ObjectLayersMan
         int lx = (int)(r.x + 3), ly = (int)(r.y + 3);
         DrawRectangle(lx - 1, ly - 1, fs + 2, fs + 2, (Color){ 0, 0, 0, 160 });
         DrawText("-", lx + 1, ly, fs, (Color){ 255, 165, 0, 220 });
+    }
+
+    /* ── Sum-stat badge (bottom-left) ─────────────────────────────────── */
+    if (mgr && ols->item_id[0] != '\0') {
+        ObjectLayer* ol_data = lookup_cached_layer(ols->item_id);
+        if (ol_data) {
+            Stats st = ol_data->data.stats;
+            int sum = st.effect + st.resistance + st.agility + st.range
+                      + st.intelligence + st.utility;
+            if (sum != 0) {
+                /* Icon slightly larger, font scaled up */
+                int stat_icon_sz = fs;
+                if (stat_icon_sz < 13) stat_icon_sz = 13;
+                float si_cx = r.x + stat_icon_sz * 0.5f + 3.0f;
+                float si_cy = r.y + r.height - stat_icon_sz * 0.5f - 3.0f;
+                ui_icon_draw("stats", si_cx, si_cy, stat_icon_sz, false, 0.0f);
+
+                int stat_font = fs;
+                if (stat_font < 11) stat_font = 11;
+                char sum_str[16];
+                snprintf(sum_str, sizeof(sum_str), "%d", sum);
+                int sum_tx = (int)(r.x + stat_icon_sz + 6.0f);
+                int sum_ty = (int)(r.y + r.height - stat_font - 3.0f);
+
+                /* Black outline around text chars for legibility */
+                for (int dy = -1; dy <= 1; dy++) {
+                    for (int dx = -1; dx <= 1; dx++) {
+                        if (dx == 0 && dy == 0) continue;
+                        DrawText(sum_str, sum_tx + dx, sum_ty + dy, stat_font, BLACK);
+                    }
+                }
+                DrawText(sum_str, sum_tx, sum_ty, stat_font, (Color){ 120, 220, 140, 255 });
+            }
+        }
     }
 }
