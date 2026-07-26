@@ -32,4 +32,9 @@ bool modal_notification_handle_click(int mx, int my);
 /* Returns true while a notification is visible. */
 bool modal_notification_is_open(void);
 
+/* Returns true during the post-close cooldown window. While this is active,
+ * the click dispatch should swallow all taps to prevent accidental triggers
+ * on elements that were behind the notification. */
+bool modal_notification_is_on_cooldown(void);
+
 #endif /* MODAL_NOTIFICATION_H */

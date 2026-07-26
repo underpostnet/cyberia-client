@@ -12,6 +12,8 @@
  *     appears (or the slot goes empty).
  *   - The auto-timeout path (hold + fade) still exists for the auto-timer
  *     if the player doesn't click OK, but clicking OK is the primary action.
+ *   - After the modal closes, a 0.8-second click cooldown prevents
+ *     accidental clicks on elements behind the notification.
  */
 
 #include "modal_notification.h"
@@ -21,6 +23,8 @@
 #include "item_slot.h"
 #include "loot_fx.h"
 #include "modal.h"
+#include "modal_interact.h"
+#include "inventory_modal.h"
 #include "object_layer.h"
 #include "object_layers_management.h"
 #include "fx_reward.h"
@@ -41,6 +45,7 @@
 #define MN_TOP        16   /* top padding above the title                  */
 #define MN_GAP        10   /* vertical gap between content blocks          */
 #define MN_BOT        12   /* bottom padding below the OK button           */
+#define MN_CLOSE_COOLDOWN 0.4f  /* seconds to block clicks after close */
 
 /* Reward preview arrival flourish: it pops in slightly oversized (with a soft
  * overshoot) and its slot color transitions from the notification's accent
@@ -71,12 +76,20 @@ static int   s_reward_qty = 0;
 static bool  s_reward_new = false;  /* fresh reward → fire the arrival flourish once */
 static float s_reward_pop_age = 0.0f; /* time since this reward started popping in */
 
+/* Click cooldown timer — after the modal closes, clicks are swallowed for
+ * MN_CLOSE_COOLDOWN seconds to prevent accidental triggers on elements
+ * that were behind the notification. */
+static float s_close_cooldown = 0.0f;
+
 static const Color C_TITLE = { 230, 235, 245, 255 };
 static const Color C_BODY  = { 170, 180, 200, 230 };
 
 static void show_next(void) {
     if (s_queue_head == s_queue_tail) {
         s_open = false;
+        /* Start the close cooldown so clicks behind the notification are
+         * blocked for a brief window after dismissal. */
+        s_close_cooldown = MN_CLOSE_COOLDOWN;
         return;
     }
     const NotifEntry* e = &s_queue[s_queue_head];
@@ -127,6 +140,7 @@ void modal_notification_init(void) {
     s_open = false;
     s_queue_head = 0;
     s_queue_tail = 0;
+    s_close_cooldown = 0.0f;
 }
 
 void modal_notification_show(const char* title, const char* message, Color accent) {
@@ -194,6 +208,12 @@ static Rectangle notif_reward_slot(Rectangle card) {
 }
 
 void modal_notification_update(float dt) {
+    /* Tick down the close cooldown even while the modal is closed. */
+    if (s_close_cooldown > 0.0f) {
+        s_close_cooldown -= dt;
+        if (s_close_cooldown < 0.0f) s_close_cooldown = 0.0f;
+    }
+
     if (!s_open) return;
     s_age += dt; /* drives the pop-in only; dismissal is OK-only */
     /* Celebrate only when the notice carries an object layer (a reward item). */
@@ -292,7 +312,21 @@ bool modal_notification_is_open(void) {
     return s_open;
 }
 
+bool modal_notification_is_on_cooldown(void) {
+    return s_close_cooldown > 0.0f;
+}
+
 bool modal_notification_handle_click(int mx, int my) {
+    /* During the close cooldown, swallow clicks only when there is a modal
+     * behind the notification that could accidentally receive them (interact
+     * modal's quest cards, inventory modal buttons, etc.). Without a modal
+     * behind, clicks pass through normally. */
+    if (s_close_cooldown > 0.0f &&
+        (modal_interact_is_open() || inventory_modal_is_open())) {
+        return true;
+    }
+    if (s_close_cooldown > 0.0f) return false;
+
     if (!s_open) return false;
     Rectangle card = notif_card();
     Rectangle ok_r = notif_ok(card);

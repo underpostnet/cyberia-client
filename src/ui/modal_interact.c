@@ -775,7 +775,8 @@ void modal_interact_update(float dt) {
         ui_scroll_update(&s_q_scroll, content_rect(card_rect()), s_q_content_height, dt);
         int click_x, click_y;
         if (ui_scroll_take_click(&s_q_scroll, &click_x, &click_y) &&
-            !modal_notification_is_open()) {
+            !modal_notification_is_open() &&
+            !modal_notification_is_on_cooldown()) {
             handle_quest_click(click_x, click_y);
             if (!s_open) return;
         }
