@@ -94,6 +94,8 @@ static UIScroll  s_q_scroll;
 static float     s_q_content_height = 0.0f;
 static UIScroll  s_s_scroll;
 static float     s_s_content_height = 0.0f;
+static UIScroll  s_stack_scroll;
+static float     s_stack_content_height = 0.0f;
 
 /* Reward icon hit-boxes captured across all visible cards during the draw, so
  * the click handler can open the same read-only inspection the stack tab uses. */
@@ -623,6 +625,8 @@ void modal_interact_init(void) {
     s_q_content_height = 0.0f;
     ui_scroll_reset(&s_s_scroll);
     s_s_content_height = 0.0f;
+    ui_scroll_reset(&s_stack_scroll);
+    s_stack_content_height = 0.0f;
     s_q_expanded = -1;
     s_q_expand_age = MODAL_POP_DURATION;
     es_clear();
@@ -744,6 +748,10 @@ bool modal_interact_handle_wheel(float wheel_delta) {
         return ui_scroll_on_wheel(&s_s_scroll, content_rect(card_rect()),
                                   s_s_content_height, wheel_delta);
     }
+    if (s_tab == MI_TAB_STACK) {
+        return ui_scroll_on_wheel(&s_stack_scroll, content_rect(card_rect()),
+                                  s_stack_content_height, wheel_delta);
+    }
     return false;
 }
 
@@ -804,6 +812,8 @@ void modal_interact_update(float dt) {
         }
     } else if (s_tab == MI_TAB_STATS) {
         ui_scroll_update(&s_s_scroll, content_rect(card_rect()), s_s_content_height, dt);
+    } else if (s_tab == MI_TAB_STACK) {
+        ui_scroll_update(&s_stack_scroll, content_rect(card_rect()), s_stack_content_height, dt);
     }
 
     if (!s_dialogue_opened) {
@@ -824,9 +834,43 @@ static void draw_stack_tab(Rectangle content) {
         DrawText("No active items.", (int)content.x, (int)content.y, MI_FONT_LABEL, C_LABEL);
         return;
     }
+
+    float pad = mi_pad();
+    float content_y = content.y - ui_scroll_offset(&s_stack_scroll);
+    float y = content_y;
+    float slot_sz = (float)MI_SLOT_SZ;
+    float row_h = slot_sz + pad;
+    int font_id = mi_font_label();
+    int font_type = mi_font_label() - 1;
+    if (font_type < 10) font_type = 10;
+
+    ui_scroll_begin(&s_stack_scroll);
     for (int i = 0; i < s_cached_layer_count; i++) {
-        item_slot_draw(slot_rect_in(content, i), &s_cached_layers[i], olm);
+        float row_y = y + i * row_h;
+
+        /* Item slot at left */
+        Rectangle slot_r = { content.x, row_y, slot_sz, slot_sz };
+        item_slot_draw(slot_r, &s_cached_layers[i], olm);
+
+        /* Item ID and type text to the right of the slot */
+        int tx = (int)(slot_r.x + slot_sz + 6.0f);
+        int ty = (int)(row_y + 2.0f);
+
+        /* Item ID — show the item_id field */
+        DrawText(s_cached_layers[i].item_id, tx, ty, font_id, C_TEXT);
+
+        /* Item type — resolve from layer data if available */
+        if (olm && s_cached_layers[i].item_id[0] != '\0') {
+            ObjectLayer* ol = lookup_cached_layer(s_cached_layers[i].item_id);
+            if (ol && ol->data.item.type[0] != '\0') {
+                ty += font_id + 4;
+                DrawText(ol->data.item.type, tx, ty, font_type, C_LABEL);
+            }
+        }
     }
+    float total_h = s_cached_layer_count * row_h + pad;
+    s_stack_content_height = total_h;
+    ui_scroll_end(&s_stack_scroll);
 }
 
 static void draw_stats_tab(Rectangle content) {
@@ -1664,19 +1708,26 @@ bool modal_interact_handle_click(int mx, int my) {
         return true;
     }
 
-    /* Stack tab: tap an item slot → read-only inspection.  Push the current
-     * modal session onto the ephemeral stack so popping restores it. */
-    if (s_tab == MI_TAB_STACK) {
+    /* Stack tab: scroll press + tap an item slot → read-only inspection. */
+    if (s_tab == MI_TAB_STACK &&
+        CheckCollisionPointRec((Vector2){ (float)mx, (float)my }, content)) {
+        ui_scroll_on_press(&s_stack_scroll, mx, my);
+        float slot_sz = (float)MI_SLOT_SZ;
+        float row_h = slot_sz + mi_pad();
+        float scroll_off = ui_scroll_offset(&s_stack_scroll);
         for (int i = 0; i < s_cached_layer_count; i++) {
-            if (item_slot_hit(slot_rect_in(content, i), mx, my)) {
+            float row_y = content.y - scroll_off + i * row_h;
+            Rectangle slot_r = { content.x, row_y, slot_sz, slot_sz };
+            if (item_slot_hit(slot_r, mx, my)) {
                 ObjectLayerState ols = s_cached_layers[i];
-                es_push();  /* save current session before navigating away */
+                es_push();
                 modal_interact_close();
                 inventory_modal_open_external(&ols);
                 inventory_modal_set_on_close(modal_interact_reopen);
                 return true;
             }
         }
+        return true;
     }
 
     if (!ui_button_hit(card, mx, my)) {
