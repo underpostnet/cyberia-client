@@ -24,10 +24,7 @@
 !Dockerfile
 !Dockerfile.dev
 !.dockerignore
-!deployment.yaml
-!grpc-service.yaml
-!proxy.yaml
-!pv-pvc.yaml
+!**/*.yaml
 !docker-driver.py
 
 build/
