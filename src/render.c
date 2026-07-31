@@ -10,6 +10,7 @@
 #include "ui/interaction_bubble.h"
 #include "ui/loot_fx.h"
 #include "ui/fx_reward.h"
+#include "ui/hud_minimap_overlay.h"
 #include "ui/inventory_bar.h"
 #include "ui/inventory_modal.h"
 #include "ui/modal_dialogue.h"
@@ -64,6 +65,7 @@ void render_init(int width, int height) {
         LOG_WARN("modal_map_init failed");
     }
     modal_instance_map_init();
+    hud_minimap_overlay_init();
 
     fx_tap_init();
     loot_fx_reset();
@@ -94,6 +96,7 @@ void render_on_tick(float delta_time) {
     dev_ui_on_tick(delta_time);
     modal_map_update(delta_time);
     modal_instance_map_update(delta_time);
+    hud_minimap_overlay_update(delta_time);
 
     if (g_game_state.init_received) {
         game_render_frame();
@@ -128,5 +131,6 @@ void render_cleanup(void) {
     game_render_cleanup();
     dev_ui_cleanup();
     modal_map_cleanup();
+    hud_minimap_overlay_cleanup();
     modal_instance_map_cleanup();
 }

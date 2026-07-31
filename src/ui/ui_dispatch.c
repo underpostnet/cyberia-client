@@ -3,6 +3,7 @@
 #include <raylib.h>
 
 #include "interaction_bubble.h"
+#include "hud_minimap_overlay.h"
 #include "inventory_bar.h"
 #include "inventory_modal.h"
 #include "modal_dialogue.h"
@@ -17,10 +18,10 @@ bool ui_dispatch_tap(int x, int y) {
     /* Notification OK button has highest priority while visible. */
     if (modal_notification_handle_click(x, y)) return true;
 
-    /* Toolbar toggles (quest / map / fullscreen) stay live above every
-     * modal; the Quest Journal floats above the Instance Map container,
-     * which then consumes presses inside its bounds. */
+    /* Toolbar controls stay live above every modal. The minimap only consumes
+     * its close control; the expanded Instance Map owns its full panel. */
     if (toolbar_handle_click(x, y)) return true;
+    if (hud_minimap_overlay_handle_click(x, y)) return true;
     if (modal_instance_map_handle_click(x, y)) return true;
 
     /* Interaction and dialogue modals keep the bottom inventory companion

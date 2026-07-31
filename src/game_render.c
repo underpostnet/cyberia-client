@@ -16,6 +16,7 @@
 #include "ui/floating_combat_text.h"
 #include "ui/fx_shapes.h"
 #include "ui/interaction_bubble.h"
+#include "ui/hud_minimap_overlay.h"
 #include "ui/inventory_bar.h"
 #include "ui/loot_fx.h"
 #include "ui/inventory_modal.h"
@@ -1043,6 +1044,9 @@ void game_render_ui(void) {
     // Quest Journal (right side) — grid-level HUD, below every modal.
     quest_journal_draw();
 
+    // Read-only minimap HUD. It never participates in UI input coverage.
+    hud_minimap_overlay_draw();
+
     // The inventory bar stays live and on top while any bottom modal is open
     // (interact, dialogue, or the inventory modal itself), so slots remain
     // clickable and never sit under a dim overlay.
@@ -1287,4 +1291,3 @@ void game_render_cleanup(void) {
     ui_icon_cleanup();
     dialogue_data_cleanup();
 }
-
