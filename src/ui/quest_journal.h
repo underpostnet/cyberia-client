@@ -27,6 +27,7 @@ bool quest_journal_handle_wheel(float wheel_delta);
 
 /* Hidden by default; the toolbar's quest button toggles it. */
 void quest_journal_toggle(void);
+void quest_journal_close(void);
 bool quest_journal_is_visible(void);
 
 #endif /* QUEST_JOURNAL_H */

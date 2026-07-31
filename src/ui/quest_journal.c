@@ -17,18 +17,16 @@
 
 /* ── Layout ───────────────────────────────────────────────────────────── */
 
-#define QJ_PANEL_W        248
-#define QJ_MARGIN         8
-#define QJ_TOP_MARGIN     12    /* gap below the map info HUD when it is shown */
-#define QJ_HEADER_H       40
-#define QJ_HEADER_PAD     10    /* left inset for the "Quest Journal" title    */
+#define QJ_PANEL_W        300
+#define QJ_HEADER_H       28
+#define QJ_HEADER_PAD     7
 #define QJ_SECTION_H      36
 #define QJ_ROW_H          22
 #define QJ_DETAIL_H       54
 #define QJ_PAGER_H        22
 #define QJ_CHEVRON        32
 
-#define QJ_FONT_TITLE     16
+#define QJ_FONT_TITLE     11
 #define QJ_FONT_SECTION   14
 #define QJ_FONT_ROW       13
 #define QJ_FONT_NAME      13
@@ -39,8 +37,9 @@
 #define QJ_CARD_GAP       6    /* vertical gap between cards              */
 #define QJ_BOTTOM_MARGIN  8    /* gap kept above the inventory bar        */
 
-/* Header / cards sit on top of the shared MODAL_PANEL_BG fill. */
-static const Color C_HEADER   = {  24,  30,  48, 255 };
+/* Header and cards sit over the translucent HUD panel. */
+static const Color C_HEADER   = {   3,   7,  16, 148 };
+static const Color C_HEADER_TEXT = { 215, 230, 245, 235 };
 static const Color C_TEXT     = { 220, 220, 230, 240 };
 static const Color C_DIM      = { 140, 140, 160, 200 };
 static const Color C_CARD     = {  30,  34,  52, 210 };
@@ -80,12 +79,12 @@ static int page_count(int count) {
 
 /* Sits directly below the top toolbar. */
 static float panel_top(void) {
-    return toolbar_height() + QJ_TOP_MARGIN;
+    return toolbar_height();
 }
 
 static Rectangle panel_rect(void) {
     int sw = GetScreenWidth();
-    return (Rectangle){ (float)(sw - QJ_PANEL_W - QJ_MARGIN), panel_top(),
+    return (Rectangle){ (float)(sw - QJ_PANEL_W), panel_top(),
                         (float)QJ_PANEL_W, 0.0f };
 }
 
@@ -176,8 +175,9 @@ static float header_walk(int mode, int mx, int my, float x, float y, float w) {
     if (JW_DRAW == mode) {
         Rectangle header = { x, y, w, header_h };
         DrawRectangleRec(header, C_HEADER);
-        DrawText("Quest Journal", (int)(x + QJ_HEADER_PAD),
-                 (int)(y + (header_h - QJ_FONT_TITLE) * 0.5f), QJ_FONT_TITLE, C_TEXT);
+        DrawText("QUEST JOURNAL", (int)(x + QJ_HEADER_PAD),
+                 (int)(y + (header_h - QJ_FONT_TITLE) * 0.5f),
+                 QJ_FONT_TITLE, C_HEADER_TEXT);
         UIButtonStyle cb = { .icon_id = "close-yellow", .no_fill = true };
         ui_button_draw(close_r, &cb, UI_BUTTON_NORMAL);
     } else if (JW_CLICK == mode && hit(mx, my, close_r)) {
@@ -196,7 +196,7 @@ static float sections_walk(int mode, int mx, int my, float x, float y0, float w)
         char label[64];
         snprintf(label, sizeof(label), "%s (%d)", C_SECTION_LABEL[sec], count);
         float srow_h = ui_toggle_header(&s_section[sec], x, y, w, label, QJ_FONT_SECTION,
-                                        count > 0 ? C_TEXT : C_DIM, UI_TOGGLE_HEADER_LEFT,
+                                        C_TEXT, UI_TOGGLE_HEADER_LEFT,
                                         0.0f, 0.0f, UI_TOGGLE_HDR_CHEVRON, JW_DRAW == mode);
         Rectangle srow = { x, y, w, srow_h };
         if (JW_CLICK == mode && hit(mx, my, srow)) {
@@ -284,6 +284,10 @@ void quest_journal_toggle(void) {
     }
 }
 
+void quest_journal_close(void) {
+    s_visible = false;
+}
+
 bool quest_journal_is_visible(void) {
     return s_visible;
 }
@@ -336,16 +340,12 @@ void quest_journal_draw(void) {
     s_view = (Rectangle){ x, y + s_header_h, w, view_h };
     s_panel_h = s_header_h + view_h;
 
-    /* Translucent fill so the grid reads through the journal, plus the shared
-     * border and fade-in. */
+    /* The journal and minimap share the same settled panel transparency. */
     Rectangle full = { x, y, w, s_panel_h };
     float a = modal_pop_alpha(s_age);
-    Color bg = { 14, 14, 22, 180 };
+    Color bg = { 5, 10, 22, 112 };
     bg.a = (unsigned char)(bg.a * a);
     DrawRectangleRec(full, bg);
-    Color bc = MODAL_PANEL_BORDER;
-    bc.a = (unsigned char)(bc.a * a);
-    DrawRectangleLinesEx(full, 1.5f, bc);
 
     header_walk(JW_DRAW, 0, 0, x, y, w);
 
