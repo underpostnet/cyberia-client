@@ -1,5 +1,6 @@
 #include "toolbar.h"
 
+#include "hud_minimap_overlay.h"
 #include "inventory_modal.h"
 #include "modal_instance_map.h"
 #include "modal_interact.h"
@@ -74,6 +75,45 @@ static void draw_toggle_btn(Rectangle r, const char* icon, Vector2 mouse) {
         DrawRectangleRoundedLinesEx(r, 0.18f, 6, 1.0f, WHITE);
 }
 
+static bool interact_inventory_chain_is_open(void) {
+    return modal_interact_is_open() || inventory_modal_is_open();
+}
+
+static void close_interact_inventory_chain(void) {
+    if (!interact_inventory_chain_is_open()) return;
+    inventory_modal_set_on_close(NULL);
+    modal_interact_close();
+    inventory_modal_close();
+}
+
+static void toggle_minimap(void) {
+    if (interact_inventory_chain_is_open()) {
+        quest_journal_close();
+        close_interact_inventory_chain();
+        modal_instance_map_close();
+        if (!hud_minimap_overlay_is_visible()) hud_minimap_overlay_show();
+        return;
+    }
+    if (hud_minimap_overlay_is_visible()) {
+        hud_minimap_overlay_hide();
+        return;
+    }
+    quest_journal_close();
+    close_interact_inventory_chain();
+    modal_instance_map_close();
+    hud_minimap_overlay_show();
+}
+
+static void toggle_expanded_instance_map(void) {
+    if (modal_instance_map_is_open()) {
+        modal_instance_map_close();
+        return;
+    }
+    hud_minimap_overlay_hide();
+    quest_journal_close();
+    modal_instance_map_toggle();
+}
+
 void toolbar_draw(int screen_width) {
     /* Advance the slide (draw runs once per frame). */
     float dt = GetFrameTime();
@@ -90,9 +130,9 @@ void toolbar_draw(int screen_width) {
         DrawLine(0, (int)(oy + TOOLBAR_H), screen_width, (int)(oy + TOOLBAR_H), TB_LINE);
 
         bool fs_active = fullscreen_bridge_is_active();
-        bool map_open  = modal_instance_map_is_open();
+        bool map_open  = hud_minimap_overlay_is_visible();
         draw_btn(btn_rect(0), fs_active ? "shrink" : "fullscreen", fs_active, mp);
-        draw_btn(btn_rect(1), map_open ? "close-yellow" : "map", map_open, mp);
+        draw_btn(btn_rect(1), "map", map_open, mp);
         draw_btn(btn_rect(2), "quest", quest_journal_is_visible(), mp);
     }
 
@@ -106,19 +146,23 @@ bool toolbar_handle_click(int mx, int my) {
     }
     if (s_hidden) return false;
     if (ui_button_hit(btn_rect(0), mx, my)) { fullscreen_bridge_toggle(); return true; }
-    if (ui_button_hit(btn_rect(1), mx, my)) { modal_instance_map_toggle(); return true; }
+    if (ui_button_hit(btn_rect(1), mx, my)) {
+        toggle_minimap();
+        return true;
+    }
     if (ui_button_hit(btn_rect(2), mx, my)) {
         /* The quest button returns to the grid: if any world-covering modal is
          * up, dismiss them all and surface the Quest Journal instead of
          * toggling it. Otherwise it toggles the journal as usual. */
-        if (modal_interact_is_open() || inventory_modal_is_open() || modal_instance_map_is_open()) {
+        bool minimap_was_visible = hud_minimap_overlay_is_visible();
+        hud_minimap_overlay_hide();
+        if (interact_inventory_chain_is_open() ||
+            modal_instance_map_is_open() || minimap_was_visible) {
             /* Clear the inventory modal's on-close callback before closing it,
              * so that a pending modal_interact_reopen (set when the inventory
              * modal was opened from the interact modal's stack/quest tab) does
              * not re-open the interact modal after we close it here. */
-            inventory_modal_set_on_close(NULL);
-            modal_interact_close();
-            inventory_modal_close();
+            close_interact_inventory_chain();
             modal_instance_map_close();
             if (!quest_journal_is_visible()) quest_journal_toggle();
         } else {
@@ -126,9 +170,9 @@ bool toolbar_handle_click(int mx, int my) {
         }
         return true;
     }
-    /* Tapping the map readout expands/retracts the Instance Map too. */
+    /* The coordinate readout opens the expanded inspection map. */
     if (ui_button_hit(modal_map_bounds(), mx, my)) {
-        modal_instance_map_toggle();
+        toggle_expanded_instance_map();
         return true;
     }
     return false;
