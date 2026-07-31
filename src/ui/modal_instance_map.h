@@ -17,9 +17,9 @@
  * layer (ui/instance_map_data — engine-cyberia REST, never the AOI stream),
  * and its own selection state.
  *
- * Open/close via modal_map's Map button, which swaps to a close icon while
- * the container is expanded. Opening starts the static fetch + dynamic
- * polling; closing stops polling immediately.
+ * The compact coordinate readout opens this expanded inspection surface. Its
+ * header owns the close control. Opening starts the static fetch and dynamic
+ * polling; closing stops polling.
  */
 
 void modal_instance_map_init(void);

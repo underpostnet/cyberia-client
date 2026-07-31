@@ -77,7 +77,7 @@ static int       s_rotation_from = 0;
 static int       s_rotation_to = 0;
 static int       s_rotation_step = 0;
 static float     s_rotation_age = IMAP_ROTATE_DURATION;
-static Rectangle s_rotate_left_btn, s_rotate_right_btn;
+static Rectangle s_close_btn, s_rotate_left_btn, s_rotate_right_btn;
 
 /* Node preview backgrounds: each map's auto-captured Object Layer render,
  * fetched lazily from the server-supplied previewUrl through the engine
@@ -99,6 +99,7 @@ void modal_instance_map_init(void) {
     s_rotation_to = 0;
     s_rotation_step = 0;
     s_rotation_age = IMAP_ROTATE_DURATION;
+    s_close_btn = (Rectangle){ 0 };
     s_preview_cache = texture_cache_create(IMAP_MAX_NODES, "imap-preview", on_preview_blob);
 }
 
@@ -130,6 +131,7 @@ void modal_instance_map_toggle(void) {
     s_rotation_to = s_grid_rotation;
     s_rotation_step = 0;
     s_rotation_age = IMAP_ROTATE_DURATION;
+    s_close_btn = (Rectangle){ 0 };
     reset_camera();
     instance_map_data_open();
     modal_map_set_expanded(true);      /* container morphs to full screen */
@@ -262,6 +264,10 @@ static void begin_grid_rotation(int step) {
 
 /* Release resolution: a clean (non-drag) press acts on what it landed on. */
 static void resolve_click(Vector2 at) {
+    if (CheckCollisionPointRec(at, s_close_btn)) {
+        modal_instance_map_close();
+        return;
+    }
     if (CheckCollisionPointRec(at, s_rotate_left_btn)) {
         begin_grid_rotation(-1);
         return;
@@ -976,6 +982,30 @@ static void draw_header(float fade) {
     shadow_label(title, (int)title_x, (int)title_y, 16,
                  fade_c((Color){ 140, 230, 255, 240 }, fade));
 
+    int mx = GetMouseX();
+    int my = GetMouseY();
+    float button_side = 28.0f;
+    float button_gap = 6.0f;
+    float button_y = title_y - (button_side - 16.0f) * 0.5f;
+    float close_x = s_m.panel.x + s_m.panel.width - button_side - 14.0f;
+    s_close_btn = (Rectangle){ close_x, button_y, button_side, button_side };
+    s_rotate_right_btn = (Rectangle){ close_x - button_gap - button_side, button_y,
+                                      button_side, button_side };
+    s_rotate_left_btn = (Rectangle){ s_rotate_right_btn.x - button_gap - button_side,
+                                     button_y, button_side, button_side };
+    bool rotate_enabled = !grid_rotation_animating();
+    draw_pixel_icon_button(s_rotate_left_btn, "arrow-left", rotate_enabled, mx, my, fade);
+    draw_pixel_icon_button(s_rotate_right_btn, "arrow-right", rotate_enabled, mx, my, fade);
+    draw_pixel_icon_button(s_close_btn, "close-yellow", true, mx, my, fade);
+    if (grid_rotation_animating()) {
+        int blocks = (int)(grid_rotation_progress() * 5.0f);
+        for (int i = 0; i < blocks; i++) {
+            DrawRectangle((int)(s_rotate_left_btn.x + 4.0f + i * 4.0f),
+                          (int)(s_rotate_left_btn.y + s_rotate_left_btn.height - 5.0f),
+                          3, 2, fade_c(IMAP_SELECTED, fade));
+        }
+    }
+
     char sub[IMAP_NAME_MAX + 24];
     switch (instance_map_data_state()) {
         case IMAP_DATA_READY:
@@ -988,26 +1018,6 @@ static void draw_header(float fade) {
     shadow_label(sub, (int)title_x,
                  (int)title_y + text_line_height(16) + 1, 11,
                  fade_c(IMAP_TEXT_DIM, fade));
-
-    /* Grid rotation controls keep all map cards on the same packed tile plane. */
-    float ab = 30.0f;
-    float rotate_x = s_m.panel.x + s_m.panel.width - 2.0f * ab - 16.0f;
-    float rotate_y = s_m.panel.y + s_m.panel.height * 0.5f - ab * 0.5f;
-    s_rotate_left_btn  = (Rectangle){ rotate_x, rotate_y, ab, ab };
-    s_rotate_right_btn = (Rectangle){ rotate_x + ab + 6.0f, rotate_y, ab, ab };
-    int mx = GetMouseX();
-    int my = GetMouseY();
-    bool enabled = !grid_rotation_animating();
-    draw_pixel_icon_button(s_rotate_left_btn, "arrow-left", enabled, mx, my, fade);
-    draw_pixel_icon_button(s_rotate_right_btn, "arrow-right", enabled, mx, my, fade);
-    if (grid_rotation_animating()) {
-        int blocks = (int)(grid_rotation_progress() * 5.0f);
-        for (int i = 0; i < blocks; i++) {
-            DrawRectangle((int)(s_rotate_left_btn.x + 4.0f + i * 4.0f),
-                          (int)(s_rotate_left_btn.y + s_rotate_left_btn.height - 5.0f),
-                          3, 2, fade_c(IMAP_SELECTED, fade));
-        }
-    }
 
     const char* hint = "DRAG PAN · WHEEL / PINCH ZOOM · ROTATE GRID · TAP NODE";
     int hw = MeasureText(hint, 10);
