@@ -19,6 +19,7 @@
 #include "object_layers_management.h"
 #include "quest_progress_store.h"
 #include "quest_cache.h"
+#include "sum_stat.h"
 #include "ui_button.h"
 #include "ui_scroll.h"
 #include "ui_icon.h"
@@ -460,22 +461,6 @@ static void snapshot_alive_layers(void) {
     }
 }
 
-static Stats stack_stats(void) {
-    Stats t = { 0 };
-    ObjectLayersManager* mgr = obj_layers_mgr_get();
-    for (int i = 0; i < s_cached_layer_count; i++) {
-        ObjectLayer* ol = mgr ? lookup_cached_layer(s_cached_layers[i].item_id) : NULL;
-        if (!ol) continue;
-        t.effect       += ol->data.stats.effect;
-        t.resistance   += ol->data.stats.resistance;
-        t.agility      += ol->data.stats.agility;
-        t.range        += ol->data.stats.range;
-        t.intelligence += ol->data.stats.intelligence;
-        t.utility      += ol->data.stats.utility;
-    }
-    return t;
-}
-
 /* The active dialogue key: the selected quest-talk dialogue code, else the
  * skin greeting. */
 static const char* active_dlg_key(void) {
@@ -874,7 +859,7 @@ static void draw_stack_tab(Rectangle content) {
 }
 
 static void draw_stats_tab(Rectangle content) {
-    Stats t = stack_stats();
+    Stats t = sum_stat_compute(s_cached_layers, s_cached_layer_count, obj_layers_mgr_get());
     int sum = t.effect + t.resistance + t.agility + t.range + t.intelligence + t.utility;
 
     float pad = mi_pad();
@@ -884,31 +869,7 @@ static void draw_stats_tab(Rectangle content) {
     ui_scroll_begin(&s_s_scroll);
 
     /* ── Sum stat container (scrolls with content) ─────────────────────── */
-    float header_h = 56.0f;
-    Rectangle header_rect = { content.x, y, content.width, header_h };
-    Color header_bg = { 50, 70, 120, 50 };
-    DrawRectangleRec(header_rect, header_bg);
-    DrawRectangleLinesEx(header_rect, 1.0f, (Color){ 80, 110, 170, 80 });
-
-    int sum_icon_sz = 28;
-    float sum_cx = content.x + pad + sum_icon_sz * 0.5f;
-    float sum_cy = y + header_h * 0.5f;
-    ui_icon_draw("stats", sum_cx, sum_cy, sum_icon_sz, false, 0.0f);
-
-    int sum_font = 22;
-    char sum_label[16];
-    snprintf(sum_label, sizeof(sum_label), "%+d", sum);
-    int sum_tw = MeasureText(sum_label, sum_font);
-    float sum_tx = content.x + pad + sum_icon_sz + 8.0f;
-    float sum_ty = y + (header_h - sum_font) * 0.5f;
-    DrawText(sum_label, (int)sum_tx, (int)sum_ty, sum_font, C_STAT);
-
-    int total_font = 12;
-    float total_tx = sum_tx + sum_tw + 8.0f;
-    float total_ty = y + (header_h - total_font) * 0.5f;
-    DrawText("Total Stats", (int)total_tx, (int)total_ty, total_font, C_LABEL);
-
-    y += header_h + pad;
+    y += sum_stat_draw(content.x, y, content.width, pad, sum) + pad;
 
     /* ── Per-stat rows ─────────────────────────────────────────────────── */
     const char* names[6] = { "Effect", "Resistance", "Agility", "Range", "Intelligence", "Utility" };

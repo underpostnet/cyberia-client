@@ -126,7 +126,7 @@ void item_slot_draw_ex(Rectangle r, const ObjectLayerState* ols, ObjectLayersMan
         DrawText("-", lx + 1, ly, fs, (Color){ 255, 165, 0, 220 });
     }
 
-    /* ── Sum-stat badge (bottom-left) ─────────────────────────────────── */
+    /* ── Sum-stat badge (top-right) ───────────────────────────────────── */
     if (mgr && ols->item_id[0] != '\0') {
         ObjectLayer* ol_data = lookup_cached_layer(ols->item_id);
         if (ol_data) {
@@ -137,16 +137,19 @@ void item_slot_draw_ex(Rectangle r, const ObjectLayerState* ols, ObjectLayersMan
                 /* Icon slightly larger, font scaled up */
                 int stat_icon_sz = fs;
                 if (stat_icon_sz < 13) stat_icon_sz = 13;
-                float si_cx = r.x + stat_icon_sz * 0.5f + 3.0f;
-                float si_cy = r.y + r.height - stat_icon_sz * 0.5f - 3.0f;
-                ui_icon_draw("stats", si_cx, si_cy, stat_icon_sz, false, 0.0f);
 
-                int stat_font = fs;
-                if (stat_font < 11) stat_font = 11;
                 char sum_str[16];
                 snprintf(sum_str, sizeof(sum_str), "%d", sum);
-                int sum_tx = (int)(r.x + stat_icon_sz + 6.0f);
-                int sum_ty = (int)(r.y + r.height - stat_font - 3.0f);
+                int stat_font = fs;
+                if (stat_font < 11) stat_font = 11;
+                int sum_tw = MeasureText(sum_str, stat_font);
+
+                /* Icon + value packed against the top-right corner. */
+                int sum_tx = (int)(r.x + r.width - sum_tw - 3.0f);
+                int sum_ty = (int)(r.y + 3.0f);
+                float si_cx = sum_tx - stat_icon_sz * 0.5f - 4.0f;
+                float si_cy = r.y + stat_icon_sz * 0.5f + 3.0f;
+                ui_icon_draw("stats", si_cx, si_cy, stat_icon_sz, false, 0.0f);
 
                 /* Black outline around text chars for legibility */
                 for (int dy = -1; dy <= 1; dy++) {

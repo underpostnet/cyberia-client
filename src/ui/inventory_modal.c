@@ -35,6 +35,7 @@
 #include "ol_as_animated_ico.h"
 #include "ui_icon.h"
 #include "serial.h"
+#include "sum_stat.h"
 #include "toolbar.h"
 #include "ui_button.h"
 #include "ui_scroll.h"
@@ -725,6 +726,20 @@ void inventory_modal_draw(void) {
                                  : (Color){ 120, 180, 255, 200 };
         DrawText(tbuf, (int)(info_x + (info_w - tbw) * 0.5f), (int)y_cursor, tbf, tcol);
         y_cursor += tbf + 6;
+    }
+
+    /* Sum-stat summary — shared container/style with the interact modal's
+     * Stats tab; single item here (array[0]). Inset left/right by `pad` to
+     * match the description and per-stat rows below (instead of spanning
+     * the full pane and touching the card edge), with a small top gap off
+     * the type badge and a tighter gap before the separator than the full
+     * `pad` used elsewhere, so the block reads as part of the column
+     * instead of floating with an oversized footer gap. */
+    {
+        y_cursor += 6.0f;
+        Stats sst = sum_stat_compute(ols, 1, s_ol_manager);
+        int sst_sum = sst.effect + sst.resistance + sst.agility + sst.range + sst.intelligence + sst.utility;
+        y_cursor += sum_stat_draw(info_x + pad, y_cursor, info_w - 2.0f * pad, (float)pad, sst_sum) + 8.0f;
     }
 
     DrawLine((int)(info_x + pad), (int)y_cursor, (int)(info_x + info_w - pad), (int)y_cursor,
