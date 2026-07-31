@@ -46,6 +46,14 @@
 #define MN_GAP        10   /* vertical gap between content blocks          */
 #define MN_BOT        12   /* bottom padding below the OK button           */
 #define MN_CLOSE_COOLDOWN 0.4f  /* seconds to block clicks after close */
+#define MN_SLIDE_DURATION 0.30f /* open: left -> center; close: center -> right */
+
+/* OK-press pulse: a quick grow-then-shrink punch, independent of the card's
+ * own close-slide / delivery wait — the button vanishes on this timeline
+ * regardless of how long the rest of the notification stays on screen. */
+#define MN_OK_PULSE_DURATION  0.34f
+#define MN_OK_PULSE_GROW_FRAC 0.3f /* fraction of the duration spent growing */
+#define MN_OK_PULSE_PEAK_SCALE 1.22f
 
 /* Reward preview arrival flourish: it pops in slightly oversized (with a soft
  * overshoot) and its slot color transitions from the notification's accent
@@ -81,6 +89,22 @@ static float s_reward_pop_age = 0.0f; /* time since this reward started popping 
  * that were behind the notification. */
 static float s_close_cooldown = 0.0f;
 
+/* Closing slide (center -> right, on OK press): while true the card keeps
+ * drawing/updating at its old entry (s_open stays true) until the slide
+ * finishes, then show_next() actually advances the queue. */
+static bool  s_closing    = false;
+static float s_close_age  = 0.0f;
+
+/* True from OK-press (reward case) until the delivery flight (notification
+ * slot -> inventory slot, loot_fx.c) lands — the card holds at rest (no
+ * slide) so the player watches the item arrive before it closes. */
+static bool  s_awaiting_delivery = false;
+
+/* OK-press pulse: true from click until MN_OK_PULSE_DURATION elapses, at
+ * which point the button is gone for good (see mn_ok_pulse). */
+static bool  s_ok_pulsing   = false;
+static float s_ok_pulse_age = 0.0f;
+
 static const Color C_TITLE = { 230, 235, 245, 255 };
 static const Color C_BODY  = { 170, 180, 200, 230 };
 
@@ -107,6 +131,9 @@ static void show_next(void) {
     s_open   = true;
     s_reward_new = (s_reward_item[0] != '\0');
     s_reward_pop_age = 0.0f;
+    /* Fresh entry starts with a clean, unpressed OK button. */
+    s_ok_pulsing = false;
+    s_ok_pulse_age = 0.0f;
 }
 
 static void push_queue(const char* title, const char* message, Color accent,
@@ -141,6 +168,11 @@ void modal_notification_init(void) {
     s_queue_head = 0;
     s_queue_tail = 0;
     s_close_cooldown = 0.0f;
+    s_closing = false;
+    s_close_age = 0.0f;
+    s_awaiting_delivery = false;
+    s_ok_pulsing = false;
+    s_ok_pulse_age = 0.0f;
 }
 
 void modal_notification_show(const char* title, const char* message, Color accent) {
@@ -164,6 +196,56 @@ static float mn_ease_out_back(float t) {
     return 1.0f + c3 * u * u * u + c1 * u * u;
 }
 
+/* Slide-in ease (decelerating) and slide-out ease (accelerating). */
+static float mn_ease_out_cubic(float t) {
+    float u = 1.0f - t;
+    return 1.0f - u * u * u;
+}
+static float mn_ease_in_cubic(float t) {
+    return t * t * t;
+}
+
+/* 0..1 progress of whichever slide is currently active. */
+static float mn_slide_progress(void) {
+    float age = s_closing ? s_close_age : s_age;
+    float t = age / MN_SLIDE_DURATION;
+    return t < 0.0f ? 0.0f : (t > 1.0f ? 1.0f : t);
+}
+
+/* Horizontal offset applied to the resting card position: enters from the
+ * left (negative offset shrinking to 0), exits to the right (offset going
+ * positive past the card's own width so it fully leaves the screen). */
+static float mn_slide_offset_x(float card_w) {
+    float t = mn_slide_progress();
+    if (s_closing) return (card_w + 60.0f) * mn_ease_in_cubic(t);
+    return -(float)GetScreenWidth() * (1.0f - mn_ease_out_cubic(t));
+}
+
+/* Fade paired with the slide: fades in while entering, fades out while
+ * leaving — the card is never both fully opaque and off-screen. */
+static float mn_slide_alpha(void) {
+    float t = mn_slide_progress();
+    return s_closing ? 1.0f - mn_ease_in_cubic(t) : mn_ease_out_cubic(t);
+}
+
+/* OK-press pulse shape: grow (ease-out) to MN_OK_PULSE_PEAK_SCALE, then shrink
+ * back through 0 (also ease-out, so the shrink front-loads its motion and
+ * tapers gently into nothing instead of snapping away at the last instant). */
+static void mn_ok_pulse(float* out_scale, float* out_alpha) {
+    float t = s_ok_pulse_age / MN_OK_PULSE_DURATION;
+    if (t > 1.0f) t = 1.0f;
+    if (t < MN_OK_PULSE_GROW_FRAC) {
+        float g = t / MN_OK_PULSE_GROW_FRAC;
+        *out_scale = 1.0f + (MN_OK_PULSE_PEAK_SCALE - 1.0f) * mn_ease_out_cubic(g);
+        *out_alpha = 1.0f;
+    } else {
+        float s = (t - MN_OK_PULSE_GROW_FRAC) / (1.0f - MN_OK_PULSE_GROW_FRAC);
+        float e = mn_ease_out_cubic(s);
+        *out_scale = MN_OK_PULSE_PEAK_SCALE * (1.0f - e);
+        *out_alpha = 1.0f - e;
+    }
+}
+
 /* Card height derived from the wrapped content so text never overflows and the
  * card grows with longer messages (and the active font size / family). */
 static float notif_content_height(void) {
@@ -180,13 +262,16 @@ static float notif_content_height(void) {
     return h;
 }
 
-/* Screen-centred card. The notification stays until the player taps OK, so the
- * geometry is static (no slide/fade) and shared by draw + hit-test; its height is
- * content-driven (see notif_content_height). */
+/* Screen-centred card, shared by draw + hit-test; its height is content-driven
+ * (see notif_content_height). Slides in from the left on open and out to the
+ * right on close (see mn_slide_offset_x) — resting position is unaffected
+ * once a slide settles, so hit-testing during the resting window matches the
+ * drawn position exactly. */
 static Rectangle notif_card(void) {
     int sw = GetScreenWidth(), sh = GetScreenHeight();
     float h = notif_content_height();
-    return (Rectangle){ (sw - MN_W) / 2.0f, (sh - h) / 2.0f, MN_W, h };
+    float x = (sw - MN_W) / 2.0f + mn_slide_offset_x(MN_W);
+    return (Rectangle){ x, (sh - h) / 2.0f, MN_W, h };
 }
 
 static Rectangle notif_ok(Rectangle card) {
@@ -215,7 +300,44 @@ void modal_notification_update(float dt) {
     }
 
     if (!s_open) return;
-    s_age += dt; /* drives the pop-in only; dismissal is OK-only */
+
+    /* OK-press pulse runs on its own clock, independent of the close-slide /
+     * delivery-wait branches below — the button vanishes on this timeline
+     * regardless of how long the rest of the card stays on screen. */
+    if (s_ok_pulsing) {
+        s_ok_pulse_age += dt;
+        if (s_ok_pulse_age >= MN_OK_PULSE_DURATION) s_ok_pulsing = false;
+    }
+
+    /* Close-slide in progress: keep drawing at the sliding position, but skip
+     * the open-state logic below (reward pop-in, holds) until it finishes,
+     * at which point the queue actually advances. */
+    if (s_closing) {
+        s_close_age += dt;
+        if (s_close_age >= MN_SLIDE_DURATION) {
+            s_closing = false;
+            s_close_age = 0.0f;
+            show_next();
+        }
+        return;
+    }
+
+    /* Reward delivery in flight: hold the card at rest (no slide) and keep
+     * its inventory hold fresh until the item lands on its slot, then play
+     * the close-slide (see loot_fx_inbound_to_inventory). Falls straight
+     * through to closing on the very frame the flight never actually
+     * started (e.g. no inventory slot resolved for the item). */
+    if (s_awaiting_delivery) {
+        if (s_reward_item[0] != '\0') fx_inventory_bar_qty_hold_for_delivery(s_reward_item);
+        if (!loot_fx_inbound_to_inventory(s_reward_item)) {
+            s_awaiting_delivery = false;
+            s_closing = true;
+            s_close_age = 0.0f;
+        }
+        return;
+    }
+
+    s_age += dt; /* drives the open slide-in; dismissal is OK-only */
     /* Celebrate only when the notice carries an object layer (a reward item). */
     if (s_reward_item[0] != '\0') {
         Rectangle card = notif_card();
@@ -236,7 +358,7 @@ void modal_notification_update(float dt) {
 void modal_notification_draw(void) {
     if (!s_open) return;
 
-    float a = modal_pop_alpha(s_age);
+    float a = mn_slide_alpha();
     Rectangle card = notif_card();
 
     /* Dim the screen so a stacked notification reads as modal. */
@@ -271,41 +393,82 @@ void modal_notification_draw(void) {
 
     /* Reward item slot — centred, pops in oversized (soft overshoot) and its
      * color transitions from the notification's accent back to normal as it
-     * settles, so a fresh reward reads as a distinct, celebratory arrival. */
+     * settles, so a fresh reward reads as a distinct, celebratory arrival.
+     * Once the delivery flight launches (s_awaiting_delivery), the icon
+     * itself leaves the slot empty — the loot_fx token is what's seen flying
+     * on to the inventory, so the item must vanish here to sell that motion.
+     * For a reward, s_closing only starts once that flight has already
+     * landed (see modal_notification_update), so the slot stays empty
+     * through the close-slide too instead of the item reappearing. */
     if (s_reward_item[0] != '\0') {
         Rectangle slot = notif_reward_slot(card);
 
-        float pop_t  = fminf(1.0f, s_reward_pop_age / MN_REWARD_POP_DUR);
-        float pop    = mn_ease_out_back(pop_t);
-        float scale  = 0.55f + 0.45f * pop;
-        float sw = MN_SLOT * scale, sh = MN_SLOT * scale;
-        Rectangle pop_slot = { slot.x + (slot.width - sw) * 0.5f,
-                               slot.y + (slot.height - sh) * 0.5f, sw, sh };
+        if (s_awaiting_delivery || s_closing) {
+            ObjectLayerState empty_ol = { 0 };
+            item_slot_draw_ex(slot, &empty_ol, obj_layers_mgr_get(), s_accent, 0.0f, true);
+        } else {
+            float pop_t  = fminf(1.0f, s_reward_pop_age / MN_REWARD_POP_DUR);
+            float pop    = mn_ease_out_back(pop_t);
+            float scale  = 0.55f + 0.45f * pop;
+            float sw = MN_SLOT * scale, sh = MN_SLOT * scale;
+            Rectangle pop_slot = { slot.x + (slot.width - sw) * 0.5f,
+                                   slot.y + (slot.height - sh) * 0.5f, sw, sh };
 
-        float tint_t = 1.0f - fminf(1.0f, s_reward_pop_age / MN_REWARD_TINT_DUR);
+            float tint_t = 1.0f - fminf(1.0f, s_reward_pop_age / MN_REWARD_TINT_DUR);
 
-        ObjectLayerState ol = { 0 };
-        strncpy(ol.item_id, s_reward_item, sizeof(ol.item_id) - 1);
-        ol.active = true;
-        ol.quantity = s_reward_qty;
-        item_slot_draw_ex(pop_slot, &ol, obj_layers_mgr_get(), s_accent, tint_t, true);
+            ObjectLayerState ol = { 0 };
+            strncpy(ol.item_id, s_reward_item, sizeof(ol.item_id) - 1);
+            ol.active = true;
+            ol.quantity = s_reward_qty;
+            item_slot_draw_ex(pop_slot, &ol, obj_layers_mgr_get(), s_accent, tint_t, true);
+        }
     }
 
-    /* OK button — bottom centre, pixel-retro style with check icon. */
-    int mx = GetMouseX(), my = GetMouseY();
+    /* OK button — bottom centre, pixel-retro style with check icon. Once
+     * pressed it plays a quick grow-then-shrink pulse and is gone for good
+     * after MN_OK_PULSE_DURATION, independent of the close-slide / delivery
+     * wait the rest of the card may still be playing. */
     Rectangle ok_r = notif_ok(card);
-    bool hit = ((float)mx >= ok_r.x && (float)mx < ok_r.x + ok_r.width &&
-                (float)my >= ok_r.y && (float)my < ok_r.y + ok_r.height);
-    UIButtonPixelRetroStyle ok_btn = {
-        .bg = (Color){ 50, 55, 80, 235 },
-        .icon_id = "check",
-        .label = "OK",
-        .font_size = 15,
-        .text_color = C_TITLE,
-        .selected = false,
-        .enabled = true,
-    };
-    ui_button_pixel_retro_draw(ok_r, &ok_btn, hit);
+    if (s_ok_pulsing) {
+        float pscale, palpha;
+        mn_ok_pulse(&pscale, &palpha);
+        /* Skip once faint enough that a rounded-to-zero text alpha would
+         * fall back to opaque white (see ui_button_pixel_retro_draw) — the
+         * button has effectively vanished by this point anyway. */
+        if (pscale > 0.02f && palpha > 0.02f) {
+            Rectangle pulse_r = {
+                ok_r.x + ok_r.width  * 0.5f * (1.0f - pscale),
+                ok_r.y + ok_r.height * 0.5f * (1.0f - pscale),
+                ok_r.width  * pscale,
+                ok_r.height * pscale,
+            };
+            UIButtonPixelRetroStyle pulse_btn = {
+                .bg = (Color){ 50, 55, 80, (unsigned char)(235.0f * palpha) },
+                .icon_id = "check",
+                .label = "OK",
+                .font_size = 15,
+                .text_color = (Color){ C_TITLE.r, C_TITLE.g, C_TITLE.b,
+                                       (unsigned char)((float)C_TITLE.a * palpha) },
+                .selected = false,
+                .enabled = false,
+            };
+            ui_button_pixel_retro_draw(pulse_r, &pulse_btn, false);
+        }
+    } else if (!s_closing && !s_awaiting_delivery) {
+        int mx = GetMouseX(), my = GetMouseY();
+        bool hit = ((float)mx >= ok_r.x && (float)mx < ok_r.x + ok_r.width &&
+                    (float)my >= ok_r.y && (float)my < ok_r.y + ok_r.height);
+        UIButtonPixelRetroStyle ok_btn = {
+            .bg = (Color){ 50, 55, 80, 235 },
+            .icon_id = "check",
+            .label = "OK",
+            .font_size = 15,
+            .text_color = C_TITLE,
+            .selected = false,
+            .enabled = true,
+        };
+        ui_button_pixel_retro_draw(ok_r, &ok_btn, hit);
+    }
 }
 
 bool modal_notification_is_open(void) {
@@ -328,6 +491,9 @@ bool modal_notification_handle_click(int mx, int my) {
     if (s_close_cooldown > 0.0f) return false;
 
     if (!s_open) return false;
+    /* Close-slide or delivery wait already playing — swallow further clicks
+     * (no double-fire on the OK button, nothing behind should react either). */
+    if (s_closing || s_awaiting_delivery) return true;
     Rectangle card = notif_card();
     Rectangle ok_r = notif_ok(card);
     /* Only the OK button is clickable; all other clicks are swallowed
@@ -335,16 +501,27 @@ bool modal_notification_handle_click(int mx, int my) {
      * triggered. */
     if ((float)mx >= ok_r.x && (float)mx < ok_r.x + ok_r.width &&
         (float)my >= ok_r.y && (float)my < ok_r.y + ok_r.height) {
-        /* Reward arrival — the same presentation as a world pickup, launched
-         * from the notification's reward slot. Landing releases the held slot
-         * reveal / +N popup / pulse. */
+        /* Grow-then-shrink punch, then gone for good — runs on its own clock
+         * regardless of how long the card itself stays on screen after. */
+        s_ok_pulsing = true;
+        s_ok_pulse_age = 0.0f;
         if (s_reward_item[0] != '\0') {
+            /* Reward arrival — the same presentation as a world pickup,
+             * launched from the notification's reward slot. Landing releases
+             * the held slot reveal / +N popup / pulse. The card holds at rest
+             * until the flight lands (modal_notification_update), so the
+             * player watches the item travel before the notification closes. */
             Rectangle slot = notif_reward_slot(card);
             loot_fx_reward_delivery(s_reward_item,
                                     slot.x + slot.width * 0.5f,
                                     slot.y + slot.height * 0.5f);
+            s_awaiting_delivery = true;
+        } else {
+            /* Nothing to deliver — play the center -> right close slide right
+             * away; show_next() fires once it finishes. */
+            s_closing = true;
+            s_close_age = 0.0f;
         }
-        show_next();
         return true;
     }
     return true; /* swallow all clicks while a notification is up */

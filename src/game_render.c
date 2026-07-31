@@ -1009,9 +1009,10 @@ void game_render_aoi_circle(void) {
 }
 
 /* Screen-space loot FX (slot delivery sparks + the reduction "expend" spray, and
- * the item icon riding either stream). Drawn in a top pass above the HUD/modals
- * so both the pickup delivery and the outward reduction parabola read clearly;
- * the notification toast still draws after this, staying top-most. */
+ * the item icon riding either stream). Drawn in a top pass above the HUD/modals,
+ * and after the notification toast (see game_render_ui), so a reward's delivery
+ * flight — which originates from inside the notification card — is never dimmed
+ * or clipped by the toast's overlay while it travels to the inventory bar. */
 static void draw_loot_screen_fx(void) {
     int loot_scr = loot_fx_screen_particle_slot_count();
     for (int i = 0; i < loot_scr; i++) {
@@ -1089,12 +1090,14 @@ void game_render_ui(void) {
         dev_ui_draw(g_renderer.screen_width, g_renderer.screen_height, 0);
     }
 
-    // Screen-space loot FX (pickup delivery + the reduction "expend" spray) draw
-    // above the HUD and modals so they read clearly, but below the notification.
-    draw_loot_screen_fx();
-
-    // Transient notification toast — top-most, above every modal and the loot FX.
+    // Transient notification toast — draws first so the loot delivery flight
+    // (a reward travelling out of the toast's own reward slot) lands on top of
+    // it instead of being dimmed by the toast's overlay.
     modal_notification_draw();
+
+    // Screen-space loot FX (pickup delivery + the reduction "expend" spray) —
+    // top-most, above the HUD, every modal, and the notification toast.
+    draw_loot_screen_fx();
 }
 
 typedef struct {

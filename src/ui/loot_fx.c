@@ -71,7 +71,7 @@
  * player, particles stream (homing) into the item's inventory slot, then burst
  * on arrival. All in screen pixels. */
 #define DELIVER_COUNT        9
-#define DELIVER_TTL          0.62f   /* seconds, avatar → slot (slow enough to read)*/
+#define DELIVER_TTL          1.05f   /* seconds, avatar → slot (slowed for readability)*/
 #define DELIVER_ARC_PX       130.0f  /* parabola peak height, screen px           */
 #define DELIVER_START_SPREAD 24.0f   /* px jitter around the avatar origin        */
 #define DELIVER_TARGET_JIT   7.0f    /* px jitter around the slot center          */
