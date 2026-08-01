@@ -31,8 +31,8 @@ void runtime_config_init(void) {
 
     /* The instance code is the first URL path segment; an empty segment (root)
      * means the default instance, served bare by the origin. The default is not
-     * folded in here: at root the ws URL stays prefix-free so the server's `/`
-     * route serves it, keeping the client and the proxy on one routing rule. */
+     * folded in here: at root the ws URL stays prefix-free; non-root instances
+     * retain the segment consumed by the server's CYBERIA_BASE_PATH mount. */
     adopt_js_string((char*)EM_ASM_PTR({
                         var segment = (self.location && self.location.pathname ? self.location.pathname : "/")
                                           .split("/")

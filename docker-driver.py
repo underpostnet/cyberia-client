@@ -26,6 +26,7 @@ Multi-instance routing
     CYBERIA_WS_ORIGIN          websocket origin, e.g. wss://server.cyberiaonline.com
     CYBERIA_ENGINE_API_ORIGIN  engine REST origin, e.g. https://www.cyberiaonline.com
     CYBERIA_DEFAULT_INSTANCE   instance used when served from the root path
+    CYBERIA_BASE_PATH          this container's public path, e.g. /FOREST
 
   Unset vars are simply not injected and the client falls back to the values
   compiled into the WASM.

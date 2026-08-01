@@ -3,11 +3,12 @@
 
 /* One WASM binary serves every world instance. The instance code is the first
  * segment of window.location.pathname; an empty segment (root) is the default
- * instance and yields a prefix-free "<origin>/ws" so the server's `/` route
- * serves it. Endpoint origins come from window.CYBERIA_WS_ORIGIN /
- * window.CYBERIA_ENGINE_API_ORIGIN, injected by the static server; config.h
- * constants are the fallback for local builds. Call runtime_config_init()
- * before connection_open() or any engine fetch. */
+ * instance and yields a prefix-free "<origin>/ws" for the default server. A
+ * non-root instance keeps its segment in "<origin>/<instance>/ws", matching
+ * the server's CYBERIA_BASE_PATH mount. Endpoint origins come from
+ * window.CYBERIA_WS_ORIGIN / window.CYBERIA_ENGINE_API_ORIGIN, injected by the
+ * static server; config.h constants are the fallback for local builds. Call
+ * runtime_config_init() before connection_open() or any engine fetch. */
 
 void        runtime_config_init(void);
 const char* runtime_config_instance_code(void);
