@@ -1,0 +1,22 @@
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: dd-cyberia-mmo-client-test-development-traffic-service
+  namespace: default
+  labels:
+    underpost.net/traffic-service: "true"
+    underpost.net/deploy-id: dd-cyberia-mmo-client-test-development
+spec:
+  type: ClusterIP
+  selector:
+    app: dd-cyberia-mmo-client-test-development-blue
+  ports:
+    - name: 'tcp-8082'
+      protocol: TCP
+      port: 8082
+      targetPort: 8082
+    - name: 'udp-8082'
+      protocol: UDP
+      port: 8082
+      targetPort: 8082

@@ -14,7 +14,7 @@ spec:
       
       enableWebsockets: true
       services:
-        - name: dd-cyberia-mmo-client-test-development-blue-service
+        - name: dd-cyberia-mmo-client-test-development-traffic-service
           port: 8082
           weight: 100
     

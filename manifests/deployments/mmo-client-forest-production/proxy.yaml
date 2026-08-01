@@ -16,7 +16,7 @@ spec:
       
       enableWebsockets: true
       services:
-        - name: dd-cyberia-mmo-client-forest-production-blue-service
+        - name: dd-cyberia-mmo-client-forest-production-traffic-service
           port: 8081
           weight: 100
     
