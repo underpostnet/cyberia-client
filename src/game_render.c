@@ -14,7 +14,7 @@
 #include "ui/dev_ui.h"
 #include "ui/entity_overhead_ui.h"
 #include "ui/floating_combat_text.h"
-#include "ui/fx_shapes.h"
+#include "fx/fx_shapes.h"
 #include "ui/interaction_bubble.h"
 #include "ui/hud_minimap_overlay.h"
 #include "ui/inventory_bar.h"
@@ -28,7 +28,7 @@
 #include "ui/nameplate.h"
 #include "ui/quest_journal.h"
 #include "ui/modal_notification.h"
-#include "ui/fx_tap.h"
+#include "fx/fx_tap.h"
 #include "ui/ui_icon.h"
 #include "util/log.h"
 

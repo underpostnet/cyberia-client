@@ -39,7 +39,8 @@ src_files = \
 	$(wildcard $(SRC_DIR)/network/*.c) \
 	$(wildcard $(SRC_DIR)/ui/*.c) \
 	$(wildcard $(SRC_DIR)/input/*.c) \
-	$(wildcard $(SRC_DIR)/domain/*.c)
+	$(wildcard $(SRC_DIR)/domain/*.c) \
+	$(wildcard $(SRC_DIR)/fx/*.c)
 
 #------------------------------------------------
 # Raylib Dependendy

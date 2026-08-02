@@ -22,7 +22,7 @@
 #include "domain/presentation_runtime.h"
 #include "util/log.h"
 #include "ui/ui_dispatch.h"
-#include "ui/fx_tap.h"
+#include "fx/fx_tap.h"
 #include "ui/interaction_bubble.h"
 #include "ui/text.h"
 #include "domain/local_player.h"

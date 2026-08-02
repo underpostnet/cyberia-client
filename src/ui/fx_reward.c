@@ -1,6 +1,6 @@
 #include "ui/fx_reward.h"
 
-#include "fx_shapes.h"
+#include "fx/fx_shapes.h"
 #include "ui_icon.h"
 
 #include <math.h>

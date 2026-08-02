@@ -19,7 +19,7 @@
 #include "ui/modal_map.h"
 #include "ui/quest_journal.h"
 #include "ui/modal_notification.h"
-#include "ui/fx_tap.h"
+#include "fx/fx_tap.h"
 #include "ui/ui_icon.h"
 #include "network/engine_client.h"
 #include "util/log.h"

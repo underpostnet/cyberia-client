@@ -1,5 +1,5 @@
-#ifndef CYBERIA_UI_FX_SHAPES_H
-#define CYBERIA_UI_FX_SHAPES_H
+#ifndef CYBERIA_FX_FX_SHAPES_H
+#define CYBERIA_FX_FX_SHAPES_H
 
 #include <raylib.h>
 
@@ -18,4 +18,4 @@ void fx_shape_bar(float x, float y, float w, float h, float border, Color body);
  * (0..1) scales the opacity of both body and border. Pixel-snapped. */
 void fx_shape_spark(float cx, float cy, float size_px, Color body, float alpha);
 
-#endif /* CYBERIA_UI_FX_SHAPES_H */
+#endif /* CYBERIA_FX_FX_SHAPES_H */
