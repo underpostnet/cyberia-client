@@ -31,12 +31,6 @@ void ws_close(WebSocketClient* ws_client);
 bool ws_is_open(const WebSocketClient* ws_client);
 
 /**
- * Sends a text message to the server. The function returns immediately
- * after queuing the message for transmission.
- */
-bool ws_send_str(const WebSocketClient* ws_client, const char* data);
-
-/**
  * Sends a binary message to the server.
  */
 bool ws_send_binary(const WebSocketClient* ws_client, const void* data, size_t len);

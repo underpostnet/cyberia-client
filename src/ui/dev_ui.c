@@ -53,7 +53,6 @@ int dev_ui_init(void) {
     g_dev_ui.background_color = (Color){0, 0, 0, (unsigned char)(255 * 0.4f)};
     g_dev_ui.text_color = (Color){255, 255, 255, 255};
     g_dev_ui.debug_text_color = (Color){220, 220, 220, 255};
-    g_dev_ui.error_text_color = (Color){255, 50, 50, 255};
 
     // Network stats
     g_dev_ui.download_kbps = 0.0f;
@@ -70,7 +69,6 @@ int dev_ui_init(void) {
     g_dev_ui.show_network_stats = true;
     g_dev_ui.show_player_stats = true;
     g_dev_ui.show_game_stats = true;
-    g_dev_ui.show_error_section = true;
 
     LOG_INFO("[DEV_UI] Development UI initialized\n");
     return 0;
@@ -210,7 +208,6 @@ void dev_ui_draw(int screen_width, int screen_height, int hud_occupied) {
     Vector2 player_pos = g_game_state.player.base.interp_pos;
     Vector2 target_pos = g_game_state.player.target_pos;
     int sum_stats_limit = g_game_state.sum_stats_limit;
-    const char* error_msg = game_render_get_error_message();
 
     // Get active stats and item count
     int active_stats_sum = dev_ui_get_active_stats_sum(player_id);
@@ -237,11 +234,4 @@ void dev_ui_draw(int screen_width, int screen_height, int hud_occupied) {
         y_offset += line_spacing;
     }
 
-    // Draw error message at the bottom of the panel if present
-    if (g_dev_ui.show_error_section && error_msg[0] != '\0') {
-        int error_y = panel_y + dev_ui_height - 30;
-        char error_text[256];
-        snprintf(error_text, sizeof(error_text), "Error: %s", error_msg);
-        DrawText(error_text, x_margin, error_y, font_size_text, g_dev_ui.error_text_color);
-    }
 }

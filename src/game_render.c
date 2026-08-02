@@ -143,12 +143,6 @@ void game_render_set_screen_size(int width, int height) {
 }
 
 void game_render_frame(void) {
-    /* Consume any error posted by message_parser via game_state.pending_error. */
-    if (g_game_state.pending_error[0] != '\0') {
-        game_render_set_error_message(g_game_state.pending_error);
-        g_game_state.pending_error[0] = '\0';
-    }
-
     // Atlas textures are loaded on-demand via get_atlas_texture() during rendering.
     // No pre-caching queue processing is needed.
 
@@ -1035,9 +1029,6 @@ static void draw_loot_screen_fx(void) {
 
 void game_render_ui(void) {
 
-    // Render error messages (always visible)
-    game_render_error_messages();
-
     // Entity interaction bubbles (left side, collapsible column)
     interaction_bubble_draw();
 
@@ -1102,43 +1093,6 @@ void game_render_ui(void) {
     // Screen-space loot FX (pickup delivery + the reduction "expend" spray) —
     // top-most, above the HUD, every modal, and the notification toast.
     draw_loot_screen_fx();
-}
-
-typedef struct {
-    char   text[MAX_MESSAGE_SIZE];
-    double display_time;
-} ErrorBanner;
-
-static ErrorBanner g_error_banner = {0};
-
-void game_render_set_error_message(const char* msg) {
-    assert(msg);
-    if (msg[0] == '\0') {
-        g_error_banner.text[0] = '\0';
-        g_error_banner.display_time = 0.0;
-        return;
-    }
-    strncpy(g_error_banner.text, msg, sizeof(g_error_banner.text) - 1);
-    g_error_banner.text[sizeof(g_error_banner.text) - 1] = '\0';
-    g_error_banner.display_time = GetTime();
-}
-
-const char* game_render_get_error_message(void) {
-    return g_error_banner.text;
-}
-
-void game_render_error_messages(void) {
-    if (g_error_banner.text[0] != '\0') {
-        double current_time = GetTime();
-        if (current_time - g_error_banner.display_time < 5.0) {
-            int font_size = 16;
-            int text_width = MeasureText(g_error_banner.text, font_size);
-            int x = (g_renderer.screen_width - text_width) / 2;
-            int y = 100;
-
-            DrawText(g_error_banner.text, x, y, font_size, (Color){ 220, 80, 80, 255 });
-        }
-    }
 }
 
 void game_render_click_effects(void) {

@@ -2,8 +2,7 @@
  * @file binary_aoi_decoder.c
  * @brief Decoder for the compact binary AOI protocol from the Go server.
  *
- * Parses little-endian binary messages and updates the global g_game_state,
- * mirroring the behavior of the JSON-based message_parser_parse_aoi_update().
+ * Parses little-endian binary messages and updates the global g_game_state.
  */
 
 #include "binary_aoi_decoder.h"
@@ -645,33 +644,6 @@ int binary_aoi_process(const uint8_t* data, size_t length) {
         local_player_fct_push(&ev);
         return 0;
     }
-    /* ── Item FCT event — variable-length message (≥15 bytes) ─────────────── */
-    if (msg_type == BIN_MSG_ITEM_FCT) {
-        if (length < 15) {
-            LOG_ERROR("[BINARY_AOI] ItemFCT message too short (%zu bytes)", length);
-            return -1;
-        }
-        uint8_t  fct_type = br_u8(&r);
-        float    world_x  = br_f32(&r);
-        float    world_y  = br_f32(&r);
-        uint32_t qty      = br_u32(&r);
-        uint8_t  id_len   = br_u8(&r);
-        char     item_id[MAX_ITEM_ID_LENGTH];
-        memset(item_id, 0, sizeof(item_id));
-        if (id_len > 0 && id_len < MAX_ITEM_ID_LENGTH && r.pos + id_len <= r.len) {
-            memcpy(item_id, r.data + r.pos, id_len);
-        }
-        LocalFctEvent ev = {
-            .world_x  = world_x,
-            .world_y  = world_y,
-            .value    = qty,
-            .type     = fct_type,
-            .item_qty = qty,
-        };
-        strncpy(ev.item_id, item_id, MAX_ITEM_ID_LENGTH - 1);
-        local_player_fct_push(&ev);
-        return 0;
-    }
     /* ── Drop collected — arm the parabolic pickup flight ─────────────────── */
     if (msg_type == BIN_MSG_DROP_COLLECT) {
         if (length < 82) {
@@ -708,9 +680,9 @@ int binary_aoi_process(const uint8_t* data, size_t length) {
                            item_id, launch_ms);
         return 0;
     }
-    /* ── AOI update / full AOI ─────────────────────────────────────────────
+    /* ── Full AOI snapshot ─────────────────────────────────────────────────
      *
-     *   [0]      u8  msgType        (0x01 = aoi_update, 0x03 = full_aoi)
+     *   [0]      u8  msgType        (0x03 = full_aoi)
      *   [1..4]   u32 tick           — simulation tick when produced
      *   [5..8]   u32 lastAckSeq     — highest InputCommand.Sequence the server
      *                                 has applied for this client; the
@@ -723,7 +695,7 @@ int binary_aoi_process(const uint8_t* data, size_t length) {
         LOG_ERROR("[BINARY_AOI] AOI message too short (%zu bytes, need 11)", length);
         return -1;
     }
-    if (msg_type != BIN_MSG_AOI_UPDATE && msg_type != BIN_MSG_FULL_AOI) {
+    if (BIN_MSG_FULL_AOI != msg_type) {
         LOG_ERROR("[BINARY_AOI] Unknown message type 0x%02x", msg_type);
         return -1;
     }
@@ -757,7 +729,7 @@ int binary_aoi_process(const uint8_t* data, size_t length) {
         s_prev_players[i].pos_server = gs->other_players[i].base.pos_server;
     }
 
-    /* Clear world objects (same as JSON parser does each AOI frame) */
+    /* Reset world-object counters; each snapshot re-lists everything in AOI. */
     gs->other_player_count = 0;
     gs->bot_count = 0;
     gs->resource_count = 0;

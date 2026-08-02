@@ -5,51 +5,6 @@
 #include <stddef.h>
 #include <stdint.h>
 #include <cJSON.h>
-#include <raylib.h>
-
-#include "world_types.h"
-
-#include "object_layer.h"
-
-/* ============================================================================
- * Core Serialization/Deserialization Functions
- * ============================================================================ */
-
-int serial_deserialize_color(const cJSON* json, Color* out);
-
-/**
- * @brief Deserialize JSON object to Vector2 (Point)
- * @param json cJSON object with X/Y fields
- * @param out Output Vector2 structure
- * @return 0 on success, -1 on failure
- */
-int serial_deserialize_point(const cJSON* json, Vector2* out);
-
-int serial_deserialize_dimensions(const cJSON* json, Vector2* out);
-
-Direction serial_deserialize_direction(const cJSON* json);
-
-ObjectLayerMode serial_deserialize_mode(const cJSON* json);
-
-int serial_deserialize_object_layer_state(const cJSON* json, ObjectLayerState* out);
-
-int serial_deserialize_object_layer_array(const cJSON* json, ObjectLayerState* out, int max_count);
-
-int serial_deserialize_entity_state(const cJSON* json, EntityState* out);
-
-/**
- * @brief Deserialize JSON object to PlayerState (player object)
- * @param json cJSON object with player data
- * @param out Output PlayerState structure
- * @return 0 on success, -1 on failure
- */
-int serial_deserialize_player_state(const cJSON* json, PlayerState* out);
-
-int serial_deserialize_bot_state(const cJSON* json, BotState* out);
-
-int serial_deserialize_world_object(const cJSON* json, WorldObject* out);
-
-int serial_deserialize_path(const cJSON* json, Vector2* out, int max_points);
 
 /* ============================================================================
  * Helper Utilities
@@ -82,16 +37,6 @@ int serial_get_int(const cJSON* json, const char* key, int* out);
  * @return 0 on success, -1 if field missing or not a number
  */
 int serial_get_float(const cJSON* json, const char* key, float* out);
-
-/*
- * @brief Safely get double from cJSON object
- * @param json cJSON object
- * @param key Field name
- * @param out Output double pointer
- * @return 0 on success, -1 if field missing or not a number
- * /
-// int serial_get_double(const cJSON* json, const char* key, double* out);
-*/
 
 /**
  * @brief Safely get boolean from cJSON object
@@ -169,7 +114,6 @@ bool serial_get_bool_default(const cJSON* json, const char* key, bool default_va
  *   0x13  freeze_start    u8 reasonLen + str reason
  *   0x14  freeze_end      u8 reasonLen + str reason
  *   0x15  chat            u8 toIdLen + str toId, u8 textLen + str text
- *   0x16  get_items_ids   u8 idLen + str itemId
  */
 
 #define UPLINK_HANDSHAKE       0x10
@@ -178,7 +122,7 @@ bool serial_get_bool_default(const cJSON* json, const char* key, bool default_va
 #define UPLINK_FREEZE_START    0x13
 #define UPLINK_FREEZE_END      0x14
 #define UPLINK_CHAT            0x15
-#define UPLINK_GET_ITEMS_IDS   0x16
+/* 0x16 retired (was get_items_ids) */
 #define UPLINK_DLG_START       0x17
 #define UPLINK_DLG_COMPLETE    0x18
 #define UPLINK_DLG_CANCEL      0x19
@@ -216,7 +160,6 @@ void uplink_item_activation(BinWriter* w, const char* item_id, bool active);
 void uplink_freeze_start(BinWriter* w, const char* reason);
 void uplink_freeze_end(BinWriter* w, const char* reason);
 void uplink_chat(BinWriter* w, const char* to_id, const char* text);
-void uplink_get_items_ids(BinWriter* w, const char* item_id);
 
 /* Dialogue interaction frames. The server resolves the bound action and
  * quest from its own cache; the client only reports which entity it talked

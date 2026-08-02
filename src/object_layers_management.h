@@ -125,12 +125,6 @@ Texture2D get_atlas_texture(const char* item_key);
  */
 void populate_object_layer_from_json(const char* item_id, const cJSON* ol_json);
 
-/* Dead — no external callers. Atlas population flows through
- * obj_layers_mgr_schedule_atlas_fetch + on_atlas_meta_fetched (REST path).
- *
- * void populate_atlas_from_json(ObjectLayersManager* manager, const char* item_key, const cJSON* atlas_json);
- */
-
 /**
  * @brief Schedule a REST fetch for atlas sprite sheet metadata by item_key.
  *

@@ -27,7 +27,7 @@
  *   - domain/presentation_runtime.h  palette, status icon visuals, dev_ui
  *   - domain/local_player.h     frozen flag, FCT queue, self status icon,
  *                               authoritative move speed
- *   - ui/ui_state.h             skill_map, associated_item_ids
+ *   - ui/ui_state.h             skill_map
  */
 
 #define MAX_ENTITIES 1000
@@ -39,8 +39,7 @@
 #define MAX_DEAD_ITEM_IDS    16
 
 /* EntityState / PlayerState / BotState / WorldObject + their MAX_* sizing
- * macros live in world_types.h so the serializer can use them without
- * depending on this header's global GameState. */
+ * macros live in world_types.h. */
 
 typedef struct GameState GameState;
 
@@ -124,8 +123,6 @@ struct GameState {
     bool init_received;
     double last_update_time;       /* wall-clock arrival of the latest snapshot */
     uint32_t last_snapshot_tick;   /* mirror of session_server_tick_estimate() */
-
-    char pending_error[256];
 };
 
 extern GameState g_game_state;

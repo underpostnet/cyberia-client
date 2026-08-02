@@ -24,10 +24,6 @@
 static MessageType get_message_type(const cJSON* root);
 static int message_parser_parse_metadata(const cJSON* json_root);
 static int message_parser_parse_init_data(const cJSON* json_root);
-static int message_parser_parse_aoi_update(const cJSON* json_root);
-static int message_parser_parse_skill_item_ids(const cJSON* json_root);
-static int message_parser_parse_error(const cJSON* json_root);
-static int message_parser_parse_visible_players(const cJSON* players_json);
 static int message_parser_parse_dlg_ack(const cJSON* json_root);
 static void message_parser_upsert_quest_array(const cJSON* quests_json);
 
@@ -59,19 +55,6 @@ bool message_parser_parse(const char* json_str) {
         case MSG_TYPE_METADATA:
             result = 0 == message_parser_parse_metadata(root);
             break;
-        case MSG_TYPE_AOI_UPDATE:
-            result = 0 == message_parser_parse_aoi_update(root);
-            break;
-        case MSG_TYPE_SKILL_ITEM_IDS:
-            result = 0 == message_parser_parse_skill_item_ids(root);
-            break;
-        case MSG_TYPE_ERROR:
-            result = 0 == message_parser_parse_error(root);
-            break;
-        case MSG_TYPE_PING:
-        case MSG_TYPE_PONG:
-            result = true;
-            break;
         case MSG_TYPE_DLG_ACK:
             result = 0 == message_parser_parse_dlg_ack(root);
             break;
@@ -92,24 +75,8 @@ bool message_parser_parse(const char* json_str) {
             break;
         }
         case MSG_TYPE_UNKNOWN:
-        default: {
-            cJSON* payload = serial_get_object(root, "payload");
-            if (payload) {
-                // Check for init_data indicators
-                if (cJSON_HasObjectItem(payload, "gridW") && cJSON_HasObjectItem(payload, "gridH")) {
-                    result = 0 == message_parser_parse_init_data(root);
-                }
-                // Check for aoi_update indicators
-                else if (cJSON_HasObjectItem(payload, "player") && cJSON_HasObjectItem(payload, "playerID")) {
-                    result = 0 == message_parser_parse_aoi_update(root);
-                }
-                // Check for skill_item_ids indicators
-                else if (cJSON_HasObjectItem(payload, "associatedItemIds")) {
-                    result = 0 == message_parser_parse_skill_item_ids(root);
-                }
-            }
+        default:
             break;
-        }
     }
 
     cJSON_Delete(root);
@@ -359,264 +326,6 @@ static int message_parser_parse_metadata(const cJSON* json_root) {
     return 0;
 }
 
-/* ============================================================================
- * AOI Update Message Parser
- * ============================================================================ */
-
-static int message_parser_parse_visible_players(const cJSON* players_json) {
-    assert(players_json);
-
-    // Mark all existing players as not seen in this update
-    bool player_seen[MAX_ENTITIES] = {false};
-
-    // Parse all visible players from server
-    cJSON* player_obj = NULL;
-    cJSON_ArrayForEach(player_obj, players_json) {
-        PlayerState player = {0};
-
-        // Deserialize player as entity (VisiblePlayer is subset of PlayerState)
-        if (serial_deserialize_entity_state(player_obj, &player.base) == 0) {
-            // Update or add player - this preserves smooth interpolation for existing players
-            game_state_update_player(&player);
-
-            // Mark this player as seen
-            for (int i = 0; i < g_game_state.other_player_count; i++) {
-                if (strcmp(g_game_state.other_players[i].base.id, player.base.id) == 0) {
-                    player_seen[i] = true;
-                    break;
-                }
-            }
-        }
-    }
-
-    // Remove players that are no longer visible
-    for (int i = g_game_state.other_player_count - 1; i >= 0; i--) {
-        if (!player_seen[i]) {
-            game_state_remove_player(g_game_state.other_players[i].base.id);
-        }
-    }
-
-    return 0;
-}
-
-static int message_parser_parse_aoi_update(const cJSON* json_root) {
-    assert(json_root);
-
-    // Get payload object
-    cJSON* payload = serial_get_object(json_root, "payload");
-    if (!payload) {
-        return -1;
-    }
-
-    // Parse main player object
-    cJSON* player_obj = serial_get_object(payload, "player");
-    if (player_obj) {
-        PlayerState player = {0};
-
-        if (serial_deserialize_player_state(player_obj, &player) == 0) {
-            bool first_update = (g_game_state.player_id[0] == '\0');
-
-            Vector2 prev_interp_pos = g_game_state.player.base.interp_pos;
-            Vector2 prev_server_pos = g_game_state.player.base.pos_server;
-            Vector2 tap_target      = g_game_state.player.tap_target;
-            bool    has_tap_target  = g_game_state.player.has_tap_target;
-
-            /* Clear the local tap target as soon as the server reports the
-             * player stopped — drives the on-tap arrow off when motion ends. */
-            if (!first_update) {
-                float sdx = player.base.pos_server.x - prev_server_pos.x;
-                float sdy = player.base.pos_server.y - prev_server_pos.y;
-                if (sdx * sdx + sdy * sdy < 0.0001f) {
-                    has_tap_target = false;
-                }
-            }
-
-            memcpy(&g_game_state.player, &player, sizeof(PlayerState));
-
-            g_game_state.player.tap_target     = tap_target;
-            g_game_state.player.has_tap_target = has_tap_target;
-
-            if (!first_update) {
-                g_game_state.player.base.interp_pos = prev_interp_pos;
-            }
-
-            // Store player ID if not set
-            if (first_update) {
-                strncpy(g_game_state.player_id, player.base.id, sizeof(g_game_state.player_id) - 1);
-            }
-        }
-    }
-
-    // Parse visible players
-    cJSON* visible_players = serial_get_object(payload, "visiblePlayers");
-    if (visible_players) {
-        message_parser_parse_visible_players(visible_players);
-    }
-
-    // Parse visible grid objects - this is a FLAT dictionary where each object has a "Type" field
-    cJSON* visible_grid_objects = serial_get_object(payload, "visibleGridObjects");
-    if (visible_grid_objects) {
-        // Clear all grid object collections first (non-entity objects)
-        g_game_state.obstacle_count = 0;
-        g_game_state.portal_count = 0;
-        g_game_state.floor_count = 0;
-        g_game_state.foreground_count = 0;
-
-        // Note: bot_count is managed by game_state_update_bot() to preserve smooth interpolation
-        // Mark all existing bots as not seen in this update
-        bool bot_seen[MAX_ENTITIES] = {false};
-
-        // Iterate through all objects in the flat dictionary (it's an object, not an array)
-        // In cJSON, for {"id1": {...}, "id2": {...}}, child points to first key-value pair
-        // obj->string is the key (ID), obj itself is the value object
-        cJSON* obj = visible_grid_objects->child;
-        while (obj != NULL) {
-            // Get the Type field to determine what kind of object this is
-            cJSON* type_field = cJSON_GetObjectItemCaseSensitive(obj, "Type");
-            if (!type_field || !cJSON_IsString(type_field)) {
-                obj = obj->next;
-                continue;
-            }
-
-            const char* obj_type = type_field->valuestring;
-
-            // Dispatch based on type
-            if (strcmp(obj_type, "obstacle") == 0) {
-                if (g_game_state.obstacle_count < MAX_OBJECTS) {
-                    WorldObject* obstacle = &g_game_state.obstacles[g_game_state.obstacle_count];
-                    if (serial_deserialize_world_object(obj, obstacle) != 0) {
-                        obj = obj->next;
-                        continue;
-                    }
-                        g_game_state.obstacle_count++;
-                }
-            }
-            else if (strcmp(obj_type, "foreground") == 0) {
-                if (g_game_state.foreground_count < MAX_OBJECTS) {
-                    WorldObject* foreground = &g_game_state.foregrounds[g_game_state.foreground_count];
-                    if (serial_deserialize_world_object(obj, foreground) != 0) {
-                        obj = obj->next;
-                        continue;
-                    }
-                        g_game_state.foreground_count++;
-                }
-            }
-            else if (strcmp(obj_type, "portal") == 0) {
-                if (g_game_state.portal_count < MAX_OBJECTS) {
-                    WorldObject* portal = &g_game_state.portals[g_game_state.portal_count];
-                    if (serial_deserialize_world_object(obj, portal) != 0) {
-                        obj = obj->next;
-                        continue;
-                    }
-                        g_game_state.portal_count++;
-                }
-            }
-            else if (strcmp(obj_type, "floor") == 0) {
-                if (g_game_state.floor_count < MAX_OBJECTS) {
-                    WorldObject* floor = &g_game_state.floors[g_game_state.floor_count];
-                    if (serial_deserialize_world_object(obj, floor) != 0) {
-                        obj = obj->next;
-                        continue;
-                    }
-                        g_game_state.floor_count++;
-                }
-            }
-            else if (strcmp(obj_type, "bot") == 0) {
-                // Parse bot
-                BotState bot = {0};
-
-                if (serial_deserialize_bot_state(obj, &bot) == 0) {
-                    // Update or add bot - preserves smooth interpolation for existing bots
-                    game_state_update_bot(&bot);
-
-                    // Mark this bot as seen
-                    for (int i = 0; i < g_game_state.bot_count; i++) {
-                        if (strcmp(g_game_state.bots[i].base.id, bot.base.id) == 0) {
-                            bot_seen[i] = true;
-                            break;
-                        }
-                    }
-                }
-            }
-
-            // Move to next object in the dictionary
-            obj = obj->next;
-        }
-
-        // Remove bots that are no longer visible
-        for (int i = g_game_state.bot_count - 1; i >= 0; i--) {
-            if (!bot_seen[i]) {
-                game_state_remove_bot(g_game_state.bots[i].base.id);
-            }
-        }
-    }
-
-    // Update timestamp
-    g_game_state.last_update_time = GetTime();
-
-    return 0;
-}
-
-/* ============================================================================
- * Skill/Item IDs Message Parser
- * ============================================================================ */
-
-static int message_parser_parse_skill_item_ids(const cJSON* json_root) {
-    assert(json_root);
-
-    printf("[MESSAGE_PARSER] Parsing skill_item_ids message\n");
-
-    // Get payload object
-    cJSON* payload = serial_get_object(json_root, "payload");
-    if (!payload) {
-        printf("[MESSAGE_PARSER] skill_item_ids missing payload\n");
-        return -1;
-    }
-
-    ui_state_clear_associated_items();
-
-    cJSON* associated_ids = serial_get_array(payload, "associatedItemIds");
-    if (associated_ids) {
-        cJSON* item = NULL;
-        cJSON_ArrayForEach(item, associated_ids) {
-            if (cJSON_IsString(item)) {
-                const char* item_id = cJSON_GetStringValue(item);
-                if (item_id) ui_state_push_associated_item(item_id);
-            }
-        }
-    }
-
-    LOG_INFO("skill_item_ids parsed: %d associations", ui_state_associated_item_count());
-    return 0;
-}
-
-static int message_parser_parse_error(const cJSON* json_root) {
-    LOG_INFO("[MESSAGE_PARSER] Parsing error message\n");
-    assert(json_root);
-
-    // Get payload object
-    cJSON* payload = serial_get_object(json_root, "payload");
-    if (!payload) {
-        LOG_ERROR("[MESSAGE_PARSER] error missing payload\n");
-        return -1;
-    }
-
-    // Get error message
-    char error_msg[MAX_MESSAGE_SIZE] = {0};
-    if (serial_get_string(payload, "message", error_msg, sizeof(error_msg)) == 0)
-    {
-        strncpy(g_game_state.pending_error, error_msg, sizeof(g_game_state.pending_error) - 1);
-        g_game_state.pending_error[sizeof(g_game_state.pending_error) - 1] = '\0';
-        LOG_INFO("[MESSAGE_PARSER] Server error: %s\n", error_msg);
-    }
-    else
-    {
-        strncpy(g_game_state.pending_error, "UNKNOWN SERVER ERROR", sizeof(g_game_state.pending_error) - 1);
-    }
-
-    return 0;
-}
-
 static MessageType get_message_type(const cJSON* root) {
     char type_str[64] = {0};
     if (0 != serial_get_string(root, "type", type_str, sizeof(type_str))) {
@@ -626,11 +335,6 @@ static MessageType get_message_type(const cJSON* root) {
 
     if (0 == strcmp(type_str, "init_data"))      return MSG_TYPE_INIT_DATA;
     if (0 == strcmp(type_str, "metadata"))       return MSG_TYPE_METADATA;
-    if (0 == strcmp(type_str, "aoi_update"))     return MSG_TYPE_AOI_UPDATE;
-    if (0 == strcmp(type_str, "skill_item_ids")) return MSG_TYPE_SKILL_ITEM_IDS;
-    if (0 == strcmp(type_str, "error"))          return MSG_TYPE_ERROR;
-    if (0 == strcmp(type_str, "ping"))           return MSG_TYPE_PING;
-    if (0 == strcmp(type_str, "pong"))           return MSG_TYPE_PONG;
     if (0 == strcmp(type_str, "chat"))           return MSG_TYPE_CHAT;
     if (0 == strcmp(type_str, "dlg_ack"))        return MSG_TYPE_DLG_ACK;
 

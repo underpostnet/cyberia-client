@@ -4,7 +4,7 @@
  *
  * This is the C/WASM client-side counterpart to aoi_binary.go.
  * When the server sends a WebSocket binary message, this decoder
- * parses it into the same game_state structures used by the JSON parser.
+ * parses it into the game_state structures.
  *
  * Wire format documentation: see cyberia-server/src/aoi_binary.go
  */
@@ -15,9 +15,7 @@
 #include <stddef.h>
 #include <stdint.h>
 
-/* ── Message types ─────────────────────────────────────────────── */
-#define BIN_MSG_AOI_UPDATE 0x01
-#define BIN_MSG_INIT_DATA  0x02
+/* ── Message types (0x01/0x02/0x05 are retired wire slots) ─────── */
 #define BIN_MSG_FULL_AOI   0x03
 /* BIN_MSG_FCT — Floating Combat Text event (14 bytes, little-endian).
  * Wire layout:
@@ -27,15 +25,6 @@
  *   [6..9]   f32  world_y
  *   [10..13] u32  value   (always positive; sign implied by type)     */
 #define BIN_MSG_FCT        0x04
-/* BIN_MSG_ITEM_FCT \u2014 Item quantity FCT event (\u226515 bytes, little-endian).
- *   [0]     u8   0x05 (this constant)
- *   [1]     u8   fct_type (FCT_TYPE_ITEM_GAIN=0x04 or FCT_TYPE_ITEM_LOSS=0x05)
- *   [2..5]  f32  worldX
- *   [6..9]  f32  worldY
- *   [10..13] u32 quantity
- *   [14]    u8   itemId length (0\u201363)
- *   [15..]  str  itemId bytes                                               */
-#define BIN_MSG_ITEM_FCT   0x05
 /* BIN_MSG_DROP_COLLECT — scattered loot token collected by a player (≥82 bytes).
  *   [0]        u8   0x06 (this constant)
  *   [1..36]    36B  dropId       (token entity UUID, zero-padded)
@@ -80,8 +69,7 @@
 /**
  * @brief Process a binary AOI message from the server.
  *
- * Parses the binary buffer and updates the global game state,
- * mirroring the behavior of message_parser_parse() for JSON.
+ * Parses the binary buffer and updates the global game state.
  *
  * @param data    Pointer to the raw binary message.
  * @param length  Length of the message in bytes.

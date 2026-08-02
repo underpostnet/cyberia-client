@@ -53,25 +53,6 @@ bool ws_open(WebSocketClient* ws_client, const char* url, void* user_ctx, WebSoc
     return true;
 }
 
-// Send message through WebSocket
-bool ws_send_str(const WebSocketClient* ws_client, const char* data) {
-    assert(ws_client);
-    assert(data);
-    assert(strlen(data) > 0);
-    if (!ws_is_open(ws_client)) {
-        return false;
-    }
-
-    // Send as text message
-    EMSCRIPTEN_RESULT result = emscripten_websocket_send_utf8_text(ws_client->socket, data);
-    if (result != EMSCRIPTEN_RESULT_SUCCESS) {
-        LOG_ERROR("WebSocket send failed with error code: %d", result);
-        return false;
-    }
-
-    return true;
-}
-
 bool ws_send_binary(const WebSocketClient* ws_client, const void* data, size_t len) {
     assert(ws_client);
     assert(data);

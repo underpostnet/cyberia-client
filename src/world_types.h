@@ -8,12 +8,11 @@
 
 /**
  * @file world_types.h
- * @brief Plain world-entity data structures shared by the serializer and the
- *        game-state mirror.
+ * @brief Plain world-entity data structures for the game-state mirror.
  *
- * These are pure structure definitions with no behaviour and no global state.
- * The serializer depends only on this header so it can stay structure-aware
- * without pulling in the GameState god object (g_game_state) or its accessors.
+ * These are pure structure definitions with no behaviour and no global state,
+ * usable without pulling in the GameState god object (g_game_state) or its
+ * accessors.
  */
 
 #define MAX_OBJECT_LAYERS   20

@@ -35,7 +35,6 @@ typedef struct {
     Color background_color;
     Color text_color;
     Color debug_text_color;
-    Color error_text_color;
     
     // Performance tracking
     int last_fps;
@@ -45,7 +44,6 @@ typedef struct {
     bool show_network_stats;
     bool show_player_stats;
     bool show_game_stats;
-    bool show_error_section;
     
 } DevUI;
 
