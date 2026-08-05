@@ -3,14 +3,15 @@
  *
  * A tab strip over a fixed bottom bar of integration buttons:
  *
- *   Tabs:   [stack]  active item slots
+ *   Tabs:   [quest]  mission interface — only for quest-provider entities
+ *           [shop]   vendor catalog     — only for entities selling items
+ *           [stack]  active item slots
  *           [stats]  six-stat stack totals
- *           [action] mission interface — only for action-provider entities
  *   Bottom: [ Chat ]        opens the JS overlay on the Chat tab
  *           [ Integration ] opens the JS overlay on the Integration tab
  *
- * The action tab's "Talk" opens the paired modal_dialogue (bottom half);
- * server validation drives quest grant/advance. Dismiss closes both.
+ * The paired modal_dialogue (bottom half) carries the talk flow; server
+ * validation drives quest grant/advance. Dismiss closes both.
  */
 
 #ifndef MODAL_INTERACT_H

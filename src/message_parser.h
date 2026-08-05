@@ -11,7 +11,8 @@ typedef enum {
     MSG_TYPE_INIT_DATA,
     MSG_TYPE_METADATA,
     MSG_TYPE_CHAT,
-    MSG_TYPE_DLG_ACK
+    MSG_TYPE_DLG_ACK,
+    MSG_TYPE_SHOP_ACK
 } MessageType;
 
 /**

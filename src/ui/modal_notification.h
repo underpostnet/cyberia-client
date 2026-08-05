@@ -22,6 +22,26 @@ void modal_notification_show(const char* title, const char* message, Color accen
 void modal_notification_show_reward(const char* title, const char* message, Color accent,
                                     const char* reward_item_id, int reward_quantity);
 
+/* Confirmation callback for a quantity picker: the item and the count the
+ * player settled on before pressing OK. */
+typedef void (*ModalNotificationConfirmFn)(const char* item_id, int quantity);
+
+/* Like modal_notification_show_reward, plus a ◀ / ▶ quantity stepper between
+ * the slot and the buttons, a running total priced in `price_item_id`, and a
+ * Cancel / Buy pair in place of the lone OK. `on_confirm` fires on Buy with the
+ * selected count; Cancel dismisses with nothing sent.
+ *
+ * A picker announces a trade rather than a gift, so it drops the reward
+ * celebration and waits for the server: after Buy it holds until the granted
+ * items land in the inventory, releases the price item's spend FX, and only
+ * then flies the item from its slot into the inventory slot. Passing the price
+ * is what lets the spend animation play before the arrival instead of on the
+ * generic fallback timer. */
+void modal_notification_show_picker(const char* title, const char* message, Color accent,
+                                    const char* item_id, int min_quantity, int max_quantity,
+                                    const char* price_item_id, int price_quantity,
+                                    ModalNotificationConfirmFn on_confirm);
+
 void modal_notification_update(float dt);
 void modal_notification_draw(void);
 

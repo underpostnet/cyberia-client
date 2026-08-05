@@ -63,6 +63,11 @@ void local_player_request_freeze(bool start, const char* reason) {
     }
 }
 
+void local_player_keep_freeze(void) {
+    if (!g_local.freeze_pending) return;
+    g_local.freeze_deadline = GetTime() + LOCAL_FREEZE_TIMEOUT_S;
+}
+
 static void arm_freeze_watchdog(const char* reason) {
     strncpy(g_local.freeze_reason, reason ? reason : "", LOCAL_FREEZE_REASON_MAX - 1);
     g_local.freeze_reason[LOCAL_FREEZE_REASON_MAX - 1] = '\0';
@@ -101,6 +106,15 @@ void local_player_request_quest_abandon(const char* quest_code) {
 void local_player_request_quest_accept(const char* entity_id, const char* quest_code) {
     BinWriter w;
     uplink_quest_accept(&w, entity_id, quest_code);
+    network_send_binary(w.buf, w.pos);
+}
+
+void local_player_request_shop_buy(const char* entity_id, const char* item_id,
+                                   int quantity) {
+    if (quantity < 1) quantity = 1;
+    if (quantity > 255) quantity = 255;
+    BinWriter w;
+    uplink_shop_buy(&w, entity_id, item_id, (uint8_t)quantity);
     network_send_binary(w.buf, w.pos);
 }
 

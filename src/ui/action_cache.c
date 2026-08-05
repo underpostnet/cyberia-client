@@ -80,6 +80,27 @@ static void ingest_doc(ActionMetadataEntry* e, const cJSON* doc) {
             e->quest_count++;
         }
     }
+
+    /* shopItems[] is the vendor catalog. A non-empty list is what makes the
+     * entity a vendor — there is no action type flag. */
+    e->shop_count = 0;
+    const cJSON* sis = cJSON_GetObjectItemCaseSensitive(doc, "shopItems");
+    if (cJSON_IsArray(sis)) {
+        const cJSON* si = NULL;
+        cJSON_ArrayForEach(si, sis) {
+            if (e->shop_count >= ACTION_CACHE_SHOP_MAX) break;
+            const cJSON* item = cJSON_GetObjectItemCaseSensitive(si, "itemId");
+            if (!cJSON_IsString(item)) continue;
+            const cJSON* price_item = cJSON_GetObjectItemCaseSensitive(si, "priceItemId");
+            const cJSON* price_qty = cJSON_GetObjectItemCaseSensitive(si, "priceQty");
+            ActionShopItem* slot = &e->shop_items[e->shop_count];
+            copy_str(slot->item_id, ACTION_CACHE_CODE_MAX, item->valuestring);
+            copy_str(slot->price_item_id, ACTION_CACHE_CODE_MAX,
+                     cJSON_IsString(price_item) ? price_item->valuestring : "coin");
+            slot->price_qty = cJSON_IsNumber(price_qty) ? price_qty->valueint : 1;
+            e->shop_count++;
+        }
+    }
 }
 
 static void on_action_fetched(const FetchResponse* r) {

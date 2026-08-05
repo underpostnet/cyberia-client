@@ -128,6 +128,7 @@ bool serial_get_bool_default(const cJSON* json, const char* key, bool default_va
 #define UPLINK_DLG_CANCEL      0x19
 #define UPLINK_QUEST_ABANDON   0x1A
 #define UPLINK_QUEST_ACCEPT    0x1B
+#define UPLINK_SHOP_BUY        0x1C
 
 typedef struct {
     uint8_t  buf[256];
@@ -174,5 +175,11 @@ void uplink_quest_abandon(BinWriter* w, const char* quest_code);
 
 /* Accept the quest the entity offers — the only path to start a mission. */
 void uplink_quest_accept(BinWriter* w, const char* entity_id, const char* quest_code);
+
+/* Buy `quantity` units of a vendor action's catalog item. The server owns the
+ * price, the balance check, and the quantity clamp; the client only names the
+ * vendor, the item, and how many the player confirmed. */
+void uplink_shop_buy(BinWriter* w, const char* entity_id, const char* item_id,
+                     uint8_t quantity);
 
 #endif // SERIAL_H

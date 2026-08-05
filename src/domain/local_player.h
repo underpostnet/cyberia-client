@@ -45,6 +45,13 @@ bool  local_player_is_frozen(void);
  * (e.g. the UI closed via a path that skipped it, or a crash interrupted it). */
 void  local_player_request_freeze(bool start, const char* reason);
 
+/* Renew the freeze watchdog without touching the wire. A modal that owns the
+ * freeze calls this every frame it stays open, so a player who lingers past
+ * LOCAL_FREEZE_TIMEOUT_S is not auto-thawed — and killed — while still inside
+ * it. The server freeze has no timeout of its own; only the matching
+ * freeze_end (or this watchdog) releases it. */
+void  local_player_keep_freeze(void);
+
 /* Dialogue interaction frames. dlg_start freezes the player server-side
  * (modal protection) and arms the same watchdog as a freeze with reason
  * "dialogue"; dlg_complete / dlg_cancel release it. The server resolves the
@@ -60,6 +67,11 @@ void  local_player_request_quest_abandon(const char* quest_code);
 
 /* Accept the quest the entity offers — the only path to start a mission. */
 void  local_player_request_quest_accept(const char* entity_id, const char* quest_code);
+
+/* Buy `quantity` units of a vendor entity's catalog item. The server validates
+ * the total price against the player's balance and replies with a shop_ack. */
+void  local_player_request_shop_buy(const char* entity_id, const char* item_id,
+                                    int quantity);
 
 /* Advance the freeze watchdog; call once per render frame. */
 void  local_player_on_tick(void);

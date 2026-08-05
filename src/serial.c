@@ -217,3 +217,10 @@ void uplink_quest_accept(BinWriter* w, const char* entity_id, const char* quest_
     bw_str(w, entity_id  ? entity_id  : "");
     bw_str(w, quest_code ? quest_code : "");
 }
+void uplink_shop_buy(BinWriter* w, const char* entity_id, const char* item_id,
+                     uint8_t quantity) {
+    bw_init(w, UPLINK_SHOP_BUY);
+    bw_str(w, entity_id ? entity_id : "");
+    bw_str(w, item_id   ? item_id   : "");
+    bw_u8(w, quantity);
+}

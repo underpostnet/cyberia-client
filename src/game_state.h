@@ -162,6 +162,18 @@ static inline int game_state_get_player_coins(void) {
     return g_game_state.player_coins;
 }
 
+/* Quantity of an item the player holds; 0 when the inventory has no stack for
+ * it. Coins included — the server keeps their display slot in sync with the
+ * flat balance. */
+static inline int game_state_item_quantity(const char* item_id) {
+    if (NULL == item_id || '\0' == item_id[0]) return 0;
+    for (int i = 0; i < g_game_state.full_inventory_count; i++) {
+        if (0 == strcmp(g_game_state.full_inventory[i].item_id, item_id))
+            return g_game_state.full_inventory[i].quantity;
+    }
+    return 0;
+}
+
 /* True when item_id is a dead-state (Fragmentation) visual — an incomplete
  * manifestation the player can hold but never equip. */
 static inline bool game_state_is_dead_item(const char* item_id) {

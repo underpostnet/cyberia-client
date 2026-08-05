@@ -1,6 +1,7 @@
 #include "modal_interact.h"
 #include "text.h"
 
+#include "action_cache.h"
 #include "dialogue_data.h"
 #include "domain/local_player.h"
 #include "domain/viewport.h"
@@ -17,6 +18,7 @@
 #include "toolbar.h"
 #include "object_layer.h"
 #include "object_layers_management.h"
+#include "ol_as_animated_ico.h"
 #include "quest_progress_store.h"
 #include "quest_cache.h"
 #include "sum_stat.h"
@@ -31,16 +33,23 @@
 
 /* ── Tabs ─────────────────────────────────────────────────────────────── */
 
-enum { MI_TAB_STACK = 0, MI_TAB_STATS, MI_TAB_QUEST, MI_TAB_COUNT };
+enum { MI_TAB_STACK = 0, MI_TAB_STATS, MI_TAB_QUEST, MI_TAB_SHOP, MI_TAB_COUNT };
 
-static const char* MI_TAB_ICON[MI_TAB_COUNT]  = { "stack", "stats", "quest" };
-static const char* MI_TAB_LABEL[MI_TAB_COUNT] = { "Stack", "Stats", "Quest" };
+static const char* MI_TAB_ICON[MI_TAB_COUNT]  = { "stack", "stats", "quest", "home-red" };
+static const char* MI_TAB_LABEL[MI_TAB_COUNT] = { "Stack", "Stats", "Quest", "Shop" };
 
 /* ── Module state ─────────────────────────────────────────────────────── */
 
 static bool  s_open = false;
 static float s_age  = 0.0f;
 static int   s_tab  = MI_TAB_STACK;
+/* Tab-switch transition clock — a fresh tab's content pops in over
+ * MODAL_POP_DURATION and swallows content taps until it settles. */
+static float s_tab_age = MODAL_POP_DURATION;
+/* True once the player picks a tab. Until then the active tab tracks the
+ * entity's leading capability, which can only resolve after the action
+ * metadata fetch lands. */
+static bool  s_tab_picked = false;
 
 static char  s_entity_id[64]    = {0};
 static char  s_display_name[64] = {0};
@@ -68,6 +77,10 @@ static int  s_talk_sel = -1;
  * Quest tab renders one mission card per code; metadata is fetched by code. */
 static char  s_quest_codes[BOT_QUEST_CODES_MAX][64];
 static int   s_quest_code_count = 0;
+
+/* The NPC's cyberia-action code (from AOI). Its cached metadata carries the
+ * vendor catalog the Shop tab renders. */
+static char  s_action_code[64] = {0};
 
 /* True while this modal holds a server interaction context (dlg_start sent on
  * open, freezing the player and binding the entity); released on close. */
@@ -98,6 +111,19 @@ static float     s_s_content_height = 0.0f;
 static UIScroll  s_stack_scroll;
 static float     s_stack_content_height = 0.0f;
 
+/* Shop tab: one card per catalog row, each with a Buy control. Rects are
+ * captured during the draw so the click handler hit-tests the same layout. */
+static Rectangle s_shop_buy_btn[ACTION_CACHE_SHOP_MAX];
+static Rectangle s_shop_item_slot[ACTION_CACHE_SHOP_MAX];
+static bool      s_shop_affordable[ACTION_CACHE_SHOP_MAX];
+static int       s_shop_card_count = 0;
+static UIScroll  s_shop_scroll;
+static float     s_shop_content_height = 0.0f;
+
+/* Units a single purchase may cover. Mirrors shopBuyMaxQty in
+ * cyberia-server/game/shop.go, which clamps the request authoritatively. */
+#define MI_SHOP_QTY_MAX 10
+
 /* Reward icon hit-boxes captured across all visible cards during the draw, so
  * the click handler can open the same read-only inspection the stack tab uses. */
 static Rectangle        s_reward_rects[MI_QUEST_MAX * MI_REWARD_SLOT_MAX];
@@ -117,6 +143,7 @@ static int              s_cached_layer_count = 0;
 static bool  s_overlay_open = false;
 
 static void handle_quest_click(int mx, int my);
+static void handle_shop_click(int mx, int my);
 
 /* ─────────────────────────────────────────────────────────────────────────
  *  EPHEMERAL SESSION DATA — survives navigating away to inspection modals
@@ -132,6 +159,7 @@ typedef struct {
     char  entity_id[64];
     char  display_name[64];
     char  dlg_item[128];
+    char  action_code[64];
     char  talk_quest_codes[BOT_QUEST_CODES_MAX][64];
     char  talk_dialog_codes[BOT_QUEST_CODES_MAX][64];
     int   talk_count;
@@ -153,6 +181,7 @@ static void es_push(void) {
     strncpy(f->entity_id, s_entity_id, sizeof(f->entity_id) - 1);
     strncpy(f->display_name, s_display_name, sizeof(f->display_name) - 1);
     strncpy(f->dlg_item, s_dlg_item, sizeof(f->dlg_item) - 1);
+    strncpy(f->action_code, s_action_code, sizeof(f->action_code) - 1);
     memcpy(f->talk_quest_codes, s_talk_quest_codes, sizeof(s_talk_quest_codes));
     memcpy(f->talk_dialog_codes, s_talk_dialog_codes, sizeof(s_talk_dialog_codes));
     f->talk_count         = s_talk_count;
@@ -174,6 +203,7 @@ static void es_pop(void) {
     strncpy(s_entity_id, f->entity_id, sizeof(s_entity_id) - 1);
     strncpy(s_display_name, f->display_name, sizeof(s_display_name) - 1);
     strncpy(s_dlg_item, f->dlg_item, sizeof(s_dlg_item) - 1);
+    strncpy(s_action_code, f->action_code, sizeof(s_action_code) - 1);
     memcpy(s_talk_quest_codes, f->talk_quest_codes, sizeof(s_talk_quest_codes));
     memcpy(s_talk_dialog_codes, f->talk_dialog_codes, sizeof(s_talk_dialog_codes));
     s_talk_count         = f->talk_count;
@@ -214,15 +244,16 @@ static void es_clear(void) {
 #define MI_FONT_REW       11
 #define MI_REW_SLOT_SZ    32
 #define MI_REW_SLOT_GAP   6
-#define MI_Q_GRID_GAP     8.0f
-#define MI_Q_GRID_PAD     8.0f
-#define MI_Q_GRID_ICON_GAP 6.0f
+/* Card metrics shared by the quest grid and the shop catalog. */
+#define MI_CARD_GAP        8.0f
+#define MI_CARD_PAD        8.0f
+#define MI_CARD_ICON_GAP   6.0f
+#define MI_CARD_ACTION_GAP 6.0f
+#define MI_CARD_ACTION_H_MOBILE  28.0f
+#define MI_CARD_ACTION_H_DESKTOP 32.0f
 #define MI_Q_GRID_MIN_H_MOBILE 64.0f
 #define MI_Q_GRID_MIN_H_DESKTOP 70.0f
 #define MI_FONT_QGRID_MOBILE 15
-#define MI_Q_CARD_ACTION_H_MOBILE 28.0f
-#define MI_Q_CARD_ACTION_H_DESKTOP 32.0f
-#define MI_Q_CARD_ACTION_GAP 6.0f
 
 /* Quest tab desktop enlargement. The mission cards, reward slots, toggle
  * chevrons and Accept/Abandon button read too small at the base sizes above
@@ -247,9 +278,12 @@ static inline float mi_pad(void)          { return viewport_is_mobile() ? 8.0f :
 static inline float mi_header_h(void)     { return viewport_is_mobile() ? 36.0f : (float)MI_HEADER_H; }
 static inline float mi_close_sz(void)     { return viewport_is_mobile() ? 32.0f : (float)MI_CLOSE_SZ; }
 static inline float mi_tab_h(void)        { return viewport_is_mobile() ? 32.0f : (float)MI_TAB_H; }
-static inline float mi_tab_w(Rectangle card) {
+/* `count` is how many tabs the entity's capabilities actually expose, so the
+ * mobile strip packs to the visible row instead of the enum size. */
+static inline float mi_tab_w(Rectangle card, int count) {
     if (!viewport_is_mobile()) return (float)MI_TAB_W;
-    float available = (card.width - 2.0f * mi_pad() - 2.0f * MI_TAB_GAP) / MI_TAB_COUNT;
+    if (count < 1) count = 1;
+    float available = (card.width - 2.0f * mi_pad() - (float)(count - 1) * MI_TAB_GAP) / (float)count;
     return available < 90.0f ? available : 90.0f;
 }
 static inline float mi_bar_h(void)        { return viewport_is_mobile() ? 48.0f : (float)MI_BAR_H; }
@@ -280,6 +314,17 @@ static bool quest_tab_visible(void) {
     return s_quest_code_count > 0;
 }
 
+/* The NPC's cached action metadata, or NULL while its REST fetch is pending. */
+static const ActionMetadataEntry* action_metadata(void) {
+    return '\0' != s_action_code[0] ? action_cache_get(s_action_code) : NULL;
+}
+
+/* Shop shows only for an action carrying a non-empty catalog. */
+static bool shop_tab_visible(void) {
+    const ActionMetadataEntry* am = action_metadata();
+    return am && am->shop_count > 0;
+}
+
 /* Re-read the per-player bot capability snapshot (pending quest-talks, quest
  * codes, interaction flags) from live AOI so the quest-talk buttons and quest
  * tab track server events without a modal reopen. Keeps the last snapshot when
@@ -299,6 +344,9 @@ static bool refresh_bot_snapshot(void) {
     memcpy(prev_dialogs, s_talk_dialog_codes, sizeof(prev_dialogs));
 
     s_interaction_flags = bot->interaction_flags;
+    strncpy(s_action_code, bot->action_code, sizeof(s_action_code) - 1);
+    s_action_code[sizeof(s_action_code) - 1] = '\0';
+    action_cache_fetch(s_action_code);
     s_quest_code_count = 0;
     s_talk_count = 0;
     for (int i = 0; i < bot->quest_code_count && i < BOT_QUEST_CODES_MAX; i++) {
@@ -333,15 +381,41 @@ static bool refresh_bot_snapshot(void) {
     return false;
 }
 
-/* Fill `out` with the visible tab IDs in strip order; returns the count. */
-/* Quest leads the row when the entity offers missions — it is also the
- * default active tab in that case. */
+/* Fill `out` with the visible tab IDs in strip order; returns the count.
+ * Capability tabs lead the row, Shop first: a vendor's catalog is what the
+ * player came for, so it also becomes the tab the modal opens on. */
 static int visible_tabs(int out[MI_TAB_COUNT]) {
     int n = 0;
+    if (shop_tab_visible())   out[n++] = MI_TAB_SHOP;
     if (quest_tab_visible())  out[n++] = MI_TAB_QUEST;
     out[n++] = MI_TAB_STACK;
     out[n++] = MI_TAB_STATS;
     return n;
+}
+
+/* Leading tab for the entity's current capabilities — Shop, else Quest, else
+ * the always-present Stack. */
+static int leading_tab(void) {
+    int tabs[MI_TAB_COUNT];
+    visible_tabs(tabs);
+    return tabs[0];
+}
+
+/* Switch tabs, replaying the content pop-in. */
+static void set_tab(int tab) {
+    if (tab == s_tab) return;
+    s_tab = tab;
+    s_tab_age = 0.0f;
+}
+
+/* Return the Quest tab from a mission's detail view to the grid of cards.
+ * Swapping the whole content replays the tab pop-in, the same transition a tab
+ * switch plays — the grid is as much a content change as another tab is. */
+static void collapse_quest_detail(void) {
+    s_q_expanded = -1;
+    s_q_expand_age = MODAL_POP_DURATION;
+    ui_scroll_reset(&s_q_scroll);
+    s_tab_age = 0.0f;
 }
 
 /* Desktop uses a top-half card. On mobile, the interact card fills the space
@@ -380,9 +454,9 @@ static Rectangle close_rect(Rectangle card) {
                         size, size };
 }
 
-static Rectangle tab_rect(Rectangle card, int i) {
+static Rectangle tab_rect(Rectangle card, int i, int count) {
     float y = card.y + mi_header_h();
-    float width = mi_tab_w(card);
+    float width = mi_tab_w(card, count);
     return (Rectangle){ card.x + mi_pad() + (float)i * (width + MI_TAB_GAP), y,
                         width, mi_tab_h() };
 }
@@ -612,6 +686,11 @@ void modal_interact_init(void) {
     s_s_content_height = 0.0f;
     ui_scroll_reset(&s_stack_scroll);
     s_stack_content_height = 0.0f;
+    ui_scroll_reset(&s_shop_scroll);
+    s_shop_content_height = 0.0f;
+    s_shop_card_count = 0;
+    s_tab_age = MODAL_POP_DURATION;
+    s_tab_picked = false;
     s_q_expanded = -1;
     s_q_expand_age = MODAL_POP_DURATION;
     es_clear();
@@ -653,8 +732,13 @@ void modal_interact_open(const char* entity_id, const char* display_name,
     s_overlay_open       = false;
     s_open               = true;
     s_tab                = MI_TAB_STACK;
+    s_tab_age            = MODAL_POP_DURATION;
+    s_tab_picked         = false;
     ui_scroll_reset(&s_q_scroll);
     s_q_content_height = 0.0f;
+    ui_scroll_reset(&s_shop_scroll);
+    s_shop_content_height = 0.0f;
+    s_shop_card_count = 0;
     s_q_expanded = -1;
     s_q_expand_age = MODAL_POP_DURATION;
     s_dlg_collapse_t = 0.0f;
@@ -670,6 +754,7 @@ void modal_interact_open(const char* entity_id, const char* display_name,
      * quest codes it provides, and the pending quest-talk mapped to each. Read
      * these BEFORE requesting the dialogue, since they decide what the paired
      * panel opens on. */
+    s_action_code[0] = '\0';
     s_quest_code_count = 0;
     s_talk_count = 0;
     /* The paired dialogue always opens on the default greeting; pending
@@ -678,8 +763,10 @@ void modal_interact_open(const char* entity_id, const char* display_name,
     s_talk_sel = -1;
     refresh_bot_snapshot();
 
-    /* The Quest tab, when offered, opens as the active tab. */
-    if (quest_tab_visible()) s_tab = MI_TAB_QUEST;
+    /* Open on the leading capability tab. The shop catalog arrives with an
+     * async REST fetch, so update keeps re-resolving this until the player
+     * picks a tab themselves. */
+    s_tab = leading_tab();
 
     /* Interaction freeze for the whole modal session: the server blocks
      * damage/targeting while the reason chain interact→dialogue→interact
@@ -737,11 +824,18 @@ bool modal_interact_handle_wheel(float wheel_delta) {
         return ui_scroll_on_wheel(&s_stack_scroll, content_rect(card_rect()),
                                   s_stack_content_height, wheel_delta);
     }
+    if (s_tab == MI_TAB_SHOP) {
+        return ui_scroll_on_wheel(&s_shop_scroll, content_rect(card_rect()),
+                                  s_shop_content_height, wheel_delta);
+    }
     return false;
 }
 
 void modal_interact_update(float dt) {
     if (!s_open) return;
+    /* Keep the freeze watchdog from expiring under a player who lingers — a
+     * shop session easily outlasts it, and a thawed player is a killable one. */
+    local_player_keep_freeze();
     s_age += dt;
 
     /* Refresh the stacked layers from the live AOI every frame so the Stack
@@ -786,12 +880,24 @@ void modal_interact_update(float dt) {
             s_q_expand_age = MODAL_POP_DURATION;
     }
 
+    /* Follow the entity's leading capability until the player picks a tab —
+     * the Shop tab only becomes visible once its REST fetch lands, after this
+     * modal already opened. */
+    if (!s_tab_picked) set_tab(leading_tab());
+    if (s_tab_age < MODAL_POP_DURATION) {
+        s_tab_age += dt;
+        if (s_tab_age > MODAL_POP_DURATION) s_tab_age = MODAL_POP_DURATION;
+    }
+
+    /* Content taps are answered on release by the tab's scroll gesture, and
+     * only once its pop-in has settled so a tap never lands on moving cards. */
+    bool content_ready = s_tab_age >= MODAL_POP_DURATION &&
+                         !modal_notification_is_open() &&
+                         !modal_notification_is_on_cooldown();
+    int click_x, click_y;
     if (s_tab == MI_TAB_QUEST) {
         ui_scroll_update(&s_q_scroll, content_rect(card_rect()), s_q_content_height, dt);
-        int click_x, click_y;
-        if (ui_scroll_take_click(&s_q_scroll, &click_x, &click_y) &&
-            !modal_notification_is_open() &&
-            !modal_notification_is_on_cooldown()) {
+        if (ui_scroll_take_click(&s_q_scroll, &click_x, &click_y) && content_ready) {
             handle_quest_click(click_x, click_y);
             if (!s_open) return;
         }
@@ -799,6 +905,12 @@ void modal_interact_update(float dt) {
         ui_scroll_update(&s_s_scroll, content_rect(card_rect()), s_s_content_height, dt);
     } else if (s_tab == MI_TAB_STACK) {
         ui_scroll_update(&s_stack_scroll, content_rect(card_rect()), s_stack_content_height, dt);
+    } else if (s_tab == MI_TAB_SHOP) {
+        ui_scroll_update(&s_shop_scroll, content_rect(card_rect()), s_shop_content_height, dt);
+        if (ui_scroll_take_click(&s_shop_scroll, &click_x, &click_y) && content_ready) {
+            handle_shop_click(click_x, click_y);
+            if (!s_open) return;
+        }
     }
 
     if (!s_dialogue_opened) {
@@ -1024,28 +1136,16 @@ static float quest_grid_icon_size(float button_width) {
 }
 
 static int quest_grid_title_width(float button_width) {
-    float title_width = button_width - 2.0f * MI_Q_GRID_PAD -
-                        quest_grid_icon_size(button_width) - MI_Q_GRID_ICON_GAP;
+    float title_width = button_width - 2.0f * MI_CARD_PAD -
+                        quest_grid_icon_size(button_width) - MI_CARD_ICON_GAP;
     return title_width > 12.0f ? (int)title_width : 12;
 }
 
-static void draw_quest_grid_title_line(const char* line, int x, int y,
-                                       int width, int font) {
-    int line_width = MeasureText(line, font);
-    int line_x = x + (width - line_width) / 2;
-    for (int offset_y = -1; offset_y <= 1; offset_y++) {
-        for (int offset_x = -1; offset_x <= 1; offset_x++) {
-            if (0 == offset_x && 0 == offset_y) continue;
-            DrawText(line, line_x + offset_x, y + offset_y, font, BLACK);
-        }
-    }
-    DrawText(line, line_x, y, font, WHITE);
-}
-
-static void draw_quest_grid_status_line(const char* line, int x, int y,
-                                        int width, int font, Color color) {
-    int line_width = MeasureText(line, font);
-    int line_x = x + (width - line_width) / 2;
+/* Black-outlined card text line — shared by the quest grid (centred) and the
+ * shop catalog (left-aligned) so both read as the same card family. */
+static void draw_card_line(const char* line, int x, int y, int width, int font,
+                           Color color, bool center) {
+    int line_x = center ? x + (width - MeasureText(line, font)) / 2 : x;
     for (int offset_y = -1; offset_y <= 1; offset_y++) {
         for (int offset_x = -1; offset_x <= 1; offset_x++) {
             if (0 == offset_x && 0 == offset_y) continue;
@@ -1055,8 +1155,8 @@ static void draw_quest_grid_status_line(const char* line, int x, int y,
     DrawText(line, line_x, y, font, color);
 }
 
-static int quest_grid_title_wrap(const char* title, int x, int y, int width,
-                                 int font, bool draw) {
+static int card_title_wrap(const char* title, int x, int y, int width,
+                                 int font, Color color, bool center, bool draw) {
     if (NULL == title || '\0' == title[0]) return 0;
     if (width < 1) width = 1;
 
@@ -1090,7 +1190,7 @@ static int quest_grid_title_wrap(const char* title, int x, int y, int width,
                     word_offset = word_length;
                     continue;
                 }
-                if (draw) draw_quest_grid_title_line(line, x, line_y, width, font);
+                if (draw) draw_card_line(line, x, line_y, width, font, color, center);
                 line_y += line_height;
                 line[0] = '\0';
                 continue;
@@ -1115,7 +1215,7 @@ static int quest_grid_title_wrap(const char* title, int x, int y, int width,
             line[fragment_length] = '\0';
             word_offset += fragment_length;
             if (word_offset < word_length) {
-                if (draw) draw_quest_grid_title_line(line, x, line_y, width, font);
+                if (draw) draw_card_line(line, x, line_y, width, font, color, center);
                 line_y += line_height;
                 line[0] = '\0';
             }
@@ -1123,7 +1223,7 @@ static int quest_grid_title_wrap(const char* title, int x, int y, int width,
     }
 
     if ('\0' != line[0]) {
-        if (draw) draw_quest_grid_title_line(line, x, line_y, width, font);
+        if (draw) draw_card_line(line, x, line_y, width, font, color, center);
         line_y += line_height;
     }
     return line_y - y;
@@ -1131,19 +1231,19 @@ static int quest_grid_title_wrap(const char* title, int x, int y, int width,
 
 static float quest_grid_button_height(const char* title, float button_width,
                                       int font) {
-    int title_height = quest_grid_title_wrap(title, 0, 0,
+    int title_height = card_title_wrap(title, 0, 0,
                                              quest_grid_title_width(button_width),
-                                             font, false);
+                                             font, WHITE, true, false);
     int status_height = text_line_height(quest_grid_status_font(font));
     float icon_size = quest_grid_icon_size(button_width);
     float text_height = title_height + 2.0f + status_height;
     float content_height = text_height > icon_size ? text_height : icon_size;
     float min_height = viewport_is_mobile() ? MI_Q_GRID_MIN_H_MOBILE
                                              : MI_Q_GRID_MIN_H_DESKTOP;
-    float action_height = viewport_is_mobile() ? MI_Q_CARD_ACTION_H_MOBILE
-                                                : MI_Q_CARD_ACTION_H_DESKTOP;
-    float button_height = content_height + 2.0f * MI_Q_GRID_PAD +
-                          MI_Q_CARD_ACTION_GAP + action_height;
+    float action_height = viewport_is_mobile() ? MI_CARD_ACTION_H_MOBILE
+                                                : MI_CARD_ACTION_H_DESKTOP;
+    float button_height = content_height + 2.0f * MI_CARD_PAD +
+                          MI_CARD_ACTION_GAP + action_height;
     return button_height > min_height ? button_height : min_height;
 }
 
@@ -1171,7 +1271,7 @@ static void draw_quest_grid_action_button(Rectangle button, const char* label,
 
     int font = quest_grid_action_font(label, button.width);
     int label_y = (int)(button.y + (button.height - text_line_height(font)) * 0.5f);
-    draw_quest_grid_title_line(label, (int)button.x, label_y, (int)button.width, font);
+    draw_card_line(label, (int)button.x, label_y, (int)button.width, font, WHITE, true);
 }
 
 static void draw_quest_grid_button(Rectangle card, const QuestCardInfo* info,
@@ -1182,46 +1282,46 @@ static void draw_quest_grid_button(Rectangle card, const QuestCardInfo* info,
     Color shadow = (Color){ 8, 12, 22, 255 };
     Rectangle inner = { card.x + 2.0f, card.y + 2.0f,
                         card.width - 4.0f, card.height - 4.0f };
-    float action_height = viewport_is_mobile() ? MI_Q_CARD_ACTION_H_MOBILE
-                                                : MI_Q_CARD_ACTION_H_DESKTOP;
-    float action_y = card.y + card.height - MI_Q_GRID_PAD - action_height;
-    float action_width = (card.width - 2.0f * MI_Q_GRID_PAD - MI_Q_CARD_ACTION_GAP) * 0.5f;
+    float action_height = viewport_is_mobile() ? MI_CARD_ACTION_H_MOBILE
+                                                : MI_CARD_ACTION_H_DESKTOP;
+    float action_y = card.y + card.height - MI_CARD_PAD - action_height;
+    float action_width = (card.width - 2.0f * MI_CARD_PAD - MI_CARD_ACTION_GAP) * 0.5f;
 
     DrawRectangleRec(card, BLACK);
     DrawRectangleRec(inner, fill);
     DrawRectangle((int)inner.x, (int)inner.y, (int)inner.width, 2, highlight);
     DrawRectangle((int)inner.x, (int)(inner.y + inner.height - 2.0f),
                   (int)inner.width, 2, shadow);
-    DrawRectangle((int)inner.x, (int)(action_y - MI_Q_CARD_ACTION_GAP * 0.5f),
+    DrawRectangle((int)inner.x, (int)(action_y - MI_CARD_ACTION_GAP * 0.5f),
                   (int)inner.width, 1, info->color);
     DrawRectangle((int)inner.x, (int)inner.y, 3, (int)inner.height, info->color);
     if (hovered) DrawRectangleLinesEx(inner, 1.0f, WHITE);
 
     float icon_size = quest_grid_icon_size(card.width);
-    float icon_x = card.x + MI_Q_GRID_PAD + icon_size * 0.5f;
-    float content_top = card.y + MI_Q_GRID_PAD;
-    float content_bottom = action_y - MI_Q_CARD_ACTION_GAP;
+    float icon_x = card.x + MI_CARD_PAD + icon_size * 0.5f;
+    float content_top = card.y + MI_CARD_PAD;
+    float content_bottom = action_y - MI_CARD_ACTION_GAP;
     float icon_y = content_top + (content_bottom - content_top) * 0.5f;
     ui_icon_draw_ex("quest", icon_x + 1.0f, icon_y + 1.0f, icon_size, 0.0f, BLACK);
     ui_icon_draw_ex("quest", icon_x, icon_y, icon_size, 0.0f, WHITE);
 
-    int title_x = (int)(card.x + MI_Q_GRID_PAD + icon_size + MI_Q_GRID_ICON_GAP);
+    int title_x = (int)(card.x + MI_CARD_PAD + icon_size + MI_CARD_ICON_GAP);
     int title_width = quest_grid_title_width(card.width);
-    int title_height = quest_grid_title_wrap(info->title, title_x, 0,
-                                              title_width, font, false);
+    int title_height = card_title_wrap(info->title, title_x, 0,
+                                              title_width, font, WHITE, true, false);
     int status_font = quest_grid_status_font(font);
     int status_height = text_line_height(status_font);
     int text_height = title_height + 2 + status_height;
     int title_y = (int)(content_top + (content_bottom - content_top - text_height) * 0.5f);
-    quest_grid_title_wrap(info->title, title_x, title_y, title_width, font, true);
-    draw_quest_grid_status_line(info->word, title_x, title_y + title_height + 2,
-                                title_width, status_font, info->color);
+    card_title_wrap(info->title, title_x, title_y, title_width, font, WHITE, true, true);
+    draw_card_line(info->word, title_x, title_y + title_height + 2,
+                   title_width, status_font, info->color, true);
 
     /* The header area (icon + title + stats, above the action row) also
      * expands the card when tapped. */
     s_q_grid_header[slot] = (Rectangle){ card.x, card.y, card.width,
-                                         action_y - MI_Q_CARD_ACTION_GAP - card.y };
-    s_q_grid_btn[slot] = (Rectangle){ card.x + MI_Q_GRID_PAD, action_y,
+                                         action_y - MI_CARD_ACTION_GAP - card.y };
+    s_q_grid_btn[slot] = (Rectangle){ card.x + MI_CARD_PAD, action_y,
                                        action_width, action_height };
     const char* action_label = info->acceptable ? "Accept"
                              : info->active ? "Abandon" : info->word;
@@ -1230,7 +1330,7 @@ static void draw_quest_grid_button(Rectangle card, const QuestCardInfo* info,
                        : (Color){ 70, 74, 88, 255 };
     s_q_grid_action_kind[slot] = info->acceptable ? 1 : info->active ? 2 : 0;
     s_q_grid_action_btn[slot] = (Rectangle){ s_q_grid_btn[slot].x + action_width +
-                                              MI_Q_CARD_ACTION_GAP, action_y,
+                                              MI_CARD_ACTION_GAP, action_y,
                                               action_width, action_height };
     draw_quest_grid_action_button(s_q_grid_btn[slot], "Expand",
                                   (Color){ 44, 96, 156, 255 }, true, mx, my);
@@ -1373,7 +1473,7 @@ static void draw_quest_tab(Rectangle content, int mx, int my) {
                           draw_content.x, draw_content.width, &y, mx, my);
     } else {
         int qfont = quest_grid_font();
-        float column_width = (content.width - MI_Q_GRID_GAP) * 0.5f;
+        float column_width = (content.width - MI_CARD_GAP) * 0.5f;
         for (int first_slot = 0; first_slot < s_q_count; first_slot += 2) {
             QuestCardInfo left = quest_card_info(s_quest_codes[first_slot]);
             float row_height = quest_grid_button_height(left.title, column_width, qfont);
@@ -1388,14 +1488,14 @@ static void draw_quest_tab(Rectangle content, int mx, int my) {
             Rectangle left_button = { content.x, y, column_width, row_height };
             draw_quest_grid_button(left_button, &left, first_slot, qfont, mx, my);
             if (has_right) {
-                Rectangle right_button = { content.x + column_width + MI_Q_GRID_GAP,
+                Rectangle right_button = { content.x + column_width + MI_CARD_GAP,
                                            y, column_width, row_height };
                 draw_quest_grid_button(right_button, &right, first_slot + 1,
                                        qfont, mx, my);
             }
 
             y += row_height;
-            if (first_slot + 2 < s_q_count) y += MI_Q_GRID_GAP;
+            if (first_slot + 2 < s_q_count) y += MI_CARD_GAP;
         }
         y += 4.0f;
     }
@@ -1418,9 +1518,7 @@ static void handle_quest_click(int mx, int my) {
         /* Detail mode: close returns to the grid; then the mission's
          * Accept/Abandon button and reward slots. */
         if (ui_button_hit(s_q_close, mx, my)) {
-            s_q_expanded = -1;
-            s_q_expand_age = MODAL_POP_DURATION;
-            ui_scroll_reset(&s_q_scroll);
+            collapse_quest_detail();
             return;
         }
         int i = s_q_expanded;
@@ -1454,6 +1552,226 @@ static void handle_quest_click(int mx, int my) {
             s_q_expanded = i;
             s_q_expand_age = 0.0f;
             ui_scroll_reset(&s_q_scroll);
+            return;
+        }
+    }
+}
+
+/* ── Shop tab: the vendor catalog carried by the entity's action ───────── */
+
+/* Cards mirror the quest grid — two columns — and each is two rows: a detail
+ * row splitting a third for the item slot from two thirds for its left-aligned
+ * id, type and price, then a full-width Buy control. */
+#define MI_SHOP_SLOT_FRAC 0.3333f
+/* The detail row is capped at half the third-column width. Without it a wide
+ * desktop column would make the slot (and so the row) hundreds of pixels tall. */
+#define MI_SHOP_ROW_FRAC  0.5f
+
+static inline float mi_shop_price_sz(void) { return viewport_is_mobile() ? 26.0f : 34.0f; }
+static inline int   mi_shop_price_font(void) { return viewport_is_mobile() ? 16 : 20; }
+static inline float mi_shop_buy_h(void)    { return viewport_is_mobile() ? MI_CARD_ACTION_H_MOBILE
+                                                                        : MI_CARD_ACTION_H_DESKTOP; }
+
+static int shop_card_text_width(float card_width) {
+    float text_width = (card_width - 2.0f * MI_CARD_PAD) * (1.0f - MI_SHOP_SLOT_FRAC) -
+                       MI_CARD_ICON_GAP;
+    return text_width > 12.0f ? (int)text_width : 12;
+}
+
+/* Detail-row height: the capped slot column, or the id + type + price stack
+ * when that is taller. */
+static float shop_card_detail_height(const char* item_id, float card_width, int font) {
+    int   text_w = shop_card_text_width(card_width);
+    float text_h = (float)card_title_wrap(item_id, 0, 0, text_w, font, WHITE, false, false) + 2.0f +
+                   (float)text_line_height(quest_grid_status_font(font)) + 2.0f +
+                   mi_shop_price_sz();
+    float slot_h = (card_width - 2.0f * MI_CARD_PAD) * MI_SHOP_SLOT_FRAC * MI_SHOP_ROW_FRAC;
+    return text_h > slot_h ? text_h : slot_h;
+}
+
+/* The slot is a square fitted to the detail row, inside the third-width column. */
+static float shop_card_slot_size(const char* item_id, float card_width, int font) {
+    float column = (card_width - 2.0f * MI_CARD_PAD) * MI_SHOP_SLOT_FRAC;
+    float row = shop_card_detail_height(item_id, card_width, font);
+    return row < column ? row : column;
+}
+
+static float shop_card_height(const char* item_id, float card_width, int font) {
+    return MI_CARD_PAD + shop_card_detail_height(item_id, card_width, font) +
+           MI_CARD_ACTION_GAP + mi_shop_buy_h() + MI_CARD_PAD;
+}
+
+/* How many units the player can pay for right now, capped at the picker range.
+ * A free row (or one priced in nothing) is always buyable. */
+static int shop_affordable_qty(const ActionShopItem* item) {
+    if (item->price_qty <= 0) return MI_SHOP_QTY_MAX;
+    int held = game_state_item_quantity(item->price_item_id);
+    int affordable = held / item->price_qty;
+    return affordable > MI_SHOP_QTY_MAX ? MI_SHOP_QTY_MAX : affordable;
+}
+
+/* One catalog card. `affordable` mutes the Buy control and reddens the price
+ * when the player cannot pay for a single unit — the server enforces the same
+ * rule authoritatively. */
+static void draw_shop_card(Rectangle card, const ActionShopItem* item, int slot,
+                           bool affordable, int font, int mx, int my) {
+    ObjectLayersManager* olm = obj_layers_mgr_get();
+    bool hovered = ui_button_hit(card, mx, my);
+    Rectangle inner = { card.x + 2.0f, card.y + 2.0f, card.width - 4.0f, card.height - 4.0f };
+    Color accent = affordable ? (Color){ 120, 200, 140, 235 } : (Color){ 210, 120, 110, 230 };
+
+    DrawRectangleRec(card, BLACK);
+    DrawRectangleRec(inner, hovered ? (Color){ 35, 48, 72, 255 } : (Color){ 24, 32, 50, 255 });
+    DrawRectangle((int)inner.x, (int)inner.y, (int)inner.width, 2,
+                  hovered ? (Color){ 86, 112, 152, 255 } : (Color){ 58, 78, 110, 255 });
+    DrawRectangle((int)inner.x, (int)(inner.y + inner.height - 2.0f), (int)inner.width, 2,
+                  (Color){ 8, 12, 22, 255 });
+    DrawRectangle((int)inner.x, (int)inner.y, 3, (int)inner.height, accent);
+    if (hovered) DrawRectangleLinesEx(inner, 1.0f, WHITE);
+
+    /* Row 1 — a third for the item slot, two thirds for its id, type, price. */
+    float detail_h = shop_card_detail_height(item->item_id, card.width, font);
+    float slot_sz = shop_card_slot_size(item->item_id, card.width, font);
+    float column_w = (card.width - 2.0f * MI_CARD_PAD) * MI_SHOP_SLOT_FRAC;
+    Rectangle item_r = { card.x + MI_CARD_PAD + (column_w - slot_sz) * 0.5f,
+                         card.y + MI_CARD_PAD + (detail_h - slot_sz) * 0.5f,
+                         slot_sz, slot_sz };
+    ObjectLayerState ols = { 0 };
+    strncpy(ols.item_id, item->item_id, MAX_ID_LENGTH - 1);
+    ols.active = true;
+    ols.quantity = 1;
+    item_slot_draw(item_r, &ols, olm);
+    s_shop_item_slot[slot] = item_r;
+
+    /* Column 2 — left-aligned id over type over price. */
+    int   text_x = (int)(card.x + MI_CARD_PAD + column_w + MI_CARD_ICON_GAP);
+    int   text_w = shop_card_text_width(card.width);
+    int   type_font = quest_grid_status_font(font);
+    float price_sz = mi_shop_price_sz();
+    int   price_font = mi_shop_price_font();
+
+    float text_h = (float)card_title_wrap(item->item_id, 0, 0, text_w, font, WHITE, false, false) + 2.0f +
+                   (float)text_line_height(type_font) + 2.0f + price_sz;
+    float text_y = card.y + MI_CARD_PAD + (detail_h - text_h) * 0.5f;
+
+    text_y += (float)card_title_wrap(item->item_id, text_x, (int)text_y, text_w, font,
+                                     WHITE, false, true) + 2.0f;
+
+    ObjectLayer* ol_data = olm ? lookup_cached_layer(item->item_id) : NULL;
+    draw_card_line(ol_data && ol_data->data.item.type[0] != '\0' ? ol_data->data.item.type : "item",
+                   text_x, (int)text_y, text_w, type_font, C_LABEL, false);
+    text_y += (float)text_line_height(type_font) + 2.0f;
+
+    /* Price — the currency sprite and its count, both dropped on a soft shadow
+     * so the figure reads against the card fill. */
+    char price[32];
+    snprintf(price, sizeof(price), "%d", item->price_qty);
+    ol_as_ico_draw(olm, item->price_item_id, text_x + 2, (int)text_y + 2, (int)price_sz,
+                   OL_ICO_DEFAULT_DIR, 0, (Color){ 0, 0, 0, 150 });
+    ol_as_ico_draw(olm, item->price_item_id, text_x, (int)text_y, (int)price_sz,
+                   OL_ICO_DEFAULT_DIR, 0, WHITE);
+    draw_card_line(price, (int)((float)text_x + price_sz + 6.0f),
+                   (int)(text_y + (price_sz - (float)text_line_height(price_font)) * 0.5f),
+                   text_w, price_font,
+                   affordable ? C_REW_LABEL : (Color){ 210, 120, 110, 235 }, false);
+
+    Rectangle buy = { card.x + MI_CARD_PAD, card.y + card.height - MI_CARD_PAD - mi_shop_buy_h(),
+                      card.width - 2.0f * MI_CARD_PAD, mi_shop_buy_h() };
+    s_shop_buy_btn[slot] = buy;
+    UIButtonPixelRetroStyle buy_st = {
+        .bg = affordable ? (Color){ 38, 138, 76, 255 } : (Color){ 58, 62, 76, 255 },
+        .icon_id = "wallet",
+        .label = "Buy",
+        .font_size = viewport_is_mobile() ? 13 : mi_font_btn(),
+        .text_color = affordable ? C_TEXT : C_TAB_DIM,
+        .enabled = affordable,
+    };
+    ui_button_pixel_retro_draw(buy, &buy_st, affordable && ui_button_hit(buy, mx, my));
+}
+
+static void draw_shop_tab(Rectangle content, int mx, int my) {
+    const ActionMetadataEntry* am = action_metadata();
+    s_shop_card_count = 0;
+
+    float content_y = content.y - ui_scroll_offset(&s_shop_scroll);
+    float y = content_y + 4.0f;
+    ui_scroll_begin(&s_shop_scroll);
+    if (!am || 0 == am->shop_count) {
+        DrawText("Nothing for sale here.", (int)content.x, (int)y, mi_font_quest(), C_LABEL);
+        s_shop_content_height = y - content_y + mi_font_quest() + 4.0f;
+        ui_scroll_end(&s_shop_scroll);
+        return;
+    }
+
+    int   font = quest_grid_font();
+    float column_width = (content.width - MI_CARD_GAP) * 0.5f;
+    s_shop_card_count = am->shop_count < ACTION_CACHE_SHOP_MAX ? am->shop_count : ACTION_CACHE_SHOP_MAX;
+    for (int first = 0; first < s_shop_card_count; first += 2) {
+        float row_height = shop_card_height(am->shop_items[first].item_id, column_width, font);
+        bool has_right = first + 1 < s_shop_card_count;
+        if (has_right) {
+            float right_height = shop_card_height(am->shop_items[first + 1].item_id, column_width, font);
+            if (right_height > row_height) row_height = right_height;
+        }
+
+        for (int col = 0; col < 2; col++) {
+            int i = first + col;
+            if (i >= s_shop_card_count) break;
+            s_shop_affordable[i] = shop_affordable_qty(&am->shop_items[i]) > 0;
+            Rectangle card = { content.x + (float)col * (column_width + MI_CARD_GAP), y,
+                               column_width, row_height };
+            draw_shop_card(card, &am->shop_items[i], i, s_shop_affordable[i], font, mx, my);
+        }
+
+        y += row_height;
+        if (first + 2 < s_shop_card_count) y += MI_CARD_GAP;
+    }
+    y += 4.0f;
+
+    s_shop_content_height = y - content_y + 4.0f;
+    ui_scroll_end(&s_shop_scroll);
+}
+
+/* Confirmation from the quantity picker — the only path that reaches the wire.
+ * The picker's own slot→inventory delivery plays the arrival FX, so nothing is
+ * animated here. */
+static void shop_purchase_confirmed(const char* item_id, int quantity) {
+    local_player_request_shop_buy(s_entity_id, item_id, quantity);
+}
+
+/* Tapping Buy opens the quantity picker rather than buying outright: the
+ * notification holds the item's inventory-bar FX until the player confirms,
+ * then flies it into the bar. The range is capped by what the player can pay
+ * for, so the picker can never offer an unaffordable count. */
+static void request_shop_buy(const ActionShopItem* item) {
+    int max_qty = shop_affordable_qty(item);
+    if (max_qty < 1) return;
+    char message[96];
+    snprintf(message, sizeof(message), "%d %s each", item->price_qty, item->price_item_id);
+    modal_notification_show_picker(item->item_id, message, (Color){ 120, 200, 140, 255 },
+                                   item->item_id, 1, max_qty,
+                                   item->price_item_id, item->price_qty,
+                                   shop_purchase_confirmed);
+}
+
+static void handle_shop_click(int mx, int my) {
+    const ActionMetadataEntry* am = action_metadata();
+    if (!am) return;
+    for (int i = 0; i < s_shop_card_count && i < am->shop_count; i++) {
+        if (s_shop_affordable[i] && ui_button_hit(s_shop_buy_btn[i], mx, my)) {
+            request_shop_buy(&am->shop_items[i]);
+            return;
+        }
+        /* The item slot opens the same read-only inspection as the stack tab,
+         * so a buyer can read an item's stats before paying for it. */
+        if (item_slot_hit(s_shop_item_slot[i], mx, my)) {
+            ObjectLayerState ols = { 0 };
+            strncpy(ols.item_id, am->shop_items[i].item_id, MAX_ID_LENGTH - 1);
+            ols.quantity = 1;
+            es_push();
+            modal_interact_close();
+            inventory_modal_open_external(&ols);
+            inventory_modal_set_on_close(modal_interact_reopen);
             return;
         }
     }
@@ -1507,10 +1825,10 @@ void modal_interact_draw(void) {
     int tabs_n = visible_tabs(tabs);
     bool tab_shown = false;
     for (int k = 0; k < tabs_n; k++) if (tabs[k] == s_tab) tab_shown = true;
-    if (!tab_shown) s_tab = MI_TAB_STACK;
+    if (!tab_shown) set_tab(MI_TAB_STACK);
     for (int k = 0; k < tabs_n; k++) {
         int t = tabs[k];
-        Rectangle r = tab_rect(card, k);
+        Rectangle r = tab_rect(card, k, tabs_n);
         bool hovered = ui_button_hit(r, mx, my);
         if (t == s_tab) {
             UIButtonPixelRetroStyle st = {
@@ -1537,9 +1855,25 @@ void modal_interact_draw(void) {
         }
     }
 
-    if (s_tab == MI_TAB_STACK)       draw_stack_tab(content);
-    else if (s_tab == MI_TAB_STATS)  draw_stats_tab(content);
-    else if (s_tab == MI_TAB_QUEST)  draw_quest_tab(content, mx, my);
+    /* Tab-switch transition: the incoming tab's content pops in from the
+     * panel centre and fades up, so switching reads as a swap rather than an
+     * instant redraw. Hit rects are captured from this same animated frame;
+     * taps stay suppressed until it settles (modal_interact_update). */
+    Rectangle tab_content = modal_scale_rect(content, modal_pop_scale(s_tab_age));
+    if (s_tab == MI_TAB_STACK)       draw_stack_tab(tab_content);
+    else if (s_tab == MI_TAB_STATS)  draw_stats_tab(tab_content);
+    else if (s_tab == MI_TAB_QUEST)  draw_quest_tab(tab_content, mx, my);
+    else if (s_tab == MI_TAB_SHOP)   draw_shop_tab(tab_content, mx, my);
+
+    /* Fade the new content up by lifting a panel-coloured veil off it —
+     * raylib has no global alpha, and a veil costs one rect instead of a
+     * render target. */
+    float tab_fade = modal_pop_alpha(s_tab_age);
+    if (tab_fade < 1.0f) {
+        Color veil = MODAL_PANEL_BG;
+        veil.a = (unsigned char)(255.0f * (1.0f - tab_fade));
+        DrawRectangleRec(panel, veil);
+    }
 
     /* Fixed bottom bar with integration buttons. No background
      * fill — it shares the modal's panel so the modal's bottom border stays
@@ -1622,14 +1956,15 @@ bool modal_interact_handle_click(int mx, int my) {
     int tabs[MI_TAB_COUNT];
     int tabs_n = visible_tabs(tabs);
     for (int k = 0; k < tabs_n; k++) {
-        if (ui_button_hit(tab_rect(card, k), mx, my)) {
+        if (ui_button_hit(tab_rect(card, k, tabs_n), mx, my)) {
             int new_tab = tabs[k];
             if (new_tab == MI_TAB_QUEST && new_tab == s_tab && s_q_expanded >= 0) {
-                s_q_expanded = -1;
-                s_q_expand_age = MODAL_POP_DURATION;
-                ui_scroll_reset(&s_q_scroll);
+                collapse_quest_detail();
             }
-            s_tab = new_tab;
+            /* An explicit pick pins the tab: update stops re-resolving it from
+             * the entity's leading capability. */
+            s_tab_picked = true;
+            set_tab(new_tab);
             return true;
         }
     }
@@ -1666,6 +2001,12 @@ bool modal_interact_handle_click(int mx, int my) {
     if (s_tab == MI_TAB_STATS &&
         CheckCollisionPointRec((Vector2){ (float)mx, (float)my }, content)) {
         ui_scroll_on_press(&s_s_scroll, mx, my);
+        return true;
+    }
+
+    if (s_tab == MI_TAB_SHOP &&
+        CheckCollisionPointRec((Vector2){ (float)mx, (float)my }, content)) {
+        ui_scroll_on_press(&s_shop_scroll, mx, my);
         return true;
     }
 

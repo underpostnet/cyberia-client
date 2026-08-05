@@ -25,6 +25,7 @@ static MessageType get_message_type(const cJSON* root);
 static int message_parser_parse_metadata(const cJSON* json_root);
 static int message_parser_parse_init_data(const cJSON* json_root);
 static int message_parser_parse_dlg_ack(const cJSON* json_root);
+static int message_parser_parse_shop_ack(const cJSON* json_root);
 static void message_parser_upsert_quest_array(const cJSON* quests_json);
 
 static MessageParserInitHandler s_init_handler = NULL;
@@ -57,6 +58,9 @@ bool message_parser_parse(const char* json_str) {
             break;
         case MSG_TYPE_DLG_ACK:
             result = 0 == message_parser_parse_dlg_ack(root);
+            break;
+        case MSG_TYPE_SHOP_ACK:
+            result = 0 == message_parser_parse_shop_ack(root);
             break;
         case MSG_TYPE_CHAT: {
             cJSON* payload = serial_get_object(root, "payload");
@@ -337,6 +341,7 @@ static MessageType get_message_type(const cJSON* root) {
     if (0 == strcmp(type_str, "metadata"))       return MSG_TYPE_METADATA;
     if (0 == strcmp(type_str, "chat"))           return MSG_TYPE_CHAT;
     if (0 == strcmp(type_str, "dlg_ack"))        return MSG_TYPE_DLG_ACK;
+    if (0 == strcmp(type_str, "shop_ack"))       return MSG_TYPE_SHOP_ACK;
 
     LOG_ERROR("[MESSAGE_PARSER] warning type unknown\n");
     return MSG_TYPE_UNKNOWN;
@@ -368,6 +373,25 @@ static void message_parser_upsert_quest_array(const cJSON* quests_json) {
         /* Kick off async metadata fetch from engine REST. */
         quest_cache_fetch(code);
     }
+}
+
+/* shop_ack is the server verdict on a shop purchase. An accepted purchase needs
+ * nothing here: the items arrive through the AOI self-player block and the
+ * quantity picker already launched their slot delivery. Only a rejection has to
+ * surface, so the player learns why nothing came. */
+static int message_parser_parse_shop_ack(const cJSON* json_root) {
+    cJSON* payload = serial_get_object(json_root, "payload");
+    if (!payload) return -1;
+    if (serial_get_bool_default(payload, "ok", false)) return 0;
+
+    char reason[64] = {0};
+    serial_get_string(payload, "reason", reason, sizeof(reason));
+    modal_notification_show("Purchase failed",
+                            0 == strcmp(reason, "insufficient_funds")
+                                ? "Not enough currency."
+                                : "The vendor refused the trade.",
+                            (Color){ 210, 120, 110, 255 });
+    return 0;
 }
 
 /* dlg_ack is notify-only: it updates the local quest_progress_store from the affected
