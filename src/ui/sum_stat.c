@@ -1,4 +1,5 @@
 #include "sum_stat.h"
+#include "text.h"
 #include "ui_icon.h"
 
 #include <stdio.h>
@@ -32,17 +33,19 @@ float sum_stat_draw(float x, float y, float width, float pad, int sum) {
     float icon_cy = y + SUM_STAT_HEADER_H * 0.5f;
     ui_icon_draw("stats", icon_cx, icon_cy, icon_sz, false, 0.0f);
 
+    /* Centred on the rendered line height, not the requested point size: the
+     * text.h shim scales every size by the client-hints font factor. */
     int sum_font = 22;
     char sum_label[16];
     snprintf(sum_label, sizeof(sum_label), "%+d", sum);
     int sum_tw = MeasureText(sum_label, sum_font);
     float sum_tx = x + pad + icon_sz + 8.0f;
-    float sum_ty = y + (SUM_STAT_HEADER_H - sum_font) * 0.5f;
+    float sum_ty = y + (SUM_STAT_HEADER_H - (float)text_line_height(sum_font)) * 0.5f;
     DrawText(sum_label, (int)sum_tx, (int)sum_ty, sum_font, C_STAT);
 
     int total_font = 12;
     float total_tx = sum_tx + sum_tw + 8.0f;
-    float total_ty = y + (SUM_STAT_HEADER_H - total_font) * 0.5f;
+    float total_ty = y + (SUM_STAT_HEADER_H - (float)text_line_height(total_font)) * 0.5f;
     DrawText("Total Stats", (int)total_tx, (int)total_ty, total_font, C_LABEL);
 
     return SUM_STAT_HEADER_H;
