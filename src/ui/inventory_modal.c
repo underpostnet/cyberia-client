@@ -485,6 +485,8 @@ static void inventory_modal_handle_content_click(int mx, int my) {
 
 void inventory_modal_update(float dt) {
     if (!s_open) return;
+    /* Keep the freeze watchdog from expiring under a player who lingers. */
+    local_player_keep_freeze();
     s_age += dt;
 
     const ObjectLayerState* ols = current_ols();
