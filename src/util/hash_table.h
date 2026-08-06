@@ -1,5 +1,5 @@
-#ifndef HASH_TABLE_H
-#define HASH_TABLE_H
+#ifndef CYBERIA_UTIL_HASH_TABLE_H
+#define CYBERIA_UTIL_HASH_TABLE_H
 
 #include <stdbool.h>
 #include <stddef.h>

@@ -1,6 +1,6 @@
 #include "object_layers_management.h"
 #include "config.h"
-#include "hash_table.h"
+#include "util/hash_table.h"
 #include "texture_cache.h"
 #include "network/engine_client.h"
 #include "util/log.h"

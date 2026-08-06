@@ -4,7 +4,7 @@
 #include <string.h>
 
 #include "network/game_client.h"
-#include "serial.h"
+#include "util/serial.h"
 #include "util/log.h"
 
 #define LOCAL_PLAYER_DEFAULT_MOVE_SPEED 3.0f
@@ -28,10 +28,8 @@ static struct {
 };
 
 static void send_freeze_frame(bool start, const char* reason) {
-    BinWriter w;
-    if (start) { uplink_freeze_start(&w, reason); }
-    else       { uplink_freeze_end(&w, reason); }
-    bool rc = network_send_binary(w.buf, w.pos);
+    bool rc = network_send(start ? json_pack_freeze_start(reason)
+                                 : json_pack_freeze_end(reason));
     LOG_INFO("[LOCAL_PLAYER] WS -> freeze_%s (reason=%s) rc=%d",
              start ? "start" : "end", reason ? reason : "", rc);
 }
@@ -76,46 +74,34 @@ static void arm_freeze_watchdog(const char* reason) {
 }
 
 void local_player_request_dialogue_start(const char* entity_id, const char* item_id) {
-    BinWriter w;
-    uplink_dlg_start(&w, entity_id, item_id);
-    network_send_binary(w.buf, w.pos);
+    network_send(json_pack_dialog_start(entity_id, item_id));
     arm_freeze_watchdog("dialogue");
 }
 
 void local_player_request_dialogue_complete(const char* entity_id, const char* item_id,
                                             const char* dialog_code) {
-    BinWriter w;
-    uplink_dlg_complete(&w, entity_id, item_id, dialog_code);
-    network_send_binary(w.buf, w.pos);
+    network_send(json_pack_dialog_complete(entity_id, item_id, dialog_code));
     g_local.freeze_pending = false;
 }
 
 void local_player_request_dialogue_cancel(const char* entity_id, const char* item_id) {
-    BinWriter w;
-    uplink_dlg_cancel(&w, entity_id, item_id);
-    network_send_binary(w.buf, w.pos);
+    network_send(json_pack_dialog_cancel(entity_id, item_id));
     g_local.freeze_pending = false;
 }
 
 void local_player_request_quest_abandon(const char* quest_code) {
-    BinWriter w;
-    uplink_quest_abandon(&w, quest_code);
-    network_send_binary(w.buf, w.pos);
+    network_send(json_pack_quest_abandon(quest_code));
 }
 
 void local_player_request_quest_accept(const char* entity_id, const char* quest_code) {
-    BinWriter w;
-    uplink_quest_accept(&w, entity_id, quest_code);
-    network_send_binary(w.buf, w.pos);
+    network_send(json_pack_quest_accept(entity_id, quest_code));
 }
 
 void local_player_request_shop_buy(const char* entity_id, const char* item_id,
                                    int quantity) {
     if (quantity < 1) quantity = 1;
     if (quantity > 255) quantity = 255;
-    BinWriter w;
-    uplink_shop_buy(&w, entity_id, item_id, (uint8_t)quantity);
-    network_send_binary(w.buf, w.pos);
+    network_send(json_pack_shop_buy(entity_id, item_id, quantity));
 }
 
 void local_player_on_tick(void) {

@@ -1,5 +1,5 @@
 #include "dialogue_data.h"
-#include "hash_table.h"
+#include "util/hash_table.h"
 #include "network/engine_client.h"
 #include "util/log.h"
 #include <cJSON.h>

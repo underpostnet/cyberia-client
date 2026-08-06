@@ -2,7 +2,7 @@
 #include "ui/text.h"
 #include "object_layers_management.h"
 #include "layer_z_order.h"
-#include "hash_table.h"
+#include "util/hash_table.h"
 #include <raylib.h>
 #include <math.h>
 #include <stdlib.h>

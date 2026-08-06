@@ -3,9 +3,8 @@
 #include "config.h"
 #include "runtime_config.h"
 #include "game_state.h"
-#include "message_parser.h"
-#include "binary_aoi_decoder.h"
-#include "serial.h"
+#include "message.h"
+#include "util/serial.h"
 #include "replication.h"
 #include "domain/local_player.h"
 #include "ui/ui_state.h"
@@ -13,43 +12,44 @@
 
 #include <assert.h>
 #include <stdbool.h>
+#include <stddef.h>
 #include <stdint.h>
 #include <raylib.h>
 #include <stdlib.h>
 #include <string.h>
 
 typedef struct {
-    WebSocketClient ws_client;
-    conn_stats      stats;
-    double          status_entered_at;
-    double          last_reconnect_at;
-    int             heartbeat_frames;
+    Socket     sock;
+    conn_stats stats;
+    double     status_entered_at;
+    double     last_reconnect_at;
+    int        heartbeat_frames;
 } ClientCtx;
 
 static ClientCtx g_client = {0};
 
-static void on_websocket_open(void* ctx);
-static void on_websocket_message(const uint8_t* data, uint32_t length, bool is_text, void* ctx);
-static void on_websocket_error(void* ctx);
-static void on_websocket_close(int code, const char* reason, void* ctx);
+static void on_socket_open(void* ctx);
+static void on_socket_receive(const uint8_t* data, uint32_t length, void* ctx);
+static void on_socket_error(void* ctx);
+static void on_socket_close(int code, const char* reason, void* ctx);
 
 static void client_reset_state(void) {
     game_state_reset();
     local_player_reset();
     ui_state_reset();
-    binary_aoi_reset_prev_snapshots();
+    message_reset_prev_snapshots();
     prediction_reset((Vector2){0.0f, 0.0f});
 }
 
 bool connection_open(void) {
-    message_parser_set_init_handler(client_on_init_received);
-    WebSocketHandlers callbacks = {
-        .on_open_cb    = on_websocket_open,
-        .on_message_cb = on_websocket_message,
-        .on_error_cb   = on_websocket_error,
-        .on_close_cb   = on_websocket_close,
+    message_set_init_handler(client_on_init_received);
+    SocketHandlers callbacks = {
+        .on_open    = on_socket_open,
+        .on_receive = on_socket_receive,
+        .on_error   = on_socket_error,
+        .on_close   = on_socket_close,
     };
-    if (!ws_open(&g_client.ws_client, runtime_config_ws_url(), &g_client, callbacks)) {
+    if (!socket_open(&g_client.sock, runtime_config_ws_url(), &g_client, callbacks)) {
         LOG_ERROR("WebSocket open failed");
         return false;
     }
@@ -57,11 +57,11 @@ bool connection_open(void) {
 }
 
 void connection_close(void) {
-    ws_close(&g_client.ws_client);
+    socket_close(&g_client.sock);
 }
 
 bool connection_is_open(void) {
-    return ws_is_open(&g_client.ws_client);
+    return socket_is_open(&g_client.sock);
 }
 
 conn_stats connection_get_stats(void) {
@@ -72,9 +72,7 @@ static bool s_loading_confirmed = false;
 
 void client_confirm_loading_done(void) {
     s_loading_confirmed = true;
-    BinWriter w;
-    uplink_freeze_end(&w, "loading");
-    network_send_binary(w.buf, w.pos);
+    network_send(json_pack_freeze_end("loading"));
 }
 
 void client_on_init_received(void) {
@@ -84,9 +82,7 @@ void client_on_init_received(void) {
      * new session immediately; the first join instead waits for the player's
      * explicit Tap-to-Start (client_confirm_loading_done). */
     if (s_loading_confirmed) {
-        BinWriter w;
-        uplink_freeze_end(&w, "loading");
-        network_send_binary(w.buf, w.pos);
+        network_send(json_pack_freeze_end("loading"));
     }
 }
 
@@ -114,59 +110,42 @@ void game_client_on_tick(void) {
     }
 }
 
-bool network_send_binary(const uint8_t* data, uint16_t len) {
-    assert(data);
-    assert(len > 0);
-    if (!connection_is_open()) return false;
-    bool ok = ws_send_binary(&g_client.ws_client, data, len);
-    g_client.stats.bytes_up += ok ? len : 0;
+bool network_send(cJSON* msg) {
+    assert(msg);
+    RawPack pack = serial_pack(msg);
+    bool ok = connection_is_open() && socket_send(&g_client.sock, pack.data, pack.len);
+    g_client.stats.bytes_up += ok ? pack.len : 0;
+    free(pack.data);
     return ok;
 }
 
 bool network_send_chat(const char* to_id, const char* text) {
     assert(to_id);
     assert(text);
-    BinWriter w;
-    uplink_chat(&w, to_id, text);
-    return network_send_binary(w.buf, w.pos);
+    return network_send(json_pack_chat(to_id, text));
 }
 
-/* ── WebSocket callbacks ─────────────────────────────────────────────── */
+/* ── Socket callbacks ────────────────────────────────────────────────── */
 
-static void on_websocket_open(void* ctx) {
-    BinWriter w;
-    uplink_handshake(&w, "cyberia-mmo", "1.0.0");
-    network_send_binary(w.buf, w.pos);
+static void on_socket_open(void* ctx) {
+    network_send(json_pack_handshake("cyberia-mmo", "1.0.0"));
     LOG_INFO("WebSocket open");
 }
 
-static void on_websocket_message(const uint8_t* data, uint32_t length, bool is_text, void* ctx) {
+static void on_socket_receive(const uint8_t* data, uint32_t length, void* ctx) {
     assert(data);
     assert(length > 0);
     assert(ctx);
     ClientCtx* st = ctx;
-
     st->stats.bytes_down += length;
-
-    if (is_text) {
-        char* msg = malloc(length + 1);
-        assert(msg);
-        memcpy(msg, data, length);
-        msg[length] = '\0';
-        if (!message_parser_parse(msg)) {
-            LOG_ERROR("failed to process WS text frame");
-        }
-        free(msg);
-    } else if (0 != binary_aoi_process(data, (size_t)length)) {
-        LOG_ERROR("failed to process binary AOI message");
-    }
+    message_receive(data, (size_t)length);
 }
 
-static void on_websocket_error(void* ctx) {
+static void on_socket_error(void* ctx) {
     LOG_ERROR("WebSocket error");
 }
 
-static void on_websocket_close(int code, const char* reason, void* ctx) {
+static void on_socket_close(int code, const char* reason, void* ctx) {
     if (code != 1000) {
         LOG_WARN("WebSocket closed unexpectedly code=%d reason='%s'",
                  code, reason ? reason : "none");

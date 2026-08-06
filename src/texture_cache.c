@@ -1,6 +1,6 @@
 #include "texture_cache.h"
 
-#include "hash_table.h"
+#include "util/hash_table.h"
 #include "util/log.h"
 
 #include <assert.h>

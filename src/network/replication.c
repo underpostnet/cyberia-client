@@ -1,7 +1,7 @@
 #include "network/replication.h"
 
 #include "game_state.h"
-#include "serial.h"
+#include "util/serial.h"
 #include "input/input_command.h"
 #include "input/input.h"
 #include "network/game_client.h"
@@ -16,9 +16,7 @@
 #include <math.h>
 
 static bool send_event_tap(Vector2 grid, uint32_t client_tick, uint32_t sequence) {
-    BinWriter w;
-    uplink_player_action(&w, grid.x, grid.y, client_tick, sequence);
-    return network_send_binary(w.buf, w.pos);
+    return network_send(json_pack_player_action(grid.x, grid.y, client_tick, sequence));
 }
 
 void replication_prepare_input(input_queue_t in_queue) {

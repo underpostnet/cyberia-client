@@ -10,7 +10,7 @@
 #include "interact_bridge.h"
 
 #include "network/game_client.h"
-#include "serial.h"
+#include "util/serial.h"
 
 #include <emscripten.h>
 #include <stdio.h>

@@ -34,7 +34,7 @@
 #include "object_layers_management.h"
 #include "ol_as_animated_ico.h"
 #include "ui_icon.h"
-#include "serial.h"
+#include "util/serial.h"
 #include "sum_stat.h"
 #include "toolbar.h"
 #include "ui_button.h"
@@ -285,9 +285,7 @@ static int modal_sprite_size(float card_w, float card_h) {
 }
 
 static void send_activation(const char* item_id, bool active) {
-    BinWriter w;
-    uplink_item_activation(&w, item_id, active);
-    network_send_binary(w.buf, w.pos);
+    network_send(json_pack_item_active(item_id, active));
 }
 
 static void send_freeze(bool start) {

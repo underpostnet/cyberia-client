@@ -6,33 +6,33 @@
 #include <stdint.h>
 #include <stddef.h>
 
-typedef void (*onopen_callback)(void* user_data);
-typedef void (*onmessage_callback)(const uint8_t* data, uint32_t length, bool is_text, void* user_data);
-typedef void (*onerror_callback)(void* user_data);
-typedef void (*onclose_callback)(int code, const char* reason, void* user_data);
+/* Transport only: the socket moves bytes. It never reads or builds a
+ * message — that is the job of util/serial.h and message.h. */
+
+typedef void (*on_open_callback)(void* user_data);
+typedef void (*on_receive_callback)(const uint8_t* data, uint32_t length, void* user_data);
+typedef void (*on_error_callback)(void* user_data);
+typedef void (*on_close_callback)(int code, const char* reason, void* user_data);
 
 typedef struct {
-    onopen_callback on_open_cb;        // Called when connection is established
-    onmessage_callback on_message_cb;  // Called when message is received
-    onerror_callback on_error_cb;      // Called when error occurs
-    onclose_callback on_close_cb;      // Called when connection is closed
-} WebSocketHandlers;
+    on_open_callback    on_open;     // Called when the connection opens
+    on_receive_callback on_receive;  // Called for each frame from the server
+    on_error_callback   on_error;    // Called on a transport error
+    on_close_callback   on_close;    // Called when the connection closes
+} SocketHandlers;
 
 typedef struct {
     EMSCRIPTEN_WEBSOCKET_T socket;
     bool connected;
-    WebSocketHandlers callbacks;
+    SocketHandlers callbacks;
     void* user_ctx;
-} WebSocketClient;
+} Socket;
 
+bool socket_open(Socket* sock, const char* url, void* user_ctx, SocketHandlers handlers);
+void socket_close(Socket* sock);
+bool socket_is_open(const Socket* sock);
 
-bool ws_open(WebSocketClient* ws_client, const char* url, void* user_ctx, WebSocketHandlers handlers);
-void ws_close(WebSocketClient* ws_client);
-bool ws_is_open(const WebSocketClient* ws_client);
-
-/**
- * Sends a binary message to the server.
- */
-bool ws_send_binary(const WebSocketClient* ws_client, const void* data, size_t len);
+/* Send packed bytes to the server. */
+bool socket_send(const Socket* sock, const void* data, size_t len);
 
 #endif // SOCKET_H

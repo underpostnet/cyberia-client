@@ -4,6 +4,7 @@
 #include <stddef.h>
 #include <stdint.h>
 #include <stdbool.h>
+#include <cJSON.h>
 
 typedef struct {
     size_t bytes_down;
@@ -27,10 +28,10 @@ void client_on_init_received(void);
  * "loading" freeze. Reconnect joins re-release automatically. */
 void client_confirm_loading_done(void);
 
-/** Send a pre-built binary uplink frame (BinWriter output). */
-bool network_send_binary(const uint8_t* data, uint16_t len);
+/** Pack a message and send it. Takes ownership of msg. */
+bool network_send(cJSON* msg);
 
-/** Convenience: chat — builds and sends UPLINK_CHAT. */
+/** Convenience: build and send a chat message. */
 bool network_send_chat(const char* to_id, const char* text);
 
 #endif // CLIENT_H

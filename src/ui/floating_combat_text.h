@@ -2,13 +2,14 @@
  * @file floating_combat_text.h
  * @brief General-purpose Floating Combat Text (FCT) module.
  *
- * Renders animated pop-up numbers at world positions.  Designed to be the
- * single visual feedback channel for all real-time economy and combat events:
+ * Renders animated pop-up numbers at world positions. It is the visual
+ * feedback channel for real-time combat events:
  *
- *   FCT_TYPE_DAMAGE    — life lost  (red,    "-N")
- *   FCT_TYPE_REGEN     — life gained (green, "+N")
- *   FCT_TYPE_COIN_GAIN — coins received (yellow, "+N")
- *   FCT_TYPE_COIN_LOSS — coins lost / burned (yellow, "-N")
+ *   FCT_TYPE_DAMAGE — life lost   (red,   "-N")
+ *   FCT_TYPE_REGEN  — life gained (green, "+N")
+ *
+ * Coin and item changes do NOT come through here — the inventory-bar quantity
+ * FX shows coins, and the loot grid shows item gains.
  *
  * Each entry animates through three phases:
  *   1. Pop    (0 → FCT_POP_DURATION): font scales up with a brief overshoot.
@@ -26,12 +27,8 @@
  *   game_render_world()  (inside BeginMode2D): fct_draw();
  *   on server event:   fct_spawn(world_x, world_y, value, type);
  *
- * Binary wire format for server-sent events (14 bytes, little-endian):
- *   [0]      u8   0x04  (BIN_MSG_FCT)
- *   [1]      u8   fct_type  (one of FCT_TYPE_* below)
- *   [2..5]   f32  world_x
- *   [6..9]   f32  world_y
- *   [10..13] u32  value  (always positive; sign implied by type)
+ * The server sends a `combat_text` JSON message: kind, worldX, worldY, value.
+ * message.c maps the kind word to an FCTType below.
  */
 
 #ifndef FLOATING_COMBAT_TEXT_H
@@ -41,18 +38,14 @@
 #include <stdint.h>
 
 /* ── FCT event types ─────────────────────────────────────────────────────
- * These values MUST stay in sync with Go constants in aoi_binary.go:
- *   FCTTypeDamage = 0x00
- *   FCTTypeRegen  = 0x01
- * Damage/regen are broadcast to every AOI viewer with the exact amount.
- * Coin types are retired on the server (balance changes surface in the
- * inventory-bar quantity FX); kept here for wire compatibility.             */
-#define FCT_TYPE_DAMAGE    0x00   /* life loss    — red    "-N"            */
-#define FCT_TYPE_REGEN     0x01   /* life gain    — green  "+N"            */
-#define FCT_TYPE_COIN_GAIN 0x02   /* coins in     — yellow "+N"            */
-#define FCT_TYPE_COIN_LOSS 0x03   /* coins out    — yellow "-N"            */
-#define FCT_TYPE_ITEM_GAIN 0x04   /* item qty in  — cyan   "+N ItemID"     */
-#define FCT_TYPE_ITEM_LOSS 0x05   /* item qty out — purple "-N ItemID"     */
+ * Client-only. The wire carries the kind as a JSON string, so these numbers
+ * never cross the network and need no server counterpart. message.c maps the
+ * server's `kind` word (game/snapshot.go: FCTDamage "damage", FCTRegen
+ * "regen") onto this enum. To add a kind, add it in both places.            */
+typedef enum {
+    FCT_TYPE_DAMAGE = 0,   /* life loss — red   "-N" */
+    FCT_TYPE_REGEN  = 1,   /* life gain — green "+N" */
+} FCTType;
 
 /** Maximum number of concurrently active FCT entries. */
 #define FCT_MAX_ENTRIES 64
@@ -66,29 +59,14 @@
 void fct_init(void);
 
 /**
- * @brief Spawn an item quantity FCT entry (e.g. "+45 wood", "-30 stone").
- *
- * Same animation as coin events, but the label includes the item key.
- *
- * @param world_x  World-space X coordinate.
- * @param world_y  World-space Y coordinate.
- * @param quantity Magnitude of the change (always non-negative).
- * @param type     FCT_TYPE_ITEM_GAIN or FCT_TYPE_ITEM_LOSS.
- * @param item_id  Null-terminated item identifier string (e.g. "wood").
- */
-void fct_spawn_item(float world_x, float world_y, uint32_t quantity,
-                    uint8_t type, const char* item_id);
-
-/**
  * @brief Spawn a new Floating Combat Text entry at a world position.
  *
  * @param world_x  World-space X coordinate (same unit as entity positions).
  * @param world_y  World-space Y coordinate.
  * @param value    Magnitude of the event (always non-negative).
- * @param type     One of FCT_TYPE_DAMAGE / FCT_TYPE_REGEN /
- *                 FCT_TYPE_COIN_GAIN / FCT_TYPE_COIN_LOSS.
+ * @param type     FCT_TYPE_DAMAGE or FCT_TYPE_REGEN.
  */
-void fct_spawn(float world_x, float world_y, uint32_t value, uint8_t type);
+void fct_spawn(float world_x, float world_y, uint32_t value, FCTType type);
 
 /**
  * @brief Advance all active FCT entries by dt seconds.

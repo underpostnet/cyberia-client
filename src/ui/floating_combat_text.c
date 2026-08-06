@@ -2,8 +2,8 @@
  * @file floating_combat_text.c
  * @brief Floating Combat Text — animated pop-up numbers for the Cyberia client.
  *
- * Surfaces every combat and economy event as a short-lived animated number
- * that pops, rises, and fades from the event's world position.
+ * Surfaces every combat event as a short-lived animated number that pops,
+ * rises, and fades from the event's world position.
  *
  * Animation phases (FCT_TOTAL_LIFETIME seconds total):
  *   Phase 1 — Pop   [0, FCT_POP_DURATION):
@@ -12,7 +12,7 @@
  *
  *   Phase 2 — Rise  [FCT_POP_DURATION, FCT_FADE_START):
  *       Upward velocity (per-type FCT_RISE_* world-units/s) plus random
- *       horizontal drift.  Damage: fast and wide.  Regen: gentle.  Coins: medium.
+ *       horizontal drift.  Damage: fast and wide.  Regen: gentle.
  *
  *   Phase 3 — Fade  [FCT_FADE_START, FCT_TOTAL_LIFETIME):
  *       Velocity decelerates (×(1−dt×5) each frame); alpha decays to 0.
@@ -27,10 +27,8 @@
  *   Regen  → brief green vignette (max alpha 0.14, decays in ~0.55 s).
  *
  * Per-type visual tuning:
- *   FCT_TYPE_DAMAGE    red   {255,60,60}   rise 3.8  drift ±1.8  font 14–44  overshoot ≤1.70×
- *   FCT_TYPE_REGEN     green {80,240,80}   rise 2.2  drift ±0.5  font 14–32  overshoot ≤1.45×
- *   FCT_TYPE_COIN_GAIN gold  {255,215,0}   rise 2.6  drift ±1.2  font 14–36  overshoot ≤1.50×
- *   FCT_TYPE_COIN_LOSS amber {255,130,0}   rise 2.6  drift ±1.2  font 14–36  overshoot ≤1.50×
+ *   FCT_TYPE_DAMAGE red   {255,60,60}  rise 3.8  drift ±1.8  font 14–44  overshoot ≤1.70×
+ *   FCT_TYPE_REGEN  green {80,240,80}  rise 2.2  drift ±0.5  font 14–32  overshoot ≤1.45×
  *
  * Damage/regen events are broadcast to every AOI viewer; the red/green screen
  * vignette is personal — it fires only when the event lands on the local
@@ -60,13 +58,11 @@
 
 #define FCT_RISE_DAMAGE      3.8f
 #define FCT_RISE_REGEN       2.2f
-#define FCT_RISE_COIN        2.6f
 
 /* ── Per-type max horizontal drift (world units/second) ───────────────── */
 
 #define FCT_DRIFT_DAMAGE     1.8f
 #define FCT_DRIFT_REGEN      0.5f
-#define FCT_DRIFT_COIN       1.2f
 #define FCT_DRIFT_MIN        0.2f   /* minimum absolute drift for all types  */
 
 /* ── Per-type font sizing ──────────────────────────────────────────────── */
@@ -74,13 +70,11 @@
 #define FCT_FONT_MIN         14     /* minimum pixels (all types)            */
 #define FCT_FONT_MAX_DAMAGE  44     /* upper limit for damage hits           */
 #define FCT_FONT_MAX_REGEN   32     /* upper limit for regen pulses          */
-#define FCT_FONT_MAX_COIN    36     /* upper limit for coin events           */
 
 /* Log-base divisor: log2(value+1)/div → 1.0 at the "saturating" value.
  * Smaller = font maxes out at lower hit values (more aggressive growth).  */
 #define FCT_LOG_DIV_DAMAGE   5.0f   /* log2(32)  ≈ 5  → hit   33 = full sz */
 #define FCT_LOG_DIV_REGEN    7.0f   /* log2(128) ≈ 7  → regen 129 = full   */
-#define FCT_LOG_DIV_COIN     6.0f   /* log2(64)  ≈ 6  → coins  65 = full   */
 
 /* ── Screen-overlay vignette ───────────────────────────────────────────── */
 
@@ -91,13 +85,8 @@
 
 /* ── Base colours ──────────────────────────────────────────────────────── */
 
-static const Color s_color_damage    = {255,  60,  60, 255};  /* bright red   */
-static const Color s_color_regen     = { 80, 240,  80, 255};  /* bright green */
-static const Color s_color_coin_gain = {255, 215,   0, 255};  /* bright gold  */
-static const Color s_color_coin_loss = {255, 130,   0, 255};  /* burnt orange */
-static const Color s_color_item_gain = { 80, 220, 255, 255};  /* cyan         */
-static const Color s_color_item_loss = {180,  80, 255, 255};  /* purple       */
-static const Color s_color_fallback  = {190, 190, 190, 255};  /* grey         */
+static const Color s_color_damage = {255,  60,  60, 255};  /* bright red   */
+static const Color s_color_regen  = { 80, 240,  80, 255};  /* bright green */
 
 /* ── Internal entry ────────────────────────────────────────────────────── */
 
@@ -109,7 +98,7 @@ typedef struct {
     float   pop_overshoot;           /* peak scale during pop-in (type + value)      */
     char    text[32];                /* formatted string: "+42 wood", "-1337", etc.  */
     Color   base_color;              /* colour before alpha is applied               */
-    uint8_t type;                    /* FCT_TYPE_* — for draw-time differentiation   */
+    FCTType type;                    /* FCT_TYPE_* — for draw-time differentiation   */
     bool    active;
 } FCTEntry;
 
@@ -146,7 +135,7 @@ void fct_init(void) {
     s_init = true;
 }
 
-void fct_spawn(float world_x, float world_y, uint32_t value, uint8_t type) {
+void fct_spawn(float world_x, float world_y, uint32_t value, FCTType type) {
     if (!s_init) fct_init();
 
     /* Find a free slot; evict the oldest active entry if the pool is full. */
@@ -160,79 +149,22 @@ void fct_spawn(float world_x, float world_y, uint32_t value, uint8_t type) {
     if (!slot) slot = &s_pool[oldest_i];
 
     /* ── Format text ─────────────────────────────────────────────────── */
-    if (type == FCT_TYPE_REGEN || type == FCT_TYPE_COIN_GAIN)
-        snprintf(slot->text, sizeof(slot->text), "+%u", value);
-    else
-        snprintf(slot->text, sizeof(slot->text), "-%u", value);
+    const bool is_regen = (type == FCT_TYPE_REGEN);
+    snprintf(slot->text, sizeof(slot->text), is_regen ? "+%u" : "-%u", value);
 
     /* ── Per-type tuning ──────────────────────────────────────────────── */
-    float rise_speed, drift_max, log_div, base_overshoot;
-    int   font_max;
-    Color base_color;
+    /* Damage/regen are broadcast to every AOI viewer; the screen vignette is
+     * personal — only when the event lands on the local player. */
+    const float rise_speed     = is_regen ? FCT_RISE_REGEN      : FCT_RISE_DAMAGE;
+    const float drift_max      = is_regen ? FCT_DRIFT_REGEN     : FCT_DRIFT_DAMAGE;
+    const float log_div        = is_regen ? FCT_LOG_DIV_REGEN   : FCT_LOG_DIV_DAMAGE;
+    const int   font_max       = is_regen ? FCT_FONT_MAX_REGEN  : FCT_FONT_MAX_DAMAGE;
+    const Color base_color     = is_regen ? s_color_regen       : s_color_damage;
+    const float base_overshoot = is_regen ? 1.20f               : 1.45f;
 
-    switch (type) {
-        /* Damage/regen are broadcast to every AOI viewer; the screen vignette
-         * is personal — only when the event lands on the local player. */
-        case FCT_TYPE_DAMAGE:
-            rise_speed     = FCT_RISE_DAMAGE;
-            drift_max      = FCT_DRIFT_DAMAGE;
-            log_div        = FCT_LOG_DIV_DAMAGE;
-            font_max       = FCT_FONT_MAX_DAMAGE;
-            base_color     = s_color_damage;
-            base_overshoot = 1.45f;
-            if (fct_event_on_self(world_x, world_y))
-                s_damage_overlay = FCT_OVERLAY_DMG_ALPHA;
-            break;
-        case FCT_TYPE_REGEN:
-            rise_speed     = FCT_RISE_REGEN;
-            drift_max      = FCT_DRIFT_REGEN;
-            log_div        = FCT_LOG_DIV_REGEN;
-            font_max       = FCT_FONT_MAX_REGEN;
-            base_color     = s_color_regen;
-            base_overshoot = 1.20f;
-            if (fct_event_on_self(world_x, world_y))
-                s_regen_overlay = FCT_OVERLAY_RGN_ALPHA;
-            break;
-        case FCT_TYPE_COIN_GAIN:
-            rise_speed     = FCT_RISE_COIN;
-            drift_max      = FCT_DRIFT_COIN;
-            log_div        = FCT_LOG_DIV_COIN;
-            font_max       = FCT_FONT_MAX_COIN;
-            base_color     = s_color_coin_gain;
-            base_overshoot = 1.25f;
-            break;
-        case FCT_TYPE_COIN_LOSS:
-            rise_speed     = FCT_RISE_COIN;
-            drift_max      = FCT_DRIFT_COIN;
-            log_div        = FCT_LOG_DIV_COIN;
-            font_max       = FCT_FONT_MAX_COIN;
-            base_color     = s_color_coin_loss;
-            base_overshoot = 1.25f;
-            break;
-        case FCT_TYPE_ITEM_GAIN:
-            rise_speed     = FCT_RISE_COIN;
-            drift_max      = FCT_DRIFT_COIN;
-            log_div        = FCT_LOG_DIV_COIN;
-            font_max       = FCT_FONT_MAX_COIN;
-            base_color     = s_color_item_gain;
-            base_overshoot = 1.20f;
-            break;
-        case FCT_TYPE_ITEM_LOSS:
-            rise_speed     = FCT_RISE_COIN;
-            drift_max      = FCT_DRIFT_COIN;
-            log_div        = FCT_LOG_DIV_COIN;
-            font_max       = FCT_FONT_MAX_COIN;
-            base_color     = s_color_item_loss;
-            base_overshoot = 1.20f;
-            break;
-        default:
-            rise_speed     = FCT_RISE_COIN;
-            drift_max      = FCT_DRIFT_COIN;
-            log_div        = FCT_LOG_DIV_COIN;
-            font_max       = FCT_FONT_MAX_COIN;
-            base_color     = s_color_fallback;
-            base_overshoot = 1.20f;
-            break;
+    if (fct_event_on_self(world_x, world_y)) {
+        if (is_regen) s_regen_overlay  = FCT_OVERLAY_RGN_ALPHA;
+        else          s_damage_overlay = FCT_OVERLAY_DMG_ALPHA;
     }
 
     /* ── Font size — log₂ scale, per-type grow rate ─────────────────── */
@@ -264,50 +196,13 @@ void fct_spawn(float world_x, float world_y, uint32_t value, uint8_t type) {
     slot->active = true;
 }
 
-// fct_spawn_item spawns a labeled FCT for item quantity changes.
-// The label is formatted as "+N itemId" or "-N itemId".
-void fct_spawn_item(float world_x, float world_y, uint32_t quantity,
-                    uint8_t type, const char* item_id) {
-    if (!s_init) fct_init();
-    if (quantity == 0) return;
-
-    /* Reuse fct_spawn's slot-finding logic by calling it directly, then
-     * patch the text with the item label. Use ITEM_GAIN/LOSS types so the
-     * colour switch in fct_spawn picks the right palette. */
-    fct_spawn(world_x, world_y, quantity, type);
-
-    /* fct_spawn wrote to the most recently activated slot — find it. */
-    FCTEntry* slot = NULL;
-    float latest = -1.0f;
-    for (int i = 0; i < FCT_MAX_ENTRIES; i++) {
-        if (s_pool[i].active && s_pool[i].age <= 0.001f) {
-            if (s_pool[i].age >= latest) {
-                latest = s_pool[i].age;
-                slot = &s_pool[i];
-            }
-        }
-    }
-    if (!slot) return;
-
-    /* Overwrite text with labeled form: "+45 wood" or "-30 stone". */
-    if (item_id && item_id[0] != '\0') {
-        const char* sign = (type == FCT_TYPE_ITEM_GAIN) ? "+" : "-";
-        snprintf(slot->text, sizeof(slot->text), "%s%u %s", sign, quantity, item_id);
-    }
-}
-
 void fct_update(float dt) {
-    /* Drain events queued by binary_aoi_decoder via the local-player module. */
+    /* Drain events queued by message.c via the local-player module. */
     int n = local_player_fct_count();
     for (int i = 0; i < n; i++) {
         const LocalFctEvent* ev = local_player_fct_at(i);
         if (!ev) continue;
-        if (ev->item_id[0] != '\0') {
-            fct_spawn_item(ev->world_x, ev->world_y, ev->item_qty,
-                           ev->type, ev->item_id);
-        } else {
-            fct_spawn(ev->world_x, ev->world_y, ev->value, ev->type);
-        }
+        fct_spawn(ev->world_x, ev->world_y, ev->value, ev->type);
     }
     local_player_fct_clear();
 

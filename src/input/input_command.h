@@ -15,7 +15,7 @@
  * Pipeline:
  *
  *   ui hit-test → input_command_build_*() → prediction_apply() (optimistic)
- *                                         → uplink_send_input_command()    (wire)
+ *                                         → network_send()                 (wire)
  *                                         → input_buffer_push()            (replay history)
  *
  * Rendering and world-state mutation must not happen here — this module

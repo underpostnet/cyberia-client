@@ -4,7 +4,7 @@
 #include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
-#include "util/log.h"
+#include "log.h"
 
 /* Resize when (count + tombstones) exceeds this fraction of capacity. */
 #define HASH_LOAD_NUM 7

@@ -8,14 +8,13 @@
 #include <emscripten/websocket.h>
 
 // Forward declarations of internal event handlers
-static EM_BOOL ws_onopen_internal(int eventType, const EmscriptenWebSocketOpenEvent* event, void* userData);
-static EM_BOOL ws_onmessage_internal(int eventType, const EmscriptenWebSocketMessageEvent* event, void* userData);
-static EM_BOOL ws_onerror_internal(int eventType, const EmscriptenWebSocketErrorEvent* event, void* userData);
-static EM_BOOL ws_onclose_internal(int eventType, const EmscriptenWebSocketCloseEvent* event, void* userData);
+static EM_BOOL socket_onopen_internal(int eventType, const EmscriptenWebSocketOpenEvent* event, void* userData);
+static EM_BOOL socket_onmessage_internal(int eventType, const EmscriptenWebSocketMessageEvent* event, void* userData);
+static EM_BOOL socket_onerror_internal(int eventType, const EmscriptenWebSocketErrorEvent* event, void* userData);
+static EM_BOOL socket_onclose_internal(int eventType, const EmscriptenWebSocketCloseEvent* event, void* userData);
 
-// Initialize WebSocket client with event handlers
-bool ws_open(WebSocketClient* ws_client, const char* url, void* user_ctx, WebSocketHandlers callbacks) {
-    assert(ws_client);
+bool socket_open(Socket* sock, const char* url, void* user_ctx, SocketHandlers callbacks) {
+    assert(sock);
     assert(url);
     assert(user_ctx);
 
@@ -25,111 +24,109 @@ bool ws_open(WebSocketClient* ws_client, const char* url, void* user_ctx, WebSoc
         return false;
     }
 
-    // Create WebSocket attributes
     EmscriptenWebSocketCreateAttributes attrs;
     emscripten_websocket_init_create_attributes(&attrs);
     attrs.url = url;
     attrs.protocols = NULL;
     attrs.createOnMainThread = EM_TRUE;
 
-    // Create WebSocket
-    EMSCRIPTEN_WEBSOCKET_T socket = emscripten_websocket_new(&attrs);
-    if (socket <= 0) {
+    EMSCRIPTEN_WEBSOCKET_T handle = emscripten_websocket_new(&attrs);
+    if (handle <= 0) {
         LOG_ERROR("Failed to create WebSocket");
         return false;
     }
 
-    ws_client->socket = socket;
-    ws_client->connected = false;
-    ws_client->user_ctx = user_ctx;
-    ws_client->callbacks = callbacks;
+    sock->socket = handle;
+    sock->connected = false;
+    sock->user_ctx = user_ctx;
+    sock->callbacks = callbacks;
 
     // Register event callbacks; userData is forwarded verbatim to user callbacks
-    emscripten_websocket_set_onopen_callback(socket, ws_client, ws_onopen_internal);
-    emscripten_websocket_set_onmessage_callback(socket, ws_client, ws_onmessage_internal);
-    emscripten_websocket_set_onerror_callback(socket, ws_client, ws_onerror_internal);
-    emscripten_websocket_set_onclose_callback(socket, ws_client, ws_onclose_internal);
+    emscripten_websocket_set_onopen_callback(handle, sock, socket_onopen_internal);
+    emscripten_websocket_set_onmessage_callback(handle, sock, socket_onmessage_internal);
+    emscripten_websocket_set_onerror_callback(handle, sock, socket_onerror_internal);
+    emscripten_websocket_set_onclose_callback(handle, sock, socket_onclose_internal);
 
     return true;
 }
 
-bool ws_send_binary(const WebSocketClient* ws_client, const void* data, size_t len) {
-    assert(ws_client);
+bool socket_send(const Socket* sock, const void* data, size_t len) {
+    assert(sock);
     assert(data);
     assert(len > 0);
-    if (!ws_is_open(ws_client)) {
+    if (!socket_is_open(sock)) {
         return false;
     }
-    EMSCRIPTEN_RESULT result = emscripten_websocket_send_binary(ws_client->socket, (void*)data, (uint32_t)len);
+    EMSCRIPTEN_RESULT result = emscripten_websocket_send_binary(sock->socket, (void*)data, (uint32_t)len);
     if (result != EMSCRIPTEN_RESULT_SUCCESS) {
-        LOG_ERROR("WebSocket binary send failed: %d", result);
+        LOG_ERROR("WebSocket send failed: %d", result);
         return false;
     }
     return true;
 }
 
-void ws_close(WebSocketClient* ws_client) {
-    assert(ws_client);
-    if (ws_client->socket > 0) {
-        emscripten_websocket_close(ws_client->socket, 1000, "Client initiated closure");
-        emscripten_websocket_delete(ws_client->socket);
+void socket_close(Socket* sock) {
+    assert(sock);
+    if (sock->socket > 0) {
+        emscripten_websocket_close(sock->socket, 1000, "Client initiated closure");
+        emscripten_websocket_delete(sock->socket);
     }
-    ws_client->socket = 0;
-    ws_client->connected = false;
+    sock->socket = 0;
+    sock->connected = false;
 }
 
-bool ws_is_open(const WebSocketClient* ws_client) {
-    assert(ws_client);
-    return ws_client && ws_client->connected;
+bool socket_is_open(const Socket* sock) {
+    assert(sock);
+    return sock && sock->connected;
 }
 
 // ============================================================================
 // Internal Event Handlers (Emscripten WebSocket Callbacks)
 // ============================================================================
-static EM_BOOL ws_onopen_internal(int eventType, const EmscriptenWebSocketOpenEvent* event, void* userData) {
+static EM_BOOL socket_onopen_internal(int eventType, const EmscriptenWebSocketOpenEvent* event, void* userData) {
     printf("[WS] onopen fired — socket=%d\n", event ? event->socket : -1);
-    WebSocketClient* socket_ctx = userData;
-    if (socket_ctx && socket_ctx->callbacks.on_open_cb) {
-        socket_ctx->connected = true;
-        socket_ctx->callbacks.on_open_cb(socket_ctx->user_ctx);
+    Socket* sock = userData;
+    if (sock && sock->callbacks.on_open) {
+        sock->connected = true;
+        sock->callbacks.on_open(sock->user_ctx);
         return EM_TRUE;
     }
     return EM_FALSE;
 }
 
-static EM_BOOL ws_onmessage_internal(int eventType, const EmscriptenWebSocketMessageEvent* event, void* userData) {
-    WebSocketClient* socket_ctx = userData;
-    if (socket_ctx && socket_ctx->callbacks.on_message_cb) {
-        socket_ctx->callbacks.on_message_cb(event->data, event->numBytes, event->isText, socket_ctx->user_ctx);
+static EM_BOOL socket_onmessage_internal(int eventType, const EmscriptenWebSocketMessageEvent* event, void* userData) {
+    Socket* sock = userData;
+    if (sock && sock->callbacks.on_receive) {
+        sock->callbacks.on_receive(event->data, event->numBytes, sock->user_ctx);
         return EM_TRUE;
     }
     return EM_FALSE;
 }
 
-static EM_BOOL ws_onerror_internal(int eventType, const EmscriptenWebSocketErrorEvent* event, void* userData) {
+static EM_BOOL socket_onerror_internal(int eventType, const EmscriptenWebSocketErrorEvent* event, void* userData) {
     LOG_ERROR("WebSocket error occurred");
-    WebSocketClient* socket_ctx = userData;
-    if(socket_ctx) {
-        if (socket_ctx->callbacks.on_error_cb) {
-            socket_ctx->callbacks.on_error_cb(socket_ctx->user_ctx);
+    Socket* sock = userData;
+    if (sock) {
+        if (sock->callbacks.on_error) {
+            sock->callbacks.on_error(sock->user_ctx);
         }
-        ws_close(socket_ctx);
+        socket_close(sock);
     }
     return EM_TRUE;
 }
 
-static EM_BOOL ws_onclose_internal(int eventType, const EmscriptenWebSocketCloseEvent* event, void* userData) {
-    WebSocketClient* socket_ctx = userData;
+static EM_BOOL socket_onclose_internal(int eventType, const EmscriptenWebSocketCloseEvent* event, void* userData) {
+    Socket* sock = userData;
     // Only log unexpected closures
     if (!(bool)event->wasClean || event->code != 1000) {
         LOG_ERROR("WebSocket closed unexpectedly: code=%d, reason='%s'", event->code, event->reason);
     }
-    if(socket_ctx) {
-        if (socket_ctx->callbacks.on_close_cb) {
-            socket_ctx->callbacks.on_close_cb(event->code, event->reason, socket_ctx->user_ctx);
+    if (sock) {
+        if (sock->callbacks.on_close) {
+            sock->callbacks.on_close(event->code, event->reason, sock->user_ctx);
         }
-        socket_ctx->socket = 0;
-        socket_ctx->connected = false;
+        sock->socket = 0;
+        sock->connected = false;
     }
 
     return EM_TRUE;

@@ -4,7 +4,7 @@
 #include <stdbool.h>
 #include <stdint.h>
 
-#include "object_layer.h"
+#include "ui/floating_combat_text.h"   /* FCTType */
 
 /* Local-player state.
  *
@@ -26,9 +26,7 @@ typedef struct {
     float    world_x;
     float    world_y;
     uint32_t value;
-    uint8_t  type;
-    char     item_id[MAX_ITEM_ID_LENGTH]; /* empty → numeric FCT */
-    uint32_t item_qty;
+    FCTType  type;
 } LocalFctEvent;
 
 /* Reset all local-player flags to their post-disconnect defaults. */
@@ -39,7 +37,7 @@ void  local_player_set_frozen(bool frozen);
 bool  local_player_is_frozen(void);
 
 /* Request the server to freeze/unfreeze the local player for an interaction
- * (dialogue, inventory, ...). Owns the uplink_freeze_* network dispatch so UI
+ * (dialogue, inventory, ...). Owns the freeze_start/freeze_end dispatch so UI
  * modules never drive the wire directly. A freeze_start arms a client-side
  * watchdog that auto-sends freeze_end if the matching end never arrives
  * (e.g. the UI closed via a path that skipped it, or a crash interrupted it). */
@@ -94,7 +92,7 @@ void   local_player_set_portal_hold(bool on_portal, float progress);
 bool   local_player_on_portal(void);
 float  local_player_portal_hold_progress(void);
 
-/* FCT event queue — single-producer (binary_aoi_decoder) /
+/* FCT event queue — single-producer (message.c) /
  * single-consumer (floating_combat_text). */
 bool                   local_player_fct_push(const LocalFctEvent* ev);
 int                    local_player_fct_count(void);

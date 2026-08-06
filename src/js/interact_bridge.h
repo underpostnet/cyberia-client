@@ -8,7 +8,7 @@
  *
  * Data flow:
  *   C interaction_bubble click  →  js_interact_overlay_open()         → JS builds DOM
- *   JS chat send                →  c_send_chat_binary()               → C network_send_binary()
+ *   JS chat send                →  c_send_chat_binary()               → C network_send_chat()
  *   C incoming chat WS msg      →  js_interact_overlay_receive_chat() → JS DOM
  */
 
