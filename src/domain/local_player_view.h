@@ -5,29 +5,31 @@
 
 #include "object_layer.h"
 
-/* Presentation layer for the LOCAL player — the entity rendered at screen
- * centre. Purely visual: never read by prediction, reconciliation, collision,
- * or any gameplay/simulation code — only by the renderer/camera.
+/* Presentation layer for the local player, drawn at screen centre. Only the
+ * renderer and the camera read it. Prediction, reconciliation, collision,
+ * and all simulation code ignore it.
  *
- * It owns an independent presentation state (position, velocity, facing,
- * walk/idle mode) advanced each render frame toward the simulation's
- * predicted/reconciled position by a critically damped spring. Reconciliation
- * displacements are absorbed into a correction offset the instant they land —
- * the spring target never jumps — and the offset bleeds away with its speed
- * capped below the walk speed, so a correction can slightly slow the walk but
- * can never reverse it or read as a hesitation. Facing and animation mode are
- * derived from the presentation velocity with hysteresis, so corrections can
- * never flip or flicker the sprite. Teleports and respawns (explicit
- * MODE_TELEPORTING, or a jump beyond the snap distance) snap instantly. */
+ * It owns its own position, velocity, facing, and walk/idle mode. A
+ * critically damped spring advances that state toward the predicted position
+ * each render frame.
+ *
+ * A reconciliation displacement goes into a correction offset the moment it
+ * lands, so the spring target never jumps. The offset bleeds away at a speed
+ * below the walk speed. A correction can slow the walk a little, but it can
+ * never reverse it or look like a hesitation.
+ *
+ * Facing and animation mode come from the presentation velocity, with
+ * hysteresis, so a correction never flips or flickers the sprite. A teleport
+ * or a respawn snaps: explicit MODE_TELEPORTING, or a jump longer than the
+ * snap distance. */
 
 /* Advance the presentation state toward `sim_pos` over `dt` seconds.
- * `sim_correction` is this frame's reconciliation displacement
- * (prediction_consume_correction()), absorbed so it never disturbs the
- * rendered trajectory. `sim_direction` and `sim_mode` are the authoritative
- * snapshot values; they are consumed only on snaps (a teleport has no organic
- * motion vector to derive facing from) and to detect MODE_TELEPORTING. Call
- * once per render frame, then read the accessors below. Frame-rate
- * independent. */
+ * `sim_correction` is this frame's reconciliation displacement, from
+ * prediction_consume_correction(). `sim_direction` and `sim_mode` are the
+ * snapshot values. They apply on a snap only, because a teleport gives no
+ * motion vector to derive the facing from, and they signal
+ * MODE_TELEPORTING. Call once per render frame, then read the accessors
+ * below. Frame-rate independent. */
 void local_player_view_update(Vector2 sim_pos, Vector2 sim_correction,
                               Direction sim_direction, ObjectLayerMode sim_mode,
                               float dt);

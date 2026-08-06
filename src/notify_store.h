@@ -1,14 +1,8 @@
-/**
- * @file notify_store.h
- * @brief Per-entity chat message store + unread-badge counter — pure C.
- *
- * Single source of truth for chat unread state. The interaction bubble reads
- * the last message for its informational chat bubble; the interaction modal's
- * Chat button reads/clears the unread count.
- */
-
 #ifndef NOTIFY_STORE_H
 #define NOTIFY_STORE_H
+
+/* Per-entity chat message store. The interaction bubble reads the last
+ * message for its chat bubble. Unread counts live in notification.h. */
 
 #include <stddef.h>
 
@@ -30,11 +24,9 @@ typedef struct {
     int           count;
 } NotifyEntry;
 
-/** Append a chat message for entity_id. Counts live in the notification
- *  dispatcher (notification.h), not here. */
 void notify_store_push(const char* entity_id, const char* sender, const char* text);
 
-/** Return the NotifyEntry for entity_id, or NULL if not found. */
+/* NULL when the entity has no messages. */
 const NotifyEntry* notify_store_get(const char* entity_id);
 
 #endif /* NOTIFY_STORE_H */

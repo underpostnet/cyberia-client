@@ -30,9 +30,7 @@ RawPack serial_pack(cJSON* obj);
  * The caller deletes the result. */
 cJSON* serial_unpack(const uint8_t* data, size_t len);
 
-/* ============================================================================
- * Message packers — client to server
- * ============================================================================ */
+/* ── Message packers — client to server ─────────────────────────────── */
 
 cJSON* json_pack_handshake(const char* client_name, const char* version);
 
@@ -67,9 +65,7 @@ cJSON* json_pack_quest_accept(const char* entity_id, const char* quest_code);
 cJSON* json_pack_shop_buy(const char* entity_id, const char* item_id,
                           int quantity);
 
-/* ============================================================================
- * Read helpers
- * ============================================================================ */
+/* ── Read helpers ───────────────────────────────────────────────────── */
 
 /* Copy a string field into out. Returns 0 on success, -1 if the field is
  * missing or is not a string. */

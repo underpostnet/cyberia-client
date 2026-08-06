@@ -6,14 +6,9 @@
 
 #include "object_layer.h"
 
-/**
- * @file world_types.h
- * @brief Plain world-entity data structures for the game-state mirror.
- *
- * These are pure structure definitions with no behaviour and no global state,
- * usable without pulling in the GameState god object (g_game_state) or its
- * accessors.
- */
+/* World-entity structures for the game-state mirror. Definitions only — no
+ * behaviour and no global state — so a module can use them without pulling
+ * in g_game_state or its accessors. */
 
 #define MAX_OBJECT_LAYERS   20
 #define MAX_PATH_POINTS     100

@@ -11,23 +11,18 @@
 #include "object_layer.h"
 #include "world_types.h"
 
-/**
- * @file game_state.h
- * @brief Authoritative world-state view.
+/* The client mirror of the simulation. Carries gameplay fields only:
+ * entities with their positions and life, the world configuration the server
+ * pushed at boot, and the economy and inventory state the simulation owns.
  *
- * GameState is the client's mirror of the simulation. It carries only
- * gameplay-relevant fields: entities, their positions and life, the
- * world configuration that the server pushed at boot, and the
- * economy/inventory state that the simulation owns.
+ * Render data, per-frame UI bookkeeping, status indicators, and the camera
+ * live in their own modules:
  *
- * Render-only data, per-frame UI bookkeeping, status indicators, and the
- * camera live in dedicated modules:
- *
- *   - domain/camera.h           Camera2D + follow-smoothing
+ *   - domain/camera.h                Camera2D and follow smoothing
  *   - domain/presentation_runtime.h  palette, status icon visuals, dev_ui
- *   - domain/local_player.h     frozen flag, FCT queue, self status icon,
- *                               authoritative move speed
- *   - ui/ui_state.h             skill_map
+ *   - domain/local_player.h          frozen flag, FCT queue, self status
+ *                                    icon, authoritative move speed
+ *   - ui/ui_state.h                  skill_map
  */
 
 #define MAX_ENTITIES 1000
@@ -127,10 +122,9 @@ struct GameState {
 
 extern GameState g_game_state;
 
-/** Clear the world mirror to its post-disconnect defaults: drops init flag,
- *  player id, and all entity/object counts. The single entry point for
- *  resetting world state; callers outside game_state.c must not poke the
- *  count fields directly. */
+/* Clear the world mirror to its post-disconnect defaults: the init flag, the
+ * player id, and every entity and object count. The one entry point to reset
+ * world state — code outside game_state.c must not touch the count fields. */
 void         game_state_reset(void);
 
 PlayerState* game_state_find_player(const char* id);
@@ -140,14 +134,14 @@ int          game_state_update_bot(const BotState* bot);
 void         game_state_remove_player(const char* id);
 void         game_state_remove_bot(const char* id);
 
-/** Observer fired when an entity is removed from the world mirror (left AOI).
- *  Lets the presentation layer release per-entity resources (e.g. animation
- *  states) without game_state depending on render modules. */
+/* Fires when an entity leaves the world mirror (left the AOI). Lets the
+ * presentation layer release its per-entity resources, such as animation
+ * states, without game_state depending on the render modules. */
 typedef void (*GameStateEntityRemovedFn)(const char* id);
 void         game_state_set_entity_removed_cb(GameStateEntityRemovedFn cb);
 
-/** Toggle the client-owned dev-overlay flag. The toggle delegates to
- *  presentation_runtime so the value stays a single source of truth. */
+/* Toggle the dev overlay flag. Delegates to presentation_runtime, which
+ * keeps the one copy of the value. */
 void game_state_toggle_dev_ui(void);
 
 static inline const EntityTypeDefault* game_state_get_entity_default(const char* entity_type) {

@@ -1,18 +1,3 @@
-/**
- * @file interaction_bubble.h
- * @brief Entity-specific interaction bubbles rendered in screen space.
- *
- * Each interactable entity (NPC bot, other player) in the AOI gets its
- * own bubble whose icon is the full active ObjectLayer stack — exactly
- * how the entity appears in the world.
- *
- * Tapping a bubble opens the JS interact overlay (interact_overlay.js)
- * via the interact_bridge module.  The overlay provides tabs for Dialog,
- * Chat, and Actions interactions.
- *
- * Keyed by **entity ID** (not item ID) — one bubble per entity.
- */
-
 #ifndef INTERACTION_BUBBLE_H
 #define INTERACTION_BUBBLE_H
 
@@ -20,6 +5,12 @@
 #include "object_layer.h"
 
 #include <stdbool.h>
+
+/* Screen-space bubble column, one bubble per interactable entity in the AOI
+ * (NPC bot or other player), keyed by entity ID. Each bubble icon is the
+ * entity's full active ObjectLayer stack, so it matches how the entity looks
+ * in the world. A tap opens the JS interact overlay through interact_bridge,
+ * which carries the Dialog, Chat, and Actions tabs. */
 
 /* ── Layout constants ──────────────────────────────────────────────────── */
 
@@ -37,13 +28,9 @@
 #define INTERACT_SOCIAL     (1 << 1)
 #define INTERACT_QUEST      (1 << 2)
 
-/**
- * @brief One visible bubble slot — entity-specific, stores full OL snapshot.
- *
- * `alive_layers` holds the last-known alive OL stack so the bubble icon
- * always shows the living appearance (even when the entity is dead/ghost).
- * `layers` tracks whatever the server currently sends (dead items if ghost).
- */
+/* One bubble slot. `alive_layers` keeps the last known alive stack, so the
+ * icon always shows the living appearance even for a dead or ghost entity;
+ * `layers` tracks whatever the server currently sends. */
 typedef struct {
     char entity_id[MAX_ID_LENGTH];
     char display_name[MAX_ID_LENGTH];
@@ -76,23 +63,13 @@ void interaction_bubble_expand(void);
 bool interaction_bubble_handle_wheel(float wheel_delta);
 int  interaction_bubble_slot_count(void);
 
-/**
- * @brief Optimistically update the self-player bubble's alive-OL cache
- *        after an equip/unequip while dead.
- *
- * The server queues dead-equip in PreRespawnObjectLayers (never sent to
- * the client), so the bubble must apply the change locally to keep the
- * icon in sync with what will render on revive.
- */
+/* Apply an equip or unequip that happened while the self-player is dead. The
+ * server queues those in PreRespawnObjectLayers and never sends them back, so
+ * the bubble updates its own alive cache to match what revive will render. */
 void interaction_bubble_dead_equip(const char* item_id, bool active);
 
-/**
- * @brief Look up the cached alive-OL stack for an entity.
- *
- * Returns the alive layer snapshot and count via out-params.
- * If the entity has no bubble slot or no alive cache, returns NULL
- * and sets *out_count to 0.
- */
+/* Cached alive stack for an entity. Returns NULL and sets *out_count to 0
+ * when the entity has no bubble slot or no alive cache. */
 const ObjectLayerState* interaction_bubble_get_alive_layers(
     const char *entity_id, int *out_count);
 
@@ -100,22 +77,13 @@ const ObjectLayerState* interaction_bubble_get_alive_layers(
 #define INTERACT_OVERLAY_TAB_CHAT         0
 #define INTERACT_OVERLAY_TAB_INTEGRATION  1
 
-/**
- * @brief Open the JS overlay for an entity's bubble slot on a given tab.
- *
- * Resolves the slot by entity ID, opens the JS overlay on @p initial_tab
- * (INTERACT_OVERLAY_TAB_*), and pushes the entity's OL stack for preview
- * rendering. No-op if the entity has no bubble slot.
- */
+/* Open the JS overlay on `initial_tab` (INTERACT_OVERLAY_TAB_*) and push the
+ * entity's layer stack for the preview. No-op when the entity has no slot. */
 void interaction_bubble_open_js_overlay(const char* entity_id, int initial_tab);
 
-/**
- * @brief Whether a screen point is occupied by the bubble column UI.
- *
- * The toggle tab always counts. The bubble band only counts while the
- * column is expanded — when collapsed the left area is free for game-world
- * taps (movement), so hiding the column actually reclaims that space.
- */
+/* True when the bubble column UI covers the point. The toggle tab always
+ * counts; the bubble band counts only while the column is expanded, so a
+ * collapsed column gives the space back to world taps. */
 bool interaction_bubble_point_covered(int x, int y);
 
 #endif /* INTERACTION_BUBBLE_H */

@@ -1,19 +1,9 @@
-/**
- * @file notification.h
- * @brief Central notification dispatcher — counts only, pure C.
- *
- * Single authority for unread notification counts. Counts are tracked along
- * two axes:
- *   - register (category): chat today; extensible (trade, quest, ...).
- *   - target  (entity id): who the notification is about.
- *
- * Exposes a global total, a per-register total, a per-target total (all
- * registers), and the per-register-per-target count used by badges. Message
- * text itself lives in notify_store; this module only counts.
- */
-
 #ifndef NOTIFICATION_H
 #define NOTIFICATION_H
+
+/* Sole authority for unread notification counts, along two axes: register
+ * (the category — chat today) and target (the entity the notification is
+ * about). Message text lives in notify_store; this module only counts. */
 
 #define NOTIF_MAX_TARGETS    64
 #define NOTIF_TARGET_ID_LEN  64

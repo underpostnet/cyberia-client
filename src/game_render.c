@@ -91,22 +91,6 @@ int game_render_init(int screen_width, int screen_height) {
     g_renderer.screen_width = screen_width;
     g_renderer.screen_height = screen_height;
 
-    // Initialize texture cache
-    g_renderer.texture_cache.capacity = 100;
-    g_renderer.texture_cache.texture_count = 0;
-
-    // Initialize effect arrays
-    g_renderer.floating_text_count = 0;
-    g_renderer.click_effect_count = 0;
-
-    // UI state
-    g_renderer.hud_visible = true;
-
-    // Performance tracking
-    g_renderer.frames_rendered = 0;
-    g_renderer.last_fps_update = GetTime();
-    g_renderer.current_fps = 60.0f;
-
     // Initialize object layer rendering system
     create_object_layers_manager();
     ObjectLayersManager* olm = obj_layers_mgr_get();
@@ -134,12 +118,6 @@ int game_render_init(int screen_width, int screen_height) {
 void game_render_set_screen_size(int width, int height) {
     g_renderer.screen_width = width;
     g_renderer.screen_height = height;
-
-    // Update HUD area
-    g_renderer.hud_area.x = 0;
-    g_renderer.hud_area.y = height - 60; // Bottom 60 pixels for HUD
-    g_renderer.hud_area.width = width;
-    g_renderer.hud_area.height = 60;
 }
 
 void game_render_frame(void) {
@@ -172,15 +150,6 @@ void game_render_frame(void) {
     // Tap effects are rendered in screen space so input systems can spawn
     // them directly from screen coordinates without camera conversions.
     fx_tap_draw();
-
-    // Update performance tracking
-    g_renderer.frames_rendered++;
-    double current_time = GetTime();
-    if (current_time - g_renderer.last_fps_update >= 1.0) {
-        g_renderer.current_fps = g_renderer.frames_rendered / (current_time - g_renderer.last_fps_update);
-        g_renderer.frames_rendered = 0;
-        g_renderer.last_fps_update = current_time;
-    }
 
     // CRITICAL: Always call EndDrawing() even if errors occurred above
     EndDrawing();
@@ -284,9 +253,7 @@ void game_render_world(void) {
     // 6. Foregrounds (always on top of entities) - creates depth
     game_render_foregrounds();
 
-    // 7. Effects — click effects, floating text, FCT pop-ups, loot flights
-    game_render_click_effects();
-    game_render_floating_texts();
+    // 7. Effects — FCT pop-ups, loot flights
     fct_draw();
     game_render_loot_fx();
 
@@ -1095,46 +1062,6 @@ void game_render_ui(void) {
     draw_loot_screen_fx();
 }
 
-void game_render_click_effects(void) {
-    for (int i = 0; i < g_renderer.click_effect_count; i++) {
-        ClickEffect* effect = &g_renderer.click_effects[i];
-        if (!effect->active) continue;
-
-        float alpha = effect->life_time / effect->max_life_time;
-        Color c = effect->color;
-        c.a = (unsigned char)(c.a * alpha);
-
-        float cell_size = g_game_state.cell_size > 0 ? g_game_state.cell_size : 12.0f;
-        Vector2 world_pos = {
-            effect->position.x * cell_size,
-            effect->position.y * cell_size
-        };
-
-        DrawCircleLines(world_pos.x, world_pos.y, effect->radius, c);
-    }
-}
-
-void game_render_floating_texts(void) {
-    for (int i = 0; i < g_renderer.floating_text_count; i++) {
-        FloatingText* text = &g_renderer.floating_texts[i];
-        if (!text->active) continue;
-
-        float alpha = text->life_time / text->max_life_time;
-        Color c = text->color;
-        c.a = (unsigned char)(c.a * alpha);
-
-        float cell_size = g_game_state.cell_size > 0 ? g_game_state.cell_size : 12.0f;
-        Vector2 world_pos = {
-            text->position.x * cell_size,
-            text->position.y * cell_size
-        };
-
-        DrawText(text->text, world_pos.x, world_pos.y, text->font_size, c);
-    }
-}
-
-
-
 Vector2 game_render_world_to_screen(Vector2 world_pos) {
     float cell_size = g_game_state.cell_size > 0 ? g_game_state.cell_size : 12.0f;
     Vector2 scaled = {world_pos.x * cell_size, world_pos.y * cell_size};
@@ -1161,73 +1088,6 @@ Rectangle game_render_get_camera_bounds(void) {
     };
 }
 
-void game_render_add_click_effect(Vector2 world_pos, Color color) {
-    for (int i = 0; i < 20; i++) {
-        if (!g_renderer.click_effects[i].active) {
-            g_renderer.click_effects[i].position = world_pos;
-            g_renderer.click_effects[i].radius = 10.0f;
-            g_renderer.click_effects[i].max_radius = 30.0f;
-            g_renderer.click_effects[i].life_time = 1.0f;
-            g_renderer.click_effects[i].max_life_time = 1.0f;
-            g_renderer.click_effects[i].color = color;
-            g_renderer.click_effects[i].active = true;
-            break;
-        }
-    }
-}
-
-void game_render_add_floating_text(Vector2 world_pos, const char* text,
-                                   Color color, float font_size, float life_time) {
-    for (int i = 0; i < 100; i++) {
-        if (!g_renderer.floating_texts[i].active) {
-            g_renderer.floating_texts[i].position = world_pos;
-            g_renderer.floating_texts[i].velocity = (Vector2){0, -1.0f};
-            strncpy(g_renderer.floating_texts[i].text, text, 63);
-            g_renderer.floating_texts[i].text[63] = '\0';
-            g_renderer.floating_texts[i].color = color;
-            g_renderer.floating_texts[i].life_time = life_time;
-            g_renderer.floating_texts[i].max_life_time = life_time;
-            g_renderer.floating_texts[i].font_size = font_size;
-            g_renderer.floating_texts[i].active = true;
-            break;
-        }
-    }
-}
-
-void game_render_update_effects(float delta_time) {
-    // Update click effects
-    for (int i = 0; i < g_renderer.click_effect_count; i++) {
-        ClickEffect* effect = &g_renderer.click_effects[i];
-        if (!effect->active) continue;
-
-        effect->life_time -= delta_time;
-        if (effect->life_time <= 0.0f) {
-            effect->active = false;
-            continue;
-        }
-
-        // Expand radius over time
-        float progress = 1.0f - (effect->life_time / effect->max_life_time);
-        effect->radius = effect->max_radius * progress;
-    }
-
-    // Update floating texts
-    for (int i = 0; i < g_renderer.floating_text_count; i++) {
-        FloatingText* text = &g_renderer.floating_texts[i];
-        if (!text->active) continue;
-
-        text->life_time -= delta_time;
-        if (text->life_time <= 0.0f) {
-            text->active = false;
-            continue;
-        }
-
-        // Move text based on velocity
-        text->position.x += text->velocity.x * delta_time;
-        text->position.y += text->velocity.y * delta_time;
-    }
-}
-
 void game_render_cleanup(void) {
 
     // Cleanup entity rendering system
@@ -1236,11 +1096,6 @@ void game_render_cleanup(void) {
 
     // Cleanup object layers manager
     destroy_object_layers_manager();
-
-    // Unload font if loaded
-    if (IsFontValid(g_renderer.game_font)) {
-        UnloadFont(g_renderer.game_font);
-    }
 
     ui_icon_cleanup();
     dialogue_data_cleanup();

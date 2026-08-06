@@ -37,9 +37,6 @@ void modal_interact_close(void);
 bool modal_interact_is_open(void);
 float modal_interact_layout_bottom(void);
 
-/* Quest-talk switcher for the paired dialogue: the dialogue draws a quest
- * button bar above its title and toggles between the default greeting and
- * the mapped quest-talk dialogue through these. */
 /* Quest-talk switcher for the paired dialogue: one entry per active quest with
  * an incomplete talk objective this NPC's action maps to a dialogue. The
  * dialogue draws a button bar above its title; selecting an index swaps the

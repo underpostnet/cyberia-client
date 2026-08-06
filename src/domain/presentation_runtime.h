@@ -1,39 +1,3 @@
-/**
- * @file domain/presentation_runtime.h
- * @brief Sole owner of the cyberia-client presentation surface.
- *
- * Architecture
- * ------------
- * The cyberia-client carries no hardcoded palette, no compile-time status
- * icon table, no compile-time camera tunings. Every presentation value
- * comes from the engine REST endpoint
- *
- *     GET /api/cyberia-client-hints/:CYBERIA_CLIENT_HINTS_CODE
- *
- * Lifecycle
- * ---------
- *   1. main() calls presentation_runtime_start_fetch() once after
- *      js_init_engine_api() — kicks off the async GET via engine_client.
- *   2. When the response settles, the engine_client callback parses palette,
- *      entity colour keys, status-icon visuals, and camera/cell tunings.
- *      The simulation-relevant subset (cell_size, interpolation_ms) is
- *      hydrated into GameState; camera zoom is read on demand by
- *      domain/camera.c from the same runtime.
- *   3. Renderers / UI code consult the runtime accessors below.
- *
- * Bootstrap fallback
- * ------------------
- * A tiny inline palette + neutral grey is hardcoded inside the .c so the
- * splash screen has *something* to draw before the fetch settles.  These
- * are NOT a real palette — they exist only to avoid a black screen during
- * the few frames between window-up and fetch-complete.
- *
- * Strict boundary
- * ---------------
- * The cyberia-server (Go) never serves this endpoint.  The data here is
- * presentation only — gameplay state never touches this module.
- */
-
 #ifndef CYBERIA_DOMAIN_PRESENTATION_RUNTIME_H
 #define CYBERIA_DOMAIN_PRESENTATION_RUNTIME_H
 
@@ -41,36 +5,51 @@
 #include <stdint.h>
 #include <raylib.h>
 
+/* Sole owner of the presentation surface. The client holds no compile-time
+ * palette, status-icon table, or camera tuning: every value arrives from
+ * GET /api/cyberia-client-hints/:CYBERIA_CLIENT_HINTS_CODE.
+ *
+ * main() starts the async fetch once, after js_init_engine_api(). The
+ * engine_client callback parses the palette, the entity colour keys, the
+ * status-icon visuals, and the camera and cell tunings; it hydrates
+ * cell_size and interpolation_ms into GameState. Renderers and UI read the
+ * accessors below; domain/camera.c reads the zoom on demand.
+ *
+ * Until the fetch settles the accessors return a small inline bootstrap
+ * value, so the splash screen has something to draw. Those are not a real
+ * palette.
+ *
+ * Presentation only: the Go server never serves this endpoint, and gameplay
+ * state never touches this module. */
+
 #ifdef __cplusplus
 extern "C" {
 #endif
 
-/** Kick off the asynchronous fetch. Safe to call exactly once at startup
- *  after js_init_engine_api has run. Subsequent calls are no-ops. */
+/* Start the fetch. Call once at startup, after js_init_engine_api. Later
+ * calls are no-ops. */
 void presentation_runtime_start_fetch(const char* client_hints_code);
 
-/** True once the fetch has settled (succeeded, errored, or 404). After
- *  this point, all accessors reflect the resolved table; before then they
- *  return the inline bootstrap values. */
+/* True once the fetch settles — success, error, or 404. The accessors give
+ * resolved values after that point, bootstrap values before it. */
 bool presentation_runtime_is_ready(void);
 
 /* ── Presentation accessors ────────────────────────────────────────── */
 
-/** Palette colour for `key`, or a neutral grey when unknown. */
+/* Palette colour for `key`, or a neutral grey when unknown. */
 Color presentation_runtime_palette(const char* key);
 
-/** Per-entity-type fallback colour. Composes entity_type → color_key →
- *  palette. Falls back to neutral grey when nothing matches. */
+/* Per-entity-type fallback colour. Composes entity_type → color_key →
+ * palette. Falls back to neutral grey when nothing matches. */
 Color presentation_runtime_entity_fallback_color(const char* entity_type);
 
-/** Icon stem (e.g. "skull") for a u8 status ID, or NULL when no icon. */
+/* Icon stem (e.g. "skull") for a u8 status ID, or NULL when no icon. */
 const char* presentation_runtime_status_icon(uint8_t status_id);
 
-/** Border colour for a u8 status ID, or neutral grey when unknown. */
+/* Border colour for a u8 status ID, or neutral grey when unknown. */
 Color presentation_runtime_status_border(uint8_t status_id);
 
-/** Camera and cell-sizing accessors. Defined values once the fetch
- *  settles; bootstrap values before that. */
+/* Camera and cell sizing. */
 float    presentation_runtime_cell_size(void);
 float    presentation_runtime_camera_zoom(void);
 float    presentation_runtime_camera_smoothing(void);
@@ -81,8 +60,8 @@ bool     presentation_runtime_dev_ui(void);
 void     presentation_runtime_set_dev_ui(bool enabled);
 void     presentation_runtime_toggle_dev_ui(void);
 
-/** Main UI font: TTF file name under engine assets/fonts/ ("" = built-in font)
- *  and a uniform multiplier applied to every text size. */
+/* Main UI font: TTF file name under engine assets/fonts/ ("" = built-in
+ * font) and a multiplier applied to every text size. */
 const char* presentation_runtime_font_family(void);
 float       presentation_runtime_font_factor_size(void);
 

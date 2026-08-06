@@ -79,7 +79,6 @@ void render_on_tick(float delta_time) {
 
     camera_on_tick(delta_time);
 
-    game_render_update_effects(delta_time);
     fct_update(delta_time);
     loot_fx_update(delta_time);
     fx_tap_update(delta_time);

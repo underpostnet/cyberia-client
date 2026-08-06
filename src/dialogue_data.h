@@ -1,24 +1,3 @@
-/**
- * @file dialogue_data.h
- * @brief Async dialogue data fetcher and cache.
- *
- * Fetches dialogue records from the Engine API per item ID via the
- * engine_client fetch queue; completion arrives through a registered
- * callback (no per-frame poll required from the caller).
- *
- * API endpoint:
- *   GET /api/cyberia-dialogue/code/default-<itemId>
- *
- * Response shape (success):
- *   { "status": "success", "data": [ { code, order, speaker, text, mood }, ... ] }
- *
- * Usage:
- *   dialogue_data_init();
- *   dialogue_data_request("lain");          // fetches /code/default-lain
- *   const DialogueDataSet* d = dialogue_data_get("lain");
- *   if (d && d->state == DLG_DATA_READY) { ... use d->lines ... }
- */
-
 #ifndef DIALOGUE_DATA_H
 #define DIALOGUE_DATA_H
 
@@ -26,7 +5,9 @@
 
 #include <stdbool.h>
 
-/* ── Fetch state ─────────────────────────────────────────────────────── */
+/* Dialogue cache. Fetches records through the engine_client queue and
+ * reports completion through a registered callback — the caller does not
+ * poll. */
 
 typedef enum {
     DLG_DATA_NONE = 0,
@@ -36,9 +17,6 @@ typedef enum {
     DLG_DATA_ERROR
 } DialogueDataState;
 
-/**
- * @brief Cached dialogue data for one item ID.
- */
 typedef struct {
     char            item_id[128];
     DialogueLine    lines[DIALOGUE_MAX_LINES];
@@ -46,37 +24,21 @@ typedef struct {
     DialogueDataState state;
 } DialogueDataSet;
 
-/* ── Public API ──────────────────────────────────────────────────────── */
-
 void dialogue_data_init(void);
 void dialogue_data_cleanup(void);
 
-/**
- * @brief Request dialogue data for an item ID.
- *
- * If the data is already cached (any state), this is a no-op.
- * Otherwise kicks off an async HTTP fetch.
- */
+/* Fetch GET /api/cyberia-dialogue/code/default-<item_id>. No-op when the
+ * item is already cached in any state. */
 void dialogue_data_request(const char* item_id);
 
-/**
- * @brief Request dialogue data by full dialogue code (e.g. a quest's talk
- *        dialogue), fetching GET /api/cyberia-dialogue/code/<code> verbatim —
- *        no "default-" prefix. Cached under `code`; look it up with
- *        dialogue_data_get(code).
- */
+/* Fetch GET /api/cyberia-dialogue/code/<code> verbatim — no "default-"
+ * prefix. Cached under `code`; read it back with dialogue_data_get(code). */
 void dialogue_data_request_code(const char* code);
 
-/**
- * @brief Look up cached dialogue data for an item ID.
- *
- * @return Pointer to cached data, or NULL if not yet requested.
- */
+/* Cached data, or NULL when the item was never requested. */
 const DialogueDataSet* dialogue_data_get(const char* item_id);
 
-/**
- * @brief Check if an item ID has dialogue data available (READY with lines > 0).
- */
+/* True when the item is READY and holds at least one line. */
 bool dialogue_data_available(const char* item_id);
 
 #endif /* DIALOGUE_DATA_H */

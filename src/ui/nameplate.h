@@ -1,18 +1,3 @@
-/**
- * @file nameplate.h
- * @brief Centralized display-name resolution for all entities.
- *
- * Provides a single function that computes the nameplate string for
- * any entity — player or bot — so every UI surface (overhead HUD,
- * interaction bubble, JS overlay header) shows a consistent name.
- *
- * Rules:
- *   - **Players** → "Anon-" + first 8 characters of the websocket ID.
- *   - **Bots**    → First-char-uppercased active skin item_id + "-" +
- *                    first 8 characters of the entity ID.
- *                    Falls back to first active layer, then raw ID.
- */
-
 #ifndef NAMEPLATE_H
 #define NAMEPLATE_H
 
@@ -21,19 +6,17 @@
 
 #include <stdbool.h>
 
-/**
- * @brief Resolve a display name into @p out.
+/* One display name for each entity, so the overhead HUD, the interaction
+ * bubble, and the JS overlay header always agree.
  *
- * @param entity_id   Entity's unique ID (websocket session ID for players,
- *                     server-assigned UUID for bots).
- * @param is_player   true for main player and other players, false for bots.
- * @param layers      Entity's active ObjectLayerState array (may be NULL).
- * @param layer_count Number of entries in @p layers.
- * @param mgr         ObjectLayersManager for type look-ups (may be NULL;
- *                     bot skin detection is skipped when NULL).
- * @param out         Destination buffer for the resolved name.
- * @param out_size    Size of @p out in bytes (including NUL terminator).
- */
+ *   Players — "Anon-" plus the first 8 characters of the websocket ID.
+ *   Bots    — active skin item_id, first letter capital, plus "-" and the
+ *             first 8 characters of the entity ID. Falls back to the first
+ *             active layer, then to the raw ID. */
+
+/* `entity_id` is the websocket session ID for a player, the server UUID for
+ * a bot. `layers` may be NULL. A NULL `mgr` skips the bot skin lookup.
+ * `out_size` counts the terminator. */
 void nameplate_resolve(const char *entity_id,
                        bool is_player,
                        const ObjectLayerState *layers,

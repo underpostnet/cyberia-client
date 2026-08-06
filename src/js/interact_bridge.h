@@ -1,19 +1,13 @@
-/**
- * @file interact_bridge.h
- * @brief C ↔ JS bridge for the interact overlay.
- *
- * Declares:
- *   - `extern` JS functions callable from C (implemented in interact_overlay.js)
- *   - `EMSCRIPTEN_KEEPALIVE` C functions callable from JS (Module._xxx)
- *
- * Data flow:
- *   C interaction_bubble click  →  js_interact_overlay_open()         → JS builds DOM
- *   JS chat send                →  c_send_chat_binary()               → C network_send_chat()
- *   C incoming chat WS msg      →  js_interact_overlay_receive_chat() → JS DOM
- */
-
 #ifndef INTERACT_BRIDGE_H
 #define INTERACT_BRIDGE_H
+
+/* C-to-JS bridge for the interact overlay. Declares the JS functions that C
+ * calls (implemented in interact_overlay.js) and the EMSCRIPTEN_KEEPALIVE C
+ * functions that JS calls as Module._xxx.
+ *
+ *   bubble click     → js_interact_overlay_open()         → JS builds the DOM
+ *   JS chat send     → c_send_chat_binary()               → network_send_chat()
+ *   chat WS message  → js_interact_overlay_receive_chat() → JS DOM */
 
 #include <stdint.h>
 

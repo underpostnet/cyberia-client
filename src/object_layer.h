@@ -11,7 +11,6 @@
 #define MAX_CID_LENGTH 128
 #define MAX_ADDRESS_LENGTH 128
 
-// Enums corresponding to Python enums
 typedef enum {
     DIRECTION_UP = 0,
     DIRECTION_UP_RIGHT = 1,
@@ -30,9 +29,6 @@ typedef enum {
     MODE_TELEPORTING = 2
 } ObjectLayerMode;
 
-/**
- * @brief Typed enum for ObjectLayer item type discriminator.
- */
 typedef enum {
     OBJECT_LAYER_TYPE_UNKNOWN    = 0,
     OBJECT_LAYER_TYPE_FLOOR      = 1,
@@ -47,25 +43,20 @@ typedef enum {
     OBJECT_LAYER_TYPE_STATIC     = 10,
 } ObjectLayerType;
 
-/**
- * @brief Blockchain ledger type for economic classification.
- *
- * Maps to the Mongoose enum: ['ERC20', 'ERC721', 'OFF_CHAIN']
- */
+/* Economic classification. Mirrors the engine enum ['ERC20', 'ERC721',
+ * 'OFF_CHAIN']. */
 typedef enum {
     LEDGER_TYPE_OFF_CHAIN = 0,
     LEDGER_TYPE_ERC20 = 1,
     LEDGER_TYPE_ERC721 = 2
 } LedgerType;
 
-// Object layer state
 typedef struct {
     char item_id[MAX_ITEM_ID_LENGTH];
     bool active;
     int quantity;
 } ObjectLayerState;
 
-// Stats structure
 typedef struct {
     int effect;
     int resistance;
@@ -75,61 +66,33 @@ typedef struct {
     int utility;
 } Stats;
 
-// ============================================================================
-// Atlas Sprite Sheet Structures (FrameMetadataSchema)
-// ============================================================================
-
-/**
- * @brief Metadata for a single frame within an atlas sprite sheet.
- *
- * Corresponds to the FrameMetadataSchema in the engine's
- * AtlasSpriteSheetModel. Each frame stores its position and
- * dimensions inside the consolidated atlas PNG so the renderer
- * can clip (crop) the correct sub-region.
- */
+/* Position and size of one frame inside the atlas PNG. The renderer clips
+ * this sub-region out of the single atlas texture. */
 typedef struct {
-    int x;           /**< X position in the atlas (pixels) */
-    int y;           /**< Y position in the atlas (pixels) */
-    int width;       /**< Frame width (pixels) */
-    int height;      /**< Frame height (pixels) */
-    int frame_index; /**< Frame index in animation sequence */
+    int x;
+    int y;
+    int width;
+    int height;
+    int frame_index;
 } FrameMetadata;
 
-/**
- * @brief Array of FrameMetadata for a single animation direction.
- *
- * Groups all frames belonging to one direction/mode combination
- * (e.g. "down_idle", "right_walking") together with a count.
- */
+/* All frames of one direction and mode (e.g. "down_idle", "right_walking"). */
 typedef struct {
     FrameMetadata frames[MAX_FRAMES_PER_DIRECTION];
     int count;
 } DirectionFrameData;
 
-/**
- * @brief Consolidated atlas sprite sheet data for one object layer item.
- *
- * Mirrors the engine's AtlasSpriteSheetModel. Contains the fileId
- * referencing the consolidated atlas PNG stored via the File API,
- * overall atlas dimensions, and per-direction frame metadata arrays
- * used to clip individual animation frames from the single texture.
- *
- * Workflow:
- *  1. Fetch AtlasSpriteSheet doc by metadata.itemKey
- *  2. Extract fileId and frame metadata
- *  3. Fetch atlas PNG binary via GET /api/file/blob/{fileId}
- *  4. Load the single atlas image as a GPU texture
- *  5. On each render frame, use the DirectionFrameData source rects
- */
+/* Atlas sprite sheet of one object-layer item. `file_id` points at the
+ * consolidated atlas PNG in the File API; the per-direction arrays clip the
+ * animation frames out of that one texture. */
 typedef struct {
-    char item_key[MAX_ITEM_ID_LENGTH];     /**< Item identifier (metadata.itemKey) */
-    char file_id[MAX_FILE_ID_LENGTH];      /**< MongoDB ObjectId hex of the atlas PNG file */
-    int atlas_width;                        /**< Total atlas width in pixels */
-    int atlas_height;                       /**< Total atlas height in pixels */
-    int cell_pixel_dim;                     /**< Pixel dimension of each cell */
-    int frame_duration;                     /**< ms per frame (from atlas metadata) */
+    char item_key[MAX_ITEM_ID_LENGTH];
+    char file_id[MAX_FILE_ID_LENGTH];   /* MongoDB ObjectId hex of the PNG */
+    int atlas_width;                    /* pixels */
+    int atlas_height;                   /* pixels */
+    int cell_pixel_dim;                 /* pixel size of one cell */
+    int frame_duration;                 /* ms per frame */
 
-    /* Per-direction frame metadata arrays (DirectionFramesSchema) */
     DirectionFrameData up_idle;
     DirectionFrameData down_idle;
     DirectionFrameData right_idle;
@@ -150,47 +113,22 @@ typedef struct {
     DirectionFrameData none_idle;
 } AtlasSpriteSheetData;
 
-// ============================================================================
-// Render Structure (new: IPFS content identifiers for atlas sprite sheet)
-// ============================================================================
-
-/**
- * @brief IPFS content identifiers for the consolidated atlas sprite sheet.
- *
- *   - cid:         IPFS CID for the consolidated atlas sprite sheet PNG
- *   - metadataCid: IPFS CID for the atlas sprite sheet metadata JSON
- *
- * Frame-level animation data lives on the AtlasSpriteSheetData metadata
- * fetched at runtime.
- */
+/* IPFS content identifiers of the atlas sprite sheet. Frame-level animation
+ * data lives in AtlasSpriteSheetData, fetched at runtime. */
 typedef struct {
-    char cid[MAX_CID_LENGTH];              /**< IPFS CID for the atlas PNG */
-    char metadata_cid[MAX_CID_LENGTH];     /**< IPFS CID for the atlas metadata JSON */
+    char cid[MAX_CID_LENGTH];           /* atlas PNG */
+    char metadata_cid[MAX_CID_LENGTH];  /* atlas metadata JSON */
 } Render;
 
-// ============================================================================
-// Ledger Structure (blockchain protocol metadata)
-// ============================================================================
-
-/**
- * @brief Blockchain protocol metadata linking the visual object-layer
- *        prefab to its economic reality.
- *
- * Corresponds to the LedgerSchema in the ObjectLayer model:
- *   - type:    Token standard or off-chain designation (ERC20, ERC721, OFF_CHAIN)
- *   - address: Solidity smart-contract address (may be empty for OFF_CHAIN)
- */
+/* Blockchain metadata that binds the visual prefab to its economic reality.
+ * `address` is empty for OFF_CHAIN. */
 typedef struct {
-    LedgerType type;                        /**< ERC20, ERC721, or OFF_CHAIN */
-    char address[MAX_ADDRESS_LENGTH];       /**< Solidity contract address */
+    LedgerType type;
+    char address[MAX_ADDRESS_LENGTH];   /* Solidity contract address */
 } Ledger;
 
-// ============================================================================
-// Item Structure
-// ============================================================================
-
-/* Item.type is kept as a string for round-tripping arbitrary engine-side
- * categories; type_kind is the parsed enum for hot-path comparisons. */
+/* Item.type is a string, to round-trip arbitrary engine-side categories;
+ * type_kind is the parsed enum for hot-path comparisons. */
 typedef struct {
     char            id[MAX_ITEM_ID_LENGTH];
     char            type[MAX_TYPE_LENGTH];
@@ -199,19 +137,6 @@ typedef struct {
     bool            activable;
 } Item;
 
-// ============================================================================
-// ObjectLayer Structures
-// ============================================================================
-
-/**
- * @brief Core data payload of an ObjectLayer document.
- *
- * New schema (matches object-layer.model.js):
- *   data.stats  — mechanical attributes
- *   data.item   — human-readable item info
- *   data.ledger — blockchain / economic metadata
- *   data.render — IPFS CIDs for the atlas sprite sheet
- */
 typedef struct {
     Stats stats;
     Item item;
@@ -219,67 +144,27 @@ typedef struct {
     Render render;
 } ObjectLayerData;
 
-/**
- * @brief Top-level ObjectLayer document.
- *
- * The C client only needs a subset of the full Mongoose document.
- */
+/* The subset of the engine ObjectLayer document that the client needs. */
 typedef struct {
     ObjectLayerData data;
-    char sha256[65];    // 64 hex chars + null terminator
+    char sha256[65];    /* 64 hex chars plus the terminator */
 } ObjectLayer;
 
-// ============================================================================
-// Function Prototypes
-// ============================================================================
-
-/**
- * @brief Create a new ObjectLayer with default values
- * @return Pointer to new ObjectLayer, or NULL on allocation failure
- */
+/* Both create functions return NULL on allocation failure. Both free
+ * functions accept NULL. */
 ObjectLayer* create_object_layer(void);
-
-/**
- * @brief Free an ObjectLayer and all its resources
- * @param layer The ObjectLayer to free (may be NULL)
- */
 void free_object_layer(ObjectLayer* layer);
-
-/**
- * @brief Create a new AtlasSpriteSheetData with default (zeroed) values
- * @return Pointer to new AtlasSpriteSheetData, or NULL on allocation failure
- */
 AtlasSpriteSheetData* create_atlas_sprite_sheet_data(void);
-
-/**
- * @brief Free an AtlasSpriteSheetData and all its resources
- * @param data The AtlasSpriteSheetData to free (may be NULL)
- */
 void free_atlas_sprite_sheet_data(AtlasSpriteSheetData* data);
 
-/**
- * @brief Look up the DirectionFrameData for a given direction string.
- *
- * Maps animation state names (e.g. "down_idle", "right_walking",
- * "default_idle") to the corresponding DirectionFrameData inside
- * an AtlasSpriteSheetData struct.
- *
- * @param atlas   The atlas sprite sheet data to search
- * @param dir_str The direction/mode string (e.g. "down_idle")
- * @return Pointer to the matching DirectionFrameData, or NULL if
- *         atlas is NULL or dir_str is unrecognised
- */
+/* Frames for a direction and mode string (e.g. "down_idle"). NULL when the
+ * atlas is NULL or the string is unknown. */
 const DirectionFrameData* atlas_get_direction_frames(
     const AtlasSpriteSheetData* atlas,
     const char* dir_str
 );
 
-/**
- * @brief Parse a LedgerType enum value from a JSON string.
- *
- * @param type_str  The string to parse ("ERC20", "ERC721", "OFF_CHAIN")
- * @return The corresponding LedgerType, defaulting to LEDGER_TYPE_OFF_CHAIN
- */
+/* Parse "ERC20", "ERC721", or "OFF_CHAIN". Unknown values give OFF_CHAIN. */
 LedgerType ledger_type_from_string(const char* type_str);
 
 #endif // OBJECT_LAYER_H
