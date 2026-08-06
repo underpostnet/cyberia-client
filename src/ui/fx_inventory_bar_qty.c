@@ -14,7 +14,6 @@
 /* ── Tuning ─────────────────────────────────────────────────────────────── */
 
 #define FQ_MAX          96      /* tracked items                                */
-#define FQ_TWEEN_RATE   9.0f    /* count-toward-target smoothing (per second)   */
 #define FQ_RELEASE_WAIT 1.6     /* s to wait for a pickup particle before firing */
 #define FQ_HELD_WAIT    4.0     /* s fallback for externally-held changes (the
                                    holder refreshes pending_since while waiting) */
@@ -35,7 +34,7 @@ static const Color FQ_LOSS = { 245,  65,  55, 255 }; /* vivid red   - */
 typedef struct {
     char   item_id[MAX_ITEM_ID_LENGTH];
     int    actual;        /* last known authoritative quantity                  */
-    float  display;       /* tweened badge value                                */
+    float  display;       /* badge value: the pre-change count while held       */
     /* A detected change held until the pickup particle lands (or fallback). */
     bool   pending;
     int    pending_delta; /* accumulated signed change while held               */
@@ -109,6 +108,10 @@ static void release_pending(FqEntry* e) {
                 loot_fx_slot_expend(e->item_id);
         }
     }
+    /* The badge lands with the delivery: the moment the item visibly arrives is
+     * the moment its slot must read the new total, so the count snaps here
+     * rather than rolling toward it afterwards. */
+    e->display = (float)e->actual;
     e->hidden = false;
     e->held = false;
     e->pending = false;
@@ -200,13 +203,6 @@ void fx_inventory_bar_qty_update(float dt) {
         double wait = e->held ? FQ_HELD_WAIT : FQ_RELEASE_WAIT;
         if (e->pending && (s_clock - e->pending_since) > wait) {
             release_pending(e);
-        }
-
-        /* The badge only counts once the change has been released. */
-        if (!e->pending) {
-            float gap = (float)e->actual - e->display;
-            e->display += gap * fminf(1.0f, dt * FQ_TWEEN_RATE);
-            if (fabsf((float)e->actual - e->display) < 0.5f) e->display = (float)e->actual;
         }
 
         if (e->popup_age >= 0.0f) {

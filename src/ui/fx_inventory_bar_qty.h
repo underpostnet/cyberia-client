@@ -8,13 +8,14 @@
  *
  * Watches every inventory item's quantity and, on a change, plays a transition
  * for that slot: a floating green "+N" (gained) or red "-N" (lost) popup with a
- * bold black border (the sum-of-stats capability-value style), and a delayed,
- * gradual count of the badge number toward its new value.
+ * bold black border (the sum-of-stats capability-value style). The badge holds
+ * the pre-change count until the delivery lands, then snaps to the new total —
+ * the arriving item and the number it produces are one event.
  *
  * Presentation-only, driven off g_game_state.full_inventory. Contract:
  *   1. fx_inventory_bar_qty_update(dt) once per frame (detects changes, advances
- *      the count tween and popups);
- *   2. the inventory bar draws each slot's badge with the tweened value from
+ *      the popups);
+ *   2. the inventory bar draws each slot's badge with the held value from
  *      fx_inventory_bar_qty_display(item_id, actual);
  *   3. and calls fx_inventory_bar_qty_draw(slot_rect, item_id) to layer the
  *      +/- popup above that slot. */
@@ -28,7 +29,8 @@ void fx_inventory_bar_qty_update(float dt);
  * pickup animation release on a short fallback timer instead. */
 void fx_inventory_bar_qty_notify_arrival(const char* item_id);
 
-/* Gradually-animated badge value for an item (falls back to `actual`). */
+/* Badge value for an item: the pre-change count while a change is held for its
+ * delivery, `actual` otherwise. */
 int  fx_inventory_bar_qty_display(const char* item_id, int actual);
 
 /* False only while a first-copy slot is held hidden awaiting its pickup
