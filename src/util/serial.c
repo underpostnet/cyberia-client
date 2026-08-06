@@ -131,6 +131,19 @@ cJSON* json_pack_shop_buy(const char* entity_id, const char* item_id, int quanti
     return root;
 }
 
+cJSON* json_pack_craft_item(const char* entity_id, int recipe_index) {
+    cJSON* p;
+    cJSON* root = new_message("craft_item", &p);
+    cJSON_AddStringToObject(p, "entityId", entity_id ? entity_id : "");
+    cJSON_AddNumberToObject(p, "recipeIndex", recipe_index);
+    return root;
+}
+
+cJSON* json_pack_craft_cancel(void) {
+    cJSON* p;
+    return new_message("craft_cancel", &p);
+}
+
 /* ============================================================================
  * Read helpers
  * ============================================================================ */

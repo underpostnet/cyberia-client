@@ -42,6 +42,45 @@ void modal_notification_show_picker(const char* title, const char* message, Colo
                                     const char* price_item_id, int price_quantity,
                                     ModalNotificationConfirmFn on_confirm);
 
+/* One line of a result set: what is produced and how much of it. */
+typedef struct {
+    const char* item_id;
+    int         quantity;
+} ModalNotificationItem;
+
+/* Cancellation callback for an assembly the player aborted mid-progress. */
+typedef void (*ModalNotificationCancelFn)(void);
+
+/* Assemble mode: a timed synthesis. The card stacks the consumed inputs over a
+ * progress bar charging for `craft_seconds` over the produced outputs, with
+ * fx_assemble's electric field converging on it, and a Cancel that aborts
+ * before it completes.
+ *
+ * The inputs are consumed the moment the bar starts, so their inventory loss FX
+ * releases right away; when the bar fills they spray out of their card slots
+ * while the outputs fly from theirs into the inventory. */
+typedef struct {
+    const char*                  title;
+    const char*                  message;
+    Color                        accent;
+    const ModalNotificationItem* inputs;
+    int                          input_count;
+    const ModalNotificationItem* outputs;
+    int                          output_count;
+    float                        craft_seconds;
+    ModalNotificationCancelFn    on_cancel;
+} ModalNotificationAssemble;
+
+void modal_notification_show_assemble(const ModalNotificationAssemble* assemble);
+
+/* Adopt the server's authoritative assembly duration once craft_ack lands.
+ * Ignored when no assembly is running. */
+void modal_notification_set_assemble_duration(float craft_seconds);
+
+/* Abort a running assembly from outside (a rejected craft_ack). Closes the card
+ * without calling the cancel callback — the server already knows. */
+void modal_notification_abort_assemble(void);
+
 void modal_notification_update(float dt);
 void modal_notification_draw(void);
 

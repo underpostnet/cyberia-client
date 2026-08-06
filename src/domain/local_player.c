@@ -78,15 +78,24 @@ void local_player_request_dialogue_start(const char* entity_id, const char* item
     arm_freeze_watchdog("dialogue");
 }
 
+/* Disarm the watchdog only while it still belongs to the dialogue. A caller
+ * that re-bridged to another modal a moment earlier (modal_dialogue hands the
+ * freeze back to "interact" before emitting the dlg frame) owns the watchdog
+ * now, and clearing it here would silently disable local_player_keep_freeze
+ * for the rest of that session. */
+static void release_dialogue_watchdog(void) {
+    if (0 == strcmp(g_local.freeze_reason, "dialogue")) g_local.freeze_pending = false;
+}
+
 void local_player_request_dialogue_complete(const char* entity_id, const char* item_id,
                                             const char* dialog_code) {
     network_send(json_pack_dialog_complete(entity_id, item_id, dialog_code));
-    g_local.freeze_pending = false;
+    release_dialogue_watchdog();
 }
 
 void local_player_request_dialogue_cancel(const char* entity_id, const char* item_id) {
     network_send(json_pack_dialog_cancel(entity_id, item_id));
-    g_local.freeze_pending = false;
+    release_dialogue_watchdog();
 }
 
 void local_player_request_quest_abandon(const char* quest_code) {
@@ -102,6 +111,14 @@ void local_player_request_shop_buy(const char* entity_id, const char* item_id,
     if (quantity < 1) quantity = 1;
     if (quantity > 255) quantity = 255;
     network_send(json_pack_shop_buy(entity_id, item_id, quantity));
+}
+
+void local_player_request_craft(const char* entity_id, int recipe_index) {
+    network_send(json_pack_craft_item(entity_id, recipe_index));
+}
+
+void local_player_request_craft_cancel(void) {
+    network_send(json_pack_craft_cancel());
 }
 
 void local_player_on_tick(void) {

@@ -71,6 +71,13 @@ void  local_player_request_quest_accept(const char* entity_id, const char* quest
 void  local_player_request_shop_buy(const char* entity_id, const char* item_id,
                                     int quantity);
 
+/* Assemble an assembler entity's recipe. The server validates the ingredients
+ * against the player's inventory and replies with a craft_ack. */
+void  local_player_request_craft(const char* entity_id, int recipe_index);
+
+/* Abort the running assembly — the server refunds its ingredients. */
+void  local_player_request_craft_cancel(void);
+
 /* Advance the freeze watchdog; call once per render frame. */
 void  local_player_on_tick(void);
 

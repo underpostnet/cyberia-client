@@ -672,6 +672,27 @@ static void json_unpack_shop_ack(const cJSON* payload) {
                             (Color){ 210, 120, 110, 255 });
 }
 
+/* craft_ack answers the start of an assembly. Accepted: the assembly modal
+ * adopts the server's authoritative duration so its progress bar tracks the
+ * real timer rather than the cached recipe. Rejected: the modal is torn down
+ * and the reason surfaced, since nothing was consumed. */
+static void json_unpack_craft_ack(const cJSON* payload) {
+    if (serial_get_bool_default(payload, "ok", false)) {
+        modal_notification_set_assemble_duration(
+            (float)serial_get_int_default(payload, "craftTimeMs", 0) / 1000.0f);
+        return;
+    }
+
+    char reason[64] = {0};
+    serial_get_string(payload, "reason", reason, sizeof(reason));
+    modal_notification_abort_assemble();
+    modal_notification_show("Synthesis failed",
+                            0 == strcmp(reason, "missing_ingredients") ? "Missing components."
+                            : 0 == strcmp(reason, "already_assembling") ? "Already assembling."
+                            : "The assembler rejected the schematic.",
+                            (Color){ 210, 120, 110, 255 });
+}
+
 /* dialog_ack is notify-only: it updates the local quest_progress_store from the
  * affected quest entries the server attached. questGranted / objectivesDone gate
  * an optional notification; no simulation state is touched here. */
@@ -765,6 +786,7 @@ void message_receive(const uint8_t* data, size_t len) {
     else if (0 == strcmp(type, "chat"))            json_unpack_chat(payload);
     else if (0 == strcmp(type, "dialog_ack"))      json_unpack_dialog_ack(payload);
     else if (0 == strcmp(type, "shop_ack"))        json_unpack_shop_ack(payload);
+    else if (0 == strcmp(type, "craft_ack"))       json_unpack_craft_ack(payload);
     else LOG_ERROR("[MESSAGE] unknown type '%s'\n", type);
 
     cJSON_Delete(root);

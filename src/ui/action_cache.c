@@ -48,6 +48,23 @@ const ActionMetadataEntry* action_cache_get(const char* code) {
     return find_by_code(code);
 }
 
+/* Read one side of a recipe ({itemId, qty} rows) into `out`; returns the count. */
+static int ingest_craft_items(const cJSON* arr, ActionCraftItem* out) {
+    if (!cJSON_IsArray(arr)) return 0;
+    int count = 0;
+    const cJSON* row = NULL;
+    cJSON_ArrayForEach(row, arr) {
+        if (count >= ACTION_CACHE_CRAFT_ITEMS_MAX) break;
+        const cJSON* item = cJSON_GetObjectItemCaseSensitive(row, "itemId");
+        if (!cJSON_IsString(item)) continue;
+        const cJSON* qty = cJSON_GetObjectItemCaseSensitive(row, "qty");
+        copy_str(out[count].item_id, ACTION_CACHE_CODE_MAX, item->valuestring);
+        out[count].qty = cJSON_IsNumber(qty) ? qty->valueint : 1;
+        count++;
+    }
+    return count;
+}
+
 static void ingest_doc(ActionMetadataEntry* e, const cJSON* doc) {
     const cJSON* label = cJSON_GetObjectItemCaseSensitive(doc, "label");
     if (cJSON_IsString(label)) copy_str(e->label, ACTION_CACHE_LABEL_MAX, label->valuestring);
@@ -99,6 +116,26 @@ static void ingest_doc(ActionMetadataEntry* e, const cJSON* doc) {
                      cJSON_IsString(price_item) ? price_item->valuestring : "coin");
             slot->price_qty = cJSON_IsNumber(price_qty) ? price_qty->valueint : 1;
             e->shop_count++;
+        }
+    }
+
+    /* craftRecipes[] is the assembler recipe book. A non-empty list is what
+     * makes the entity a fabrication terminal — there is no action type flag. */
+    e->craft_count = 0;
+    const cJSON* recipes = cJSON_GetObjectItemCaseSensitive(doc, "craftRecipes");
+    if (cJSON_IsArray(recipes)) {
+        const cJSON* r = NULL;
+        cJSON_ArrayForEach(r, recipes) {
+            if (e->craft_count >= ACTION_CACHE_CRAFT_MAX) break;
+            ActionCraftRecipe* slot = &e->craft_recipes[e->craft_count];
+            slot->output_count = ingest_craft_items(cJSON_GetObjectItemCaseSensitive(r, "outputItems"),
+                                                    slot->outputs);
+            slot->ingredient_count = ingest_craft_items(cJSON_GetObjectItemCaseSensitive(r, "ingredients"),
+                                                        slot->ingredients);
+            const cJSON* ms = cJSON_GetObjectItemCaseSensitive(r, "craftTimeMs");
+            slot->craft_time_ms = cJSON_IsNumber(ms) ? ms->valueint : 0;
+            /* A recipe with nothing to produce is not offerable. */
+            if (slot->output_count > 0) e->craft_count++;
         }
     }
 }

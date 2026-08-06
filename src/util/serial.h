@@ -65,6 +65,14 @@ cJSON* json_pack_quest_accept(const char* entity_id, const char* quest_code);
 cJSON* json_pack_shop_buy(const char* entity_id, const char* item_id,
                           int quantity);
 
+/* Assemble the assembler recipe at `recipe_index`. The server owns the recipe
+ * book and the ingredient check; the client only names the terminal and which
+ * of its recipes the player triggered. */
+cJSON* json_pack_craft_item(const char* entity_id, int recipe_index);
+
+/* Abort the running assembly. The server refunds its ingredients. */
+cJSON* json_pack_craft_cancel(void);
+
 /* ── Read helpers ───────────────────────────────────────────────────── */
 
 /* Copy a string field into out. Returns 0 on success, -1 if the field is

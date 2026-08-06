@@ -8,6 +8,8 @@
 #include "ui/dev_ui.h"
 #include "ui/floating_combat_text.h"
 #include "ui/interaction_bubble.h"
+#include "ui/fx_assemble.h"
+#include "ui/fx_grant_delivery.h"
 #include "ui/loot_fx.h"
 #include "ui/fx_reward.h"
 #include "ui/hud_minimap_overlay.h"
@@ -69,6 +71,8 @@ void render_init(int width, int height) {
 
     fx_tap_init();
     loot_fx_reset();
+    fx_grant_delivery_init();
+    fx_assemble_init();
     fx_reward_init();
     camera_init(width, height);
 }
@@ -84,12 +88,16 @@ void render_on_tick(float delta_time) {
     fx_tap_update(delta_time);
 
     inventory_bar_update(delta_time);
+    /* After the bar refreshed its quantity FX, so a landed grant is visible to
+     * the sequence on the same frame it arrives. */
+    fx_grant_delivery_update(delta_time);
     if (inventory_modal_is_open())  inventory_modal_update(delta_time);
     if (modal_dialogue_is_open())   modal_dialogue_update(delta_time);
     if (modal_interact_is_open())   modal_interact_update(delta_time);
     quest_journal_update(delta_time);
     modal_notification_update(delta_time);
     fx_reward_update(delta_time);
+    fx_assemble_update(delta_time);
 
     interaction_bubble_update();
     dev_ui_on_tick(delta_time);

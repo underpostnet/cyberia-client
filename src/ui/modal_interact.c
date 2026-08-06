@@ -3,6 +3,7 @@
 
 #include "action_cache.h"
 #include "dialogue_data.h"
+#include "fx_grant_delivery.h"
 #include "domain/local_player.h"
 #include "domain/viewport.h"
 #include "game_state.h"
@@ -33,10 +34,10 @@
 
 /* ── Tabs ─────────────────────────────────────────────────────────────── */
 
-enum { MI_TAB_STACK = 0, MI_TAB_STATS, MI_TAB_QUEST, MI_TAB_SHOP, MI_TAB_COUNT };
+enum { MI_TAB_STACK = 0, MI_TAB_STATS, MI_TAB_QUEST, MI_TAB_SHOP, MI_TAB_CRAFT, MI_TAB_COUNT };
 
-static const char* MI_TAB_ICON[MI_TAB_COUNT]  = { "stack", "stats", "quest", "home-red" };
-static const char* MI_TAB_LABEL[MI_TAB_COUNT] = { "Stack", "Stats", "Quest", "Shop" };
+static const char* MI_TAB_ICON[MI_TAB_COUNT]  = { "stack", "stats", "quest", "home-red", "engine" };
+static const char* MI_TAB_LABEL[MI_TAB_COUNT] = { "Stack", "Stats", "Quest", "Shop", "Assembly" };
 
 /* ── Module state ─────────────────────────────────────────────────────── */
 
@@ -124,6 +125,22 @@ static float     s_shop_content_height = 0.0f;
  * cyberia-server/game/shop.go, which clamps the request authoritatively. */
 #define MI_SHOP_QTY_MAX 10
 
+/* Assembly tab: one card per recipe, each with an Assemble control. Rects are
+ * captured during the draw so the click handler hit-tests the same layout.
+ * `ready` mirrors the server's ingredient check for affordance only. */
+static Rectangle s_craft_btn[ACTION_CACHE_CRAFT_MAX];
+static Rectangle s_craft_in_slot[ACTION_CACHE_CRAFT_MAX][ACTION_CACHE_CRAFT_ITEMS_MAX];
+static Rectangle s_craft_out_slot[ACTION_CACHE_CRAFT_MAX][ACTION_CACHE_CRAFT_ITEMS_MAX];
+static bool      s_craft_ready[ACTION_CACHE_CRAFT_MAX];
+static int       s_craft_card_count = 0;
+static UIScroll  s_craft_scroll;
+static float     s_craft_content_height = 0.0f;
+
+/* Synthesis flash on the card that was triggered: -1 when idle. */
+static int   s_craft_flash_slot = -1;
+static float s_craft_flash_age = 0.0f;
+#define MI_CRAFT_FLASH_DURATION 0.55f
+
 /* Reward icon hit-boxes captured across all visible cards during the draw, so
  * the click handler can open the same read-only inspection the stack tab uses. */
 static Rectangle        s_reward_rects[MI_QUEST_MAX * MI_REWARD_SLOT_MAX];
@@ -144,6 +161,7 @@ static bool  s_overlay_open = false;
 
 static void handle_quest_click(int mx, int my);
 static void handle_shop_click(int mx, int my);
+static void handle_craft_click(int mx, int my);
 
 /* ─────────────────────────────────────────────────────────────────────────
  *  EPHEMERAL SESSION DATA — survives navigating away to inspection modals
@@ -325,6 +343,12 @@ static bool shop_tab_visible(void) {
     return am && am->shop_count > 0;
 }
 
+/* Assembly shows only for an action carrying a non-empty recipe book. */
+static bool craft_tab_visible(void) {
+    const ActionMetadataEntry* am = action_metadata();
+    return am && am->craft_count > 0;
+}
+
 /* Re-read the per-player bot capability snapshot (pending quest-talks, quest
  * codes, interaction flags) from live AOI so the quest-talk buttons and quest
  * tab track server events without a modal reopen. Keeps the last snapshot when
@@ -382,19 +406,21 @@ static bool refresh_bot_snapshot(void) {
 }
 
 /* Fill `out` with the visible tab IDs in strip order; returns the count.
- * Capability tabs lead the row, Shop first: a vendor's catalog is what the
- * player came for, so it also becomes the tab the modal opens on. */
+ * Capability tabs lead the row — a terminal's catalog or recipe book is what
+ * the player came for, so the first one also becomes the tab the modal opens
+ * on. */
 static int visible_tabs(int out[MI_TAB_COUNT]) {
     int n = 0;
     if (shop_tab_visible())   out[n++] = MI_TAB_SHOP;
+    if (craft_tab_visible())  out[n++] = MI_TAB_CRAFT;
     if (quest_tab_visible())  out[n++] = MI_TAB_QUEST;
     out[n++] = MI_TAB_STACK;
     out[n++] = MI_TAB_STATS;
     return n;
 }
 
-/* Leading tab for the entity's current capabilities — Shop, else Quest, else
- * the always-present Stack. */
+/* Leading tab for the entity's current capabilities — Shop, else Assembly,
+ * else Quest, else the always-present Stack. */
 static int leading_tab(void) {
     int tabs[MI_TAB_COUNT];
     visible_tabs(tabs);
@@ -689,6 +715,10 @@ void modal_interact_init(void) {
     ui_scroll_reset(&s_shop_scroll);
     s_shop_content_height = 0.0f;
     s_shop_card_count = 0;
+    ui_scroll_reset(&s_craft_scroll);
+    s_craft_content_height = 0.0f;
+    s_craft_card_count = 0;
+    s_craft_flash_slot = -1;
     s_tab_age = MODAL_POP_DURATION;
     s_tab_picked = false;
     s_q_expanded = -1;
@@ -739,6 +769,10 @@ void modal_interact_open(const char* entity_id, const char* display_name,
     ui_scroll_reset(&s_shop_scroll);
     s_shop_content_height = 0.0f;
     s_shop_card_count = 0;
+    ui_scroll_reset(&s_craft_scroll);
+    s_craft_content_height = 0.0f;
+    s_craft_card_count = 0;
+    s_craft_flash_slot = -1;
     s_q_expanded = -1;
     s_q_expand_age = MODAL_POP_DURATION;
     s_dlg_collapse_t = 0.0f;
@@ -828,6 +862,10 @@ bool modal_interact_handle_wheel(float wheel_delta) {
         return ui_scroll_on_wheel(&s_shop_scroll, content_rect(card_rect()),
                                   s_shop_content_height, wheel_delta);
     }
+    if (s_tab == MI_TAB_CRAFT) {
+        return ui_scroll_on_wheel(&s_craft_scroll, content_rect(card_rect()),
+                                  s_craft_content_height, wheel_delta);
+    }
     return false;
 }
 
@@ -888,6 +926,10 @@ void modal_interact_update(float dt) {
         s_tab_age += dt;
         if (s_tab_age > MODAL_POP_DURATION) s_tab_age = MODAL_POP_DURATION;
     }
+    if (s_craft_flash_slot >= 0) {
+        s_craft_flash_age += dt;
+        if (s_craft_flash_age >= MI_CRAFT_FLASH_DURATION) s_craft_flash_slot = -1;
+    }
 
     /* Content taps are answered on release by the tab's scroll gesture, and
      * only once its pop-in has settled so a tap never lands on moving cards. */
@@ -909,6 +951,12 @@ void modal_interact_update(float dt) {
         ui_scroll_update(&s_shop_scroll, content_rect(card_rect()), s_shop_content_height, dt);
         if (ui_scroll_take_click(&s_shop_scroll, &click_x, &click_y) && content_ready) {
             handle_shop_click(click_x, click_y);
+            if (!s_open) return;
+        }
+    } else if (s_tab == MI_TAB_CRAFT) {
+        ui_scroll_update(&s_craft_scroll, content_rect(card_rect()), s_craft_content_height, dt);
+        if (ui_scroll_take_click(&s_craft_scroll, &click_x, &click_y) && content_ready) {
+            handle_craft_click(click_x, click_y);
             if (!s_open) return;
         }
     }
@@ -1777,6 +1825,242 @@ static void handle_shop_click(int mx, int my) {
     }
 }
 
+
+/* ── Assembly tab: the recipe book carried by the entity's action ──────── */
+
+/* An assembler card stacks what the synthesis consumes over what it produces,
+ * with a downward arrow marking the transformation, then a full-width Assemble
+ * control. Every slot in either stack opens the read-only item inspection. */
+#define MI_CRAFT_ARROW 22.0f
+
+static inline float mi_craft_slot_max(void) { return viewport_is_mobile() ? 46.0f : 60.0f; }
+
+/* Slots shrink to fit the widest of the two stacks, so both rows stay aligned
+ * on the same pitch however lopsided a recipe is. */
+static float craft_slot_size(const ActionCraftRecipe* recipe, float card_width) {
+    int widest = recipe->ingredient_count > recipe->output_count ? recipe->ingredient_count
+                                                                : recipe->output_count;
+    if (widest < 1) widest = 1;
+    float fit = ((card_width - 2.0f * MI_CARD_PAD) - (float)(widest - 1) * MI_CARD_ACTION_GAP)
+                / (float)widest;
+    float max = mi_craft_slot_max();
+    return fit < max ? fit : max;
+}
+
+static float craft_card_height(const ActionCraftRecipe* recipe, float card_width) {
+    float slot = craft_slot_size(recipe, card_width);
+    return MI_CARD_PAD + slot + MI_CARD_ICON_GAP + MI_CRAFT_ARROW + MI_CARD_ICON_GAP + slot +
+           MI_CARD_ACTION_GAP + mi_shop_buy_h() + MI_CARD_PAD;
+}
+
+/* Every ingredient present in the required amount. Mirrors the server's
+ * all-or-nothing check; the simulation remains the authority. */
+static bool craft_recipe_ready(const ActionCraftRecipe* recipe) {
+    for (int i = 0; i < recipe->ingredient_count; i++) {
+        const ActionCraftItem* in = &recipe->ingredients[i];
+        if (in->qty > 0 && game_state_item_quantity(in->item_id) < in->qty) return false;
+    }
+    return true;
+}
+
+/* One centred stack of slots, each badged with its quantity. Inputs the player
+ * is short of are dimmed and red-framed; outputs always read as available.
+ * Captures each rect into `rects` for the click handler. */
+static void draw_craft_stack(Rectangle card, float top, float slot_sz,
+                             const ActionCraftItem* items, int count, bool check_held,
+                             Rectangle* rects, ObjectLayersManager* olm) {
+    float row_w = (float)count * slot_sz + (float)(count - 1) * MI_CARD_ACTION_GAP;
+    float x = card.x + (card.width - row_w) * 0.5f;
+    for (int i = 0; i < count; i++) {
+        const ActionCraftItem* it = &items[i];
+        bool held = !check_held || it->qty <= 0 ||
+                    game_state_item_quantity(it->item_id) >= it->qty;
+
+        ObjectLayerState ols = { 0 };
+        strncpy(ols.item_id, it->item_id, MAX_ID_LENGTH - 1);
+        ols.active = held;
+        ols.quantity = it->qty;
+        Rectangle slot = { x, top, slot_sz, slot_sz };
+        item_slot_draw_ex(slot, &ols, olm, (Color){ 210, 120, 110, 255 }, held ? 0.0f : 0.45f, held);
+        if (!held) DrawRectangleLinesEx(slot, 2.0f, (Color){ 210, 120, 110, 235 });
+        rects[i] = slot;
+        x += slot_sz + MI_CARD_ACTION_GAP;
+    }
+}
+
+/* One recipe card. `ready` illuminates the frame and arms Assemble; a missing
+ * ingredient greys the control and reddens the accent. `flash` is the 0..1
+ * synthesis pulse played on the card the player just triggered. */
+static void draw_craft_card(Rectangle card, const ActionCraftRecipe* recipe, int slot,
+                            bool ready, float flash, int mx, int my) {
+    ObjectLayersManager* olm = obj_layers_mgr_get();
+    bool hovered = ui_button_hit(card, mx, my);
+    Rectangle inner = { card.x + 2.0f, card.y + 2.0f, card.width - 4.0f, card.height - 4.0f };
+    Color accent = ready ? (Color){ 120, 200, 140, 235 } : (Color){ 210, 120, 110, 230 };
+    /* The synthesis pulse washes the whole card toward the accent, so the
+     * confirmation reads before the item has left for the inventory. */
+    unsigned char glow = (unsigned char)(90.0f * flash);
+
+    DrawRectangleRec(card, BLACK);
+    DrawRectangleRec(inner, hovered ? (Color){ 35, 48, 72, 255 } : (Color){ 24, 32, 50, 255 });
+    if (flash > 0.0f) DrawRectangleRec(inner, (Color){ accent.r, accent.g, accent.b, glow });
+    DrawRectangle((int)inner.x, (int)inner.y, (int)inner.width, 2,
+                  hovered ? (Color){ 86, 112, 152, 255 } : (Color){ 58, 78, 110, 255 });
+    DrawRectangle((int)inner.x, (int)(inner.y + inner.height - 2.0f), (int)inner.width, 2,
+                  (Color){ 8, 12, 22, 255 });
+    DrawRectangle((int)inner.x, (int)inner.y, 3, (int)inner.height, accent);
+    if (hovered || flash > 0.0f) DrawRectangleLinesEx(inner, 1.0f, WHITE);
+
+    float slot_sz = craft_slot_size(recipe, card.width);
+    float y = card.y + MI_CARD_PAD;
+    draw_craft_stack(card, y, slot_sz, recipe->ingredients, recipe->ingredient_count, true,
+                     s_craft_in_slot[slot], olm);
+    y += slot_sz + MI_CARD_ICON_GAP;
+
+    ui_icon_draw("arrow-down", card.x + card.width * 0.5f, y + MI_CRAFT_ARROW * 0.5f,
+                 (int)MI_CRAFT_ARROW, false, 0.0f);
+    y += MI_CRAFT_ARROW + MI_CARD_ICON_GAP;
+
+    draw_craft_stack(card, y, slot_sz, recipe->outputs, recipe->output_count, false,
+                     s_craft_out_slot[slot], olm);
+
+    Rectangle btn = { card.x + MI_CARD_PAD, card.y + card.height - MI_CARD_PAD - mi_shop_buy_h(),
+                      card.width - 2.0f * MI_CARD_PAD, mi_shop_buy_h() };
+    s_craft_btn[slot] = btn;
+    UIButtonPixelRetroStyle btn_st = {
+        .bg = ready ? (Color){ 38, 138, 76, 255 } : (Color){ 58, 62, 76, 255 },
+        .icon_id = "engine",
+        .label = "Assemble",
+        .font_size = viewport_is_mobile() ? 13 : mi_font_btn(),
+        .text_color = ready ? C_TEXT : C_TAB_DIM,
+        .enabled = ready,
+    };
+    ui_button_pixel_retro_draw(btn, &btn_st, ready && ui_button_hit(btn, mx, my));
+}
+
+static void draw_craft_tab(Rectangle content, int mx, int my) {
+    const ActionMetadataEntry* am = action_metadata();
+    s_craft_card_count = 0;
+
+    float content_y = content.y - ui_scroll_offset(&s_craft_scroll);
+    float y = content_y + 4.0f;
+    ui_scroll_begin(&s_craft_scroll);
+    if (!am || 0 == am->craft_count) {
+        DrawText("This terminal has no schematics.", (int)content.x, (int)y,
+                 mi_font_quest(), C_LABEL);
+        s_craft_content_height = y - content_y + mi_font_quest() + 4.0f;
+        ui_scroll_end(&s_craft_scroll);
+        return;
+    }
+
+    float column_width = (content.width - MI_CARD_GAP) * 0.5f;
+    s_craft_card_count = am->craft_count < ACTION_CACHE_CRAFT_MAX ? am->craft_count
+                                                                 : ACTION_CACHE_CRAFT_MAX;
+    for (int first = 0; first < s_craft_card_count; first += 2) {
+        float row_height = craft_card_height(&am->craft_recipes[first], column_width);
+        bool has_right = first + 1 < s_craft_card_count;
+        if (has_right) {
+            float right_height = craft_card_height(&am->craft_recipes[first + 1], column_width);
+            if (right_height > row_height) row_height = right_height;
+        }
+
+        for (int col = 0; col < 2; col++) {
+            int i = first + col;
+            if (i >= s_craft_card_count) break;
+            s_craft_ready[i] = craft_recipe_ready(&am->craft_recipes[i]);
+            float flash = (i == s_craft_flash_slot)
+                        ? 1.0f - s_craft_flash_age / MI_CRAFT_FLASH_DURATION : 0.0f;
+            Rectangle card = { content.x + (float)col * (column_width + MI_CARD_GAP), y,
+                               column_width, row_height };
+            draw_craft_card(card, &am->craft_recipes[i], i, s_craft_ready[i], flash, mx, my);
+        }
+
+        y += row_height;
+        if (first + 2 < s_craft_card_count) y += MI_CARD_GAP;
+    }
+    y += 4.0f;
+
+    s_craft_content_height = y - content_y + 4.0f;
+    ui_scroll_end(&s_craft_scroll);
+}
+
+static void cancel_craft(void) {
+    local_player_request_craft_cancel();
+}
+
+/* Assemble hands the synthesis to the server, flashes the card, and opens the
+ * assembly notification: its progress bar charges over the recipe's duration
+ * while the consumed ingredients drain from the inventory, and the outputs fly
+ * in only once the bar fills and the grant lands. */
+static void request_craft(int slot, const ActionCraftRecipe* recipe) {
+    ModalNotificationItem outputs[ACTION_CACHE_CRAFT_ITEMS_MAX];
+    for (int i = 0; i < recipe->output_count; i++) {
+        outputs[i].item_id  = recipe->outputs[i].item_id;
+        outputs[i].quantity = recipe->outputs[i].qty;
+    }
+    ModalNotificationItem inputs[ACTION_CACHE_CRAFT_ITEMS_MAX];
+    int input_count = 0;
+    for (int i = 0; i < recipe->ingredient_count; i++) {
+        if (recipe->ingredients[i].qty <= 0) continue;
+        inputs[input_count].item_id  = recipe->ingredients[i].item_id;
+        inputs[input_count].quantity = recipe->ingredients[i].qty;
+        input_count++;
+    }
+
+    ModalNotificationAssemble assemble = {
+        .title = "Assembling",
+        .message = "Synthesizing components",
+        .accent = (Color){ 120, 200, 140, 255 },
+        .inputs = inputs,
+        .input_count = input_count,
+        .outputs = outputs,
+        .output_count = recipe->output_count,
+        .craft_seconds = (float)recipe->craft_time_ms / 1000.0f,
+        .on_cancel = cancel_craft,
+    };
+    modal_notification_show_assemble(&assemble);
+
+    s_craft_flash_slot = slot;
+    s_craft_flash_age = 0.0f;
+    local_player_request_craft(s_entity_id, slot);
+}
+
+/* Open the read-only item inspection the stack tab uses, so a player can read
+ * what a schematic consumes or yields before running it. */
+static void inspect_craft_item(const ActionCraftItem* item) {
+    ObjectLayerState ols = { 0 };
+    strncpy(ols.item_id, item->item_id, MAX_ID_LENGTH - 1);
+    ols.quantity = item->qty;
+    es_push();
+    modal_interact_close();
+    inventory_modal_open_external(&ols);
+    inventory_modal_set_on_close(modal_interact_reopen);
+}
+
+static void handle_craft_click(int mx, int my) {
+    const ActionMetadataEntry* am = action_metadata();
+    if (!am) return;
+    for (int i = 0; i < s_craft_card_count && i < am->craft_count; i++) {
+        const ActionCraftRecipe* recipe = &am->craft_recipes[i];
+        if (s_craft_ready[i] && ui_button_hit(s_craft_btn[i], mx, my)) {
+            request_craft(i, recipe);
+            return;
+        }
+        for (int k = 0; k < recipe->ingredient_count; k++) {
+            if (item_slot_hit(s_craft_in_slot[i][k], mx, my)) {
+                inspect_craft_item(&recipe->ingredients[k]);
+                return;
+            }
+        }
+        for (int k = 0; k < recipe->output_count; k++) {
+            if (item_slot_hit(s_craft_out_slot[i][k], mx, my)) {
+                inspect_craft_item(&recipe->outputs[k]);
+                return;
+            }
+        }
+    }
+}
+
 /* ── Draw ─────────────────────────────────────────────────────────────── */
 
 void modal_interact_draw(void) {
@@ -1864,6 +2148,7 @@ void modal_interact_draw(void) {
     else if (s_tab == MI_TAB_STATS)  draw_stats_tab(tab_content);
     else if (s_tab == MI_TAB_QUEST)  draw_quest_tab(tab_content, mx, my);
     else if (s_tab == MI_TAB_SHOP)   draw_shop_tab(tab_content, mx, my);
+    else if (s_tab == MI_TAB_CRAFT)  draw_craft_tab(tab_content, mx, my);
 
     /* Fade the new content up by lifting a panel-coloured veil off it —
      * raylib has no global alpha, and a veil costs one rect instead of a
@@ -2007,6 +2292,12 @@ bool modal_interact_handle_click(int mx, int my) {
     if (s_tab == MI_TAB_SHOP &&
         CheckCollisionPointRec((Vector2){ (float)mx, (float)my }, content)) {
         ui_scroll_on_press(&s_shop_scroll, mx, my);
+        return true;
+    }
+
+    if (s_tab == MI_TAB_CRAFT &&
+        CheckCollisionPointRec((Vector2){ (float)mx, (float)my }, content)) {
+        ui_scroll_on_press(&s_craft_scroll, mx, my);
         return true;
     }
 
