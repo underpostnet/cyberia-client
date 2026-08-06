@@ -65,14 +65,11 @@
 #define MN_REWARD_POP_DUR  0.45f
 #define MN_REWARD_TINT_DUR  0.90f
 
-/* Quantity stepper (picker entries only): ◀ / ▶ around a "x" and the live
- * count, sitting between the item slot and the confirm button, with the
- * running total priced beneath the message. */
-#define MN_STEP_H      40
+/* Quantity stepper (picker entries only): − / + flanking the item slot, whose
+ * own quantity badge is the count, with the running total priced under it. */
 #define MN_STEP_BTN    40
-#define MN_STEP_FONT   22
+#define MN_STEP_FONT   24
 #define MN_STEP_GAP    12
-#define MN_STEP_HASH   "x"
 #define MN_TOTAL_ICON  22
 #define MN_TOTAL_FONT  17
 #define MN_BTN_GAP     10
@@ -337,14 +334,11 @@ static float notif_content_height(void) {
     if (s_message[0] != '\0') {
         h += MN_GAP + (float)text_wrap(s_message, 0, 0, iw, MN_FONT_BODY, C_BODY, true, false);
     }
-    if (notif_has_picker()) {
-        h += MN_GAP + MN_TOTAL_ICON; /* running total, right under the message */
-    }
     if (s_reward_item[0] != '\0') {
         h += MN_GAP + MN_SLOT;
     }
     if (notif_has_picker()) {
-        h += MN_GAP + MN_STEP_H;
+        h += MN_GAP + MN_TOTAL_ICON; /* running total, right under the slot */
     }
     h += MN_GAP + MN_OK_H + MN_BOT;
     return h;
@@ -377,20 +371,8 @@ static Rectangle notif_cancel(Rectangle card) {
                         card.y + card.height - MN_OK_H - 12, MN_OK_W, MN_OK_H };
 }
 
-/* Running total row (picker only): the price sprite and `qty × unit price`,
- * directly under the per-unit message. */
-static Rectangle notif_total_row(Rectangle card) {
-    int iw = notif_inner_w();
-    float cy = card.y + MN_TOP;
-    cy += (float)text_wrap(s_title, 0, 0, iw, MN_FONT_TITLE, C_TITLE, true, false);
-    if (s_message[0] != '\0') {
-        cy += MN_GAP + (float)text_wrap(s_message, 0, 0, iw, MN_FONT_BODY, C_BODY, true, false);
-    }
-    return (Rectangle){ card.x + MN_PAD, cy + MN_GAP, (float)iw, MN_TOTAL_ICON };
-}
-
-/* Resting rect of the reward slot (below title + message + total) — shared by
- * the draw pass and the confirm-press delivery launch. */
+/* Resting rect of the reward slot (below title + message) — shared by the draw
+ * pass and the confirm-press delivery launch. */
 static Rectangle notif_reward_slot(Rectangle card) {
     int iw = notif_inner_w();
     float cy = card.y + MN_TOP;
@@ -398,32 +380,32 @@ static Rectangle notif_reward_slot(Rectangle card) {
     if (s_message[0] != '\0') {
         cy += MN_GAP + (float)text_wrap(s_message, 0, 0, iw, MN_FONT_BODY, C_BODY, true, false);
     }
-    if (notif_has_picker()) cy += MN_GAP + MN_TOTAL_ICON;
     cy += MN_GAP;
     return (Rectangle){ card.x + (card.width - MN_SLOT) / 2.0f, cy, MN_SLOT, MN_SLOT };
 }
 
-/* Stepper row, centred under the item slot: [◀] [wallet] N [▶]. The centre
- * block is measured at the widest count so the arrows never shift as the
- * player steps through the range. */
-static Rectangle notif_step_row(Rectangle card) {
+/* Running total row (picker only): the price sprite and `qty × unit price`,
+ * directly under the item slot. */
+static Rectangle notif_total_row(Rectangle card) {
     Rectangle slot = notif_reward_slot(card);
-    char widest[16];
-    snprintf(widest, sizeof(widest), MN_STEP_HASH "%d", s_qty_max);
-    float centre_w = (float)MeasureText(widest, MN_STEP_FONT);
-    float row_w = 2.0f * (MN_STEP_BTN + MN_STEP_GAP) + centre_w;
-    return (Rectangle){ card.x + (card.width - row_w) * 0.5f,
-                        slot.y + slot.height + MN_GAP, row_w, MN_STEP_H };
+    return (Rectangle){ card.x + MN_PAD, slot.y + slot.height + MN_GAP,
+                        (float)notif_inner_w(), MN_TOTAL_ICON };
 }
 
+/* The − / + steppers flank the slot, vertically centred on it. The slot's own
+ * quantity badge carries the count, so the row needs no separate readout. */
 static Rectangle notif_step_dec(Rectangle card) {
-    Rectangle row = notif_step_row(card);
-    return (Rectangle){ row.x, row.y, MN_STEP_BTN, row.height };
+    Rectangle slot = notif_reward_slot(card);
+    return (Rectangle){ slot.x - MN_STEP_GAP - MN_STEP_BTN,
+                        slot.y + (slot.height - MN_STEP_BTN) * 0.5f,
+                        MN_STEP_BTN, MN_STEP_BTN };
 }
 
 static Rectangle notif_step_inc(Rectangle card) {
-    Rectangle row = notif_step_row(card);
-    return (Rectangle){ row.x + row.width - MN_STEP_BTN, row.y, MN_STEP_BTN, row.height };
+    Rectangle slot = notif_reward_slot(card);
+    return (Rectangle){ slot.x + slot.width + MN_STEP_GAP,
+                        slot.y + (slot.height - MN_STEP_BTN) * 0.5f,
+                        MN_STEP_BTN, MN_STEP_BTN };
 }
 
 /* Clamp and apply a stepper delta; no-op once an end of the range is reached. */
@@ -572,22 +554,6 @@ void modal_notification_draw(void) {
         cy += (float)text_wrap(s_message, ix, (int)cy, iw, MN_FONT_BODY, body, true, true);
     }
 
-    /* Running total — the price item's own sprite beside what this purchase
-     * costs at the selected count, so "10 coin each" always has its sum. */
-    if (notif_has_picker()) {
-        Rectangle row = notif_total_row(card);
-        char total[24];
-        snprintf(total, sizeof(total), "%d", s_price_qty * s_reward_qty);
-        float total_w = MN_TOTAL_ICON + 6.0f + (float)MeasureText(total, MN_TOTAL_FONT);
-        float total_x = row.x + (row.width - total_w) * 0.5f;
-        ol_as_ico_draw(obj_layers_mgr_get(), s_price_item, (int)total_x, (int)row.y,
-                       MN_TOTAL_ICON, OL_ICO_DEFAULT_DIR, 0, Fade(WHITE, a));
-        Color total_c = { 255, 215, 0, (unsigned char)(230.0f * a) };
-        DrawText(total, (int)(total_x + MN_TOTAL_ICON + 6.0f),
-                 (int)(row.y + (MN_TOTAL_ICON - (float)text_line_height(MN_TOTAL_FONT)) * 0.5f),
-                 MN_TOTAL_FONT, total_c);
-    }
-
     /* Reward item slot — centred, pops in oversized (soft overshoot) and its
      * color transitions from the notification's accent back to normal as it
      * settles, so a fresh reward reads as a distinct, celebratory arrival.
@@ -621,8 +587,9 @@ void modal_notification_draw(void) {
         }
     }
 
-    /* Quantity stepper — drawn only while the entry is still answerable; once
-     * OK is pressed the choice is locked and the row leaves with the slot. */
+    /* Quantity steppers and running total — drawn only while the entry is
+     * still answerable; once Buy is pressed the choice is locked and they
+     * leave with the slot. */
     if (notif_has_picker() && !s_awaiting_grant && !s_awaiting_delivery && !s_closing) {
         int smx = GetMouseX(), smy = GetMouseY();
         Rectangle dec = notif_step_dec(card);
@@ -630,27 +597,31 @@ void modal_notification_draw(void) {
         bool can_dec = s_reward_qty > s_qty_min;
         bool can_inc = s_reward_qty < s_qty_max;
 
-        /* An arrow at the end of its range is disabled outright — muted fill,
+        /* A stepper at the end of its range is disabled outright — muted fill,
          * no hover response, no click. */
-        UIButtonPixelRetroStyle arrow = { .font_size = MN_FONT_BODY };
-        arrow.icon_id = "arrow-left";
-        arrow.enabled = can_dec;
-        arrow.bg = (Color){ 50, 55, 80, (unsigned char)((can_dec ? 235.0f : 90.0f) * a) };
-        ui_button_pixel_retro_draw(dec, &arrow, can_dec && ui_button_hit(dec, smx, smy));
-        arrow.icon_id = "arrow-right";
-        arrow.enabled = can_inc;
-        arrow.bg = (Color){ 50, 55, 80, (unsigned char)((can_inc ? 235.0f : 90.0f) * a) };
-        ui_button_pixel_retro_draw(inc, &arrow, can_inc && ui_button_hit(inc, smx, smy));
+        UIButtonPixelRetroStyle step = { .font_size = MN_STEP_FONT, .text_color = C_TITLE };
+        step.label = "-";
+        step.enabled = can_dec;
+        step.bg = (Color){ 50, 55, 80, (unsigned char)((can_dec ? 235.0f : 90.0f) * a) };
+        ui_button_pixel_retro_draw(dec, &step, can_dec && ui_button_hit(dec, smx, smy));
+        step.label = "+";
+        step.enabled = can_inc;
+        step.bg = (Color){ 50, 55, 80, (unsigned char)((can_inc ? 235.0f : 90.0f) * a) };
+        ui_button_pixel_retro_draw(inc, &step, can_inc && ui_button_hit(inc, smx, smy));
 
-        Rectangle row = notif_step_row(card);
-        char count[16];
-        snprintf(count, sizeof(count), MN_STEP_HASH "%d", s_reward_qty);
-        Color count_c = C_TITLE;
-        count_c.a = (unsigned char)((float)count_c.a * a);
-        float count_x = row.x + (row.width - (float)MeasureText(count, MN_STEP_FONT)) * 0.5f;
-        DrawText(count, (int)count_x,
-                 (int)(row.y + (row.height - (float)text_line_height(MN_STEP_FONT)) * 0.5f),
-                 MN_STEP_FONT, count_c);
+        /* Running total — the price item's own sprite beside what this purchase
+         * costs at the selected count, so "10 coin each" always has its sum. */
+        Rectangle row = notif_total_row(card);
+        char total[24];
+        snprintf(total, sizeof(total), "%d", s_price_qty * s_reward_qty);
+        float total_w = MN_TOTAL_ICON + 6.0f + (float)MeasureText(total, MN_TOTAL_FONT);
+        float total_x = row.x + (row.width - total_w) * 0.5f;
+        ol_as_ico_draw(obj_layers_mgr_get(), s_price_item, (int)total_x, (int)row.y,
+                       MN_TOTAL_ICON, OL_ICO_DEFAULT_DIR, 0, Fade(WHITE, a));
+        Color total_c = { 255, 215, 0, (unsigned char)(230.0f * a) };
+        DrawText(total, (int)(total_x + MN_TOTAL_ICON + 6.0f),
+                 (int)(row.y + (MN_TOTAL_ICON - (float)text_line_height(MN_TOTAL_FONT)) * 0.5f),
+                 MN_TOTAL_FONT, total_c);
     }
 
     /* Confirm button — bottom centre, pixel-retro style. A picker is answering
