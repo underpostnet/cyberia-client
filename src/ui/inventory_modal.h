@@ -25,9 +25,10 @@ void inventory_modal_open(int inv_idx);
  * any opener chain so the modal becomes a standalone view of the new slot. */
 void inventory_modal_switch_slot(int inv_idx);
 
-/* Read-only inspection of an item the player does not hold (another
- * entity's layer, seen from the interaction modal). No activate or lore
- * control, and no freeze. */
+/* Read-only inspection of an item the player does not hold (another entity's
+ * layer, a shop row, an assembler recipe line). No activate or lore control,
+ * but it takes the same modal freeze as any other open — the player is reading
+ * a panel with the world still running. */
 void inventory_modal_open_external(const ObjectLayerState* ols);
 
 /* One-shot callback fired when the modal closes — lets the opener restore

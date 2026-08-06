@@ -427,7 +427,12 @@ void inventory_modal_open_external(const ObjectLayerState* ols) {
     reset_view_state();
     /* Kick the sprite atlas fetch so the preview is ready promptly. */
     if (s_ol_manager) get_or_fetch_atlas_data(ols->item_id);
-    /* Read-only view — no FrozenInteractionState. */
+    /* Read-only or not, this is a modal the player reads with the world still
+     * running, and inventory_modal_close always releases the matching freeze —
+     * so it has to take one. Openers reach here from another modal that just
+     * dropped its own freeze (a shop, assembler or stack slot), and both frames
+     * land in the same input drain, so no tick passes with the player exposed. */
+    send_freeze(true);
 }
 
 void inventory_modal_set_on_close(InventoryModalOnClose cb) {
