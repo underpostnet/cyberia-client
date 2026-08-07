@@ -26,6 +26,10 @@ void modal_notification_show_reward(const char* title, const char* message, Colo
  * player settled on before pressing OK. */
 typedef void (*ModalNotificationConfirmFn)(const char* item_id, int quantity);
 
+/* Cancellation callback: an assembly the player aborted mid-progress, or a
+ * picker whose "no" means something other than doing nothing. */
+typedef void (*ModalNotificationCancelFn)(void);
+
 /* Like modal_notification_show_reward, plus a ◀ / ▶ quantity stepper between
  * the slot and the buttons, a running total priced in `price_item_id`, and a
  * Cancel / Buy pair in place of the lone OK. `on_confirm` fires on Buy with the
@@ -42,14 +46,23 @@ void modal_notification_show_picker(const char* title, const char* message, Colo
                                     const char* price_item_id, int price_quantity,
                                     ModalNotificationConfirmFn on_confirm);
 
+/* Unpriced quantity picker: how much of a stack the player wants to move.
+ * Unlike show_picker there is nothing to buy and no grant to wait for, so the
+ * card confirms and leaves at once — the opener owns whatever animation
+ * follows. `confirm_label` / `confirm_icon` name the action ("Store", "Take",
+ * "Split"); `on_cancel` may be NULL, and fires when the player declines — the
+ * question can have a meaningful second answer, not only "do nothing". */
+void modal_notification_show_split(const char* title, const char* message, Color accent,
+                                   const char* item_id, int max_quantity,
+                                   const char* confirm_label, const char* confirm_icon,
+                                   ModalNotificationConfirmFn on_confirm,
+                                   ModalNotificationCancelFn on_cancel);
+
 /* One line of a result set: what is produced and how much of it. */
 typedef struct {
     const char* item_id;
     int         quantity;
 } ModalNotificationItem;
-
-/* Cancellation callback for an assembly the player aborted mid-progress. */
-typedef void (*ModalNotificationCancelFn)(void);
 
 /* Assemble mode: a timed synthesis. The card stacks the consumed inputs over a
  * progress bar charging for `craft_seconds` over the produced outputs, with

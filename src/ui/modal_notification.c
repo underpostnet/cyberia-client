@@ -109,6 +109,8 @@ typedef struct {
     int   qty_max;
     char  price_item[64];
     int   price_qty;
+    char  confirm_label[16];
+    char  confirm_icon[24];
     ModalNotificationConfirmFn on_confirm;
     /* Assembly — inactive when craft_seconds is 0. */
     float     craft_seconds;
@@ -136,6 +138,8 @@ static int   s_qty_min = 0;
 static int   s_qty_max = 0;
 static char  s_price_item[64] = {0};
 static int   s_price_qty = 0;
+static char  s_confirm_label[16] = {0};
+static char  s_confirm_icon[24]  = {0};
 static ModalNotificationConfirmFn s_on_confirm = NULL;
 
 /* Active assembly; craft_total 0 means the visible entry is not one. */
@@ -173,6 +177,9 @@ static float s_ok_pulse_age = 0.0f;
 /* ── Mode predicates ──────────────────────────────────────────────────── */
 
 static bool notif_has_picker(void)    { return s_qty_max > 0; }
+/* A priced picker is a purchase: it shows a running total and waits for the
+ * server's grant. An unpriced one is a split of stock already owned. */
+static bool notif_has_price(void)     { return notif_has_picker() && '\0' != s_price_item[0]; }
 static bool notif_is_assembling(void) { return s_craft_total > 0.0f; }
 
 /* ── Queue ────────────────────────────────────────────────────────────── */
@@ -200,6 +207,10 @@ static void show_next(void) {
     strncpy(s_price_item, e->price_item, sizeof(s_price_item) - 1);
     s_price_item[sizeof(s_price_item) - 1] = '\0';
     s_price_qty = e->price_qty;
+    strncpy(s_confirm_label, e->confirm_label, sizeof(s_confirm_label) - 1);
+    s_confirm_label[sizeof(s_confirm_label) - 1] = '\0';
+    strncpy(s_confirm_icon, e->confirm_icon, sizeof(s_confirm_icon) - 1);
+    s_confirm_icon[sizeof(s_confirm_icon) - 1] = '\0';
     memcpy(s_inputs, e->inputs, sizeof(s_inputs));
     s_input_count  = e->input_count;
     s_craft_total  = e->craft_seconds;
@@ -229,6 +240,8 @@ static NotifEntry* push_entry(const char* title, const char* message, Color acce
     strncpy(e->title, title ? title : "", sizeof(e->title) - 1);
     strncpy(e->message, message ? message : "", sizeof(e->message) - 1);
     e->accent = accent;
+    strncpy(e->confirm_label, "OK", sizeof(e->confirm_label) - 1);
+    strncpy(e->confirm_icon, "check", sizeof(e->confirm_icon) - 1);
     return e;
 }
 
@@ -263,6 +276,8 @@ void modal_notification_init(void) {
     s_qty_max = 0;
     s_price_item[0] = '\0';
     s_price_qty = 0;
+    s_confirm_label[0] = '\0';
+    s_confirm_icon[0] = '\0';
     s_on_confirm = NULL;
     s_craft_total = 0.0f;
     s_input_count = 0;
@@ -294,7 +309,29 @@ void modal_notification_show_picker(const char* title, const char* message, Colo
     e->qty_max = max_quantity;
     strncpy(e->price_item, price_item_id ? price_item_id : "", sizeof(e->price_item) - 1);
     e->price_qty = price_quantity;
+    strncpy(e->confirm_label, "Buy", sizeof(e->confirm_label) - 1);
+    strncpy(e->confirm_icon, "wallet", sizeof(e->confirm_icon) - 1);
     e->on_confirm = on_confirm;
+    present();
+}
+
+void modal_notification_show_split(const char* title, const char* message, Color accent,
+                                   const char* item_id, int max_quantity,
+                                   const char* confirm_label, const char* confirm_icon,
+                                   ModalNotificationConfirmFn on_confirm,
+                                   ModalNotificationCancelFn on_cancel) {
+    if (max_quantity < 1) max_quantity = 1;
+
+    NotifEntry* e = push_entry(title, message, accent);
+    add_entry_item(e, item_id, max_quantity);
+    e->qty_min = 1;
+    e->qty_max = max_quantity;
+    strncpy(e->confirm_label, confirm_label ? confirm_label : "OK",
+            sizeof(e->confirm_label) - 1);
+    strncpy(e->confirm_icon, confirm_icon ? confirm_icon : "check",
+            sizeof(e->confirm_icon) - 1);
+    e->on_confirm = on_confirm;
+    e->on_cancel = on_cancel;
     present();
 }
 
@@ -408,7 +445,7 @@ static float notif_content_height(void) {
     if (notif_is_assembling() && s_input_count > 0) h += MN_GAP + notif_slot_size();
     if (notif_is_assembling())                      h += MN_GAP + MN_BAR_H;
     if (s_item_count > 0)                           h += MN_GAP + notif_slot_size();
-    if (notif_has_picker())                         h += MN_GAP + MN_TOTAL_ICON;
+    if (notif_has_price())                          h += MN_GAP + MN_TOTAL_ICON;
     h += MN_GAP + MN_OK_H + MN_BOT;
     return h;
 }
@@ -824,27 +861,30 @@ void modal_notification_draw(void) {
         ui_button_pixel_retro_draw(inc, &step, can_inc && ui_button_hit(inc, mx, my));
 
         /* Running total — the price item's own sprite beside what this purchase
-         * costs at the selected count, so "10 coin each" always has its sum. */
-        Rectangle row = notif_total_row(card);
-        char total[24];
-        snprintf(total, sizeof(total), "%d", s_price_qty * s_items[0].qty);
-        float total_w = MN_TOTAL_ICON + 6.0f + (float)MeasureText(total, MN_TOTAL_FONT);
-        float total_x = row.x + (row.width - total_w) * 0.5f;
-        ol_as_ico_draw(obj_layers_mgr_get(), s_price_item, (int)total_x, (int)row.y,
-                       MN_TOTAL_ICON, OL_ICO_DEFAULT_DIR, 0, Fade(WHITE, a));
-        Color total_c = { 255, 215, 0, (unsigned char)(230.0f * a) };
-        DrawText(total, (int)(total_x + MN_TOTAL_ICON + 6.0f),
-                 (int)(row.y + (MN_TOTAL_ICON - (float)text_line_height(MN_TOTAL_FONT)) * 0.5f),
-                 MN_TOTAL_FONT, total_c);
+         * costs at the selected count, so "10 coin each" always has its sum. A
+         * split has nothing to price, so it steps the count and nothing more. */
+        if (notif_has_price()) {
+            Rectangle row = notif_total_row(card);
+            char total[24];
+            snprintf(total, sizeof(total), "%d", s_price_qty * s_items[0].qty);
+            float total_w = MN_TOTAL_ICON + 6.0f + (float)MeasureText(total, MN_TOTAL_FONT);
+            float total_x = row.x + (row.width - total_w) * 0.5f;
+            ol_as_ico_draw(obj_layers_mgr_get(), s_price_item, (int)total_x, (int)row.y,
+                           MN_TOTAL_ICON, OL_ICO_DEFAULT_DIR, 0, Fade(WHITE, a));
+            Color total_c = { 255, 215, 0, (unsigned char)(230.0f * a) };
+            DrawText(total, (int)(total_x + MN_TOTAL_ICON + 6.0f),
+                     (int)(row.y + (MN_TOTAL_ICON - (float)text_line_height(MN_TOTAL_FONT)) * 0.5f),
+                     MN_TOTAL_FONT, total_c);
+        }
     }
 
-    /* Confirm button — a picker answers "how many do I buy?", so it reads
-     * "Buy"; everything else acknowledges with "OK". Once pressed it plays a
+    /* Confirm button — the entry names its own action ("Buy", "Store", "OK").
+     * Once pressed it plays a
      * quick grow-then-shrink pulse and is gone for good after
      * MN_OK_PULSE_DURATION, independent of the close-slide / delivery wait the
      * rest of the card may still be playing. */
-    const char* ok_label = notif_has_picker() ? "Buy" : "OK";
-    const char* ok_icon  = notif_has_picker() ? "wallet" : "check";
+    const char* ok_label = s_confirm_label;
+    const char* ok_icon  = s_confirm_icon;
     if (s_ok_pulsing && confirm_r.width > 0.0f) {
         float pscale, palpha;
         mn_ok_pulse(&pscale, &palpha);
@@ -961,9 +1001,21 @@ bool modal_notification_handle_click(int mx, int my) {
         if (s_on_confirm) {
             ModalNotificationConfirmFn confirm = s_on_confirm;
             s_on_confirm = NULL;
-            const char* spent = s_price_item;
-            begin_result_delivery(card, &spent, 1);
-            confirm(s_items[0].item_id, s_items[0].qty);
+            char item[64];
+            strncpy(item, s_items[0].item_id, sizeof(item) - 1);
+            item[sizeof(item) - 1] = '\0';
+            int qty = s_items[0].qty;
+            if (notif_has_price()) {
+                const char* spent = s_price_item;
+                begin_result_delivery(card, &spent, 1);
+                confirm(item, qty);
+                return true;
+            }
+            /* A split moves stock the player already owns — nothing is granted,
+             * so the card leaves at once and the opener animates the move. */
+            release_result_items();
+            start_closing();
+            confirm(item, qty);
             return true;
         }
         if (s_item_count > 0) {
