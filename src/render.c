@@ -10,6 +10,7 @@
 #include "ui/interaction_bubble.h"
 #include "ui/fx_assemble.h"
 #include "ui/fx_grant_delivery.h"
+#include "ui/fx_item_transfer.h"
 #include "ui/loot_fx.h"
 #include "ui/fx_reward.h"
 #include "ui/hud_minimap_overlay.h"
@@ -91,6 +92,7 @@ void render_on_tick(float delta_time) {
     /* After the bar refreshed its quantity FX, so a landed grant is visible to
      * the sequence on the same frame it arrives. */
     fx_grant_delivery_update(delta_time);
+    fx_item_transfer_update(delta_time);
     if (inventory_modal_is_open())  inventory_modal_update(delta_time);
     if (modal_dialogue_is_open())   modal_dialogue_update(delta_time);
     if (modal_interact_is_open())   modal_interact_update(delta_time);

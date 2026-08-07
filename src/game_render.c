@@ -23,6 +23,7 @@
 #include "ui/modal_dialogue.h"
 #include "ui/action_cache.h"
 #include "ui/modal_instance_map.h"
+#include "ui/fx_item_transfer.h"
 #include "ui/modal_interact.h"
 #include "ui/modal_map.h"
 #include "ui/nameplate.h"
@@ -1037,6 +1038,10 @@ void game_render_ui(void) {
     if (bar_on_top) {
         inventory_bar_draw();
     }
+
+    // A dragged vault slot rides above every surface, the bar included.
+    modal_interact_draw_storage_drag();
+    fx_item_transfer_draw(obj_layers_mgr_get());
 
     // Instance Map content inside the modal_map container — independent
     // visualization system above the gameplay UI (world stays visible
