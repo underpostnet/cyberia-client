@@ -31,6 +31,17 @@ bool ui_dispatch_tap(int x, int y) {
      * keeps the slots read-only. */
     if (modal_dialogue_is_open() || modal_interact_is_open()) {
         if (inventory_bar_handle_toggle_click(x, y)) return true;
+        /* Storage tab open → a press on a bar slot lifts that stack into the
+         * vault grid's drag instead of arming the strip's scroll, which is what
+         * makes Inventory Bar → Storage Grid a single gesture. */
+        /* Equipped items stay equipped: only an inactive stack is storable. */
+        int drag_slot = inventory_bar_get_tapped_slot(x, y);
+        if (0 <= drag_slot && drag_slot < g_game_state.full_inventory_count &&
+            !g_game_state.full_inventory[drag_slot].active &&
+            modal_interact_storage_accepts_drag()) {
+            modal_interact_storage_drag_in(drag_slot);
+            return true;
+        }
         /* Arms the drag; the slot activates on release via ui_on_tick. The bar
          * is live for the interact modal and for an inventory-lore dialogue
          * (opened from the inventory modal) so a slot can switch the chain. */

@@ -11,6 +11,7 @@
 #define UI_SCROLL_BAR_MIN_H      18.0f
 #define UI_SCROLL_BAR_W           3.0f
 #define UI_SCROLL_BAR_MARGIN      3.0f
+#define UI_SCROLL_NUDGE_DURATION  0.20f
 
 static float scroll_max_offset(const UIScroll* s) {
     float max_offset = s->content_h - s->view.height;
@@ -46,6 +47,8 @@ static void scroll_capture_bounds(UIScroll* s, Rectangle view, float content_h) 
     s->view = view;
     s->content_h = content_h > 0.0f ? content_h : 0.0f;
     s->offset = scroll_clamp(s->offset, 0.0f, scroll_max_offset(s));
+    s->nudge_from = scroll_clamp(s->nudge_from, 0.0f, scroll_max_offset(s));
+    s->nudge_to = scroll_clamp(s->nudge_to, 0.0f, scroll_max_offset(s));
 }
 
 static float scroll_move(UIScroll* s, float delta) {
@@ -89,6 +92,7 @@ void ui_scroll_set_scrollbar_bounds(UIScroll* s, Rectangle bounds) {
 
 void ui_scroll_on_press(UIScroll* s, int mx, int my) {
     if (!s) return;
+    s->nudge_active = false;
     s->pressed = true;
     s->dragging = false;
     s->press_pos = (Vector2){ (float)mx, (float)my };
@@ -97,12 +101,45 @@ void ui_scroll_on_press(UIScroll* s, int mx, int my) {
     s->click_pending = false;
 }
 
+bool ui_scroll_nudge(UIScroll* s, Rectangle view, float content_h, float delta) {
+    if (!s || 0.0f == delta) return false;
+
+    scroll_capture_bounds(s, view, content_h);
+    float base = s->nudge_active ? s->nudge_to : s->offset;
+    float target = scroll_clamp(base + delta, 0.0f, scroll_max_offset(s));
+    s->vel = 0.0f;
+    if (0.01f > fabsf(target - s->offset)) {
+        s->offset = target;
+        s->nudge_active = false;
+        return false;
+    }
+    s->nudge_from = s->offset;
+    s->nudge_to = target;
+    s->nudge_age = 0.0f;
+    s->nudge_active = true;
+    scroll_show_bar(s);
+    return true;
+}
+
+void ui_scroll_cancel_press(UIScroll* s) {
+    if (!s) return;
+    s->nudge_active = false;
+    s->pressed = false;
+    s->dragging = false;
+    s->click_pending = false;
+    s->vel = 0.0f;
+    /* Suppress the rising-edge re-arm in ui_scroll_update for as long as the
+     * pointer stays down. */
+    s->pointer_was_down = true;
+}
+
 bool ui_scroll_on_wheel(UIScroll* s, Rectangle view, float content_h, float wheel_delta) {
     if (!s || wheel_delta == 0.0f) return false;
 
     scroll_capture_bounds(s, view, content_h);
     if (!scroll_input_contains(s, scroll_pointer_position())) return false;
 
+    s->nudge_active = false;
     s->vel = 0.0f;
     if (fabsf(scroll_move(s, -wheel_delta * UI_SCROLL_WHEEL_PIXELS)) > 0.0f)
         scroll_show_bar(s);
@@ -145,6 +182,19 @@ void ui_scroll_update(UIScroll* s, Rectangle view, float content_h, float dt) {
         }
     }
 
+    if (s->nudge_active && 0.0f < dt) {
+        s->nudge_age += dt;
+        float t = s->nudge_age / UI_SCROLL_NUDGE_DURATION;
+        if (1.0f <= t) {
+            s->offset = s->nudge_to;
+            s->nudge_active = false;
+        } else {
+            float eased = t * t * (3.0f - 2.0f * t);
+            s->offset = s->nudge_from + (s->nudge_to - s->nudge_from) * eased;
+        }
+        scroll_show_bar(s);
+    }
+
     if (!s->pressed && fabsf(s->vel) >= UI_SCROLL_MIN_VELOCITY && dt > 0.0f) {
         float next_velocity = s->vel * expf(-UI_SCROLL_INERTIA_DECAY * dt);
         float requested = (s->vel - next_velocity) / UI_SCROLL_INERTIA_DECAY;
@@ -160,6 +210,7 @@ void ui_scroll_update(UIScroll* s, Rectangle view, float content_h, float dt) {
 
     if (scroll_max_offset(s) <= 0.0f) {
         s->vel = 0.0f;
+        s->nudge_active = false;
         s->bar_hold_s = 0.0f;
         s->bar_alpha = 0.0f;
         s->pointer_was_down = pointer_down;

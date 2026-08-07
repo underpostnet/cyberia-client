@@ -4,6 +4,8 @@
 #include "action_cache.h"
 #include "dialogue_data.h"
 #include "fx_grant_delivery.h"
+#include "fx_inventory_bar_qty.h"
+#include "fx_item_transfer.h"
 #include "domain/local_player.h"
 #include "domain/viewport.h"
 #include "game_state.h"
@@ -12,6 +14,7 @@
 #include "inventory_bar.h"
 #include "inventory_modal.h"
 #include "item_slot.h"
+#include "item_slot_grid.h"
 #include "modal.h"
 #include "modal_dialogue.h"
 #include "modal_notification.h"
@@ -34,10 +37,11 @@
 
 /* ── Tabs ─────────────────────────────────────────────────────────────── */
 
-enum { MI_TAB_STACK = 0, MI_TAB_STATS, MI_TAB_QUEST, MI_TAB_SHOP, MI_TAB_CRAFT, MI_TAB_COUNT };
+enum { MI_TAB_STACK = 0, MI_TAB_STATS, MI_TAB_QUEST, MI_TAB_SHOP, MI_TAB_CRAFT,
+       MI_TAB_STORAGE, MI_TAB_COUNT };
 
-static const char* MI_TAB_ICON[MI_TAB_COUNT]  = { "stack", "stats", "quest", "home-red", "engine" };
-static const char* MI_TAB_LABEL[MI_TAB_COUNT] = { "Stack", "Stats", "Quest", "Shop", "Assembly" };
+static const char* MI_TAB_ICON[MI_TAB_COUNT]  = { "stack", "stats", "quest", "home-red", "engine", "grid" };
+static const char* MI_TAB_LABEL[MI_TAB_COUNT] = { "Stack", "Stats", "Quest", "Shop", "Assembly", "Storage" };
 
 /* ── Module state ─────────────────────────────────────────────────────── */
 
@@ -162,6 +166,21 @@ static bool  s_overlay_open = false;
 static void handle_quest_click(int mx, int my);
 static void handle_shop_click(int mx, int my);
 static void handle_craft_click(int mx, int my);
+static bool storage_tab_visible(void);
+static void draw_storage_tab(Rectangle content);
+static void handle_storage_event(const ItemSlotGridEvent* ev);
+
+/* The vault grid is authoritative-backed: a drop is applied locally so the item
+ * follows the pointer without a round trip, and the storage_state the server
+ * answers with replaces the whole grid. */
+static ItemSlotGrid s_storage_grid;
+static bool         s_storage_bound = false;
+static UIScroll     s_storage_scroll;
+static float        s_storage_content_height = 0.0f;
+
+#define MI_STORAGE_GRID_RIGHT_PAD 30.0f
+#define MI_STORAGE_SCROLL_ICON_SZ 20
+#define MI_STORAGE_SCROLL_STEP 96.0f
 
 /* ─────────────────────────────────────────────────────────────────────────
  *  EPHEMERAL SESSION DATA — survives navigating away to inspection modals
@@ -411,8 +430,9 @@ static bool refresh_bot_snapshot(void) {
  * on. */
 static int visible_tabs(int out[MI_TAB_COUNT]) {
     int n = 0;
-    if (shop_tab_visible())   out[n++] = MI_TAB_SHOP;
-    if (craft_tab_visible())  out[n++] = MI_TAB_CRAFT;
+    if (shop_tab_visible())    out[n++] = MI_TAB_SHOP;
+    if (craft_tab_visible())   out[n++] = MI_TAB_CRAFT;
+    if (storage_tab_visible()) out[n++] = MI_TAB_STORAGE;
     if (quest_tab_visible())  out[n++] = MI_TAB_QUEST;
     out[n++] = MI_TAB_STACK;
     out[n++] = MI_TAB_STATS;
@@ -719,6 +739,9 @@ void modal_interact_init(void) {
     s_craft_content_height = 0.0f;
     s_craft_card_count = 0;
     s_craft_flash_slot = -1;
+    s_storage_bound = false;
+    ui_scroll_reset(&s_storage_scroll);
+    s_storage_content_height = 0.0f;
     s_tab_age = MODAL_POP_DURATION;
     s_tab_picked = false;
     s_q_expanded = -1;
@@ -773,6 +796,9 @@ void modal_interact_open(const char* entity_id, const char* display_name,
     s_craft_content_height = 0.0f;
     s_craft_card_count = 0;
     s_craft_flash_slot = -1;
+    s_storage_bound = false;
+    ui_scroll_reset(&s_storage_scroll);
+    s_storage_content_height = 0.0f;
     s_q_expanded = -1;
     s_q_expand_age = MODAL_POP_DURATION;
     s_dlg_collapse_t = 0.0f;
@@ -866,6 +892,10 @@ bool modal_interact_handle_wheel(float wheel_delta) {
         return ui_scroll_on_wheel(&s_craft_scroll, content_rect(card_rect()),
                                   s_craft_content_height, wheel_delta);
     }
+    if (s_tab == MI_TAB_STORAGE) {
+        return ui_scroll_on_wheel(&s_storage_scroll, content_rect(card_rect()),
+                                  s_storage_content_height, wheel_delta);
+    }
     return false;
 }
 
@@ -957,6 +987,19 @@ void modal_interact_update(float dt) {
         ui_scroll_update(&s_craft_scroll, content_rect(card_rect()), s_craft_content_height, dt);
         if (ui_scroll_take_click(&s_craft_scroll, &click_x, &click_y) && content_ready) {
             handle_craft_click(click_x, click_y);
+            if (!s_open) return;
+        }
+    } else if (s_tab == MI_TAB_STORAGE) {
+        /* A cell lifted out of the scrolled content owns the gesture; without
+         * this the touch fallback in ui_scroll would scroll the vault out from
+         * under a drag aimed at the inventory bar. */
+        if (s_storage_grid.pressed) ui_scroll_cancel_press(&s_storage_scroll);
+        ui_scroll_update(&s_storage_scroll, content_rect(card_rect()),
+                         s_storage_content_height, dt);
+        item_slot_grid_update(&s_storage_grid, dt);
+        ItemSlotGridEvent ev;
+        if (item_slot_grid_take_event(&s_storage_grid, &ev) && content_ready) {
+            handle_storage_event(&ev);
             if (!s_open) return;
         }
     }
@@ -2061,6 +2104,266 @@ static void handle_craft_click(int mx, int my) {
     }
 }
 
+/* ── Storage tab: the personal vault carried by the entity's action ────── */
+
+/* Vault capacity from the action, clamped to what the grid can render. */
+static int storage_capacity(int slots) {
+    if (slots < 0) return 0;
+    return slots > ITEM_SLOT_GRID_MAX_SLOTS ? ITEM_SLOT_GRID_MAX_SLOTS : slots;
+}
+
+/* Storage shows only for an action declaring a vault capacity. */
+static bool storage_tab_visible(void) {
+    const ActionMetadataEntry* am = action_metadata();
+    return am && storage_capacity(am->storage_slots) >= 1;
+}
+
+static Rectangle storage_scroll_lane(Rectangle content) {
+    float width = content.width > MI_STORAGE_GRID_RIGHT_PAD
+                ? MI_STORAGE_GRID_RIGHT_PAD : 0.0f;
+    return (Rectangle){ content.x + content.width - width, content.y,
+                        width, content.height };
+}
+
+void modal_interact_storage_state(const char* entity_id, int capacity,
+                                  const ObjectLayerState* slots, const int* indices,
+                                  int count) {
+    if (!s_open || 0 != strcmp(s_entity_id, entity_id ? entity_id : "")) return;
+    if (capacity != s_storage_grid.capacity) item_slot_grid_init(&s_storage_grid, capacity);
+    item_slot_grid_clear(&s_storage_grid);
+    for (int i = 0; i < count; i++) {
+        item_slot_grid_set(&s_storage_grid, indices[i], &slots[i]);
+    }
+    s_storage_bound = true;
+}
+
+static void draw_storage_tab(Rectangle content) {
+    const ActionMetadataEntry* am = action_metadata();
+    int capacity = am ? storage_capacity(am->storage_slots) : 0;
+    if (capacity < 1) {
+        DrawText("No vault here.", (int)content.x, (int)content.y, mi_font_quest(), C_LABEL);
+        return;
+    }
+    if (capacity != s_storage_grid.capacity) item_slot_grid_init(&s_storage_grid, capacity);
+    /* Bind on first draw: the server answers with the vault's contents. */
+    if (!s_storage_bound) local_player_request_storage_open(s_entity_id);
+
+    int   font = quest_grid_status_font(quest_grid_font());
+    float head = (float)text_line_height(font) + 4.0f;
+    float top = content.y - ui_scroll_offset(&s_storage_scroll);
+    Rectangle scroll_lane = storage_scroll_lane(content);
+    Rectangle grid = { content.x, content.y,
+                       content.width - scroll_lane.width, content.height };
+
+    ui_scroll_set_scrollbar_bounds(&s_storage_scroll, scroll_lane);
+    ui_scroll_begin(&s_storage_scroll);
+    draw_card_line("Drag between the vault and your inventory bar",
+                   (int)grid.x, (int)top, (int)grid.width, font, C_LABEL, true);
+    /* Cells flow across the full width and wrap, so a large vault is taller
+     * than the panel and the tab scrolls to reach its lower rows. */
+    item_slot_grid_layout(&s_storage_grid,
+                          (Rectangle){ grid.x, top + head, grid.width, 0.0f });
+    /* The viewport ui_scroll scissors to and taps are gated on — not the
+     * tab-pop rect above, which is animated. */
+    item_slot_grid_set_clip(&s_storage_grid, grid);
+    item_slot_grid_draw(&s_storage_grid, obj_layers_mgr_get());
+    s_storage_content_height = head + item_slot_grid_height(&s_storage_grid) + 4.0f;
+    ui_scroll_end(&s_storage_scroll);
+    if (0.0f < scroll_lane.width) {
+        float center_x = scroll_lane.x + scroll_lane.width * 0.5f;
+        ui_icon_draw("arrow-up", center_x, scroll_lane.y + scroll_lane.height * 0.25f,
+                     MI_STORAGE_SCROLL_ICON_SZ, false, 0.0f);
+        ui_icon_draw("arrow-down", center_x, scroll_lane.y + scroll_lane.height * 0.75f,
+                     MI_STORAGE_SCROLL_ICON_SZ, false, 0.0f);
+    }
+}
+
+/* Apply a drop locally so the grid answers the pointer immediately; the
+ * storage_state that follows replaces it with the authoritative layout.
+ * A `qty` below the stack splits it, leaving the remainder behind, and landing
+ * on the same item merges into it. */
+static void storage_apply_local_move(int from, int to, int qty) {
+    ObjectLayerState moved = s_storage_grid.cells[from];
+    if (qty <= 0 || qty > moved.quantity) qty = moved.quantity;
+    if (qty < moved.quantity) s_storage_grid.cells[from].quantity -= qty;
+    else memset(&s_storage_grid.cells[from], 0, sizeof(s_storage_grid.cells[from]));
+
+    int absorbed = 0 == strcmp(s_storage_grid.cells[to].item_id, moved.item_id)
+                       ? s_storage_grid.cells[to].quantity : 0;
+    moved.quantity = qty + absorbed;
+    s_storage_grid.cells[to] = moved;
+    item_slot_grid_animate_move(&s_storage_grid, from, to);
+}
+
+/* A swap exchanges whole stacks — there is nothing to split into. */
+static void storage_apply_local_swap(int from, int to) {
+    ObjectLayerState moved = s_storage_grid.cells[from];
+    s_storage_grid.cells[from] = s_storage_grid.cells[to];
+    s_storage_grid.cells[to] = moved;
+    item_slot_grid_animate_move(&s_storage_grid, from, to);
+    item_slot_grid_animate_move(&s_storage_grid, to, from);
+}
+
+/* Predict the slot where the server will merge or append the withdrawn item. */
+static Rectangle storage_bar_slot_rect(const char* item_id) {
+    Rectangle slot;
+    if (inventory_bar_predicted_item_slot_rect(item_id, &slot)) return slot;
+    Rectangle toggle = inventory_bar_toggle_bounds();
+    return (Rectangle){ toggle.x, toggle.y, toggle.width, toggle.height };
+}
+
+/* Dropping a vault cell outside the visible grid withdraws it into inventory. */
+static void storage_drop_out(const ItemSlotGridEvent* ev, int qty) {
+    Rectangle from = item_slot_grid_cell_rect(&s_storage_grid, ev->from_index);
+    ObjectLayerState taken = ev->payload;
+    taken.quantity = qty;
+    if (qty < s_storage_grid.cells[ev->from_index].quantity) {
+        s_storage_grid.cells[ev->from_index].quantity -= qty;
+    } else {
+        memset(&s_storage_grid.cells[ev->from_index], 0,
+               sizeof(s_storage_grid.cells[ev->from_index]));
+    }
+    /* The bar shows no gain FX for a transfer, so this flight is the only
+     * thing that says where the stack went. */
+    fx_item_transfer_spawn_to_inventory(&taken, from,
+                                        storage_bar_slot_rect(taken.item_id));
+    local_player_request_storage_transfer(s_entity_id, taken.item_id, qty, false,
+                                          ev->from_index, 0);
+}
+
+/* Carry out a resolved vault move at `qty` units. */
+static void storage_commit(const ItemSlotGridEvent* ev, int qty) {
+    switch (ev->type) {
+        case ITEM_SLOT_GRID_EVENT_MOVE:
+            storage_apply_local_move(ev->from_index, ev->to_index, qty);
+            local_player_request_storage_move(s_entity_id, ev->from_index,
+                                              ev->to_index, qty);
+            return;
+        case ITEM_SLOT_GRID_EVENT_SWAP:
+            storage_apply_local_swap(ev->from_index, ev->to_index);
+            local_player_request_storage_swap(s_entity_id, ev->from_index, ev->to_index);
+            return;
+        case ITEM_SLOT_GRID_EVENT_DROP_OUT:
+            storage_drop_out(ev, qty);
+            return;
+        case ITEM_SLOT_GRID_EVENT_DROP_IN: {
+            /* An inventory stack dragged onto a cell — deposit it there. The
+             * item settles from where it was released rather than appearing. */
+            ObjectLayerState landed = ev->payload;
+            landed.quantity = qty;
+            if (0 == strcmp(s_storage_grid.cells[ev->to_index].item_id, landed.item_id)) {
+                landed.quantity += s_storage_grid.cells[ev->to_index].quantity;
+            }
+            s_storage_grid.cells[ev->to_index] = landed;
+            float half = s_storage_grid.cell_size * 0.5f;
+            item_slot_grid_animate_from_point(
+                &s_storage_grid, ev->to_index,
+                (Vector2){ ev->point.x - half, ev->point.y - half });
+            fx_inventory_bar_qty_suppress(ev->payload.item_id);
+            local_player_request_storage_transfer(s_entity_id, ev->payload.item_id,
+                                                  qty, true, 0, ev->to_index);
+            return;
+        }
+        case ITEM_SLOT_GRID_EVENT_TAP:
+            /* A tap inspects, matching every other slot in the modal. */
+            if (ev->to_index >= 0 && '\0' != s_storage_grid.cells[ev->to_index].item_id[0]) {
+                ObjectLayerState ols = s_storage_grid.cells[ev->to_index];
+                es_push();
+                modal_interact_close();
+                inventory_modal_open_external(&ols);
+                inventory_modal_set_on_close(modal_interact_reopen);
+            }
+            return;
+        case ITEM_SLOT_GRID_EVENT_NONE:
+            return;
+    }
+}
+
+/* The drop held while the picker asks how much of the stack to move. */
+static ItemSlotGridEvent s_storage_split;
+
+/* A drop onto a cell holding the same item could mean either "stack these" or
+ * "trade places", and the gesture cannot say which — so the card asks. */
+static bool storage_is_stackable_swap(const ItemSlotGridEvent* ev) {
+    return ITEM_SLOT_GRID_EVENT_SWAP == ev->type &&
+           0 == strcmp(s_storage_grid.cells[ev->to_index].item_id, ev->payload.item_id);
+}
+
+static void storage_split_confirmed(const char* item_id, int quantity) {
+    (void)item_id;
+    ItemSlotGridEvent ev = s_storage_split;
+    s_storage_split.type = ITEM_SLOT_GRID_EVENT_NONE;
+    if (ITEM_SLOT_GRID_EVENT_NONE == ev.type) return;
+    /* Agreeing to stack turns the swap into a move onto the occupied cell,
+     * which is what the vault merges. */
+    if (ITEM_SLOT_GRID_EVENT_SWAP == ev.type) ev.type = ITEM_SLOT_GRID_EVENT_MOVE;
+    storage_commit(&ev, quantity);
+}
+
+static void storage_split_declined(void) {
+    ItemSlotGridEvent ev = s_storage_split;
+    s_storage_split.type = ITEM_SLOT_GRID_EVENT_NONE;
+    /* Declining the stack leaves the swap the grid actually emitted; declining
+     * any other split leaves the vault untouched. */
+    if (ITEM_SLOT_GRID_EVENT_SWAP == ev.type) storage_commit(&ev, ev.payload.quantity);
+}
+
+/* Moving more than one of something is a question, not a gesture: the picker
+ * sizes it first so a stack can be split across the vault boundary. */
+static bool storage_needs_split(const ItemSlotGridEvent* ev) {
+    if (ev->payload.quantity <= 1) return false;
+    return ITEM_SLOT_GRID_EVENT_MOVE == ev->type ||
+           ITEM_SLOT_GRID_EVENT_DROP_OUT == ev->type ||
+           ITEM_SLOT_GRID_EVENT_DROP_IN == ev->type;
+}
+
+static void storage_ask_split(const ItemSlotGridEvent* ev) {
+    s_storage_split = *ev;
+    const char* prompt = "How many to split off?";
+    const char* label = "Split";
+    const char* icon = "stack";
+    if (ITEM_SLOT_GRID_EVENT_SWAP == ev->type) {
+        prompt = "How many to stack here? Cancel swaps them.";
+        label = "Stack";
+    } else if (ITEM_SLOT_GRID_EVENT_DROP_IN == ev->type) {
+        prompt = "How many to store?";
+        label = "Store";
+        icon = "bag";
+    } else if (ITEM_SLOT_GRID_EVENT_DROP_OUT == ev->type) {
+        prompt = "How many to take?";
+        label = "Take";
+        icon = "hand";
+    }
+    modal_notification_show_split(ev->payload.item_id, prompt,
+                                  (Color){ 120, 200, 140, 255 },
+                                  ev->payload.item_id, ev->payload.quantity,
+                                  label, icon, storage_split_confirmed,
+                                  storage_split_declined);
+}
+
+static void handle_storage_event(const ItemSlotGridEvent* ev) {
+    if (storage_is_stackable_swap(ev) || storage_needs_split(ev)) storage_ask_split(ev);
+    else                                                          storage_commit(ev, ev->payload.quantity);
+}
+
+void modal_interact_storage_drag_in(int inv_idx) {
+    if (!s_open || MI_TAB_STORAGE != s_tab) return;
+    if (inv_idx < 0 || inv_idx >= g_game_state.full_inventory_count) return;
+    item_slot_grid_begin_external_drag(&s_storage_grid,
+                                       &g_game_state.full_inventory[inv_idx],
+                                       GetMousePosition());
+}
+
+void modal_interact_draw_storage_drag(void) {
+    if (!s_open || MI_TAB_STORAGE != s_tab) return;
+    item_slot_grid_draw_drag(&s_storage_grid, obj_layers_mgr_get());
+}
+
+bool modal_interact_storage_accepts_drag(void) {
+    return s_open && MI_TAB_STORAGE == s_tab && !item_slot_grid_is_dragging(&s_storage_grid);
+}
+
+
 /* ── Draw ─────────────────────────────────────────────────────────────── */
 
 void modal_interact_draw(void) {
@@ -2149,6 +2452,7 @@ void modal_interact_draw(void) {
     else if (s_tab == MI_TAB_QUEST)  draw_quest_tab(tab_content, mx, my);
     else if (s_tab == MI_TAB_SHOP)   draw_shop_tab(tab_content, mx, my);
     else if (s_tab == MI_TAB_CRAFT)  draw_craft_tab(tab_content, mx, my);
+    else if (s_tab == MI_TAB_STORAGE) draw_storage_tab(tab_content);
 
     /* Fade the new content up by lifting a panel-coloured veil off it —
      * raylib has no global alpha, and a veil costs one rect instead of a
@@ -2298,6 +2602,24 @@ bool modal_interact_handle_click(int mx, int my) {
     if (s_tab == MI_TAB_CRAFT &&
         CheckCollisionPointRec((Vector2){ (float)mx, (float)my }, content)) {
         ui_scroll_on_press(&s_craft_scroll, mx, my);
+        return true;
+    }
+
+    if (s_tab == MI_TAB_STORAGE &&
+        CheckCollisionPointRec((Vector2){ (float)mx, (float)my }, content)) {
+        Rectangle scroll_lane = storage_scroll_lane(content);
+        if (CheckCollisionPointRec((Vector2){ (float)mx, (float)my }, scroll_lane)) {
+            float delta = (float)my < scroll_lane.y + scroll_lane.height * 0.5f
+                        ? -MI_STORAGE_SCROLL_STEP : MI_STORAGE_SCROLL_STEP;
+            ui_scroll_cancel_press(&s_storage_scroll);
+            ui_scroll_nudge(&s_storage_scroll, content, s_storage_content_height, delta);
+            return true;
+        }
+        /* Cells own the press (that is what arms a drag); the margin around
+         * them falls through to the scroll so the tab is still draggable. */
+        if (!item_slot_grid_handle_press(&s_storage_grid, mx, my)) {
+            ui_scroll_on_press(&s_storage_scroll, mx, my);
+        }
         return true;
     }
 

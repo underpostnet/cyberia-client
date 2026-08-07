@@ -64,4 +64,22 @@ void modal_interact_discard_stack(void);
 /* Returns the cached alive layer snapshot (persists across AOI changes). */
 const ObjectLayerState* modal_interact_get_cached_layers(int* out_count);
 
+/* Authoritative vault contents for the open storage session. `indices` carries
+ * each slot's position in the vault, parallel to `slots`. */
+void modal_interact_storage_state(const char* entity_id, int capacity,
+                                  const ObjectLayerState* slots, const int* indices,
+                                  int count);
+
+/* True while the Storage tab is showing and can adopt a drag from the
+ * inventory bar. */
+bool modal_interact_storage_accepts_drag(void);
+
+/* Draw the vault's dragged item. The frame orchestrator calls this after the
+ * inventory bar so the item in hand rides above every surface. */
+void modal_interact_draw_storage_drag(void);
+
+/* Lift an inventory-bar stack into the vault grid's drag, giving Inventory Bar
+ * → Storage Grid the same gesture as a move inside the grid. */
+void modal_interact_storage_drag_in(int inv_idx);
+
 #endif /* MODAL_INTERACT_H */

@@ -39,9 +39,13 @@ typedef struct {
     float     content_h;      /* content height captured by the last update    */
     float     offset;         /* scroll offset px, 0..(content_h - view.height)*/
     float     vel;            /* px/s — inertial glide velocity                */
+    float     nudge_from;     /* fixed-step animation start offset              */
+    float     nudge_to;       /* fixed-step animation target offset             */
+    float     nudge_age;      /* fixed-step animation age                       */
     bool      pressed;        /* pointer down began inside the view            */
     bool      pointer_was_down;
     bool      dragging;       /* gesture exceeded the slop — scrolling         */
+    bool      nudge_active;   /* fixed-step scroll transition is active         */
     bool      has_input_bounds;
     bool      has_scrollbar_bounds;
     Vector2   press_pos;
@@ -67,6 +71,14 @@ void ui_scroll_set_scrollbar_bounds(UIScroll* s, Rectangle bounds);
 /* Route a pointer press that landed inside the view. Catches a gliding list
  * (kills velocity) and arms tap-vs-drag disambiguation. */
 void ui_scroll_on_press(UIScroll* s, int mx, int my);
+
+/* Animate a fixed pixel delta. Negative moves toward the top. */
+bool ui_scroll_nudge(UIScroll* s, Rectangle view, float content_h, float delta);
+
+/* Give up an armed press because another surface owns the gesture — a drag
+ * lifted out of the scrolled content, say. Produces no deferred click, and the
+ * touch fallback below cannot re-arm until the pointer lifts. */
+void ui_scroll_cancel_press(UIScroll* s);
 
 /* Forward a wheel delta from the UI input dispatcher. Returns true when the
  * pointer is inside `view`, so callers can suppress world zoom behind UI.
