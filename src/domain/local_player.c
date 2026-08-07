@@ -121,6 +121,26 @@ void local_player_request_craft_cancel(void) {
     network_send(json_pack_craft_cancel());
 }
 
+void local_player_request_storage_open(const char* entity_id) {
+    network_send(json_pack_storage_open(entity_id));
+}
+
+void local_player_request_storage_move(const char* entity_id, int from_index, int to_index,
+                                       int quantity) {
+    network_send(json_pack_storage_move(entity_id, from_index, to_index, quantity));
+}
+
+void local_player_request_storage_swap(const char* entity_id, int from_index, int to_index) {
+    network_send(json_pack_storage_swap(entity_id, from_index, to_index));
+}
+
+void local_player_request_storage_transfer(const char* entity_id, const char* item_id,
+                                           int quantity, bool deposit,
+                                           int from_index, int to_index) {
+    network_send(json_pack_storage_transfer(entity_id, item_id, quantity, deposit,
+                                            from_index, to_index));
+}
+
 void local_player_on_tick(void) {
     if (!g_local.freeze_pending) { return; }
     if (GetTime() < g_local.freeze_deadline) { return; }

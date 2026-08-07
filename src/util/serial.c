@@ -144,6 +144,45 @@ cJSON* json_pack_craft_cancel(void) {
     return new_message("craft_cancel", &p);
 }
 
+static cJSON* pack_storage_slots(const char* type, const char* entity_id,
+                                 int from_index, int to_index) {
+    cJSON* p;
+    cJSON* root = new_message(type, &p);
+    cJSON_AddStringToObject(p, "entityId", entity_id ? entity_id : "");
+    cJSON_AddNumberToObject(p, "fromIndex", from_index);
+    cJSON_AddNumberToObject(p, "toIndex", to_index);
+    return root;
+}
+
+cJSON* json_pack_storage_open(const char* entity_id) {
+    cJSON* p;
+    cJSON* root = new_message("storage_open", &p);
+    cJSON_AddStringToObject(p, "entityId", entity_id ? entity_id : "");
+    return root;
+}
+
+cJSON* json_pack_storage_move(const char* entity_id, int from_index, int to_index,
+                              int quantity) {
+    cJSON* root = pack_storage_slots("storage_move", entity_id, from_index, to_index);
+    cJSON_AddNumberToObject(cJSON_GetObjectItemCaseSensitive(root, "payload"),
+                            "quantity", quantity);
+    return root;
+}
+
+cJSON* json_pack_storage_swap(const char* entity_id, int from_index, int to_index) {
+    return pack_storage_slots("storage_swap", entity_id, from_index, to_index);
+}
+
+cJSON* json_pack_storage_transfer(const char* entity_id, const char* item_id, int quantity,
+                                  bool deposit, int from_index, int to_index) {
+    cJSON* root = pack_storage_slots("storage_transfer", entity_id, from_index, to_index);
+    cJSON* p = cJSON_GetObjectItemCaseSensitive(root, "payload");
+    cJSON_AddStringToObject(p, "itemId", item_id ? item_id : "");
+    cJSON_AddNumberToObject(p, "quantity", quantity);
+    cJSON_AddBoolToObject(p, "deposit", deposit);
+    return root;
+}
+
 /* ============================================================================
  * Read helpers
  * ============================================================================ */

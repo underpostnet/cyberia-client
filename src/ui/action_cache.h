@@ -70,6 +70,7 @@ typedef struct {
     int  shop_count;
     ActionCraftRecipe craft_recipes[ACTION_CACHE_CRAFT_MAX];
     int  craft_count;
+    int  storage_slots;
     ActionCacheState state;
 } ActionMetadataEntry;
 

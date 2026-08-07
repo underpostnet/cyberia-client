@@ -15,6 +15,8 @@
 #include "notify_store.h"
 #include "ui/floating_combat_text.h"
 #include "ui/loot_fx.h"
+#include "ui/item_slot_grid.h"
+#include "ui/modal_interact.h"
 #include "ui/modal_notification.h"
 #include "ui/quest_cache.h"
 #include "ui/quest_progress_store.h"
@@ -672,6 +674,34 @@ static void json_unpack_shop_ack(const cJSON* payload) {
                             (Color){ 210, 120, 110, 255 });
 }
 
+/* storage_state is the authoritative vault, pushed after open and after every
+ * mutation. The client adopts it wholesale over its optimistic view, so a
+ * rejected drag self-heals without a bespoke error path. */
+static void json_unpack_storage_state(const cJSON* payload) {
+    char entity_id[64] = {0};
+    serial_get_string(payload, "entityId", entity_id, sizeof(entity_id));
+    int capacity = serial_get_int_default(payload, "capacity", 0);
+
+    ObjectLayerState slots[ITEM_SLOT_GRID_MAX_SLOTS];
+    int indices[ITEM_SLOT_GRID_MAX_SLOTS];
+    int count = 0;
+
+    cJSON* arr = serial_get_array(payload, "slots");
+    if (arr) {
+        const cJSON* row = NULL;
+        cJSON_ArrayForEach(row, arr) {
+            if (count >= ITEM_SLOT_GRID_MAX_SLOTS) break;
+            memset(&slots[count], 0, sizeof(slots[count]));
+            if (0 != serial_get_string(row, "itemId", slots[count].item_id,
+                                       sizeof(slots[count].item_id))) continue;
+            slots[count].quantity = serial_get_int_default(row, "qty", 0);
+            indices[count] = serial_get_int_default(row, "index", 0);
+            count++;
+        }
+    }
+    modal_interact_storage_state(entity_id, capacity, slots, indices, count);
+}
+
 /* craft_ack answers the start of an assembly. Accepted: the assembly modal
  * adopts the server's authoritative duration so its progress bar tracks the
  * real timer rather than the cached recipe. Rejected: the modal is torn down
@@ -787,6 +817,7 @@ void message_receive(const uint8_t* data, size_t len) {
     else if (0 == strcmp(type, "dialog_ack"))      json_unpack_dialog_ack(payload);
     else if (0 == strcmp(type, "shop_ack"))        json_unpack_shop_ack(payload);
     else if (0 == strcmp(type, "craft_ack"))       json_unpack_craft_ack(payload);
+    else if (0 == strcmp(type, "storage_state"))   json_unpack_storage_state(payload);
     else LOG_ERROR("[MESSAGE] unknown type '%s'\n", type);
 
     cJSON_Delete(root);

@@ -138,6 +138,11 @@ static void ingest_doc(ActionMetadataEntry* e, const cJSON* doc) {
             if (slot->output_count > 0) e->craft_count++;
         }
     }
+
+    /* storageSlots is the vault capacity; a positive value is what makes the
+     * entity a storage terminal. */
+    const cJSON* storage = cJSON_GetObjectItemCaseSensitive(doc, "storageSlots");
+    e->storage_slots = cJSON_IsNumber(storage) ? storage->valueint : 0;
 }
 
 static void on_action_fetched(const FetchResponse* r) {
