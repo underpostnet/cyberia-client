@@ -69,6 +69,9 @@ bool inventory_bar_point_covered(int mx, int my);
 /* full_inventory index of the slot below the screen point, or -1 on a miss. */
 int inventory_bar_get_tapped_slot(int mx, int my);
 
+/* Slot rectangle where an item would land after an inventory gain. */
+bool inventory_bar_predicted_item_slot_rect(const char* item_id, Rectangle* out);
+
 /* Screen-space centre of the slot holding `item_id` — loot_fx aims its
  * delivery stream at it. False when the item has no slot. */
 bool inventory_bar_item_slot_center(const char* item_id, Vector2* out);

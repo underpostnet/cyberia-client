@@ -45,6 +45,7 @@ typedef struct {
     float  pulse_age;     /* seconds since the slot pulse fired; < 0 = at rest  */
     bool   hidden;        /* first-copy slot held invisible until pickup lands  */
     bool   held;          /* external hold (reward delivery) — long fallback    */
+    bool   silent;        /* next change lands with no FX (a visible transfer)  */
     bool   present;       /* item was in full_inventory this frame              */
     float  slot_x, slot_y;/* last-known slot center (for the expend after removal) */
     bool   has_slot;      /* slot center has been captured at least once        */
@@ -118,6 +119,14 @@ static void release_pending(FqEntry* e) {
     e->pending_delta = 0;
 }
 
+void fx_inventory_bar_qty_suppress(const char* item_id) {
+    if (!item_id || item_id[0] == '\0') return;
+    FqEntry* e = find(item_id);
+    if (!e) e = alloc_entry(item_id);
+    e->silent = true;
+    e->last_seen = s_clock;
+}
+
 void fx_inventory_bar_qty_hold_for_delivery(const char* item_id) {
     if (!item_id || item_id[0] == '\0') return;
     FqEntry* e = find(item_id);
@@ -127,6 +136,8 @@ void fx_inventory_bar_qty_hold_for_delivery(const char* item_id) {
         e = alloc_entry(item_id);
         e->hidden = true;
     }
+    if (!e->present && 0 == e->actual) e->hidden = true;
+    e->silent  = false;
     e->held    = true;
     e->pending = true;
     e->pending_since = s_clock; /* refreshed by the holder while it waits */
@@ -169,10 +180,19 @@ void fx_inventory_bar_qty_update(float dt) {
                 e->display = (float)qty;
             }
         } else if (e->actual != qty) {
-            /* Hold the change until the pickup particle reaches the slot. */
-            if (!e->pending) { e->pending = true; e->pending_since = s_clock; }
-            e->pending_delta += qty - e->actual;
-            e->actual = qty;
+            if (e->silent) {
+                /* A transfer between two visible surfaces: land the badge with
+                 * no popup, and drop any hold that was waiting on it. */
+                e->actual = qty;
+                e->display = (float)qty;
+                e->hidden = e->held = e->pending = e->silent = false;
+                e->pending_delta = 0;
+            } else {
+                /* Hold the change until the pickup particle reaches the slot. */
+                if (!e->pending) { e->pending = true; e->pending_since = s_clock; }
+                e->pending_delta += qty - e->actual;
+                e->actual = qty;
+            }
         }
         e->present   = true;
         e->last_seen = s_clock;
@@ -194,9 +214,16 @@ void fx_inventory_bar_qty_update(float dt) {
          * leaves full_inventory): synthesize the decrement to 0 so it fires the
          * same -N popup + expend as any in-place reduction. */
         if (!e->present && e->actual > 0 && !e->hidden && !e->held) {
-            if (!e->pending) { e->pending = true; e->pending_since = s_clock; }
-            e->pending_delta += -e->actual;
-            e->actual = 0;
+            if (e->silent) {
+                e->actual = 0;
+                e->display = 0.0f;
+                e->silent = e->pending = false;
+                e->pending_delta = 0;
+            } else {
+                if (!e->pending) { e->pending = true; e->pending_since = s_clock; }
+                e->pending_delta += -e->actual;
+                e->actual = 0;
+            }
         }
 
         /* Fallback: fire even without a pickup animation (quests, coins, etc.). */

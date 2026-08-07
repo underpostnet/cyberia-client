@@ -45,6 +45,12 @@ float fx_inventory_bar_qty_slot_scale(const char* item_id);
  * sprite in full colour for its duration. */
 bool fx_inventory_bar_qty_slot_pulsing(const char* item_id);
 
+/* Apply this item's next quantity change with no popup, pulse or spray — the
+ * badge simply lands on the new total. Used when the item is moving between two
+ * surfaces the player can see (inventory bar ↔ storage vault), where a loss FX
+ * would read as destruction rather than a transfer. */
+void fx_inventory_bar_qty_suppress(const char* item_id);
+
 /* Hold this item's next quantity change (and, for a first copy, the slot
  * itself) until a delivery lands (notify_arrival). The holder must call this
  * every frame while waiting — e.g. the notification modal with a pending

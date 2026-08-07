@@ -193,11 +193,86 @@ static float max_scroll_px(int screen_w, int scroll_count) {
     return max > 0.0f ? max : 0.0f;
 }
 
+/* slot_rect_at returns the screen rect at a fractional slot position — the
+ * reflow slide lands between two indices. */
+static Rectangle slot_rect_at(float si, float bar_top) {
+    float slot_top = bar_top + (bar_height() - bar_slot_size()) * 0.5f;
+    float x = strip_left() + si * (float)slot_pitch() - s_scroll_px;
+    return (Rectangle){ x, slot_top, (float)bar_slot_size(), (float)bar_slot_size() };
+}
+
 /* slot_rect returns the screen rect for the si-th scrollable slot. */
 static Rectangle slot_rect(int si, float bar_top) {
-    float slot_top = bar_top + (bar_height() - bar_slot_size()) * 0.5f;
-    float x = strip_left() + (float)si * (float)slot_pitch() - s_scroll_px;
-    return (Rectangle){ x, slot_top, (float)bar_slot_size(), (float)bar_slot_size() };
+    return slot_rect_at((float)si, bar_top);
+}
+
+/* ── Reflow ───────────────────────────────────────────────────────────── */
+
+/* The strip is left-aligned, so a slot leaving anywhere but the end makes every
+ * slot after it close the gap. Each remembers the position it held, turning
+ * that shift into a slide. Keyed by item_id — inventory entries merge by item,
+ * so one id is one slot. Hit-testing keeps using the settled position, so a
+ * mid-slide slot is tapped where it will land. */
+#define INV_REFLOW_DUR 0.22f
+
+typedef struct {
+    char  item_id[64];
+    float from_si;
+    float to_si;
+    float age;
+} InvReflow;
+
+static InvReflow s_reflow[MAX_OBJECT_LAYERS];
+static int       s_reflow_count = 0;
+
+static float reflow_position(const InvReflow* e) {
+    if (e->age >= INV_REFLOW_DUR) return e->to_si;
+    float u = 1.0f - e->age / INV_REFLOW_DUR;
+    float eased = 1.0f - u * u * u; /* ease-out cubic */
+    return e->from_si + (e->to_si - e->from_si) * eased;
+}
+
+static const InvReflow* reflow_find(const char* item_id) {
+    for (int i = 0; i < s_reflow_count; i++) {
+        if (0 == strcmp(s_reflow[i].item_id, item_id)) return &s_reflow[i];
+    }
+    return NULL;
+}
+
+/* Position a slot is drawn at, mid-slide while it closes a gap. */
+static float reflow_si(const char* item_id, int si) {
+    const InvReflow* e = reflow_find(item_id);
+    return e ? reflow_position(e) : (float)si;
+}
+
+static void update_reflow(float dt) {
+    int map[MAX_OBJECT_LAYERS];
+    int n = build_scroll_map(find_coin_slot(), map, false);
+
+    InvReflow next[MAX_OBJECT_LAYERS];
+    for (int si = 0; si < n; si++) {
+        const char* id = g_game_state.full_inventory[map[si]].item_id;
+        const InvReflow* prev = reflow_find(id);
+        InvReflow* e = &next[si];
+        memset(e, 0, sizeof(*e));
+        strncpy(e->item_id, id, sizeof(e->item_id) - 1);
+        if (!prev) {
+            /* A slot appearing for the first time starts where it belongs. */
+            e->from_si = e->to_si = (float)si;
+            e->age = INV_REFLOW_DUR;
+        } else if (prev->to_si != (float)si) {
+            /* Slide from wherever it is right now, so a second shift arriving
+             * mid-slide continues rather than snapping back. */
+            e->from_si = reflow_position(prev);
+            e->to_si   = (float)si;
+            e->age     = 0.0f;
+        } else {
+            *e = *prev;
+            e->age += dt;
+        }
+    }
+    memcpy(s_reflow, next, sizeof(InvReflow) * (size_t)n);
+    s_reflow_count = n;
 }
 
 /* coin_slot_rect returns the rect for the pinned coin slot (right of scrollable area). */
@@ -350,6 +425,7 @@ void inventory_bar_init(ObjectLayersManager* ol_manager) {
     s_dragging      = false;
     s_pointer_was_down = false;
     s_tap_pending   = false;
+    s_reflow_count  = 0;
     s_bar_toggle_init = false;
     ensure_bar_toggle();
     fx_inventory_bar_qty_init();
@@ -361,6 +437,7 @@ void inventory_bar_update(float dt) {
     ui_toggle_set_anchor(&s_bar_toggle,
                          bar_toggle_anchor(GetScreenHeight()));
     fx_inventory_bar_qty_update(dt);
+    update_reflow(dt);
     update_drag(dt);
 }
 
@@ -409,6 +486,8 @@ void inventory_bar_draw(void) {
             int inv_idx = scroll_map[si];
             ObjectLayerState ol = g_game_state.full_inventory[inv_idx];
             ol.quantity = fx_inventory_bar_qty_display(ol.item_id, ol.quantity);
+            /* Culled on the settled rect, drawn at the sliding one. */
+            r = slot_rect_at(reflow_si(ol.item_id, si), current_bar_top);
             /* During the arrival pulse the sprite renders in full colour. */
             item_slot_draw_ex(scale_rect(r, fx_inventory_bar_qty_slot_scale(ol.item_id)),
                               &ol, s_ol_manager, WHITE, 0.0f,
@@ -476,7 +555,7 @@ bool inventory_bar_point_covered(int mx, int my) {
     return (float)my >= bar_top(GetScreenHeight()) && my < GetScreenHeight();
 }
 
-int inventory_bar_get_tapped_slot(int mx, int my) {
+static int inventory_bar_slot_at(int mx, int my, Rectangle* out_rect) {
     ensure_bar_toggle();
     if (!s_bar_toggle.expanded) return -1;
     int screen_w = GetScreenWidth();
@@ -491,7 +570,8 @@ int inventory_bar_get_tapped_slot(int mx, int my) {
     Rectangle cr = coin_slot_rect(screen_w, current_bar_top);
     if ((float)mx >= cr.x && (float)mx < cr.x + cr.width &&
         (float)my >= cr.y && (float)my < cr.y + cr.height) {
-        return (coin_idx >= 0) ? coin_idx : -1;
+        if (0 <= coin_idx && NULL != out_rect) *out_rect = cr;
+        return (0 <= coin_idx) ? coin_idx : -1;
     }
 
     int scroll_map[MAX_OBJECT_LAYERS];
@@ -505,10 +585,64 @@ int inventory_bar_get_tapped_slot(int mx, int my) {
         if (r.x >= right)          break;
         if ((float)mx >= r.x && (float)mx < r.x + r.width &&
             (float)my >= r.y && (float)my < r.y + r.height) {
+            if (NULL != out_rect) *out_rect = r;
             return scroll_map[si];
         }
     }
     return -1;
+}
+
+int inventory_bar_get_tapped_slot(int mx, int my) {
+    return inventory_bar_slot_at(mx, my, NULL);
+}
+
+static bool inventory_bar_item_slot_rect(const char* item_id, bool append_missing,
+                                         Rectangle* out) {
+    if (!out || !item_id || item_id[0] == '\0') return false;
+
+    ensure_bar_toggle();
+    int screen_w = GetScreenWidth();
+    int screen_h = GetScreenHeight();
+    float current_bar_top = bar_top(screen_h);
+    int n_inv    = g_game_state.full_inventory_count;
+    int coin_idx = find_coin_slot();
+
+    int inv_idx = -1;
+    for (int i = 0; i < n_inv; i++) {
+        if (0 == strcmp(g_game_state.full_inventory[i].item_id, item_id)) {
+            inv_idx = i;
+            break;
+        }
+    }
+
+    if ((0 <= inv_idx && inv_idx == coin_idx) ||
+        (0 > inv_idx && append_missing && is_coin_item_id(item_id))) {
+        *out = coin_slot_rect(screen_w, current_bar_top);
+        return true;
+    }
+
+    int scroll_map[MAX_OBJECT_LAYERS];
+    int scroll_count = build_scroll_map(coin_idx, scroll_map, true);
+    int si = append_missing ? scroll_count : -1;
+    for (int i = 0; i < scroll_count; i++) {
+        if (scroll_map[i] == inv_idx) {
+            si = i;
+            break;
+        }
+    }
+    if (0 > si) return false;
+
+    Rectangle slot = slot_rect(si, current_bar_top);
+    float left  = strip_left();
+    float right = strip_right(screen_w);
+    if (slot.x < left) slot.x = left;
+    if (slot.x + slot.width > right) slot.x = right - slot.width;
+    *out = slot;
+    return true;
+}
+
+bool inventory_bar_predicted_item_slot_rect(const char* item_id, Rectangle* out) {
+    return inventory_bar_item_slot_rect(item_id, true, out);
 }
 
 bool inventory_bar_item_slot_center(const char* item_id, Vector2* out) {
@@ -521,46 +655,16 @@ bool inventory_bar_item_slot_center(const char* item_id, Vector2* out) {
         return true;
     }
 
-    int screen_w = GetScreenWidth();
-    int screen_h = GetScreenHeight();
-    float current_bar_top = bar_top(screen_h);
-    int n_inv    = g_game_state.full_inventory_count;
-    int coin_idx = find_coin_slot();
-
-    int inv_idx = -1;
-    for (int i = 0; i < n_inv; i++) {
-        if (0 == strcmp(g_game_state.full_inventory[i].item_id, item_id)) { inv_idx = i; break; }
-    }
-
-    /* Coins live in the pinned right slot. */
-    if (inv_idx >= 0 && inv_idx == coin_idx) {
-        Rectangle r = coin_slot_rect(screen_w, current_bar_top);
-        *out = (Vector2){ r.x + r.width * 0.5f, r.y + r.height * 0.5f };
+    Rectangle slot;
+    if (inventory_bar_item_slot_rect(item_id, false, &slot)) {
+        *out = (Vector2){ slot.x + slot.width * 0.5f, slot.y + slot.height * 0.5f };
         return true;
     }
 
-    /* Scrollable slot — clamp to the nearest visible column when scrolled off.
-     * Hidden first-copy slots are included: the flight aims at the cell where
-     * the slot will reveal. */
-    if (inv_idx >= 0) {
-        int scroll_map[MAX_OBJECT_LAYERS];
-        int scroll_count = build_scroll_map(coin_idx, scroll_map, true);
-        int si = -1;
-        for (int k = 0; k < scroll_count; k++) {
-            if (scroll_map[k] == inv_idx) { si = k; break; }
-        }
-        if (si >= 0) {
-            Rectangle r = slot_rect(si, current_bar_top);
-            float left  = strip_left();
-            float right = strip_right(screen_w);
-            if (r.x < left)                 r.x = left;
-            if (r.x + r.width > right)      r.x = right - r.width;
-            *out = (Vector2){ r.x + r.width * 0.5f, r.y + r.height * 0.5f };
-            return true;
-        }
-    }
-
     /* Unknown item — aim at the bar center. */
+    int screen_w = GetScreenWidth();
+    int screen_h = GetScreenHeight();
+    float current_bar_top = bar_top(screen_h);
     *out = (Vector2){ screen_w * 0.5f, current_bar_top + bar_height() * 0.5f };
     return true;
 }
