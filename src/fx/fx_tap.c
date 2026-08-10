@@ -1,6 +1,8 @@
 // Tap feedback: a single electric-yellow cross with a wide black border that
 // forms at the tap's WORLD position — it stays pinned to the grid cell while
-// the camera moves. Fixed pool, no heap allocation.
+// the camera moves, and every dimension scales with the camera zoom so the
+// cross keeps a fixed size relative to grid entities. Fixed pool, no heap
+// allocation.
 
 #include "fx_tap.h"
 
@@ -13,6 +15,19 @@
 
 #define FX_TAP_TAU 6.28318530718f
 #define FX_TAP_PULSE_CYCLES 2.0f
+
+/* Cross geometry is authored in world-reference pixels — the on-screen size at
+ * zoom 1.0 — then multiplied by the live camera zoom at draw time. */
+#define FX_TAP_REF_SIZE      14.0f
+#define FX_TAP_REF_GROW      14.0f
+#define FX_TAP_REF_LENGTH     8.0f
+#define FX_TAP_REF_THICKNESS  5.0f
+#define FX_TAP_REF_GAP        6.0f
+#define FX_TAP_REF_BORDER     3.0f
+
+/* Screen-space floor applied after zoom scaling so bars and their borders never
+ * collapse to nothing at minimum zoom. */
+#define FX_TAP_MIN_PIXELS 1.0f
 
 typedef struct {
     Vector2 position;
@@ -64,14 +79,28 @@ static FxTapEntry* fx_tap_alloc_entry(void) {
     return slot;
 }
 
-static void fx_tap_draw_cross(const FxTapEntry* entry, Vector2 screen_pos, float t) {
+/* Zoom-scale a world-reference dimension, then snap so edges land on whole
+ * pixels. Snapping must happen after scaling, otherwise the zoom multiply
+ * reintroduces the fractional edges the snap removed. */
+static float fx_tap_scale_px(float reference_px, float zoom) {
+    float scaled = fx_tap_snapf(reference_px * zoom);
+    return scaled < FX_TAP_MIN_PIXELS ? FX_TAP_MIN_PIXELS : scaled;
+}
+
+static void fx_tap_draw_cross(const FxTapEntry* entry, Vector2 screen_pos, float t, float zoom) {
     float grow = fx_tap_ease_out_quart(fx_tap_clampf(t / 0.22f, 0.0f, 1.0f));
     float pulse = 1.0f + 0.20f * sinf(t * FX_TAP_TAU * FX_TAP_PULSE_CYCLES);
-    float size = fx_tap_snapf((14.0f + 14.0f * grow) * entry->scale * (0.90f + 0.22f * entry->intensity) * pulse);
-    float length = fx_tap_snapf(fmaxf(8.0f, size * 0.40f));
-    float thickness = fx_tap_snapf(fmaxf(5.0f, size * 0.16f));
-    float gap = fx_tap_snapf(fmaxf(6.0f, size * 0.30f));
-    float border = fx_tap_snapf(fmaxf(3.0f, thickness * 0.60f));
+    float size = (FX_TAP_REF_SIZE + FX_TAP_REF_GROW * grow) * entry->scale *
+                 (0.90f + 0.22f * entry->intensity) * pulse;
+    float ref_length = fmaxf(FX_TAP_REF_LENGTH, size * 0.40f);
+    float ref_thickness = fmaxf(FX_TAP_REF_THICKNESS, size * 0.16f);
+    float ref_gap = fmaxf(FX_TAP_REF_GAP, size * 0.30f);
+    float ref_border = fmaxf(FX_TAP_REF_BORDER, ref_thickness * 0.60f);
+
+    float length = fx_tap_scale_px(ref_length, zoom);
+    float thickness = fx_tap_scale_px(ref_thickness, zoom);
+    float gap = fx_tap_scale_px(ref_gap, zoom);
+    float border = fx_tap_scale_px(ref_border, zoom);
     float x = fx_tap_snapf(screen_pos.x);
     float y = fx_tap_snapf(screen_pos.y);
     float half = fx_tap_snapf(thickness * 0.5f);
@@ -136,12 +165,13 @@ void fx_tap_draw(void) {
     if (!s_fx_tap_ready) return;
 
     Camera2D cam = camera_get();
+    float zoom = cam.zoom > 0.0f ? cam.zoom : 1.0f;
     for (int i = 0; i < FX_TAP_MAX_ENTRIES; i++) {
         const FxTapEntry* entry = &s_entries[i];
         if (!entry->active || entry->duration <= 0.0f) continue;
 
         Vector2 screen_pos = GetWorldToScreen2D(entry->position, cam);
         float t = fx_tap_clampf(entry->age / entry->duration, 0.0f, 1.0f);
-        fx_tap_draw_cross(entry, screen_pos, t);
+        fx_tap_draw_cross(entry, screen_pos, t, zoom);
     }
 }
