@@ -989,6 +989,15 @@ void modal_interact_close(void) {
 
 bool modal_interact_is_open(void) { return s_open; }
 
+bool modal_interact_overlay_is_open(void) { return s_overlay_open; }
+
+bool modal_interact_card_rect(const char* entity_id, Rectangle* out) {
+    if (NULL == out || !s_open || !modal_anchor_active()) return false;
+    if (NULL == entity_id || 0 != strcmp(entity_id, s_entity_id)) return false;
+    *out = card_rect();
+    return true;
+}
+
 /* Bottom of the horizontal band this modal reserves, which the paired dialogue
  * stacks under. The anchored card floats over its entity and reserves nothing,
  * so it reports 0 and the dialogue keeps its own position. */

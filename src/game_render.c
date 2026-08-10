@@ -1025,13 +1025,16 @@ void game_render_ui(void) {
     }
 
     // Intermediate interaction modal (below dialogue in the draw order).
-    // Hidden while the mobile fullscreen dialogue reader is up.
-    if (modal_interact_is_open() && !modal_dialogue_is_fullscreen()) {
+    // Hidden while the mobile fullscreen dialogue reader is up, and while the
+    // JS overlay holds the session — the anchored overlay's backdrop is
+    // transparent, so anything still drawn here would show through it.
+    bool js_overlay = modal_interact_overlay_is_open();
+    if (modal_interact_is_open() && !modal_dialogue_is_fullscreen() && !js_overlay) {
         modal_interact_draw();
     }
 
     // Dialogue modal
-    if (modal_dialogue_is_open()) {
+    if (modal_dialogue_is_open() && !js_overlay) {
         modal_dialogue_draw();
     }
 

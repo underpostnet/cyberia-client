@@ -37,6 +37,17 @@ void modal_interact_close(void);
 bool modal_interact_is_open(void);
 float modal_interact_layout_bottom(void);
 
+/* True while the JS interact overlay has taken over this modal's session. The
+ * card and its paired dialogue stay out of the frame for the duration —
+ * without this they show through the overlay's transparent backdrop. */
+bool modal_interact_overlay_is_open(void);
+
+/* Anchored card rect this modal is currently showing for `entity_id`, for a
+ * panel taking its place (the DOM overlay). False when the modal is closed,
+ * showing a different entity, or using the full-width layout — the caller then
+ * resolves its own placement. */
+bool modal_interact_card_rect(const char* entity_id, Rectangle* out);
+
 /* Quest-talk switcher for the paired dialogue: one entry per active quest with
  * an incomplete talk objective this NPC's action maps to a dialogue. The
  * dialogue draws a button bar above its title; selecting an index swaps the

@@ -25,6 +25,15 @@ extern void js_interact_overlay_open(const char* entity_id,
                                      int border_a,
                                      int initial_tab);
 
+/* Placement for the next open. `anchored` 0 keeps the full-bleed opaque panel
+ * (mobile and small viewports); 1 parks the panel on the given screen rect and
+ * makes its backdrop transparent, so the overlay reads as the same card the C
+ * interact modal was showing. The rect is in CSS pixels, which the canvas is
+ * sized in (render.c drives it from window.innerWidth/Height), so raylib screen
+ * coordinates pass through unchanged. */
+extern void js_interact_overlay_set_anchor(int anchored, int x, int y,
+                                           int width, int height);
+
 extern void js_interact_overlay_close(void);
 
 extern int  js_interact_overlay_is_open(void);

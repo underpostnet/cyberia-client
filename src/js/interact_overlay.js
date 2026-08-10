@@ -2,9 +2,19 @@
  * @file interact_overlay.js
  * @brief General-purpose interact overlay — non-intrusive, real-time MMORPG.
  *
- * Bottom-docked panel for entity interactions: Chat, Integration.
- * Uses the browser DOM for keyboard input and text rendering — areas where
- * the web platform has clear advantages over Raylib.
+ * Panel for entity interactions: Chat, Integration. Uses the browser DOM for
+ * keyboard input and text rendering — areas where the web platform has clear
+ * advantages over Raylib.
+ *
+ * The panel is translucent in every layout — the world keeps reading through
+ * it, so a chat window never hides what the grid is doing. Two layouts, chosen
+ * by C and pushed through js_interact_overlay_set_anchor:
+ *   full-bleed — covers the viewport (mobile, small windows). No "outside"
+ *                area, so only the Back button closes it.
+ *   anchored   — above the desktop breakpoint, a compact card on the screen
+ *                rect C resolved over the target entity, the rest of the world
+ *                left clear. An outside tap dismisses, matching the C panel
+ *                modals.
  *
  * Tabs:
  *   Chat        — 1:1 chat input + history + quick-chat presets.
@@ -58,7 +68,6 @@ mergeInto(LibraryManager.library, {
 
   $IP: {
     el: null,
-    backdrop: null,
     open: false,
     hidden: false,
     entityId: '',
@@ -72,6 +81,9 @@ mergeInto(LibraryManager.library, {
     activeTab: 'chat',
     initialTab: 'chat',
     chatHistory: [],
+    /* Screen rect (CSS px) pushed from C for the anchored desktop layout, or
+     * null for the full-bleed panel. See js_interact_overlay_set_anchor. */
+    anchor: null,
     dom: {},
   },
 
@@ -80,14 +92,19 @@ mergeInto(LibraryManager.library, {
    * ================================================================ */
 
   $IPS: {
-    panelBg: 'rgba(8,8,18,0.92)',
-    headerBg: 'rgba(12,12,28,0.96)',
+    /* The panel's single tint, in every layout. Light enough that the grid
+     * keeps reading through it — a chat window should never stop you seeing
+     * what the world is doing. It only reads as translucent while it is the
+     * ONLY full-surface fill: the header and message list below are lifts
+     * layered over it, not second sheets, because stacked opaque fills
+     * compound (0.92 over 0.92 over 0.82 is 0.999 — solid black). */
+    panelBg: 'rgba(8,8,18,0.62)',
+    headerBg: 'rgba(12,12,28,0.45)',
     border: 'rgba(50,50,90,0.6)',
     nameCol: 'rgba(180,200,240,1)',
     textCol: 'rgba(200,200,215,0.92)',
     hintCol: 'rgba(100,100,130,0.65)',
     tabBg: 'rgba(16,16,32,0.92)',
-    tabActive: 'rgba(8,8,18,0.92)',
     tabInactive: 'rgba(22,24,44,0.88)',
     tabTextActive: 'rgba(220,230,255,1)',
     tabTextInactive: 'rgba(130,140,170,0.85)',
@@ -95,7 +112,7 @@ mergeInto(LibraryManager.library, {
     btnHover: 'rgba(40,50,90,0.95)',
     btnText: 'rgba(180,190,220,1)',
     btnAccent: 'rgba(50,70,140,1)',
-    chatBg: 'rgba(14,14,28,0.82)',
+    chatBg: 'rgba(14,14,28,0.35)',
     chatMe: 'rgba(120,180,240,1)',
     chatThem: 'rgba(200,200,220,0.88)',
     inputBg: 'rgba(18,18,36,0.88)',
@@ -104,6 +121,12 @@ mergeInto(LibraryManager.library, {
     closeBg: 'rgba(180,80,80,0.8)',
     closeHover: 'rgba(220,100,100,1)',
     qcBg: 'rgba(22,26,48,0.85)',
+    /* Anchored card only: it floats over the live world, so it carries its
+     * own edge instead of running to the viewport bounds. */
+    cardRadius: '8px',
+    cardShadow: '0 10px 28px rgba(0,0,0,0.55)',
+    /* Margin the anchored card keeps from the viewport edges (CSS px). */
+    anchorPad: 8,
   },
 
   $IP_QC: ['Hello!', 'GG', 'Help!', 'Trade?', 'Follow me', 'Thanks!'],
@@ -184,6 +207,59 @@ mergeInto(LibraryManager.library, {
   },
 
   /* ================================================================
+   * Layout — full-bleed panel, or a card anchored over the entity
+   *
+   * Mirrors ui/modal_anchor.c: above the desktop breakpoint C resolves a
+   * screen rect over the target entity and pushes it here, and the panel
+   * shrinks to a card on that rect instead of covering the viewport. C owns
+   * the breakpoint and the rect so both surfaces place panels the same way;
+   * this only applies what it is handed, re-clamping to the viewport because a
+   * resize can outdate a rect C is no longer recomputing.
+   * ================================================================ */
+
+  $ipApplyLayout__deps: ['$IP', '$IPS'],
+  $ipApplyLayout: function () {
+    var P = IP,
+      S = IPS,
+      D = P.dom;
+    if (!P.el || !D.card) return;
+
+    /* The layer never paints — it only positions the card and catches taps.
+     * The card owns the one translucent tint in both layouts, so only its
+     * geometry and edge treatment change below. */
+    if (!P.anchor) {
+      /* Full-bleed: the card covers the viewport. */
+      D.card.style.left = '0';
+      D.card.style.top = '0';
+      D.card.style.width = '100%';
+      D.card.style.height = '100%';
+      D.card.style.border = 'none';
+      D.card.style.borderRadius = '0';
+      D.card.style.boxShadow = 'none';
+      return;
+    }
+
+    /* Anchored: card fitted into the viewport. Shrink before clamping so an
+     * oversized rect lands inside rather than hanging off an edge — the same
+     * order as fit_into() in modal_anchor.c. */
+    var pad = S.anchorPad;
+    var vw = window.innerWidth,
+      vh = window.innerHeight;
+    var w = Math.min(P.anchor.w, vw - 2 * pad);
+    var h = Math.min(P.anchor.h, vh - 2 * pad);
+    var x = Math.max(pad, Math.min(P.anchor.x, vw - pad - w));
+    var y = Math.max(pad, Math.min(P.anchor.y, vh - pad - h));
+
+    D.card.style.left = x + 'px';
+    D.card.style.top = y + 'px';
+    D.card.style.width = w + 'px';
+    D.card.style.height = h + 'px';
+    D.card.style.border = '1px solid ' + P.borderColor;
+    D.card.style.borderRadius = S.cardRadius;
+    D.card.style.boxShadow = S.cardShadow;
+  },
+
+  /* ================================================================
    * Build panel DOM — called once on first open, then reused
    * ================================================================ */
 
@@ -195,6 +271,7 @@ mergeInto(LibraryManager.library, {
     '$IP_QC',
     '$ipRenderChat',
     '$ipSwitchTab',
+    '$ipApplyLayout',
     '$FetchState',
     'js_interact_overlay_close',
     'js_interact_overlay_send_chat',
@@ -214,10 +291,10 @@ mergeInto(LibraryManager.library, {
       document.head.appendChild(sheet);
     }
 
-    /* No backdrop — panel fills the whole screen so there's no
-     * "outside" area to tap. Only the X button closes the overlay. */
-
-    /* ── Root panel (full-screen overlay) ── */
+    /* ── Root layer ──
+     * Never painted: it positions the card and catches pointer events, so a
+     * tap beside an anchored card dismisses instead of reaching the canvas —
+     * the same gesture the C panel modals answer to. */
     P.el = ipEl(
       'div',
       {
@@ -229,18 +306,35 @@ mergeInto(LibraryManager.library, {
         zIndex: '9999',
         fontFamily: 'monospace',
         display: 'none',
-        flexDirection: 'column',
-        animation: 'ipSlide 0.14s ease-out',
         pointerEvents: 'auto',
-        background: S.panelBg,
+        animation: 'ipSlide 0.14s ease-out',
       },
       document.body,
     );
+    P.el.onclick = function (ev) {
+      /* Only a hit on the layer itself — the card covers it entirely in the
+       * full-bleed layout, so that layout never sees this. */
+      if (ev.target !== P.el) return;
+      _js_interact_overlay_close();
+    };
 
-    /* Panel is full-screen — backdrop isn't needed. */
-    if (P.backdrop) {
-      P.backdrop.style.display = 'none';
-    }
+    /* ── Card: header + body, and the panel's one translucent fill ── */
+    D.card = ipEl(
+      'div',
+      {
+        position: 'absolute',
+        display: 'flex',
+        flexDirection: 'column',
+        overflow: 'hidden',
+        background: S.panelBg,
+      },
+      P.el,
+    );
+
+    /* A resize invalidates a rect resolved against the old viewport. */
+    window.addEventListener('resize', function () {
+      if (P.open) ipApplyLayout();
+    });
 
     /* ── Header with entity name + close ── */
     var hdr = ipEl(
@@ -254,7 +348,7 @@ mergeInto(LibraryManager.library, {
         minHeight: '40px',
         flexShrink: '0',
       },
-      P.el,
+      D.card,
     );
 
     D.nameEl = ipEl(
@@ -311,7 +405,6 @@ mergeInto(LibraryManager.library, {
       'div',
       {
         flex: '1',
-        background: S.tabActive,
         padding: '12px 14px',
         overflowY: 'auto',
         overflowX: 'hidden',
@@ -319,7 +412,7 @@ mergeInto(LibraryManager.library, {
         display: 'flex',
         flexDirection: 'column',
       },
-      P.el,
+      D.card,
     );
   },
 
@@ -524,7 +617,15 @@ mergeInto(LibraryManager.library, {
    * Chat tab — messages + input + quick-chat
    * ================================================================ */
 
-  $ipBuildChatTab__deps: ['$IP', '$IPS', '$IP_QC', '$ipEl', '$ipBtn', '$ipRenderChat', 'js_interact_overlay_send_chat'],
+  $ipBuildChatTab__deps: [
+    '$IP',
+    '$IPS',
+    '$IP_QC',
+    '$ipEl',
+    '$ipBtn',
+    '$ipRenderChat',
+    'js_interact_overlay_send_chat',
+  ],
   $ipBuildChatTab: function (container) {
     var P = IP,
       S = IPS,
@@ -687,7 +788,14 @@ mergeInto(LibraryManager.library, {
    * Public API — called from C via extern declarations
    * ================================================================ */
 
-  js_interact_overlay_open__deps: ['$IP', '$IPStore', '$ipStoreEnsure', '$ipBuild', '$ipPopulate'],
+  js_interact_overlay_set_anchor__deps: ['$IP', '$ipApplyLayout'],
+  js_interact_overlay_set_anchor: function (anchored, x, y, width, height) {
+    var P = IP;
+    P.anchor = anchored ? { x: x, y: y, w: width, h: height } : null;
+    if (P.open) ipApplyLayout();
+  },
+
+  js_interact_overlay_open__deps: ['$IP', '$IPStore', '$ipStoreEnsure', '$ipBuild', '$ipPopulate', '$ipApplyLayout'],
   js_interact_overlay_open: function (
     entity_id_ptr,
     display_name_ptr,
@@ -726,9 +834,10 @@ mergeInto(LibraryManager.library, {
     });
 
     ipBuild();
+    ipApplyLayout();
     ipPopulate();
 
-    P.el.style.display = 'flex';
+    P.el.style.display = 'block';
   },
 
   js_interact_overlay_set_ol_stack__deps: ['$IP', '$ipPopulate'],
