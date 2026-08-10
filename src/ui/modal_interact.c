@@ -7,6 +7,7 @@
 #include "fx_inventory_bar_qty.h"
 #include "fx_item_transfer.h"
 #include "domain/local_player.h"
+#include "domain/presentation_runtime.h"
 #include "domain/viewport.h"
 #include "game_state.h"
 #include "world_types.h"
@@ -635,35 +636,52 @@ static bool dialog_btn_visible(void) {
     return modal_dialogue_is_collapsed();
 }
 
+/* The Integration tab is a developer surface — it links out to the object-layer
+ * engine viewer — so its button only appears while the dev UI is on. */
+static bool integration_btn_visible(void) {
+    return presentation_runtime_dev_ui();
+}
+
+/* Chat is the only permanent entry; Dialog and Integration come and go, and the
+ * row re-packs around whichever are showing. */
 static void bar_buttons(Rectangle card, Rectangle* dialog, Rectangle* chat,
                         Rectangle* integration) {
     Rectangle bar = bar_rect(card);
     float pad = mi_pad();
     float button_h = mi_bar_btn_h();
     float by = bar.y + (bar.height - button_h) * 0.5f;
+    bool show_dialog      = dialog_btn_visible();
+    bool show_integration = integration_btn_visible();
+
+    *dialog      = (Rectangle){ 0 };
+    *integration = (Rectangle){ 0 };
+
     if (viewport_is_mobile()) {
-        int   count = dialog_btn_visible() ? 3 : 2;
+        int   count = 1 + (show_dialog ? 1 : 0) + (show_integration ? 1 : 0);
         float bw = (bar.width - 2.0f * pad - (float)(count - 1) * MI_BAR_BTN_GAP)
                    / (float)count;
         float x = bar.x + pad;
-        *dialog = (Rectangle){ 0 };
-        if (dialog_btn_visible()) {
+        if (show_dialog) {
             *dialog = (Rectangle){ x, by, bw, button_h };
             x += bw + MI_BAR_BTN_GAP;
         }
-        *chat        = (Rectangle){ x, by, bw, button_h };
-        *integration = (Rectangle){ x + bw + MI_BAR_BTN_GAP, by, bw, button_h };
+        *chat = (Rectangle){ x, by, bw, button_h };
+        x += bw + MI_BAR_BTN_GAP;
+        if (show_integration) *integration = (Rectangle){ x, by, bw, button_h };
         return;
     }
 
-    *dialog = (Rectangle){ 0 };
+    /* Desktop: packed against the bar's right edge, laid out right to left. */
     float bw = (bar.width - 3.0f * pad) * 0.5f;
     if (bw > mi_bar_btn_maxw()) bw = mi_bar_btn_maxw();
-    float ix = bar.x + bar.width - pad - bw;
-    *integration = (Rectangle){ ix, by, bw, button_h };
-    *chat        = (Rectangle){ ix - MI_BAR_BTN_GAP - bw, by, bw, button_h };
-    if (dialog_btn_visible())
-        *dialog = (Rectangle){ chat->x - MI_BAR_BTN_GAP - bw, by, bw, button_h };
+    float x = bar.x + bar.width - pad - bw;
+    if (show_integration) {
+        *integration = (Rectangle){ x, by, bw, button_h };
+        x -= MI_BAR_BTN_GAP + bw;
+    }
+    *chat = (Rectangle){ x, by, bw, button_h };
+    x -= MI_BAR_BTN_GAP + bw;
+    if (show_dialog) *dialog = (Rectangle){ x, by, bw, button_h };
 }
 
 static Rectangle slot_rect_in(Rectangle content, int i) {
@@ -2653,17 +2671,19 @@ void modal_interact_draw(void) {
         DrawText(txt, (int)(bx - tw * 0.5f), (int)(by - 5.5f), 11, (Color){ 255, 255, 255, 245 });
     }
 
-    int ifont = viewport_is_mobile() ? 12 : mi_font_btn();
-    UIButtonPixelRetroStyle integration_st = {
-        .bg = C_BTN,
-        .icon_id = "reload",
-        .label = "Integration",
-        .font_size = ifont,
-        .text_color = C_TEXT,
-        .selected = false,
-        .enabled = true,
-    };
-    ui_button_pixel_retro_draw(integration, &integration_st, ui_button_hit(integration, mx, my));
+    if (integration_btn_visible()) {
+        int ifont = viewport_is_mobile() ? 12 : mi_font_btn();
+        UIButtonPixelRetroStyle integration_st = {
+            .bg = C_BTN,
+            .icon_id = "reload",
+            .label = "Integration",
+            .font_size = ifont,
+            .text_color = C_TEXT,
+            .selected = false,
+            .enabled = true,
+        };
+        ui_button_pixel_retro_draw(integration, &integration_st, ui_button_hit(integration, mx, my));
+    }
 }
 
 /* ── Click ────────────────────────────────────────────────────────────── */
@@ -2712,7 +2732,7 @@ bool modal_interact_handle_click(int mx, int my) {
         open_overlay(INTERACT_OVERLAY_TAB_CHAT);
         return true;
     }
-    if (ui_button_hit(integration, mx, my)) {
+    if (integration_btn_visible() && ui_button_hit(integration, mx, my)) {
         open_overlay(INTERACT_OVERLAY_TAB_INTEGRATION);
         return true;
     }
