@@ -28,6 +28,7 @@
 #include "interaction_bubble.h"
 #include "inventory_bar.h"
 #include "modal.h"
+#include "modal_anchor.h"
 #include "modal_dialogue.h"
 #include "modal_interact.h"
 #include "object_layer.h"
@@ -92,6 +93,17 @@ static bool      s_skill_arrows_visible = false;
 static UIScroll s_content_scroll;
 static float    s_content_height = 0.0f;
 
+/* Entity the card is anchored over on large screens — the vendor, assembler or
+ * NPC whose panel opened this item. Empty means the local player, who owns the
+ * inventory the modal reads. */
+static char  s_anchor_entity[MAX_ID_LENGTH] = {0};
+/* Anchored card height, tracking the measured content. Negative until the
+ * first measurement of a session, which snaps. */
+static float s_anchor_h = -1.0f;
+/* Frozen top-left corner and the flag that stops it being re-resolved. */
+static ModalAnchor s_anchor = { 0 };
+static bool s_anchor_settled = false;
+
 /* ── Layout constants ───────────────────────────────────────────────────── */
 
 /* The inventory modal fills the whole viewport between the top toolbar and
@@ -101,6 +113,16 @@ static float    s_content_height = 0.0f;
 
 #define IM_CARD_PAD    8.0f   /* outer margin around the full-screen card    */
 #define IM_HEADER_H   36.0f   /* interact-style header strip                 */
+
+/* Anchored layout (large screens): a compact card parked over the entity that
+ * opened it, sized to its content instead of to the viewport. */
+#define IM_ANCHOR_MIN_H       260.0f
+#define IM_ANCHOR_DEFAULT_H   420.0f
+/* Panel fill opacity with no dimmed backdrop behind the card (vs 150 for the
+ * full-width layout, which sits on the overlay). */
+#define IM_ANCHOR_PANEL_ALPHA 236.0f
+/* Clearance the header title keeps from the close button. */
+#define IM_HEADER_TITLE_GAP     8.0f
 
 #define MODAL_SPRITE_FRAC  0.38f   /* sprite size as fraction of card width */
 #define MODAL_SPRITE_MIN   100
@@ -264,7 +286,33 @@ static void rebuild_dir_str(void) {
     snprintf(s_dir_str, sizeof(s_dir_str), "%s_%s", s_dir, s_mode);
 }
 
+/* Vertical space the fixed controls hold below the scrolling content, matching
+ * inventory_activate_button_rect / inventory_lore_button_rect and the gap
+ * inventory_content_view leaves above them. External items show no controls. */
+static float inventory_controls_reserved(bool lore_available) {
+    if (s_is_external) return IM_CARD_PAD;
+    float reserved = im_button_h() + (inventory_modal_compact() ? 10.0f : 14.0f) +
+                     IM_LANDSCAPE_CONTROL_PAD;
+    if (lore_available)
+        reserved += im_lore_button_h() + (inventory_modal_compact() ? 6.0f : 10.0f);
+    return reserved;
+}
+
+static Vector2 anchor_card_size(Rectangle safe) {
+    return (Vector2){
+        safe.width < MODAL_ANCHOR_MAX_W ? safe.width : MODAL_ANCHOR_MAX_W,
+        s_anchor_h > 0.0f ? s_anchor_h : IM_ANCHOR_DEFAULT_H,
+    };
+}
+
+static Rectangle anchored_card_rect(void) {
+    Rectangle safe = modal_anchor_safe_area(IM_CARD_PAD, IM_ANCHOR_MIN_H);
+    return modal_anchor_rect(&s_anchor, anchor_card_size(safe), safe);
+}
+
 static Rectangle card_rect(int sw, int sh, float scale) {
+    if (modal_anchor_active()) return modal_scale_rect(anchored_card_rect(), scale);
+
     /* Full-viewport card between the toolbar and the inventory bar —
      * mirrors the interact modal's container. */
     float top    = toolbar_height() + IM_CARD_PAD;
@@ -274,14 +322,54 @@ static Rectangle card_rect(int sw, int sh, float scale) {
     return modal_scale_rect(r, scale);
 }
 
+/* `card_h` <= 0 means no height budget: the anchored card derives its height
+ * from the content, so the sprite has to derive its size from the card width
+ * alone or the two chase each other down to the minimum. An oversized result
+ * is absorbed by the safe-area clamp and the content scroll. */
 static int modal_sprite_size(float card_w, float card_h) {
     int s = (int)(card_w * im_sprite_frac());
-    int max_by_height = (int)(card_h * (inventory_modal_compact() ? 0.34f : 0.46f));
     if (s < im_sprite_min()) s = im_sprite_min();
     if (s > im_sprite_max()) s = im_sprite_max();
-    if (s > max_by_height) s = max_by_height;
+    if (card_h > 0.0f) {
+        int max_by_height = (int)(card_h * (inventory_modal_compact() ? 0.34f : 0.46f));
+        if (s > max_by_height) s = max_by_height;
+    }
     if (s < 4) s = 4;
     return s;
+}
+
+/* Resolve the anchored card's geometry for this frame. */
+static void update_anchor_layout(float dt, bool lore_available) {
+    if (!modal_anchor_active()) {
+        s_anchor_h = -1.0f;
+        s_anchor.captured = false;
+        s_anchor_settled = false;
+        return;
+    }
+
+    float target;
+    if (s_content_height > 0.0f)
+        target = IM_HEADER_H + s_content_height + inventory_controls_reserved(lore_available);
+    else
+        target = s_anchor_h > 0.0f ? s_anchor_h : IM_ANCHOR_DEFAULT_H;
+
+    Rectangle safe = modal_anchor_safe_area(IM_CARD_PAD, IM_ANCHOR_MIN_H);
+    if (target > safe.height)     target = safe.height;
+    if (target < IM_ANCHOR_MIN_H) target = IM_ANCHOR_MIN_H;
+
+    /* While the card opens it snaps to its measured height and keeps resolving
+     * the corner from the entity, so it lands at the real size in the right
+     * place. The corner freezes on the first settled measurement, at the latest
+     * when the entrance animation ends. After that the card ignores the entity
+     * and a content change extends it downward from the same top edge. */
+    if (!s_anchor_settled) {
+        s_anchor_h = target;
+        modal_anchor_capture(&s_anchor, s_anchor_entity, anchor_card_size(safe),
+                             MODAL_ANCHOR_GAP, safe);
+        if (s_content_height > 0.0f || s_age >= MODAL_POP_DURATION) s_anchor_settled = true;
+        return;
+    }
+    s_anchor_h = modal_anchor_ease_height(s_anchor_h, target, dt);
 }
 
 static void send_activation(const char* item_id, bool active) {
@@ -389,6 +477,17 @@ static void reset_view_state(void) {
     s_activate_btn_visible = false;
     ui_scroll_reset(&s_content_scroll);
     s_content_height = 0.0f;
+    s_anchor_entity[0] = '\0';
+    /* A fresh session re-resolves both the height and the frozen corner. */
+    s_anchor_h = -1.0f;
+    s_anchor_settled = false;
+    s_anchor.captured = false;
+}
+
+void inventory_modal_set_anchor_entity(const char* entity_id) {
+    if (NULL == entity_id) { s_anchor_entity[0] = '\0'; return; }
+    strncpy(s_anchor_entity, entity_id, sizeof(s_anchor_entity) - 1);
+    s_anchor_entity[sizeof(s_anchor_entity) - 1] = '\0';
 }
 
 void inventory_modal_open(int inv_idx) {
@@ -494,9 +593,12 @@ void inventory_modal_update(float dt) {
 
     const ObjectLayerState* ols = current_ols();
     if (NULL == ols) return;
+    bool lore_available = inventory_lore_available(ols);
+    /* Resolve the card geometry before anything laid out against it. */
+    update_anchor_layout(dt, lore_available);
     Rectangle card = card_rect(GetScreenWidth(), GetScreenHeight(), 1.0f);
     InventoryModalLayout layout = inventory_modal_layout(card);
-    Rectangle view = inventory_content_view(card, layout, inventory_lore_available(ols));
+    Rectangle view = inventory_content_view(card, layout, lore_available);
     ui_scroll_update(&s_content_scroll, view, s_content_height, dt);
 
     int click_x, click_y;
@@ -531,14 +633,22 @@ void inventory_modal_draw(void) {
     /* 2. Card — interact-style container: translucent panel, 1px border, and
      * a header strip with close button + item title. The dim overlay stops at
      * the inventory bar so the bar stays fully readable and interactive. */
-    float dim_h = (float)screen_h - inventory_bar_visible_height();
-    Color overlay = MODAL_OVERLAY_BG;
-    overlay.a = (unsigned char)(overlay.a * modal_pop_alpha(s_age));
-    DrawRectangle(0, 0, screen_w, (int)dim_h, overlay);
+    /* The anchored card floats over the live world: no dimmed backdrop (it
+     * would hide the very entity the card points at), so it carries its own
+     * shadow and an opaque fill to stay readable over a busy scene. */
+    bool anchored = modal_anchor_active();
     Rectangle card = card_rect(screen_w, screen_h, modal_pop_scale(s_age));
     float alpha = modal_pop_alpha(s_age);
+    if (anchored) {
+        modal_draw_float_shadow(card, s_age);
+    } else {
+        float dim_h = (float)screen_h - inventory_bar_visible_height();
+        Color overlay = MODAL_OVERLAY_BG;
+        overlay.a = (unsigned char)(overlay.a * alpha);
+        DrawRectangle(0, 0, screen_w, (int)dim_h, overlay);
+    }
     Color card_bg = MODAL_PANEL_BG;
-    card_bg.a = (unsigned char)(150 * alpha);
+    card_bg.a = (unsigned char)((anchored ? IM_ANCHOR_PANEL_ALPHA : 150) * alpha);
     DrawRectangleRec(card, card_bg);
     Color card_bc = C_CARD_BORDER;
     card_bc.a = (unsigned char)(card_bc.a * alpha);
@@ -597,15 +707,18 @@ void inventory_modal_draw(void) {
     /* 4. Animated sprite via ol_as_animated_ico
      * Size is dynamic: fills the full column width in wide (landscape) layout,
      * or uses the standard fraction-based sizing in stacked layout. */
+    float sprite_budget_h = modal_anchor_active() ? 0.0f : card.height;
     int sprite_sz;
     if (wide) {
         /* The left pane is dedicated to the preview — fill it dynamically. */
         int s = (int)(pane_w * 0.78f);
-        int max_h = (int)(card.height * 0.56f);
-        if (s > max_h) s = max_h;
+        if (sprite_budget_h > 0.0f) {
+            int max_h = (int)(sprite_budget_h * 0.56f);
+            if (s > max_h) s = max_h;
+        }
         sprite_sz = s;
     } else {
-        sprite_sz = modal_sprite_size(pane_w, card.height);
+        sprite_sz = modal_sprite_size(pane_w, sprite_budget_h);
     }
     float sprite_x = cx + pane_w * 0.5f - sprite_sz * 0.5f;
     float sprite_y = cy + (inventory_modal_compact() ? 8.0f : 14.0f);
@@ -982,12 +1095,15 @@ void inventory_modal_draw(void) {
     s_content_height = content_bottom - content_origin_y + 8.0f;
     ui_scroll_end(&s_content_scroll);
 
-    /* Item name stays fixed in the header while the main column scrolls.
-     * Left inset clears the toolbar's pinned top-left toggle. */
+    /* Item name stays fixed in the card's own header while the main column
+     * scrolls. The floor also clears the toolbar's pinned top-left toggle. */
     {
         int tfs = 18;
-        DrawText(item_name, (int)toolbar_toggle_right(),
-                 (int)(card.y + (IM_HEADER_H - tfs) * 0.5f), tfs, C_TITLE);
+        float tx = card.x + IM_CARD_PAD;
+        if (tx < toolbar_toggle_right()) tx = toolbar_toggle_right();
+        modal_draw_clipped_text(item_name, (int)tx,
+                                (int)(card.y + (IM_HEADER_H - tfs) * 0.5f),
+                                (int)(close_r.x - IM_HEADER_TITLE_GAP - tx), tfs, C_TITLE);
     }
 
     /* ── Bottom-anchored buttons ────────────────────────────────────── */

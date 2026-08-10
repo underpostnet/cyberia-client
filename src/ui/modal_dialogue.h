@@ -65,6 +65,11 @@ bool modal_dialogue_is_fullscreen(void);
  * modal reclaims the space and shows a Dialog button to restore it. */
 bool modal_dialogue_is_collapsed(void);
 
+/* Top edge of the dialogue panel in screen space, or 0 while it claims no
+ * band of its own (closed, collapsed, or the mobile fullscreen reader). Lets a
+ * floating modal keep clear of the dialogue. */
+float modal_dialogue_layout_top(void);
+
 /* Mobile: open the fullscreen reader. Desktop: restore a collapsed paired
  * dialogue to its bottom-half panel. */
 void modal_dialogue_show_fullscreen(void);

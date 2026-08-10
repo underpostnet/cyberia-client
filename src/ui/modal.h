@@ -103,6 +103,18 @@ void modal_draw_overlay(int screen_width, int screen_height, float age);
 void modal_draw_panel(Rectangle rect, float age);
 void modal_draw_panel_ex(Rectangle rect, float age, Color border, float border_width);
 
+/* Soft drop shadow under a panel that floats over the live world with no
+ * dimmed backdrop behind it — without it the card has no edge against a busy
+ * scene. Draw before the panel fill. */
+#define MODAL_SHADOW_LAYERS 3
+void modal_draw_float_shadow(Rectangle rect, float age);
+
+/* Draw a single line at (x, y), truncated with an ellipsis to fit `max_w`
+ * pixels. Used for panel header titles, which share their strip with a close
+ * button and must never run under it. */
+void modal_draw_clipped_text(const char* text, int x, int y, int max_w,
+                             int font_size, Color color);
+
 /* Landscape breakpoint: the UI area is significantly wider than tall, so
  * modals prefer two-column layouts over vertical stacking. */
 bool modal_wide_layout(void);

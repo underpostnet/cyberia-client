@@ -164,12 +164,20 @@ static Rectangle panel_rect(int sw, int sh) {
         if (bot <= top) bot = top + 60.0f;
         return (Rectangle){ 0.0f, top, (float)sw, bot - top };
     }
-    float top = modal_interact_is_open()
-              ? modal_interact_layout_bottom() + DLG_PANEL_GAP
-              : sh * DLG_TOP_FRAC;
+    /* The interact modal reports 0 when it claims no band of its own (closed,
+     * or floating over its entity on a large screen) — the dialogue then keeps
+     * its own bottom-half position instead of tracking the card. */
+    float interact_bottom = modal_interact_is_open() ? modal_interact_layout_bottom() : 0.0f;
+    float top = interact_bottom > 0.0f ? interact_bottom + DLG_PANEL_GAP
+                                       : sh * DLG_TOP_FRAC;
     float bot = (float)sh - inventory_bar_visible_height();
     if (bot <= top) bot = top + 60.0f;
     return (Rectangle){ 0.0f, top, (float)sw, bot - top };
+}
+
+float modal_dialogue_layout_top(void) {
+    if (!s_open || dlg_hidden() || dlg_fullscreen()) return 0.0f;
+    return panel_rect(GetScreenWidth(), GetScreenHeight()).y;
 }
 
 static int dlg_side_pad(void) {

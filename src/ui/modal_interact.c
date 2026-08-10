@@ -16,6 +16,7 @@
 #include "item_slot.h"
 #include "item_slot_grid.h"
 #include "modal.h"
+#include "modal_anchor.h"
 #include "modal_dialogue.h"
 #include "modal_notification.h"
 #include "notification.h"
@@ -468,11 +469,63 @@ static void collapse_quest_detail(void) {
  * otherwise reserved for the paired dialogue. */
 #define MI_TOP_FRAC 0.56f
 
+/* Anchored layout (large screens): a compact card parked over the entity
+ * instead of a full-width band. */
+#define MI_ANCHOR_MIN_H      220.0f
+#define MI_ANCHOR_DEFAULT_H  360.0f
+/* Panel fill opacity with no dimmed backdrop behind the card (vs 150 for the
+ * full-width layout, which sits on the overlay). */
+#define MI_ANCHOR_PANEL_ALPHA 236.0f
+/* Clearance the header title keeps from the close button. */
+#define MI_HEADER_TITLE_GAP    8.0f
+
 /* Desktop dialogue-collapse expansion: 0 = half-height (paired dialogue
  * below), 1 = the card owns the dialogue's space. Animated in update. */
 static float s_dlg_collapse_t = 0.0f;
 
+/* Anchored-layout card height, tracking the active tab's measured content.
+ * Negative until the first measurement of a session, which snaps. */
+static float s_anchor_h = -1.0f;
+/* Frozen top-left corner and the flag that stops it being re-resolved. */
+static ModalAnchor s_anchor = { 0 };
+static bool s_anchor_settled = false;
+
+/* Region the anchored card may occupy: the standard safe area, minus the band
+ * the paired dialogue holds at the bottom. */
+static Rectangle anchor_safe_area(void) {
+    float pad = mi_pad();
+    Rectangle safe = modal_anchor_safe_area(pad, MI_ANCHOR_MIN_H);
+    float dlg_top = modal_dialogue_layout_top();
+    if (dlg_top > 0.0f) {
+        float bottom = dlg_top - pad;
+        float height = bottom - safe.y;
+        if (height < MI_ANCHOR_MIN_H) height = MI_ANCHOR_MIN_H;
+        if (height < safe.height) safe.height = height;
+    }
+    return safe;
+}
+
+/* Card height that fits the active tab's content exactly — the chrome around
+ * the content area (see content_rect) plus the height that tab measured on its
+ * last draw. */
+static float anchor_content_card_height(float content_h) {
+    return mi_header_h() + mi_tab_h() + 2.0f * mi_pad() + content_h + mi_bar_h();
+}
+
+static Vector2 anchor_card_size(Rectangle safe) {
+    return (Vector2){
+        safe.width < MODAL_ANCHOR_MAX_W ? safe.width : MODAL_ANCHOR_MAX_W,
+        s_anchor_h > 0.0f ? s_anchor_h : MI_ANCHOR_DEFAULT_H,
+    };
+}
+
+static Rectangle anchored_card_rect(void) {
+    Rectangle safe = anchor_safe_area();
+    return modal_anchor_rect(&s_anchor, anchor_card_size(safe), safe);
+}
+
 static Rectangle card_rect(void) {
+    if (modal_anchor_active()) return anchored_card_rect();
     int sw = GetScreenWidth();
     int sh = GetScreenHeight();
     float pad = mi_pad();
@@ -492,6 +545,59 @@ static Rectangle card_rect(void) {
     if (bottom > max_bottom) bottom = max_bottom;
     if (bottom < top + 120.0f) bottom = top + 120.0f;
     return (Rectangle){ pad, top, (float)sw - 2.0f * pad, bottom - top };
+}
+
+/* Height the active tab measured on its last draw; 0 while it has never drawn
+ * (a freshly switched-to tab), which keeps the card at its current size rather
+ * than collapsing for one frame. */
+static float active_tab_content_height(void) {
+    switch (s_tab) {
+        case MI_TAB_STACK:   return s_stack_content_height;
+        case MI_TAB_STATS:   return s_s_content_height;
+        case MI_TAB_QUEST:   return s_q_content_height;
+        case MI_TAB_SHOP:    return s_shop_content_height;
+        case MI_TAB_CRAFT:   return s_craft_content_height;
+        case MI_TAB_STORAGE: return s_storage_content_height;
+        default:             return 0.0f;
+    }
+}
+
+/* Resolve the anchored card's geometry for this frame. Content is measured
+ * from the card's width only, so the height never feeds back into itself. */
+static void update_anchor_layout(float dt) {
+    if (!modal_anchor_active()) {
+        s_anchor_h = -1.0f;
+        s_anchor.captured = false;
+        s_anchor_settled = false;
+        return;
+    }
+
+    /* Measurements taken mid tab-pop come from a scaled-down content rect and
+     * wrap differently — only resize once the incoming tab has settled. */
+    float content = s_tab_age >= MODAL_POP_DURATION ? active_tab_content_height() : 0.0f;
+    float target;
+    if (content > 0.0f)         target = anchor_content_card_height(content);
+    else if (s_anchor_h > 0.0f) target = s_anchor_h;
+    else                        target = MI_ANCHOR_DEFAULT_H;
+
+    Rectangle safe = anchor_safe_area();
+    if (target > safe.height)     target = safe.height;
+    if (target < MI_ANCHOR_MIN_H) target = MI_ANCHOR_MIN_H;
+
+    /* While the card opens it snaps to its measured height and keeps resolving
+     * the corner from the entity, so it lands at the real size in the right
+     * place. The corner freezes on the first settled measurement — at the
+     * latest when the entrance animation ends, for a tab that measures nothing
+     * (an empty stack). After that the card ignores the entity entirely and a
+     * content change extends it downward from the same top edge. */
+    if (!s_anchor_settled) {
+        s_anchor_h = target;
+        modal_anchor_capture(&s_anchor, s_entity_id, anchor_card_size(safe),
+                             MODAL_ANCHOR_GAP, safe);
+        if (content > 0.0f || s_age >= MODAL_POP_DURATION) s_anchor_settled = true;
+        return;
+    }
+    s_anchor_h = modal_anchor_ease_height(s_anchor_h, target, dt);
 }
 
 static Rectangle close_rect(Rectangle card) {
@@ -710,6 +816,19 @@ void modal_interact_stack_player_item(int inv_idx) {
     es_push();
     modal_interact_close();
     inventory_modal_open(inv_idx);
+    inventory_modal_set_anchor_entity(s_entity_id);
+    inventory_modal_set_on_close(modal_interact_reopen);
+}
+
+/* Hand the session over to the read-only item inspection every slot in this
+ * modal opens: stack the current session, swap the modals, and keep the item
+ * card anchored over the same entity so the swap reads as one panel changing
+ * contents. Closing the item modal pops back here. */
+static void stack_item_inspect(const ObjectLayerState* ols) {
+    es_push();
+    modal_interact_close();
+    inventory_modal_open_external(ols);
+    inventory_modal_set_anchor_entity(s_entity_id);
     inventory_modal_set_on_close(modal_interact_reopen);
 }
 
@@ -744,6 +863,9 @@ void modal_interact_init(void) {
     s_storage_content_height = 0.0f;
     s_tab_age = MODAL_POP_DURATION;
     s_tab_picked = false;
+    s_anchor_h = -1.0f;
+    s_anchor_settled = false;
+    s_anchor.captured = false;
     s_q_expanded = -1;
     s_q_expand_age = MODAL_POP_DURATION;
     es_clear();
@@ -787,6 +909,10 @@ void modal_interact_open(const char* entity_id, const char* display_name,
     s_tab                = MI_TAB_STACK;
     s_tab_age            = MODAL_POP_DURATION;
     s_tab_picked         = false;
+    /* A fresh session re-resolves both the height and the frozen corner. */
+    s_anchor_h           = -1.0f;
+    s_anchor_settled     = false;
+    s_anchor.captured    = false;
     ui_scroll_reset(&s_q_scroll);
     s_q_content_height = 0.0f;
     ui_scroll_reset(&s_shop_scroll);
@@ -863,8 +989,11 @@ void modal_interact_close(void) {
 
 bool modal_interact_is_open(void) { return s_open; }
 
+/* Bottom of the horizontal band this modal reserves, which the paired dialogue
+ * stacks under. The anchored card floats over its entity and reserves nothing,
+ * so it reports 0 and the dialogue keeps its own position. */
 float modal_interact_layout_bottom(void) {
-    if (!s_open) return 0.0f;
+    if (!s_open || modal_anchor_active()) return 0.0f;
     Rectangle card = card_rect();
     return card.y + card.height;
 }
@@ -905,6 +1034,10 @@ void modal_interact_update(float dt) {
      * shop session easily outlasts it, and a thawed player is a killable one. */
     local_player_keep_freeze();
     s_age += dt;
+
+    /* Resolve the card geometry before anything that lays out against it —
+     * the scroll views below all read card_rect(). */
+    update_anchor_layout(dt);
 
     /* Refresh the stacked layers from the live AOI every frame so the Stack
      * tab reflects equipment changes in real time (e.g. a weapon unequipped
@@ -1620,10 +1753,7 @@ static void handle_quest_click(int mx, int my) {
         for (int r = 0; r < s_reward_slot_count; r++) {
             if (item_slot_hit(s_reward_rects[r], mx, my)) {
                 ObjectLayerState ols = s_reward_ols[r];
-                es_push();
-                modal_interact_close();
-                inventory_modal_open_external(&ols);
-                inventory_modal_set_on_close(modal_interact_reopen);
+                stack_item_inspect(&ols);
                 return;
             }
         }
@@ -1859,10 +1989,7 @@ static void handle_shop_click(int mx, int my) {
             ObjectLayerState ols = { 0 };
             strncpy(ols.item_id, am->shop_items[i].item_id, MAX_ID_LENGTH - 1);
             ols.quantity = 1;
-            es_push();
-            modal_interact_close();
-            inventory_modal_open_external(&ols);
-            inventory_modal_set_on_close(modal_interact_reopen);
+            stack_item_inspect(&ols);
             return;
         }
     }
@@ -2074,10 +2201,7 @@ static void inspect_craft_item(const ActionCraftItem* item) {
     ObjectLayerState ols = { 0 };
     strncpy(ols.item_id, item->item_id, MAX_ID_LENGTH - 1);
     ols.quantity = item->qty;
-    es_push();
-    modal_interact_close();
-    inventory_modal_open_external(&ols);
-    inventory_modal_set_on_close(modal_interact_reopen);
+    stack_item_inspect(&ols);
 }
 
 static void handle_craft_click(int mx, int my) {
@@ -2268,10 +2392,7 @@ static void storage_commit(const ItemSlotGridEvent* ev, int qty) {
             /* A tap inspects, matching every other slot in the modal. */
             if (ev->to_index >= 0 && '\0' != s_storage_grid.cells[ev->to_index].item_id[0]) {
                 ObjectLayerState ols = s_storage_grid.cells[ev->to_index];
-                es_push();
-                modal_interact_close();
-                inventory_modal_open_external(&ols);
-                inventory_modal_set_on_close(modal_interact_reopen);
+                stack_item_inspect(&ols);
             }
             return;
         case ITEM_SLOT_GRID_EVENT_NONE:
@@ -2372,11 +2493,16 @@ void modal_interact_draw(void) {
     int sh = GetScreenHeight();
     int mx = GetMouseX(), my = GetMouseY();
 
-    modal_draw_overlay(sw, sh, s_age);
+    /* The anchored card floats over the live world: no dimmed backdrop (it
+     * would hide the very entity the card points at), so it carries its own
+     * shadow and an opaque fill to stay readable over a busy scene. */
+    bool anchored = modal_anchor_active();
     Rectangle card = modal_scale_rect(card_rect(), modal_pop_scale(s_age));
     float a = modal_pop_alpha(s_age);
+    if (anchored) modal_draw_float_shadow(card, s_age);
+    else          modal_draw_overlay(sw, sh, s_age);
     Color bg = MODAL_PANEL_BG;
-    bg.a = (unsigned char)(150 * a);
+    bg.a = (unsigned char)((anchored ? MI_ANCHOR_PANEL_ALPHA : 150) * a);
     DrawRectangleRec(card, bg);
     Color bc = s_border;
     bc.a = (unsigned char)(bc.a * a);
@@ -2388,9 +2514,13 @@ void modal_interact_draw(void) {
     Rectangle xr = close_rect(card);
     if (s_display_name[0] != '\0') {
         int name_font = mi_font_name();
-        /* Clears the toolbar's pinned top-left toggle when the strip hides. */
-        DrawText(s_display_name, (int)toolbar_toggle_right(),
-                 (int)(card.y + (mi_header_h() - name_font) * 0.5f), name_font, C_TEXT);
+        /* Title sits inside the card's own header strip. The floor also clears
+         * the toolbar's pinned top-left toggle when the strip hides. */
+        float tx = card.x + mi_pad();
+        if (tx < toolbar_toggle_right()) tx = toolbar_toggle_right();
+        modal_draw_clipped_text(s_display_name, (int)tx,
+                                (int)(card.y + (mi_header_h() - name_font) * 0.5f),
+                                (int)(xr.x - MI_HEADER_TITLE_GAP - tx), name_font, C_TEXT);
     }
     UIButtonStyle close_btn = { .icon_id = "close-yellow", .no_fill = true };
     ui_button_draw(xr, &close_btn, ui_button_resolve_state(true, false, ui_button_hit(xr, mx, my)));
@@ -2635,10 +2765,7 @@ bool modal_interact_handle_click(int mx, int my) {
             Rectangle slot_r = { content.x, row_y, slot_sz, slot_sz };
             if (item_slot_hit(slot_r, mx, my)) {
                 ObjectLayerState ols = s_cached_layers[i];
-                es_push();
-                modal_interact_close();
-                inventory_modal_open_external(&ols);
-                inventory_modal_set_on_close(modal_interact_reopen);
+                stack_item_inspect(&ols);
                 return true;
             }
         }
