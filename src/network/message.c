@@ -299,6 +299,11 @@ static void unpack_self(const cJSON* e) {
     float move_speed = serial_get_float_default(e, "moveSpeed", 0.0f);
     if (move_speed > 0.0f) local_player_set_move_speed(move_speed);
 
+    /* Authoritative action cooldown — the skill-trigger period. Movement is not
+     * gated by it; keyboard steering paces its refresh by it. */
+    int cooldown_ms = serial_get_int_default(e, "actionCooldownMs", 0);
+    if (cooldown_ms > 0) local_player_set_action_cooldown((float)cooldown_ms / 1000.0f);
+
     /* The HUD renders the hold bar only while on_portal is set. */
     local_player_set_portal_hold(serial_get_bool_default(e, "onPortal", false),
                                  serial_get_float_default(e, "portalHoldProgress", 0.0f));
@@ -310,7 +315,8 @@ static void json_unpack_snapshot(const cJSON* payload) {
     /* Feed the session bookkeeping so prediction and interpolation align to
      * the authoritative tick stream. */
     session_on_snapshot(serial_get_u32_default(payload, "tick", 0),
-                        serial_get_u32_default(payload, "ack", 0));
+                        serial_get_u32_default(payload, "ack", 0),
+                        serial_get_u32_default(payload, "moveAck", 0));
 
     /* Stamp the arrival time. The interpolator computes
      * t = (now - snapshot_time) * 1000 / interpolation_ms; without this write

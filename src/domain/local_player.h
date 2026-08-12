@@ -102,6 +102,14 @@ uint8_t  local_player_status_icon(void);
 void   local_player_set_move_speed(float speed);
 float  local_player_move_speed(void);
 
+/* Authoritative action cooldown in seconds, pushed by the server in every AOI
+ * self-player block. It does not gate movement — that re-plans every tick —
+ * but every tap fires skills, so it is the period after which repeating an
+ * unchanged input is worth anything. Keyboard steering paces its refresh by
+ * it. Returns the bootstrap default before the first snapshot. */
+void   local_player_set_action_cooldown(float seconds);
+float  local_player_action_cooldown(void);
+
 /* Portal hold — authoritative teleport charge for the local player. on_portal
  * mirrors the server OnPortal flag; hold_progress is the 0..1 fraction of the
  * hold time elapsed. Both come from the AOI self-player block; the HUD renders

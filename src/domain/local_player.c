@@ -8,6 +8,9 @@
 #include "util/log.h"
 
 #define LOCAL_PLAYER_DEFAULT_MOVE_SPEED 3.0f
+/* Mirrors entityBaseActionCooldownMs, the instance default. Only in force
+ * until the first snapshot carries the player's own, Utility-reduced value. */
+#define LOCAL_PLAYER_DEFAULT_ACTION_COOLDOWN_S 0.5f
 #define LOCAL_FREEZE_TIMEOUT_S          30.0
 #define LOCAL_FREEZE_REASON_MAX         32
 
@@ -15,6 +18,7 @@ static struct {
     bool          frozen;
     uint8_t       status_icon;
     float         move_speed;
+    float         action_cooldown_s;
     bool          on_portal;
     float         portal_hold_progress;
     LocalFctEvent fct[LOCAL_FCT_PENDING_MAX];
@@ -24,7 +28,8 @@ static struct {
     double        freeze_deadline;
     char          freeze_reason[LOCAL_FREEZE_REASON_MAX];
 } g_local = {
-    .move_speed = LOCAL_PLAYER_DEFAULT_MOVE_SPEED,
+    .move_speed        = LOCAL_PLAYER_DEFAULT_MOVE_SPEED,
+    .action_cooldown_s = LOCAL_PLAYER_DEFAULT_ACTION_COOLDOWN_S,
 };
 
 static void send_freeze_frame(bool start, const char* reason) {
@@ -38,6 +43,7 @@ void local_player_reset(void) {
     g_local.frozen               = false;
     g_local.status_icon          = 0;
     g_local.move_speed           = LOCAL_PLAYER_DEFAULT_MOVE_SPEED;
+    g_local.action_cooldown_s    = LOCAL_PLAYER_DEFAULT_ACTION_COOLDOWN_S;
     g_local.on_portal            = false;
     g_local.portal_hold_progress = 0.0f;
     g_local.fct_count            = 0;
@@ -157,6 +163,11 @@ void  local_player_set_move_speed(float speed) {
     if (speed > 0.0f) g_local.move_speed = speed;
 }
 float local_player_move_speed(void) { return g_local.move_speed; }
+
+void local_player_set_action_cooldown(float seconds) {
+    if (seconds > 0.0f) g_local.action_cooldown_s = seconds;
+}
+float local_player_action_cooldown(void) { return g_local.action_cooldown_s; }
 
 void local_player_set_portal_hold(bool on_portal, float progress) {
     g_local.on_portal = on_portal;

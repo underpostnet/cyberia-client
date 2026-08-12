@@ -42,9 +42,14 @@ Vector2 prediction_consume_correction(void);
 void interpolation_compute_view(void);
 
 /* Session — per-connection tick + acknowledgement bookkeeping (sole writer). */
-void session_on_snapshot(uint32_t snapshot_tick, uint32_t last_acked_sequence);
+void session_on_snapshot(uint32_t snapshot_tick, uint32_t last_acked_sequence,
+                         uint32_t last_movement_sequence);
 cyberia_tick_t session_last_server_tick(void);
 cyberia_input_seq_t session_last_acked_input_sequence(void);
+/* Highest command sequence the server actually re-planned movement for. Always
+ * at or behind the acknowledgement: arrival is not acceptance, because the
+ * server drops a tap that lands inside the action cooldown. */
+cyberia_input_seq_t session_last_movement_sequence(void);
 cyberia_tick_t session_server_tick_estimate(void);
 cyberia_tick_t session_render_tick(void);
 cyberia_input_seq_t session_next_input_sequence(void);
