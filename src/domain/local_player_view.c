@@ -51,6 +51,7 @@
  *                speed. The gap keeps small corrections out of the animation.
  * DIRECTION_HOLD_S — facing commits after the motion points to a new octant
  *                for this time.
+ * FACING_MIN_CELLS_S — floor under the speed gate that gates facing updates.
  * IDLE_HOLD_S  — the sprite keeps the walk for this long after the follower
  *                reaches the target, so a stalled link does not flicker the
  *                animation. */
@@ -74,6 +75,8 @@
 #define LOCAL_PLAYER_VIEW_WALK_START_FRACTION 0.25f
 #define LOCAL_PLAYER_VIEW_WALK_STOP_FRACTION 0.10f
 #define LOCAL_PLAYER_VIEW_DIRECTION_HOLD_S 0.10f
+/* Floor under the facing gate, for a move speed not yet known from a snapshot. */
+#define LOCAL_PLAYER_VIEW_FACING_MIN_CELLS_S 0.05f
 #define LOCAL_PLAYER_VIEW_IDLE_HOLD_S 0.12f
 
 /* Local player's draw footprint bump, a clean +10% so the character stands
@@ -100,6 +103,7 @@ typedef struct {
     float           direction_hold_s;
     ObjectLayerMode mode;
     float           idle_hold_s;
+    Vector2         prev_render;    /* last rendered point, for the reversal gate */
     bool            initialized;
 } LocalPlayerView;
 
@@ -125,6 +129,7 @@ static void snap_to(Vector2 sim_pos, Direction sim_direction) {
     s_view.mode = MODE_IDLE;
     s_view.direction_hold_s = 0.0f;
     s_view.idle_hold_s = 0.0f;
+    s_view.prev_render = sim_pos;
     /* A teleport has no organic motion vector — adopt the server's facing. */
     if (DIRECTION_NONE != sim_direction) { s_view.direction = sim_direction; }
     s_view.initialized = true;
@@ -306,8 +311,23 @@ static void update_mode(float speed, float dt) {
     }
 }
 
-static void update_direction(float dt) {
+static void suppress_render_reversal(void);
+
+static void update_direction(float speed, float dt) {
     if (MODE_WALKING != s_view.mode) {
+        s_view.direction_hold_s = 0.0f;
+        return;
+    }
+    /* Below the stop threshold the velocity carries no heading: atan2f(0, 0) is
+     * 0, which quantizes to RIGHT. The walk mode outlives the motion by
+     * IDLE_HOLD_S, so without this gate every stop committed a right-facing
+     * idle. Keep the last heading instead — it is the direction of travel. */
+    float move_speed = local_player_move_speed();
+    float facing_min = move_speed * LOCAL_PLAYER_VIEW_WALK_STOP_FRACTION;
+    if (LOCAL_PLAYER_VIEW_FACING_MIN_CELLS_S > facing_min) {
+        facing_min = LOCAL_PLAYER_VIEW_FACING_MIN_CELLS_S;
+    }
+    if (facing_min > speed) {
         s_view.direction_hold_s = 0.0f;
         return;
     }
@@ -321,6 +341,49 @@ static void update_direction(float dt) {
         s_view.direction = candidate;
         s_view.direction_hold_s = 0.0f;
     }
+}
+
+/* A walking sprite must never step backward on the screen.
+ *
+ * A backward reconciliation reaches the offset, and the bleed then applies it a
+ * little each frame — smooth, but still a visible slide against the direction
+ * of travel. Absorb it by under-travelling instead: hold the render at its
+ * furthest point along the heading and leave the remainder in the offset, which
+ * clears while the player turns, stops, or simply walks slower than authority.
+ *
+ * Bounded by ERROR_MAX_CELLS: past that the correction is too large to be a
+ * misprediction, so authority shows at once rather than being held back. */
+static void suppress_render_reversal(void) {
+    Vector2 rendered = { s_view.follow_pos.x + s_view.error_offset.x,
+                         s_view.follow_pos.y + s_view.error_offset.y };
+    float speed = sqrtf(s_view.vel.x * s_view.vel.x + s_view.vel.y * s_view.vel.y);
+
+    if (MODE_WALKING != s_view.mode || 0.0f >= speed) {
+        s_view.prev_render = rendered;
+        return;
+    }
+
+    float hx = s_view.vel.x / speed, hy = s_view.vel.y / speed;
+    float along = (rendered.x - s_view.prev_render.x) * hx +
+                  (rendered.y - s_view.prev_render.y) * hy;
+    if (0.0f <= along) {
+        s_view.prev_render = rendered;
+        return;
+    }
+
+    float held = sqrtf(s_view.error_offset.x * s_view.error_offset.x +
+                       s_view.error_offset.y * s_view.error_offset.y);
+    if (LOCAL_PLAYER_VIEW_ERROR_MAX_CELLS <= held) {
+        s_view.prev_render = rendered;
+        return;
+    }
+
+    /* Cancel the backward component only. Sideways still shows, so the sprite
+     * keeps following the route. */
+    s_view.error_offset.x -= hx * along;
+    s_view.error_offset.y -= hy * along;
+    s_view.prev_render.x = rendered.x - hx * along;
+    s_view.prev_render.y = rendered.y - hy * along;
 }
 
 void local_player_view_update(Vector2 sim_pos, Vector2 sim_correction,
@@ -359,7 +422,8 @@ void local_player_view_update(Vector2 sim_pos, Vector2 sim_correction,
 
     bleed_error_offset(travel, speed, dt);
     update_mode(speed, dt);
-    update_direction(dt);
+    update_direction(speed, dt);
+    suppress_render_reversal();
 }
 
 Vector2 local_player_view_position(void) {
