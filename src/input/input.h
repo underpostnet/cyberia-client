@@ -13,6 +13,7 @@ typedef enum input_type {
     INPUT_NONE,
     INPUT_TAP,
     INPUT_KEY_DEBUG,
+    INPUT_KEY_ESCAPE,
     INPUT_ZOOM
 } input_e;
 

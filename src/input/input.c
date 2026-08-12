@@ -195,6 +195,9 @@ void input_queue_on_tick(input_queue_t* q, double dt) {
         case KEY_F3:
             input_push(q, (input_event_t){ .type = INPUT_KEY_DEBUG });
             break;
+        case KEY_ESCAPE:
+            input_push(q, (input_event_t){ .type = INPUT_KEY_ESCAPE });
+            break;
         default: break;
     }
 

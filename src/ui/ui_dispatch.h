@@ -12,6 +12,7 @@
 #include "modal_instance_map.h"
 #include "modal_interact.h"
 #include "quest_journal.h"
+#include "js/interact_bridge.h"
 
 
 /* UI tap dispatcher.
@@ -28,6 +29,30 @@
 
 bool ui_dispatch_tap(int screen_x, int screen_y);
 bool ui_dispatch_covers_point(int screen_x, int screen_y);
+
+static bool ui_dispatch_escape(void) {
+    if (js_interact_overlay_is_open()) {
+        js_interact_overlay_close();
+        return true;
+    }
+    if (modal_instance_map_is_open()) {
+        modal_instance_map_close();
+        return true;
+    }
+    if (inventory_modal_is_open()) {
+        inventory_modal_close();
+        return true;
+    }
+    if (modal_interact_is_open()) {
+        modal_interact_close();
+        return true;
+    }
+    if (modal_dialogue_is_open()) {
+        modal_dialogue_close();
+        return true;
+    }
+    return false;
+}
 
 static void ui_on_tick(input_queue_t* input_queue, double dt) {
     input_queue_t bkp_queue = { 0 };
@@ -70,6 +95,9 @@ static void ui_on_tick(input_queue_t* input_queue, double dt) {
         if(!consumed && INPUT_KEY_DEBUG == evt.type) {
             presentation_runtime_toggle_dev_ui();
             consumed = true;
+        }
+        if(!consumed && INPUT_KEY_ESCAPE == evt.type) {
+            consumed = ui_dispatch_escape();
         }
 
         if(!consumed && INPUT_ZOOM == evt.type) {

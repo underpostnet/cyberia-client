@@ -371,21 +371,35 @@ mergeInto(LibraryManager.library, {
         background: 'rgba(40,50,90,0.85)',
         border: '1px solid ' + S.border,
         borderRadius: '6px',
-        color: S.tabTextActive,
-        fontSize: '14px',
         cursor: 'pointer',
-        padding: '6px 14px',
-        fontFamily: 'monospace',
-        fontWeight: 'bold',
+        padding: '6px',
+        width: '32px',
+        height: '32px',
+        boxSizing: 'border-box',
+        lineHeight: '0',
         touchAction: 'manipulation',
         transition: 'background 0.1s',
         display: 'flex',
         alignItems: 'center',
-        gap: '6px',
+        justifyContent: 'center',
       },
       hdr,
     );
-    backBtn.innerHTML = '\u2190 Back';
+    backBtn.title = 'Back';
+    backBtn.setAttribute('aria-label', 'Back');
+    var backIcon = ipEl(
+      'img',
+      {
+        width: '18px',
+        height: '18px',
+        display: 'block',
+        imageRendering: 'pixelated',
+        pointerEvents: 'none',
+      },
+      backBtn,
+    );
+    backIcon.src = FetchState.api_base_url + '/assets/ui-icons/close-yellow.png';
+    backIcon.alt = '';
     backBtn.onpointerenter = function () {
       backBtn.style.background = 'rgba(60,75,140,0.95)';
     };
@@ -624,6 +638,7 @@ mergeInto(LibraryManager.library, {
     '$ipEl',
     '$ipBtn',
     '$ipRenderChat',
+    'js_interact_overlay_close',
     'js_interact_overlay_send_chat',
   ],
   $ipBuildChatTab: function (container) {
@@ -676,6 +691,11 @@ mergeInto(LibraryManager.library, {
 
     D.chatInput.addEventListener('keydown', function (ev) {
       ev.stopPropagation();
+      if (ev.key === 'Escape') {
+        ev.preventDefault();
+        _js_interact_overlay_close();
+        return;
+      }
       if (ev.key === 'Backspace') {
         /* C engine consumes keyboard events — manually remove last char. */
         if (D.chatInput.value.length > 0) {
