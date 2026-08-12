@@ -2,6 +2,8 @@
 #include "input.h"
 #include "network/replication.h"
 #include "domain/camera.h"
+#include "domain/local_player.h"
+#include "game_state.h"
 
 #include <assert.h>
 #include <raylib.h>
@@ -43,16 +45,85 @@ static Vector2 s_tap_pending_pos  = {0};
 static bool    s_pinch_active     = false;   /* also latches until all fingers lift */
 static float   s_pinch_prev_dist  = 0.0f;
 
+/* ── Keyboard steering ───────────────────────────────────────────────────
+ * A held direction key (arrows or WASD) sends a synthetic INPUT_TAP a short
+ * distance ahead of the player. One held key gives a cardinal heading, two
+ * give a true 45° diagonal; opposite keys on one axis cancel. Release stops
+ * the walk, because a zero heading targets the cell the player stands on.
+ *
+ * Two calibrations keep the walk fluid:
+ *
+ * A change of heading emits at once — a key press, a key release, a turn. That
+ * is the whole point of steering, and the server re-plans on the next tick, so
+ * nothing is gained by holding it back. Only the refresh of an unchanged
+ * heading waits: it exists to keep the target ahead of the player, and every
+ * tap also rolls the skill trigger, so repeating one faster than the action
+ * cooldown spends skill rolls for no movement.
+ *
+ * The target is anchored on the predicted position, never on the camera.
+ * The camera is a lag follower, so a camera-relative target puts the camera
+ * lag into the heading and makes a diagonal follow the screen aspect ratio
+ * instead of 45°. Reach stays near one refresh of travel: far enough that
+ * the walk never stalls between commands, short enough that the server A*
+ * returns a near-straight path instead of routing around distant terrain. */
+#define KEY_STEER_REACH_FACTOR    1.75f
+#define KEY_STEER_REACH_MIN_CELLS 3.0f
+#define KEY_STEER_DIAGONAL_NORM   0.70710678f
+
+static int    s_steer_x   = 0;
+static int    s_steer_y   = 0;
+static double s_steer_age = 0.0;
+
 void input_gestures_set_blocked(bool blocked) {
     s_gestures_blocked = blocked;
 }
 
-static void emit_tap(input_queue_t* q, Vector2 screen_pos) {
+static void push_tap(input_queue_t* q, Vector2 screen_pos, Vector2 world_pos,
+                     bool synthetic) {
     input_push(q, (input_event_t){
         .type = INPUT_TAP,
         .screen_position = screen_pos,
-        .world_position = GetScreenToWorld2D(screen_pos, camera_get()),
+        .world_position = world_pos,
+        .synthetic = synthetic,
     });
+}
+
+static void emit_tap(input_queue_t* q, Vector2 screen_pos) {
+    push_tap(q, screen_pos, GetScreenToWorld2D(screen_pos, camera_get()), false);
+}
+
+/* -1 low, +1 high, 0 when no key or both keys are held. */
+static int axis_dir(int low_key, int low_alt, int high_key, int high_alt) {
+    bool low  = IsKeyDown(low_key)  || IsKeyDown(low_alt);
+    bool high = IsKeyDown(high_key) || IsKeyDown(high_alt);
+    if (low == high) { return 0; }
+    return low ? -1 : 1;
+}
+
+/* World-pixel target for a heading. A zero heading gives the current cell,
+ * which is the stop command. */
+static Vector2 steer_world_target(int dir_x, int dir_y) {
+    Vector2 self = prediction_self_position();
+    float   cell = g_game_state.cell_size > 0.0f ? g_game_state.cell_size : 12.0f;
+
+    if (0 == dir_x && 0 == dir_y) {
+        return (Vector2){ self.x * cell, self.y * cell };
+    }
+
+    float reach = local_player_move_speed() * local_player_action_cooldown() *
+                  KEY_STEER_REACH_FACTOR;
+    if (reach < KEY_STEER_REACH_MIN_CELLS) { reach = KEY_STEER_REACH_MIN_CELLS; }
+    if (0 != dir_x && 0 != dir_y) { reach *= KEY_STEER_DIAGONAL_NORM; }
+
+    return (Vector2){
+        (self.x + (float)dir_x * reach) * cell,
+        (self.y + (float)dir_y * reach) * cell,
+    };
+}
+
+static void emit_steer_tap(input_queue_t* q, int dir_x, int dir_y) {
+    Vector2 world_pos = steer_world_target(dir_x, dir_y);
+    push_tap(q, GetWorldToScreen2D(world_pos, camera_get()), world_pos, true);
 }
 
 static void pinch_zoom_on_tick(void) {
@@ -80,6 +151,8 @@ void input_queue_on_tick(input_queue_t* q, double dt) {
         if (0 == touches) s_pinch_active = false;
     }
 
+    bool pointer_tap = false;
+
     if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT) && !s_pinch_active) {
         if (touches > 0) {
             /* Touch press: hold for the confirmation window. */
@@ -89,6 +162,7 @@ void input_queue_on_tick(input_queue_t* q, double dt) {
         } else {
             emit_tap(q, GetMousePosition());
         }
+        pointer_tap = true;
     }
 
     if (s_tap_pending) {
@@ -98,6 +172,23 @@ void input_queue_on_tick(input_queue_t* q, double dt) {
             s_tap_pending = false;
             emit_tap(q, s_tap_pending_pos);
         }
+        pointer_tap = true;
+    }
+
+    int steer_x = axis_dir(KEY_LEFT, KEY_A, KEY_RIGHT, KEY_D);
+    int steer_y = axis_dir(KEY_UP,   KEY_W, KEY_DOWN,  KEY_S);
+    bool turned = steer_x != s_steer_x || steer_y != s_steer_y;
+    /* A heading that turned to zero still owes one stop command. */
+    bool refresh = (0 != steer_x || 0 != steer_y) &&
+                   s_steer_age >= (double)local_player_action_cooldown();
+
+    s_steer_age += dt;
+    if ((turned || refresh) &&
+        !pointer_tap && !s_gestures_blocked && !s_pinch_active) {
+        emit_steer_tap(q, steer_x, steer_y);
+        s_steer_x   = steer_x;
+        s_steer_y   = steer_y;
+        s_steer_age = 0.0;
     }
 
     switch (GetKeyPressed()) {

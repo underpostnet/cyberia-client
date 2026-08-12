@@ -58,7 +58,10 @@ static void ui_on_tick(input_queue_t* input_queue, double dt) {
     input_event_t evt = { 0 };
     while (input_pop(input_queue, &evt)) {
         bool consumed = false;
-        if(!consumed && INPUT_TAP == evt.type) {
+        /* A synthetic tap has no pointer on its target pixel, so HUD chrome
+         * must not absorb it. Modals still block it: they freeze the local
+         * player, and main drops taps while frozen. */
+        if(!consumed && INPUT_TAP == evt.type && !evt.synthetic) {
             int mx = (int)evt.screen_position.x;
             int my = (int)evt.screen_position.y;
             if (!consumed && ui_dispatch_tap(mx, my)) { consumed = true; }

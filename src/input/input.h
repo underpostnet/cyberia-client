@@ -22,6 +22,10 @@ typedef struct input_event {
     bool zoom_in;            /* For INPUT_ZOOM */
     float wheel_delta;       /* For INPUT_ZOOM */
     Vector2 world_position;  /* For INPUT_TAP */
+    /* For INPUT_TAP: keyboard steering made this tap. No pointer is on the
+     * target pixel, so the UI layer does no hit test on it and the
+     * presentation layer draws no tap effect for it. */
+    bool synthetic;
 } input_event_t;
 
 #define Q_CAP 100
@@ -37,7 +41,8 @@ void input_push(input_queue_t* q, input_event_t e);
 
 /* While blocked, the capture layer runs no gameplay pinch zoom — a
  * full-screen UI surface (the Instance Map) owns touch gestures instead.
- * Taps, wheel, and debug-key events still flow. */
+ * Pointer taps, wheel, and debug-key events still flow; keyboard steering
+ * does not. */
 void input_gestures_set_blocked(bool blocked);
 
 #endif /* CYBERIA_INPUT_H */

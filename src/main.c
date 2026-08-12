@@ -96,7 +96,9 @@ static void gameloop(void) {
         input_event_t evt = { 0 };
         while (input_pop(&frame_input, &evt)) {
             bool consumed = false;
-            if(!consumed && INPUT_TAP == evt.type) {
+            /* Keyboard steering repeats at the screen edge; it draws no tap
+             * effect and opens no bubble. Both belong to a real pointer. */
+            if(!consumed && INPUT_TAP == evt.type && !evt.synthetic) {
                 FxTapParams fx = fx_tap_default_params();
                 fx.scale = 1.15f;
                 fx.duration = 0.70f;
