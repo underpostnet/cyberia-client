@@ -160,6 +160,8 @@ static void column_ensure_toggle(void) {
     ui_toggle_init(&s_col_toggle, toggle_anchor(), expanded, UI_TOGGLE_CHEVRON_LEFT);
     s_col_toggle.icon_expanded  = "close-yellow";
     s_col_toggle.icon_collapsed = "stack";
+    /* Drag the button in any direction to show or hide the column. */
+    ui_toggle_set_drag(&s_col_toggle);
     ui_scroll_reset(&s_col_scroll);
     s_col_init = true;
 }
@@ -370,7 +372,15 @@ void interaction_bubble_init(void) {
 void interaction_bubble_update(void) {
     column_ensure_toggle();
     /* Re-anchor not needed — the toggle is fixed in screen space. */
+    ui_toggle_set_input_enabled(&s_col_toggle, !modals_block_bubbles());
     ui_toggle_update(&s_col_toggle, GetFrameTime());
+    /* Reset the scroll only when opening — and only from the toggle's own
+     * transition, which a swipe resolves in ui_toggle_update rather than on the
+     * press. Resetting on collapse would zero the scroll's stored view — a 0×0
+     * scissor — and scissor the column away on the next frame instead of
+     * letting it slide out. */
+    if (ui_toggle_take_changed(&s_col_toggle) && s_col_toggle.expanded)
+        ui_scroll_reset(&s_col_scroll);
     /* Fixed-duration slide progress, independent of the chevron's anim_t. */
     float dir = s_col_toggle.expanded ? 1.0f : -1.0f;
     s_col_slide_t += dir * GetFrameTime() / IBUBBLE_SLIDE_DURATION;
@@ -688,13 +698,9 @@ bool interaction_bubble_handle_click(int mx, int my) {
     column_ensure_toggle();
     /* A modal over the column blocks every bubble interaction, toggle included. */
     if (modals_block_bubbles()) return false;
-    if (ui_toggle_handle_click(&s_col_toggle, mx, my)) {
-        /* Reset the scroll only when opening. Resetting on collapse would
-         * zero the scroll's stored view — a 0×0 scissor — and scissor the
-         * column away on the next frame instead of letting it slide out. */
-        if (s_col_toggle.expanded) ui_scroll_reset(&s_col_scroll);
-        return true;
-    }
+    /* The press only arms the toggle's gesture; expand/collapse (and the scroll
+     * reset that follows it) resolves in interaction_bubble_update. */
+    if (ui_toggle_handle_click(&s_col_toggle, mx, my)) return true;
 
     if (!s_col_toggle.expanded || s_slot_count <= 0) return false;
     Rectangle view = column_scroll_view();
