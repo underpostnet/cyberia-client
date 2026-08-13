@@ -22,6 +22,8 @@
 #include "ui/modal_map.h"
 #include "ui/quest_journal.h"
 #include "ui/modal_notification.h"
+#include "fx/fx_dust.h"
+#include "fx/fx_footsteps.h"
 #include "fx/fx_tap.h"
 #include "ui/ui_icon.h"
 #include "network/engine_client.h"
@@ -71,6 +73,8 @@ void render_init(int width, int height) {
     hud_minimap_overlay_init();
 
     fx_tap_init();
+    fx_dust_init();
+    fx_footsteps_init();
     loot_fx_reset();
     fx_grant_delivery_init();
     fx_assemble_init();
@@ -87,6 +91,10 @@ void render_on_tick(float delta_time) {
     fct_update(delta_time);
     loot_fx_update(delta_time);
     fx_tap_update(delta_time);
+    /* Reads the render positions main.c settled this frame, so the dust lands
+     * with the sprite that raised it. */
+    fx_footsteps_update(delta_time);
+    fx_dust_update(delta_time);
 
     inventory_bar_update(delta_time);
     /* After the bar refreshed its quantity FX, so a landed grant is visible to
@@ -137,6 +145,8 @@ void render_fallback(int width, int height) {
 void render_cleanup(void) {
     UnloadTexture(render_state.splash_texture);
     fx_tap_reset();
+    fx_footsteps_reset();
+    fx_dust_reset();
     game_render_cleanup();
     dev_ui_cleanup();
     modal_map_cleanup();

@@ -29,6 +29,7 @@
 #include "ui/nameplate.h"
 #include "ui/quest_journal.h"
 #include "ui/modal_notification.h"
+#include "fx/fx_dust.h"
 #include "fx/fx_tap.h"
 #include "ui/ui_icon.h"
 #include "util/log.h"
@@ -237,28 +238,31 @@ void game_render_world(void) {
     // 2. World objects (obstacles, portals - but NOT foregrounds)
     game_render_world_objects();
 
-    // 3. Entities (sorted by depth) - players and bots
+    // 3. Footstep dust - on the ground, so under every entity that raised it
+    fx_dust_draw();
+
+    // 4. Entities (sorted by depth) - players and bots
     game_render_entities();
     if (g_entity_render) { entity_render_gc(g_entity_render); }
 
-    // 4. Player path (if dev_ui enabled) - visual debug aid
+    // 5. Player path (if dev_ui enabled) - visual debug aid
     if (presentation_runtime_dev_ui()) {
         game_render_player_path();
     }
 
-    // 5. AOI circle (if dev_ui enabled) - visual debug aid
+    // 6. AOI circle (if dev_ui enabled) - visual debug aid
     if (presentation_runtime_dev_ui()) {
         game_render_aoi_circle();
     }
 
-    // 6. Foregrounds (always on top of entities) - creates depth
+    // 7. Foregrounds (always on top of entities) - creates depth
     game_render_foregrounds();
 
-    // 7. Effects — FCT pop-ups, loot flights
+    // 8. Effects — FCT pop-ups, loot flights
     fct_draw();
     game_render_loot_fx();
 
-    // 8. Grid overlay (if dev_ui enabled - renders on top of everything)
+    // 9. Grid overlay (if dev_ui enabled - renders on top of everything)
     if (presentation_runtime_dev_ui()) {
         game_render_grid();
     }
