@@ -35,6 +35,9 @@ typedef void (*ModalNotificationCancelFn)(void);
  * Cancel / Buy pair in place of the lone OK. `on_confirm` fires on Buy with the
  * selected count; Cancel dismisses with nothing sent.
  *
+ * Ranges of 10 or more also carry a step multiplier under the slot, cycling
+ * x1 → x10 → x100 → x1000 → x10000 so a deep stack is sized in a few taps.
+ *
  * A picker announces a trade rather than a gift, so it drops the reward
  * celebration and waits for the server: after Buy it holds until the granted
  * items land in the inventory, releases the price item's spend FX, and only
@@ -46,12 +49,13 @@ void modal_notification_show_picker(const char* title, const char* message, Colo
                                     const char* price_item_id, int price_quantity,
                                     ModalNotificationConfirmFn on_confirm);
 
-/* Unpriced quantity picker: how much of a stack the player wants to move.
- * Unlike show_picker there is nothing to buy and no grant to wait for, so the
- * card confirms and leaves at once — the opener owns whatever animation
- * follows. `confirm_label` / `confirm_icon` name the action ("Store", "Take",
- * "Split"); `on_cancel` may be NULL, and fires when the player declines — the
- * question can have a meaningful second answer, not only "do nothing". */
+/* Unpriced quantity picker: how much of a stack the player wants to move. Same
+ * stepper and step multiplier as show_picker, but with nothing to buy and no
+ * grant to wait for, so the card confirms and leaves at once — the opener owns
+ * whatever animation follows. `confirm_label` / `confirm_icon` name the action
+ * ("Store", "Take", "Split"); `on_cancel` may be NULL, and fires when the player
+ * declines — the question can have a meaningful second answer, not only "do
+ * nothing". */
 void modal_notification_show_split(const char* title, const char* message, Color accent,
                                    const char* item_id, int max_quantity,
                                    const char* confirm_label, const char* confirm_icon,

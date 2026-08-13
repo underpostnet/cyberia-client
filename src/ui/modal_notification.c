@@ -8,7 +8,8 @@
  * Four shapes, each additive over the last:
  *   plain     title + message + OK.
  *   reward    plus the granted item's slot; OK flies it into the inventory.
- *   picker    plus a − / + quantity stepper and a running total; Cancel / Buy.
+ *   picker    plus a − / + quantity stepper, its step multiplier, and a running
+ *             total; Cancel / Buy.
  *   assemble  plus the consumed inputs stacked over a progress bar charging
  *             over the recipe's duration over the produced outputs, framed by
  *             fx_assemble's electric field, and a Cancel that aborts before it
@@ -84,6 +85,17 @@
 #define MN_TOTAL_FONT  17
 #define MN_BTN_GAP     10
 
+/* Step multiplier: one button under the slot cycling x1 → x10 → … → x10000, so
+ * a deep stack is sized in a few taps instead of a hundred. A range with fewer
+ * choices than the first rung has nothing to multiply and shows no button. */
+#define MN_MULT_MIN_W        64
+#define MN_MULT_H            30
+#define MN_MULT_PAD          14
+#define MN_MULT_FONT         15
+#define MN_MULT_MAX       10000
+#define MN_MULT_TOP_LABEL "x10000"
+#define MN_MULT_MIN_CHOICES  10
+
 /* Assembly progress bar; the surrounding electric field is fx_assemble. */
 #define MN_BAR_H 18
 
@@ -136,6 +148,7 @@ static float s_reward_pop_age = 0.0f; /* time since the results started popping 
 /* Active quantity picker; qty_max 0 means the visible entry has none. */
 static int   s_qty_min = 0;
 static int   s_qty_max = 0;
+static int   s_qty_mult = 1;   /* step size the − / + buttons apply */
 static char  s_price_item[64] = {0};
 static int   s_price_qty = 0;
 static char  s_confirm_label[16] = {0};
@@ -180,6 +193,9 @@ static bool notif_has_picker(void)    { return s_qty_max > 0; }
 /* A priced picker is a purchase: it shows a running total and waits for the
  * server's grant. An unpriced one is a split of stock already owned. */
 static bool notif_has_price(void)     { return notif_has_picker() && '\0' != s_price_item[0]; }
+static bool notif_has_multiplier(void) {
+    return notif_has_picker() && s_qty_max - s_qty_min + 1 >= MN_MULT_MIN_CHOICES;
+}
 static bool notif_is_assembling(void) { return s_craft_total > 0.0f; }
 
 /* ── Queue ────────────────────────────────────────────────────────────── */
@@ -203,6 +219,7 @@ static void show_next(void) {
     s_item_count = e->item_count;
     s_qty_min    = e->qty_min;
     s_qty_max    = e->qty_max;
+    s_qty_mult   = 1;
     s_on_confirm = e->on_confirm;
     strncpy(s_price_item, e->price_item, sizeof(s_price_item) - 1);
     s_price_item[sizeof(s_price_item) - 1] = '\0';
@@ -274,6 +291,7 @@ void modal_notification_init(void) {
     s_item_count = 0;
     s_qty_min = 0;
     s_qty_max = 0;
+    s_qty_mult = 1;
     s_price_item[0] = '\0';
     s_price_qty = 0;
     s_confirm_label[0] = '\0';
@@ -445,6 +463,7 @@ static float notif_content_height(void) {
     if (notif_is_assembling() && s_input_count > 0) h += MN_GAP + notif_slot_size();
     if (notif_is_assembling())                      h += MN_GAP + MN_BAR_H;
     if (s_item_count > 0)                           h += MN_GAP + notif_slot_size();
+    if (notif_has_multiplier())                     h += MN_GAP + MN_MULT_H;
     if (notif_has_price())                          h += MN_GAP + MN_TOTAL_ICON;
     h += MN_GAP + MN_OK_H + MN_BOT;
     return h;
@@ -506,12 +525,25 @@ static Rectangle notif_item_slot(Rectangle card, int index) {
     return notif_row_slot(card, top + MN_GAP, s_item_count, index);
 }
 
+/* Step-multiplier button (picker only), centred under the item slot so the slot
+ * itself — the delivery flight's origin — stays on the card's axis. */
+static Rectangle notif_mult_btn(Rectangle card) {
+    Rectangle slot = notif_item_slot(card, 0);
+    /* Sized on the widest rung — measured, because the active font and its size
+     * factor arrive from client hints — so cycling never resizes the button. */
+    float w = (float)MeasureText(MN_MULT_TOP_LABEL, MN_MULT_FONT) + 2.0f * MN_MULT_PAD;
+    if (w < MN_MULT_MIN_W) w = MN_MULT_MIN_W;
+    return (Rectangle){ card.x + (card.width - w) * 0.5f,
+                        slot.y + slot.height + MN_GAP, w, MN_MULT_H };
+}
+
 /* Running total row (picker only): the price sprite and `qty × unit price`,
- * directly under the item slot. */
+ * under the item slot and whatever multiplier button sits below it. */
 static Rectangle notif_total_row(Rectangle card) {
     Rectangle slot = notif_item_slot(card, 0);
-    return (Rectangle){ card.x + MN_PAD, slot.y + slot.height + MN_GAP,
-                        (float)notif_inner_w(), MN_TOTAL_ICON };
+    float top = slot.y + slot.height + MN_GAP;
+    if (notif_has_multiplier()) top += MN_MULT_H + MN_GAP;
+    return (Rectangle){ card.x + MN_PAD, top, (float)notif_inner_w(), MN_TOTAL_ICON };
 }
 
 /* Bottom row. A picker pairs Cancel with the confirm; an assembly offers only
@@ -549,12 +581,18 @@ static Rectangle notif_step_inc(Rectangle card) {
                         MN_STEP_BTN, MN_STEP_BTN };
 }
 
-/* Clamp and apply a stepper delta; no-op once an end of the range is reached. */
-static void notif_step_quantity(int delta) {
-    int next = s_items[0].qty + delta;
+/* Clamp and apply a stepper delta; no-op once an end of the range is reached.
+ * `steps` is in multiplier units, so one tap always moves by the shown xN. */
+static void notif_step_quantity(int steps) {
+    int next = s_items[0].qty + steps * s_qty_mult;
     if (next < s_qty_min) next = s_qty_min;
     if (next > s_qty_max) next = s_qty_max;
     s_items[0].qty = next;
+}
+
+/* Advance the multiplier one rung, wrapping past the top back to x1. */
+static void notif_cycle_multiplier(void) {
+    s_qty_mult = (s_qty_mult >= MN_MULT_MAX) ? 1 : s_qty_mult * 10;
 }
 
 /* ── Result lifecycle ─────────────────────────────────────────────────── */
@@ -860,6 +898,24 @@ void modal_notification_draw(void) {
         step.bg = (Color){ 50, 55, 80, (unsigned char)((can_inc ? 235.0f : 90.0f) * a) };
         ui_button_pixel_retro_draw(inc, &step, can_inc && ui_button_hit(inc, mx, my));
 
+        /* Step multiplier — one tap cycles the rung the steppers move by, so a
+         * deep stack is sized without holding a button down. Lit while it is
+         * above x1, which is the only state that is not the plain default. */
+        if (notif_has_multiplier()) {
+            Rectangle mult = notif_mult_btn(card);
+            char mult_label[8];
+            snprintf(mult_label, sizeof(mult_label), "x%d", s_qty_mult);
+            UIButtonPixelRetroStyle mult_btn = {
+                .bg = (Color){ 50, 55, 80, (unsigned char)(235.0f * a) },
+                .label = mult_label,
+                .font_size = MN_MULT_FONT,
+                .text_color = C_TITLE,
+                .selected = s_qty_mult > 1,
+                .enabled = true,
+            };
+            ui_button_pixel_retro_draw(mult, &mult_btn, ui_button_hit(mult, mx, my));
+        }
+
         /* Running total — the price item's own sprite beside what this purchase
          * costs at the selected count, so "10 coin each" always has its sum. A
          * split has nothing to price, so it steps the count and nothing more. */
@@ -985,8 +1041,13 @@ bool modal_notification_handle_click(int mx, int my) {
         return true;
     }
 
-    /* Quantity stepper — adjusts the pending count without dismissing. */
+    /* Quantity stepper and its multiplier — both adjust the pending choice
+     * without dismissing. */
     if (notif_has_picker()) {
+        if (notif_has_multiplier() && ui_button_hit(notif_mult_btn(card), mx, my)) {
+            notif_cycle_multiplier();
+            return true;
+        }
         if (ui_button_hit(notif_step_dec(card), mx, my)) { notif_step_quantity(-1); return true; }
         if (ui_button_hit(notif_step_inc(card), mx, my)) { notif_step_quantity(+1); return true; }
     }
