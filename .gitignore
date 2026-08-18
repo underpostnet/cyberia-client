@@ -25,6 +25,7 @@
 !Dockerfile.dev
 !.dockerignore
 !**/*.yaml
+!deploy/**/*.sh
 !docker-driver.py
 
 build/
