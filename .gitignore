@@ -30,3 +30,6 @@
 
 build/
 bin/
+
+# Underpost CLI package staged into this build context by the image pipeline.
+underpost-cli.tgz
