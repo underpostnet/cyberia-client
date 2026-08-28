@@ -35,11 +35,16 @@ Container status reporting
 --------------------------
   Set CONTAINER_DEPLOY_ID in the instance env file (e.g.
   "dd-cyberia-mmo-client-debug").  When set, each lifecycle transition is
-  reported synchronously (blocks until `underpost config set` returns):
+  reported synchronously (blocks until `underpost state set` returns).
+
+  The target is the `state` domain's container state store, never the host
+  configuration store: container status is per-container and resets with the
+  container, while host configuration is node-scoped and survives.  The deploy
+  monitor reads back from that same store.
     - container-status (runtime-status): set on EVERY transition, success or
       error. The deploy monitor reads it to detect failure.
-        success: underpost config set container-status <CONTAINER_DEPLOY_ID>-running-deployment
-        error:   underpost config set container-status error
+        success: underpost state set container-status <CONTAINER_DEPLOY_ID>-running-deployment
+        error:   underpost state set container-status error
     - start-container-status: the insulated readiness marker, set ONLY after a
       successful bind (<CONTAINER_DEPLOY_ID>-running-deployment) — never on
       error, so a later fault can't clear pod readiness.
@@ -79,18 +84,18 @@ def runtime_config_script() -> bytes:
 def call_underpost(key: str, value: str) -> None:
     try:
         r = subprocess.run(
-            ["underpost", "config", "set", key, value],
+            ["underpost", "state", "set", key, value],
             capture_output=True,
             text=True,
         )
         if 0 != r.returncode:
             print(
-                f"[status] underpost config set {key} {value} "
+                f"[status] underpost state set {key} {value} "
                 f"exited {r.returncode}: {r.stderr.strip()}",
                 flush=True,
             )
     except Exception as exc:
-        print(f"[status] underpost config set {key} {value}: {exc}", flush=True)
+        print(f"[status] underpost state set {key} {value}: {exc}", flush=True)
 
 
 def report_container_status(container_id: str, status: str) -> None:
