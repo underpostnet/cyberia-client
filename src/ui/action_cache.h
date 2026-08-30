@@ -14,7 +14,7 @@
 #ifndef ACTION_CACHE_H
 #define ACTION_CACHE_H
 
-#include <stdbool.h>
+#include "meta_cache.h"
 
 #define ACTION_CACHE_CODE_MAX   64
 #define ACTION_CACHE_LABEL_MAX  64
@@ -23,13 +23,6 @@
 #define ACTION_CACHE_CRAFT_MAX  16
 #define ACTION_CACHE_CRAFT_ITEMS_MAX 6
 #define ACTION_CACHE_CAP  32
-
-typedef enum {
-    ACTION_CACHE_NONE = 0,
-    ACTION_CACHE_LOADING,
-    ACTION_CACHE_READY,
-    ACTION_CACHE_ERROR,
-} ActionCacheState;
 
 typedef struct {
     char quest_code[ACTION_CACHE_CODE_MAX];
@@ -58,7 +51,7 @@ typedef struct {
 } ActionCraftRecipe;
 
 typedef struct {
-    char code[ACTION_CACHE_CODE_MAX];
+    MetaCacheHead head;
     char label[ACTION_CACHE_LABEL_MAX];
     char dialog_code[ACTION_CACHE_CODE_MAX];
     char source_map_code[ACTION_CACHE_CODE_MAX];
@@ -71,7 +64,6 @@ typedef struct {
     ActionCraftRecipe craft_recipes[ACTION_CACHE_CRAFT_MAX];
     int  craft_count;
     int  storage_slots;
-    ActionCacheState state;
 } ActionMetadataEntry;
 
 /* Schedule an async REST fetch if not cached/loading. */

@@ -66,10 +66,10 @@ static struct {
     char             font_family[128];
     float            font_factor_size;
 } g_rt = {
-    .cell_size          = 45.0f,
+    .cell_size          = CELL_SIZE_DEFAULT,
     .camera_zoom        = 1.0f,
     .camera_smoothing   = 0.1f,
-    .interpolation_ms   = 100,
+    .interpolation_ms   = INTERPOLATION_MS_DEFAULT,
     .default_obj_width  = 1.0f,
     .default_obj_height = 1.0f,
     .dev_ui             = false,
@@ -179,14 +179,6 @@ static void parse_response(const char* body, int len) {
            g_rt.cell_size, g_rt.interpolation_ms);
 }
 
-/* One-shot hydration of GameState with the simulation-relevant subset
- * (cell-size, interpolation window). Camera and dev_ui live in their own
- * modules and read straight off this runtime. */
-static void hydrate_game_state(void) {
-    g_game_state.cell_size        = g_rt.cell_size;
-    g_game_state.interpolation_ms = g_rt.interpolation_ms;
-}
-
 static void on_hints_fetched(const FetchResponse* r) {
     if (r->success && r->data && r->size > 0) {
         parse_response((const char*)r->data, (int)r->size);
@@ -195,7 +187,6 @@ static void on_hints_fetched(const FetchResponse* r) {
     }
     free(r->data);
     g_rt.ready = true;
-    hydrate_game_state();
 }
 
 /* ── Public lifecycle ──────────────────────────────────────────────── */
@@ -256,6 +247,16 @@ Color presentation_runtime_status_border(uint8_t status_id) {
 }
 
 float presentation_runtime_camera_zoom(void)       { return g_rt.camera_zoom; }
+
+/* A hints payload that sends a non-positive value falls back to the bootstrap
+ * default, so no call site needs its own guard. */
+float world_cell_size(void) {
+    return g_rt.cell_size > 0.0f ? g_rt.cell_size : CELL_SIZE_DEFAULT;
+}
+
+int world_interpolation_ms(void) {
+    return g_rt.interpolation_ms > 0 ? g_rt.interpolation_ms : INTERPOLATION_MS_DEFAULT;
+}
 bool  presentation_runtime_dev_ui(void)            { return g_rt.dev_ui; }
 const char* presentation_runtime_font_family(void) { return g_rt.font_family; }
 float presentation_runtime_font_factor_size(void)  { return g_rt.font_factor_size; }

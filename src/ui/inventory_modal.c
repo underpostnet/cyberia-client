@@ -97,12 +97,8 @@ static float    s_content_height = 0.0f;
  * NPC whose panel opened this item. Empty means the local player, who owns the
  * inventory the modal reads. */
 static char  s_anchor_entity[MAX_ID_LENGTH] = {0};
-/* Anchored card height, tracking the measured content. Negative until the
- * first measurement of a session, which snaps. */
-static float s_anchor_h = -1.0f;
-/* Frozen top-left corner and the flag that stops it being re-resolved. */
-static ModalAnchor s_anchor = { 0 };
-static bool s_anchor_settled = false;
+/* Anchored card geometry: height, frozen corner, and the settled flag. */
+static ModalAnchorLayout s_layout = { .height = -1.0f };
 
 /* ── Layout constants ───────────────────────────────────────────────────── */
 
@@ -297,16 +293,11 @@ static float inventory_controls_reserved(bool lore_available) {
     return reserved;
 }
 
-static Vector2 anchor_card_size(Rectangle safe) {
-    return (Vector2){
-        safe.width < MODAL_ANCHOR_MAX_W ? safe.width : MODAL_ANCHOR_MAX_W,
-        s_anchor_h > 0.0f ? s_anchor_h : IM_ANCHOR_DEFAULT_H,
-    };
-}
-
 static Rectangle anchored_card_rect(void) {
     Rectangle safe = modal_anchor_safe_area(IM_CARD_PAD, IM_ANCHOR_MIN_H);
-    return modal_anchor_rect(&s_anchor, anchor_card_size(safe), safe);
+    return modal_anchor_rect(&s_layout.anchor,
+                             modal_anchor_card_size(&s_layout, safe, IM_ANCHOR_DEFAULT_H),
+                             safe);
 }
 
 static Rectangle card_rect(int sw, int sh, float scale) {
@@ -339,36 +330,13 @@ static int modal_sprite_size(float card_w, float card_h) {
 
 /* Resolve the anchored card's geometry for this frame. */
 static void update_anchor_layout(float dt, bool lore_available) {
-    if (!modal_anchor_active()) {
-        s_anchor_h = -1.0f;
-        s_anchor.captured = false;
-        s_anchor_settled = false;
-        return;
-    }
-
-    float target;
-    if (s_content_height > 0.0f)
-        target = IM_HEADER_H + s_content_height + inventory_controls_reserved(lore_available);
-    else
-        target = s_anchor_h > 0.0f ? s_anchor_h : IM_ANCHOR_DEFAULT_H;
-
-    Rectangle safe = modal_anchor_safe_area(IM_CARD_PAD, IM_ANCHOR_MIN_H);
-    if (target > safe.height)     target = safe.height;
-    if (target < IM_ANCHOR_MIN_H) target = IM_ANCHOR_MIN_H;
-
-    /* While the card opens it snaps to its measured height and keeps resolving
-     * the corner from the entity, so it lands at the real size in the right
-     * place. The corner freezes on the first settled measurement, at the latest
-     * when the entrance animation ends. After that the card ignores the entity
-     * and a content change extends it downward from the same top edge. */
-    if (!s_anchor_settled) {
-        s_anchor_h = target;
-        modal_anchor_capture(&s_anchor, s_anchor_entity, anchor_card_size(safe),
-                             MODAL_ANCHOR_GAP, safe);
-        if (s_content_height > 0.0f || s_age >= MODAL_POP_DURATION) s_anchor_settled = true;
-        return;
-    }
-    s_anchor_h = modal_anchor_ease_height(s_anchor_h, target, dt);
+    float content = s_content_height > 0.0f
+                  ? IM_HEADER_H + s_content_height + inventory_controls_reserved(lore_available)
+                  : 0.0f;
+    modal_anchor_layout_update(&s_layout, s_anchor_entity,
+                               modal_anchor_safe_area(IM_CARD_PAD, IM_ANCHOR_MIN_H),
+                               content, IM_ANCHOR_DEFAULT_H, IM_ANCHOR_MIN_H,
+                               s_age >= MODAL_POP_DURATION, dt);
 }
 
 static void send_activation(const char* item_id, bool active) {
@@ -472,9 +440,7 @@ static void reset_view_state(void) {
     s_content_height = 0.0f;
     s_anchor_entity[0] = '\0';
     /* A fresh session re-resolves both the height and the frozen corner. */
-    s_anchor_h = -1.0f;
-    s_anchor_settled = false;
-    s_anchor.captured = false;
+    modal_anchor_layout_reset(&s_layout);
 }
 
 void inventory_modal_set_anchor_entity(const char* entity_id) {

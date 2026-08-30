@@ -9,8 +9,10 @@
 #include "fx_shapes.h"
 
 #include "domain/camera.h"
+#include "util/utils.h"
 
 #include <math.h>
+#include <raymath.h>
 #include <string.h>
 
 #define FX_TAP_TAU 6.28318530718f
@@ -42,39 +44,22 @@ typedef struct {
 static FxTapEntry s_entries[FX_TAP_MAX_ENTRIES];
 static bool s_fx_tap_ready = false;
 
-static float fx_tap_clampf(float value, float min_value, float max_value) {
-    if (value < min_value) return min_value;
-    if (value > max_value) return max_value;
-    return value;
-}
-
 static float fx_tap_snapf(float value) {
     return floorf(value + 0.5f);
 }
 
 static float fx_tap_ease_out_quart(float t) {
-    float inv = 1.0f - fx_tap_clampf(t, 0.0f, 1.0f);
+    float inv = 1.0f - Clamp(t, 0.0f, 1.0f);
     return 1.0f - inv * inv * inv * inv;
 }
 
+static float tap_rank(const void* elem) {
+    const FxTapEntry* e = elem;
+    return e->active ? e->age : INFINITY;
+}
+
 static FxTapEntry* fx_tap_alloc_entry(void) {
-    FxTapEntry* slot = NULL;
-    float oldest_age = -1.0f;
-    int oldest_index = 0;
-
-    for (int i = 0; i < FX_TAP_MAX_ENTRIES; i++) {
-        if (!s_entries[i].active) {
-            slot = &s_entries[i];
-            break;
-        }
-        if (s_entries[i].age > oldest_age) {
-            oldest_age = s_entries[i].age;
-            oldest_index = i;
-        }
-    }
-
-    if (!slot) slot = &s_entries[oldest_index];
-    memset(slot, 0, sizeof(*slot));
+    FxTapEntry* slot = pool_take(s_entries, sizeof(*s_entries), FX_TAP_MAX_ENTRIES, tap_rank);
     slot->active = true;
     return slot;
 }
@@ -88,7 +73,7 @@ static float fx_tap_scale_px(float reference_px, float zoom) {
 }
 
 static void fx_tap_draw_cross(const FxTapEntry* entry, Vector2 screen_pos, float t, float zoom) {
-    float grow = fx_tap_ease_out_quart(fx_tap_clampf(t / 0.22f, 0.0f, 1.0f));
+    float grow = fx_tap_ease_out_quart(Clamp(t / 0.22f, 0.0f, 1.0f));
     float pulse = 1.0f + 0.20f * sinf(t * FX_TAP_TAU * FX_TAP_PULSE_CYCLES);
     float size = (FX_TAP_REF_SIZE + FX_TAP_REF_GROW * grow) * entry->scale *
                  (0.90f + 0.22f * entry->intensity) * pulse;
@@ -136,9 +121,9 @@ void fx_tap_spawn(Vector2 world_position, const FxTapParams* params) {
     if (!s_fx_tap_ready) fx_tap_init();
 
     FxTapParams cfg = params ? *params : fx_tap_default_params();
-    cfg.scale = fx_tap_clampf(cfg.scale <= 0.0f ? 1.0f : cfg.scale, 0.35f, 3.5f);
-    cfg.duration = fx_tap_clampf(cfg.duration <= 0.0f ? 0.34f : cfg.duration, 0.12f, 1.20f);
-    cfg.intensity = fx_tap_clampf(cfg.intensity <= 0.0f ? 1.0f : cfg.intensity, 0.20f, 2.50f);
+    cfg.scale = Clamp(cfg.scale <= 0.0f ? 1.0f : cfg.scale, 0.35f, 3.5f);
+    cfg.duration = Clamp(cfg.duration <= 0.0f ? 0.34f : cfg.duration, 0.12f, 1.20f);
+    cfg.intensity = Clamp(cfg.intensity <= 0.0f ? 1.0f : cfg.intensity, 0.20f, 2.50f);
     if (0 == cfg.color.a) cfg.color = fx_tap_default_params().color;
 
     FxTapEntry* entry = fx_tap_alloc_entry();
@@ -171,7 +156,7 @@ void fx_tap_draw(void) {
         if (!entry->active || entry->duration <= 0.0f) continue;
 
         Vector2 screen_pos = GetWorldToScreen2D(entry->position, cam);
-        float t = fx_tap_clampf(entry->age / entry->duration, 0.0f, 1.0f);
+        float t = Clamp(entry->age / entry->duration, 0.0f, 1.0f);
         fx_tap_draw_cross(entry, screen_pos, t, zoom);
     }
 }

@@ -8,6 +8,7 @@
 
 #include "domain/camera.h"
 #include "domain/local_player.h"
+#include "domain/presentation_runtime.h"
 #include "game_state.h"
 #include "object_layer.h"
 #include "world_types.h"
@@ -87,7 +88,7 @@ static FxStepTracker* tracker_for(const char* id) {
 }
 
 static float cell_size(void) {
-    return g_game_state.cell_size > 0.0f ? g_game_state.cell_size : 12.0f;
+    return world_cell_size();
 }
 
 static float walk_speed_ref(void) {

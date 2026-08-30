@@ -184,7 +184,7 @@ static void draw_drop_count(float top_x, float top_y, float dims_w, float cell_s
  * background plate — the token and bordered-square sparks carry the read. */
 static void game_render_loot_fx(void) {
     if (!g_entity_render) return;
-    const float cell_size = g_game_state.cell_size > 0 ? g_game_state.cell_size : 12.0f;
+    const float cell_size = world_cell_size();
 
     /* Bordered-square particles (ambient float + collection burst). */
     int pslots = loot_fx_particle_slot_count();
@@ -272,7 +272,7 @@ void game_render_grid(void) {
     // Only render grid overlay when dev_ui is enabled
     // Grid is transparent with red lines and white border on top of everything
 
-    float cell_size = g_game_state.cell_size > 0 ? g_game_state.cell_size : 12.0f;
+    float cell_size = world_cell_size();
     int grid_w = g_game_state.grid_w;
     int grid_h = g_game_state.grid_h;
     float map_w = grid_w * cell_size;
@@ -313,7 +313,7 @@ void game_render_grid(void) {
 
 
 void game_render_floors(void) {
-    const float cell_size = g_game_state.cell_size > 0 ? g_game_state.cell_size : 12.0f;
+    const float cell_size = world_cell_size();
 
     // If we have no floors, draw a default background to prevent black screen
     if (g_game_state.floor_count == 0) {
@@ -365,7 +365,7 @@ void game_render_floors(void) {
 }
 
 void game_render_world_objects(void) {
-    const float cell_size = g_game_state.cell_size > 0 ? g_game_state.cell_size : 12.0f;
+    const float cell_size = world_cell_size();
 
     // Render portals
     for (int i = 0; i < g_game_state.portal_count; i++) {
@@ -423,7 +423,7 @@ void game_render_world_objects(void) {
 }
 
 void game_render_foregrounds(void) {
-    const float cell_size = g_game_state.cell_size > 0 ? g_game_state.cell_size : 12.0f;
+    const float cell_size = world_cell_size();
 
     // Render foregrounds (always on top of entities)
     for (int i = 0; i < g_game_state.foreground_count; i++) {
@@ -509,7 +509,7 @@ void game_render_entities(void) {
     // Safety check - ensure entity render system is initialized
     if (!g_entity_render) {
         // Fallback to simple rendering if entity render system not initialized
-        const float cell_size = g_game_state.cell_size > 0 ? g_game_state.cell_size : 12.0f;
+        const float cell_size = world_cell_size();
 
         // Draw simple rectangles as fallback to ensure entities are visible
         Rectangle rect ={
@@ -546,7 +546,7 @@ void game_render_entities(void) {
         return;
     }
 
-    const float cell_size = g_game_state.cell_size > 0 ? g_game_state.cell_size : 12.0f;
+    const float cell_size = world_cell_size();
     const bool dev_ui = presentation_runtime_dev_ui();
 
     // Create array to hold all depth-sorted actors
@@ -890,7 +890,7 @@ void game_render_entities(void) {
                         if (np_bot->action_code[0] != '\0') {
                             action_cache_fetch(np_bot->action_code);
                             const ActionMetadataEntry* am = action_cache_get(np_bot->action_code);
-                            if (am && ACTION_CACHE_READY == am->state && am->label[0] != '\0') {
+                            if (am && META_CACHE_READY == am->head.state && am->label[0] != '\0') {
                                 strncpy(np_buf, am->label, sizeof(np_buf) - 1);
                                 np_buf[sizeof(np_buf) - 1] = '\0';
                             }
@@ -931,7 +931,7 @@ void game_render_entities(void) {
 }
 
 void game_render_player_path(void) {
-    const float cell_size = g_game_state.cell_size > 0 ? g_game_state.cell_size : 12.0f;
+    const float cell_size = world_cell_size();
 
     // Render target position
     if (g_game_state.player.target_pos.x >= 0 && g_game_state.player.target_pos.y >= 0) {
@@ -963,7 +963,7 @@ void game_render_player_path(void) {
 }
 
 void game_render_aoi_circle(void) {
-    float cell_size = g_game_state.cell_size > 0 ? g_game_state.cell_size : 12.0f;
+    float cell_size = world_cell_size();
     float aoi_radius = g_game_state.aoi_radius * cell_size;
 
     Vector2 center = {
@@ -1075,14 +1075,14 @@ void game_render_ui(void) {
 }
 
 Vector2 game_render_world_to_screen(Vector2 world_pos) {
-    float cell_size = g_game_state.cell_size > 0 ? g_game_state.cell_size : 12.0f;
+    float cell_size = world_cell_size();
     Vector2 scaled = {world_pos.x * cell_size, world_pos.y * cell_size};
     return GetWorldToScreen2D(scaled, camera_get());
 }
 
 Vector2 game_render_screen_to_world(Vector2 screen_pos) {
     Vector2 world = GetScreenToWorld2D(screen_pos, camera_get());
-    float cell_size = g_game_state.cell_size > 0 ? g_game_state.cell_size : 12.0f;
+    float cell_size = world_cell_size();
     return (Vector2){world.x / cell_size, world.y / cell_size};
 }
 

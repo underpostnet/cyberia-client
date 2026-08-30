@@ -61,17 +61,6 @@ static const Color C_RESPAWN_OUTLINE = {   0,   0,   0, 255 };
 #define EOHUD_STAT_OUTLINE_RINGS    2
 #define EOHUD_RESPAWN_OUTLINE_RINGS 2
 
-static Color color_lerp(Color a, Color b, float t) {
-    if (t <= 0.0f) return a;
-    if (t >= 1.0f) return b;
-    return (Color){
-        (unsigned char)(a.r + (float)(b.r - a.r) * t),
-        (unsigned char)(a.g + (float)(b.g - a.g) * t),
-        (unsigned char)(a.b + (float)(b.b - a.b) * t),
-        (unsigned char)(a.a + (float)(b.a - a.a) * t),
-    };
-}
-
 /* ── Shared pill ─────────────────────────────────────────────────────── */
 
 /** Draws the standardized pill (dark rounded backdrop + subtle border) sized to
@@ -133,8 +122,8 @@ static void draw_hp_bar(float cx, float top_y, float life, float max_life) {
         float frac = life / max_life;
         if (frac > 1.0f) frac = 1.0f;
         Color fill = (frac > 0.5f)
-            ? color_lerp(C_HP_MID, C_HP_FULL, (frac - 0.5f) * 2.0f)
-            : color_lerp(C_HP_LOW, C_HP_MID, frac * 2.0f);
+            ? ColorLerp(C_HP_MID, C_HP_FULL, (frac - 0.5f) * 2.0f)
+            : ColorLerp(C_HP_LOW, C_HP_MID, frac * 2.0f);
         Rectangle fr = bar;
         fr.width = bar.width * frac;
         if (fr.width < 1.0f && life > 0.0f) fr.width = 1.0f;

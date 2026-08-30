@@ -19,6 +19,7 @@
 #include <limits.h>
 #include <math.h>
 #include <raylib.h>
+#include <raymath.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -235,10 +236,6 @@ static int node_at_point(float x, float y) {
 
 /* ── Camera controls ────────────────────────────────────────────────────── */
 
-static float clampf(float v, float lo, float hi) {
-    return v < lo ? lo : (v > hi ? hi : v);
-}
-
 static float imap_zoom_max(void) {
     float w = s_m.panel.width > 4.0f ? s_m.panel.width : (float)GetScreenWidth();
     float max = 4.0f * w / IMAP_NODE_SIDE;
@@ -247,7 +244,7 @@ static float imap_zoom_max(void) {
 
 /* Zoom about an anchor point: the graph point under the anchor stays put. */
 static void zoom_about(float factor, Vector2 anchor) {
-    float nz = clampf(s_m.zoom_target * factor, IMAP_ZOOM_MIN, imap_zoom_max());
+    float nz = Clamp(s_m.zoom_target * factor, IMAP_ZOOM_MIN, imap_zoom_max());
     factor = nz / s_m.zoom_target;
     Vector2 c = panel_center();
     Vector2 rel = { anchor.x - c.x - s_m.pan_target.x,
@@ -612,8 +609,8 @@ static void draw_edge(const ImapEdge* e, int idx, float fade, double t) {
 static Vector2 cell_to_card(Rectangle card, const ImapNode* n, float cell_x, float cell_y) {
     float fx = n->grid_x > 0 ? cell_x / (float)n->grid_x : 0.5f;
     float fy = n->grid_y > 0 ? cell_y / (float)n->grid_y : 0.5f;
-    fx = clampf(fx, 0.0f, 1.0f);
-    fy = clampf(fy, 0.0f, 1.0f);
+    fx = Clamp(fx, 0.0f, 1.0f);
+    fy = Clamp(fy, 0.0f, 1.0f);
     return (Vector2){ card.x + fx * card.width, card.y + fy * card.height };
 }
 

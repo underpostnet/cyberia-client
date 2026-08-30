@@ -75,4 +75,32 @@ Rectangle modal_anchor_rect(const ModalAnchor* anchor, Vector2 size, Rectangle s
  * the card instead of jumping it. */
 float modal_anchor_ease_height(float current, float target, float dt);
 
+/* Everything a panel modal keeps about its anchored card between frames. */
+typedef struct {
+    ModalAnchor anchor;
+    float       height;   /* card height; negative until the first measurement */
+    bool        settled;  /* the corner is frozen and no longer follows the entity */
+} ModalAnchorLayout;
+
+/* Back to the unanchored state: the next update re-measures and re-captures. */
+void modal_anchor_layout_reset(ModalAnchorLayout* layout);
+
+/* Card size for the current height, capped at MODAL_ANCHOR_MAX_W and falling
+ * back to `default_h` before the first measurement. */
+Vector2 modal_anchor_card_size(const ModalAnchorLayout* layout, Rectangle safe,
+                               float default_h);
+
+/* Resolve the anchored card's geometry for this frame.
+ *
+ * `content_h` is the height the content wants, or 0 while it is unmeasured.
+ * `entrance_done` freezes the corner even for a card that measures nothing.
+ *
+ * While the card opens it snaps to its measured height and keeps resolving the
+ * corner from the entity, so it lands at the real size in the right place. The
+ * corner freezes on the first settled measurement. After that the card ignores
+ * the entity and a content change extends it downward from the same top edge. */
+void modal_anchor_layout_update(ModalAnchorLayout* layout, const char* entity_id,
+                                Rectangle safe, float content_h, float default_h,
+                                float min_h, bool entrance_done, float dt);
+
 #endif /* MODAL_ANCHOR_H */

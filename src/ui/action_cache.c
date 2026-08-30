@@ -4,44 +4,33 @@
 
 #include "action_cache.h"
 
-#include "network/engine_client.h"
-#include "util/log.h"
+#include "meta_cache.h"
+#include "util/utils.h"
 
 #include <cJSON.h>
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
 
-static ActionMetadataEntry s_cache[ACTION_CACHE_CAP];
-static int             s_count = 0;
+static ActionMetadataEntry s_entries[ACTION_CACHE_CAP];
+static void ingest_doc(void* entry, const cJSON* doc);
 
-static ActionMetadataEntry* find_by_code(const char* code) {
-    if (!code) return NULL;
-    for (int i = 0; i < s_count; ++i) {
-        if (0 == strcmp(s_cache[i].code, code)) return &s_cache[i];
-    }
-    return NULL;
-}
-
-static ActionMetadataEntry* find_or_create(const char* code) {
-    ActionMetadataEntry* e = find_by_code(code);
-    if (e) return e;
-    if (s_count >= ACTION_CACHE_CAP) return NULL;
-    e = &s_cache[s_count++];
-    memset(e, 0, sizeof(ActionMetadataEntry));
-    strncpy(e->code, code, ACTION_CACHE_CODE_MAX - 1);
-    return e;
-}
-
-static void copy_str(char* dst, size_t cap, const char* src) {
-    if (!src) { dst[0] = '\0'; return; }
-    strncpy(dst, src, cap - 1);
-    dst[cap - 1] = '\0';
-}
+static MetaCache s_cache = {
+    .entries    = s_entries,
+    .elem_size  = sizeof(ActionMetadataEntry),
+    .cap        = ACTION_CACHE_CAP,
+    .url_prefix = "/api/cyberia-action/code/",
+    .label      = "action",
+    .ingest     = ingest_doc,
+};
 
 const ActionMetadataEntry* action_cache_get(const char* code) {
-    if (!code) return NULL;
-    return find_by_code(code);
+    return meta_cache_find(&s_cache, code);
+}
+
+static void on_action_fetched(const FetchResponse* r) {
+    meta_cache_on_fetched(&s_cache, r);
+}
+
+void action_cache_fetch(const char* code) {
+    meta_cache_fetch(&s_cache, code, on_action_fetched);
 }
 
 /* Read one side of a recipe ({itemId, qty} rows) into `out`; returns the count. */
@@ -61,7 +50,9 @@ static int ingest_craft_items(const cJSON* arr, ActionCraftItem* out) {
     return count;
 }
 
-static void ingest_doc(ActionMetadataEntry* e, const cJSON* doc) {
+static void ingest_doc(void* entry, const cJSON* doc) {
+    ActionMetadataEntry* e = entry;
+
     const cJSON* label = cJSON_GetObjectItemCaseSensitive(doc, "label");
     if (cJSON_IsString(label)) copy_str(e->label, ACTION_CACHE_LABEL_MAX, label->valuestring);
 
@@ -139,41 +130,4 @@ static void ingest_doc(ActionMetadataEntry* e, const cJSON* doc) {
      * entity a storage terminal. */
     const cJSON* storage = cJSON_GetObjectItemCaseSensitive(doc, "storageSlots");
     e->storage_slots = cJSON_IsNumber(storage) ? storage->valueint : 0;
-}
-
-static void on_action_fetched(const FetchResponse* r) {
-    ActionMetadataEntry* e = find_by_code(r->asset_id);
-    if (!e) { free(r->data); return; }
-
-    if (!r->success) {
-        e->state = ACTION_CACHE_ERROR;
-        LOG_WARN("action metadata fetch failed for %s", r->asset_id);
-        free(r->data);
-        return;
-    }
-
-    cJSON* root = cJSON_ParseWithLength((const char*)r->data, r->size);
-    const cJSON* status = root ? cJSON_GetObjectItemCaseSensitive(root, "status") : NULL;
-    const cJSON* doc = root ? cJSON_GetObjectItemCaseSensitive(root, "data") : NULL;
-    if (!cJSON_IsString(status) || 0 != strcmp(status->valuestring, "success") || !cJSON_IsObject(doc)) {
-        e->state = ACTION_CACHE_ERROR;
-    } else {
-        ingest_doc(e, doc);
-        e->state = ACTION_CACHE_READY;
-    }
-    cJSON_Delete(root);
-    free(r->data);
-}
-
-void action_cache_fetch(const char* code) {
-    if (!code || '\0' == code[0]) return;
-
-    ActionMetadataEntry* e = find_or_create(code);
-    if (!e) return;
-    if (ACTION_CACHE_READY == e->state || ACTION_CACHE_LOADING == e->state) return;
-
-    e->state = ACTION_CACHE_LOADING;
-    char url[512];
-    snprintf(url, sizeof url, "/api/cyberia-action/code/%s", code);
-    fetch_request_start(code, url, on_action_fetched);
 }

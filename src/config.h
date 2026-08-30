@@ -21,7 +21,7 @@ static const char* API_BASE_URL =
 #define TICK_DURATION_S       (1.0 / (double)TICK_RATE_HZ)
 
 /* Bootstrap render-tick interpolation offset, in ticks. Applies only until
- * g_game_state.interpolation_ms arrives from the client-hints endpoint. */
+ * world_interpolation_ms() arrives from the client-hints endpoint. */
 #define INTERP_TICKS          2
 
 /* Cache ceilings. One atlas texture per item. */

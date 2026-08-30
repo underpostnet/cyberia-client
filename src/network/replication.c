@@ -1,5 +1,6 @@
 #include "network/replication.h"
 
+#include "domain/presentation_runtime.h"
 #include "game_state.h"
 #include "util/serial.h"
 #include "input/input_command.h"
@@ -10,6 +11,7 @@
 #include "config.h"
 
 #include <raylib.h>
+#include <raymath.h>
 #include <stdint.h>
 #include <stdbool.h>
 #include <assert.h>
@@ -24,7 +26,7 @@ void replication_prepare_input(input_queue_t in_queue) {
     input_event_t evt = { 0 };
     while (input_pop(&in_queue, &evt)) {
         if (INPUT_TAP == evt.type) {
-            float cell = g_game_state.cell_size > 0.0f ? g_game_state.cell_size : 12.0f;
+            float cell = world_cell_size();
             float gx = evt.world_position.x / cell;
             float gy = evt.world_position.y / cell;
             input_command_t cmd = input_command_build_tap(gx, gy);
@@ -484,18 +486,16 @@ static inline float compute_alpha_for(double now, double snapshot_time, int wind
 
 void interpolation_compute_view(void) {
     const double now = GetTime();
-    const int window_ms = g_game_state.interpolation_ms;
+    const int window_ms = world_interpolation_ms();
 
     for (int i = 0; i < g_game_state.other_player_count; i++) {
         PlayerState* p = &g_game_state.other_players[i];
         float t = compute_alpha_for(now, p->base.snapshot_time, window_ms);
-        p->base.interp_pos.x = p->base.pos_prev.x + (p->base.pos_server.x - p->base.pos_prev.x) * t;
-        p->base.interp_pos.y = p->base.pos_prev.y + (p->base.pos_server.y - p->base.pos_prev.y) * t;
+        p->base.interp_pos = Vector2Lerp(p->base.pos_prev, p->base.pos_server, t);
     }
     for (int i = 0; i < g_game_state.bot_count; i++) {
         BotState* b = &g_game_state.bots[i];
         float t = compute_alpha_for(now, b->base.snapshot_time, window_ms);
-        b->base.interp_pos.x = b->base.pos_prev.x + (b->base.pos_server.x - b->base.pos_prev.x) * t;
-        b->base.interp_pos.y = b->base.pos_prev.y + (b->base.pos_server.y - b->base.pos_prev.y) * t;
+        b->base.interp_pos = Vector2Lerp(b->base.pos_prev, b->base.pos_server, t);
     }
 }

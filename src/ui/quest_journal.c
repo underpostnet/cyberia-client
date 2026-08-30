@@ -130,7 +130,7 @@ static int quest_card_layout(bool draw, const QuestProgressEntry* e, QuestStatus
          * green, the current step as the green focus (with its objectives
          * line), future steps visually disabled. */
         const QuestMetadataEntry* qm = quest_cache_get(e->code);
-        if (qm && QUEST_CACHE_READY == qm->state && qm->step_count > 0) {
+        if (qm && META_CACHE_READY == qm->head.state && qm->step_count > 0) {
             int active_idx = 0;
             for (int s = 0; s < qm->step_count; s++) {
                 if (0 == strcmp(qm->steps[s].id, e->active_step)) { active_idx = s; break; }

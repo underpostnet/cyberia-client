@@ -10,7 +10,7 @@
 #ifndef QUEST_CACHE_H
 #define QUEST_CACHE_H
 
-#include <stdbool.h>
+#include "meta_cache.h"
 
 #define QUEST_CACHE_CODE_MAX   64
 #define QUEST_CACHE_TITLE_MAX  96
@@ -22,13 +22,6 @@
 #define QUEST_CACHE_OBJ_MAX    4
 #define QUEST_CACHE_STEPDESC_MAX 160
 #define QUEST_CACHE_CAP 64
-
-typedef enum {
-    QUEST_CACHE_NONE = 0,
-    QUEST_CACHE_LOADING,
-    QUEST_CACHE_READY,
-    QUEST_CACHE_ERROR,
-} QuestCacheState;
 
 typedef struct {
     char item_id[QUEST_CACHE_ITEM_MAX];
@@ -49,7 +42,7 @@ typedef struct {
 } QuestStepMeta;
 
 typedef struct {
-    char    code[QUEST_CACHE_CODE_MAX];
+    MetaCacheHead head;
     char    title[QUEST_CACHE_TITLE_MAX];
     char    description[QUEST_CACHE_DESC_MAX];
     int     step_count;
@@ -61,7 +54,6 @@ typedef struct {
     char    source_map_code[QUEST_CACHE_CODE_MAX];
     int     source_cell_x;
     int     source_cell_y;
-    QuestCacheState state;
 } QuestMetadataEntry;
 
 /* Look up cached metadata by code. Returns NULL if not present. */

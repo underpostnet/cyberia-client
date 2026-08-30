@@ -8,6 +8,7 @@
 #include "ui_button.h"
 #include "ui_icon.h"
 
+#include <raylib.h>
 #include <stdio.h>
 
 static const Color C_SLOT_BG      = {  25,  25,  40, 200 };
@@ -19,17 +20,6 @@ static const Color C_QTY_TEXT     = { 255, 230,  80, 255 };
 bool item_slot_hit(Rectangle r, int mx, int my) {
     return ((float)mx >= r.x && (float)mx < r.x + r.width &&
             (float)my >= r.y && (float)my < r.y + r.height);
-}
-
-static Color lerp_color(Color from, Color to, float t) {
-    if (t <= 0.0f) return from;
-    if (t >= 1.0f) return to;
-    return (Color){
-        (unsigned char)(from.r + (to.r - from.r) * t),
-        (unsigned char)(from.g + (to.g - from.g) * t),
-        (unsigned char)(from.b + (to.b - from.b) * t),
-        (unsigned char)(from.a + (to.a - from.a) * t),
-    };
 }
 
 void item_slot_draw(Rectangle r, const ObjectLayerState* ols, ObjectLayersManager* mgr) {
@@ -80,7 +70,7 @@ void item_slot_draw_ex(Rectangle r, const ObjectLayerState* ols, ObjectLayersMan
 
     /* highlight_t blends the slot's neutral bg/border toward `highlight` — used
      * to briefly "color" a slot (e.g. a fresh reward settling in). */
-    Color slot_bg = lerp_color(fill, (Color){ highlight.r, highlight.g, highlight.b, fill.a }, highlight_t);
+    Color slot_bg = ColorLerp(fill, (Color){ highlight.r, highlight.g, highlight.b, fill.a }, highlight_t);
 
     /* Black outer border */
     DrawRectangleRec(r, BLACK);

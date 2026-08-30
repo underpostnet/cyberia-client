@@ -3,6 +3,7 @@
 #include "game_state.h"
 #include "network/engine_client.h"
 #include "util/log.h"
+#include "util/utils.h"
 
 #include <cJSON.h>
 #include <math.h>
@@ -23,12 +24,6 @@ static bool          s_poll_inflight = false;
  * a close (or across a reopen) are recognised as stale and dropped. */
 static int s_session = 0;
 
-static void copy_str(char* dst, size_t cap, const char* src) {
-    if (!src) { dst[0] = '\0'; return; }
-    strncpy(dst, src, cap - 1);
-    dst[cap - 1] = '\0';
-}
-
 static const char* json_str(const cJSON* obj, const char* key) {
     const cJSON* v = cJSON_GetObjectItemCaseSensitive(obj, key);
     return cJSON_IsString(v) ? v->valuestring : NULL;
@@ -42,18 +37,6 @@ static int json_int(const cJSON* obj, const char* key, int fallback) {
 static bool json_bool(const cJSON* obj, const char* key, bool fallback) {
     const cJSON* v = cJSON_GetObjectItemCaseSensitive(obj, key);
     return cJSON_IsBool(v) ? cJSON_IsTrue(v) : fallback;
-}
-
-/* Returns the envelope's `data` object on success, else NULL. */
-static const cJSON* envelope_success_doc(const cJSON* root) {
-    if (!root) return NULL;
-    const cJSON* status = cJSON_GetObjectItemCaseSensitive(root, "status");
-    const cJSON* doc    = cJSON_GetObjectItemCaseSensitive(root, "data");
-    if (!cJSON_IsString(status) || 0 != strcmp(status->valuestring, "success") ||
-        !cJSON_IsObject(doc)) {
-        return NULL;
-    }
-    return doc;
 }
 
 int instance_map_data_find_node(const char* map_code) {

@@ -5,6 +5,7 @@
 #include "fx_inventory_bar_qty.h"
 #include "ui/inventory_bar.h"
 #include "world_types.h"
+#include "util/utils.h"
 
 #include <math.h>
 #include <raylib.h>
@@ -219,17 +220,14 @@ static DropAnim* drop_find(const char* drop_id) {
     return NULL;
 }
 
+static float drop_rank(const void* elem) {
+    const DropAnim* d = elem;
+    return d->active ? (float)-d->last_seen : INFINITY;
+}
+
 static DropAnim* drop_alloc(const char* drop_id) {
-    DropAnim* slot = NULL;
-    double oldest = 1e18;
-    int    oldest_i = 0;
-    for (int i = 0; i < LOOT_DROP_MAX; i++) {
-        if (!s_drops[i].active) { slot = &s_drops[i]; break; }
-        if (s_drops[i].last_seen < oldest) { oldest = s_drops[i].last_seen; oldest_i = i; }
-    }
-    if (!slot) slot = &s_drops[oldest_i];
-    memset(slot, 0, sizeof(*slot));
-    strncpy(slot->drop_id, drop_id, MAX_ID_LENGTH - 1);
+    DropAnim* slot = pool_take(s_drops, sizeof(*s_drops), LOOT_DROP_MAX, drop_rank);
+    copy_str(slot->drop_id, MAX_ID_LENGTH, drop_id);
     slot->phase     = id_phase(drop_id);
     slot->last_seen = s_clock;
     slot->active    = true;

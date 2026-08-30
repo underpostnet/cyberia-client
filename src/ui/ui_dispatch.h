@@ -54,9 +54,50 @@ static bool ui_dispatch_escape(void) {
     return false;
 }
 
-static void ui_on_tick(input_queue_t* input_queue, double dt) {
-    input_queue_t bkp_queue = { 0 };
+static bool ui_consume_event(const input_event_t* e, void* ctx) {
+    bool consumed = false;
+    /* A synthetic tap has no pointer on its target pixel, so HUD chrome
+     * must not absorb it. Modals still block it: they freeze the local
+     * player, and main drops taps while frozen. */
+    if(!consumed && INPUT_TAP == e->type && !e->synthetic) {
+        int mx = (int)e->screen_position.x;
+        int my = (int)e->screen_position.y;
+        if (!consumed && ui_dispatch_tap(mx, my)) { consumed = true; }
+        if (!consumed && ui_dispatch_covers_point(mx, my)) { consumed = true; }
+    }
+    if(!consumed && INPUT_KEY_DEBUG == e->type) {
+        presentation_runtime_toggle_dev_ui();
+        consumed = true;
+    }
+    if(!consumed && INPUT_KEY_ESCAPE == e->type) {
+        consumed = ui_dispatch_escape();
+    }
 
+    if(!consumed && INPUT_ZOOM == e->type) {
+        if (inventory_modal_handle_wheel(e->wheel_delta)) { consumed = true; }
+    }
+    if(!consumed && INPUT_ZOOM == e->type) {
+        if (modal_instance_map_handle_wheel(e->wheel_delta)) { consumed = true; }
+    }
+    if(!consumed && INPUT_ZOOM == e->type) {
+        if (modal_interact_handle_wheel(e->wheel_delta)) { consumed = true; }
+    }
+    if(!consumed && INPUT_ZOOM == e->type) {
+        if (quest_journal_handle_wheel(e->wheel_delta)) { consumed = true; }
+    }
+    if(!consumed && INPUT_ZOOM == e->type) {
+        if (!modal_interact_is_open() &&
+            interaction_bubble_handle_wheel(e->wheel_delta)) { consumed = true; }
+    }
+    if(!consumed && INPUT_ZOOM == e->type) {
+        if(e->zoom_in) { camera_zoom_by(1.1); } else { camera_zoom_by(0.9); }
+        consumed = true;
+    }
+
+    return consumed;
+}
+
+static void ui_on_tick(input_queue_t* input_queue, double dt) {
     /* Inventory-bar slots activate on a clean release, so a horizontal drag
      * scrolls the strip instead of opening a modal. A standalone dialogue keeps
      * the slots read-only. */
@@ -80,57 +121,7 @@ static void ui_on_tick(input_queue_t* input_queue, double dt) {
         else if (!modal_dialogue_is_open())  inventory_modal_open(inv_tap);
     }
 
-    input_event_t evt = { 0 };
-    while (input_pop(input_queue, &evt)) {
-        bool consumed = false;
-        /* A synthetic tap has no pointer on its target pixel, so HUD chrome
-         * must not absorb it. Modals still block it: they freeze the local
-         * player, and main drops taps while frozen. */
-        if(!consumed && INPUT_TAP == evt.type && !evt.synthetic) {
-            int mx = (int)evt.screen_position.x;
-            int my = (int)evt.screen_position.y;
-            if (!consumed && ui_dispatch_tap(mx, my)) { consumed = true; }
-            if (!consumed && ui_dispatch_covers_point(mx, my)) { consumed = true; }
-        }
-        if(!consumed && INPUT_KEY_DEBUG == evt.type) {
-            presentation_runtime_toggle_dev_ui();
-            consumed = true;
-        }
-        if(!consumed && INPUT_KEY_ESCAPE == evt.type) {
-            consumed = ui_dispatch_escape();
-        }
-
-        if(!consumed && INPUT_ZOOM == evt.type) {
-            if (inventory_modal_handle_wheel(evt.wheel_delta)) { consumed = true; }
-        }
-        if(!consumed && INPUT_ZOOM == evt.type) {
-            if (modal_instance_map_handle_wheel(evt.wheel_delta)) { consumed = true; }
-        }
-        if(!consumed && INPUT_ZOOM == evt.type) {
-            if (modal_interact_handle_wheel(evt.wheel_delta)) { consumed = true; }
-        }
-        if(!consumed && INPUT_ZOOM == evt.type) {
-            if (quest_journal_handle_wheel(evt.wheel_delta)) { consumed = true; }
-        }
-        if(!consumed && INPUT_ZOOM == evt.type) {
-            if (!modal_interact_is_open() &&
-                interaction_bubble_handle_wheel(evt.wheel_delta)) { consumed = true; }
-        }
-        if(!consumed && INPUT_ZOOM == evt.type) {
-            if(evt.zoom_in) { camera_zoom_by(1.1); } else { camera_zoom_by(0.9); }
-            consumed = true;
-        }
-
-        // unconsumed event back to the queue
-        if(!consumed) {
-            input_push(&bkp_queue, evt );
-            continue;
-        }
-    }
-
-    // return unconsummed events to the original queue
-    input_event_t bkp_evt = { 0 };
-    while (input_pop(&bkp_queue, &bkp_evt)) { input_push(input_queue, bkp_evt ); }
+    input_queue_filter(input_queue, ui_consume_event, NULL);
 }
 
 #endif /* CYBERIA_UI_DISPATCH_H */

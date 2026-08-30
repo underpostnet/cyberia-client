@@ -10,6 +10,7 @@
 
 #include <math.h>
 #include <raylib.h>
+#include <raymath.h>
 #include <stdio.h>
 #include <string.h>
 
@@ -32,10 +33,6 @@ static const Color MINIMAP_ACTION       = { 90, 230, 235, 255 };
 
 static bool s_visible = false;
 static int  s_zoom_level = MINIMAP_ZOOM_DEFAULT;
-
-static float clampf(float value, float low, float high) {
-    return value < low ? low : (value > high ? high : value);
-}
 
 static Rectangle overlay_bounds(void) {
     return (Rectangle){ (float)GetScreenWidth() - HUD_MINIMAP_OVERLAY_SIZE,
@@ -99,8 +96,8 @@ static Rectangle node_rect(const ImapGraph* graph, int node_index,
                      g_game_state.player.base.dims.x * 0.5f;
     float player_y = g_game_state.player.base.interp_pos.y +
                      g_game_state.player.base.dims.y * 0.5f;
-    float player_fx = clampf(player_x / grid_x, 0.0f, 1.0f);
-    float player_fy = clampf(player_y / grid_y, 0.0f, 1.0f);
+    float player_fx = Clamp(player_x / grid_x, 0.0f, 1.0f);
+    float player_fy = Clamp(player_y / grid_y, 0.0f, 1.0f);
     Vector2 center = overlay_center(bounds);
     float side = node_side();
     float stride = side + MINIMAP_NODE_GAP;
@@ -115,8 +112,8 @@ static Vector2 cell_position(const ImapNode* node, Rectangle rect,
                              float cell_x, float cell_y) {
     float fx = 0 < node->grid_x ? cell_x / (float)node->grid_x : 0.5f;
     float fy = 0 < node->grid_y ? cell_y / (float)node->grid_y : 0.5f;
-    return (Vector2){ rect.x + clampf(fx, 0.0f, 1.0f) * rect.width,
-                      rect.y + clampf(fy, 0.0f, 1.0f) * rect.height };
+    return (Vector2){ rect.x + Clamp(fx, 0.0f, 1.0f) * rect.width,
+                      rect.y + Clamp(fy, 0.0f, 1.0f) * rect.height };
 }
 
 static Color presence_color(ImapPresenceStatus status) {

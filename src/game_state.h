@@ -60,8 +60,6 @@ struct GameState {
 
     int grid_w;
     int grid_h;
-    float cell_size;
-    int interpolation_ms;
     float aoi_radius;
 
     EntityTypeDefault entity_defaults[MAX_ENTITY_TYPES];

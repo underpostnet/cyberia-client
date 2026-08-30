@@ -483,12 +483,8 @@ static void collapse_quest_detail(void) {
  * below), 1 = the card owns the dialogue's space. Animated in update. */
 static float s_dlg_collapse_t = 0.0f;
 
-/* Anchored-layout card height, tracking the active tab's measured content.
- * Negative until the first measurement of a session, which snaps. */
-static float s_anchor_h = -1.0f;
-/* Frozen top-left corner and the flag that stops it being re-resolved. */
-static ModalAnchor s_anchor = { 0 };
-static bool s_anchor_settled = false;
+/* Anchored card geometry: height, frozen corner, and the settled flag. */
+static ModalAnchorLayout s_layout = { .height = -1.0f };
 
 /* Region the anchored card may occupy: the standard safe area, minus the band
  * the paired dialogue holds at the bottom. */
@@ -512,16 +508,11 @@ static float anchor_content_card_height(float content_h) {
     return mi_header_h() + mi_tab_h() + 2.0f * mi_pad() + content_h + mi_bar_h();
 }
 
-static Vector2 anchor_card_size(Rectangle safe) {
-    return (Vector2){
-        safe.width < MODAL_ANCHOR_MAX_W ? safe.width : MODAL_ANCHOR_MAX_W,
-        s_anchor_h > 0.0f ? s_anchor_h : MI_ANCHOR_DEFAULT_H,
-    };
-}
-
 static Rectangle anchored_card_rect(void) {
     Rectangle safe = anchor_safe_area();
-    return modal_anchor_rect(&s_anchor, anchor_card_size(safe), safe);
+    return modal_anchor_rect(&s_layout.anchor,
+                             modal_anchor_card_size(&s_layout, safe, MI_ANCHOR_DEFAULT_H),
+                             safe);
 }
 
 static Rectangle card_rect(void) {
@@ -563,41 +554,17 @@ static float active_tab_content_height(void) {
 }
 
 /* Resolve the anchored card's geometry for this frame. Content is measured
- * from the card's width only, so the height never feeds back into itself. */
+ * from the card's width only, so the height never feeds back into itself.
+ *
+ * Measurements taken mid tab-pop come from a scaled-down content rect and wrap
+ * differently — only resize once the incoming tab has settled. */
 static void update_anchor_layout(float dt) {
-    if (!modal_anchor_active()) {
-        s_anchor_h = -1.0f;
-        s_anchor.captured = false;
-        s_anchor_settled = false;
-        return;
-    }
-
-    /* Measurements taken mid tab-pop come from a scaled-down content rect and
-     * wrap differently — only resize once the incoming tab has settled. */
     float content = s_tab_age >= MODAL_POP_DURATION ? active_tab_content_height() : 0.0f;
-    float target;
-    if (content > 0.0f)         target = anchor_content_card_height(content);
-    else if (s_anchor_h > 0.0f) target = s_anchor_h;
-    else                        target = MI_ANCHOR_DEFAULT_H;
+    if (content > 0.0f) content = anchor_content_card_height(content);
 
-    Rectangle safe = anchor_safe_area();
-    if (target > safe.height)     target = safe.height;
-    if (target < MI_ANCHOR_MIN_H) target = MI_ANCHOR_MIN_H;
-
-    /* While the card opens it snaps to its measured height and keeps resolving
-     * the corner from the entity, so it lands at the real size in the right
-     * place. The corner freezes on the first settled measurement — at the
-     * latest when the entrance animation ends, for a tab that measures nothing
-     * (an empty stack). After that the card ignores the entity entirely and a
-     * content change extends it downward from the same top edge. */
-    if (!s_anchor_settled) {
-        s_anchor_h = target;
-        modal_anchor_capture(&s_anchor, s_entity_id, anchor_card_size(safe),
-                             MODAL_ANCHOR_GAP, safe);
-        if (content > 0.0f || s_age >= MODAL_POP_DURATION) s_anchor_settled = true;
-        return;
-    }
-    s_anchor_h = modal_anchor_ease_height(s_anchor_h, target, dt);
+    modal_anchor_layout_update(&s_layout, s_entity_id, anchor_safe_area(),
+                               content, MI_ANCHOR_DEFAULT_H, MI_ANCHOR_MIN_H,
+                               s_age >= MODAL_POP_DURATION, dt);
 }
 
 static Rectangle close_rect(Rectangle card) {
@@ -875,9 +842,7 @@ void modal_interact_init(void) {
     s_storage_content_height = 0.0f;
     s_tab_age = MODAL_POP_DURATION;
     s_tab_picked = false;
-    s_anchor_h = -1.0f;
-    s_anchor_settled = false;
-    s_anchor.captured = false;
+    modal_anchor_layout_reset(&s_layout);
     s_q_expanded = -1;
     s_q_expand_age = MODAL_POP_DURATION;
     es_clear();
@@ -922,9 +887,7 @@ void modal_interact_open(const char* entity_id, const char* display_name,
     s_tab_age            = MODAL_POP_DURATION;
     s_tab_picked         = false;
     /* A fresh session re-resolves both the height and the frozen corner. */
-    s_anchor_h           = -1.0f;
-    s_anchor_settled     = false;
-    s_anchor.captured    = false;
+    modal_anchor_layout_reset(&s_layout);
     ui_scroll_reset(&s_q_scroll);
     s_q_content_height = 0.0f;
     ui_scroll_reset(&s_shop_scroll);
@@ -1347,7 +1310,7 @@ static QuestCardInfo quest_card_info(const char* code) {
     in.qm = quest_cache_get(code);
     in.active    = in.q && QUEST_ACTIVE == in.q->status;
     in.completed = in.q && QUEST_COMPLETED == in.q->status;
-    if (!in.active && !in.completed && in.qm && QUEST_CACHE_READY == in.qm->state) {
+    if (!in.active && !in.completed && in.qm && META_CACHE_READY == in.qm->head.state) {
         for (int i = 0; i < in.qm->prerequisite_count; i++) {
             if (!quest_progress_store_is_completed(in.qm->prerequisites[i])) {
                 in.locked = true;
@@ -1640,7 +1603,7 @@ static void draw_quest_detail(int slot, const char* code, float x, float w,
         *y += button_height + 8.0f;
     }
 
-    if (qm && QUEST_CACHE_READY == qm->state) {
+    if (qm && META_CACHE_READY == qm->head.state) {
         *y += text_wrap(qm->description, (int)ix, (int)*y, iw, mi_font_desc(), C_DESC_TEXT, false, true);
         *y += 4;
         draw_quest_steps(qm, q, active, completed, acceptable, ix, y, iw,

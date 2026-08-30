@@ -1,6 +1,7 @@
 #include "fx_reward.h"
 
 #include "fx_shapes.h"
+#include "ui/ease.h"
 #include "ui/ui_icon.h"
 
 #include <math.h>
@@ -191,15 +192,6 @@ static Vector2 ring_pos_u_at(float u, float extra, RfxRing layer) {
     u -= floorf(u);
     float margin = ring_margin_for(layer) + extra;
     return ellipse_point(s_bounds.width * 0.5f + margin, s_bounds.height * 0.5f + margin, u);
-}
-
-/* Decelerating glide with a gentle overshoot-and-settle at the end, so the
- * arrival wave lands with a soft, visible bounce instead of just stopping. */
-static float ease_out_back(float t) {
-    const float c1 = 1.70158f;
-    const float c3 = c1 + 1.0f;
-    float u = t - 1.0f;
-    return 1.0f + c3 * u * u * u + c1 * u * u;
 }
 
 /* A random point just off one of the four screen edges. */

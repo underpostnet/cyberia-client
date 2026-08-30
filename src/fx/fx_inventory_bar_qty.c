@@ -5,6 +5,7 @@
 #include "loot_fx.h"
 #include "object_layer.h"
 #include "ui/text.h"
+#include "util/utils.h"
 
 #include <math.h>
 #include <raylib.h>
@@ -70,17 +71,14 @@ static FqEntry* find(const char* id) {
     return NULL;
 }
 
+static float fq_rank(const void* elem) {
+    const FqEntry* e = elem;
+    return e->used ? (float)-e->last_seen : INFINITY;
+}
+
 static FqEntry* alloc_entry(const char* id) {
-    FqEntry* slot = NULL;
-    double oldest = 1e18;
-    int    oldest_i = 0;
-    for (int i = 0; i < FQ_MAX; i++) {
-        if (!s_e[i].used) { slot = &s_e[i]; break; }
-        if (s_e[i].last_seen < oldest) { oldest = s_e[i].last_seen; oldest_i = i; }
-    }
-    if (!slot) slot = &s_e[oldest_i];
-    memset(slot, 0, sizeof(*slot));
-    strncpy(slot->item_id, id, MAX_ITEM_ID_LENGTH - 1);
+    FqEntry* slot = pool_take(s_e, sizeof(*s_e), FQ_MAX, fq_rank);
+    copy_str(slot->item_id, MAX_ITEM_ID_LENGTH, id);
     slot->popup_age = -1.0f;
     slot->pulse_age = -1.0f;
     slot->used = true;

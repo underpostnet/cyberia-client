@@ -34,7 +34,7 @@ static double sim_acc = 0.0;
 /* True when the world-px tap position lands within a finger-sized radius of
  * a quest/action provider bot. */
 static bool tap_hits_provider(Vector2 world_pos) {
-    float cell = g_game_state.cell_size > 0.0f ? g_game_state.cell_size : 12.0f;
+    float cell = world_cell_size();
     for (int i = 0; i < g_game_state.bot_count; i++) {
         const BotState* bot = &g_game_state.bots[i];
         if ('\0' == bot->action_code[0] && 0 == bot->quest_code_count) continue;

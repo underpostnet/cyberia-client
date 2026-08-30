@@ -17,7 +17,10 @@
 
 #include "fx_shapes.h"
 
+#include "util/utils.h"
+
 #include <math.h>
+#include <raymath.h>
 #include <stdbool.h>
 #include <stdint.h>
 #include <string.h>
@@ -84,33 +87,16 @@ static float lcg_f01(void) {
 }
 static float lcg_range(float lo, float hi) { return lo + lcg_f01() * (hi - lo); }
 
-static float dust_clampf(float v, float lo, float hi) {
-    if (v < lo) return lo;
-    if (v > hi) return hi;
-    return v;
+static float puff_rank(const void* elem) {
+    const FxDustPuff* p = elem;
+    if (!p->active) return INFINITY;
+    return p->age - p->duration;   /* closest to expiring ranks highest */
 }
 
 /* Free slot, else the oldest puff — a burst never fails, it just recycles the
  * dust closest to expiring. */
 static FxDustPuff* alloc_puff(void) {
-    FxDustPuff* slot = NULL;
-    float oldest = -1.0f;
-    int   oldest_index = 0;
-
-    for (int i = 0; i < FX_DUST_MAX_PUFFS; i++) {
-        if (!s_puffs[i].active) {
-            slot = &s_puffs[i];
-            break;
-        }
-        float remaining = s_puffs[i].duration - s_puffs[i].age;
-        float staleness = -remaining;
-        if (staleness > oldest) {
-            oldest = staleness;
-            oldest_index = i;
-        }
-    }
-    if (!slot) slot = &s_puffs[oldest_index];
-    memset(slot, 0, sizeof(*slot));
+    FxDustPuff* slot = pool_take(s_puffs, sizeof(*s_puffs), FX_DUST_MAX_PUFFS, puff_rank);
     slot->active = true;
     return slot;
 }
@@ -159,12 +145,12 @@ void fx_dust_spawn(Vector2 world_pos, Vector2 heading, const FxDustParams* param
 
     FxDustParams cfg = params ? *params : fx_dust_default_params();
     FxDustParams def = fx_dust_default_params();
-    cfg.size     = dust_clampf(cfg.size     <= 0.0f ? def.size     : cfg.size,     1.0f, 24.0f);
-    cfg.duration = dust_clampf(cfg.duration <= 0.0f ? def.duration : cfg.duration, 0.10f, 1.20f);
-    cfg.drift    = dust_clampf(cfg.drift    <  0.0f ? def.drift    : cfg.drift,    0.0f, 120.0f);
-    cfg.rise     = dust_clampf(cfg.rise     <  0.0f ? def.rise     : cfg.rise,     0.0f, 120.0f);
-    cfg.fan      = dust_clampf(cfg.fan      <  0.0f ? def.fan      : cfg.fan,      0.0f,  80.0f);
-    cfg.spread   = dust_clampf(cfg.spread   <  0.0f ? def.spread   : cfg.spread,   0.0f,  40.0f);
+    cfg.size     = Clamp(cfg.size     <= 0.0f ? def.size     : cfg.size,     1.0f, 24.0f);
+    cfg.duration = Clamp(cfg.duration <= 0.0f ? def.duration : cfg.duration, 0.10f, 1.20f);
+    cfg.drift    = Clamp(cfg.drift    <  0.0f ? def.drift    : cfg.drift,    0.0f, 120.0f);
+    cfg.rise     = Clamp(cfg.rise     <  0.0f ? def.rise     : cfg.rise,     0.0f, 120.0f);
+    cfg.fan      = Clamp(cfg.fan      <  0.0f ? def.fan      : cfg.fan,      0.0f,  80.0f);
+    cfg.spread   = Clamp(cfg.spread   <  0.0f ? def.spread   : cfg.spread,   0.0f,  40.0f);
     if (cfg.count <= 0) cfg.count = def.count;
     if (cfg.count > FX_DUST_MAX_PUFFS) cfg.count = FX_DUST_MAX_PUFFS;
     if (0 == cfg.color.a) cfg.color = def.color;
@@ -248,7 +234,7 @@ void fx_dust_draw(void) {
         const FxDustPuff* puff = &s_puffs[i];
         if (!puff->active || puff->duration <= 0.0f) continue;
 
-        float t = dust_clampf(puff->age / puff->duration, 0.0f, 1.0f);
+        float t = Clamp(puff->age / puff->duration, 0.0f, 1.0f);
         float size = puff->size * size_curve(t);
         if (size < FX_DUST_MIN_SIZE_PX) size = FX_DUST_MIN_SIZE_PX;
         fx_shape_spark(puff->position.x, puff->position.y, size,

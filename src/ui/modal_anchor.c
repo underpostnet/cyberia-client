@@ -134,3 +134,40 @@ float modal_anchor_ease_height(float current, float target, float dt) {
     if (current < 0.0f) return target;
     return current + (target - current) * (1.0f - expf(-MODAL_ANCHOR_RESIZE_LAMBDA * dt));
 }
+
+void modal_anchor_layout_reset(ModalAnchorLayout* layout) {
+    if (NULL == layout) return;
+    layout->height           = -1.0f;
+    layout->settled          = false;
+    layout->anchor.captured  = false;
+}
+
+Vector2 modal_anchor_card_size(const ModalAnchorLayout* layout, Rectangle safe,
+                               float default_h) {
+    return (Vector2){
+        safe.width < MODAL_ANCHOR_MAX_W ? safe.width : MODAL_ANCHOR_MAX_W,
+        layout->height > 0.0f ? layout->height : default_h,
+    };
+}
+
+void modal_anchor_layout_update(ModalAnchorLayout* layout, const char* entity_id,
+                                Rectangle safe, float content_h, float default_h,
+                                float min_h, bool entrance_done, float dt) {
+    if (NULL == layout) return;
+    if (!modal_anchor_active()) { modal_anchor_layout_reset(layout); return; }
+
+    float target = content_h > 0.0f ? content_h
+                 : (layout->height > 0.0f ? layout->height : default_h);
+    if (target > safe.height) target = safe.height;
+    if (target < min_h)       target = min_h;
+
+    if (!layout->settled) {
+        layout->height = target;
+        modal_anchor_capture(&layout->anchor, entity_id,
+                             modal_anchor_card_size(layout, safe, default_h),
+                             MODAL_ANCHOR_GAP, safe);
+        if (content_h > 0.0f || entrance_done) layout->settled = true;
+        return;
+    }
+    layout->height = modal_anchor_ease_height(layout->height, target, dt);
+}

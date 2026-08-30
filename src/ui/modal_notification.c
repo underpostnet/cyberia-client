@@ -24,6 +24,7 @@
  */
 
 #include "modal_notification.h"
+#include "ease.h"
 #include "text.h"
 
 #include "fx/fx_assemble.h"
@@ -389,15 +390,6 @@ static float notif_slot_size(void) {
     if (widest <= 1) return MN_SLOT;
     float fit = ((float)notif_inner_w() - (float)(widest - 1) * MN_SLOT_GAP) / (float)widest;
     return fit < MN_SLOT ? fit : MN_SLOT;
-}
-
-/* Overshoot ease — used for the result slots' pop-in so they briefly grow past
- * their final size before settling, reading as a small "impact". */
-static float mn_ease_out_back(float t) {
-    static const float c1 = 1.70158f;
-    static const float c3 = c1 + 1.0f;
-    float u = t - 1.0f;
-    return 1.0f + c3 * u * u * u + c1 * u * u;
 }
 
 /* Slide-in ease (decelerating) and slide-out ease (accelerating). */
@@ -856,7 +848,7 @@ void modal_notification_draw(void) {
         /* An assembly keeps its slots at a fixed size for the whole run, so
          * the result reads as materialising in place; a reward pops in. */
         float pop_t = fminf(1.0f, s_reward_pop_age / MN_REWARD_POP_DUR);
-        float scale = notif_is_assembling() ? 1.0f : 0.55f + 0.45f * mn_ease_out_back(pop_t);
+        float scale = notif_is_assembling() ? 1.0f : 0.55f + 0.45f * ease_out_back(pop_t);
         float sw = slot.width * scale, sh = slot.height * scale;
         Rectangle pop_slot = { slot.x + (slot.width - sw) * 0.5f,
                                slot.y + (slot.height - sh) * 0.5f, sw, sh };

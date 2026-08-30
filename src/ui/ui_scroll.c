@@ -1,6 +1,7 @@
 #include "ui_scroll.h"
 
 #include <math.h>
+#include <raymath.h>
 
 #define UI_SCROLL_DRAG_SLOP       8.0f
 #define UI_SCROLL_WHEEL_PIXELS   56.0f
@@ -16,12 +17,6 @@
 static float scroll_max_offset(const UIScroll* s) {
     float max_offset = s->content_h - s->view.height;
     return max_offset > 0.0f ? max_offset : 0.0f;
-}
-
-static float scroll_clamp(float value, float min_value, float max_value) {
-    if (value < min_value) return min_value;
-    if (value > max_value) return max_value;
-    return value;
 }
 
 static bool scroll_contains(const Rectangle view, Vector2 point) {
@@ -46,14 +41,14 @@ static bool scroll_pointer_down(void) {
 static void scroll_capture_bounds(UIScroll* s, Rectangle view, float content_h) {
     s->view = view;
     s->content_h = content_h > 0.0f ? content_h : 0.0f;
-    s->offset = scroll_clamp(s->offset, 0.0f, scroll_max_offset(s));
-    s->nudge_from = scroll_clamp(s->nudge_from, 0.0f, scroll_max_offset(s));
-    s->nudge_to = scroll_clamp(s->nudge_to, 0.0f, scroll_max_offset(s));
+    s->offset = Clamp(s->offset, 0.0f, scroll_max_offset(s));
+    s->nudge_from = Clamp(s->nudge_from, 0.0f, scroll_max_offset(s));
+    s->nudge_to = Clamp(s->nudge_to, 0.0f, scroll_max_offset(s));
 }
 
 static float scroll_move(UIScroll* s, float delta) {
     float before = s->offset;
-    s->offset = scroll_clamp(before + delta, 0.0f, scroll_max_offset(s));
+    s->offset = Clamp(before + delta, 0.0f, scroll_max_offset(s));
     return s->offset - before;
 }
 
@@ -97,7 +92,7 @@ bool ui_scroll_nudge(UIScroll* s, Rectangle view, float content_h, float delta) 
 
     scroll_capture_bounds(s, view, content_h);
     float base = s->nudge_active ? s->nudge_to : s->offset;
-    float target = scroll_clamp(base + delta, 0.0f, scroll_max_offset(s));
+    float target = Clamp(base + delta, 0.0f, scroll_max_offset(s));
     s->vel = 0.0f;
     if (0.01f > fabsf(target - s->offset)) {
         s->offset = target;
@@ -250,7 +245,7 @@ void ui_scroll_end(const UIScroll* s) {
     float thumb_h = bounds.height * (s->view.height / s->content_h);
     float min_thumb_h = bounds.height < UI_SCROLL_BAR_MIN_H
                       ? bounds.height : UI_SCROLL_BAR_MIN_H;
-    thumb_h = scroll_clamp(thumb_h, min_thumb_h, bounds.height);
+    thumb_h = Clamp(thumb_h, min_thumb_h, bounds.height);
     float travel = bounds.height - thumb_h;
     float progress = s->offset / max_offset;
     float thumb_y = bounds.y + travel * progress;

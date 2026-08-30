@@ -39,6 +39,7 @@
 #include "text.h"
 
 #include "domain/local_player.h"
+#include "domain/presentation_runtime.h"
 #include "game_state.h"
 #include "world_types.h"
 
@@ -237,7 +238,7 @@ void fct_update(float dt) {
 }
 
 void fct_draw(void) {
-    float cell_size = (g_game_state.cell_size > 0.0f) ? g_game_state.cell_size : 12.0f;
+    float cell_size = world_cell_size();
 
     for (int i = 0; i < FCT_MAX_ENTRIES; i++) {
         FCTEntry *e = &s_pool[i];

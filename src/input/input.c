@@ -3,6 +3,7 @@
 #include "network/replication.h"
 #include "domain/camera.h"
 #include "domain/local_player.h"
+#include "domain/presentation_runtime.h"
 #include "game_state.h"
 
 #include <assert.h>
@@ -24,6 +25,17 @@ bool input_pop(input_queue_t* q, input_event_t* out) {
     q->head = (q->head + 1) % Q_CAP;
     q->count--;
     return true;
+}
+
+void input_queue_filter(input_queue_t* q, input_consume_fn consume, void* ctx) {
+    assert(q);
+    assert(consume);
+    input_queue_t keep = { 0 };
+    input_event_t evt = { 0 };
+    while (input_pop(q, &evt)) {
+        if (!consume(&evt, ctx)) { input_push(&keep, evt); }
+    }
+    while (input_pop(&keep, &evt)) { input_push(q, evt); }
 }
 
 /* ── Touch gestures ──────────────────────────────────────────────────────
@@ -104,7 +116,7 @@ static int axis_dir(int low_key, int low_alt, int high_key, int high_alt) {
  * which is the stop command. */
 static Vector2 steer_world_target(int dir_x, int dir_y) {
     Vector2 self = prediction_self_position();
-    float   cell = g_game_state.cell_size > 0.0f ? g_game_state.cell_size : 12.0f;
+    float   cell = world_cell_size();
 
     if (0 == dir_x && 0 == dir_y) {
         return (Vector2){ self.x * cell, self.y * cell };
