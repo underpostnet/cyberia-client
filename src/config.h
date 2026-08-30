@@ -29,9 +29,6 @@ static const int MAX_TEXTURE_CACHE_SIZE = 512;
 static const int MAX_LAYER_CACHE_SIZE = 256;
 static const int MAX_ATLAS_CACHE_SIZE = 256;
 
-/* Frame duration for object layers that specify none. */
-static const int DEFAULT_FRAME_DURATION_MS = 100;
-
 /* Lookup code for GET /api/cyberia-client-hints/:code — the only source of
  * the presentation surface (palette, colour keys, status icons, camera and
  * cell tunings). A presentation override key only: the client carries no

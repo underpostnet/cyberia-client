@@ -60,8 +60,6 @@ typedef struct {
 /* Zero the container (fresh panel session: offset, glide, gesture, bar). */
 void ui_scroll_reset(UIScroll* s);
 
-/* Enable or disable the transient scrollbar. It is enabled after reset. */
-void ui_scroll_set_scrollbar(UIScroll* s, bool enabled);
 
 /* Override the pointer hit area or transient thumb track. Bounds with no
  * positive area restore the clipping viewport as the default. */

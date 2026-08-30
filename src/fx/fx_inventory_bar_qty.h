@@ -1,5 +1,5 @@
-#ifndef CYBERIA_UI_FX_INVENTORY_BAR_QTY_H
-#define CYBERIA_UI_FX_INVENTORY_BAR_QTY_H
+#ifndef CYBERIA_FX_FX_INVENTORY_BAR_QTY_H
+#define CYBERIA_FX_FX_INVENTORY_BAR_QTY_H
 
 #include <raylib.h>
 #include <stdbool.h>
@@ -21,7 +21,6 @@
  *      +/- popup above that slot. */
 
 void fx_inventory_bar_qty_init(void);
-void fx_inventory_bar_qty_reset(void);
 void fx_inventory_bar_qty_update(float dt);
 
 /* Release a held +/- popup the moment the loot pickup particle reaches this
@@ -64,4 +63,4 @@ void fx_inventory_bar_qty_draw(Rectangle slot, const char* item_id);
  * anchor while its slots are hidden. */
 void fx_inventory_bar_qty_draw_bottom(Rectangle anchor);
 
-#endif /* CYBERIA_UI_FX_INVENTORY_BAR_QTY_H */
+#endif /* CYBERIA_FX_FX_INVENTORY_BAR_QTY_H */

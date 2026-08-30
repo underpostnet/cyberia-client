@@ -812,10 +812,6 @@ bool interaction_bubble_point_covered(int x, int y) {
     return hit_rect(x, y, column_input_bounds(column_scroll_view()));
 }
 
-int interaction_bubble_slot_count(void) {
-    return s_slot_count;
-}
-
 /* ── Dead-equip: optimistically update self-player alive_layers ──────── */
 void interaction_bubble_dead_equip(const char* item_id, bool active) {
     if (s_slot_count <= 0) return;

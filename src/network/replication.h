@@ -27,7 +27,6 @@ void replication_prepare_input(input_queue_t in_queue);
 /* Prediction — predicted self position (sole writer); replay + reconcile. */
 void prediction_init(void);
 void prediction_reset(Vector2 authoritative_pos);
-bool prediction_apply(const input_command_t* cmd);
 void prediction_enqueue_input(const input_command_t* cmd);
 void prediction_step(double tick_dt);
 void prediction_reconcile(void);

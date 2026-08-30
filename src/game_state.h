@@ -2,7 +2,6 @@
 #define GAME_STATE_H
 
 #include <raylib.h>
-#include <limits.h>
 #include <stdbool.h>
 #include <stdint.h>
 #include <stddef.h>
@@ -27,7 +26,6 @@
 
 #define MAX_ENTITIES 1000
 #define MAX_OBJECTS 5000
-#define MAX_MESSAGE_SIZE USHRT_MAX
 #define MAX_ENTITY_TYPES     16
 #define MAX_DEFAULT_ITEM_IDS  8
 #define MAX_ACTIVE_ITEM_TYPES 8
@@ -51,8 +49,6 @@ typedef struct {
     int  live_item_id_count;
     char dead_item_ids[MAX_DEFAULT_ITEM_IDS][128];
     int  dead_item_id_count;
-    char drop_item_ids[MAX_DEFAULT_ITEM_IDS][128];
-    int  drop_item_id_count;
 } EntityTypeDefault;
 
 struct GameState {
@@ -117,7 +113,6 @@ struct GameState {
 
     bool init_received;
     double last_update_time;       /* wall-clock arrival of the latest snapshot */
-    uint32_t last_snapshot_tick;   /* mirror of session_server_tick_estimate() */
 };
 
 extern GameState g_game_state;
@@ -129,20 +124,12 @@ void         game_state_reset(void);
 
 PlayerState* game_state_find_player(const char* id);
 BotState*    game_state_find_bot(const char* id);
-int          game_state_update_player(const PlayerState* player);
-int          game_state_update_bot(const BotState* bot);
-void         game_state_remove_player(const char* id);
-void         game_state_remove_bot(const char* id);
 
 /* Fires when an entity leaves the world mirror (left the AOI). Lets the
  * presentation layer release its per-entity resources, such as animation
  * states, without game_state depending on the render modules. */
 typedef void (*GameStateEntityRemovedFn)(const char* id);
 void         game_state_set_entity_removed_cb(GameStateEntityRemovedFn cb);
-
-/* Toggle the dev overlay flag. Delegates to presentation_runtime, which
- * keeps the one copy of the value. */
-void game_state_toggle_dev_ui(void);
 
 static inline const EntityTypeDefault* game_state_get_entity_default(const char* entity_type) {
     for (int i = 0; i < g_game_state.entity_defaults_count; i++) {

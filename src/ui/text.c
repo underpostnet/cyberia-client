@@ -76,13 +76,6 @@ void text_font_sync(void) {
     LOG_INFO("[text] fetching main font %s", url);
 }
 
-void text_font_unload(void) {
-    if (s_loaded) {
-        UnloadFont(s_font);
-        s_loaded = false;
-    }
-}
-
 Font text_active_font(void) {
     return s_loaded ? s_font : GetFontDefault();
 }
@@ -94,10 +87,6 @@ static float effective_factor(void) {
     float f = s_factor;
     if (viewport_is_mobile()) f *= TEXT_MOBILE_FONT_SCALE;
     return f;
-}
-
-float text_font_factor(void) {
-    return effective_factor();
 }
 
 void text_draw_compat(const char *text, int x, int y, int size, Color color) {

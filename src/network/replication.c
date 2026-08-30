@@ -30,8 +30,6 @@ void replication_prepare_input(input_queue_t in_queue) {
             input_command_t cmd = input_command_build_tap(gx, gy);
             prediction_enqueue_input(&cmd);
             send_event_tap((Vector2){gx, gy}, cmd.client_tick, cmd.sequence);
-            g_game_state.player.tap_target     = (Vector2){gx, gy};
-            g_game_state.player.has_tap_target = true;
         }
     }
 }
@@ -69,10 +67,6 @@ cyberia_tick_t session_last_server_tick(void) {
     return g_sess.last_server_tick;
 }
 
-cyberia_input_seq_t session_last_acked_input_sequence(void) {
-    return g_sess.last_acked_input_sequence;
-}
-
 cyberia_input_seq_t session_last_movement_sequence(void) {
     return g_sess.last_movement_sequence;
 }
@@ -83,21 +77,6 @@ cyberia_tick_t session_server_tick_estimate(void) {
     if (elapsed < 0.0) elapsed = 0.0;
     uint32_t ticks_since = (uint32_t)(elapsed / TICK_DURATION_S);
     return g_sess.last_server_tick + ticks_since;
-}
-
-cyberia_tick_t session_render_tick(void) {
-    cyberia_tick_t est = session_server_tick_estimate();
-    /* Render-tick offset = the runtime interpolation window expressed in
-     * ticks. Single source of truth with interpolation_compute_view, which
-     * reads the same window in ms. Falls back to the compile-time bootstrap
-     * default until the client-hints window is hydrated. */
-    int window_ms = g_game_state.interpolation_ms;
-    uint32_t offset = (window_ms > 0)
-        ? (uint32_t)((window_ms * TICK_RATE_HZ + 500) / 1000)
-        : INTERP_TICKS;
-    if (0 == offset) { offset = INTERP_TICKS; }
-    if (est <= offset) { return 0; }
-    return est - offset;
 }
 
 cyberia_input_seq_t session_next_input_sequence(void) {
@@ -344,13 +323,6 @@ void prediction_reset(Vector2 authoritative_pos) {
     path_clear();
     history_clear(&g_pred.history);
     command_queue_clear();
-}
-
-bool prediction_apply(const input_command_t* cmd) {
-    if (!cmd) return false;
-    if (INPUT_KIND_PLAYER_ACTION == cmd->kind) { retarget_walk(cmd); }
-    g_pred.predicted_pos = sim_step_one(g_pred.predicted_pos, cmd, TICK_DURATION_S);
-    return true;
 }
 
 void prediction_step(double tick_dt) {

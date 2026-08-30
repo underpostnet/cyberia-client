@@ -11,9 +11,6 @@
  * built-in defaults so each call site sets only what differs from the toggle
  * baseline; a color with alpha 0 means "use the default for that slot".
  *
- * `ui_button_measure` returns the content-fit size so callers can grow or
- * shrink a button to its content instead of hardcoding dimensions.
- *
  * Also provides ui_button_pixel_retro_draw — a pixel-art retro button chrome
  * with black outer border, flat fill, lighter top edge, darker bottom edge,
  * optional left icon, and outlined label. Used for retro-styled tap targets.
@@ -65,9 +62,6 @@ typedef struct {
     float roundness;         /* used when rounded; 0 → 0.18 */
     bool  no_fill;           /* skip the background fill (bare icon/text target) */
 } UIButtonStyle;
-
-/* Content-fit size (icon + gap + text + padding*2). */
-Vector2 ui_button_measure(const UIButtonStyle* style);
 
 /* Draw within explicit bounds; content is centered as a group. */
 void ui_button_draw(Rectangle bounds, const UIButtonStyle* style, UIButtonState state);

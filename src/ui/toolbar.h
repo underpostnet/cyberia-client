@@ -33,7 +33,6 @@ float toolbar_height(void);
 /* Vertical offset of the sliding strip (0 → -TOOLBAR_H). Content drawn on
  * the strip (the map readout) rides this. */
 float toolbar_offset_y(void);
-bool  toolbar_is_hidden(void);
 
 void  toolbar_draw(int screen_width);
 /* Toggle-row taps (quest / HUD map / fullscreen / hide) + the map readout. */

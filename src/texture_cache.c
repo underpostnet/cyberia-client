@@ -118,9 +118,3 @@ void texture_cache_on_blob_fetched(TextureCache* tc, const FetchResponse* r) {
     e->state = TEX_READY;
     LOG_INFO("[TEXCACHE] loaded: %s (%dx%d)", r->asset_id, e->texture.width, e->texture.height);
 }
-
-void texture_cache_evict(TextureCache* tc, const char* url) {
-    assert(tc);
-    assert(url);
-    hash_table_remove(&tc->entries, url);
-}

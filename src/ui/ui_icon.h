@@ -12,10 +12,6 @@
  *
  * This module renders; entity_status picks which icon an entity shows. */
 
-/* Rendered size of an overhead status icon (pixels). Large enough to read
- * at normal zoom without competing with the nameplate or the HP bar. */
-#define UI_ICON_DEFAULT_SIZE    28
-
 /* Bounce amplitude in pixels — half of the total vertical travel. */
 #define UI_ICON_BOUNCE_AMP      2.5f
 

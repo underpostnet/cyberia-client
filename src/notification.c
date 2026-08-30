@@ -61,13 +61,6 @@ int notification_target_total(const char* target_id) {
     return sum;
 }
 
-int notification_register_total(NotifRegister reg) {
-    if (reg < 0 || reg >= NOTIF_REGISTER_COUNT) return 0;
-    int sum = 0;
-    for (int i = 0; i < s_count; i++) sum += s_targets[i].counts[reg];
-    return sum;
-}
-
 int notification_total(void) {
     int sum = 0;
     for (int i = 0; i < s_count; i++)

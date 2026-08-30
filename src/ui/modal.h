@@ -4,74 +4,6 @@
 #include <raylib.h>
 #include <stdbool.h>
 
-/* Modal container: draws several lines of text with configurable style and
- * position. Shared by the game status displays. */
-
-#define MODAL_MAX_LINES 10
-#define MODAL_MAX_LINE_LENGTH 128
-
-typedef struct {
-    char text[MODAL_MAX_LINE_LENGTH];
-    Color color;
-    bool visible;
-} ModalLine;
-
-typedef struct {
-    ModalLine lines[MODAL_MAX_LINES];
-    int line_count;
-
-    int min_width;
-    int min_height;
-    int padding;
-    int margin_top;
-    int margin_right;
-    int margin_bottom;
-    int margin_left;
-
-    enum {
-        MODAL_POS_TOP_LEFT,
-        MODAL_POS_TOP_RIGHT,
-        MODAL_POS_BOTTOM_LEFT,
-        MODAL_POS_BOTTOM_RIGHT,
-        MODAL_POS_CENTER,
-        MODAL_POS_CUSTOM
-    } position_mode;
-
-    /* Used when position_mode is MODAL_POS_CUSTOM. */
-    int custom_x;
-    int custom_y;
-
-    Color background_color;
-    Color border_color;
-    Color shadow_color;
-    float background_alpha;
-    float border_width;
-    bool draw_shadow;
-    bool draw_border;
-
-    int font_size;
-    int line_spacing;
-
-    enum {
-        MODAL_ALIGN_LEFT,
-        MODAL_ALIGN_CENTER,
-        MODAL_ALIGN_RIGHT
-    } text_align;
-
-    bool visible;
-
-    float fade_alpha;
-    bool fade_in;
-
-} Modal;
-
-/* Returns 0 on success, -1 on failure. */
-int modal_init_struct(Modal* modal);
-
-void modal_clear_lines(Modal* modal);
-void modal_draw_struct(const Modal* modal, int screen_width, int screen_height);
-
-
 /* ── Shared panel chrome ──────────────────────────────────────────────────
  *
  * Standardized look-and-feel for every panel-style modal (inventory,
@@ -100,7 +32,6 @@ Rectangle modal_scale_rect(Rectangle rect, float scale);
 void modal_draw_overlay(int screen_width, int screen_height, float age);
 
 /* Fill + border a panel rect with the standardized chrome (faded by age). */
-void modal_draw_panel(Rectangle rect, float age);
 void modal_draw_panel_ex(Rectangle rect, float age, Color border, float border_width);
 
 /* Soft drop shadow under a panel that floats over the live world with no

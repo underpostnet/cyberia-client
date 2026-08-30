@@ -11,7 +11,6 @@
  * runtime_config_init() before connection_open() or any engine fetch. */
 
 void        runtime_config_init(void);
-const char* runtime_config_instance_code(void);
 const char* runtime_config_ws_url(void);
 const char* runtime_config_api_base_url(void);
 

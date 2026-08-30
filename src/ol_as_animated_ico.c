@@ -92,13 +92,3 @@ void ol_as_ico_draw(ObjectLayersManager* mgr,
                       (float)icon_size, (float)icon_size };
     DrawTexturePro(tex, src, dst, (Vector2){0.0f, 0.0f}, 0.0f, tint);
 }
-
-void ol_as_ico_draw_safe(ObjectLayersManager* mgr,
-                         const char* item_key,
-                         int x, int y, int icon_size,
-                         const char* dir_str,
-                         int frame_ms) {
-    ol_as_ico_draw(mgr, item_key, x, y, icon_size,
-                   dir_str ? dir_str : OL_ICO_DEFAULT_DIR,
-                   frame_ms, WHITE);
-}

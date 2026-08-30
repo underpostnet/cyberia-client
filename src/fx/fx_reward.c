@@ -1,7 +1,7 @@
-#include "ui/fx_reward.h"
+#include "fx_reward.h"
 
-#include "fx/fx_shapes.h"
-#include "ui_icon.h"
+#include "fx_shapes.h"
+#include "ui/ui_icon.h"
 
 #include <math.h>
 #include <raylib.h>
@@ -266,12 +266,6 @@ void fx_reward_init(void) {
             .radius_jitter = a.radius_jitter, .layer = a.layer, .is_star = star,
         };
     }
-}
-
-void fx_reward_reset(void) {
-    memset(s_arrivals, 0, sizeof(s_arrivals));
-    s_intensity = 0.0f;
-    s_requested = false;
 }
 
 void fx_reward_show(Rectangle modal_bounds) {

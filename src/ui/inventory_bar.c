@@ -23,7 +23,7 @@
 #include "text.h"
 
 #include "domain/viewport.h"
-#include "fx_inventory_bar_qty.h"
+#include "fx/fx_inventory_bar_qty.h"
 #include "game_state.h"
 #include "item_slot.h"
 #include "object_layers_management.h"

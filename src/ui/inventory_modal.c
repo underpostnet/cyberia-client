@@ -128,7 +128,6 @@ static bool s_anchor_settled = false;
 #define MODAL_SPRITE_MIN   100
 #define MODAL_SPRITE_MAX   240
 
-#define MODAL_FONT_TITLE   26
 #define MODAL_FONT_BODY    18
 #define MODAL_FONT_STAT    16
 #define MODAL_BTN_W        200
@@ -384,12 +383,6 @@ static void send_freeze(bool start) {
 static bool hit_rect(int mx, int my, Rectangle r) {
     return ((float)mx >= r.x && (float)mx < r.x + r.width &&
             (float)my >= r.y && (float)my < r.y + r.height);
-}
-
-static Color lighten(Color c, int d) {
-    int r = (int)c.r + d, g = (int)c.g + d, b = (int)c.b + d;
-    return (Color){ (uint8_t)(r > 255 ? 255 : r), (uint8_t)(g > 255 ? 255 : g),
-                    (uint8_t)(b > 255 ? 255 : b), c.a };
 }
 
 /* draw_small_btn draws direction/mode buttons (icon, label, or both) using

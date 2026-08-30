@@ -74,8 +74,6 @@ typedef struct {
     ActionCacheState state;
 } ActionMetadataEntry;
 
-void action_cache_reset(void);
-
 /* Schedule an async REST fetch if not cached/loading. */
 void action_cache_fetch(const char* code);
 

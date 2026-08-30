@@ -1,7 +1,7 @@
-#include "ui/fx_item_transfer.h"
+#include "fx_item_transfer.h"
 
 #include "fx_inventory_bar_qty.h"
-#include "item_slot.h"
+#include "ui/item_slot.h"
 
 #include <math.h>
 #include <string.h>
@@ -23,10 +23,6 @@ typedef struct {
 
 static FxTransfer s_flights[FX_TRANSFER_MAX];
 
-void fx_item_transfer_reset(void) {
-    memset(s_flights, 0, sizeof(s_flights));
-}
-
 static void spawn(const ObjectLayerState* ols, Rectangle from, Rectangle to,
                   bool inventory_arrival) {
     if (!ols || '\0' == ols->item_id[0]) return;
@@ -39,10 +35,6 @@ static void spawn(const ObjectLayerState* ols, Rectangle from, Rectangle to,
         if (inventory_arrival) fx_inventory_bar_qty_hold_for_delivery(ols->item_id);
         return;
     }
-}
-
-void fx_item_transfer_spawn(const ObjectLayerState* ols, Rectangle from, Rectangle to) {
-    spawn(ols, from, to, false);
 }
 
 void fx_item_transfer_spawn_to_inventory(const ObjectLayerState* ols,

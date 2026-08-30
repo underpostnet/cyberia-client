@@ -31,7 +31,6 @@ static float slide_eased(void) {
 
 float toolbar_height(void)   { return TOOLBAR_H * (1.0f - slide_eased()); }
 float toolbar_offset_y(void) { return -TOOLBAR_H * slide_eased(); }
-bool  toolbar_is_hidden(void) { return s_hidden; }
 
 /* Toggle row, right-aligned: index 0 is the rightmost button (fullscreen).
  * All ride the strip's slide. */

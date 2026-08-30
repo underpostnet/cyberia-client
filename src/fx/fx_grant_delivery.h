@@ -1,5 +1,5 @@
-#ifndef CYBERIA_UI_FX_GRANT_DELIVERY_H
-#define CYBERIA_UI_FX_GRANT_DELIVERY_H
+#ifndef CYBERIA_FX_FX_GRANT_DELIVERY_H
+#define CYBERIA_FX_FX_GRANT_DELIVERY_H
 
 #include <raylib.h>
 #include <stdbool.h>
@@ -29,7 +29,6 @@ typedef struct {
 } FxGrantGain;
 
 void fx_grant_delivery_init(void);
-void fx_grant_delivery_reset(void);
 
 /* Arm the sequence for a request whose grant is on its way. `spent_item_ids`
  * are released the moment the grant lands, so the loss reads before the
@@ -45,4 +44,4 @@ void fx_grant_delivery_update(float dt);
  * sequence gave up. */
 bool fx_grant_delivery_waiting(void);
 
-#endif /* CYBERIA_UI_FX_GRANT_DELIVERY_H */
+#endif /* CYBERIA_FX_FX_GRANT_DELIVERY_H */

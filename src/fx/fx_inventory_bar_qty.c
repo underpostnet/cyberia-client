@@ -1,10 +1,10 @@
-#include "ui/fx_inventory_bar_qty.h"
+#include "fx_inventory_bar_qty.h"
 
 #include "game_state.h"
-#include "inventory_bar.h"
+#include "ui/inventory_bar.h"
 #include "loot_fx.h"
 #include "object_layer.h"
-#include "text.h"
+#include "ui/text.h"
 
 #include <math.h>
 #include <raylib.h>
@@ -61,10 +61,6 @@ static double  s_clock = 0.0;
 void fx_inventory_bar_qty_init(void) {
     memset(s_e, 0, sizeof(s_e));
     s_clock = 0.0;
-}
-
-void fx_inventory_bar_qty_reset(void) {
-    memset(s_e, 0, sizeof(s_e));
 }
 
 static FqEntry* find(const char* id) {

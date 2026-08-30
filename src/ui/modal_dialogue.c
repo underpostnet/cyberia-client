@@ -3,7 +3,6 @@
  * @brief Dialogue/lore modal implementation — uses modal.c for rendering.
  *
  * Architecture:
- *   - Wraps a Modal struct (from modal.c) for the text box rendering.
  *   - Manages its own state for line progression and typewriter effect.
  *   - Sends "dialogue_start" / "dialogue_end" JSON messages to the Go
  *     server so it can grant / revoke damage immunity.
@@ -72,11 +71,6 @@ static bool  s_line_complete = false;
 
 /* One-shot close callback (cleared after firing) */
 static ModalDialogueOnClose s_on_close = NULL;
-
-/* The underlying modal used purely for the text-box chrome.
- * We call modal_draw_struct() for the background/border then overlay
- * our custom content on top.  */
-static Modal s_modal;
 
 /* ── Layout constants ───────────────────────────────────────────────────── */
 
@@ -266,7 +260,6 @@ void modal_dialogue_init(void) {
     s_line_count = 0;
     s_current    = 0;
     s_on_close   = NULL;
-    modal_init_struct(&s_modal);
 }
 
 void modal_dialogue_open(const char* entity_id, const char* item_id,

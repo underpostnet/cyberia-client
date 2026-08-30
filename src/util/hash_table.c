@@ -112,18 +112,6 @@ bool hash_table_remove(HashTable* t, const char* key) {
     return true;
 }
 
-void* hash_table_find(const HashTable* t, HashPredFn pred, void* user_data) {
-    assert(t);
-    assert(pred);
-    for (size_t i = 0; i < t->capacity; i++) {
-        if (SLOT_OCCUPIED == t->slots[i].state &&
-            pred(t->slots[i].key, t->slots[i].value, user_data)) {
-            return t->slots[i].value;
-        }
-    }
-    return NULL;
-}
-
 size_t hash_table_remove_if(HashTable* t, HashPredFn pred, void* user_data) {
     assert(t);
     assert(pred);

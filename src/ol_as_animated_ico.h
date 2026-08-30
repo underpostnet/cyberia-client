@@ -25,12 +25,4 @@ void ol_as_ico_draw(ObjectLayersManager* mgr,
                     int frame_ms,
                     Color tint);
 
-/* Same, but falls back to "down_idle" then "default_idle" when the atlas has
- * no frames for `dir_str`. */
-void ol_as_ico_draw_safe(ObjectLayersManager* mgr,
-                         const char* item_key,
-                         int x, int y, int icon_size,
-                         const char* dir_str,
-                         int frame_ms);
-
 #endif /* OL_AS_ANIMATED_ICO_H */

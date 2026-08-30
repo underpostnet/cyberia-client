@@ -14,7 +14,7 @@
 #include "notification.h"
 #include "notify_store.h"
 #include "ui/floating_combat_text.h"
-#include "ui/loot_fx.h"
+#include "fx/loot_fx.h"
 #include "ui/item_slot_grid.h"
 #include "ui/modal_interact.h"
 #include "ui/modal_notification.h"
@@ -106,7 +106,6 @@ static void read_entity_state(const cJSON* e, EntityState* base) {
     base->stats_sum   = serial_get_int_default(e, "statsSum", 0);
     base->status_icon = (uint8_t)serial_get_int_default(e, "statusIcon", 0);
     base->object_layer_count = read_layers(e, "objectLayers", base->object_layers, MAX_OBJECT_LAYERS);
-    base->last_update   = gs->last_update_time;
     base->snapshot_time = gs->last_update_time;
 }
 
@@ -205,39 +204,32 @@ static void unpack_resource(const cJSON* e) {
     strncpy(res->behavior, "resource", MAX_BEHAVIOR_LENGTH - 1);
 }
 
-/* passive_slot claims the next free slot for a passive world object and tags
- * its type. Returns NULL when that array is full. */
+/* passive_slot claims the next free slot for a passive world object.
+ * Returns NULL when that array is full. */
 static WorldObject* passive_slot(const char* type) {
     GameState* gs = &g_game_state;
     WorldObject* o = NULL;
-    ObjectLayerType kind = OBJECT_LAYER_TYPE_UNKNOWN;
 
     if (0 == strcmp(type, "floor")) {
         if (gs->floor_count >= MAX_OBJECTS) return NULL;
         o = &gs->floors[gs->floor_count++];
-        kind = OBJECT_LAYER_TYPE_FLOOR;
     } else if (0 == strcmp(type, "obstacle")) {
         if (gs->obstacle_count >= MAX_OBJECTS) return NULL;
         o = &gs->obstacles[gs->obstacle_count++];
-        kind = OBJECT_LAYER_TYPE_OBSTACLE;
     } else if (0 == strcmp(type, "portal")) {
         if (gs->portal_count >= MAX_OBJECTS) return NULL;
         o = &gs->portals[gs->portal_count++];
-        kind = OBJECT_LAYER_TYPE_PORTAL;
     } else if (0 == strcmp(type, "foreground")) {
         if (gs->foreground_count >= MAX_OBJECTS) return NULL;
         o = &gs->foregrounds[gs->foreground_count++];
-        kind = OBJECT_LAYER_TYPE_FOREGROUND;
     } else if (0 == strcmp(type, "static")) {
         if (gs->static_count >= MAX_ENTITIES) return NULL;
         o = &gs->statics[gs->static_count++];
-        kind = OBJECT_LAYER_TYPE_STATIC;
     } else {
         return NULL;
     }
 
     memset(o, 0, sizeof(WorldObject));
-    o->type_kind = kind;
     strncpy(o->type, type, MAX_TYPE_LENGTH - 1);
     return o;
 }
@@ -492,21 +484,6 @@ static void json_unpack_init_data(const cJSON* payload) {
                                 cJSON_GetStringValue(item), 127);
                         d->dead_item_ids[d->dead_item_id_count][127] = '\0';
                         d->dead_item_id_count++;
-                    }
-                }
-            }
-
-            // Parse dropItemIds array
-            cJSON* drop_arr = cJSON_GetObjectItem(etd, "dropItemIds");
-            if (drop_arr && cJSON_IsArray(drop_arr)) {
-                cJSON* item = NULL;
-                cJSON_ArrayForEach(item, drop_arr) {
-                    if (d->drop_item_id_count >= MAX_DEFAULT_ITEM_IDS) break;
-                    if (cJSON_IsString(item)) {
-                        strncpy(d->drop_item_ids[d->drop_item_id_count],
-                                cJSON_GetStringValue(item), 127);
-                        d->drop_item_ids[d->drop_item_id_count][127] = '\0';
-                        d->drop_item_id_count++;
                     }
                 }
             }

@@ -20,15 +20,11 @@
 #define QJ_PANEL_W        300
 #define QJ_HEADER_H       28
 #define QJ_HEADER_PAD     7
-#define QJ_SECTION_H      36
-#define QJ_ROW_H          22
-#define QJ_DETAIL_H       54
 #define QJ_PAGER_H        22
 #define QJ_CHEVRON        32
 
 #define QJ_FONT_TITLE     11
 #define QJ_FONT_SECTION   14
-#define QJ_FONT_ROW       13
 #define QJ_FONT_NAME      13
 #define QJ_FONT_SMALL     11
 

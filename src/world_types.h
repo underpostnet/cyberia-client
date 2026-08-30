@@ -32,7 +32,6 @@ struct EntityState {
     float life;
     float max_life;
     float respawn_in;
-    double last_update;     /* wall-clock time the entity was last touched */
     double snapshot_time;   /* wall-clock time of the snapshot that produced
                              * pos_server. Used by interpolation to compute
                              * a per-entity alpha instead of a global one. */
@@ -46,9 +45,6 @@ struct PlayerState {
     Vector2 path[MAX_PATH_POINTS]; /* debug only */
     int path_count;                /* debug only */
     Vector2 target_pos;            /* debug only */
-
-    Vector2 tap_target;
-    bool    has_tap_target;
 };
 
 /* Interaction capability bits (mirror cyberia-server entity_status.go). The bit
@@ -102,7 +98,6 @@ typedef struct WorldObject {
     char             id[MAX_ID_LENGTH];
     Vector2          pos;
     Vector2          dims;
-    ObjectLayerType  type_kind;
     char             type[MAX_TYPE_LENGTH];
     /* Portal-only: presence status icon (ESI 10) + teleport destination, used to
      * build the "<targetMapCode> <x>,<y>" overhead nameplate. Zero for non-portals. */

@@ -52,7 +52,4 @@ void fx_dust_spawn(Vector2 world_pos, Vector2 heading, const FxDustParams* param
 void fx_dust_update(float dt);
 void fx_dust_draw(void);
 
-/* Live puff count — pool diagnostics. */
-int fx_dust_active_count(void);
-
 #endif /* FX_DUST_H */

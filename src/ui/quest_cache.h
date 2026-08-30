@@ -64,13 +64,8 @@ typedef struct {
     QuestCacheState state;
 } QuestMetadataEntry;
 
-void quest_cache_reset(void);
-
 /* Look up cached metadata by code. Returns NULL if not present. */
 const QuestMetadataEntry* quest_cache_get(const char* code);
-
-/* Return the fetch state for a quest code. */
-QuestCacheState quest_cache_state(const char* code);
 
 /* Schedule an async REST fetch (GET /api/cyberia-quest/code/:code) via
  * engine_client if not already cached/loading. Parses the

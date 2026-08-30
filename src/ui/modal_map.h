@@ -48,7 +48,6 @@ Rectangle modal_map_bounds(void);
 
 /* Container expansion state — driven by modal_instance_map open/close. */
 void  modal_map_set_expanded(bool expanded);
-bool  modal_map_is_expanded(void);
 /* Eased 0..1 expansion progress (smoothstep over the transition). */
 float modal_map_expand_progress(void);
 

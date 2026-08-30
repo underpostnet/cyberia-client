@@ -1,5 +1,5 @@
-#ifndef CYBERIA_UI_LOOT_FX_H
-#define CYBERIA_UI_LOOT_FX_H
+#ifndef CYBERIA_FX_LOOT_FX_H
+#define CYBERIA_FX_LOOT_FX_H
 
 #include <stdbool.h>
 #include <stdint.h>
@@ -133,4 +133,4 @@ void loot_fx_slot_expend(const char* item_id);
  * last-known center. */
 void loot_fx_slot_expend_at(const char* item_id, float from_x, float from_y);
 
-#endif /* CYBERIA_UI_LOOT_FX_H */
+#endif /* CYBERIA_FX_LOOT_FX_H */

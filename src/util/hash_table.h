@@ -61,9 +61,7 @@ void  hash_table_put(HashTable* t, const char* key, void* value);
 bool  hash_table_remove(HashTable* t, const char* key);
 bool  hash_table_contains(const HashTable* t, const char* key);
 
-/* Linear scan with predicate; returns first matching value or NULL. */
 typedef bool (*HashPredFn)(const char* key, void* value, void* user_data);
-void* hash_table_find(const HashTable* t, HashPredFn pred, void* user_data);
 
 /* Remove every occupied entry for which pred returns true; free_fn is applied
  * to each removed value. Safe to call mid-session. Returns count removed. */

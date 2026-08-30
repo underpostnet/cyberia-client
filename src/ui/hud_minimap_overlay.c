@@ -313,11 +313,6 @@ void hud_minimap_overlay_hide(void) {
     input_gestures_set_blocked(false);
 }
 
-void hud_minimap_overlay_toggle(void) {
-    if (s_visible) hud_minimap_overlay_hide();
-    else           hud_minimap_overlay_show();
-}
-
 bool hud_minimap_overlay_is_visible(void) {
     return s_visible;
 }

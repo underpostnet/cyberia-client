@@ -41,10 +41,6 @@ static QuestMetadataEntry* find_or_create(const char* code) {
     return e;
 }
 
-void quest_cache_reset(void) {
-    s_count = 0;
-}
-
 static void copy_str(char* dst, size_t cap, const char* src) {
     if (!src) { dst[0] = '\0'; return; }
     strncpy(dst, src, cap - 1);
@@ -54,12 +50,6 @@ static void copy_str(char* dst, size_t cap, const char* src) {
 const QuestMetadataEntry* quest_cache_get(const char* code) {
     if (!code) return NULL;
     return find_by_code(code);
-}
-
-QuestCacheState quest_cache_state(const char* code) {
-    const QuestMetadataEntry* e = quest_cache_get(code);
-    if (!e) return QUEST_CACHE_NONE;
-    return e->state;
 }
 
 static void on_quest_fetched(const FetchResponse* r);

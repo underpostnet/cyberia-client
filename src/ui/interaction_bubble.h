@@ -26,7 +26,6 @@
 
 #define INTERACT_DIALOGUE   (1 << 0)
 #define INTERACT_SOCIAL     (1 << 1)
-#define INTERACT_QUEST      (1 << 2)
 
 /* One bubble slot. `alive_layers` keeps the last known alive stack, so the
  * icon always shows the living appearance even for a dead or ghost entity;
@@ -61,7 +60,6 @@ bool interaction_bubble_handle_click(int mx, int my);
 bool interaction_bubble_is_collapsed(void);
 void interaction_bubble_expand(void);
 bool interaction_bubble_handle_wheel(float wheel_delta);
-int  interaction_bubble_slot_count(void);
 
 /* Apply an equip or unequip that happened while the self-player is dead. The
  * server queues those in PreRespawnObjectLayers and never sends them back, so

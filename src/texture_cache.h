@@ -40,7 +40,4 @@ Texture2D     texture_cache_get(TextureCache* tc, const char* url);
 /* Route an engine_client fetch completion into the cache (keyed by URL). */
 void          texture_cache_on_blob_fetched(TextureCache* tc, const FetchResponse* r);
 
-/* Drop a cached entry and unload its GPU texture. No-op if absent. */
-void          texture_cache_evict(TextureCache* tc, const char* url);
-
 #endif /* CYBERIA_TEXTURE_CACHE_H */

@@ -50,14 +50,8 @@ const char* presentation_runtime_status_icon(uint8_t status_id);
 Color presentation_runtime_status_border(uint8_t status_id);
 
 /* Camera and cell sizing. */
-float    presentation_runtime_cell_size(void);
 float    presentation_runtime_camera_zoom(void);
-float    presentation_runtime_camera_smoothing(void);
-int      presentation_runtime_interpolation_ms(void);
-float    presentation_runtime_default_obj_width(void);
-float    presentation_runtime_default_obj_height(void);
 bool     presentation_runtime_dev_ui(void);
-void     presentation_runtime_set_dev_ui(bool enabled);
 void     presentation_runtime_toggle_dev_ui(void);
 
 /* Main UI font: TTF file name under engine assets/fonts/ ("" = built-in

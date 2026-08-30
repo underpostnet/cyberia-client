@@ -25,9 +25,6 @@ int notification_count(NotifRegister reg, const char* target_id);
 /* All registers for one target (the generic badge on a bubble). */
 int notification_target_total(const char* target_id);
 
-/* One register across all targets. */
-int notification_register_total(NotifRegister reg);
-
 /* Everything, all registers and targets. */
 int notification_total(void);
 

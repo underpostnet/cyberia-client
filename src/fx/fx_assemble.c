@@ -1,6 +1,6 @@
-#include "ui/fx_assemble.h"
+#include "fx_assemble.h"
 
-#include "fx/fx_shapes.h"
+#include "fx_shapes.h"
 
 #include <math.h>
 #include <raylib.h>
@@ -146,11 +146,6 @@ void fx_assemble_init(void) {
             .period = lcg_range(AFX_ARC_PERIOD_MIN, AFX_ARC_PERIOD_MAX),
         };
     }
-}
-
-void fx_assemble_reset(void) {
-    s_intensity = 0.0f;
-    s_requested = false;
 }
 
 void fx_assemble_show(Rectangle card_bounds) {

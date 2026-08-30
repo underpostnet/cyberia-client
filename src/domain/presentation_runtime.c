@@ -255,15 +255,9 @@ Color presentation_runtime_status_border(uint8_t status_id) {
     return kBootstrapNeutral;
 }
 
-float presentation_runtime_cell_size(void)         { return g_rt.cell_size; }
 float presentation_runtime_camera_zoom(void)       { return g_rt.camera_zoom; }
-float presentation_runtime_camera_smoothing(void)  { return g_rt.camera_smoothing; }
-int   presentation_runtime_interpolation_ms(void)  { return g_rt.interpolation_ms; }
-float presentation_runtime_default_obj_width(void) { return g_rt.default_obj_width; }
-float presentation_runtime_default_obj_height(void){ return g_rt.default_obj_height; }
 bool  presentation_runtime_dev_ui(void)            { return g_rt.dev_ui; }
 const char* presentation_runtime_font_family(void) { return g_rt.font_family; }
 float presentation_runtime_font_factor_size(void)  { return g_rt.font_factor_size; }
 
-void  presentation_runtime_set_dev_ui(bool enabled) { g_rt.dev_ui = enabled; }
 void  presentation_runtime_toggle_dev_ui(void)     { g_rt.dev_ui = !g_rt.dev_ui; }

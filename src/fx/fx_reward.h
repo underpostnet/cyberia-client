@@ -1,5 +1,5 @@
-#ifndef CYBERIA_UI_FX_REWARD_H
-#define CYBERIA_UI_FX_REWARD_H
+#ifndef CYBERIA_FX_FX_REWARD_H
+#define CYBERIA_FX_FX_REWARD_H
 
 #include <raylib.h>
 
@@ -25,7 +25,6 @@
  * Skipping fx_reward_show for a frame begins the fade-out automatically. */
 
 void fx_reward_init(void);
-void fx_reward_reset(void);
 
 /* Keep the celebration alive this frame, framed around modal_bounds (screen
  * pixels). Call every frame the modal is visible. */
@@ -43,4 +42,4 @@ void fx_reward_update(float dt);
 /* Draw the celebration in screen space at the current intensity. */
 void fx_reward_draw(void);
 
-#endif /* CYBERIA_UI_FX_REWARD_H */
+#endif /* CYBERIA_FX_FX_REWARD_H */

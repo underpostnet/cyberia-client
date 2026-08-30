@@ -76,10 +76,6 @@ void runtime_config_init(void) {
     LOG_INFO("runtime config instance=%s ws=%s api=%s", s_instance_code, s_ws_url, s_api_base_url);
 }
 
-const char* runtime_config_instance_code(void) {
-    return s_instance_code;
-}
-
 const char* runtime_config_ws_url(void) {
     return s_ws_url;
 }

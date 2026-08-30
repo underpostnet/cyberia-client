@@ -12,7 +12,6 @@ void hud_minimap_overlay_cleanup(void);
 
 void hud_minimap_overlay_show(void);
 void hud_minimap_overlay_hide(void);
-void hud_minimap_overlay_toggle(void);
 bool hud_minimap_overlay_is_visible(void);
 
 void hud_minimap_overlay_update(float dt);

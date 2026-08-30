@@ -255,11 +255,3 @@ void fx_dust_draw(void) {
                        puff->color, alpha_curve(t));
     }
 }
-
-int fx_dust_active_count(void) {
-    int n = 0;
-    for (int i = 0; i < FX_DUST_MAX_PUFFS; i++) {
-        if (s_puffs[i].active) n++;
-    }
-    return n;
-}

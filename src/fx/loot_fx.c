@@ -1,8 +1,8 @@
-#include "ui/loot_fx.h"
+#include "loot_fx.h"
 
 #include "game_render.h"
 #include "game_state.h"
-#include "ui/fx_inventory_bar_qty.h"
+#include "fx_inventory_bar_qty.h"
 #include "ui/inventory_bar.h"
 #include "world_types.h"
 

@@ -44,21 +44,6 @@ static int resolve_icon_size(const UIButtonStyle* s, const Rectangle* bounds) {
     return font + 6;
 }
 
-Vector2 ui_button_measure(const UIButtonStyle* style) {
-    int   font   = resolve_font(style);
-    float pad    = resolve_pad(style);
-    bool  ic     = has_str(style->icon_id);
-    bool  tx     = has_str(style->text);
-
-    int icon_sz  = ic ? resolve_icon_size(style, NULL) : 0;
-    int text_w   = tx ? MeasureText(style->text, font) : 0;
-    float gap    = (ic && tx) ? resolve_gap(style) : 0.0f;
-
-    float content_w = (float)icon_sz + gap + (float)text_w;
-    float content_h = (float)(icon_sz > font ? icon_sz : font);
-    return (Vector2){ content_w + pad * 2.0f, content_h + pad * 2.0f };
-}
-
 UIButtonState ui_button_resolve_state(bool enabled, bool selected, bool hovered) {
     if (!enabled) return UI_BUTTON_DISABLED;
     if (selected) return UI_BUTTON_SELECTED;

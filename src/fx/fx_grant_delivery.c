@@ -1,4 +1,4 @@
-#include "ui/fx_grant_delivery.h"
+#include "fx_grant_delivery.h"
 
 #include "fx_inventory_bar_qty.h"
 #include "game_state.h"
@@ -33,10 +33,6 @@ static struct {
 } g_fg;
 
 void fx_grant_delivery_init(void) {
-    memset(&g_fg, 0, sizeof(g_fg));
-}
-
-void fx_grant_delivery_reset(void) {
     memset(&g_fg, 0, sizeof(g_fg));
 }
 

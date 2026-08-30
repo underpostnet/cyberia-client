@@ -18,12 +18,12 @@
 #include "ui/interaction_bubble.h"
 #include "ui/hud_minimap_overlay.h"
 #include "ui/inventory_bar.h"
-#include "ui/loot_fx.h"
+#include "fx/loot_fx.h"
 #include "ui/inventory_modal.h"
 #include "ui/modal_dialogue.h"
 #include "ui/action_cache.h"
 #include "ui/modal_instance_map.h"
-#include "ui/fx_item_transfer.h"
+#include "fx/fx_item_transfer.h"
 #include "ui/modal_interact.h"
 #include "ui/modal_map.h"
 #include "ui/nameplate.h"
@@ -1084,20 +1084,6 @@ Vector2 game_render_screen_to_world(Vector2 screen_pos) {
     Vector2 world = GetScreenToWorld2D(screen_pos, camera_get());
     float cell_size = g_game_state.cell_size > 0 ? g_game_state.cell_size : 12.0f;
     return (Vector2){world.x / cell_size, world.y / cell_size};
-}
-
-Rectangle game_render_get_camera_bounds(void) {
-    Vector2 top_left = game_render_screen_to_world((Vector2){0, 0});
-    Vector2 bottom_right = game_render_screen_to_world(
-        (Vector2){g_renderer.screen_width, g_renderer.screen_height}
-    );
-
-    return (Rectangle){
-        top_left.x,
-        top_left.y,
-        bottom_right.x - top_left.x,
-        bottom_right.y - top_left.y
-    };
 }
 
 void game_render_cleanup(void) {

@@ -42,7 +42,4 @@ void game_render_ui(void);
 Vector2 game_render_world_to_screen(Vector2 world_pos);
 Vector2 game_render_screen_to_world(Vector2 screen_pos);
 
-/* Camera view bounds in world coordinates. */
-Rectangle game_render_get_camera_bounds(void);
-
 #endif // GAME_RENDER_H

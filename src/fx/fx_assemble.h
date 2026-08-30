@@ -1,5 +1,5 @@
-#ifndef CYBERIA_UI_FX_ASSEMBLE_H
-#define CYBERIA_UI_FX_ASSEMBLE_H
+#ifndef CYBERIA_FX_FX_ASSEMBLE_H
+#define CYBERIA_FX_FX_ASSEMBLE_H
 
 #include <raylib.h>
 
@@ -22,7 +22,6 @@
  * Skipping fx_assemble_show for a frame begins the fade-out automatically. */
 
 void fx_assemble_init(void);
-void fx_assemble_reset(void);
 
 /* Keep the synthesis field alive this frame, converging on `card_bounds`. */
 void fx_assemble_show(Rectangle card_bounds);
@@ -30,4 +29,4 @@ void fx_assemble_show(Rectangle card_bounds);
 void fx_assemble_update(float dt);
 void fx_assemble_draw(void);
 
-#endif /* CYBERIA_UI_FX_ASSEMBLE_H */
+#endif /* CYBERIA_FX_FX_ASSEMBLE_H */

@@ -69,15 +69,6 @@ void ui_scroll_reset(UIScroll* s) {
     s->scrollbar_enabled = true;
 }
 
-void ui_scroll_set_scrollbar(UIScroll* s, bool enabled) {
-    if (!s) return;
-    s->scrollbar_enabled = enabled;
-    if (!enabled) {
-        s->bar_hold_s = 0.0f;
-        s->bar_alpha = 0.0f;
-    }
-}
-
 void ui_scroll_set_input_bounds(UIScroll* s, Rectangle bounds) {
     if (!s) return;
     s->input_bounds = bounds;

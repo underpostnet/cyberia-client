@@ -3,9 +3,9 @@
 
 #include "action_cache.h"
 #include "dialogue_data.h"
-#include "fx_grant_delivery.h"
-#include "fx_inventory_bar_qty.h"
-#include "fx_item_transfer.h"
+#include "fx/fx_grant_delivery.h"
+#include "fx/fx_inventory_bar_qty.h"
+#include "fx/fx_item_transfer.h"
 #include "domain/local_player.h"
 #include "domain/presentation_runtime.h"
 #include "domain/viewport.h"
@@ -304,7 +304,6 @@ static void es_clear(void) {
 #define MI_FONT_REW_DESKTOP      14
 #define MI_REW_SLOT_SZ_DESKTOP   44.0f
 #define MI_REW_SLOT_GAP_DESKTOP  8.0f
-#define MI_Q_BTN_W_DESKTOP       124.0f
 #define MI_Q_BTN_H_DESKTOP       34.0f
 #define MI_FONT_QBTN_DESKTOP     16
 
@@ -682,11 +681,6 @@ static void bar_buttons(Rectangle card, Rectangle* dialog, Rectangle* chat,
     *chat = (Rectangle){ x, by, bw, button_h };
     x -= MI_BAR_BTN_GAP + bw;
     if (show_dialog) *dialog = (Rectangle){ x, by, bw, button_h };
-}
-
-static Rectangle slot_rect_in(Rectangle content, int i) {
-    return (Rectangle){ content.x + (float)i * (MI_SLOT_SZ + MI_SLOT_GAP), content.y,
-                        (float)MI_SLOT_SZ, (float)MI_SLOT_SZ };
 }
 
 

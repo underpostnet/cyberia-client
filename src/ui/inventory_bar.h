@@ -23,7 +23,6 @@
 #define INV_SLOT_SIZE       60      /* square */
 #define INV_SLOT_GAP        6
 #define INV_SLOT_PADDING    4       /* around the sprite, inside the slot */
-#define INV_ACTIVE_BORDER   3
 #define INV_BAR_ALPHA       210     /* backing rectangle, 0-255 */
 #define INV_QTY_FONT_SIZE   10
 
