@@ -42,9 +42,6 @@ struct EntityState {
 struct PlayerState {
     EntityState base;
     char map_code[MAX_ID_LENGTH];
-    Vector2 path[MAX_PATH_POINTS]; /* debug only */
-    int path_count;                /* debug only */
-    Vector2 target_pos;            /* debug only */
 };
 
 /* Interaction capability bits (mirror cyberia-server entity_status.go). The bit

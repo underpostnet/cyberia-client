@@ -8,6 +8,7 @@
 #include "domain/presentation_runtime.h"
 #include "entity_render.h"
 #include "game_state.h"
+#include "network/replication.h"
 #include "ui/toolbar.h"
 #include "object_layers_management.h"
 #include "ol_as_animated_ico.h"
@@ -926,12 +927,15 @@ void game_render_entities(void) {
 
 void game_render_player_path(void) {
     const float cell_size = world_cell_size();
+    int route_count = 0;
+    const Vector2* route = prediction_route(&route_count);
+    const Vector2 target = prediction_route_target();
 
     // Render target position
-    if (g_game_state.player.target_pos.x >= 0 && g_game_state.player.target_pos.y >= 0) {
+    if (target.x >= 0 && target.y >= 0) {
         Rectangle target_rect = {
-            g_game_state.player.target_pos.x * cell_size,
-            g_game_state.player.target_pos.y * cell_size,
+            target.x * cell_size,
+            target.y * cell_size,
             cell_size,
             cell_size
         };
@@ -941,8 +945,8 @@ void game_render_player_path(void) {
     }
 
     // Render path
-    for (int i = 0; i < g_game_state.player.path_count; i++) {
-        Vector2 path_point = g_game_state.player.path[i];
+    for (int i = 0; i < route_count; i++) {
+        Vector2 path_point = route[i];
 
         Rectangle path_rect = {
             path_point.x * cell_size,

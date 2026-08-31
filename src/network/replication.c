@@ -188,6 +188,11 @@ static struct {
     Vector2         path[MAX_PATH_POINTS];
     int             path_count;
     int             path_index;
+    /* The route as the snapshot delivered it, before adoption trims the
+     * waypoints already behind this client. */
+    Vector2         route[MAX_PATH_POINTS];
+    int             route_count;
+    Vector2         route_target;
     pred_history_t  history;
     bool            initialised;
 } g_pred = {0};
@@ -419,16 +424,13 @@ static void adopt_authoritative_target(void) {
         return;
     }
     g_pred.active.kind     = INPUT_KIND_PLAYER_ACTION;
-    g_pred.active.target_x = g_game_state.player.target_pos.x;
-    g_pred.active.target_y = g_game_state.player.target_pos.y;
+    g_pred.active.target_x = g_pred.route_target.x;
+    g_pred.active.target_y = g_pred.route_target.y;
     g_pred.active.sequence = session_last_movement_sequence();
     g_pred.has_active      = true;
 
-    int count = g_game_state.player.path_count;
-    if (0 > count) { count = 0; }
-    if (MAX_PATH_POINTS < count) { count = MAX_PATH_POINTS; }
-    for (int i = 0; i < count; i++) { g_pred.path[i] = g_game_state.player.path[i]; }
-    g_pred.path_count = count;
+    for (int i = 0; i < g_pred.route_count; i++) { g_pred.path[i] = g_pred.route[i]; }
+    g_pred.path_count = g_pred.route_count;
     g_pred.path_index = 0;
 
     /* The route starts where the server stood at the snapshot tick, and this
@@ -452,6 +454,23 @@ static void adopt_authoritative_target(void) {
  * design — visual smoothing is the presentation layer's job
  * (domain/local_player_view). */
 Vector2 prediction_self_position(void) { return g_pred.predicted_pos; }
+
+void prediction_set_route(const Vector2* points, int count, Vector2 target) {
+    assert(points || 0 == count);
+    if (0 > count) { count = 0; }
+    if (MAX_PATH_POINTS < count) { count = MAX_PATH_POINTS; }
+    for (int i = 0; i < count; i++) { g_pred.route[i] = points[i]; }
+    g_pred.route_count  = count;
+    g_pred.route_target = target;
+}
+
+const Vector2* prediction_route(int* count) {
+    assert(count);
+    *count = g_pred.route_count;
+    return g_pred.route;
+}
+
+Vector2 prediction_route_target(void) { return g_pred.route_target; }
 
 Vector2 prediction_consume_correction(void) {
     Vector2 c = g_pred.correction_accum;

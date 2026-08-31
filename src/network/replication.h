@@ -35,6 +35,13 @@ Vector2 prediction_self_position(void);
  * once per render frame by the local-player presentation layer, which absorbs
  * it so corrections never disturb the rendered trajectory. */
 Vector2 prediction_consume_correction(void);
+/* The authoritative walk the latest snapshot describes: the A* polyline the
+ * server follows and the destination it planned for. Self-only, so it lives
+ * here and not in the entity mirror; the snapshot decoder is the sole writer.
+ * prediction_route() also backs the debug overlay. */
+void prediction_set_route(const Vector2* points, int count, Vector2 target);
+const Vector2* prediction_route(int* count);
+Vector2 prediction_route_target(void);
 
 /* Interpolation — render-time smoothing of remote entities (sole writer of
  * EntityState.interp_pos; never the local player). */

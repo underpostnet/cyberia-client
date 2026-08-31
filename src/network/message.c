@@ -302,16 +302,18 @@ static void unpack_self(const cJSON* e) {
 
     serial_get_string(e, "mapCode", p->map_code, MAX_ID_LENGTH);
 
-    p->path_count = 0;
+    Vector2 route[MAX_PATH_POINTS];
+    int route_count = 0;
     const cJSON* point = NULL;
     cJSON_ArrayForEach(point, serial_get_array(e, "path")) {
-        if (p->path_count >= MAX_PATH_POINTS) break;
-        p->path[p->path_count].x = serial_get_float_default(point, "x", 0.0f);
-        p->path[p->path_count].y = serial_get_float_default(point, "y", 0.0f);
-        p->path_count++;
+        if (route_count >= MAX_PATH_POINTS) break;
+        route[route_count].x = serial_get_float_default(point, "x", 0.0f);
+        route[route_count].y = serial_get_float_default(point, "y", 0.0f);
+        route_count++;
     }
-    p->target_pos = (Vector2){ (float)serial_get_int_default(e, "targetPosX", 0),
-                               (float)serial_get_int_default(e, "targetPosY", 0) };
+    prediction_set_route(route, route_count,
+                         (Vector2){ (float)serial_get_int_default(e, "targetPosX", 0),
+                                    (float)serial_get_int_default(e, "targetPosY", 0) });
 
     /* Full inventory — every visible layer, active and inactive. Powers the
      * inventory bottom bar. */

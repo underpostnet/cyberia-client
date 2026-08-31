@@ -2,6 +2,7 @@
 #include "text.h"
 
 #include "network/game_client.h"
+#include "network/replication.h"
 #include "game_render.h"
 #include "game_state.h"
 #include "domain/presentation_runtime.h"
@@ -206,7 +207,7 @@ void dev_ui_draw(int screen_width, int screen_height, int hud_occupied) {
     const char* mode_str = mode_to_string(g_game_state.player.base.mode);
     const char* dir_str = direction_to_string(g_game_state.player.base.direction);
     Vector2 player_pos = g_game_state.player.base.interp_pos;
-    Vector2 target_pos = g_game_state.player.target_pos;
+    Vector2 target_pos = prediction_route_target();
     int sum_stats_limit = g_game_state.sum_stats_limit;
 
     // Get active stats and item count
