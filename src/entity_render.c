@@ -136,11 +136,6 @@ static bool anim_is_stale(const char* key, void* value, void* user_data) {
     return (now - anim->last_access_time) > ANIM_IDLE_EVICT_SECONDS;
 }
 
-static bool anim_key_has_prefix(const char* key, void* value, void* user_data) {
-    const char* prefix = user_data;
-    return 0 == strncmp(key, prefix, strlen(prefix));
-}
-
 static int compare_layer_priority(const void* a, const void* b) {
     LayerRenderInfo* info_a = (LayerRenderInfo*)a;
     LayerRenderInfo* info_b = (LayerRenderInfo*)b;
@@ -263,13 +258,6 @@ void entity_render_gc(EntityRender* render) {
     assert(render);
     double now = GetTime();
     hash_table_remove_if(&render->animations, anim_is_stale, &now);
-}
-
-void entity_render_forget_entity(EntityRender* render, const char* entity_id) {
-    assert(render && entity_id);
-    char prefix[256];
-    snprintf(prefix, sizeof(prefix), "%s_", entity_id);
-    hash_table_remove_if(&render->animations, anim_key_has_prefix, prefix);
 }
 
 // ============================================================================

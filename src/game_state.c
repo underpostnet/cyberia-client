@@ -28,12 +28,6 @@ void game_state_reset(void) {
     g_game_state.dead_item_id_count   = 0;
 }
 
-static GameStateEntityRemovedFn s_entity_removed_cb = NULL;
-
-void game_state_set_entity_removed_cb(GameStateEntityRemovedFn cb) {
-    s_entity_removed_cb = cb;
-}
-
 PlayerState* game_state_find_player(const char* id) {
     assert(id);
     for (int i = 0; i < g_game_state.other_player_count; i++) {

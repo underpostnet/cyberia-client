@@ -26,10 +26,6 @@ void destroy_entity_render(EntityRender* render);
  * recently). Call periodically from the render loop to bound memory. */
 void entity_render_gc(EntityRender* render);
 
-/* Synchronously evict all animation states for a single entity (all its
- * item layers). Call when an entity is removed from the world snapshot. */
-void entity_render_forget_entity(EntityRender* render, const char* entity_id);
-
 /* Draw one entity's active layers. Position and size are grid units, scaled
  * internally by `cell_size`. `layers_state` may be NULL when layers_count is
  * 0; invalid inputs are skipped without an error. `entity_type` ("self",

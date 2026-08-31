@@ -123,12 +123,6 @@ void         game_state_reset(void);
 PlayerState* game_state_find_player(const char* id);
 BotState*    game_state_find_bot(const char* id);
 
-/* Fires when an entity leaves the world mirror (left the AOI). Lets the
- * presentation layer release its per-entity resources, such as animation
- * states, without game_state depending on the render modules. */
-typedef void (*GameStateEntityRemovedFn)(const char* id);
-void         game_state_set_entity_removed_cb(GameStateEntityRemovedFn cb);
-
 static inline const EntityTypeDefault* game_state_get_entity_default(const char* entity_type) {
     for (int i = 0; i < g_game_state.entity_defaults_count; i++) {
         if (strcmp(g_game_state.entity_defaults[i].entity_type, entity_type) == 0)
