@@ -72,6 +72,25 @@ void message_reset_prev_snapshots(void) {
  * Snapshot readers
  * ============================================================================ */
 
+/* A full array drops the rest of its kind for that snapshot. Log it once per
+ * array per snapshot, not once per dropped entity. */
+enum { OVF_PLAYERS, OVF_BOTS, OVF_RESOURCES, OVF_FLOORS, OVF_OBSTACLES,
+       OVF_PORTALS, OVF_FOREGROUNDS, OVF_STATICS, OVF_COUNT };
+
+static const char* const OVF_NAME[OVF_COUNT] = {
+    "players", "bots", "resources", "floors", "obstacles",
+    "portals", "foregrounds", "statics"
+};
+
+static uint16_t s_overflow_warned = 0;
+
+static void warn_overflow(int which) {
+    if (s_overflow_warned & (1u << which)) return;
+    s_overflow_warned |= (uint16_t)(1u << which);
+    LOG_WARN("snapshot truncated: %s array full", OVF_NAME[which]);
+}
+
+
 static int read_layers(const cJSON* owner, const char* key,
                        ObjectLayerState* layers, int max_layers) {
     const cJSON* arr = serial_get_array(owner, key);
@@ -119,7 +138,7 @@ static void unpack_player(const cJSON* e) {
         if (0 == strcmp(gs->other_players[i].base.id, id)) { idx = i; break; }
     }
     if (idx < 0) {
-        if (gs->other_player_count >= MAX_ENTITIES) return;
+        if (gs->other_player_count >= MAX_ENTITIES) { warn_overflow(OVF_PLAYERS); return; }
         idx = gs->other_player_count++;
         memset(&gs->other_players[idx], 0, sizeof(PlayerState));
         strncpy(gs->other_players[idx].base.id, id, MAX_ID_LENGTH - 1);
@@ -146,7 +165,7 @@ static void unpack_bot(const cJSON* e) {
         if (0 == strcmp(gs->bots[i].base.id, id)) { idx = i; break; }
     }
     if (idx < 0) {
-        if (gs->bot_count >= MAX_ENTITIES) return;
+        if (gs->bot_count >= MAX_ENTITIES) { warn_overflow(OVF_BOTS); return; }
         idx = gs->bot_count++;
         memset(&gs->bots[idx], 0, sizeof(BotState));
         strncpy(gs->bots[idx].base.id, id, MAX_ID_LENGTH - 1);
@@ -192,7 +211,7 @@ static void unpack_bot(const cJSON* e) {
 
 static void unpack_resource(const cJSON* e) {
     GameState* gs = &g_game_state;
-    if (gs->resource_count >= MAX_ENTITIES) return;
+    if (gs->resource_count >= MAX_ENTITIES) { warn_overflow(OVF_RESOURCES); return; }
     BotState* res = &gs->resources[gs->resource_count++];
     memset(res, 0, sizeof(BotState));
     serial_get_string(e, "id", res->base.id, MAX_ID_LENGTH);
@@ -211,19 +230,19 @@ static WorldObject* passive_slot(const char* type) {
     WorldObject* o = NULL;
 
     if (0 == strcmp(type, "floor")) {
-        if (gs->floor_count >= MAX_OBJECTS) return NULL;
+        if (gs->floor_count >= MAX_OBJECTS) { warn_overflow(OVF_FLOORS); return NULL; }
         o = &gs->floors[gs->floor_count++];
     } else if (0 == strcmp(type, "obstacle")) {
-        if (gs->obstacle_count >= MAX_OBJECTS) return NULL;
+        if (gs->obstacle_count >= MAX_OBJECTS) { warn_overflow(OVF_OBSTACLES); return NULL; }
         o = &gs->obstacles[gs->obstacle_count++];
     } else if (0 == strcmp(type, "portal")) {
-        if (gs->portal_count >= MAX_OBJECTS) return NULL;
+        if (gs->portal_count >= MAX_OBJECTS) { warn_overflow(OVF_PORTALS); return NULL; }
         o = &gs->portals[gs->portal_count++];
     } else if (0 == strcmp(type, "foreground")) {
-        if (gs->foreground_count >= MAX_OBJECTS) return NULL;
+        if (gs->foreground_count >= MAX_OBJECTS) { warn_overflow(OVF_FOREGROUNDS); return NULL; }
         o = &gs->foregrounds[gs->foreground_count++];
     } else if (0 == strcmp(type, "static")) {
-        if (gs->static_count >= MAX_ENTITIES) return NULL;
+        if (gs->static_count >= MAX_ENTITIES) { warn_overflow(OVF_STATICS); return NULL; }
         o = &gs->statics[gs->static_count++];
     } else {
         return NULL;
@@ -327,7 +346,8 @@ static void json_unpack_snapshot(const cJSON* payload) {
         s_prev_players[i].pos_server = gs->other_players[i].base.pos_server;
     }
 
-    /* Each snapshot re-lists everything in the area of interest. */
+    /* Each snapshot re-lists everything in the area of interest. */
+    s_overflow_warned = 0;
     gs->other_player_count = 0;
     gs->bot_count = 0;
     gs->resource_count = 0;
