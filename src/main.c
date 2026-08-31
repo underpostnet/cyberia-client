@@ -132,18 +132,17 @@ static void gameloop(void) {
     }
     /* Presentation-only: advance the local player's visual state (spring
      * position, velocity-derived facing and walk/idle mode) toward the
-     * predicted/reconciled simulation position. Prediction itself is
-     * untouched — the outputs written back below feed rendering/camera only,
-     * keeping sprite motion, facing, and animation in lockstep instead of
-     * following the server's asynchronous snapshot cadence. */
+     * predicted/reconciled simulation position. Facing and mode go in
+     * authoritative and come out smoothed; the smoothed pair stays in the view
+     * module, so what the renderer draws never becomes what the smoother reads
+     * next frame. interp_pos is the presentation position of every entity, and
+     * for the local player the view owns it. */
     local_player_view_update(prediction_self_position(),
                              prediction_consume_correction(),
                              g_game_state.player.base.direction,
                              g_game_state.player.base.mode,
                              frame_dt);
     g_game_state.player.base.interp_pos = local_player_view_position();
-    g_game_state.player.base.direction  = local_player_view_direction();
-    g_game_state.player.base.mode       = local_player_view_mode();
 
     /* Remote-entity render-time interpolation. */
     interpolation_compute_view();

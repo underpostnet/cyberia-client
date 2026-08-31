@@ -8,6 +8,7 @@
 
 #include "domain/camera.h"
 #include "domain/local_player.h"
+#include "domain/local_player_view.h"
 #include "domain/presentation_runtime.h"
 #include "game_state.h"
 #include "object_layer.h"
@@ -133,7 +134,7 @@ static void emit_step(const EntityState* e, Vector2 heading, bool running) {
 }
 
 /* Advance one entity's stride and emit whatever steps it crossed this frame. */
-static void track_entity(const EntityState* e, float dt) {
+static void track_entity(const EntityState* e, ObjectLayerMode mode, float dt) {
     if (!e || '\0' == e->id[0]) return;
 
     FxStepTracker* t = tracker_for(e->id);
@@ -153,9 +154,10 @@ static void track_entity(const EntityState* e, float dt) {
         t->stride_accum = 0.0f;
         return;
     }
-    /* The client's own walk/idle state, so the dust agrees with the animation
-     * being drawn rather than with the raw snapshot. */
-    if (MODE_WALKING != e->mode || moved <= 0.0f || dt <= 0.0f) return;
+    /* `mode` is the walk/idle state being drawn: the smoothed one for the local
+     * player, the snapshot one for everyone else. The dust follows the
+     * animation, not the raw snapshot. */
+    if (MODE_WALKING != mode || moved <= 0.0f || dt <= 0.0f) return;
 
     float speed = moved / dt;
     if (speed < FX_STEP_MIN_SPEED_CELLS_S) return;
@@ -187,12 +189,17 @@ void fx_footsteps_update(float dt) {
 
     for (int i = 0; i < FX_FOOTSTEPS_MAX_TRACKED; i++) s_trackers[i].seen = false;
 
-    if ('\0' != g_game_state.player_id[0]) track_entity(&g_game_state.player.base, dt);
+    if ('\0' != g_game_state.player_id[0]) {
+        track_entity(&g_game_state.player.base, local_player_view_mode(), dt);
+    }
     for (int i = 0; i < g_game_state.other_player_count; i++) {
-        track_entity(&g_game_state.other_players[i].base, dt);
+        track_entity(&g_game_state.other_players[i].base,
+                     g_game_state.other_players[i].base.mode, dt);
     }
     for (int i = 0; i < g_game_state.bot_count; i++) {
-        if (bot_has_feet(&g_game_state.bots[i])) track_entity(&g_game_state.bots[i].base, dt);
+        if (bot_has_feet(&g_game_state.bots[i])) {
+            track_entity(&g_game_state.bots[i].base, g_game_state.bots[i].base.mode, dt);
+        }
     }
 
     /* Release entities that left the AOI, so their slots serve whoever walks

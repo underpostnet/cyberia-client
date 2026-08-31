@@ -5,6 +5,7 @@
 #include "network/replication.h"
 #include "game_render.h"
 #include "game_state.h"
+#include "domain/local_player_view.h"
 #include "domain/presentation_runtime.h"
 #include "inventory_bar.h"
 #include "util/log.h"
@@ -204,8 +205,8 @@ void dev_ui_draw(int screen_width, int screen_height, int hud_occupied) {
     // Get player information
     const char* player_id = g_game_state.player_id[0] != '\0' ? g_game_state.player_id : "N/A";
     const char* map_code = g_game_state.player.map_code[0] != '\0' ? g_game_state.player.map_code : "--";
-    const char* mode_str = mode_to_string(g_game_state.player.base.mode);
-    const char* dir_str = direction_to_string(g_game_state.player.base.direction);
+    const char* mode_str = mode_to_string(local_player_view_mode());
+    const char* dir_str = direction_to_string(local_player_view_direction());
     Vector2 player_pos = g_game_state.player.base.interp_pos;
     Vector2 target_pos = prediction_route_target();
     int sum_stats_limit = g_game_state.sum_stats_limit;
