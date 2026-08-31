@@ -811,7 +811,7 @@ static void draw_node_overlay(int idx, float fade, double t) {
     Rectangle card = node_rect(n);
 
     bool selected  = idx == s_m.selected_node;
-    bool is_player = 0 == strcmp(n->map_code, g_game_state.player.map_code);
+    bool is_player = 0 == strcmp(n->map_code, g_local_player.map_code);
 
     bool zoomed = card.width >= IMAP_CAPABILITY_REVEAL_SIDE;
     float icon_size = zoomed ? poi_radius(node_screen_radius()) * 2.2f : 24.0f;

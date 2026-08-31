@@ -272,7 +272,7 @@ static void inventory_modal_handle_content_click(int mx, int my);
 
 /* Callback for dialogue modal → re-opens the inventory modal at the same slot. */
 static void on_dialogue_close_reopen(void) {
-    if (s_inv_idx >= 0 && s_inv_idx < g_game_state.full_inventory_count) {
+    if (s_inv_idx >= 0 && s_inv_idx < g_local_player.inventory_count) {
         inventory_modal_open(s_inv_idx);
     }
 }
@@ -390,8 +390,8 @@ static const char* resolve_summoned_item_id(const char* raw_id) {
     if (strcmp(raw_id, "$active_skin") != 0) return raw_id;
 
     /* Walk the player's full inventory to find the first active skin. */
-    for (int i = 0; i < g_game_state.full_inventory_count; i++) {
-        const ObjectLayerState* ol = &g_game_state.full_inventory[i];
+    for (int i = 0; i < g_local_player.inventory_count; i++) {
+        const ObjectLayerState* ol = &g_local_player.inventory[i];
         if (!ol->active || ol->item_id[0] == '\0') continue;
         if (!s_ol_manager) continue;
         ObjectLayer* data = lookup_cached_layer(ol->item_id);
@@ -421,8 +421,8 @@ void inventory_modal_init(ObjectLayersManager* ol_manager) {
 /* The item currently shown: an external read-only item, or a player slot. */
 static const ObjectLayerState* current_ols(void) {
     if (s_is_external) return &s_external;
-    if (s_inv_idx >= 0 && s_inv_idx < g_game_state.full_inventory_count)
-        return &g_game_state.full_inventory[s_inv_idx];
+    if (s_inv_idx >= 0 && s_inv_idx < g_local_player.inventory_count)
+        return &g_local_player.inventory[s_inv_idx];
     return NULL;
 }
 
@@ -450,7 +450,7 @@ void inventory_modal_set_anchor_entity(const char* entity_id) {
 }
 
 void inventory_modal_open(int inv_idx) {
-    if (inv_idx < 0 || inv_idx >= g_game_state.full_inventory_count) return;
+    if (inv_idx < 0 || inv_idx >= g_local_player.inventory_count) return;
     s_inv_idx     = inv_idx;
     s_is_external = false;
     s_open        = true;
@@ -461,7 +461,7 @@ void inventory_modal_open(int inv_idx) {
 
 void inventory_modal_switch_slot(int inv_idx) {
     if (!s_open) return;
-    if (inv_idx < 0 || inv_idx >= g_game_state.full_inventory_count) return;
+    if (inv_idx < 0 || inv_idx >= g_local_player.inventory_count) return;
     if (!s_is_external && inv_idx == s_inv_idx) return; /* already showing it */
 
     /* Switching straight to a bar slot closes the opener chain rather than
@@ -1140,8 +1140,8 @@ bool inventory_modal_handle_click(int mx, int my) {
 
     /* Lore button */
     if (s_lore_btn_visible && hit_rect(mx, my, s_lore_btn_rect)) {
-        if (s_inv_idx >= 0 && s_inv_idx < g_game_state.full_inventory_count) {
-            const ObjectLayerState* ols = &g_game_state.full_inventory[s_inv_idx];
+        if (s_inv_idx >= 0 && s_inv_idx < g_local_player.inventory_count) {
+            const ObjectLayerState* ols = &g_local_player.inventory[s_inv_idx];
             const DialogueDataSet* d = dialogue_data_get(ols->item_id);
             if (d && d->state == DLG_DATA_READY && d->line_count > 0) {
                 /* ── Bridge-safe transition: inventory → dialogue ──────
@@ -1158,7 +1158,7 @@ bool inventory_modal_handle_click(int mx, int my) {
                 /* Open dialogue modal with return callback */
                 modal_dialogue_set_on_close(on_dialogue_close_reopen);
                 modal_dialogue_open(
-                    g_game_state.player_id,  /* self as entity context */
+                    g_local_player.id,  /* self as entity context */
                     ols->item_id,
                     "",                      /* lore preview — not a quest dialogue */
                     MODAL_DIALOGUE_RENDER_ITEM,
@@ -1173,8 +1173,8 @@ bool inventory_modal_handle_click(int mx, int my) {
     }
 
     /* Activate / Deactivate */
-    if (s_inv_idx >= 0 && s_inv_idx < g_game_state.full_inventory_count) {
-        const ObjectLayerState* ols = &g_game_state.full_inventory[s_inv_idx];
+    if (s_inv_idx >= 0 && s_inv_idx < g_local_player.inventory_count) {
+        const ObjectLayerState* ols = &g_local_player.inventory[s_inv_idx];
         bool activable = true;
         const char* item_type = "";
         if (s_ol_manager) {

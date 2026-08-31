@@ -36,7 +36,7 @@ void inventory_bar_init(ObjectLayersManager* ol_manager);
 void inventory_bar_update(float dt);
 
 /* Draw in screen space — outside BeginMode2D. Reads the slot list from
- * g_game_state.full_inventory. */
+ * g_local_player.inventory. */
 void inventory_bar_draw(void);
 
 /* Current on-screen height while the bar slides between shown and hidden. */

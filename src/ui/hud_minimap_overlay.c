@@ -5,6 +5,7 @@
 #include "toolbar.h"
 #include "ui_button.h"
 
+#include "domain/local_player.h"
 #include "game_state.h"
 #include "input/input.h"
 
@@ -81,7 +82,7 @@ static void draw_square_marker(Vector2 at, float side, Color color) {
 }
 
 static int current_node_index(const ImapGraph* graph) {
-    int node = instance_map_data_find_node(g_game_state.player.map_code);
+    int node = instance_map_data_find_node(g_local_player.map_code);
     if (0 <= node) return node;
     return 0 < graph->node_count ? 0 : -1;
 }
@@ -223,7 +224,6 @@ static void draw_live_presence(const ImapGraph* graph, int current_index,
 
     for (int i = 0; i < g_game_state.other_player_count; ++i) {
         const PlayerState* player = &g_game_state.other_players[i];
-        if (0 != strcmp(player->map_code, node->map_code)) continue;
         Vector2 at = current_map_position(node, rect, player->base.interp_pos, player->base.dims);
         draw_square_marker(at, 7.0f, MINIMAP_OTHER_PLAYER);
     }
@@ -328,7 +328,7 @@ void hud_minimap_overlay_draw(void) {
 
     const ImapGraph* graph = instance_map_data_graph();
     int current_index = current_node_index(graph);
-    const char* map_name = g_game_state.player.map_code;
+    const char* map_name = g_local_player.map_code;
     if (IMAP_DATA_READY == instance_map_data_state() && 0 <= current_index) {
         map_name = '\0' != graph->nodes[current_index].name[0]
                        ? graph->nodes[current_index].name

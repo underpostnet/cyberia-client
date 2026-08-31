@@ -39,7 +39,10 @@ static void send_freeze_frame(bool start, const char* reason) {
              start ? "start" : "end", reason ? reason : "", rc);
 }
 
+LocalPlayer g_local_player = {0};
+
 void local_player_reset(void) {
+    memset(&g_local_player, 0, sizeof(g_local_player));
     g_local.frozen               = false;
     g_local.status_icon          = 0;
     g_local.move_speed           = LOCAL_PLAYER_DEFAULT_MOVE_SPEED;

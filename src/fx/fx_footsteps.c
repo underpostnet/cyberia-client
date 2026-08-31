@@ -189,7 +189,7 @@ void fx_footsteps_update(float dt) {
 
     for (int i = 0; i < FX_FOOTSTEPS_MAX_TRACKED; i++) s_trackers[i].seen = false;
 
-    if ('\0' != g_game_state.player_id[0]) {
+    if ('\0' != g_local_player.id[0]) {
         track_entity(&g_game_state.player.base, local_player_view_mode(), dt);
     }
     for (int i = 0; i < g_game_state.other_player_count; i++) {

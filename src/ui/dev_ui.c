@@ -4,6 +4,7 @@
 #include "network/game_client.h"
 #include "network/replication.h"
 #include "game_render.h"
+#include "domain/local_player.h"
 #include "game_state.h"
 #include "domain/local_player_view.h"
 #include "domain/presentation_runtime.h"
@@ -134,8 +135,8 @@ int dev_ui_get_active_stats_sum(const char* player_id) {
 
     // Server computes the sum of all active object layer stats and sends it
     // in the binary AOI self-player section — just use it directly.
-    if (strcmp(g_game_state.player_id, player_id) == 0) {
-        return g_game_state.active_stats_sum;
+    if (strcmp(g_local_player.id, player_id) == 0) {
+        return g_local_player.active_stats_sum;
     }
 
     return 0;
@@ -147,7 +148,7 @@ int dev_ui_get_active_item_count(const char* player_id) {
     int active_count = 0;
 
     // Check if it's the main player
-    if (strcmp(g_game_state.player_id, player_id) == 0) {
+    if (strcmp(g_local_player.id, player_id) == 0) {
         EntityState* entity = &g_game_state.player.base;
 
         // Count active object layers
@@ -203,13 +204,13 @@ void dev_ui_draw(int screen_width, int screen_height, int hud_occupied) {
     y_offset += font_size_title + 10;
 
     // Get player information
-    const char* player_id = g_game_state.player_id[0] != '\0' ? g_game_state.player_id : "N/A";
-    const char* map_code = g_game_state.player.map_code[0] != '\0' ? g_game_state.player.map_code : "--";
+    const char* player_id = g_local_player.id[0] != '\0' ? g_local_player.id : "N/A";
+    const char* map_code = g_local_player.map_code[0] != '\0' ? g_local_player.map_code : "--";
     const char* mode_str = mode_to_string(local_player_view_mode());
     const char* dir_str = direction_to_string(local_player_view_direction());
     Vector2 player_pos = g_game_state.player.base.interp_pos;
     Vector2 target_pos = prediction_route_target();
-    int sum_stats_limit = g_game_state.sum_stats_limit;
+    int sum_stats_limit = g_local_player.sum_stats_limit;
 
     // Get active stats and item count
     int active_stats_sum = dev_ui_get_active_stats_sum(player_id);

@@ -3,6 +3,7 @@
 #include "toolbar.h"
 
 #include "network/game_client.h"
+#include "domain/local_player.h"
 #include "game_state.h"
 
 #include <assert.h>
@@ -76,7 +77,7 @@ static void shadow_text(const char* text, int x, int y, int fs, Color c) {
 /* ── Draw ─────────────────────────────────────────────────────────────── */
 
 void modal_map_draw(int screen_width, int screen_height) {
-    const char* map = g_game_state.player.map_code;
+    const char* map = g_local_player.map_code;
     float px        = g_game_state.player.base.interp_pos.x;
     float py        = g_game_state.player.base.interp_pos.y;
     int   fps       = (int)roundf(g_modal_map.cached_fps);

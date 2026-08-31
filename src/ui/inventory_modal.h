@@ -17,7 +17,7 @@
 /* The manager must stay valid for the lifetime of the modal. */
 void inventory_modal_init(ObjectLayersManager* ol_manager);
 
-/* `inv_idx` indexes g_game_state.full_inventory. */
+/* `inv_idx` indexes g_local_player.inventory. */
 void inventory_modal_open(int inv_idx);
 
 /* Switch an already-open modal to a different inventory slot (the inventory

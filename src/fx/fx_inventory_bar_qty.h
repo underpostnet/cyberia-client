@@ -12,7 +12,7 @@
  * the pre-change count until the delivery lands, then snaps to the new total —
  * the arriving item and the number it produces are one event.
  *
- * Presentation-only, driven off g_game_state.full_inventory. Contract:
+ * Presentation-only, driven off g_local_player.inventory. Contract:
  *   1. fx_inventory_bar_qty_update(dt) once per frame (detects changes, advances
  *      the popups);
  *   2. the inventory bar draws each slot's badge with the held value from

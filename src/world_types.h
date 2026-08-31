@@ -41,7 +41,6 @@ struct EntityState {
 
 struct PlayerState {
     EntityState base;
-    char map_code[MAX_ID_LENGTH];
 };
 
 /* Interaction capability bits (mirror cyberia-server entity_status.go). The bit

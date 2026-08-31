@@ -1,5 +1,6 @@
 #include "fx_inventory_bar_qty.h"
 
+#include "domain/local_player.h"
 #include "game_state.h"
 #include "ui/inventory_bar.h"
 #include "loot_fx.h"
@@ -47,7 +48,7 @@ typedef struct {
     bool   hidden;        /* first-copy slot held invisible until pickup lands  */
     bool   held;          /* external hold (reward delivery) — long fallback    */
     bool   silent;        /* next change lands with no FX (a visible transfer)  */
-    bool   present;       /* item was in full_inventory this frame              */
+    bool   present;       /* item was in the local inventory this frame         */
     float  slot_x, slot_y;/* last-known slot center (for the expend after removal) */
     bool   has_slot;      /* slot center has been captured at least once        */
     double last_seen;     /* eviction sentinel                                  */
@@ -152,10 +153,10 @@ void fx_inventory_bar_qty_update(float dt) {
     for (int i = 0; i < FQ_MAX; i++) s_e[i].present = false;
 
     const GameState* gs = &g_game_state;
-    for (int i = 0; i < gs->full_inventory_count; i++) {
-        const char* id = gs->full_inventory[i].item_id;
+    for (int i = 0; i < g_local_player.inventory_count; i++) {
+        const char* id = g_local_player.inventory[i].item_id;
         if (id[0] == '\0') continue;
-        int qty = gs->full_inventory[i].quantity;
+        int qty = g_local_player.inventory[i].quantity;
 
         FqEntry* e = find(id);
         if (!e) {
@@ -205,7 +206,7 @@ void fx_inventory_bar_qty_update(float dt) {
         if (!e->used) continue;
 
         /* Last copy consumed (qty 1→0 drops the stack server-side, so the item
-         * leaves full_inventory): synthesize the decrement to 0 so it fires the
+         * leaves the inventory): synthesize the decrement to 0 so it fires the
          * same -N popup + expend as any in-place reduction. */
         if (!e->present && e->actual > 0 && !e->hidden && !e->held) {
             if (e->silent) {

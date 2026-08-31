@@ -3,22 +3,57 @@
 
 #include <stdbool.h>
 #include <stdint.h>
+#include <string.h>
 
 #include "ui/floating_combat_text.h"   /* FCTType */
+#include "object_layer.h"
+#include "world_types.h"
 
-/* Local-player state.
+/* Local-player state — the one owner of everything the AOI self-player block
+ * says about this client and nobody else:
  *
- * Holds the client-side view of the local player that the simulation
- * server pushes through the AOI self-player block:
- *
+ *   - identity, map code, coin balance, stat caps and the full inventory
+ *     (g_local_player)
  *   - frozen flag (FrozenInteractionState)
  *   - status icon ID (overhead UI hint)
  *   - authoritative move speed (cells/second) for the prediction integrator
  *   - per-frame FCT event queue drained by the floating combat text module
  *
- * These are render-only flags / per-tick view models, not world state, so
- * they live outside the simulation-shaped GameState.
+ * None of it is world state, so it lives outside the simulation-shaped
+ * GameState. The derived state stays out too: local_player_view owns the
+ * smoothed presentation, replication owns the predicted position and route.
  */
+
+/* What the server says about this client's own player and nobody else's:
+ * identity, the map it stands on, the economy counters and the full
+ * inventory. World-mirror data — position, layers, life — stays on
+ * g_game_state.player, where every entity keeps it. The snapshot decoder is
+ * the sole writer. */
+typedef struct {
+    char             id[MAX_ID_LENGTH];
+    char             map_code[MAX_ID_LENGTH];
+    int              coins;
+    int              sum_stats_limit;
+    int              active_stats_sum;
+    ObjectLayerState inventory[MAX_OBJECT_LAYERS];
+    int              inventory_count;
+} LocalPlayer;
+
+extern LocalPlayer g_local_player;
+
+static inline int local_player_coins(void) { return g_local_player.coins; }
+
+/* Quantity of an item the player holds; 0 when the inventory has no stack for
+ * it. Coins included — the server keeps their display slot in sync with the
+ * flat balance. */
+static inline int local_player_item_quantity(const char* item_id) {
+    if (NULL == item_id || '\0' == item_id[0]) return 0;
+    for (int i = 0; i < g_local_player.inventory_count; i++) {
+        if (0 == strcmp(g_local_player.inventory[i].item_id, item_id))
+            return g_local_player.inventory[i].quantity;
+    }
+    return 0;
+}
 
 #define LOCAL_FCT_PENDING_MAX 64
 

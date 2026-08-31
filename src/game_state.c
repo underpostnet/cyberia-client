@@ -31,7 +31,6 @@ int game_state_layer_alloc(int count) {
 
 void game_state_reset(void) {
     g_game_state.init_received        = false;
-    g_game_state.player_id[0]         = '\0';
     g_game_state.instance_code[0]     = '\0';
     g_game_state.other_player_count   = 0;
     g_game_state.bot_count            = 0;
@@ -41,7 +40,6 @@ void game_state_reset(void) {
     g_game_state.static_count         = 0;
     g_game_state.portal_count         = 0;
     g_game_state.floor_count          = 0;
-    g_game_state.full_inventory_count = 0;
     g_game_state.dead_item_id_count   = 0;
     game_state_layer_pool_reset();
 }

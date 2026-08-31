@@ -1810,7 +1810,7 @@ static float shop_card_height(const char* item_id, float card_width, int font) {
  * A free row (or one priced in nothing) is always buyable. */
 static int shop_affordable_qty(const ActionShopItem* item) {
     if (item->price_qty <= 0) return MI_SHOP_QTY_MAX;
-    int held = game_state_item_quantity(item->price_item_id);
+    int held = local_player_item_quantity(item->price_item_id);
     int affordable = held / item->price_qty;
     return affordable > MI_SHOP_QTY_MAX ? MI_SHOP_QTY_MAX : affordable;
 }
@@ -2012,7 +2012,7 @@ static float craft_card_height(const ActionCraftRecipe* recipe, float card_width
 static bool craft_recipe_ready(const ActionCraftRecipe* recipe) {
     for (int i = 0; i < recipe->ingredient_count; i++) {
         const ActionCraftItem* in = &recipe->ingredients[i];
-        if (in->qty > 0 && game_state_item_quantity(in->item_id) < in->qty) return false;
+        if (in->qty > 0 && local_player_item_quantity(in->item_id) < in->qty) return false;
     }
     return true;
 }
@@ -2028,7 +2028,7 @@ static void draw_craft_stack(Rectangle card, float top, float slot_sz,
     for (int i = 0; i < count; i++) {
         const ActionCraftItem* it = &items[i];
         bool held = !check_held || it->qty <= 0 ||
-                    game_state_item_quantity(it->item_id) >= it->qty;
+                    local_player_item_quantity(it->item_id) >= it->qty;
 
         ObjectLayerState ols = { 0 };
         strncpy(ols.item_id, it->item_id, MAX_ID_LENGTH - 1);
@@ -2453,9 +2453,9 @@ static void handle_storage_event(const ItemSlotGridEvent* ev) {
 
 void modal_interact_storage_drag_in(int inv_idx) {
     if (!s_open || MI_TAB_STORAGE != s_tab) return;
-    if (inv_idx < 0 || inv_idx >= g_game_state.full_inventory_count) return;
+    if (inv_idx < 0 || inv_idx >= g_local_player.inventory_count) return;
     item_slot_grid_begin_external_drag(&s_storage_grid,
-                                       &g_game_state.full_inventory[inv_idx],
+                                       &g_local_player.inventory[inv_idx],
                                        GetMousePosition());
 }
 

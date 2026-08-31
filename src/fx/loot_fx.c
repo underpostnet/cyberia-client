@@ -1,6 +1,7 @@
 #include "loot_fx.h"
 
 #include "game_render.h"
+#include "domain/local_player.h"
 #include "game_state.h"
 #include "fx_inventory_bar_qty.h"
 #include "ui/inventory_bar.h"
@@ -447,7 +448,7 @@ static void spawn_slot_delivery(float from_x, float from_y, float to_x, float to
  * avatar's world position to screen, resolve the item's slot, and launch the
  * delivery stream. No-op for remote collectors (no local inventory shown). */
 static void trigger_slot_delivery(const VacFlight* f) {
-    if (0 != strcmp(f->collector_id, g_game_state.player_id)) return;
+    if (0 != strcmp(f->collector_id, g_local_player.id)) return;
 
     Vector2 from = game_render_world_to_screen((Vector2){ f->cur_x, f->cur_y });
     Vector2 slot;
@@ -524,7 +525,7 @@ void loot_fx_push(const char* drop_id, const char* collector_id,
      * collect, so a self-collect is always gold), gray when another player
      * collects loot that was never ours. */
     bool eligible = (NULL != collector_id)
-        && (0 == strcmp(collector_id, g_game_state.player_id));
+        && (0 == strcmp(collector_id, g_local_player.id));
 
     /* Stop the in-world idle render for this token. */
     if (drop_id && drop_id[0] != '\0') {
@@ -566,7 +567,7 @@ bool loot_fx_inbound_to_inventory(const char* item_id) {
     for (int i = 0; i < LOOT_FX_MAX; i++) {
         const VacFlight* f = &s_flights[i];
         if (f->active && 0 == strcmp(f->item_id, item_id) &&
-            0 == strcmp(f->collector_id, g_game_state.player_id)) {
+            0 == strcmp(f->collector_id, g_local_player.id)) {
             return true;
         }
     }
@@ -581,7 +582,7 @@ bool loot_fx_inbound_to_inventory(const char* item_id) {
 static bool resolve_collector_center(const char* collector_id, float* cx, float* cy) {
     const GameState* gs = &g_game_state;
 
-    if (collector_id[0] != '\0' && 0 == strcmp(collector_id, gs->player_id)) {
+    if (collector_id[0] != '\0' && 0 == strcmp(collector_id, g_local_player.id)) {
         *cx = gs->player.base.interp_pos.x + gs->player.base.dims.x * 0.5f;
         *cy = gs->player.base.interp_pos.y + gs->player.base.dims.y * 0.5f;
         return true;

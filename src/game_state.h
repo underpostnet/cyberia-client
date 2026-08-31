@@ -19,7 +19,8 @@
  *
  *   - domain/camera.h                Camera2D and follow smoothing
  *   - domain/presentation_runtime.h  palette, status icon visuals, dev_ui
- *   - domain/local_player.h          frozen flag, FCT queue, self status
+ *   - domain/local_player.h          identity, map code, coins, inventory,
+ *                                    frozen flag, FCT queue, self status
  *                                    icon, authoritative move speed
  *   - ui/ui_state.h                  skill_map
  */
@@ -63,8 +64,6 @@ typedef struct {
 } EntityTypeDefault;
 
 struct GameState {
-    char player_id[MAX_ID_LENGTH];
-
     /* Instance the simulation server loaded (forwarded in the metadata
      * message) — keys the Instance Map REST fetches against engine-cyberia. */
     char instance_code[MAX_ID_LENGTH];
@@ -105,15 +104,7 @@ struct GameState {
     WorldObject floors[MAX_OBJECTS];
     int floor_count;
 
-    int sum_stats_limit;
-    int active_stats_sum;
-
-    int player_coins;
-
     EquipmentRules equipment_rules;
-
-    ObjectLayerState full_inventory[MAX_OBJECT_LAYERS];
-    int full_inventory_count;
 
     /* Dead-state (Fragmentation) item ids from init_data. Visible in the
      * inventory but never equippable; the default id is server-filtered. */
@@ -148,22 +139,6 @@ static inline const EntityTypeDefault* game_state_get_entity_default(const char*
             return &g_game_state.entity_defaults[i];
     }
     return NULL;
-}
-
-static inline int game_state_get_player_coins(void) {
-    return g_game_state.player_coins;
-}
-
-/* Quantity of an item the player holds; 0 when the inventory has no stack for
- * it. Coins included — the server keeps their display slot in sync with the
- * flat balance. */
-static inline int game_state_item_quantity(const char* item_id) {
-    if (NULL == item_id || '\0' == item_id[0]) return 0;
-    for (int i = 0; i < g_game_state.full_inventory_count; i++) {
-        if (0 == strcmp(g_game_state.full_inventory[i].item_id, item_id))
-            return g_game_state.full_inventory[i].quantity;
-    }
-    return 0;
 }
 
 /* True when item_id is a dead-state (Fragmentation) visual — an incomplete

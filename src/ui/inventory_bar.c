@@ -24,6 +24,7 @@
 
 #include "domain/viewport.h"
 #include "fx/fx_inventory_bar_qty.h"
+#include "domain/local_player.h"
 #include "game_state.h"
 #include "item_slot.h"
 #include "object_layers_management.h"
@@ -138,8 +139,8 @@ static bool is_coin_item_id(const char* item_id) {
 
 /* find_coin_slot returns the index of the coin slot in full_inventory, or -1. */
 static int find_coin_slot(void) {
-    for (int i = 0; i < g_game_state.full_inventory_count; i++) {
-        if (is_coin_item_id(g_game_state.full_inventory[i].item_id)) return i;
+    for (int i = 0; i < g_local_player.inventory_count; i++) {
+        if (is_coin_item_id(g_local_player.inventory[i].item_id)) return i;
     }
     return -1;
 }
@@ -151,10 +152,10 @@ static int find_coin_slot(void) {
  * cell where the slot will reveal. Returns the slot count. */
 static int build_scroll_map(int coin_idx, int map[MAX_OBJECT_LAYERS], bool include_hidden) {
     int n = 0;
-    for (int i = 0; i < g_game_state.full_inventory_count && n < MAX_OBJECT_LAYERS; i++) {
+    for (int i = 0; i < g_local_player.inventory_count && n < MAX_OBJECT_LAYERS; i++) {
         if (i == coin_idx) continue;
         if (!include_hidden &&
-            !fx_inventory_bar_qty_slot_visible(g_game_state.full_inventory[i].item_id)) {
+            !fx_inventory_bar_qty_slot_visible(g_local_player.inventory[i].item_id)) {
             continue;
         }
         map[n++] = i;
@@ -253,7 +254,7 @@ static void update_reflow(float dt) {
 
     InvReflow next[MAX_OBJECT_LAYERS];
     for (int si = 0; si < n; si++) {
-        const char* id = g_game_state.full_inventory[map[si]].item_id;
+        const char* id = g_local_player.inventory[map[si]].item_id;
         const InvReflow* prev = reflow_find(id);
         InvReflow* e = &next[si];
         memset(e, 0, sizeof(*e));
@@ -328,7 +329,7 @@ static void draw_coin_slot(Rectangle r, int coin_idx, ObjectLayersManager* mgr) 
     DrawRectangleLinesEx(r, 2.0f, C_COIN_BORDER);
 
     /* Coin sprite (animated, down_idle) */
-    const char* ck = (coin_idx >= 0) ? g_game_state.full_inventory[coin_idx].item_id : coin_item_key();
+    const char* ck = (coin_idx >= 0) ? g_local_player.inventory[coin_idx].item_id : coin_item_key();
     if (ck && ck[0] != '\0') {
         int inner = bar_slot_size() - bar_slot_padding() * 2;
         ol_as_ico_draw(mgr, ck,
@@ -338,7 +339,7 @@ static void draw_coin_slot(Rectangle r, int coin_idx, ObjectLayersManager* mgr) 
     }
 
     /* Coin balance from fast flat field */
-    int balance = game_state_get_player_coins();
+    int balance = local_player_coins();
     char buf[24];
     if (balance >= 1000000)
         snprintf(buf, sizeof(buf), "%.1fM", balance / 1000000.0f);
@@ -486,7 +487,7 @@ void inventory_bar_draw(void) {
             if (r.x >= right)          break;
 
             int inv_idx = scroll_map[si];
-            ObjectLayerState ol = g_game_state.full_inventory[inv_idx];
+            ObjectLayerState ol = g_local_player.inventory[inv_idx];
             ol.quantity = fx_inventory_bar_qty_display(ol.item_id, ol.quantity);
             /* Culled on the settled rect, drawn at the sliding one. */
             r = slot_rect_at(reflow_si(ol.item_id, si), current_bar_top);
@@ -495,11 +496,11 @@ void inventory_bar_draw(void) {
                               &ol, s_ol_manager, WHITE, 0.0f,
                               fx_inventory_bar_qty_slot_pulsing(ol.item_id));
             if (bar_slots_settled())
-                fx_inventory_bar_qty_draw(r, g_game_state.full_inventory[inv_idx].item_id);
+                fx_inventory_bar_qty_draw(r, g_local_player.inventory[inv_idx].item_id);
         }
 
         Rectangle cr = coin_slot_rect(screen_w, current_bar_top);
-        const char* coin_key = (coin_idx >= 0) ? g_game_state.full_inventory[coin_idx].item_id : coin_item_key();
+        const char* coin_key = (coin_idx >= 0) ? g_local_player.inventory[coin_idx].item_id : coin_item_key();
         draw_coin_slot(scale_rect(cr, fx_inventory_bar_qty_slot_scale(coin_key)), coin_idx, s_ol_manager);
         if (bar_slots_settled()) fx_inventory_bar_qty_draw(cr, coin_key);
 
@@ -606,12 +607,12 @@ static bool inventory_bar_item_slot_rect(const char* item_id, bool append_missin
     int screen_w = GetScreenWidth();
     int screen_h = GetScreenHeight();
     float current_bar_top = bar_top(screen_h);
-    int n_inv    = g_game_state.full_inventory_count;
+    int n_inv    = g_local_player.inventory_count;
     int coin_idx = find_coin_slot();
 
     int inv_idx = -1;
     for (int i = 0; i < n_inv; i++) {
-        if (0 == strcmp(g_game_state.full_inventory[i].item_id, item_id)) {
+        if (0 == strcmp(g_local_player.inventory[i].item_id, item_id)) {
             inv_idx = i;
             break;
         }

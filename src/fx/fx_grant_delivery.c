@@ -1,6 +1,7 @@
 #include "fx_grant_delivery.h"
 
 #include "fx_inventory_bar_qty.h"
+#include "domain/local_player.h"
 #include "game_state.h"
 #include "loot_fx.h"
 #include "object_layer.h"
@@ -45,7 +46,7 @@ void fx_grant_delivery_begin(const FxGrantGain* gains, int gain_count,
         FgGain* g = &g_fg.gains[g_fg.gain_count++];
         strncpy(g->item_id, gains[i].item_id, MAX_ITEM_ID_LENGTH - 1);
         g->origin = gains[i].origin;
-        g->baseline = game_state_item_quantity(g->item_id);
+        g->baseline = local_player_item_quantity(g->item_id);
         fx_inventory_bar_qty_hold_for_delivery(g->item_id);
     }
     if (0 == g_fg.gain_count) return;
@@ -70,7 +71,7 @@ static void release_spent(void) {
 /* Every gain has been credited by the authoritative snapshot. */
 static bool grant_landed(void) {
     for (int i = 0; i < g_fg.gain_count; i++) {
-        if (game_state_item_quantity(g_fg.gains[i].item_id) <= g_fg.gains[i].baseline) return false;
+        if (local_player_item_quantity(g_fg.gains[i].item_id) <= g_fg.gains[i].baseline) return false;
     }
     return true;
 }

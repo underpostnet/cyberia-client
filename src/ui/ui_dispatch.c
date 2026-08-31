@@ -1,4 +1,5 @@
 #include "ui_dispatch.h"
+#include "domain/local_player.h"
 
 #include <raylib.h>
 
@@ -36,8 +37,8 @@ bool ui_dispatch_tap(int x, int y) {
          * makes Inventory Bar → Storage Grid a single gesture. */
         /* Equipped items stay equipped: only an inactive stack is storable. */
         int drag_slot = inventory_bar_get_tapped_slot(x, y);
-        if (0 <= drag_slot && drag_slot < g_game_state.full_inventory_count &&
-            !g_game_state.full_inventory[drag_slot].active &&
+        if (0 <= drag_slot && drag_slot < g_local_player.inventory_count &&
+            !g_local_player.inventory[drag_slot].active &&
             modal_interact_storage_accepts_drag()) {
             modal_interact_storage_drag_in(drag_slot);
             return true;

@@ -290,17 +290,17 @@ static void unpack_self(const cJSON* e) {
     PlayerState* p = &gs->player;
 
     serial_get_string(e, "id", p->base.id, MAX_ID_LENGTH);
-    strncpy(gs->player_id, p->base.id, MAX_ID_LENGTH - 1);
+    strncpy(g_local_player.id, p->base.id, MAX_ID_LENGTH - 1);
 
     read_entity_state(e, &p->base);
     p->base.pos_prev   = p->base.pos_server;
     p->base.pos_server = read_pos(e);
 
-    gs->sum_stats_limit  = serial_get_int_default(e, "sumStatsLimit", 0);
-    gs->active_stats_sum = serial_get_int_default(e, "activeStatsSum", 0);
-    gs->player_coins     = serial_get_int_default(e, "coinBalance", 0);
+    g_local_player.sum_stats_limit  = serial_get_int_default(e, "sumStatsLimit", 0);
+    g_local_player.active_stats_sum = serial_get_int_default(e, "activeStatsSum", 0);
+    g_local_player.coins            = serial_get_int_default(e, "coinBalance", 0);
 
-    serial_get_string(e, "mapCode", p->map_code, MAX_ID_LENGTH);
+    serial_get_string(e, "mapCode", g_local_player.map_code, MAX_ID_LENGTH);
 
     Vector2 route[MAX_PATH_POINTS];
     int route_count = 0;
@@ -317,7 +317,8 @@ static void unpack_self(const cJSON* e) {
 
     /* Full inventory — every visible layer, active and inactive. Powers the
      * inventory bottom bar. */
-    gs->full_inventory_count = read_layers(e, "inventory", gs->full_inventory, MAX_OBJECT_LAYERS);
+    g_local_player.inventory_count = read_layers(e, "inventory", g_local_player.inventory,
+                                                 MAX_OBJECT_LAYERS);
 
     local_player_set_frozen(serial_get_bool_default(e, "frozen", false));
     local_player_set_status_icon(p->base.status_icon);
@@ -479,7 +480,7 @@ static void json_unpack_init_data(const cJSON* payload) {
     g_game_state.grid_h = serial_get_int_default(payload, "gridH", 100);
     g_game_state.aoi_radius = serial_get_float_default(payload, "aoiRadius", 15.0f);
 
-    g_game_state.sum_stats_limit = serial_get_int_default(payload, "sumStatsLimit", 9999);
+    g_local_player.sum_stats_limit = serial_get_int_default(payload, "sumStatsLimit", 9999);
 
     /* Skill map lives in ui_state — pure presentation lookup. */
     ui_state_clear_skills();

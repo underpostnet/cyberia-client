@@ -18,6 +18,7 @@
 #include "domain/viewport.h"
 #include "dialogue_data.h"
 #include "entity_render.h"
+#include "domain/local_player.h"
 #include "game_state.h"
 #include "world_types.h"
 #include "js/interact_bridge.h"
@@ -393,8 +394,8 @@ void interaction_bubble_update(void) {
         s_slots[i].active = false;
 
     /* Self-player is always scanned first → occupies slot 0. */
-    if (g_game_state.player_id[0] != '\0') {
-        scan_entity(g_game_state.player_id,
+    if (g_local_player.id[0] != '\0') {
+        scan_entity(g_local_player.id,
                     &g_game_state.player.base, true, NULL, 0);
     }
 
@@ -484,7 +485,7 @@ void interaction_bubble_draw(void) {
         InteractionBubbleSlot* slot = &s_slots[i];
         Rectangle r = slot_rect(i, view);
         bool hovered = hit_rect(mx, my, r);
-        bool is_self = (strcmp(slot->entity_id, g_game_state.player_id) == 0);
+        bool is_self = (strcmp(slot->entity_id, g_local_player.id) == 0);
 
         /* Pixel-retro quest/action provider effect: animated pixel particles
          * that orbit the slot in a retro pattern. Gold for quest providers,
@@ -681,7 +682,7 @@ static bool open_slot_at(int mx, int my) {
             /* Bubble tap opens modal_interact. has_dialogue is true when the
              * active skin has dialogue; the capability bitmask gates the Action
              * and Quest tabs. */
-            bool is_self      = (strcmp(slot->entity_id, g_game_state.player_id) == 0);
+            bool is_self      = (strcmp(slot->entity_id, g_local_player.id) == 0);
             bool has_dialogue = (slot->interact_flags & INTERACT_DIALOGUE) != 0 &&
                                 slot->dialogue_item_id[0] != '\0';
             Color bc = status_border_color(slot, is_self);
@@ -739,7 +740,7 @@ static bool overlay_anchor_rect(const char* entity_id, Rectangle* out) {
 /* Open the JS overlay for one resolved slot on a given tab, pushing its OL
  * stack for preview rendering. NO freeze — the overlay is real-time-safe. */
 static void open_js_overlay_for_slot(InteractionBubbleSlot* slot, int initial_tab) {
-    bool is_self = (strcmp(slot->entity_id, g_game_state.player_id) == 0);
+    bool is_self = (strcmp(slot->entity_id, g_local_player.id) == 0);
     Color bc = status_border_color(slot, is_self);
 
     Rectangle anchor = { 0 };
@@ -817,7 +818,7 @@ void interaction_bubble_dead_equip(const char* item_id, bool active) {
     if (s_slot_count <= 0) return;
     /* Self-player is always slot 0. */
     InteractionBubbleSlot* slot = &s_slots[0];
-    if (strcmp(slot->entity_id, g_game_state.player_id) != 0) return;
+    if (strcmp(slot->entity_id, g_local_player.id) != 0) return;
 
     if (active) {
         /* Activate: mark matching item active, apply one-per-type rule. */
@@ -832,10 +833,10 @@ void interaction_bubble_dead_equip(const char* item_id, bool active) {
         /* Item wasn't in alive_layers (was inactive before death).
          * Pull it from the full inventory and append to alive_layers. */
         if (target < 0 && slot->alive_layer_count < IBUBBLE_MAX_LAYERS) {
-            for (int i = 0; i < g_game_state.full_inventory_count; i++) {
-                if (strcmp(g_game_state.full_inventory[i].item_id, item_id) == 0) {
+            for (int i = 0; i < g_local_player.inventory_count; i++) {
+                if (strcmp(g_local_player.inventory[i].item_id, item_id) == 0) {
                     int idx = slot->alive_layer_count++;
-                    slot->alive_layers[idx] = g_game_state.full_inventory[i];
+                    slot->alive_layers[idx] = g_local_player.inventory[i];
                     slot->alive_layers[idx].active = true;
                     target = idx;
                     break;
