@@ -27,8 +27,8 @@ struct EntityState {
     Vector2 dims;
     Direction direction;
     ObjectLayerMode mode;
-    ObjectLayerState object_layers[MAX_OBJECT_LAYERS];
-    int object_layer_count;
+    uint16_t layer_offset;   /* index into g_layer_pool */
+    uint8_t  layer_count;
     float life;
     float max_life;
     float respawn_in;
@@ -105,8 +105,8 @@ typedef struct WorldObject {
     char             target_map_code[MAX_ID_LENGTH];
     int              target_cell_x;
     int              target_cell_y;
-    ObjectLayerState object_layers[MAX_OBJECT_LAYERS];
-    int              object_layer_count;
+    uint16_t         layer_offset;   /* index into g_layer_pool */
+    uint8_t          layer_count;
 } WorldObject;
 
 #endif /* WORLD_TYPES_H */

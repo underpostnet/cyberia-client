@@ -149,8 +149,8 @@ int dev_ui_get_active_item_count(const char* player_id) {
         EntityState* entity = &g_game_state.player.base;
 
         // Count active object layers
-        for (int i = 0; i < entity->object_layer_count; i++) {
-            if (entity->object_layers[i].active) {
+        for (int i = 0; i < entity->layer_count; i++) {
+            if (OBJ_LAYERS(entity)[i].active) {
                 active_count++;
             }
         }

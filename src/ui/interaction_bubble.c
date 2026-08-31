@@ -281,8 +281,8 @@ static void scan_entity(const char* entity_id, const EntityState* base,
     const ObjectLayerState* scan_layers = NULL;
     int scan_count = 0;
     if (!is_dead) {
-        scan_layers = base->object_layers;
-        scan_count  = base->object_layer_count;
+        scan_layers = OBJ_LAYERS(base);
+        scan_count  = base->layer_count;
     } else if (existing && existing->alive_layer_count > 0) {
         scan_layers = existing->alive_layers;
         scan_count  = existing->alive_layer_count;
@@ -321,16 +321,16 @@ static void scan_entity(const char* entity_id, const EntityState* base,
     slot->fallback_color = presentation_runtime_entity_fallback_color(etype);
 
     /* Always snapshot current layers (dead or alive) into layers[]. */
-    snapshot_layers(slot, base->object_layers, base->object_layer_count,
+    snapshot_layers(slot, OBJ_LAYERS(base), base->layer_count,
                     (int)base->direction);
 
     /* Cache alive layers: only update when entity is alive.
      * When dead, alive_layers[] retains the last alive snapshot. */
     if (!is_dead) {
         slot->alive_layer_count = 0;
-        for (int i = 0; i < base->object_layer_count && slot->alive_layer_count < IBUBBLE_MAX_LAYERS; i++) {
-            if (base->object_layers[i].active && base->object_layers[i].item_id[0] != '\0') {
-                slot->alive_layers[slot->alive_layer_count] = base->object_layers[i];
+        for (int i = 0; i < base->layer_count && slot->alive_layer_count < IBUBBLE_MAX_LAYERS; i++) {
+            if (OBJ_LAYERS(base)[i].active && OBJ_LAYERS(base)[i].item_id[0] != '\0') {
+                slot->alive_layers[slot->alive_layer_count] = OBJ_LAYERS(base)[i];
                 slot->alive_layer_count++;
             }
         }
@@ -349,9 +349,9 @@ static void scan_entity(const char* entity_id, const EntityState* base,
     {
         ObjectLayersManager* np_mgr = obj_layers_mgr_get();
         const ObjectLayerState* np_layers = slot->alive_layer_count > 0
-            ? slot->alive_layers : base->object_layers;
+            ? slot->alive_layers : OBJ_LAYERS(base);
         int np_lc = slot->alive_layer_count > 0
-            ? slot->alive_layer_count : base->object_layer_count;
+            ? slot->alive_layer_count : base->layer_count;
         nameplate_resolve(entity_id, is_player,
                           np_layers, np_lc, np_mgr,
                           slot->display_name,

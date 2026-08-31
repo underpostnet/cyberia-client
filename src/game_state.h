@@ -34,6 +34,17 @@
 /* EntityState / PlayerState / BotState / WorldObject + their MAX_* sizing
  * macros live in world_types.h. */
 
+/* Object-layer pool. Every entity and object holds an offset and a count into
+ * it instead of an embedded [MAX_OBJECT_LAYERS] array, of which the server
+ * fills one to four slots. Sized for the worst realistic AOI, not for the
+ * array caps: the server ships only active layers. */
+#define LAYER_POOL_SIZE 4096
+
+extern ObjectLayerState g_layer_pool[LAYER_POOL_SIZE];
+
+/* Layers of one entity or object. Both carry layer_offset. */
+#define OBJ_LAYERS(x) (&g_layer_pool[(x)->layer_offset])
+
 typedef struct GameState GameState;
 
 typedef struct {
@@ -119,6 +130,14 @@ extern GameState g_game_state;
  * player id, and every entity and object count. The one entry point to reset
  * world state — code outside game_state.c must not touch the count fields. */
 void         game_state_reset(void);
+
+/* Drop every pooled layer. The whole pool dies with the entity counts, so the
+ * decoder calls this where it resets them. */
+void         game_state_layer_pool_reset(void);
+
+/* Claim `count` pool slots and return the offset, or -1 when the pool is full.
+ * The decoder is a bump allocator — there is no free. */
+int          game_state_layer_alloc(int count);
 
 PlayerState* game_state_find_player(const char* id);
 BotState*    game_state_find_bot(const char* id);

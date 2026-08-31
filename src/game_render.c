@@ -323,10 +323,10 @@ void game_render_floors(void) {
         WorldObject* floor = &g_game_state.floors[i];
         Color floor_color = presentation_runtime_palette("FLOOR");
 
-        if (floor->object_layer_count > 0) {
+        if (floor->layer_count > 0) {
             ObjectLayerState* layers[MAX_OBJECT_LAYERS];
-            for (int j = 0; j < floor->object_layer_count; j++) {
-                layers[j] = &floor->object_layers[j];
+            for (int j = 0; j < floor->layer_count; j++) {
+                layers[j] = &OBJ_LAYERS(floor)[j];
             }
 
             draw_entity_layers(
@@ -339,7 +339,7 @@ void game_render_floors(void) {
                 DIRECTION_NONE,
                 MODE_IDLE,
                 layers,
-                floor->object_layer_count,
+                floor->layer_count,
                 "floor",
                 presentation_runtime_dev_ui(),
                 cell_size,
@@ -366,10 +366,10 @@ void game_render_world_objects(void) {
         WorldObject* portal = &g_game_state.portals[i];
         Color portal_color = presentation_runtime_palette("PORTAL");
 
-        if (portal->object_layer_count > 0) {
+        if (portal->layer_count > 0) {
             ObjectLayerState* layers[MAX_OBJECT_LAYERS];
-            for (int j = 0; j < portal->object_layer_count; j++) {
-                layers[j] = &portal->object_layers[j];
+            for (int j = 0; j < portal->layer_count; j++) {
+                layers[j] = &OBJ_LAYERS(portal)[j];
             }
 
             draw_entity_layers(
@@ -382,7 +382,7 @@ void game_render_world_objects(void) {
                 DIRECTION_NONE,
                 MODE_IDLE,
                 layers,
-                portal->object_layer_count,
+                portal->layer_count,
                 "portal",
                 presentation_runtime_dev_ui(),
                 cell_size,
@@ -424,10 +424,10 @@ void game_render_foregrounds(void) {
         WorldObject* fg = &g_game_state.foregrounds[i];
         Color fg_color = presentation_runtime_palette("FOREGROUND");
 
-        if (fg->object_layer_count > 0) {
+        if (fg->layer_count > 0) {
             ObjectLayerState* layers[MAX_OBJECT_LAYERS];
-            for (int j = 0; j < fg->object_layer_count; j++) {
-                layers[j] = &fg->object_layers[j];
+            for (int j = 0; j < fg->layer_count; j++) {
+                layers[j] = &OBJ_LAYERS(fg)[j];
             }
 
             draw_entity_layers(
@@ -440,7 +440,7 @@ void game_render_foregrounds(void) {
                 DIRECTION_NONE,
                 MODE_IDLE,
                 layers,
-                fg->object_layer_count,
+                fg->layer_count,
                 "foreground",
                 presentation_runtime_dev_ui(),
                 cell_size,
@@ -650,28 +650,28 @@ void game_render_entities(void) {
                 obstacle = entry->data.object;
                 entity_type_str = "obstacle";
                 entity_id = obstacle->id;
-                layers_count = obstacle->object_layer_count;
+                layers_count = obstacle->layer_count;
                 break;
 
             case ENTITY_TYPE_STATIC:
                 obstacle = entry->data.object;
                 entity_type_str = "static";
                 entity_id = obstacle->id;
-                layers_count = obstacle->object_layer_count;
+                layers_count = obstacle->layer_count;
                 break;
 
             case ENTITY_TYPE_PLAYER:
                 entity_base = &entry->data.player->base;
                 entity_type_str = entry->is_main_player ? "self" : "other";
                 entity_id = entity_base->id;
-                layers_count = entity_base->object_layer_count;
+                layers_count = entity_base->layer_count;
                 break;
 
             case ENTITY_TYPE_OTHER_PLAYER:
                 entity_base = &entry->data.player->base;
                 entity_type_str = "other";
                 entity_id = entity_base->id;
-                layers_count = entity_base->object_layer_count;
+                layers_count = entity_base->layer_count;
                 break;
 
             case ENTITY_TYPE_BOT:
@@ -688,14 +688,14 @@ void game_render_entities(void) {
                 else
                     entity_type_str = "bot";
                 entity_id = entity_base->id;
-                layers_count = entity_base->object_layer_count;
+                layers_count = entity_base->layer_count;
                 break;
 
             case ENTITY_TYPE_RESOURCE:
                 entity_base = &entry->data.bot->base;
                 entity_type_str = "resource";
                 entity_id = entity_base->id;
-                layers_count = entity_base->object_layer_count;
+                layers_count = entity_base->layer_count;
                 break;
         }
 
@@ -715,7 +715,7 @@ void game_render_entities(void) {
                 DrawRectangleRec(rect, obstacle_color);
             } else {
                 for (int j = 0; j < layers_count && j < MAX_OBJECT_LAYERS; j++) {
-                    temp_layers[j] = &obstacle->object_layers[j];
+                    temp_layers[j] = &OBJ_LAYERS(obstacle)[j];
                 }
 
                 draw_entity_layers(
@@ -809,7 +809,7 @@ void game_render_entities(void) {
             } else {
                 // Convert object layers to pointer array
                 for (int j = 0; j < layers_count && j < MAX_OBJECT_LAYERS; j++) {
-                    temp_layers[j] = &entity_base->object_layers[j];
+                    temp_layers[j] = &OBJ_LAYERS(entity_base)[j];
                 }
 
                 // Use EntityRender system to draw entity with object layers
@@ -834,10 +834,10 @@ void game_render_entities(void) {
 
             /* On-grid quantity counter above a stacked drop (coins, bundles). */
             if (entry->type == ENTITY_TYPE_BOT && strcmp(entity_type_str, "drop") == 0
-                && entity_base->object_layer_count > 0
-                && entity_base->object_layers[0].quantity > 1) {
+                && entity_base->layer_count > 0
+                && OBJ_LAYERS(entity_base)[0].quantity > 1) {
                 draw_drop_count(draw_x, draw_y, entity_base->dims.x, cell_size,
-                                entity_base->object_layers[0].quantity);
+                                OBJ_LAYERS(entity_base)[0].quantity);
             }
 
             /* ── Overhead UI — nameplate, capacity bar, HP bar ─────────── */
@@ -852,8 +852,8 @@ void game_render_entities(void) {
                 char np_buf[80];
                 /* For bots, prefer the alive-layer cache so the nameplate
                  * always reflects the living skin (even when dead/ghost). */
-                const ObjectLayerState *np_layers = entity_base->object_layers;
-                int np_lc = entity_base->object_layer_count;
+                const ObjectLayerState *np_layers = OBJ_LAYERS(entity_base);
+                int np_lc = entity_base->layer_count;
                 if (!np_is_player) {
                     int alive_lc = 0;
                     const ObjectLayerState *alive = interaction_bubble_get_alive_layers(

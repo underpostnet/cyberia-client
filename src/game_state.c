@@ -12,6 +12,23 @@
  * remains here is strictly gameplay/world data. */
 GameState g_game_state = {0};
 
+/* Bump-allocated object layers. game_state_layer_pool_reset() is the only
+ * free. */
+ObjectLayerState g_layer_pool[LAYER_POOL_SIZE] = {0};
+static int s_layer_pool_head = 0;
+
+void game_state_layer_pool_reset(void) {
+    s_layer_pool_head = 0;
+}
+
+int game_state_layer_alloc(int count) {
+    assert(0 <= count);
+    if (LAYER_POOL_SIZE - s_layer_pool_head < count) return -1;
+    int offset = s_layer_pool_head;
+    s_layer_pool_head += count;
+    return offset;
+}
+
 void game_state_reset(void) {
     g_game_state.init_received        = false;
     g_game_state.player_id[0]         = '\0';
@@ -26,6 +43,7 @@ void game_state_reset(void) {
     g_game_state.floor_count          = 0;
     g_game_state.full_inventory_count = 0;
     g_game_state.dead_item_id_count   = 0;
+    game_state_layer_pool_reset();
 }
 
 PlayerState* game_state_find_player(const char* id) {

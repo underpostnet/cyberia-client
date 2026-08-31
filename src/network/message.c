@@ -75,11 +75,11 @@ void message_reset_prev_snapshots(void) {
 /* A full array drops the rest of its kind for that snapshot. Log it once per
  * array per snapshot, not once per dropped entity. */
 enum { OVF_PLAYERS, OVF_BOTS, OVF_RESOURCES, OVF_FLOORS, OVF_OBSTACLES,
-       OVF_PORTALS, OVF_FOREGROUNDS, OVF_STATICS, OVF_COUNT };
+       OVF_PORTALS, OVF_FOREGROUNDS, OVF_STATICS, OVF_LAYERS, OVF_COUNT };
 
 static const char* const OVF_NAME[OVF_COUNT] = {
     "players", "bots", "resources", "floors", "obstacles",
-    "portals", "foregrounds", "statics"
+    "portals", "foregrounds", "statics", "layer pool"
 };
 
 static uint16_t s_overflow_warned = 0;
@@ -106,6 +106,21 @@ static int read_layers(const cJSON* owner, const char* key,
     return n;
 }
 
+/* Same, into the layer pool. Returns the count and writes the pool offset. A
+ * full pool costs the owner its layers, so warn and leave it empty. */
+static uint8_t read_pooled_layers(const cJSON* owner, const char* key, uint16_t* offset) {
+    int n = cJSON_GetArraySize(serial_get_array(owner, key));
+    if (MAX_OBJECT_LAYERS < n) n = MAX_OBJECT_LAYERS;
+    int pool_offset = game_state_layer_alloc(n);
+    if (0 > pool_offset) {
+        warn_overflow(OVF_LAYERS);
+        *offset = 0;
+        return 0;
+    }
+    *offset = (uint16_t)pool_offset;
+    return (uint8_t)read_layers(owner, key, &g_layer_pool[pool_offset], n);
+}
+
 static Vector2 read_pos(const cJSON* e) {
     return (Vector2){ serial_get_float_default(e, "posX", 0.0f),
                       serial_get_float_default(e, "posY", 0.0f) };
@@ -124,7 +139,7 @@ static void read_entity_state(const cJSON* e, EntityState* base) {
     base->respawn_in  = serial_get_float_default(e, "respawnIn", 0.0f);
     base->stats_sum   = serial_get_int_default(e, "statsSum", 0);
     base->status_icon = (uint8_t)serial_get_int_default(e, "statusIcon", 0);
-    base->object_layer_count = read_layers(e, "objectLayers", base->object_layers, MAX_OBJECT_LAYERS);
+    base->layer_count = read_pooled_layers(e, "objectLayers", &base->layer_offset);
     base->snapshot_time = gs->last_update_time;
 }
 
@@ -267,7 +282,7 @@ static void unpack_passive(const cJSON* e, const char* type) {
     serial_get_string(e, "targetMapCode", o->target_map_code, MAX_ID_LENGTH);
     o->target_cell_x = serial_get_int_default(e, "targetCellX", 0);
     o->target_cell_y = serial_get_int_default(e, "targetCellY", 0);
-    o->object_layer_count = read_layers(e, "objectLayers", o->object_layers, MAX_OBJECT_LAYERS);
+    o->layer_count = read_pooled_layers(e, "objectLayers", &o->layer_offset);
 }
 
 static void unpack_self(const cJSON* e) {
@@ -348,6 +363,7 @@ static void json_unpack_snapshot(const cJSON* payload) {
 
     /* Each snapshot re-lists everything in the area of interest. */
     s_overflow_warned = 0;
+    game_state_layer_pool_reset();
     gs->other_player_count = 0;
     gs->bot_count = 0;
     gs->resource_count = 0;
