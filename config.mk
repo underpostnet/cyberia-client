@@ -56,16 +56,6 @@ CFLAGS += -I$(CJSON_PATH)
 #------------------------------------------------
 # CYBERIA config
 ifeq ($(BUILD_MODE),RELEASE)
-WS_URL   ?= wss://server.cyberiaonline.com/ws
-API_BASE ?= https://www.cyberiaonline.com
-else
-WS_URL   ?= ws://localhost:8081/ws
-API_BASE ?= http://localhost:4005
-endif
-
-CFLAGS += -DWS_URL_OVERRIDE='"$(WS_URL)"'
-CFLAGS += -DAPI_BASE_URL_OVERRIDE='"$(API_BASE)"'
-ifeq ($(BUILD_MODE),RELEASE)
 CFLAGS  += -DCYBERIA_LOG_LEVEL=3
 else
 CFLAGS += -DCYBERIA_LOG_LEVEL=4

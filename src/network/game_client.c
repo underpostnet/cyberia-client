@@ -49,7 +49,7 @@ bool connection_open(void) {
         .on_error   = on_socket_error,
         .on_close   = on_socket_close,
     };
-    if (!socket_open(&g_client.sock, runtime_config_ws_url(), &g_client, callbacks)) {
+    if (!socket_open(&g_client.sock, WS_URL, &g_client, callbacks)) {
         LOG_ERROR("WebSocket open failed");
         return false;
     }
