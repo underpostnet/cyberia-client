@@ -9,12 +9,6 @@
 #define WS_URL                "wss://server.cyberiaonline.com/ws"
 #endif
 
-#if defined(CYBERIA_DEBUG)
-#define API_BASE_URL    "http://localhost:8081"
-#else
-#define API_BASE_URL    "https://www.cyberiaonline.com"
-#endif
-
 /** Override with -DTICK_RATE_OVERRIDE=<hz>. */
 #if defined(TICK_RATE_OVERRIDE)
 #define TICK_RATE_HZ             TICK_RATE_OVERRIDE
@@ -40,14 +34,15 @@ static const char* CYBERIA_CLIENT_HINTS_CODE = "cyberia-main";
  * segment of window.location.pathname; an empty segment (root) is the default
  * instance and yields a prefix-free "<origin>/ws" for the default server. A
  * non-root instance keeps its segment in "<origin>/<instance>/ws", matching
- * the server's CYBERIA_BASE_PATH mount. Endpoint origins come from
- * window.CYBERIA_WS_ORIGIN / window.CYBERIA_ENGINE_API_ORIGIN, injected by the
- * static server; the WS_URL / API_BASE_URL constants above are the fallback for
- * local builds. Call config_init() before connection_open() or any engine
- * fetch. */
+ * the server's CYBERIA_BASE_PATH mount. The websocket origin comes from
+ * window.CYBERIA_WS_ORIGIN, injected by the static server; WS_URL above is the
+ * fallback for local builds.
+ *
+ * The Data Server URL has one source: the --data-server-url=<origin> command
+ * line argument. It is required. Call config_init() before connection_open()
+ * or any Data Server fetch. */
 
-void        config_init(void);
-const char* config_ws_url(void);
-const char* config_api_base_url(void);
+void        config_init(int argc, char** argv);
+const char* config_data_server_url(void);
 
 #endif // CONFIG_H

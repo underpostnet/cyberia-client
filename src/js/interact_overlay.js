@@ -33,11 +33,11 @@
 
 mergeInto(LibraryManager.library, {
   /* ================================================================
-   * Public Content Authority (engine-cyberia) origin — the client-visible
-   * address every client→engine content request resolves against. Seeded from
-   * C (js_init_engine_api) with the compile-time public origin, then overridden
-   * at runtime by the server-forwarded public URL. It is NEVER the internal
-   * cluster/service address (that stays server-side only). Read here for:
+   * Data Server (engine-cyberia) origin — the client-visible address every
+   * client→Data Server content request resolves against. Set once from C
+   * (js_init_engine_api) with the --data-server-url command line argument. It
+   * is NEVER the internal cluster/service address (that stays server-side
+   * only). Read here for:
    *   - asset previews:      GET {api_base_url}/assets/{type}/{itemId}/08/0.png
    *   - integration links:   {api_base_url}/object-layer-engine-viewer?...
    *
@@ -48,18 +48,13 @@ mergeInto(LibraryManager.library, {
    * ================================================================ */
 
   $FetchState: {
-    api_base_url: 'https://www.cyberiaonline.com',
+    api_base_url: '',
   },
 
   js_init_engine_api__deps: ['$FetchState'],
   js_init_engine_api: function (api_base_url_ptr) {
-    var api_base_url = UTF8ToString(api_base_url_ptr);
-
-    if (api_base_url) {
-      FetchState.api_base_url = api_base_url;
-    }
-
-    console.log('[API] Engine API base URL set to: ' + FetchState.api_base_url);
+    FetchState.api_base_url = UTF8ToString(api_base_url_ptr);
+    console.log('[API] Data Server URL set to: ' + FetchState.api_base_url);
   },
 
   /* ================================================================

@@ -7,10 +7,13 @@ stale WASM/JS.
 
 Usage
 -----
-  python3 wasm-driver.py <port> [<directory>]
+  python3 wasm-driver.py [--port=<port>] [--directory=<dir>] [--data-server-url=<url>]
 
-  port        TCP port
-  directory   Directory to serve (default: current directory)
+  --port              TCP port (default: 8080)
+  --directory         Directory to serve (default: current directory)
+  --data-server-url   Data Server origin (default: https://cyberiaonline.com).
+                      Passed to the WASM client as window.CYBERIA_ARGV, which
+                      emscripten turns into the client's own argv.
 
 Multi-instance routing
 ----------------------
@@ -24,7 +27,6 @@ Multi-instance routing
   into index.html as window.* globals:
 
     CYBERIA_WS_ORIGIN          websocket origin, e.g. wss://server.cyberiaonline.com
-    CYBERIA_ENGINE_API_ORIGIN  engine REST origin, e.g. https://www.cyberiaonline.com
     CYBERIA_DEFAULT_INSTANCE   instance used when served from the root path
     CYBERIA_BASE_PATH          this container's public path, e.g. /FOREST
 
@@ -51,6 +53,7 @@ Container status reporting
   If CONTAINER_DEPLOY_ID is unset the feature is silently disabled.
 """
 
+import argparse
 import sys
 import os
 import io
@@ -61,23 +64,24 @@ from http.server import HTTPServer, SimpleHTTPRequestHandler
 
 RUNTIME_CONFIG_ENV_KEYS = (
     "CYBERIA_WS_ORIGIN",
-    "CYBERIA_ENGINE_API_ORIGIN",
     "CYBERIA_DEFAULT_INSTANCE",
     # This instance's URL sub-path ("/FOREST", "/TEST", "" for default).
     "CYBERIA_BASE_PATH",
 )
 
+# The client's command line. Set once from this process's own flags.
+CLIENT_ARGV: list = []
+
 
 def runtime_config_script() -> bytes:
-    """<script> assigning the configured env vars to window.*, or b'' if none."""
+    """<script> assigning the env vars and the client argv to window.*."""
 
     assignments = "".join(
         f"window.{key}={json.dumps(os.environ[key])};"
         for key in RUNTIME_CONFIG_ENV_KEYS
         if os.environ.get(key)
     )
-    if not assignments:
-        return b""
+    assignments += f"window.CYBERIA_ARGV={json.dumps(CLIENT_ARGV)};"
     return f"<script>{assignments}</script>".encode("utf-8")
 
 
@@ -169,9 +173,19 @@ class CyberiaHandler(SimpleHTTPRequestHandler):
 
 
 if __name__ == "__main__":
-    # port required; directory optional, defaults to CWD
-    port = int(sys.argv[1])
-    directory = sys.argv[2] if len(sys.argv) > 2 else "."
+    parser = argparse.ArgumentParser(description="Static HTTP server for the Cyberia WASM client.")
+    parser.add_argument("--port", type=int, default=8080, help="TCP port (default: 8080)")
+    parser.add_argument("--directory", default=".", help="directory to serve (default: working directory)")
+    parser.add_argument(
+        "--data-server-url",
+        default="https://cyberiaonline.com",
+        help="Data Server origin (default: https://cyberiaonline.com)",
+    )
+    args = parser.parse_args()
+
+    port = args.port
+    directory = args.directory
+    CLIENT_ARGV = [f"--data-server-url={args.data_server_url}"]
     container_id = os.environ.get("CONTAINER_DEPLOY_ID", "")
 
     os.chdir(directory)

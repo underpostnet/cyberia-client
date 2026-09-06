@@ -275,16 +275,16 @@ static void preloading_loop(void) {
     }
 }
 
-int main(void) {
+int main(int argc, char** argv) {
     // init window
     const int vp_w = EM_ASM_INT({ return window.innerWidth; });
     const int vp_h = EM_ASM_INT({ return window.innerHeight; });
     InitWindow(vp_w, vp_h, NULL);
     SetTargetFPS(TICK_RATE_HZ);
 
-    // Resolves the instance code and endpoint origins from the URL + injected
-    // runtime config. Must precede any connection or engine API call.
-    config_init();
+    // Resolves the instance code from the URL and the Data Server URL from the
+    // command line. Must precede any connection or Data Server call.
+    config_init(argc, argv);
 
     // Connects to Game Server
     connection_open();
@@ -294,7 +294,7 @@ int main(void) {
     text_font_init(); // main UI font (loaded async once client-hints name a fontFamily)
 
     // [preload] start loading step, fetch from Data Server (Engine)
-    js_init_engine_api(API_BASE_URL);
+    js_init_engine_api(config_data_server_url());
 
     // NOTE: Do not mix the start fetch loop with the running game loop
     // if need to be non blocking then wait in a loading screen before starting main_loop

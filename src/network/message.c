@@ -627,13 +627,6 @@ static void json_unpack_metadata(const cJSON* payload) {
         }
     }
 
-    // Parse apiBaseUrl if provided: the server-forwarded public Content
-    // Authority origin (never the internal cluster address).
-    char api_url[256] = {0};
-    if (serial_get_string(payload, "apiBaseUrl", api_url, sizeof(api_url)) == 0 && api_url[0] != '\0') {
-        js_init_engine_api(api_url);
-    }
-
     // Parse instanceCode if provided: keys the Instance Map REST fetches.
     serial_get_string(payload, "instanceCode", g_game_state.instance_code,
                       sizeof(g_game_state.instance_code));

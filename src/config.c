@@ -14,7 +14,7 @@
 
 static char s_instance_code[CFG_CODE_MAX];
 static char s_ws_url[CFG_URL_MAX];
-static char s_api_base_url[CFG_URL_MAX];
+static char s_data_server_url[CFG_URL_MAX];
 static bool s_initialized = false;
 
 /* Copies a JS-side string allocated with allocateUTF8 into out, freeing it. */
@@ -24,7 +24,7 @@ static void adopt_js_string(char* js_string, char* out, size_t out_size) {
     free(js_string);
 }
 
-void config_init(void) {
+void config_init(int argc, char** argv) {
     if (s_initialized) return;
     s_initialized = true;
 
@@ -68,17 +68,21 @@ void config_init(void) {
     else
         snprintf(s_ws_url, sizeof(s_ws_url), "%s/%s/ws", ws_origin, s_instance_code);
 
-    adopt_js_string((char*)EM_ASM_PTR({ return allocateUTF8(self.CYBERIA_ENGINE_API_ORIGIN || ""); }), s_api_base_url,
-                    sizeof(s_api_base_url));
-    if ('\0' == s_api_base_url[0]) snprintf(s_api_base_url, sizeof(s_api_base_url), "%s", API_BASE_URL);
+    /* The Data Server URL has one source: the command line. */
+    static const char kFlag[]  = "--data-server-url=";
+    const size_t      flag_len = sizeof(kFlag) - 1;
+    for (int i = 1; i < argc; ++i)
+        if (0 == strncmp(argv[i], kFlag, flag_len))
+            snprintf(s_data_server_url, sizeof(s_data_server_url), "%s", argv[i] + flag_len);
 
-    LOG_INFO("config instance=%s ws=%s api=%s", s_instance_code, s_ws_url, s_api_base_url);
+    if ('\0' == s_data_server_url[0]) {
+        LOG_ERROR("missing --data-server-url=<origin>");
+        assert(false);
+    }
+
+    LOG_INFO("config instance=%s ws=%s data-server=%s", s_instance_code, s_ws_url, s_data_server_url);
 }
 
-const char* config_ws_url(void) {
-    return s_ws_url;
-}
-
-const char* config_api_base_url(void) {
-    return s_api_base_url;
+const char* config_data_server_url(void) {
+    return s_data_server_url;
 }
