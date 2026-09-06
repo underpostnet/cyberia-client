@@ -1,4 +1,3 @@
-#include "runtime_config.h"
 #include "config.h"
 #include "util/log.h"
 
@@ -9,13 +8,13 @@
 #include <stdlib.h>
 #include <string.h>
 
-#define RC_ORIGIN_MAX 256
-#define RC_CODE_MAX   128
-#define RC_URL_MAX    512
+#define CFG_ORIGIN_MAX 256
+#define CFG_CODE_MAX   128
+#define CFG_URL_MAX    512
 
-static char s_instance_code[RC_CODE_MAX];
-static char s_ws_url[RC_URL_MAX];
-static char s_api_base_url[RC_URL_MAX];
+static char s_instance_code[CFG_CODE_MAX];
+static char s_ws_url[CFG_URL_MAX];
+static char s_api_base_url[CFG_URL_MAX];
 static bool s_initialized = false;
 
 /* Copies a JS-side string allocated with allocateUTF8 into out, freeing it. */
@@ -25,7 +24,7 @@ static void adopt_js_string(char* js_string, char* out, size_t out_size) {
     free(js_string);
 }
 
-void runtime_config_init(void) {
+void config_init(void) {
     if (s_initialized) return;
     s_initialized = true;
 
@@ -52,7 +51,7 @@ void runtime_config_init(void) {
     }
     s_instance_code[write] = '\0';
 
-    char ws_origin[RC_ORIGIN_MAX] = {0};
+    char ws_origin[CFG_ORIGIN_MAX] = {0};
     adopt_js_string((char*)EM_ASM_PTR({ return allocateUTF8(self.CYBERIA_WS_ORIGIN || ""); }), ws_origin,
                     sizeof(ws_origin));
 
@@ -73,13 +72,13 @@ void runtime_config_init(void) {
                     sizeof(s_api_base_url));
     if ('\0' == s_api_base_url[0]) snprintf(s_api_base_url, sizeof(s_api_base_url), "%s", API_BASE_URL);
 
-    LOG_INFO("runtime config instance=%s ws=%s api=%s", s_instance_code, s_ws_url, s_api_base_url);
+    LOG_INFO("config instance=%s ws=%s api=%s", s_instance_code, s_ws_url, s_api_base_url);
 }
 
-const char* runtime_config_ws_url(void) {
+const char* config_ws_url(void) {
     return s_ws_url;
 }
 
-const char* runtime_config_api_base_url(void) {
+const char* config_api_base_url(void) {
     return s_api_base_url;
 }

@@ -1,7 +1,6 @@
 #include "game_client.h"
 #include "network/socket.h"
 #include "config.h"
-#include "runtime_config.h"
 #include "game_state.h"
 #include "message.h"
 #include "util/serial.h"

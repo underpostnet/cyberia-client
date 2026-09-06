@@ -7,7 +7,7 @@ stale WASM/JS.
 
 Usage
 -----
-  python3 docker-driver.py <port> [<directory>]
+  python3 wasm-driver.py <port> [<directory>]
 
   port        TCP port
   directory   Directory to serve (default: current directory)

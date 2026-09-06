@@ -36,4 +36,18 @@ static const int MAX_ATLAS_CACHE_SIZE = 256;
  * instance, world, or server identifier. */
 static const char* CYBERIA_CLIENT_HINTS_CODE = "cyberia-main";
 
+/* One WASM binary serves every world instance. The instance code is the first
+ * segment of window.location.pathname; an empty segment (root) is the default
+ * instance and yields a prefix-free "<origin>/ws" for the default server. A
+ * non-root instance keeps its segment in "<origin>/<instance>/ws", matching
+ * the server's CYBERIA_BASE_PATH mount. Endpoint origins come from
+ * window.CYBERIA_WS_ORIGIN / window.CYBERIA_ENGINE_API_ORIGIN, injected by the
+ * static server; the WS_URL / API_BASE_URL constants above are the fallback for
+ * local builds. Call config_init() before connection_open() or any engine
+ * fetch. */
+
+void        config_init(void);
+const char* config_ws_url(void);
+const char* config_api_base_url(void);
+
 #endif // CONFIG_H

@@ -26,7 +26,7 @@
 !.dockerignore
 !**/*.yaml
 !deploy/**/*.sh
-!docker-driver.py
+!wasm-driver.py
 
 build/
 bin/
