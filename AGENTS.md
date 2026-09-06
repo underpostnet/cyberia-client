@@ -38,16 +38,9 @@ strcmp(s, "x") == 0    // no
 queue.count == 0       // no
 ```
 
-Exceptions:
-Comparing against NULL does not matter
-```c
-NULL != ptr            // yes
-ptr != NULL            // yes
-```
-
 ## Root-relative includes
-- Project cross-directory: path from `src/`. `#include "js/services.h"` — never `"../js/services.h"`.
-- Same-directory siblings: bare name is fine. From `src/ui/inventory_modal.c`, `#include "inventory_bar.h"` is OK — no need to prefix with `ui/`. Build adds `-Isrc` only; gcc's `"..."` auto-search of the includer's directory handles siblings.
+- Project cross-directory: path from `src/`. `#include "js/interact_bridge.h"` — never `"../js/interact_bridge.h"`.
+- Same-directory siblings: bare name is fine. From `src/ui/inventory_modal.c`, `#include "inventory_bar.h"` is OK — no need to prefix with `ui/`. A `"..."` search starts in the includer's own directory, so a sibling needs no `-I`.
 - Third-party: `<>` brackets — `<raylib.h>`, `<raymath.h>`, `<cJSON.h>`.
 
 ## No `(void)param;` for unused args
@@ -60,7 +53,8 @@ One call site → keep inline. Extract only if ≥2 sites or inline obscures con
 - `Makefile`, `Web.mk`, `config.mk`, any `*.mk` → off-limits to autonomous edits.
 - Build flags (`-sASYNCIFY`, `-D_DEBUG`, `-O3`, linker order, etc.) are load-bearing in non-obvious ways. Wrong flag = silent miscompile, heap corruption, broken release.
 - If a change seems to require a Makefile edit: STOP, explain what flag/line you want to change and why, ask the user to confirm they understand the implication. Wait for explicit approval.
-- Adding a new source file does NOT count as auto-edit if the Makefile globs `src/**/*.c`. Verify it globs before assuming.
+- There is no recursive glob. `config.mk` lists one wildcard per directory: `src`, `js`, `network`, `ui`, `input`, `domain`, `fx`, `util`.
+- A new `.c` in one of those directories builds with no edit. A new directory does not — it needs a `config.mk` line, so stop and ask. A file in an unlisted directory compiles nowhere and links to nothing.
 
 ## Asserts over defensive checks
 - Prefer `assert(x);` over `if (!x) { LOG_ERROR(...); return; }` for invariant violations.
@@ -85,6 +79,19 @@ One commit = one logical theme. No bundling unrelated changes.
 - Themes that touch a shared file (main.c, message_parser, central state): land the feature commits first, then one final "wire X through main loop" glue commit. Don't merge themes just to avoid the glue commit.
 - Commit subject names ONE concern. If you need "and" or "+" to describe it, it's two commits.
 
+## manifests/ — engine-cyberia owns it
+
+`manifests/` is not ours. `engine-cyberia` writes it and an external tool syncs
+it here. This repo is a passive consumer.
+
+- A change that seems to need a `manifests/` edit: **stop**. Name the file and
+  the line, and let the user take it to the owner. The sync will overwrite it.
+- A change that touches `manifests/` and nothing else: allowed. Keep it in its
+  own commit, and warn the user the next sync can overwrite it.
+- Never bundle a `manifests/` edit with source changes in one commit.
+- Do not read it as the source of truth for deploy config.
+
+
 # System Map
 
 Three processes:
@@ -102,7 +109,5 @@ Two links carry client traffic:
 2. **Content link** — HTTPS REST to the engine origin.
    `cyberia-client/src/network/engine_client.c` (`emscripten_fetch`)
 
-The game server never serves content, and the engine never sees simulation
-
-## Transport Layer
-Goal: Transport only: the socket moves bytes. It never reads or builds a message. Client and Server must mirror 1:1.
+The game server never serves game content, and the engine never sees simulation
+state.
