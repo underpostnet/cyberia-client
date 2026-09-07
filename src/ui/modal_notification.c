@@ -8,7 +8,7 @@
  * Four shapes, each additive over the last:
  *   plain     title + message + OK.
  *   reward    plus the granted item's slot; OK flies it into the inventory.
- *   picker    plus a − / + quantity stepper, its step multiplier, and a running
+ *   picker    plus a − / + quantity stepper, its step size, and a running
  *             total; Cancel / Buy.
  *   assemble  plus the consumed inputs stacked over a progress bar charging
  *             over the recipe's duration over the produced outputs, framed by
@@ -82,20 +82,28 @@
 #define MN_STEP_BTN    40
 #define MN_STEP_FONT   24
 #define MN_STEP_GAP    12
+
+/* Range jumps: the two ends of the picker in one tap each, flanking the − / +
+ * pair so the row reads min − qty + max. A deep stack is emptied or taken whole
+ * without cycling the step size at all. */
+#define MN_RANGE_FONT  14
+#define MN_RANGE_PAD   9
+#define MN_RANGE_LABEL_MIN "min"
+#define MN_RANGE_LABEL_MAX "max"
 #define MN_TOTAL_ICON  22
 #define MN_TOTAL_FONT  17
 #define MN_BTN_GAP     10
 
-/* Step multiplier: one button under the slot cycling x1 → x10 → … → x10000, so
+/* Step size: one button under the slot cycling 1 → 10 → … → 10000, so
  * a deep stack is sized in a few taps instead of a hundred. A range with fewer
- * choices than the first rung has nothing to multiply and shows no button. */
-#define MN_MULT_MIN_W        64
-#define MN_MULT_H            30
-#define MN_MULT_PAD          14
-#define MN_MULT_FONT         15
-#define MN_MULT_MAX       10000
-#define MN_MULT_TOP_LABEL "x10000"
-#define MN_MULT_MIN_CHOICES  10
+ * choices than the first rung has nothing to step through and shows no button. */
+#define MN_STEP_SIZE_MIN_W        64
+#define MN_STEP_SIZE_H            30
+#define MN_STEP_SIZE_PAD          14
+#define MN_STEP_SIZE_FONT         15
+#define MN_STEP_SIZE_MAX       10000
+#define MN_STEP_SIZE_TOP_LABEL "+/-10000"
+#define MN_STEP_SIZE_MIN_CHOICES  10
 
 /* Assembly progress bar; the surrounding electric field is fx_assemble. */
 #define MN_BAR_H 18
@@ -149,7 +157,7 @@ static float s_reward_pop_age = 0.0f; /* time since the results started popping 
 /* Active quantity picker; qty_max 0 means the visible entry has none. */
 static int   s_qty_min = 0;
 static int   s_qty_max = 0;
-static int   s_qty_mult = 1;   /* step size the − / + buttons apply */
+static int   s_qty_step = 1;   /* step size the − / + buttons apply */
 static char  s_price_item[64] = {0};
 static int   s_price_qty = 0;
 static char  s_confirm_label[16] = {0};
@@ -194,8 +202,8 @@ static bool notif_has_picker(void)    { return s_qty_max > 0; }
 /* A priced picker is a purchase: it shows a running total and waits for the
  * server's grant. An unpriced one is a split of stock already owned. */
 static bool notif_has_price(void)     { return notif_has_picker() && '\0' != s_price_item[0]; }
-static bool notif_has_multiplier(void) {
-    return notif_has_picker() && s_qty_max - s_qty_min + 1 >= MN_MULT_MIN_CHOICES;
+static bool notif_has_step_size(void) {
+    return notif_has_picker() && s_qty_max - s_qty_min + 1 >= MN_STEP_SIZE_MIN_CHOICES;
 }
 static bool notif_is_assembling(void) { return s_craft_total > 0.0f; }
 
@@ -220,7 +228,7 @@ static void show_next(void) {
     s_item_count = e->item_count;
     s_qty_min    = e->qty_min;
     s_qty_max    = e->qty_max;
-    s_qty_mult   = 1;
+    s_qty_step   = 1;
     s_on_confirm = e->on_confirm;
     strncpy(s_price_item, e->price_item, sizeof(s_price_item) - 1);
     s_price_item[sizeof(s_price_item) - 1] = '\0';
@@ -292,7 +300,7 @@ void modal_notification_init(void) {
     s_item_count = 0;
     s_qty_min = 0;
     s_qty_max = 0;
-    s_qty_mult = 1;
+    s_qty_step = 1;
     s_price_item[0] = '\0';
     s_price_qty = 0;
     s_confirm_label[0] = '\0';
@@ -455,7 +463,7 @@ static float notif_content_height(void) {
     if (notif_is_assembling() && s_input_count > 0) h += MN_GAP + notif_slot_size();
     if (notif_is_assembling())                      h += MN_GAP + MN_BAR_H;
     if (s_item_count > 0)                           h += MN_GAP + notif_slot_size();
-    if (notif_has_multiplier())                     h += MN_GAP + MN_MULT_H;
+    if (notif_has_step_size())                     h += MN_GAP + MN_STEP_SIZE_H;
     if (notif_has_price())                          h += MN_GAP + MN_TOTAL_ICON;
     h += MN_GAP + MN_OK_H + MN_BOT;
     return h;
@@ -517,24 +525,24 @@ static Rectangle notif_item_slot(Rectangle card, int index) {
     return notif_row_slot(card, top + MN_GAP, s_item_count, index);
 }
 
-/* Step-multiplier button (picker only), centred under the item slot so the slot
+/* Step-size button (picker only), centred under the item slot so the slot
  * itself — the delivery flight's origin — stays on the card's axis. */
-static Rectangle notif_mult_btn(Rectangle card) {
+static Rectangle notif_step_size_btn(Rectangle card) {
     Rectangle slot = notif_item_slot(card, 0);
     /* Sized on the widest rung — measured, because the active font and its size
      * factor arrive from client hints — so cycling never resizes the button. */
-    float w = (float)MeasureText(MN_MULT_TOP_LABEL, MN_MULT_FONT) + 2.0f * MN_MULT_PAD;
-    if (w < MN_MULT_MIN_W) w = MN_MULT_MIN_W;
+    float w = (float)MeasureText(MN_STEP_SIZE_TOP_LABEL, MN_STEP_SIZE_FONT) + 2.0f * MN_STEP_SIZE_PAD;
+    if (w < MN_STEP_SIZE_MIN_W) w = MN_STEP_SIZE_MIN_W;
     return (Rectangle){ card.x + (card.width - w) * 0.5f,
-                        slot.y + slot.height + MN_GAP, w, MN_MULT_H };
+                        slot.y + slot.height + MN_GAP, w, MN_STEP_SIZE_H };
 }
 
 /* Running total row (picker only): the price sprite and `qty × unit price`,
- * under the item slot and whatever multiplier button sits below it. */
+ * under the item slot and whatever step-size button sits below it. */
 static Rectangle notif_total_row(Rectangle card) {
     Rectangle slot = notif_item_slot(card, 0);
     float top = slot.y + slot.height + MN_GAP;
-    if (notif_has_multiplier()) top += MN_MULT_H + MN_GAP;
+    if (notif_has_step_size()) top += MN_STEP_SIZE_H + MN_GAP;
     return (Rectangle){ card.x + MN_PAD, top, (float)notif_inner_w(), MN_TOTAL_ICON };
 }
 
@@ -573,18 +581,48 @@ static Rectangle notif_step_inc(Rectangle card) {
                         MN_STEP_BTN, MN_STEP_BTN };
 }
 
-/* Clamp and apply a stepper delta; no-op once an end of the range is reached.
- * `steps` is in multiplier units, so one tap always moves by the shown xN. */
+/* Both range buttons are sized on the wider of the two labels, so the row stays
+ * symmetrical whatever the active font measures them at. */
+static float notif_range_w(void) {
+    float wmin = (float)MeasureText(MN_RANGE_LABEL_MIN, MN_RANGE_FONT);
+    float wmax = (float)MeasureText(MN_RANGE_LABEL_MAX, MN_RANGE_FONT);
+    return (wmin > wmax ? wmin : wmax) + 2.0f * MN_RANGE_PAD;
+}
+
+/* Each jump takes whatever room its side of the stepper leaves inside the card. A card too narrow
+ * for one — several item slots, or a font measured wider than this layout assumes — returns an
+ * empty rect, and the row simply goes without it rather than spilling over the edge. */
+static Rectangle notif_range_min(Rectangle card) {
+    Rectangle dec = notif_step_dec(card);
+    float room = dec.x - MN_STEP_GAP - (card.x + MN_PAD);
+    float w = notif_range_w();
+    if (w > room) w = room;
+    if (w <= 0.0f) return (Rectangle){ 0 };
+    return (Rectangle){ dec.x - MN_STEP_GAP - w, dec.y, w, dec.height };
+}
+
+static Rectangle notif_range_max(Rectangle card) {
+    Rectangle inc = notif_step_inc(card);
+    float x = inc.x + inc.width + MN_STEP_GAP;
+    float room = card.x + card.width - MN_PAD - x;
+    float w = notif_range_w();
+    if (w > room) w = room;
+    if (w <= 0.0f) return (Rectangle){ 0 };
+    return (Rectangle){ x, inc.y, w, inc.height };
+}
+
+/* Clamp and apply a stepper press; no-op once an end of the range is reached.
+ * `steps` counts presses, so one tap always moves the range by the shown step size. */
 static void notif_step_quantity(int steps) {
-    int next = s_items[0].qty + steps * s_qty_mult;
+    int next = s_items[0].qty + steps * s_qty_step;
     if (next < s_qty_min) next = s_qty_min;
     if (next > s_qty_max) next = s_qty_max;
     s_items[0].qty = next;
 }
 
-/* Advance the multiplier one rung, wrapping past the top back to x1. */
-static void notif_cycle_multiplier(void) {
-    s_qty_mult = (s_qty_mult >= MN_MULT_MAX) ? 1 : s_qty_mult * 10;
+/* Advance the step size one rung, wrapping past the top back to one. */
+static void notif_cycle_step_size(void) {
+    s_qty_step = (s_qty_step >= MN_STEP_SIZE_MAX) ? 1 : s_qty_step * 10;
 }
 
 /* ── Result lifecycle ─────────────────────────────────────────────────── */
@@ -890,22 +928,42 @@ void modal_notification_draw(void) {
         step.bg = (Color){ 50, 55, 80, (unsigned char)((can_inc ? 235.0f : 90.0f) * a) };
         ui_button_pixel_retro_draw(inc, &step, can_inc && ui_button_hit(inc, mx, my));
 
-        /* Step multiplier — one tap cycles the rung the steppers move by, so a
-         * deep stack is sized without holding a button down. Lit while it is
-         * above x1, which is the only state that is not the plain default. */
-        if (notif_has_multiplier()) {
-            Rectangle mult = notif_mult_btn(card);
-            char mult_label[8];
-            snprintf(mult_label, sizeof(mult_label), "x%d", s_qty_mult);
-            UIButtonPixelRetroStyle mult_btn = {
+        /* The ends of the range, one tap each: min is the smallest the picker allows, max is
+         * everything that is there to take. Disabled once the quantity already sits on that end,
+         * the same way a stepper is. */
+        Rectangle range_min = notif_range_min(card);
+        Rectangle range_max = notif_range_max(card);
+        UIButtonPixelRetroStyle range = { .font_size = MN_RANGE_FONT, .text_color = C_TITLE };
+        if (range_min.width > 0.0f) {
+            range.label = MN_RANGE_LABEL_MIN;
+            range.enabled = can_dec;
+            range.bg = (Color){ 50, 55, 80, (unsigned char)((can_dec ? 235.0f : 90.0f) * a) };
+            ui_button_pixel_retro_draw(range_min, &range, can_dec && ui_button_hit(range_min, mx, my));
+        }
+        if (range_max.width > 0.0f) {
+            range.label = MN_RANGE_LABEL_MAX;
+            range.enabled = can_inc;
+            range.bg = (Color){ 50, 55, 80, (unsigned char)((can_inc ? 235.0f : 90.0f) * a) };
+            ui_button_pixel_retro_draw(range_max, &range, can_inc && ui_button_hit(range_max, mx, my));
+        }
+
+        /* Step size — one tap cycles the rung the − / + buttons move by, so a deep stack is sized
+         * without holding a button down. It is a difference, not a factor, and it applies in
+         * whichever direction the pressed stepper goes, so it reads "+/-10". Lit above the plain
+         * default of one. */
+        if (notif_has_step_size()) {
+            Rectangle step_size = notif_step_size_btn(card);
+            char step_label[12];
+            snprintf(step_label, sizeof(step_label), "step %d", s_qty_step);
+            UIButtonPixelRetroStyle step_btn = {
                 .bg = (Color){ 50, 55, 80, (unsigned char)(235.0f * a) },
-                .label = mult_label,
-                .font_size = MN_MULT_FONT,
+                .label = step_label,
+                .font_size = MN_STEP_SIZE_FONT,
                 .text_color = C_TITLE,
-                .selected = s_qty_mult > 1,
+                .selected = s_qty_step > 1,
                 .enabled = true,
             };
-            ui_button_pixel_retro_draw(mult, &mult_btn, ui_button_hit(mult, mx, my));
+            ui_button_pixel_retro_draw(step_size, &step_btn, ui_button_hit(step_size, mx, my));
         }
 
         /* Running total — the price item's own sprite beside what this purchase
@@ -1033,13 +1091,17 @@ bool modal_notification_handle_click(int mx, int my) {
         return true;
     }
 
-    /* Quantity stepper and its multiplier — both adjust the pending choice
+    /* Quantity stepper and its step size — both adjust the pending choice
      * without dismissing. */
     if (notif_has_picker()) {
-        if (notif_has_multiplier() && ui_button_hit(notif_mult_btn(card), mx, my)) {
-            notif_cycle_multiplier();
+        if (notif_has_step_size() && ui_button_hit(notif_step_size_btn(card), mx, my)) {
+            notif_cycle_step_size();
             return true;
         }
+        Rectangle jump_min = notif_range_min(card);
+        Rectangle jump_max = notif_range_max(card);
+        if (jump_min.width > 0.0f && ui_button_hit(jump_min, mx, my)) { s_items[0].qty = s_qty_min; return true; }
+        if (jump_max.width > 0.0f && ui_button_hit(jump_max, mx, my)) { s_items[0].qty = s_qty_max; return true; }
         if (ui_button_hit(notif_step_dec(card), mx, my)) { notif_step_quantity(-1); return true; }
         if (ui_button_hit(notif_step_inc(card), mx, my)) { notif_step_quantity(+1); return true; }
     }
