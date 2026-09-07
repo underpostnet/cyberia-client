@@ -1,5 +1,6 @@
 #include "toolbar.h"
 
+#include "audio/audio.h"
 #include "hud_minimap_overlay.h"
 #include "inventory_modal.h"
 #include "modal_instance_map.h"
@@ -130,9 +131,12 @@ void toolbar_draw(int screen_width) {
 
         bool fs_active = fullscreen_bridge_is_active();
         bool map_open  = hud_minimap_overlay_is_visible();
+        bool muted     = audio_is_muted();
         draw_btn(btn_rect(0), fs_active ? "shrink" : "fullscreen", fs_active, mp);
         draw_btn(btn_rect(1), "map", map_open, mp);
         draw_btn(btn_rect(2), "quest", quest_journal_is_visible(), mp);
+        /* The icon shows the state, not the action: muted audio reads as muted. */
+        draw_btn(btn_rect(3), muted ? "audio-mute" : "audio", muted, mp);
     }
 
     draw_toggle_btn(toggle_rect(), s_hidden ? "cyberia-white-0" : "cyberia-yellow-1", mp);
@@ -149,6 +153,7 @@ bool toolbar_handle_click(int mx, int my) {
         toggle_minimap();
         return true;
     }
+    if (ui_button_hit(btn_rect(3), mx, my)) { audio_toggle_mute(); return true; }
     if (ui_button_hit(btn_rect(2), mx, my)) {
         /* The quest button returns to the grid: if any world-covering modal is
          * up, dismiss them all and surface the Quest Journal instead of

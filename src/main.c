@@ -19,6 +19,8 @@
 
 #include "domain/camera.h"
 #include "domain/presentation_runtime.h"
+#include "domain/audio_context.h"
+#include "audio/audio.h"
 #include "util/log.h"
 #include "ui/ui_dispatch.h"
 #include "fx/fx_tap.h"
@@ -57,6 +59,8 @@ static void gameloop(void) {
     text_font_sync();
     game_client_on_tick();
     local_player_on_tick();
+    audio_context_update(frame_dt);
+    audio_update(frame_dt);
 
     // input capture in realtime
     input_queue_t frame_input = {0};
@@ -256,6 +260,11 @@ static void preloading_loop(void) {
      * LOAD_ASSETS / LOAD_STABLE measure genuine readiness. */
     render_on_tick(frame_dt);
 
+    /* Audio resolves and loads with everything else — its fetches are counted by the same
+     * pipeline the bar measures, so the map's music and cues are decoded and resident before
+     * Tap to Start. Playback itself stays shut until audio_start() below. */
+    audio_update(frame_dt);
+
     /* Stages complete strictly in order — each is gated on the previous. */
     while (!s_load_ready && load_stage_complete(s_load_done)) {
         s_load_done++;
@@ -268,6 +277,7 @@ static void preloading_loop(void) {
 
     /* Gameplay begins only on the player's explicit Tap-to-Start. */
     if (s_load_ready && loading_bridge_start_requested()) {
+        audio_start();
         loading_bridge_hide();
         client_confirm_loading_done(); /* release the server "loading" freeze */
         emscripten_cancel_main_loop();
@@ -285,6 +295,7 @@ int main(int argc, char** argv) {
     // Resolves the instance code from the URL and the Data Server URL from the
     // command line. Must precede any connection or Data Server call.
     config_init(argc, argv);
+    audio_init();
 
     // Connects to Game Server
     connection_open();
@@ -307,6 +318,7 @@ int main(int argc, char** argv) {
     // Note: close steps do not make sense in a web environment, but we should keep them for a while
     connection_close();
     render_cleanup();
+    audio_shutdown();
     CloseWindow();
     return 0;
 }

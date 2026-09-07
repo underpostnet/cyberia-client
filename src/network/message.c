@@ -9,6 +9,9 @@
 #include "domain/camera.h"
 #include "domain/local_player.h"
 #include "domain/presentation_runtime.h"
+#include "domain/audio_context.h"
+#include "audio/audio.h"
+#include "audio/audio_events.h"
 #include "js/interact_bridge.h"
 #include "replication.h"
 #include "notification.h"
@@ -64,6 +67,7 @@ static Vector2 lookup_prev_server_pos(const PrevPos* arr, int n,
 }
 
 void message_reset_prev_snapshots(void) {
+    audio_context_reset();
     s_prev_bot_count = 0;
     s_prev_player_count = 0;
 }
@@ -369,6 +373,7 @@ static void json_unpack_snapshot(const cJSON* payload) {
     }
 
     /* Each snapshot re-lists everything in the area of interest. */
+
     s_overflow_warned = 0;
     game_state_layer_pool_reset();
     gs->other_player_count = 0;
@@ -395,6 +400,7 @@ static void json_unpack_snapshot(const cJSON* payload) {
 
     /* The authoritative self position is fresh — reconcile prediction. */
     prediction_reconcile();
+    audio_context_snapshot();
 }
 
 static void json_unpack_combat_text(const cJSON* payload) {
@@ -408,6 +414,14 @@ static void json_unpack_combat_text(const cJSON* payload) {
         .type    = (0 == strcmp(kind, "regen")) ? FCT_TYPE_REGEN : FCT_TYPE_DAMAGE,
     };
     local_player_fct_push(&ev);
+    /* The authoritative collision signal: the server emits one of these wherever damage lands,
+     * on any entity in view. Sounding it here is what makes a hit audible when it is someone
+     * else being hit, not only when it is the player.
+     *
+     * Only damage sounds here. Regeneration is emitted constantly and in small amounts, so it is
+     * sounded from the snapshot instead, once an entity's life actually crosses a milestone —
+     * see audio_context.c. */
+    if (FCT_TYPE_DAMAGE == ev.type) audio_event(AUDIO_EVENT_HIT);
 }
 
 static void json_unpack_drop_collect(const cJSON* payload) {
@@ -423,6 +437,7 @@ static void json_unpack_drop_collect(const cJSON* payload) {
 }
 
 static void json_unpack_drop_spawn(const cJSON* payload) {
+    audio_event(AUDIO_EVENT_DROP);
     char drop_id[MAX_ID_LENGTH] = {0};
     char item_id[MAX_ITEM_ID_LENGTH] = {0};
     serial_get_string(payload, "dropId", drop_id, sizeof(drop_id));
@@ -775,6 +790,7 @@ static void json_unpack_dialog_ack(const cJSON* payload) {
             const char* disp = (qm && qm->title[0]) ? qm->title : code;
 
             if (0 == strcmp(status, "completed") && !quest_progress_store_is_completed(code)) {
+                audio_event(AUDIO_EVENT_VICTORY);
                 if (qm && qm->reward_count > 0) {
                     char body[160];
                     snprintf(body, sizeof(body), "Reward: %dx %s",

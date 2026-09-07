@@ -5,6 +5,8 @@
 #include "input/input.h"
 #include "domain/presentation_runtime.h"
 #include "domain/camera.h"
+#include "audio/audio.h"
+#include "audio/audio_events.h"
 #include "interaction_bubble.h"
 #include "inventory_bar.h"
 #include "inventory_modal.h"
@@ -62,7 +64,9 @@ static bool ui_consume_event(const input_event_t* e, void* ctx) {
     if(!consumed && INPUT_TAP == e->type && !e->synthetic) {
         int mx = (int)e->screen_position.x;
         int my = (int)e->screen_position.y;
-        if (!consumed && ui_dispatch_tap(mx, my)) { consumed = true; }
+        /* One funnel for every UI surface — toolbar, modals, bubbles, inventory — so the click
+         * cue follows what the interface actually accepted, not every tap on the world. */
+        if (!consumed && ui_dispatch_tap(mx, my)) { consumed = true; audio_event(AUDIO_EVENT_UI_CLICK); }
         if (!consumed && ui_dispatch_covers_point(mx, my)) { consumed = true; }
     }
     if(!consumed && INPUT_KEY_DEBUG == e->type) {
