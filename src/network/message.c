@@ -101,6 +101,10 @@ static int read_layers(const cJSON* owner, const char* key,
         serial_get_string(item, "itemId", layers[n].item_id, MAX_ITEM_ID_LENGTH);
         layers[n].active   = serial_get_bool_default(item, "active", true);
         layers[n].quantity = serial_get_int_default(item, "quantity", 0);
+        // Presence is the demand signal: an item worn by an entity in this world, or carried in
+        // this player's inventory, is one this session will draw. The scheduler is idempotent,
+        // so a layer seen in every snapshot still costs one fetch.
+        if (obj_layers_mgr_get()) obj_layers_mgr_schedule_atlas_fetch(layers[n].item_id);
         n++;
     }
     return n;
@@ -609,10 +613,16 @@ static void json_unpack_metadata(const cJSON* payload) {
         return;
     }
 
-    // Parse objectLayers: map of itemId → OL metadata, then schedule
-    // atlas sprite sheet REST fetch for each item (two requests per itemKey:
-    // 1. GET /api/atlas-sprite-sheet/metadata/:itemKey  → cache frames + dims
-    // 2. GET /api/atlas-sprite-sheet/blob/:itemKey      → cache PNG texture)
+    // Parse objectLayers: map of itemId → OL definition. These are the item facts the client
+    // reasons about — type, stats, render descriptor — for everything the player could ever
+    // equip or pick up, and they arrive in this one message at no extra request cost.
+    //
+    // Their atlases are NOT fetched here. The definition set spans the whole instance (and, in
+    // the fallback world, every canonical item), while a session draws a small subset of it:
+    // fetching all of them costs two REST requests per item before the first frame, most of
+    // them for sprites nothing on screen references. Atlases are scheduled from presence
+    // instead — entity layers in read_layers, and anything else the moment it is first drawn
+    // (obj_layers_mgr_get_atlas_texture).
     cJSON* ol_map = cJSON_GetObjectItem(payload, "objectLayers");
     int ol_count = 0;
     if (ol_map && cJSON_IsObject(ol_map)) {
@@ -621,7 +631,6 @@ static void json_unpack_metadata(const cJSON* payload) {
             const char* item_id = entry->string;
             if (item_id && cJSON_IsObject(entry)) {
                 populate_object_layer_from_json(item_id, entry);
-                obj_layers_mgr_schedule_atlas_fetch(item_id);
                 ol_count++;
             }
         }
