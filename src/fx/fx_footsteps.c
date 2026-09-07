@@ -174,15 +174,6 @@ static void track_entity(const EntityState* e, ObjectLayerMode mode, float dt) {
     emit_step(e, heading, running);
 }
 
-/* Loot, coins, and skill projectiles travel without walking. Their bots are
- * excluded exactly as they are from the ground shadow. */
-static bool bot_has_feet(const BotState* bot) {
-    if ('\0' != bot->caster_id[0]) return false;
-    return 0 != strcmp(bot->behavior, "skill") &&
-           0 != strcmp(bot->behavior, "coin") &&
-           0 != strcmp(bot->behavior, "drop");
-}
-
 void fx_footsteps_update(float dt) {
     if (!s_ready) fx_footsteps_init();
     if (!g_game_state.init_received) return;
@@ -197,7 +188,7 @@ void fx_footsteps_update(float dt) {
                      g_game_state.other_players[i].base.mode, dt);
     }
     for (int i = 0; i < g_game_state.bot_count; i++) {
-        if (bot_has_feet(&g_game_state.bots[i])) {
+        if (game_state_bot_has_feet(&g_game_state.bots[i])) {
             track_entity(&g_game_state.bots[i].base, g_game_state.bots[i].base.mode, dt);
         }
     }

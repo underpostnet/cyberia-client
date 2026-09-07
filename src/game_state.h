@@ -151,6 +151,16 @@ static inline bool game_state_is_dead_item(const char* item_id) {
     return false;
 }
 
+/* True for a bot that is a creature in the world rather than a thing travelling through it:
+ * skill projectiles, coins and drops carry no feet. These are the bots that walk, raise dust and
+ * cast the ground shadow, so the rule is stated once and read by everything that needs it. */
+static inline bool game_state_bot_has_feet(const BotState* bot) {
+    if (!bot || '\0' != bot->caster_id[0]) return false;
+    return 0 != strcmp(bot->behavior, "skill") &&
+           0 != strcmp(bot->behavior, "coin") &&
+           0 != strcmp(bot->behavior, "drop");
+}
+
 static inline bool game_state_is_active_item_type(const char* item_type) {
     if (!item_type || item_type[0] == '\0') return false;
     for (int i = 0; i < g_game_state.equipment_rules.active_item_type_count; i++) {
