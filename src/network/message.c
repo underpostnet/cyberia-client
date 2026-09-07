@@ -364,7 +364,7 @@ static void json_unpack_snapshot(const cJSON* payload) {
         s_prev_players[i].pos_server = gs->other_players[i].base.pos_server;
     }
 
-    /* Each snapshot re-lists everything in the area of interest. */
+    /* Each snapshot re-lists everything in the area of interest. */
     s_overflow_warned = 0;
     game_state_layer_pool_reset();
     gs->other_player_count = 0;
