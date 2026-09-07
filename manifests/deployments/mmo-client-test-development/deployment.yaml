@@ -38,7 +38,7 @@ spec:
             - /bin/sh
             - -c
             - >
-              set -a && . /home/dd/engine/engine-private/conf/dd-cyberia/instances/mmo-client-test/env/development.env && set +a && exec python3 /home/dd/engine/cyberia-client/docker-driver.py 8082 /home/dd/engine/cyberia-client/bin
+              set -a && . /home/dd/engine/engine-private/conf/dd-cyberia/instances/mmo-client-test/env/development.env && set +a && exec python3 /home/dd/engine/cyberia-client/wasm-driver.py --port=8082 --directory=/home/dd/engine/cyberia-client/bin --data-server-url=$CYBERIA_DATA_SERVER_URL
           readinessProbe:
             {
               "tcpSocket": {
