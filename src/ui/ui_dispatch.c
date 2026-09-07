@@ -14,6 +14,33 @@
 #include "quest_journal.h"
 #include "toolbar.h"
 #include "js/interact_bridge.h"
+#include "game_state.h"
+#include "object_layers_management.h"
+
+#include <string.h>
+
+/* item_type_of resolves a carried item's type from the cached ObjectLayer, or "" when this
+ * session has not read that layer yet — the same "unknown types pass through" the server applies. */
+static const char* item_type_of(const char* item_id) {
+    ObjectLayer* layer = lookup_cached_layer(item_id);
+    return (layer && layer->data.item.type[0] != '\0') ? layer->data.item.type : "";
+}
+
+/* storable mirrors the server's deposit rule: a stack that is not worn always goes, and a worn one
+ * goes when the loadout survives without it. requireSkin keeps a skin on the player, so the last
+ * active skin stays and a second one is free to be banked. */
+static bool storable(int slot) {
+    const ObjectLayerState* item = &g_local_player.inventory[slot];
+    if (!item->active) return true;
+    if (!g_game_state.equipment_rules.require_skin) return true;
+    if (0 != strcmp(item_type_of(item->item_id), "skin")) return true;
+    for (int i = 0; i < g_local_player.inventory_count; i++) {
+        const ObjectLayerState* other = &g_local_player.inventory[i];
+        if (i == slot || !other->active) continue;
+        if (0 == strcmp(item_type_of(other->item_id), "skin")) return true;
+    }
+    return false;
+}
 
 bool ui_dispatch_tap(int x, int y) {
     /* Notification OK button has highest priority while visible. */
@@ -35,10 +62,10 @@ bool ui_dispatch_tap(int x, int y) {
         /* Storage tab open → a press on a bar slot lifts that stack into the
          * vault grid's drag instead of arming the strip's scroll, which is what
          * makes Inventory Bar → Storage Grid a single gesture. */
-        /* Equipped items stay equipped: only an inactive stack is storable. */
+        /* A worn stack is taken off as it is banked, so long as the loadout survives without it. */
         int drag_slot = inventory_bar_get_tapped_slot(x, y);
         if (0 <= drag_slot && drag_slot < g_local_player.inventory_count &&
-            !g_local_player.inventory[drag_slot].active &&
+            storable(drag_slot) &&
             modal_interact_storage_accepts_drag()) {
             modal_interact_storage_drag_in(drag_slot);
             return true;
