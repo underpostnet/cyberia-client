@@ -89,10 +89,9 @@ static void read_config(Map* map, const cJSON* doc) {
 
 static void apply_current(void) {
     if (!s_current) return;
-    // Every asset this map can play is loaded as soon as the map is known — during the loading
-    // screen, alongside the sprites — so nothing is fetched at the moment it is meant to sound.
-    audio_preload(s_current->music);
-    for (int i = 0; s_current->count > i; i++) audio_preload(s_current->events[i].code);
+    audio_preload(s_current->music, FETCH_P1);
+    Binding* steps = binding(s_current, AUDIO_EVENT_FOOTSTEPS);
+    if (NULL != steps) audio_preload(steps->code, FETCH_P1);
     if (!s_started) return;
     Binding* active = binding(s_current, s_context);
     if (active && AUDIO_MUSIC == active->params.bus) audio_play(active->code, &active->params);
@@ -113,7 +112,7 @@ void audio_content_music_finished(const char* code) {
 
 /* Use the existing list filter contract and encode the whole JSON query value. */
 static void fetch_match(const char* api, const char* field, const char* value,
-                        const char* token, FetchCompletedCb callback) {
+                        const char* token, FetchCompletedCb callback, FetchPriority priority) {
     cJSON* filter = cJSON_CreateObject();
     assert(filter);
     cJSON* item = cJSON_AddObjectToObject(filter, field);
@@ -132,7 +131,7 @@ static void fetch_match(const char* api, const char* field, const char* value,
     url[used] = '\0';
     cJSON_free(json);
     cJSON_Delete(filter);
-    fetch_request_start_limited(token, url, callback, 65536, 10000);
+    fetch_request_start_limited(token, url, callback, 65536, 10000, priority);
 }
 
 static const cJSON* first_document(const cJSON* root) {
@@ -159,19 +158,47 @@ static void on_map(const FetchResponse* response) {
         if (doc && 0 == strcmp(code, map->code)) read_config(map, doc);
         cJSON_Delete(root);
         if (s_current == map) apply_current();
+        else audio_preload(map->music, FETCH_P1);
         break;
     }
-    free(response->data);
+    fetch_data_release(response->data);
 }
 
-static void request_map(Map* map) {
+static void request_map(Map* map, FetchPriority priority) {
+    if (fetch_disabled(STREAM_AUDIO_DISABLED) || fetch_disabled(STREAM_AUDIO_NETWORK_DISABLED)) return;
     if (map->resolved || map->loading || s_time < map->retry_at) return;
     map->token = ++s_sequence;
     map->loading = true;
     map->retry_at = s_time + 15;
     char token[32];
     snprintf(token, sizeof(token), "%llu", (unsigned long long)map->token);
-    fetch_match("cyberia-map-audio-conf", "mapCode", map->code, token, on_map);
+    fetch_match("cyberia-map-audio-conf", "mapCode", map->code, token, on_map, priority);
+}
+
+static Map* resolve_map(const char* code) {
+    Map* map = NULL;
+    Map* oldest = &s_maps[0];
+    for (int i = 0; MAP_CAP > i; i++) {
+        if (0 == strcmp(s_maps[i].code, code)) map = &s_maps[i];
+        if (s_current != &s_maps[i] && (s_current == oldest || oldest->touched > s_maps[i].touched)) oldest = &s_maps[i];
+    }
+    if (!map) {
+        // The map plays nothing until engine-cyberia answers with its configuration; the client
+        // ships no audio of its own, so there is no local shape to start from.
+        map = oldest;
+        *map = (Map){ .params = audio_params(AUDIO_MUSIC) };
+        copy_str(map->code, sizeof(map->code), code);
+    }
+    return map;
+}
+
+void audio_prefetch_map(const char* code) {
+    if (NULL == code || '\0' == code[0] || AUDIO_CODE_CAP <= strlen(code)) return;
+    if (fetch_disabled(STREAM_AUDIO_DISABLED) || fetch_disabled(STREAM_AUDIO_NETWORK_DISABLED)) return;
+    Map* map = resolve_map(code);
+    map->touched = ++s_sequence;
+    audio_preload(map->music, FETCH_P1);
+    request_map(map, FETCH_P1);
 }
 
 void audio_set_map(const char* code) {
@@ -184,23 +211,11 @@ void audio_set_map(const char* code) {
     }
     if (s_current && 0 == strcmp(s_current->code, code)) return;
     s_context[0] = '\0';
-    Map* map = NULL;
-    Map* oldest = &s_maps[0];
-    for (int i = 0; MAP_CAP > i; i++) {
-        if (0 == strcmp(s_maps[i].code, code)) map = &s_maps[i];
-        if (oldest->touched > s_maps[i].touched) oldest = &s_maps[i];
-    }
-    if (!map) {
-        // The map plays nothing until engine-cyberia answers with its configuration; the client
-        // ships no audio of its own, so there is no local shape to start from.
-        map = oldest;
-        *map = (Map){ .params = audio_params(AUDIO_MUSIC) };
-        copy_str(map->code, sizeof(map->code), code);
-    }
+    Map* map = resolve_map(code);
     s_current = map;
     map->touched = ++s_sequence;
     apply_current();
-    request_map(map);
+    request_map(map, FETCH_P1);
 }
 
 void audio_event(const char* event) {
@@ -212,16 +227,18 @@ void audio_event(const char* event) {
     audio_play(entry->code, &entry->params);
 }
 
+/* The buffer is handed over rather than copied: the fetch layer already made the one copy out of
+ * the browser's response, and a second full copy of every WAV was the largest avoidable
+ * allocation on the boot path. audio_request_complete frees it, whether it keeps it or not. */
 static void on_wav(const FetchResponse* response) {
     uint64_t token = strtoull(response->asset_id, NULL, 10);
     audio_request_complete(token, response->success ? response->data : NULL, response->size);
-    free(response->data);
 }
 
 static void on_asset(const FetchResponse* response) {
     uint64_t token = strtoull(response->asset_id, NULL, 10);
     const char* requested_code = audio_request_code(token);
-    if (!requested_code) { free(response->data); return; }
+    if (!requested_code) { fetch_data_release(response->data); return; }
     cJSON* root = response->success && 65536 >= response->size ?
                   cJSON_ParseWithLength(response->data, response->size) : NULL;
     char file_id[32] = {0}, code[AUDIO_CODE_CAP] = {0};
@@ -238,7 +255,7 @@ static void on_asset(const FetchResponse* response) {
     // failure is worth another attempt.
     bool answered = response->success && NULL != root;
     cJSON_Delete(root);
-    free(response->data);
+    fetch_data_release(response->data);
     if (!valid) {
         if (answered) audio_request_absent(token);
         else audio_request_complete(token, NULL, 0);
@@ -246,20 +263,21 @@ static void on_asset(const FetchResponse* response) {
     }
     char url[64];
     snprintf(url, sizeof(url), "/api/file/blob/%s", file_id);
-    fetch_request_start_limited(response->asset_id, url, on_wav, AUDIO_WAV_MAX, 10000);
+    fetch_request_start_limited(response->asset_id, url, on_wav, AUDIO_WAV_MAX, 10000,
+                                audio_request_priority(token));
 }
 
-void audio_content_fetch(const char* code, uint64_t token) {
+void audio_content_fetch(const char* code, uint64_t token, FetchPriority priority) {
     char id[32];
     snprintf(id, sizeof(id), "%llu", (unsigned long long)token);
-    fetch_match("cyberia-audio", "code", code, id, on_asset);
+    fetch_match("cyberia-audio", "code", code, id, on_asset, priority);
 }
 
 void audio_content_start(void) {
     // The map and its assets were resolved during loading; starting only releases playback.
     s_started = true;
     apply_current();
-    if (s_current) request_map(s_current);
+    if (s_current) request_map(s_current, FETCH_P1);
 }
 
 void audio_content_update(float dt) {
@@ -270,7 +288,7 @@ void audio_content_update(float dt) {
             s_maps[i].retry_at = s_time + 30;
         }
     }
-    if (s_current) request_map(s_current);
+    if (s_current) request_map(s_current, FETCH_P1);
 }
 
 void audio_content_shutdown(void) {

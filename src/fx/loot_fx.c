@@ -4,6 +4,8 @@
 #include "domain/local_player.h"
 #include "game_state.h"
 #include "fx_inventory_bar_qty.h"
+#include "audio/audio.h"
+#include "audio/audio_events.h"
 #include "ui/inventory_bar.h"
 #include "world_types.h"
 #include "util/utils.h"
@@ -450,6 +452,11 @@ static void spawn_slot_delivery(float from_x, float from_y, float to_x, float to
 static void trigger_slot_delivery(const VacFlight* f) {
     if (0 != strcmp(f->collector_id, g_local_player.id)) return;
 
+    /* Sounded here, where the parabola lands on the avatar, because that is the moment the player
+     * takes the item. The stream into the bar and its counter flourish are what happens next; a
+     * cue at the end of those trails the gesture it is meant to mark by the whole delivery. */
+    audio_event(AUDIO_EVENT_ITEM_PICKUP);
+
     Vector2 from = game_render_world_to_screen((Vector2){ f->cur_x, f->cur_y });
     Vector2 slot;
     if (!inventory_bar_item_slot_center(f->item_id, &slot)) return;
@@ -458,6 +465,9 @@ static void trigger_slot_delivery(const VacFlight* f) {
 
 void loot_fx_reward_delivery(const char* item_id, float from_x, float from_y) {
     if (!item_id || item_id[0] == '\0') return;
+    /* A granted item has no world parabola to land: this call is the moment it becomes the
+     * player's, so it is the moment it sounds. */
+    audio_event(AUDIO_EVENT_ITEM_PICKUP);
     Vector2 slot;
     if (!inventory_bar_item_slot_center(item_id, &slot)) return;
     spawn_slot_delivery(from_x, from_y, slot.x, slot.y, item_id);
@@ -481,6 +491,12 @@ static void expend_target(float from_x, float from_y, float* tx, float* ty) {
 
 void loot_fx_slot_expend_at(const char* item_id, float from_x, float from_y) {
     if (!item_id || item_id[0] == '\0') return;
+
+    /* A stack leaving the bar is the same kind of moment as one arriving — a shop price paid, a
+     * recipe's inputs consumed — so the transfer is audible in both directions. Several inputs
+     * spent in one frame collapse to one cue through the SFX retrigger guard, which is what keeps
+     * a four-ingredient recipe from stacking the sample on itself. */
+    audio_event(AUDIO_EVENT_ITEM_PICKUP);
 
     float ttx, tty;
     expend_target(from_x, from_y, &ttx, &tty);

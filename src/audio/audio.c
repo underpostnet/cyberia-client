@@ -1,11 +1,13 @@
 #include "audio.h"
 #include "audio_internal.h"
 #include "util/utils.h"
+#include "network/engine_client.h"
 
 #include <raylib.h>
 #include <math.h>
 #include <stdint.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 
 #define AUDIO_CACHE_BYTES (32u * 1024u * 1024u)
@@ -13,8 +15,8 @@
 
 typedef struct {
     char code[AUDIO_CODE_CAP];
-    AudioAssetState state;
-    Sound sound;
+    bool resolving;
+    void* data;
     uint64_t token;
     uint64_t touched;
     double retry_at;
@@ -22,11 +24,12 @@ typedef struct {
     bool absent;
     size_t bytes;
     int references;
+    FetchPriority priority;
 } Asset;
 
 typedef struct {
     Asset* asset;
-    Sound sound;
+    Music sound;
     AudioParams params;
     uint64_t order;
     float gain;
@@ -77,14 +80,14 @@ static Asset* find_asset(const char* code) {
 
 static void release_voice(Voice* voice) {
     if (!voice->asset) return;
-    StopSound(voice->sound);
-    UnloadSoundAlias(voice->sound);
+    StopMusicStream(voice->sound);
+    UnloadMusicStream(voice->sound);
     voice->asset->references--;
     *voice = (Voice){0};
 }
 
 static void release_asset(Asset* asset) {
-    if (AUDIO_READY == asset->state) UnloadSound(asset->sound);
+    fetch_data_release(asset->data);
     s_bytes -= asset->bytes;
     *asset = (Asset){0};
 }
@@ -93,8 +96,9 @@ static Asset* oldest_asset(const Asset* except, bool resident_only) {
     Asset* oldest = NULL;
     for (int i = 0; AUDIO_ASSET_CAP > i; i++) {
         Asset* asset = &s_assets[i];
-        if (except == asset || 0 != asset->references || AUDIO_LOADING == asset->state ||
-            (resident_only && 0 == asset->bytes)) continue;
+        /* A slot mid-fetch is owed to its callback, and one holding undecoded bytes is owed a
+         * frame; evicting either throws away work already paid for over the network. */
+        if (except == asset || 0 != asset->references || asset->resolving || (resident_only && 0 == asset->bytes)) continue;
         if (!oldest || oldest->touched > asset->touched) oldest = asset;
     }
     return oldest;
@@ -126,7 +130,8 @@ static bool valid_wav(const void* bytes, size_t size) {
     bool format = false;
     unsigned align = 0;
     unsigned rate = 0;
-    for (size_t offset = 12; size - 8 >= offset;) {
+    unsigned chunks = 0;
+    for (size_t offset = 12; size - 8 >= offset && 64 > chunks++;) {
         size_t length = u32(p + offset + 4);
         if (size - offset - 8 < length) return false;
         const unsigned char* data = p + offset + 8;
@@ -146,43 +151,6 @@ static bool valid_wav(const void* bytes, size_t size) {
     return false;
 }
 
-bool audio_load_wav(const char* code, const void* bytes, size_t size) {
-    if (!s_ready || !valid_wav(bytes, size)) return false;
-    Asset* asset = reserve_asset(code);
-    if (!asset || 0 != asset->references) return false;
-    Wave wave = LoadWaveFromMemory(".wav", bytes, (int)size);
-    if (!IsWaveValid(wave)) return false;
-    /* Raylib stores device-rate stereo floats; reserve for up to 48 kHz. */
-    size_t required = ((size_t)wave.frameCount * 48000 / wave.sampleRate + 1) * 8;
-    while (AUDIO_CACHE_BYTES < s_bytes - asset->bytes + required) {
-        Asset* victim = oldest_asset(asset, true);
-        if (!victim || 0 == victim->bytes) { UnloadWave(wave); return false; }
-        release_asset(victim);
-    }
-    Sound sound = LoadSoundFromWave(wave);
-    UnloadWave(wave);
-    if (!IsSoundValid(sound)) return false;
-    required = (size_t)sound.frameCount * sound.stream.channels * (sound.stream.sampleSize / 8);
-    while (AUDIO_CACHE_BYTES < s_bytes - asset->bytes + required) {
-        Asset* victim = oldest_asset(asset, true);
-        if (!victim) { UnloadSound(sound); return false; }
-        release_asset(victim);
-    }
-    if (AUDIO_READY == asset->state) UnloadSound(asset->sound);
-    s_bytes -= asset->bytes;
-    asset->sound = sound;
-    asset->bytes = required;
-    asset->state = AUDIO_READY;
-    asset->touched = ++s_sequence;
-    s_bytes += required;
-    return true;
-}
-
-AudioAssetState audio_asset_state(const char* code) {
-    Asset* asset = find_asset(code);
-    return asset ? asset->state : AUDIO_ABSENT;
-}
-
 bool audio_unload(const char* code) {
     Asset* asset = find_asset(code);
     if (!asset) return true;
@@ -194,55 +162,78 @@ bool audio_unload(const char* code) {
 void audio_request_absent(uint64_t token) {
     for (int i = 0; s_ready && AUDIO_ASSET_CAP > i; i++) {
         Asset* asset = &s_assets[i];
-        if (token != asset->token || AUDIO_LOADING != asset->state) continue;
-        asset->state = AUDIO_FAILED;
+        if (token != asset->token || !asset->resolving) continue;
+        asset->resolving = false;
         asset->absent = true;
         return;
     }
 }
 
-void audio_preload(const char* code) {
+void audio_preload(const char* code, FetchPriority priority) {
     // Loading is deliberately not gated on the tap: an asset fetched during the loading screen
     // plays the instant the world starts, where one fetched on first use would arrive late and
     // silently miss the moment it was meant to mark.
-    if (!s_ready) return;
+    if (!s_ready || fetch_disabled(STREAM_AUDIO_NETWORK_DISABLED)) return;
     Asset* asset = reserve_asset(code);
-    if (!asset || asset->absent || AUDIO_READY == asset->state || AUDIO_LOADING == asset->state ||
-        s_time < asset->retry_at) return;
-    asset->state = AUDIO_LOADING;
+    if (NULL != asset && asset->priority > priority) asset->priority = priority;
+    if (!asset || asset->absent || NULL != asset->data || asset->resolving || s_time < asset->retry_at) return;
+    asset->resolving = true;
     asset->token = ++s_sequence;
     asset->retry_at = s_time + 25.0;
-    audio_content_fetch(code, asset->token);
+    asset->priority = priority;
+    audio_content_fetch(code, asset->token, priority);
 }
 
 const char* audio_request_code(uint64_t token) {
     for (int i = 0; s_ready && AUDIO_ASSET_CAP > i; i++) {
-        if (token == s_assets[i].token && AUDIO_LOADING == s_assets[i].state) return s_assets[i].code;
+        if (token == s_assets[i].token && s_assets[i].resolving) return s_assets[i].code;
     }
     return NULL;
 }
 
-void audio_request_complete(uint64_t token, const void* bytes, size_t size) {
+FetchPriority audio_request_priority(uint64_t token) {
+    for (int i = 0; s_ready && AUDIO_ASSET_CAP > i; i++) {
+        if (token == s_assets[i].token && s_assets[i].resolving) return s_assets[i].priority;
+    }
+    return FETCH_P2;
+}
+
+void audio_request_complete(uint64_t token, void* bytes, size_t size) {
     for (int i = 0; s_ready && AUDIO_ASSET_CAP > i; i++) {
         Asset* asset = &s_assets[i];
-        if (token != asset->token || AUDIO_LOADING != asset->state) continue;
-        if (!audio_load_wav(asset->code, bytes, size)) {
-            asset->state = AUDIO_FAILED;
-            asset->retry_at = s_time + 30.0;
+        if (token != asset->token || !asset->resolving) continue;
+        asset->resolving = false;
+        const double started = fetch_now();
+        fetch_event("audio_decode_start", asset->code, size, 0);
+        bool valid = valid_wav(bytes, size);
+        fetch_event("audio_decode_end", asset->code, size, fetch_now() - started);
+        while (valid && AUDIO_CACHE_BYTES < s_bytes + size) {
+            Asset* victim = oldest_asset(asset, true);
+            if (NULL == victim) { valid = false; break; }
+            release_asset(victim);
         }
+        if (!valid) {
+            fetch_data_release(bytes);
+            asset->resolving = false;
+            asset->retry_at = s_time + 30;
+            return;
+        }
+        asset->data = bytes;
+        asset->bytes = size;
+        s_bytes += size;
         return;
     }
+    fetch_data_release(bytes);
 }
 
 /* Every asset arrives from engine-cyberia, so a code is playable once its fetch has landed. */
-static Asset* playable(const char* code, AudioBus bus) {
-    (void)bus;
+static Asset* playable(const char* code) {
     Asset* asset = find_asset(code);
-    return asset && AUDIO_READY == asset->state ? asset : NULL;
+    return asset && NULL != asset->data ? asset : NULL;
 }
 
 static void apply_volume(Voice* voice) {
-    SetSoundVolume(voice->sound, voice->gain * voice->params.volume *
+    SetMusicVolume(voice->sound, voice->gain * voice->params.volume *
                    s_volumes[voice->params.bus] * s_volumes[AUDIO_MASTER]);
 }
 
@@ -255,18 +246,24 @@ static void fade(Voice* voice, float target, float seconds) {
 }
 
 static bool begin_voice(Voice* voice, Asset* asset, AudioParams params) {
+    if (fetch_disabled(STREAM_AUDIO_RUNTIME_DISABLED) || !fetch_has_budget()) return false;
+    const double started = fetch_now();
+    fetch_event("audio_runtime_create_start", asset->code, asset->bytes, 0);
+    Music alias = LoadMusicStreamFromMemory(".wav", asset->data, (int)asset->bytes);
+    fetch_account("audio_runtime_create_end", asset->code, asset->bytes, started);
+    if (!IsMusicValid(alias)) return false;
     release_voice(voice);
-    Sound alias = LoadSoundAlias(asset->sound);
-    if (!IsSoundValid(alias)) return false;
+    alias.looping = params.loop;
     *voice = (Voice){ .asset = asset, .sound = alias, .params = params, .order = ++s_sequence,
                       .gain = 0.0f < params.fade_seconds ? 0.0f : 1.0f };
     asset->references++;
     asset->touched = s_sequence;
     fade(voice, 1.0f, params.fade_seconds);
-    SetSoundPitch(alias, params.pitch);
-    SetSoundPan(alias, params.pan);
+    SetMusicPitch(alias, params.pitch);
+    SetMusicPan(alias, params.pan);
     apply_volume(voice);
-    PlaySound(alias);
+    PlayMusicStream(alias);
+    fetch_event("audio_play", asset->code, asset->bytes, 0);
     return true;
 }
 
@@ -278,11 +275,11 @@ static bool play_sfx(Asset* asset, AudioParams params) {
     Voice* choice = NULL;
     for (int i = 0; AUDIO_SFX_CAP > i; i++) {
         Voice* voice = &s_sfx[i];
-        if (!voice->asset || !IsSoundPlaying(voice->sound)) { choice = voice; break; }
+        if (!voice->asset || !IsMusicStreamPlaying(voice->sound)) { choice = voice; break; }
         if (!choice || choice->params.priority > voice->params.priority ||
             (choice->params.priority == voice->params.priority && choice->order > voice->order)) choice = voice;
     }
-    if (choice->asset && IsSoundPlaying(choice->sound) && params.priority < choice->params.priority) return false;
+    if (choice->asset && IsMusicStreamPlaying(choice->sound) && params.priority < choice->params.priority) return false;
     if (!begin_voice(choice, asset, params)) return false;
     asset->last_started = s_time;
     return true;
@@ -296,13 +293,13 @@ bool audio_play(const char* code, const AudioParams* input) {
     params.pitch = bounded(params.pitch, 0.25f, 4);
     params.pan = bounded(params.pan, 0, 1);
     params.fade_seconds = bounded(params.fade_seconds, 0, 10);
-    audio_preload(code);
+    audio_preload(code, FETCH_P0);
     if (AUDIO_MUSIC == params.bus) {
         copy_str(s_music_code, sizeof(s_music_code), code);
         s_music_params = params;
         return true;
     }
-    Asset* asset = playable(code, params.bus);
+    Asset* asset = playable(code);
     // Several entities hit in the same tick raise several damage events; the world should sound
     // like one impact, not like the same sample stacked on itself.
     if (asset && s_time < asset->last_started + SFX_RETRIGGER_SECONDS) return false;
@@ -350,14 +347,18 @@ float audio_get_volume(AudioBus bus) {
 
 static void update_voice(Voice* voice, float dt) {
     if (!voice->asset) return;
+    const double started = fetch_now();
+    fetch_event("audio_decode_start", voice->asset->code, 0, 0);
+    UpdateMusicStream(voice->sound);
+    fetch_account("audio_decode_end", voice->asset->code, 0, started);
     if (0.0f < voice->fade_duration) {
         voice->fade_elapsed += dt;
         float amount = fminf(1, voice->fade_elapsed / voice->fade_duration);
         voice->gain = voice->fade_from + (voice->fade_to - voice->fade_from) * amount;
     }
     if (0.0f == voice->fade_to && 0.0001f >= voice->gain) { release_voice(voice); return; }
-    if (!IsSoundPlaying(voice->sound)) {
-        if (voice->params.loop) PlaySound(voice->sound);
+    if (!IsMusicStreamPlaying(voice->sound)) {
+        if (voice->params.loop) PlayMusicStream(voice->sound);
         else { release_voice(voice); return; }
     }
     apply_volume(voice);
@@ -372,14 +373,14 @@ void audio_update(float dt) {
     audio_content_update(dt);
     for (int i = 0; AUDIO_ASSET_CAP > i; i++) {
         Asset* asset = &s_assets[i];
-        if (AUDIO_LOADING == asset->state && s_time >= asset->retry_at) audio_request_complete(asset->token, NULL, 0);
+        if (asset->resolving && s_time >= asset->retry_at) audio_request_complete(asset->token, NULL, 0);
     }
     if (!s_started) return;
     for (int i = 0; AUDIO_SFX_CAP > i; i++) update_voice(&s_sfx[i], dt);
     bool finished = false;
     for (int i = 0; 2 > i; i++) {
         if (s_music[i].asset && !s_music[i].params.loop && 1.0f == s_music[i].fade_to &&
-            !IsSoundPlaying(s_music[i].sound)) finished = true;
+            !IsMusicStreamPlaying(s_music[i].sound)) finished = true;
         update_voice(&s_music[i], dt);
     }
     if (finished) {
@@ -389,15 +390,15 @@ void audio_update(float dt) {
         audio_content_music_finished(completed);
     }
     if ('\0' != s_music_code[0]) {
-        audio_preload(s_music_code);
-        Asset* asset = playable(s_music_code, AUDIO_MUSIC);
+        audio_preload(s_music_code, FETCH_P0);
+        Asset* asset = playable(s_music_code);
         int current = -1;
         for (int i = 0; 2 > i; i++) {
             if (asset && asset == s_music[i].asset) current = i;
         }
         if (0 <= current) {
-            if (s_music[current].params.pitch != s_music_params.pitch) SetSoundPitch(s_music[current].sound, s_music_params.pitch);
-            if (s_music[current].params.pan != s_music_params.pan) SetSoundPan(s_music[current].sound, s_music_params.pan);
+            if (s_music[current].params.pitch != s_music_params.pitch) SetMusicPitch(s_music[current].sound, s_music_params.pitch);
+            if (s_music[current].params.pan != s_music_params.pan) SetMusicPan(s_music[current].sound, s_music_params.pan);
             s_music[current].params = s_music_params;
             if (1.0f != s_music[current].fade_to) {
                 fade(&s_music[current], 1, s_music_params.fade_seconds);
@@ -413,13 +414,15 @@ void audio_update(float dt) {
         Pending* pending = &s_pending[i];
         if ('\0' == pending->code[0]) continue;
         if (s_time > pending->expires) { pending->code[0] = '\0'; continue; }
-        Asset* asset = playable(pending->code, AUDIO_SFX);
+        Asset* asset = playable(pending->code);
         if (asset) { play_sfx(asset, pending->params); pending->code[0] = '\0'; }
     }
 }
 
 bool audio_init(void) {
     if (s_ready) return true;
+    if (fetch_disabled(STREAM_AUDIO_DISABLED)) return false;
+    SetAudioStreamBufferSizeDefault(1024);
     InitAudioDevice();
     s_ready = IsAudioDeviceReady();
     if (!s_ready) return false;

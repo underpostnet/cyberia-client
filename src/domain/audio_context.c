@@ -1,8 +1,10 @@
 #include "audio_context.h"
+#include "network/engine_client.h"
 #include "audio/audio.h"
 #include "audio/audio_events.h"
 #include "game_state.h"
 #include "local_player.h"
+#include "ui/modal_notification.h"
 #include "object_layer.h"
 #include "world_types.h"
 #include "util/utils.h"
@@ -40,6 +42,7 @@ typedef struct {
 } EntityScan;
 
 static char s_map[MAX_ID_LENGTH];
+static char s_destination[MAX_ID_LENGTH];
 static char s_skills[SEEN_SKILLS_CAP][MAX_ID_LENGTH];
 static int s_skill_count;
 static TrackedEntity s_tracked[TRACKED_LIVES_CAP];
@@ -48,6 +51,7 @@ static float s_life;
 static int s_coins;
 static float s_combat_remaining;
 static bool s_portal_hold;
+static bool s_craft_hold;
 static float s_portal_progress;
 
 static bool crossed_milestone(float before, float after) {
@@ -111,10 +115,24 @@ static void entity_snapshot(bool map_changed) {
     if (scan.healed) audio_event(AUDIO_EVENT_HEAL);
 }
 
-/* The music bed to return to once a one-off cue ends: the portal charge outlives
- * a combat exchange, so a hold still in progress keeps the bus. */
+/* The music bed to return to once a one-off cue ends: a hold still in progress keeps the bus, so
+ * a portal charge or a running assembly outlives a combat exchange rather than being cut by it. */
 static void restore_music(void) {
-    audio_event(s_portal_hold ? AUDIO_EVENT_PORTAL_COOLDOWN : AUDIO_EVENT_IDLE);
+    if (s_portal_hold) { audio_event(AUDIO_EVENT_PORTAL_COOLDOWN); return; }
+    if (s_craft_hold) { audio_event(AUDIO_EVENT_CRAFT); return; }
+    audio_event(AUDIO_EVENT_IDLE);
+}
+
+/* The crafting bed is held for exactly as long as the assembly bar charges, the same shape as the
+ * portal charge above: entered once, released once, looping in between. The modal owns the bar and
+ * says whether one is running; arbitration of the music bus stays here, in one place. */
+static void craft_snapshot(bool map_changed) {
+    const bool charging = modal_notification_is_charging();
+    if (charging == s_craft_hold) return;
+    s_craft_hold = charging;
+    if (charging) { audio_event(AUDIO_EVENT_CRAFT); return; }
+    /* On a transfer the caller's audio_set_map installs the destination bed instead. */
+    if (!map_changed) audio_event(AUDIO_EVENT_IDLE);
 }
 
 /* Portal audio is driven by the authoritative hold flag, never by the map code: an
@@ -128,6 +146,7 @@ static void portal_snapshot(bool map_changed) {
     if (local_player_on_portal()) {
         if (!s_portal_hold) {
             s_portal_hold = true;
+            fetch_event("portal_enter", s_map, 0, 0);
             audio_event(AUDIO_EVENT_PORTAL_COOLDOWN);
         }
         s_portal_progress = local_player_portal_hold_progress();
@@ -148,10 +167,12 @@ static void portal_snapshot(bool map_changed) {
 
 void audio_context_reset(void) {
     s_map[0] = '\0';
+    s_destination[0] = '\0';
     s_skill_count = 0;
     s_tracked_count = 0;
     s_combat_remaining = 0;
     s_portal_hold = false;
+    s_craft_hold = false;
     s_portal_progress = 0.0f;
     audio_set_map("");
 }
@@ -161,6 +182,7 @@ void audio_context_snapshot(void) {
     if ('\0' == g_local_player.map_code[0]) return;
     bool changed = 0 != strcmp(s_map, g_local_player.map_code);
     portal_snapshot(changed);
+    craft_snapshot(changed);
     entity_snapshot(changed);
     if (changed) {
         copy_str(s_map, sizeof(s_map), g_local_player.map_code);
@@ -178,6 +200,24 @@ void audio_context_snapshot(void) {
     }
     s_life = player->base.life;
     s_coins = local_player_coins();
+
+    const WorldObject* closest = NULL;
+    float distance = 36.0f;
+    for (int i = 0; g_game_state.portal_count > i; i++) {
+        const WorldObject* portal = &g_game_state.portals[i];
+        if ('\0' == portal->target_map_code[0]) continue;
+        const float dx = player->base.pos_server.x - portal->pos.x;
+        const float dy = player->base.pos_server.y - portal->pos.y;
+        const float squared = dx * dx + dy * dy;
+        if (distance < squared) continue;
+        distance = squared;
+        closest = portal;
+    }
+    if (NULL != closest && 0 != strcmp(closest->target_map_code, s_destination)) {
+        copy_str(s_destination, sizeof(s_destination), closest->target_map_code);
+        fetch_event("portal_target_known", s_destination, 0, 0);
+        audio_prefetch_map(s_destination);
+    }
 
     char current[SEEN_SKILLS_CAP][MAX_ID_LENGTH];
     int count = 0;

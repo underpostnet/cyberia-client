@@ -18,6 +18,8 @@
 #define AUDIO_EVENT_HIT             "hit"
 #define AUDIO_EVENT_HEAL            "heal"
 #define AUDIO_EVENT_DROP            "drop"
+#define AUDIO_EVENT_ITEM_PICKUP     "item-pickup"
+#define AUDIO_EVENT_CRAFT           "craft"
 #define AUDIO_EVENT_UI_CLICK        "ui-click"
 #define AUDIO_EVENT_FOOTSTEPS       "footsteps"
 

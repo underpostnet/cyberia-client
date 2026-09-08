@@ -167,6 +167,7 @@ static ModalNotificationConfirmFn s_on_confirm = NULL;
 /* Active assembly; craft_total 0 means the visible entry is not one. */
 static float s_craft_total = 0.0f;
 static float s_craft_age   = 0.0f;
+
 static NotifItem s_inputs[MN_ITEMS_MAX];
 static int   s_input_count = 0;
 static ModalNotificationCancelFn s_on_cancel = NULL;
@@ -669,6 +670,13 @@ static void assemble_release_freeze(void) {
     if (modal_interact_is_open()) local_player_request_freeze(true, "interact");
 }
 
+/* The window the bar is actually charging. An assembly card outlives its charge — it stays up
+ * through the grant delivery and the close slide — so "this card is an assembly" is the wrong
+ * question for anything that follows the charge itself. */
+static bool notif_is_charging(void) {
+    return s_open && notif_is_assembling() && !s_awaiting_grant && !s_awaiting_delivery && !s_closing;
+}
+
 void modal_notification_abort_assemble(void) {
     if (!s_open || !notif_is_assembling() || s_awaiting_grant || s_awaiting_delivery) return;
     s_on_cancel = NULL;
@@ -856,7 +864,7 @@ void modal_notification_draw(void) {
         cy += (float)text_wrap(s_message, ix, (int)cy, iw, MN_FONT_BODY, body, true, true);
     }
 
-    bool charging = notif_is_assembling() && !s_awaiting_grant && !s_awaiting_delivery && !s_closing;
+    bool charging = notif_is_charging();
 
     /* Consumed inputs — shown for the whole assembly so the trade is legible,
      * and emptied once they have sprayed out of their slots. */
@@ -1054,6 +1062,8 @@ void modal_notification_draw(void) {
 bool modal_notification_is_open(void) {
     return s_open;
 }
+
+bool modal_notification_is_charging(void) { return notif_is_charging(); }
 
 bool modal_notification_is_on_cooldown(void) {
     return s_close_cooldown > 0.0f;

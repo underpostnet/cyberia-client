@@ -108,6 +108,11 @@ bool modal_notification_handle_click(int mx, int my);
 /* Returns true while a notification is visible. */
 bool modal_notification_is_open(void);
 
+/* Returns true while a recipe's assembly bar is charging — not merely while an assembly card is
+ * up, which outlives the charge. The audio layer reads this to hold the crafting bed for exactly
+ * that window, the way it reads the portal charge to hold its own. */
+bool modal_notification_is_charging(void);
+
 /* Returns true during the post-close cooldown window. While this is active,
  * the click dispatch should swallow all taps to prevent accidental triggers
  * on elements that were behind the notification. */

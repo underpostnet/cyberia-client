@@ -1,4 +1,6 @@
 #include "modal_interact.h"
+#include "audio/audio.h"
+#include "audio/audio_events.h"
 #include "text.h"
 
 #include "action_cache.h"
@@ -2341,6 +2343,18 @@ static void storage_drop_out(const ItemSlotGridEvent* ev, int qty) {
 
 /* Carry out a resolved vault move at `qty` units. */
 static void storage_commit(const ItemSlotGridEvent* ev, int qty) {
+    /* Every vault mutation passes through here — deposit, withdraw, a move inside the grid, a
+     * swap of two cells — so one cue covers them all. A tap only inspects and stays silent. */
+    switch (ev->type) {
+        case ITEM_SLOT_GRID_EVENT_MOVE:
+        case ITEM_SLOT_GRID_EVENT_SWAP:
+        case ITEM_SLOT_GRID_EVENT_DROP_OUT:
+        case ITEM_SLOT_GRID_EVENT_DROP_IN:
+            audio_event(AUDIO_EVENT_ITEM_PICKUP);
+            break;
+        default:
+            break;
+    }
     switch (ev->type) {
         case ITEM_SLOT_GRID_EVENT_MOVE:
             storage_apply_local_move(ev->from_index, ev->to_index, qty);
