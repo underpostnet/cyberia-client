@@ -406,32 +406,39 @@
 
                 let ready = false;
                 let startRequested = false;
-                let lastPct = 0;
+                const retryTimer = setTimeout(function () {
+                    if (ready) return;
+                    const retry = document.createElement("button");
+                    retry.id = "loading-retry";
+                    retry.textContent = "Reload";
+                    retry.onclick = function (event) { event.stopPropagation(); location.reload(); };
+                    el("loading-text").after(retry);
+                }, 15000);
 
                 function el(id) {
                     return document.getElementById(id);
                 }
 
-                /* pct is 0..100 from REAL stage/fetch accounting; clamped
-                   monotonic so late-queued fetches never move it backward. */
+                // Negative progress means the dependency count is not known.
                 function progress(pct, label) {
                     const bar = el("loading-bar");
                     if (!bar) return;
-                    pct = Math.floor(Math.max(lastPct, Math.min(100, pct)));
-                    lastPct = pct;
-                    bar.style.width = pct + "%";
-                    el("loading-percent").innerText = pct + "%";
+                    bar.style.width = pct < 0 ? "100%" : pct + "%";
+                    bar.style.opacity = pct < 0 ? "0.35" : "1";
+                    el("loading-percent").innerText = pct < 0 ? "..." : pct + "%";
                     if (label) {
-                        el("loading-text").innerText = "[MODULE]: " + label;
+                        el("loading-text").innerText = label;
                     }
                 }
 
                 function setReady() {
                     if (ready || !el("loading-bar")) return;
                     ready = true;
+                    clearTimeout(retryTimer);
+                    el("loading-retry")?.remove();
                     progress(100, null);
                     const text = el("loading-text");
-                    text.innerText = "LOADING COMPLETE.";
+                    text.innerText = "Your character is ready.";
                     text.style.color = "#ffcc00";
                     el("loading-ready").style.visibility = "visible";
                     el("loading-logo").style.animation =

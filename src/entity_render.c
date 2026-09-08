@@ -1,4 +1,10 @@
 #include "entity_render.h"
+#include "object_layer.h"
+#include "game_state.h"
+#include "world_types.h"
+#include "network/engine_client.h"
+#include "domain/local_player_view.h"
+#include "domain/camera.h"
 #include "ui/text.h"
 #include "object_layers_management.h"
 #include "layer_z_order.h"
@@ -224,6 +230,54 @@ static int get_frame_count_and_direction(
     return pick_available_direction(atlas, dir_str, fallback_dir, out_dir_string);
 }
 
+static bool layers_render_ready(const ObjectLayerState* layers, int count, Direction direction, ObjectLayerMode mode) {
+    bool ready = true;
+    for (int i = 0; count > i; i++) {
+        const ObjectLayerState* layer = &layers[i];
+        if (!layer->active || '\0' == layer->item_id[0]) continue;
+        AtlasSpriteSheetData* atlas = get_or_fetch_atlas_data(layer->item_id, FETCH_P0);
+        Texture2D texture = get_atlas_texture(layer->item_id, FETCH_P0);
+        if (NULL == lookup_cached_layer(layer->item_id) || NULL == atlas || 0 == texture.id) {
+            ready = false;
+            continue;
+        }
+        const char* selected;
+        if (0 == get_frame_count_and_direction(atlas, direction, mode, &selected)) { ready = false; continue; }
+        const DirectionFrameData* frames = atlas_get_direction_frames(atlas, selected);
+        for (int j = 0; frames->count > j; j++) {
+            const FrameMetadata* frame = &frames->frames[j];
+            if (0 >= frame->width || 0 >= frame->height || 0 > frame->x || 0 > frame->y ||
+                texture.width < frame->x + frame->width || texture.height < frame->y + frame->height) ready = false;
+        }
+    }
+    return ready;
+}
+
+bool player_render_ready(void) {
+    const EntityState* player = &g_game_state.player.base;
+    if ('\0' == player->id[0] || 0 == player->layer_count) return false;
+    bool active = false;
+    for (int i = 0; player->layer_count > i; i++) {
+        const ObjectLayerState* layer = &OBJ_LAYERS(player)[i];
+        if (layer->active && '\0' != layer->item_id[0]) active = true;
+    }
+    return layers_render_ready(OBJ_LAYERS(player), player->layer_count,
+                               local_player_view_direction(), local_player_view_mode()) && active;
+}
+
+bool immediate_scene_ready(void) {
+    const EntityState* player = &g_game_state.player.base;
+    const float x = player->pos_server.x + player->dims.x * 0.5f;
+    const float y = player->pos_server.y + player->dims.y * 0.5f;
+    bool ready = true;
+    for (int i = 0; g_game_state.floor_count > i; i++) {
+        const WorldObject* floor = &g_game_state.floors[i];
+        if (floor->pos.x > x || floor->pos.y > y || floor->pos.x + floor->dims.x <= x || floor->pos.y + floor->dims.y <= y) continue;
+        if (!layers_render_ready(OBJ_LAYERS(floor), floor->layer_count, DIRECTION_NONE, MODE_IDLE)) ready = false;
+    }
+    return ready;
+}
+
 static void draw_dev_ui_box(Rectangle dest_rec, const char* entity_type) {
     Color color = RED;
     if (strcmp(entity_type, "self") == 0) color = BLUE;
@@ -296,6 +350,12 @@ void draw_entity_layers(
         scaled_dims_h
     };
 
+    const Camera2D camera = camera_get();
+    const Vector2 top_left = GetScreenToWorld2D((Vector2){0, 0}, camera);
+    const Vector2 bottom_right = GetScreenToWorld2D((Vector2){GetScreenWidth(), GetScreenHeight()}, camera);
+    const Rectangle view = {top_left.x, top_left.y, bottom_right.x - top_left.x, bottom_right.y - top_left.y};
+    if (!CheckCollisionRecs(dest_rec, view)) return;
+
     // Draw dev UI debug box if enabled
     if (dev_ui && entity_type) {
         draw_dev_ui_box(dest_rec, entity_type);
@@ -312,6 +372,7 @@ void draw_entity_layers(
     LayerRenderInfo layers_to_render[MAX_LAYERS_PER_ENTITY];
     int render_count = 0;
     bool has_associated_item_id = false;
+    const FetchPriority asset_priority = NULL != entity_type && 0 == strcmp(entity_type, "self") ? FETCH_P0 : FETCH_P1;
 
     for (int i = 0; i < layers_count && render_count < MAX_LAYERS_PER_ENTITY; i++) {
         ObjectLayerState* state = layers_state[i];
@@ -325,16 +386,7 @@ void draw_entity_layers(
         ObjectLayer* layer = lookup_cached_layer(state->item_id);
 
         // Fetch atlas sprite sheet data (for frame metadata + atlas texture reference)
-        AtlasSpriteSheetData* atlas = get_or_fetch_atlas_data(state->item_id);
-
-        // If atlas metadata not yet cached, pump the async REST fetch state
-        // machine each frame. On first call: schedules
-        // GET /api/atlas-sprite-sheet/metadata/:itemKey. On subsequent calls:
-        // polls the in-flight request and caches the JSON when it arrives,
-        // then automatically kicks off the PNG blob fetch.
-        if (!atlas) {
-            get_atlas_texture(state->item_id);
-        }
+        AtlasSpriteSheetData* atlas = get_or_fetch_atlas_data(state->item_id, asset_priority);
 
         if (!layer && !atlas) {
             // Neither data source available yet — still loading
@@ -451,7 +503,7 @@ void draw_entity_layers(
 
         if (atlas && atlas->item_key[0] != '\0') {
             // Get or poll the atlas texture (async loading)
-            Texture2D atlas_texture = get_atlas_texture(atlas->item_key);
+            Texture2D atlas_texture = get_atlas_texture(atlas->item_key, asset_priority);
 
             if (atlas_texture.id > 0) {
                 // Atlas texture is ready — look up the source rectangle
@@ -491,8 +543,10 @@ void draw_entity_layers(
     // Final Rendering
     // ========================================================================
 
+    bool drawn = false;
     for (int i = 0; i < render_count; i++) {
         if (layer_textures[i].id > 0) {
+            drawn = true;
             DrawTexturePro(
                 layer_textures[i],
                 layer_source_rects[i],
@@ -503,6 +557,7 @@ void draw_entity_layers(
             );
         }
     }
+    if (!drawn) DrawRectangleRec(dest_rec, fallback_color);
 }
 
 void draw_entity_shadow(float pos_x, float pos_y, float width, float height, float cell_size) {

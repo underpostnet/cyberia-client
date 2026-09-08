@@ -15,6 +15,9 @@
 
 typedef struct EntityRender EntityRender;
 
+bool player_render_ready(void);
+bool immediate_scene_ready(void);
+
 /* The manager pointer is borrowed: free it separately, and keep it valid for
  * the lifetime of the EntityRender. NULL on allocation failure. */
 EntityRender* create_entity_render(ObjectLayersManager* object_layers_manager);

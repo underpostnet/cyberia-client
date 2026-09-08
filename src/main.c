@@ -5,6 +5,11 @@
 
 #include "input/input.h"
 #include "game_state.h"
+#include "network/engine_client.h"
+#include "entity_render.h"
+#include "world_types.h"
+#include "object_layer.h"
+#include "util/utils.h"
 #include "render.h"
 #include "network/game_client.h"
 #include "network/replication.h"
@@ -15,7 +20,6 @@
 
 #include "js/interact_bridge.h"
 #include "js/loading_bridge.h"
-#include "network/engine_client.h"
 
 #include "domain/camera.h"
 #include "domain/presentation_runtime.h"
@@ -49,6 +53,42 @@ static bool tap_hits_provider(Vector2 world_pos) {
     }
     return false;
 }
+static char s_trace_map[MAX_ID_LENGTH];
+static bool s_trace_player;
+static bool s_trace_frame;
+static bool s_trace_scene;
+static bool s_trace_movement;
+static bool s_destination;
+static Vector2 s_trace_position;
+
+static void observe_scene(bool gameplay) {
+    const EntityState* player = &g_game_state.player.base;
+    if ('\0' == g_local_player.map_code[0]) return;
+    if (0 != strcmp(s_trace_map, g_local_player.map_code)) {
+        s_destination = '\0' != s_trace_map[0];
+        copy_str(s_trace_map, sizeof(s_trace_map), g_local_player.map_code);
+        s_trace_player = s_trace_frame = s_trace_movement = s_trace_scene = false;
+        s_trace_position = player->pos_server;
+    }
+    if (!s_trace_player && player_render_ready()) {
+        s_trace_player = true;
+        fetch_event(s_destination ? "destination_player_ready" : "main_player_ready", s_trace_map, 0, 0);
+    }
+    if (!s_trace_scene && s_trace_player && immediate_scene_ready()) {
+        s_trace_scene = true;
+        fetch_event(s_destination ? "destination_activation" : "initial_scene_ready", s_trace_map, 0, 0);
+    }
+    if (gameplay && !s_trace_frame) {
+        s_trace_frame = true;
+        fetch_event(s_destination ? "first_destination_frame" : "first_frame", s_trace_map, 0, 0);
+    }
+    if (gameplay && !s_trace_movement &&
+        (s_trace_position.x != player->pos_server.x || s_trace_position.y != player->pos_server.y)) {
+        s_trace_movement = true;
+        fetch_event(s_destination ? "first_destination_movement" : "first_movement", s_trace_map, 0, 0);
+    }
+}
+
 static void gameloop(void) {
     float frame_dt = GetFrameTime();
 #ifndef CYBERIA_DEBUG
@@ -56,6 +96,7 @@ static void gameloop(void) {
 #endif
     sim_acc += (double)frame_dt;
 
+    fetch_frame_begin((double)frame_dt * 1000, !player_render_ready() || !immediate_scene_ready() || local_player_on_portal());
     text_font_sync();
     game_client_on_tick();
     local_player_on_tick();
@@ -152,131 +193,44 @@ static void gameloop(void) {
 
     // render interpolated state
     render_on_tick(frame_dt);
+    observe_scene(true);
+    fetch_process_frame();
+    fetch_frame_end();
 }
 
-/* ── Loading stages ──────────────────────────────────────────────────────
- * Each stage completes on a REAL initialization signal — never a timer.
- * The world renders beneath the DOM loading overlay for the whole preload,
- * so atlas/ObjectLayer fetches and texture creation are warmed before the
- * player ever sees the scene. The order is the true dependency chain. */
-enum {
-    LOAD_RUNTIME = 0, /* WASM runtime, renderer, UI systems initialized     */
-    LOAD_CONNECT,     /* WebSocket to the simulation server open            */
-    LOAD_WORLD,       /* authoritative init_data received                   */
-    LOAD_HINTS,       /* presentation client-hints fetched                  */
-    LOAD_ASSETS,      /* engine REST pipeline (atlas/OL/textures) went idle */
-    LOAD_STABLE,      /* sustained frames with zero outstanding fetches     */
-    LOAD_STAGE_COUNT,
-};
-
-/* Label of the stage IN PROGRESS. */
-static const char* LOAD_STAGE_LABEL[LOAD_STAGE_COUNT] = {
-    "INITIALIZING RUNTIME...",
-    "CONNECTING TO CYBERIA SERVER...",
-    "SYNCHRONIZING WORLD STATE...",
-    "LOADING PRESENTATION HINTS...",
-    "STREAMING ATLAS TEXTURES...",
-    "STABILIZING INSTANCE...",
-};
-
-/* Share of the progress bar per stage (sums to 100). Asset streaming
- * dominates real load time, so it owns most of the bar and advances
- * continuously with the fetch completion ratio. */
-static const float LOAD_STAGE_WEIGHT[LOAD_STAGE_COUNT] = {
-    5.0f, 10.0f, 10.0f, 10.0f, 55.0f, 10.0f,
-};
-
-/* The stabilization window: this many consecutive rendered frames with an
- * idle fetch pipeline before the world counts as visually stable. */
-#define LOAD_STABLE_FRAMES 45
-
-static int  s_load_done      = 0;     /* stages completed so far            */
-static int  s_stable_frames  = 0;
-static bool s_load_ready     = false; /* all stages done, awaiting the tap  */
-
-/* True when the current stage's real completion signal is observed. */
-static bool load_stage_complete(int stage) {
-    switch (stage) {
-        case LOAD_RUNTIME: return true; /* main() finished all init calls   */
-        case LOAD_CONNECT: return connection_is_open();
-        case LOAD_WORLD:   return g_game_state.init_received;
-        case LOAD_HINTS:   return presentation_runtime_is_ready();
-        case LOAD_ASSETS:  return fetch_total_started() > 0 &&
-                                  0 == fetch_pending_count();
-        case LOAD_STABLE:
-            if (0 == fetch_pending_count()) s_stable_frames++;
-            else                            s_stable_frames = 0;
-            return LOAD_STABLE_FRAMES <= s_stable_frames;
-    }
-    return false;
-}
-
-/* 0..1 completion of the stage in progress — real measurements only. */
-static float load_stage_fraction(int stage) {
-    switch (stage) {
-        case LOAD_ASSETS: {
-            int total = fetch_total_started();
-            if (0 >= total) return 0.0f;
-            return (float)(total - fetch_pending_count()) / (float)total;
-        }
-        case LOAD_STABLE:
-            return (float)s_stable_frames / (float)LOAD_STABLE_FRAMES;
-        default:
-            return 0.0f;
-    }
-}
-
-/* Bar percent + streamed label for this frame. While assets stream, the
- * label is the id of the last completed fetch so the player sees exactly
- * what is loading. */
-static void report_loading_progress(void) {
-    float pct = 0.0f;
-    for (int i = 0; i < s_load_done; i++) pct += LOAD_STAGE_WEIGHT[i];
-    pct += LOAD_STAGE_WEIGHT[s_load_done] * load_stage_fraction(s_load_done);
-
-    const char* label = LOAD_STAGE_LABEL[s_load_done];
-    static char asset_label[128];
-    if (LOAD_ASSETS == s_load_done && '\0' != fetch_last_completed_id()[0]) {
-        /* Bare asset name: last path segment, extension stripped
-         * ("/api/atlas-sprite-sheet/blob/eiri.png" → "eiri"). */
-        const char* id    = fetch_last_completed_id();
-        const char* slash = strrchr(id, '/');
-        snprintf(asset_label, sizeof(asset_label), " %s",
-                 slash ? slash + 1 : id);
-        char* dot = strrchr(asset_label, '.');
-        if (dot) *dot = '\0';
-        label = asset_label;
-    }
-    loading_bridge_progress(pct, label);
-}
+static bool s_load_ready;
 
 static void preloading_loop(void) {
     const float frame_dt = GetFrameTime();
+    fetch_frame_begin((double)frame_dt * 1000, true);
     text_font_sync();
     game_client_on_tick();
 
-    /* Render the (still hidden) world every preload frame: this is what
-     * drives the lazy atlas/ObjectLayer fetches and texture creation, so
-     * LOAD_ASSETS / LOAD_STABLE measure genuine readiness. */
     render_on_tick(frame_dt);
-
-    /* Audio resolves and loads with everything else — its fetches are counted by the same
-     * pipeline the bar measures, so the map's music and cues are decoded and resident before
-     * Tap to Start. Playback itself stays shut until audio_start() below. */
     audio_update(frame_dt);
+    observe_scene(false);
 
-    /* Stages complete strictly in order — each is gated on the previous. */
-    while (!s_load_ready && load_stage_complete(s_load_done)) {
-        s_load_done++;
-        if (LOAD_STAGE_COUNT <= s_load_done) {
+    if (!s_load_ready) {
+        const char* label = NULL;
+        if (!connection_is_open()) label = "Connecting to Cyberia...";
+        else if (!g_game_state.init_received || '\0' == g_game_state.player.base.id[0]) label = "Entering the world...";
+        else if (!presentation_runtime_is_ready()) label = "Preparing the view...";
+        else if (!player_render_ready()) label = "Loading your character...";
+        else if (!immediate_scene_ready()) label = "Preparing your location...";
+        else if (!text_font_settled()) label = "Preparing the interface...";
+        if (NULL != label) loading_bridge_progress(-1, label);
+        else {
             s_load_ready = true;
+            fetch_event("tap_to_start_visible", s_trace_map, 0, 0);
             loading_bridge_ready();
         }
     }
-    if (!s_load_ready) report_loading_progress();
+    fetch_process_frame();
+    fetch_frame_end();
 
     /* Gameplay begins only on the player's explicit Tap-to-Start. */
     if (s_load_ready && loading_bridge_start_requested()) {
+        fetch_event("gameplay_start", s_trace_map, 0, 0);
         audio_start();
         loading_bridge_hide();
         client_confirm_loading_done(); /* release the server "loading" freeze */
@@ -290,11 +244,12 @@ int main(int argc, char** argv) {
     const int vp_w = EM_ASM_INT({ return window.innerWidth; });
     const int vp_h = EM_ASM_INT({ return window.innerHeight; });
     InitWindow(vp_w, vp_h, NULL);
-    SetTargetFPS(TICK_RATE_HZ);
 
     // Resolves the instance code from the URL and the Data Server URL from the
     // command line. Must precede any connection or Data Server call.
     config_init(argc, argv);
+    fetch_init();
+    fetch_event("boot_start", "", 0, 0);
     audio_init();
 
     // Connects to Game Server
@@ -319,6 +274,7 @@ int main(int argc, char** argv) {
     connection_close();
     render_cleanup();
     audio_shutdown();
+    fetch_shutdown();
     CloseWindow();
     return 0;
 }

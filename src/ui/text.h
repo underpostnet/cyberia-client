@@ -15,6 +15,7 @@
 #include <stdbool.h>
 
 void  text_font_init(void);    /* after InitWindow: seed defaults (built-in font) */
+bool  text_font_settled(void);
 void  text_font_sync(void);    /* per frame: kick the async fetch once hints name a font */
 Font  text_active_font(void);  /* loaded main font, or GetFontDefault() until ready */
 

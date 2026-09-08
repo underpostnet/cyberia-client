@@ -30,12 +30,12 @@ static void on_font_fetched(const FetchResponse *r) {
     s_fetching = false;
     if (!r->success || NULL == r->data || 0 == r->size) {
         LOG_ERROR("[text] main font fetch failed for '%s'", s_family);
-        free(r->data);
+        fetch_data_release(r->data);
         return;
     }
     Font f = LoadFontFromMemory(".ttf", (const unsigned char *)r->data, (int)r->size,
                                 TEXT_FONT_BASE_SIZE, NULL, 0);
-    free(r->data);
+    fetch_data_release(r->data);
     if (!IsFontValid(f)) {
         LOG_ERROR("[text] LoadFontFromMemory failed for '%s'", s_family);
         return;
@@ -72,8 +72,13 @@ void text_font_sync(void) {
     char url[256];
     snprintf(url, sizeof(url), "/assets/fonts/%s", s_family);
     s_fetching = true;
-    fetch_request_start("cyberia-main-font", url, on_font_fetched);
+    fetch_request_start_at("cyberia-main-font", url, on_font_fetched, FETCH_P0);
     LOG_INFO("[text] fetching main font %s", url);
+}
+
+bool text_font_settled(void) {
+    const char* family = presentation_runtime_font_family();
+    return !s_fetching && (NULL == family || '\0' == family[0] || 0 == strcmp(family, s_family));
 }
 
 Font text_active_font(void) {

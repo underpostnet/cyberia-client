@@ -96,7 +96,7 @@ static void warn_overflow(int which) {
 
 
 static int read_layers(const cJSON* owner, const char* key,
-                       ObjectLayerState* layers, int max_layers) {
+                       ObjectLayerState* layers, int max_layers, FetchPriority priority) {
     const cJSON* arr = serial_get_array(owner, key);
     int n = 0;
     const cJSON* item = NULL;
@@ -105,10 +105,10 @@ static int read_layers(const cJSON* owner, const char* key,
         serial_get_string(item, "itemId", layers[n].item_id, MAX_ITEM_ID_LENGTH);
         layers[n].active   = serial_get_bool_default(item, "active", true);
         layers[n].quantity = serial_get_int_default(item, "quantity", 0);
-        // Presence is the demand signal: an item worn by an entity in this world, or carried in
-        // this player's inventory, is one this session will draw. The scheduler is idempotent,
-        // so a layer seen in every snapshot still costs one fetch.
-        if (obj_layers_mgr_get()) obj_layers_mgr_schedule_atlas_fetch(layers[n].item_id);
+        /* Only what the player is wearing is critical; a carried spare is not yet drawn. */
+        const FetchPriority wanted =
+            (FETCH_P0 == priority && !layers[n].active) ? FETCH_P2 : priority;
+        if (obj_layers_mgr_get()) obj_layers_mgr_schedule_atlas_fetch(layers[n].item_id, wanted);
         n++;
     }
     return n;
@@ -116,7 +116,8 @@ static int read_layers(const cJSON* owner, const char* key,
 
 /* Same, into the layer pool. Returns the count and writes the pool offset. A
  * full pool costs the owner its layers, so warn and leave it empty. */
-static uint8_t read_pooled_layers(const cJSON* owner, const char* key, uint16_t* offset) {
+static uint8_t read_pooled_layers(const cJSON* owner, const char* key, uint16_t* offset,
+                                  FetchPriority priority) {
     int n = cJSON_GetArraySize(serial_get_array(owner, key));
     if (MAX_OBJECT_LAYERS < n) n = MAX_OBJECT_LAYERS;
     int pool_offset = game_state_layer_alloc(n);
@@ -126,7 +127,7 @@ static uint8_t read_pooled_layers(const cJSON* owner, const char* key, uint16_t*
         return 0;
     }
     *offset = (uint16_t)pool_offset;
-    return (uint8_t)read_layers(owner, key, &g_layer_pool[pool_offset], n);
+    return (uint8_t)read_layers(owner, key, &g_layer_pool[pool_offset], n, priority);
 }
 
 static Vector2 read_pos(const cJSON* e) {
@@ -136,7 +137,7 @@ static Vector2 read_pos(const cJSON* e) {
 
 /* read_entity_state fills every field an active entity shares. Position is the
  * caller's job — interpolation differs per entity kind. */
-static void read_entity_state(const cJSON* e, EntityState* base) {
+static void read_entity_state(const cJSON* e, EntityState* base, FetchPriority priority) {
     GameState* gs = &g_game_state;
     base->dims = (Vector2){ serial_get_float_default(e, "dimW", 0.0f),
                             serial_get_float_default(e, "dimH", 0.0f) };
@@ -147,7 +148,7 @@ static void read_entity_state(const cJSON* e, EntityState* base) {
     base->respawn_in  = serial_get_float_default(e, "respawnIn", 0.0f);
     base->stats_sum   = serial_get_int_default(e, "statsSum", 0);
     base->status_icon = (uint8_t)serial_get_int_default(e, "statusIcon", 0);
-    base->layer_count = read_pooled_layers(e, "objectLayers", &base->layer_offset);
+    base->layer_count = read_pooled_layers(e, "objectLayers", &base->layer_offset, priority);
     base->snapshot_time = gs->last_update_time;
 }
 
@@ -168,7 +169,7 @@ static void unpack_player(const cJSON* e) {
     }
 
     PlayerState* p = &gs->other_players[idx];
-    read_entity_state(e, &p->base);
+    read_entity_state(e, &p->base, FETCH_P2);
     Vector2 incoming = read_pos(e);
     /* TELEPORTING is a one-snapshot signal that the entity jumped (portal), so
      * a lerp from the old position would sweep across the map. */
@@ -195,7 +196,7 @@ static void unpack_bot(const cJSON* e) {
     }
 
     BotState* b = &gs->bots[idx];
-    read_entity_state(e, &b->base);
+    read_entity_state(e, &b->base, FETCH_P2);
     Vector2 incoming = read_pos(e);
     b->base.pos_prev = (MODE_TELEPORTING == b->base.mode)
         ? incoming
@@ -239,7 +240,7 @@ static void unpack_resource(const cJSON* e) {
     memset(res, 0, sizeof(BotState));
     serial_get_string(e, "id", res->base.id, MAX_ID_LENGTH);
 
-    read_entity_state(e, &res->base);
+    read_entity_state(e, &res->base, FETCH_P2);
     res->base.pos_server = read_pos(e);
     res->base.pos_prev   = res->base.pos_server;
     res->base.interp_pos = res->base.pos_server; /* static — no interpolation */
@@ -290,7 +291,7 @@ static void unpack_passive(const cJSON* e, const char* type) {
     serial_get_string(e, "targetMapCode", o->target_map_code, MAX_ID_LENGTH);
     o->target_cell_x = serial_get_int_default(e, "targetCellX", 0);
     o->target_cell_y = serial_get_int_default(e, "targetCellY", 0);
-    o->layer_count = read_pooled_layers(e, "objectLayers", &o->layer_offset);
+    o->layer_count = read_pooled_layers(e, "objectLayers", &o->layer_offset, FETCH_P2);
 }
 
 static void unpack_self(const cJSON* e) {
@@ -300,7 +301,7 @@ static void unpack_self(const cJSON* e) {
     serial_get_string(e, "id", p->base.id, MAX_ID_LENGTH);
     strncpy(g_local_player.id, p->base.id, MAX_ID_LENGTH - 1);
 
-    read_entity_state(e, &p->base);
+    read_entity_state(e, &p->base, FETCH_P0);
     p->base.pos_prev   = p->base.pos_server;
     p->base.pos_server = read_pos(e);
 
@@ -326,7 +327,7 @@ static void unpack_self(const cJSON* e) {
     /* Full inventory — every visible layer, active and inactive. Powers the
      * inventory bottom bar. */
     g_local_player.inventory_count = read_layers(e, "inventory", g_local_player.inventory,
-                                                 MAX_OBJECT_LAYERS);
+                                                 MAX_OBJECT_LAYERS, FETCH_P1);
 
     local_player_set_frozen(serial_get_bool_default(e, "frozen", false));
     local_player_set_status_icon(p->base.status_icon);
@@ -347,6 +348,14 @@ static void unpack_self(const cJSON* e) {
 }
 
 static void json_unpack_snapshot(const cJSON* payload) {
+    char destination[MAX_ID_LENGTH] = {0};
+    const cJSON* destination_self = serial_get_object(payload, "self");
+    if (NULL != destination_self) serial_get_string(destination_self, "mapCode", destination, sizeof(destination));
+    const bool map_changed = '\0' != destination[0] && 0 != strcmp(destination, g_local_player.map_code);
+    if (map_changed) {
+        if ('\0' != g_local_player.map_code[0]) fetch_deprioritize();
+        fetch_event("destination_snapshot", destination, 0, 0);
+    }
     GameState* gs = &g_game_state;
 
     /* Feed the session bookkeeping so prediction and interpolation align to
@@ -385,6 +394,8 @@ static void json_unpack_snapshot(const cJSON* payload) {
     gs->portal_count = 0;
     gs->floor_count = 0;
 
+    const cJSON* self = serial_get_object(payload, "self");
+    if (NULL != self) unpack_self(self);
     const cJSON* entity = NULL;
     cJSON_ArrayForEach(entity, serial_get_array(payload, "entities")) {
         char type[16] = {0};
@@ -395,8 +406,6 @@ static void json_unpack_snapshot(const cJSON* payload) {
         else                                    unpack_passive(entity, type);
     }
 
-    const cJSON* self = serial_get_object(payload, "self");
-    if (self) unpack_self(self);
 
     /* The authoritative self position is fresh — reconcile prediction. */
     prediction_reconcile();
