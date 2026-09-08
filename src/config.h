@@ -42,6 +42,7 @@ static const char* CYBERIA_CLIENT_HINTS_CODE = "cyberia-main";
  * or any Data Server fetch. */
 
 void        config_init(int argc, char** argv);
+const char* config_ws_url(void);
 const char* config_data_server_url(void);
 
 #endif // CONFIG_H

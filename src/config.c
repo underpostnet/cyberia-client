@@ -1,4 +1,5 @@
 #include "config.h"
+#include "instance_route.h"
 #include "util/log.h"
 
 #include <assert.h>
@@ -41,32 +42,13 @@ void config_init(int argc, char** argv) {
                     }),
                     s_instance_code, sizeof(s_instance_code));
 
-    /* The code arrives from the URL and is interpolated into the websocket URL,
-     * so drop everything outside the legal code alphabet. */
-    size_t write = 0;
-    for (size_t read = 0; '\0' != s_instance_code[read]; ++read) {
-        const char c = s_instance_code[read];
-        if (('a' <= c && 'z' >= c) || ('A' <= c && 'Z' >= c) || ('0' <= c && '9' >= c) || '-' == c || '_' == c)
-            s_instance_code[write++] = c;
-    }
-    s_instance_code[write] = '\0';
+    instance_route_sanitize_code(s_instance_code);
 
     char ws_origin[CFG_ORIGIN_MAX] = {0};
     adopt_js_string((char*)EM_ASM_PTR({ return allocateUTF8(self.CYBERIA_WS_ORIGIN || ""); }), ws_origin,
                     sizeof(ws_origin));
 
-    /* Compile-time WS_URL is a full endpoint ("wss://host/ws"); the runtime form
-     * is an origin the instance segment is appended to, so strip the suffix. */
-    if ('\0' == ws_origin[0]) {
-        snprintf(ws_origin, sizeof(ws_origin), "%s", WS_URL);
-        const size_t len = strlen(ws_origin);
-        if (3 <= len && 0 == strcmp(ws_origin + len - 3, "/ws")) ws_origin[len - 3] = '\0';
-    }
-
-    if ('\0' == s_instance_code[0])
-        snprintf(s_ws_url, sizeof(s_ws_url), "%s/ws", ws_origin);
-    else
-        snprintf(s_ws_url, sizeof(s_ws_url), "%s/%s/ws", ws_origin, s_instance_code);
+    instance_route_ws_url(ws_origin, WS_URL, s_instance_code, s_ws_url, sizeof(s_ws_url));
 
     /* The Data Server URL has one source: the command line. */
     static const char kFlag[]  = "--data-server-url=";
@@ -81,6 +63,10 @@ void config_init(int argc, char** argv) {
     }
 
     LOG_INFO("config instance=%s ws=%s data-server=%s", s_instance_code, s_ws_url, s_data_server_url);
+}
+
+const char* config_ws_url(void) {
+    return s_ws_url;
 }
 
 const char* config_data_server_url(void) {
