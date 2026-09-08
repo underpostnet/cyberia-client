@@ -1,7 +1,6 @@
 #include "object_layers_management.h"
 #include "config.h"
 #include "util/hash_table.h"
-#include "texture_cache.h"
 #include "network/engine_client.h"
 #include "util/log.h"
 #include <raylib.h>
@@ -17,38 +16,22 @@ static void parse_ws_direction_frames(cJSON* frames_json, AtlasSpriteSheetData* 
 
 ObjectLayersManager* g_olm_singleton = NULL;
 
-/* Atlas metadata fetch set — value is sentinel; only key presence matters. */
-#define META_SENTINEL ((void*)1)
-static void noop_free(void* p) {}
 static void free_layer_value(void* p) { free_object_layer((ObjectLayer*)p); }
 static void free_atlas_value(void* p) { free_atlas_sprite_sheet_data((AtlasSpriteSheetData*)p); }
 
-/* Atlas GPU textures are loaded/cached/LRU-evicted by a general-purpose
- * TextureCache. The manager itself owns only authoritative content: object
- * layer metadata, atlas frame metadata, and the in-flight metadata-fetch set. */
 struct ObjectLayersManager {
-    HashTable     layers;        // item_id  → ObjectLayer*
-    HashTable     atlases;       // item_key → AtlasSpriteSheetData*
-    HashTable     meta;          // item_key → META_SENTINEL
-    TextureCache* atlas_textures;
+    HashTable layers;
+    HashTable atlases;
 };
 
-static void atlas_blob_url(const char* item_key, char* out, size_t out_sz) {
-    snprintf(out, out_sz, "/api/atlas-sprite-sheet/blob/%s", item_key);
+static void atlas_metadata_url(const char* item_key, char* url, size_t size) {
+    snprintf(url, size, "/api/atlas-sprite-sheet/metadata/%s", item_key);
 }
 
-/* engine_client fetch trampoline → routes blob completions into the atlas cache. */
-static void on_atlas_blob_fetched(const FetchResponse* r) {
-    assert(g_olm_singleton);
-    texture_cache_on_blob_fetched(g_olm_singleton->atlas_textures, r);
-}
-
-static Texture2D load_or_poll_atlas_texture(const char* item_key) {
-    assert(item_key);
-    assert(g_olm_singleton);
+static Texture2D atlas_texture(const AtlasSpriteSheetData* atlas, FetchPriority priority, bool visible) {
     char url[512];
-    atlas_blob_url(item_key, url, sizeof(url));
-    return texture_cache_get(g_olm_singleton->atlas_textures, url);
+    snprintf(url, sizeof(url), "/api/atlas-sprite-sheet/blob/%s", atlas->item_key);
+    return fetch_texture(url, atlas->cell_pixel_dim, priority, visible);
 }
 
 // --- JSON Parsing Helpers ---
@@ -149,7 +132,7 @@ static void parse_object_layer_data(cJSON* data_json, ObjectLayerData* data) {
 
 // --- Atlas Sprite Sheet JSON Parsing ---
 
-static void parse_direction_frame_data(cJSON* array_json, DirectionFrameData* dfd) {
+static void parse_direction_frame_data(cJSON* array_json, DirectionFrameData* dfd, int scale) {
     assert(dfd);
     assert(array_json);
     dfd->count = 0;
@@ -164,10 +147,10 @@ static void parse_direction_frame_data(cJSON* array_json, DirectionFrameData* df
         if (!frame_json) continue;
 
         FrameMetadata* fm = &dfd->frames[dfd->count];
-        fm->x = json_get_int_safe(frame_json, "x", 0);
-        fm->y = json_get_int_safe(frame_json, "y", 0);
-        fm->width = json_get_int_safe(frame_json, "width", 0);
-        fm->height = json_get_int_safe(frame_json, "height", 0);
+        fm->x = json_get_int_safe(frame_json, "x", 0) / scale;
+        fm->y = json_get_int_safe(frame_json, "y", 0) / scale;
+        fm->width = json_get_int_safe(frame_json, "width", 0) / scale;
+        fm->height = json_get_int_safe(frame_json, "height", 0) / scale;
         fm->frame_index = json_get_int_safe(frame_json, "frameIndex", i);
         dfd->count++;
     }
@@ -195,8 +178,6 @@ void create_object_layers_manager(void) {
      * predictable churn at ≈179 textures (256 × 0.7). */
     hash_table_init(&mgr->layers,   (size_t)MAX_LAYER_CACHE_SIZE,   free_layer_value, "ol_layers");
     hash_table_init(&mgr->atlases,  (size_t)MAX_ATLAS_CACHE_SIZE,   free_atlas_value, "ol_atlases");
-    hash_table_init(&mgr->meta,     (size_t)MAX_ATLAS_CACHE_SIZE,   noop_free,        "ol_meta");
-    mgr->atlas_textures = texture_cache_create((int)MAX_TEXTURE_CACHE_SIZE, "ol_atlas_tex", on_atlas_blob_fetched);
 
     g_olm_singleton = mgr;
 }
@@ -210,8 +191,6 @@ void destroy_object_layers_manager(void) {
 
     hash_table_destroy(&g_olm_singleton->layers);
     hash_table_destroy(&g_olm_singleton->atlases);
-    hash_table_destroy(&g_olm_singleton->meta);
-    texture_cache_destroy(g_olm_singleton->atlas_textures);
 
     free(g_olm_singleton);
     g_olm_singleton = NULL;
@@ -220,13 +199,13 @@ void destroy_object_layers_manager(void) {
 /* ── Callback for atlas metadata REST fetch (via engine_client pipeline) ─── */
 
 static void on_atlas_meta_fetched(const FetchResponse* r) {
-    if (!r->success) { free(r->data); return; }
+    if (!r->success) { fetch_data_release(r->data); return; }
 
     assert(g_olm_singleton);
 
     /* Parse REST response: { "data": { "metadata": { itemKey, atlasWidth, ... } } } */
     cJSON* root = cJSON_ParseWithLength((const char*)r->data, r->size);
-    free(r->data);
+    fetch_data_release(r->data);
     if (!root) return;
 
     cJSON* doc   = cJSON_GetObjectItem(root, "data");
@@ -251,7 +230,14 @@ static void on_atlas_meta_fetched(const FetchResponse* r) {
     strncpy(atlas->item_key, item_key, MAX_ITEM_ID_LENGTH - 1);
     atlas->atlas_width    = json_get_int_safe(rmeta, "atlasWidth",  0);
     atlas->atlas_height   = json_get_int_safe(rmeta, "atlasHeight", 0);
-    atlas->cell_pixel_dim = json_get_int_safe(rmeta, "cellPixelDim", 20);
+    atlas->cell_pixel_dim = json_get_int_safe(rmeta, "cellPixelDim", 1);
+    if (1 > atlas->cell_pixel_dim || 64 < atlas->cell_pixel_dim) {
+        free_atlas_sprite_sheet_data(atlas);
+        cJSON_Delete(root);
+        return;
+    }
+    atlas->atlas_width = (atlas->atlas_width + atlas->cell_pixel_dim - 1) / atlas->cell_pixel_dim;
+    atlas->atlas_height = (atlas->atlas_height + atlas->cell_pixel_dim - 1) / atlas->cell_pixel_dim;
     atlas->frame_duration = json_get_int_safe(rmeta, "frame_duration", 100);
     cJSON* frames = cJSON_GetObjectItem(rmeta, "frames");
     if (frames) parse_ws_direction_frames(frames, atlas);
@@ -259,54 +245,33 @@ static void on_atlas_meta_fetched(const FetchResponse* r) {
     hash_table_put(&g_olm_singleton->atlases, item_key, atlas);
     LOG_INFO("[ATLAS REST] Metadata cached via callback for: %s (%dx%d)", item_key, atlas->atlas_width, atlas->atlas_height);
 
-    /* Kick off PNG blob fetch now that metadata is cached */
-    load_or_poll_atlas_texture(item_key);
+    atlas_texture(atlas, r->priority, false);
 
     cJSON_Delete(root);
 }
 
-AtlasSpriteSheetData* get_or_fetch_atlas_data(const char* item_key) {
-    assert(item_key);
-    assert(g_olm_singleton);
-
-    AtlasSpriteSheetData* atlas = hash_table_get(&g_olm_singleton->atlases, item_key);
-    if (!atlas) {
-        get_atlas_texture(item_key);
-    }
-    return atlas;
-}
-
-Texture2D get_atlas_texture(const char* item_key) {
-    assert(item_key);
-    assert(g_olm_singleton);
-
-    if (hash_table_contains(&g_olm_singleton->atlases, item_key)) {
-        return load_or_poll_atlas_texture(item_key);
-    }
-
-    if (!hash_table_contains(&g_olm_singleton->meta, item_key)) {
-        obj_layers_mgr_schedule_atlas_fetch(item_key);
-    }
-    return (Texture2D){0};
-}
-
-// ============================================================================
-// Cache Population from WebSocket Metadata
-// ============================================================================
-
-void obj_layers_mgr_schedule_atlas_fetch(const char* item_key) {
-    assert(item_key);
-    assert(g_olm_singleton);
-
-    if (hash_table_contains(&g_olm_singleton->meta, item_key)) return;
-    if (hash_table_contains(&g_olm_singleton->atlases, item_key)) return;
-
-    hash_table_put(&g_olm_singleton->meta, item_key, META_SENTINEL);
-
+AtlasSpriteSheetData* get_or_fetch_atlas_data(const char* item_key, FetchPriority priority) {
+    assert(NULL != item_key && NULL != g_olm_singleton);
+    obj_layers_mgr_schedule_atlas_fetch(item_key, priority);
     char url[512];
-    snprintf(url, sizeof(url), "/api/atlas-sprite-sheet/metadata/%s", item_key);
-    fetch_request_start(item_key, url, on_atlas_meta_fetched);
-    LOG_INFO("[ATLAS REST] Fetch scheduled via engine_client: %s", item_key);
+    atlas_metadata_url(item_key, url, sizeof(url));
+    fetch_visible(url);
+    return hash_table_get(&g_olm_singleton->atlases, item_key);
+}
+
+Texture2D get_atlas_texture(const char* item_key, FetchPriority priority) {
+    AtlasSpriteSheetData* atlas = get_or_fetch_atlas_data(item_key, priority);
+    return NULL != atlas ? atlas_texture(atlas, priority, true) : (Texture2D){0};
+}
+
+void obj_layers_mgr_schedule_atlas_fetch(const char* item_key, FetchPriority priority) {
+    assert(NULL != item_key && NULL != g_olm_singleton);
+    if ('\0' == item_key[0]) return;
+    AtlasSpriteSheetData* atlas = hash_table_get(&g_olm_singleton->atlases, item_key);
+    if (NULL != atlas) { atlas_texture(atlas, priority, false); return; }
+    char url[512];
+    atlas_metadata_url(item_key, url, sizeof(url));
+    fetch_request_start_at(item_key, url, on_atlas_meta_fetched, priority);
 }
 
 void populate_object_layer_from_json(const char* item_id, const cJSON* ol_json) {
@@ -334,22 +299,22 @@ void populate_object_layer_from_json(const char* item_id, const cJSON* ol_json) 
 static void parse_ws_direction_frames(cJSON* frames_json, AtlasSpriteSheetData* atlas) {
     assert(frames_json);
     assert(atlas);
-    parse_direction_frame_data(cJSON_GetObjectItem(frames_json, "up_idle"), &atlas->up_idle);
-    parse_direction_frame_data(cJSON_GetObjectItem(frames_json, "down_idle"), &atlas->down_idle);
-    parse_direction_frame_data(cJSON_GetObjectItem(frames_json, "right_idle"), &atlas->right_idle);
-    parse_direction_frame_data(cJSON_GetObjectItem(frames_json, "left_idle"), &atlas->left_idle);
-    parse_direction_frame_data(cJSON_GetObjectItem(frames_json, "up_right_idle"), &atlas->up_right_idle);
-    parse_direction_frame_data(cJSON_GetObjectItem(frames_json, "down_right_idle"), &atlas->down_right_idle);
-    parse_direction_frame_data(cJSON_GetObjectItem(frames_json, "up_left_idle"), &atlas->up_left_idle);
-    parse_direction_frame_data(cJSON_GetObjectItem(frames_json, "down_left_idle"), &atlas->down_left_idle);
-    parse_direction_frame_data(cJSON_GetObjectItem(frames_json, "default_idle"), &atlas->default_idle);
-    parse_direction_frame_data(cJSON_GetObjectItem(frames_json, "up_walking"), &atlas->up_walking);
-    parse_direction_frame_data(cJSON_GetObjectItem(frames_json, "down_walking"), &atlas->down_walking);
-    parse_direction_frame_data(cJSON_GetObjectItem(frames_json, "right_walking"), &atlas->right_walking);
-    parse_direction_frame_data(cJSON_GetObjectItem(frames_json, "left_walking"), &atlas->left_walking);
-    parse_direction_frame_data(cJSON_GetObjectItem(frames_json, "up_right_walking"), &atlas->up_right_walking);
-    parse_direction_frame_data(cJSON_GetObjectItem(frames_json, "down_right_walking"), &atlas->down_right_walking);
-    parse_direction_frame_data(cJSON_GetObjectItem(frames_json, "up_left_walking"), &atlas->up_left_walking);
-    parse_direction_frame_data(cJSON_GetObjectItem(frames_json, "down_left_walking"), &atlas->down_left_walking);
-    parse_direction_frame_data(cJSON_GetObjectItem(frames_json, "none_idle"), &atlas->none_idle);
+    parse_direction_frame_data(cJSON_GetObjectItem(frames_json, "up_idle"), &atlas->up_idle, atlas->cell_pixel_dim);
+    parse_direction_frame_data(cJSON_GetObjectItem(frames_json, "down_idle"), &atlas->down_idle, atlas->cell_pixel_dim);
+    parse_direction_frame_data(cJSON_GetObjectItem(frames_json, "right_idle"), &atlas->right_idle, atlas->cell_pixel_dim);
+    parse_direction_frame_data(cJSON_GetObjectItem(frames_json, "left_idle"), &atlas->left_idle, atlas->cell_pixel_dim);
+    parse_direction_frame_data(cJSON_GetObjectItem(frames_json, "up_right_idle"), &atlas->up_right_idle, atlas->cell_pixel_dim);
+    parse_direction_frame_data(cJSON_GetObjectItem(frames_json, "down_right_idle"), &atlas->down_right_idle, atlas->cell_pixel_dim);
+    parse_direction_frame_data(cJSON_GetObjectItem(frames_json, "up_left_idle"), &atlas->up_left_idle, atlas->cell_pixel_dim);
+    parse_direction_frame_data(cJSON_GetObjectItem(frames_json, "down_left_idle"), &atlas->down_left_idle, atlas->cell_pixel_dim);
+    parse_direction_frame_data(cJSON_GetObjectItem(frames_json, "default_idle"), &atlas->default_idle, atlas->cell_pixel_dim);
+    parse_direction_frame_data(cJSON_GetObjectItem(frames_json, "up_walking"), &atlas->up_walking, atlas->cell_pixel_dim);
+    parse_direction_frame_data(cJSON_GetObjectItem(frames_json, "down_walking"), &atlas->down_walking, atlas->cell_pixel_dim);
+    parse_direction_frame_data(cJSON_GetObjectItem(frames_json, "right_walking"), &atlas->right_walking, atlas->cell_pixel_dim);
+    parse_direction_frame_data(cJSON_GetObjectItem(frames_json, "left_walking"), &atlas->left_walking, atlas->cell_pixel_dim);
+    parse_direction_frame_data(cJSON_GetObjectItem(frames_json, "up_right_walking"), &atlas->up_right_walking, atlas->cell_pixel_dim);
+    parse_direction_frame_data(cJSON_GetObjectItem(frames_json, "down_right_walking"), &atlas->down_right_walking, atlas->cell_pixel_dim);
+    parse_direction_frame_data(cJSON_GetObjectItem(frames_json, "up_left_walking"), &atlas->up_left_walking, atlas->cell_pixel_dim);
+    parse_direction_frame_data(cJSON_GetObjectItem(frames_json, "down_left_walking"), &atlas->down_left_walking, atlas->cell_pixel_dim);
+    parse_direction_frame_data(cJSON_GetObjectItem(frames_json, "none_idle"), &atlas->none_idle, atlas->cell_pixel_dim);
 }

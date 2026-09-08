@@ -192,13 +192,13 @@ static bool parse_static_doc(const cJSON* doc) {
 static void on_static_fetched(const FetchResponse* r) {
     /* asset_id carries the session stamp — drop stale/closed sessions. */
     if (!s_open || atoi(r->asset_id + strlen("imap-static-")) != s_session) {
-        free(r->data);
+        fetch_data_release(r->data);
         return;
     }
     if (!r->success) {
         s_state = IMAP_DATA_ERROR;
         LOG_WARN("instance map static fetch failed");
-        free(r->data);
+        fetch_data_release(r->data);
         return;
     }
     cJSON* root = cJSON_ParseWithLength((const char*)r->data, r->size);
@@ -212,7 +212,7 @@ static void on_static_fetched(const FetchResponse* r) {
         LOG_WARN("instance map static parse failed");
     }
     cJSON_Delete(root);
-    free(r->data);
+    fetch_data_release(r->data);
 }
 
 /* ── Dynamic payload ────────────────────────────────────────────────────── */
@@ -248,11 +248,11 @@ static void apply_dynamic_capabilities(const cJSON* doc, const char* key, bool q
 static void on_dynamic_fetched(const FetchResponse* r) {
     if (!s_open || atoi(r->asset_id + strlen("imap-dyn-")) != s_session) {
         s_poll_inflight = false;
-        free(r->data);
+        fetch_data_release(r->data);
         return;
     }
     s_poll_inflight = false;
-    if (!r->success) { free(r->data); return; }
+    if (!r->success) { fetch_data_release(r->data); return; }
 
     cJSON* root = cJSON_ParseWithLength((const char*)r->data, r->size);
     const cJSON* doc = envelope_success_doc(root);
@@ -262,7 +262,7 @@ static void on_dynamic_fetched(const FetchResponse* r) {
         apply_dynamic_capabilities(doc, "actionProviders", false);
     }
     cJSON_Delete(root);
-    free(r->data);
+    fetch_data_release(r->data);
 }
 
 static void start_dynamic_poll(void) {

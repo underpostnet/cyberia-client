@@ -1,3 +1,4 @@
+#include "network/engine_client.h"
 /**
  * @file inventory_modal.c
  * @brief Full-screen inventory item detail modal implementation.
@@ -484,7 +485,7 @@ void inventory_modal_open_external(const ObjectLayerState* ols) {
     s_open        = true;
     reset_view_state();
     /* Kick the sprite atlas fetch so the preview is ready promptly. */
-    if (s_ol_manager) get_or_fetch_atlas_data(ols->item_id);
+    if (s_ol_manager) get_or_fetch_atlas_data(ols->item_id, FETCH_P1);
     /* Read-only or not, this is a modal the player reads with the world still
      * running, and inventory_modal_close always releases the matching freeze —
      * so it has to take one. Openers reach here from another modal that just
@@ -661,7 +662,7 @@ void inventory_modal_draw(void) {
     /* ── Fetch atlas for direction button enable state ───────────────── */
     AtlasSpriteSheetData* atlas = NULL;
     if (s_ol_manager && ols->item_id[0] != '\0')
-        atlas = get_or_fetch_atlas_data(ols->item_id);
+        atlas = get_or_fetch_atlas_data(ols->item_id, FETCH_P1);
 
     /* 4. Animated sprite via ol_as_animated_ico
      * Size is dynamic: fills the full column width in wide (landscape) layout,

@@ -20,7 +20,6 @@
 #define TICK_DURATION_S       (1.0 / (double)TICK_RATE_HZ)
 
 /* Cache ceilings. One atlas texture per item. */
-static const int MAX_TEXTURE_CACHE_SIZE = 512;
 static const int MAX_LAYER_CACHE_SIZE = 256;
 static const int MAX_ATLAS_CACHE_SIZE = 256;
 

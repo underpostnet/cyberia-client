@@ -50,12 +50,12 @@ void meta_cache_fetch(MetaCache* c, const char* code, FetchCompletedCb on_comple
 void meta_cache_on_fetched(MetaCache* c, const FetchResponse* r) {
     assert(c && r);
     MetaCacheHead* h = meta_cache_find(c, r->asset_id);
-    if (!h) { free(r->data); return; }
+    if (!h) { fetch_data_release(r->data); return; }
 
     if (!r->success) {
         h->state = META_CACHE_ERROR;
         LOG_WARN("%s metadata fetch failed for %s", c->label, r->asset_id);
-        free(r->data);
+        fetch_data_release(r->data);
         return;
     }
 
@@ -68,5 +68,5 @@ void meta_cache_on_fetched(MetaCache* c, const FetchResponse* r) {
         h->state = META_CACHE_READY;
     }
     cJSON_Delete(root);
-    free(r->data);
+    fetch_data_release(r->data);
 }

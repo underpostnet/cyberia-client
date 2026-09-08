@@ -1,3 +1,4 @@
+#include "network/engine_client.h"
 /**
  * @file ol_as_animated_ico.c
  * @brief General-purpose animated ObjectLayer icon renderer implementation.
@@ -59,18 +60,18 @@ void ol_as_ico_draw(ObjectLayersManager* mgr,
         return;
     }
 
-    AtlasSpriteSheetData* atlas = get_or_fetch_atlas_data(item_key);
+    AtlasSpriteSheetData* atlas = get_or_fetch_atlas_data(item_key, FETCH_P1);
     if (!atlas) {
         /* Atlas not cached yet — pump the fetch state machine so metadata REST
          * request is scheduled (first call) or polled (subsequent calls).
          * Once metadata arrives, get_atlas_texture will automatically kick off
          * the PNG blob fetch on the next frame. */
-        get_atlas_texture(item_key);
+        get_atlas_texture(item_key, FETCH_P1);
         fallback_circle(x, y, icon_size);
         return;
     }
 
-    Texture2D tex = get_atlas_texture(item_key);
+    Texture2D tex = get_atlas_texture(item_key, FETCH_P1);
     if (tex.id == 0) {
         fallback_circle(x, y, icon_size);
         return;

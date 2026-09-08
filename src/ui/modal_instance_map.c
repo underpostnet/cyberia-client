@@ -12,7 +12,7 @@
 #include "domain/presentation_runtime.h"
 #include "game_state.h"
 #include "input/input.h"
-#include "texture_cache.h"
+#include "network/engine_client.h"
 #include "world_types.h"
 
 #include <assert.h>
@@ -83,15 +83,6 @@ static int       s_rotation_step = 0;
 static float     s_rotation_age = IMAP_ROTATE_DURATION;
 static Rectangle s_close_btn, s_rotate_left_btn, s_rotate_right_btn;
 
-/* Node preview backgrounds: each map's auto-captured Object Layer render,
- * fetched lazily from the server-supplied previewUrl through the engine
- * fetch pipeline (File blob for persisted maps, cached render for fallback). */
-static TextureCache* s_preview_cache = NULL;
-
-static void on_preview_blob(const FetchResponse* r) {
-    texture_cache_on_blob_fetched(s_preview_cache, r);
-}
-
 /* ── Lifecycle ──────────────────────────────────────────────────────────── */
 
 void modal_instance_map_init(void) {
@@ -104,17 +95,12 @@ void modal_instance_map_init(void) {
     s_rotation_step = 0;
     s_rotation_age = IMAP_ROTATE_DURATION;
     s_close_btn = (Rectangle){ 0 };
-    s_preview_cache = texture_cache_create(IMAP_MAX_NODES, "imap-preview", on_preview_blob);
 }
 
 void modal_instance_map_cleanup(void) {
     if (s_m.open) {
         instance_map_data_close();
         input_gestures_set_blocked(false);
-    }
-    if (s_preview_cache) {
-        texture_cache_destroy(s_preview_cache);
-        s_preview_cache = NULL;
     }
     memset(&s_m, 0, sizeof(s_m));
 }
@@ -761,7 +747,7 @@ static void draw_node_card(int idx, float fade, double time) {
     draw_pixel_panel(card, fill, accent, selected || hovered, fade);
     if (selected) draw_pixel_active_pulse(card, IMAP_SELECTED, fade, time);
     if ('\0' != n->preview_url[0]) {
-        Texture2D tex = texture_cache_get(s_preview_cache, n->preview_url);
+        Texture2D tex = fetch_texture(n->preview_url, 1, FETCH_P1, true);
         if (0 != tex.id) {
             Rectangle src  = { 0, 0, (float)tex.width, (float)tex.height };
             Rectangle dest = pixel_inner(card, 4.0f);

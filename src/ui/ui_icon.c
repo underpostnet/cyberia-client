@@ -1,6 +1,6 @@
 #include "ui_icon.h"
 
-#include "texture_cache.h"
+#include "network/engine_client.h"
 
 #include <assert.h>
 #include <math.h>
@@ -8,32 +8,9 @@
 #include <stdlib.h>
 #include <string.h>
 
-/* ui_icon owns its own texture cache — decorative, presentation-only icons
- * fetched from /assets/ui-icons/{id}.png. It is a peer of the
- * object-layer atlas cache, not a tenant of it: zero dependency on
- * object_layers_management. */
-
-static TextureCache* s_icon_cache = NULL;
-
-static void icon_blob_cb(const FetchResponse* r) {
-    if (s_icon_cache) { texture_cache_on_blob_fetched(s_icon_cache, r); }
-    else              { free(r->data); }
-}
-
-void ui_icon_init(int capacity) {
-    if (s_icon_cache) { return; }
-    s_icon_cache = texture_cache_create(capacity, "ui_icon", icon_blob_cb);
-}
-
-void ui_icon_cleanup(void) {
-    texture_cache_destroy(s_icon_cache);
-    s_icon_cache = NULL;
-}
-
 void ui_icon_draw(const char* icon_id, float cx, float cy, int size, bool bounce, float phase) {
     assert(icon_id);
     assert(strlen(icon_id));
-    assert(s_icon_cache);
 
     float offset_y = 0.0f;
     if (bounce) {
@@ -46,7 +23,7 @@ void ui_icon_draw(const char* icon_id, float cx, float cy, int size, bool bounce
 
     char url[512];
     snprintf(url, sizeof(url), "/assets/ui-icons/%s.png", icon_id);
-    Texture2D tex = texture_cache_get(s_icon_cache, url);
+    Texture2D tex = fetch_texture(url, 1, FETCH_P1, true);
 
     if (tex.id > 0) {
         Rectangle src = { 0, 0, (float)tex.width, (float)tex.height };
@@ -66,11 +43,10 @@ void ui_icon_draw_ex(const char* icon_id, float cx, float cy, float size,
                      float rotation_deg, Color tint) {
     assert(icon_id);
     assert(strlen(icon_id));
-    assert(s_icon_cache);
 
     char url[512];
     snprintf(url, sizeof(url), "/assets/ui-icons/%s.png", icon_id);
-    Texture2D tex = texture_cache_get(s_icon_cache, url);
+    Texture2D tex = fetch_texture(url, 1, FETCH_P1, true);
     if (tex.id <= 0) return; /* decorative — nothing while loading */
 
     Rectangle src = { 0, 0, (float)tex.width, (float)tex.height };

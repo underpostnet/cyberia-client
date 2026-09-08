@@ -18,7 +18,7 @@ void free_object_layer(ObjectLayer* layer) {
 AtlasSpriteSheetData* create_atlas_sprite_sheet_data(void) {
     AtlasSpriteSheetData* data = (AtlasSpriteSheetData*)calloc(1, sizeof(AtlasSpriteSheetData));
     if (data) {
-        data->cell_pixel_dim = 20; // Default from engine schema
+        data->cell_pixel_dim = 1;
         data->frame_duration = 100;
     }
     return data;

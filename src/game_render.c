@@ -108,7 +108,6 @@ int game_render_init(int screen_width, int screen_height) {
     interaction_bubble_init();
     quest_journal_init();
     modal_notification_init();
-    ui_icon_init(UI_ICON_CACHE_CAPACITY);
     return 0;
 }
 
@@ -1095,6 +1094,5 @@ void game_render_cleanup(void) {
     // Cleanup object layers manager
     destroy_object_layers_manager();
 
-    ui_icon_cleanup();
     dialogue_data_cleanup();
 }

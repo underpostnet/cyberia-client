@@ -71,17 +71,17 @@ static void parse_response(DialogueDataSet* d, const unsigned char* data, int si
 
 static void on_dialogue_fetched(const FetchResponse* r) {
     DialogueDataSet* d = hash_table_get(&ht, r->asset_id);
-    if (NULL == d) { free(r->data); return; }
+    if (NULL == d) { fetch_data_release(r->data); return; }
 
     if (!r->success) {
         d->state = DLG_DATA_ERROR;
         LOG_ERROR("[DIALOGUE_DATA] Fetch error for '%s'", d->item_id);
-        free(r->data);
+        fetch_data_release(r->data);
         return;
     }
 
     parse_response(d, (const unsigned char*)r->data, (int)r->size);
-    free(r->data);
+    fetch_data_release(r->data);
 }
 
 /* ── Public API ──────────────────────────────────────────────────────── */
