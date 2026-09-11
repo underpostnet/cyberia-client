@@ -1,4 +1,6 @@
 #include "render.h"
+#include "fx/fx_death.h"
+#include "fx/fx_level_up.h"
 #include "ui/text.h"
 
 #include "dialogue_data.h"
@@ -91,6 +93,8 @@ void render_on_tick(float delta_time) {
     fct_update(delta_time);
     loot_fx_update(delta_time);
     fx_tap_update(delta_time);
+    fx_level_up_update(delta_time);
+    fx_death_update(delta_time);
     /* Reads the render positions main.c settled this frame, so the dust lands
      * with the sprite that raised it. */
     fx_footsteps_update(delta_time);

@@ -5,9 +5,9 @@
 #include <stdbool.h>
 #include <stdint.h>
 
-/* World-space overhead UI above one entity. Draws bottom to top: HP bar,
- * nameplate, capability bar (Σ-stats circle plus capability icons), presence
- * status icon. Read-only — the module never changes game state. */
+/* World-space overhead UI above one entity. Draws bottom to top: XP bar,
+ * HP bar, nameplate, capability bar (level, stats sum, capability icons),
+ * presence status icon. Read-only — the module never changes game state. */
 
 /* ── Layout constants ─────────────────────────────────────────────────── */
 
@@ -23,6 +23,8 @@
 #define EOHUD_BAR_H             22
 
 #define EOHUD_HP_BAR_W          104
+/* XP bar: the HP bar width at half its height, touching it from below. */
+#define EOHUD_XP_BAR_H          (EOHUD_BAR_H / 2)
 #define EOHUD_PILL_PAD_X        8       /* horizontal padding inside a pill */
 #define EOHUD_PILL_ROUND        0.5f    /* corner roundness, 0..1 */
 #define EOHUD_ROW_GAP           3       /* between stacked rows */
@@ -33,6 +35,7 @@
 
 #define EOHUD_NAME_FONT_SIZE    13
 #define EOHUD_HP_LABEL_FONT_SIZE 12
+#define EOHUD_XP_LABEL_FONT_SIZE 9
 #define EOHUD_STATS_FONT_SIZE   16
 #define EOHUD_RESPAWN_FONT_SIZE 20
 
@@ -46,16 +49,23 @@
 typedef struct {
     const char *name;       /* entity ID or nickname */
 
-    /* Sum of the entity's active stats, capped at sum_stats_limit. Shows in
-     * the leading circle of the capability bar. */
+    /* Server effective stat sum and level; both lead the capability bar. */
     int stats_sum;
+    int level;
 
     float life;
     float max_life;         /* 0 hides the HP bar */
+    /* In-level XP fill, 0..1. The XP bar draws with the HP bar; entities
+     * whose XP the client cannot read pass 0. */
+    float xp_ratio;
+    /* Total XP and the next threshold, for the "XP n / m" label. Both 0
+     * draws the bar without a label. */
+    double xp;
+    double xp_next;
 
     bool show_stats;        /* the capability bar row; off for the dead */
 
-    /* Draws the leading Σ-stats icon and value. False suppresses that
+    /* Draws the leading level and stats-sum pair. False suppresses that
      * element only — the capability icons stay. Used for provider NPCs. */
     bool show_stats_value;
 

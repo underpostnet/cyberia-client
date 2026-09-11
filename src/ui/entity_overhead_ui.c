@@ -1,13 +1,14 @@
 /**
  * @file entity_overhead_ui.c
- * @brief World-space overhead UI — HP bar, nameplate, capability bar, presence.
+ * @brief World-space overhead UI — XP bar, HP bar, nameplate, capability bar, presence.
  *
  * Rendering stack (drawn bottom → top, above the entity):
  *
- *   [presence icon]                      ← standalone lifecycle icon (unchanged)
- *   ( Σ )[action][quest]   capability bar ← Σ-stats circle + capability icons
- *   [ Display Name ]       nameplate
- *   [ HP 73 / 100  ]       HP bar
+ *   [presence icon]                          ← standalone lifecycle icon
+ *   [stats] lv.3  [stack] 107 [action][quest] capability bar
+ *   [ Display Name ]                         nameplate
+ *   [ HP 73 / 100  ]                         HP bar
+ *   [== XP 120 / 400 ]                       XP bar, half height, gold
  *            │
  *         entity top edge
  *
@@ -42,6 +43,10 @@ static const Color C_PILL_BORDER = {120, 120, 120, 160 };
 /* HP bar — black background (the depleted portion reads as black) + outline. */
 static const Color C_HP_BG       = {  0,   0,   0, 235 };
 static const Color C_HP_BORDER   = {  0,   0,   0, 235 };
+
+/* XP bar — translucent gold over a translucent dark track. */
+static const Color C_XP_FILL     = {255, 215,   0, 220 };
+static const Color C_XP_BG       = {  0,   0,   0, 120 };
 
 /* Text. */
 static const Color C_NAME_TEXT   = {255, 255, 255, 255 };
@@ -88,7 +93,7 @@ static void draw_centered_label(const char *label, float cx, float top_y, int fs
 
 /* Gapless text outline: `rings` concentric 8-direction passes of `outline`
  * behind `fg`, at (x, y) top-left. Used where a label must stay legible over
- * any background (Σ-stats value, death countdown). */
+ * any background (level, stats sum, death countdown). */
 static void draw_outlined_text(const char *text, int x, int y, int fs,
                                Color fg, Color outline, int rings) {
     for (int o = 1; o <= rings; o++)
@@ -137,6 +142,24 @@ static void draw_hp_bar(float cx, float top_y, float life, float max_life) {
     draw_centered_label(label, cx, top_y, EOHUD_HP_LABEL_FONT_SIZE, C_LABEL, C_LABEL_SHADOW, (float)EOHUD_BAR_H);
 }
 
+static void draw_xp_bar(float cx, float top_y, float ratio, double xp, double xp_next) {
+    Rectangle bar = { cx - EOHUD_HP_BAR_W * 0.5f, top_y,
+                      (float)EOHUD_HP_BAR_W, (float)EOHUD_XP_BAR_H };
+    DrawRectangleRounded(bar, EOHUD_PILL_ROUND, 8, C_XP_BG);
+    if (ratio > 1.0f) ratio = 1.0f;
+    if (ratio > 0.0f) {
+        Rectangle fill = bar;
+        fill.width = bar.width * ratio;
+        if (fill.width < 1.0f) fill.width = 1.0f;
+        DrawRectangleRounded(fill, EOHUD_PILL_ROUND, 8, C_XP_FILL);
+    }
+    if (xp_next > 0.0) {
+        char label[40];
+        snprintf(label, sizeof(label), "XP %.0f / %.0f", xp, xp_next);
+        draw_centered_label(label, cx, top_y, EOHUD_XP_LABEL_FONT_SIZE, C_LABEL, C_LABEL_SHADOW, (float)EOHUD_XP_BAR_H);
+    }
+}
+
 static void draw_nameplate(const char *name, float cx, float top_y) {
     if (!name || name[0] == '\0') return;
     int tw = MeasureText(name, EOHUD_NAME_FONT_SIZE);
@@ -144,11 +167,20 @@ static void draw_nameplate(const char *name, float cx, float top_y) {
     draw_centered_label(name, cx, top_y, EOHUD_NAME_FONT_SIZE, C_NAME_TEXT, C_NAME_SHADOW, (float)EOHUD_BAR_H);
 }
 
-/** Capability bar: an optional leading 'stats' icon + outlined sum-of-stats value
- *  (no fill — the strong glyph outline carries it), then one icon per set
- *  interaction-capability bit (action, quest). `show_value` gates only the
- *  Σ-stats lead; the capability icons always render for the set flags. */
-static void draw_capability_bar(float cx, float top_y, int stats_sum,
+/* One icon-led item of the capability bar: `icon` then outlined `text`
+ * (no fill — the strong glyph outline carries it). Returns the width used. */
+static float draw_capability_item(const char *icon, const char *text, float x, float row_cy, float phase) {
+    ui_icon_draw(icon, x + EOHUD_CAP_ICON_SIZE * 0.5f, row_cy, EOHUD_CAP_ICON_SIZE, false, phase);
+    float text_x = x + EOHUD_CAP_ICON_SIZE + EOHUD_ITEM_GAP;
+    draw_outlined_text(text, (int)text_x, (int)(row_cy - EOHUD_STATS_FONT_SIZE * 0.5f),
+                       EOHUD_STATS_FONT_SIZE, C_LABEL, C_STAT_SHADOW, EOHUD_STAT_OUTLINE_RINGS);
+    return text_x - x + (float)MeasureText(text, EOHUD_STATS_FONT_SIZE);
+}
+
+/** Capability bar: an optional lead of `[stats] lv.<level>` and `[stack] <sum>`,
+ *  then one icon per set interaction-capability bit (action, quest).
+ *  `show_value` gates only the lead; the capability icons always render. */
+static void draw_capability_bar(float cx, float top_y, int stats_sum, int level,
                                 bool show_value, uint8_t flags, float phase) {
     const char *icons[2];
     int icon_n = 0;
@@ -157,26 +189,21 @@ static void draw_capability_bar(float cx, float top_y, int stats_sum,
     if (flags & INTERACTION_FLAG_QUEST)
         icons[icon_n++] = presentation_runtime_status_icon(STATUS_ICON_QUEST_PROVIDER);
 
-    int fs = EOHUD_STATS_FONT_SIZE;
-    char num[16];
-    int tw = 0;
-    if (show_value) {
-        snprintf(num, sizeof(num), "%d", stats_sum);
-        tw = MeasureText(num, fs);
-    }
+    char level_text[16], sum_text[16];
+    snprintf(level_text, sizeof(level_text), "lv.%d", level);
+    snprintf(sum_text, sizeof(sum_text), "%d", stats_sum);
+    float item_w = (float)EOHUD_CAP_ICON_SIZE + (float)EOHUD_ITEM_GAP;
 
-    /* Total width: optional Σ-stats lead (icon + value) plus one icon per
-     * capability flag, each element separated by EOHUD_ITEM_GAP. */
+    /* Total width: the two lead items plus one icon per capability flag,
+     * each element separated by EOHUD_ITEM_GAP. */
     float content_w = 0.0f;
-    bool acc = false;
     if (show_value) {
-        content_w += (float)EOHUD_CAP_ICON_SIZE + (float)EOHUD_ITEM_GAP + (float)tw;
-        acc = true;
+        content_w += item_w + MeasureText(level_text, EOHUD_STATS_FONT_SIZE) + EOHUD_ITEM_GAP
+                   + item_w + MeasureText(sum_text, EOHUD_STATS_FONT_SIZE);
     }
     for (int i = 0; i < icon_n; i++) {
-        if (acc) content_w += (float)EOHUD_ITEM_GAP;
+        if (content_w > 0.0f) content_w += (float)EOHUD_ITEM_GAP;
         content_w += (float)EOHUD_CAP_ICON_SIZE;
-        acc = true;
     }
     if (content_w <= 0.0f) return;
 
@@ -185,14 +212,8 @@ static void draw_capability_bar(float cx, float top_y, int stats_sum,
     bool drew = false;
 
     if (show_value) {
-        ui_icon_draw("stats", x + EOHUD_CAP_ICON_SIZE * 0.5f, row_cy,
-                     EOHUD_CAP_ICON_SIZE, false, phase);
-        x += EOHUD_CAP_ICON_SIZE + EOHUD_ITEM_GAP;
-
-        int nx = (int)x;
-        int ny = (int)(row_cy - fs * 0.5f);
-        draw_outlined_text(num, nx, ny, fs, C_LABEL, C_STAT_SHADOW, EOHUD_STAT_OUTLINE_RINGS);
-        x += (float)tw;
+        x += draw_capability_item("stats", level_text, x, row_cy, phase) + EOHUD_ITEM_GAP;
+        x += draw_capability_item("stack", sum_text, x, row_cy, phase);
         drew = true;
     }
 
@@ -230,6 +251,8 @@ void entity_overhead_ui_draw(
     }
 
     if (p->show_hp && p->max_life > 0.0f) {
+        cursor_px -= EOHUD_XP_BAR_H;
+        draw_xp_bar(entity_cx_px, cursor_px, p->xp_ratio, p->xp, p->xp_next);
         cursor_px -= EOHUD_BAR_H;
         draw_hp_bar(entity_cx_px, cursor_px, p->life, p->max_life);
         cursor_px -= EOHUD_ROW_GAP;
@@ -243,7 +266,7 @@ void entity_overhead_ui_draw(
 
     if (p->show_stats) {
         cursor_px -= EOHUD_BAR_H;
-        draw_capability_bar(entity_cx_px, cursor_px, p->stats_sum, p->show_stats_value, p->interaction_flags, phase);
+        draw_capability_bar(entity_cx_px, cursor_px, p->stats_sum, p->level, p->show_stats_value, p->interaction_flags, phase);
         cursor_px -= EOHUD_ROW_GAP;
     }
 

@@ -26,13 +26,11 @@
  *   Damage → brief red   vignette (max alpha 0.28, decays in ~0.45 s).
  *   Regen  → brief green vignette (max alpha 0.14, decays in ~0.55 s).
  *
- * Per-type visual tuning:
- *   FCT_TYPE_DAMAGE red   {255,60,60}  rise 3.8  drift ±1.8  font 14–44  overshoot ≤1.70×
- *   FCT_TYPE_REGEN  green {80,240,80}  rise 2.2  drift ±0.5  font 14–32  overshoot ≤1.45×
+ * Per-type visual tuning lives in FCT_TUNING, indexed by FCTType.
  *
  * Damage/regen events are broadcast to every AOI viewer; the red/green screen
  * vignette is personal — it fires only when the event lands on the local
- * player's own footprint.
+ * player's own footprint. XP events reach only their earner and flash nothing.
  */
 
 #include "floating_combat_text.h"
@@ -55,39 +53,33 @@
 #define FCT_POP_DURATION     0.09f  /* violent snap pop-in                   */
 #define FCT_FADE_START       1.6f   /* second at which alpha decay begins    */
 
-/* ── Per-type rise speeds (world units/second, upward) ────────────────── */
-
-#define FCT_RISE_DAMAGE      3.8f
-#define FCT_RISE_REGEN       2.2f
-
-/* ── Per-type max horizontal drift (world units/second) ───────────────── */
-
-#define FCT_DRIFT_DAMAGE     1.8f
-#define FCT_DRIFT_REGEN      0.5f
 #define FCT_DRIFT_MIN        0.2f   /* minimum absolute drift for all types  */
-
-/* ── Per-type font sizing ──────────────────────────────────────────────── */
-
 #define FCT_FONT_MIN         14     /* minimum pixels (all types)            */
-#define FCT_FONT_MAX_DAMAGE  44     /* upper limit for damage hits           */
-#define FCT_FONT_MAX_REGEN   32     /* upper limit for regen pulses          */
 
-/* Log-base divisor: log2(value+1)/div → 1.0 at the "saturating" value.
- * Smaller = font maxes out at lower hit values (more aggressive growth).  */
-#define FCT_LOG_DIV_DAMAGE   5.0f   /* log2(32)  ≈ 5  → hit   33 = full sz */
-#define FCT_LOG_DIV_REGEN    7.0f   /* log2(128) ≈ 7  → regen 129 = full   */
+/* ── Per-type tuning ───────────────────────────────────────────────────── */
 
-/* ── Screen-overlay vignette ───────────────────────────────────────────── */
+typedef struct {
+    const char* format;    /* printf format for the value                     */
+    Color       color;
+    float       rise;      /* upward speed, world units/second                 */
+    float       drift;     /* max horizontal drift, world units/second         */
+    /* Font grows with log2(value+1)/log_div, saturating at font_max. A smaller
+     * divisor reaches full size at a lower value. */
+    float       log_div;
+    int         font_max;
+    float       overshoot; /* base pop-in scale                                */
+    /* Screen vignette when the event lands on the local player: peak alpha
+     * (0 for none), alpha lost per second, and tint. */
+    float       flash;
+    float       flash_decay;
+    Color       flash_color;
+} FCTTuning;
 
-#define FCT_OVERLAY_DMG_ALPHA  0.28f  /* peak red-flash alpha               */
-#define FCT_OVERLAY_DMG_DECAY  2.20f  /* alpha units lost per second        */
-#define FCT_OVERLAY_RGN_ALPHA  0.14f  /* peak green-pulse alpha             */
-#define FCT_OVERLAY_RGN_DECAY  1.80f  /* alpha units lost per second        */
-
-/* ── Base colours ──────────────────────────────────────────────────────── */
-
-static const Color s_color_damage = {255,  60,  60, 255};  /* bright red   */
-static const Color s_color_regen  = { 80, 240,  80, 255};  /* bright green */
+static const FCTTuning FCT_TUNING[FCT_TYPE_COUNT] = {
+    [FCT_TYPE_DAMAGE] = { "-%u",    {255,  60,  60, 255}, 3.8f, 1.8f, 5.0f, 44, 1.45f, 0.28f, 2.20f, {180, 0, 0, 255} },
+    [FCT_TYPE_REGEN]  = { "+%u",    { 80, 240,  80, 255}, 2.2f, 0.5f, 7.0f, 32, 1.20f, 0.14f, 1.80f, {0, 180, 0, 255} },
+    [FCT_TYPE_XP]     = { "+%u XP", {255, 215,   0, 255}, 1.6f, 0.4f, 8.0f, 30, 1.30f, 0.00f, 0.00f, {0, 0, 0, 0} },
+};
 
 /* ── Internal entry ────────────────────────────────────────────────────── */
 
@@ -106,9 +98,9 @@ typedef struct {
 static FCTEntry s_pool[FCT_MAX_ENTRIES];
 static bool     s_init = false;
 
-/* Screen-overlay alphas: updated by fct_spawn/fct_update, read by fct_draw_overlay. */
-static float s_damage_overlay = 0.0f;
-static float s_regen_overlay  = 0.0f;
+/* Screen-overlay alphas per type: set by fct_spawn, decayed by fct_update,
+ * read by fct_draw_overlay. */
+static float s_overlay[FCT_TYPE_COUNT];
 
 /* ── Deterministic LCG — avoids touching the global rand() state ────────── */
 
@@ -131,8 +123,7 @@ static bool fct_event_on_self(float wx, float wy) {
 
 void fct_init(void) {
     memset(s_pool, 0, sizeof(s_pool));
-    s_damage_overlay = 0.0f;
-    s_regen_overlay  = 0.0f;
+    memset(s_overlay, 0, sizeof(s_overlay));
     s_init = true;
 }
 
@@ -149,50 +140,38 @@ void fct_spawn(float world_x, float world_y, uint32_t value, FCTType type) {
     }
     if (!slot) slot = &s_pool[oldest_i];
 
-    /* ── Format text ─────────────────────────────────────────────────── */
-    const bool is_regen = (type == FCT_TYPE_REGEN);
-    snprintf(slot->text, sizeof(slot->text), is_regen ? "+%u" : "-%u", value);
+    assert(type >= 0 && type < FCT_TYPE_COUNT);
+    const FCTTuning* tune = &FCT_TUNING[type];
+    snprintf(slot->text, sizeof(slot->text), tune->format, value);
 
-    /* ── Per-type tuning ──────────────────────────────────────────────── */
-    /* Damage/regen are broadcast to every AOI viewer; the screen vignette is
-     * personal — only when the event lands on the local player. */
-    const float rise_speed     = is_regen ? FCT_RISE_REGEN      : FCT_RISE_DAMAGE;
-    const float drift_max      = is_regen ? FCT_DRIFT_REGEN     : FCT_DRIFT_DAMAGE;
-    const float log_div        = is_regen ? FCT_LOG_DIV_REGEN   : FCT_LOG_DIV_DAMAGE;
-    const int   font_max       = is_regen ? FCT_FONT_MAX_REGEN  : FCT_FONT_MAX_DAMAGE;
-    const Color base_color     = is_regen ? s_color_regen       : s_color_damage;
-    const float base_overshoot = is_regen ? 1.20f               : 1.45f;
-
-    if (fct_event_on_self(world_x, world_y)) {
-        if (is_regen) s_regen_overlay  = FCT_OVERLAY_RGN_ALPHA;
-        else          s_damage_overlay = FCT_OVERLAY_DMG_ALPHA;
-    }
+    /* The screen vignette is personal — only when the event lands on the
+     * local player. */
+    if (tune->flash > 0.0f && fct_event_on_self(world_x, world_y)) s_overlay[type] = tune->flash;
 
     /* ── Font size — log₂ scale, per-type grow rate ─────────────────── */
     float log_v  = (value > 0) ? (float)log2((double)value + 1.0) : 1.0f;
     float size_f = (float)FCT_FONT_MIN
-                 + (float)(font_max - FCT_FONT_MIN) * (log_v / log_div);
-    if (size_f < (float)FCT_FONT_MIN) size_f = (float)FCT_FONT_MIN;
-    if (size_f > (float)font_max)     size_f = (float)font_max;
+                 + (float)(tune->font_max - FCT_FONT_MIN) * (log_v / tune->log_div);
+    if (size_f < (float)FCT_FONT_MIN)   size_f = (float)FCT_FONT_MIN;
+    if (size_f > (float)tune->font_max) size_f = (float)tune->font_max;
     slot->font_px = (int)(size_f + 0.5f);
 
-    /* ── Pop overshoot — scales with hit magnitude ────────────────────── */
-    float t_norm = log_v / log_div;
+    /* ── Pop overshoot — scales with magnitude ────────────────────────── */
+    float t_norm = log_v / tune->log_div;
     if (t_norm > 1.0f) t_norm = 1.0f;
-    slot->pop_overshoot = base_overshoot + 0.25f * t_norm;
+    slot->pop_overshoot = tune->overshoot + 0.25f * t_norm;
 
-    /* ── Colour / type ────────────────────────────────────────────────── */
-    slot->base_color = base_color;
+    slot->base_color = tune->color;
     slot->type       = type;
 
     /* ── Velocity — random drift direction ────────────────────────────── */
-    float drift = FCT_DRIFT_MIN + lcg_f01() * (drift_max - FCT_DRIFT_MIN);
+    float drift = FCT_DRIFT_MIN + lcg_f01() * (tune->drift - FCT_DRIFT_MIN);
     if (lcg_f01() < 0.5f) drift = -drift;
 
     slot->x      = world_x;
     slot->y      = world_y;
     slot->vx     = drift;
-    slot->vy     = -rise_speed;
+    slot->vy     = -tune->rise;
     slot->age    = 0.0f;
     slot->active = true;
 }
@@ -208,13 +187,11 @@ void fct_update(float dt) {
     local_player_fct_clear();
 
     /* Decay screen-space overlays. */
-    if (s_damage_overlay > 0.0f) {
-        s_damage_overlay -= dt * FCT_OVERLAY_DMG_DECAY;
-        if (s_damage_overlay < 0.0f) s_damage_overlay = 0.0f;
-    }
-    if (s_regen_overlay > 0.0f) {
-        s_regen_overlay -= dt * FCT_OVERLAY_RGN_DECAY;
-        if (s_regen_overlay < 0.0f) s_regen_overlay = 0.0f;
+    for (int t = 0; t < FCT_TYPE_COUNT; t++) {
+        if (s_overlay[t] > 0.0f) {
+            s_overlay[t] -= dt * FCT_TUNING[t].flash_decay;
+            if (s_overlay[t] < 0.0f) s_overlay[t] = 0.0f;
+        }
     }
 
     for (int i = 0; i < FCT_MAX_ENTRIES; i++) {
@@ -299,16 +276,11 @@ void fct_draw(void) {
 }
 
 void fct_draw_overlay(void) {
-    /* Called outside BeginMode2D — draws full-screen tints in screen space.
-     * Damage: brief red vignette.  Regen: brief green pulse.            */
-    if (s_damage_overlay > 0.0f) {
-        unsigned char a = (unsigned char)(s_damage_overlay * 255.0f + 0.5f);
-        DrawRectangle(0, 0, GetScreenWidth(), GetScreenHeight(),
-                      (Color){180, 0, 0, a});
-    }
-    if (s_regen_overlay > 0.0f) {
-        unsigned char a = (unsigned char)(s_regen_overlay * 255.0f + 0.5f);
-        DrawRectangle(0, 0, GetScreenWidth(), GetScreenHeight(),
-                      (Color){0, 180, 0, a});
+    /* Called outside BeginMode2D — draws full-screen tints in screen space. */
+    for (int t = 0; t < FCT_TYPE_COUNT; t++) {
+        if (s_overlay[t] <= 0.0f) continue;
+        Color tint = FCT_TUNING[t].flash_color;
+        tint.a = (unsigned char)(s_overlay[t] * 255.0f + 0.5f);
+        DrawRectangle(0, 0, GetScreenWidth(), GetScreenHeight(), tint);
     }
 }

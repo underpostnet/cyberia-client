@@ -5,8 +5,9 @@
 #include <stdint.h>
 
 /* Floating combat text — animated pop-up numbers at world positions, the
- * feedback channel for life changes. Coin and item changes go elsewhere: the
- * inventory-bar quantity FX shows coins, the loot grid shows item gains.
+ * feedback channel for life and XP changes. Coin and item changes go
+ * elsewhere: the inventory-bar quantity FX shows coins, the loot grid shows
+ * item gains.
  *
  * Each entry pops (font scales up with a brief overshoot), rises with a
  * gentle random arc, then fades. Font size scales with log2(value + 1), so a
@@ -16,11 +17,13 @@
 
 /* Client-only: the wire carries the kind as a JSON string, so these numbers
  * never cross the network. message.c maps the server `kind` word
- * (game/snapshot.go: FCTDamage "damage", FCTRegen "regen") onto this enum.
- * To add a kind, add it in both places. */
+ * (game/snapshot.go: FCTDamage "damage", FCTRegen "regen", FCTXp "xp") onto
+ * this enum. To add a kind, add it in both places and in the tuning table. */
 typedef enum {
-    FCT_TYPE_DAMAGE = 0,   /* life loss — red   "-N" */
-    FCT_TYPE_REGEN  = 1,   /* life gain — green "+N" */
+    FCT_TYPE_DAMAGE = 0,   /* life loss — red   "-N"    */
+    FCT_TYPE_REGEN  = 1,   /* life gain — green "+N"    */
+    FCT_TYPE_XP     = 2,   /* XP award  — gold  "+N XP" */
+    FCT_TYPE_COUNT
 } FCTType;
 
 #define FCT_MAX_ENTRIES 64

@@ -18,6 +18,8 @@
 #include "fx/fx_shapes.h"
 #include "ui/interaction_bubble.h"
 #include "ui/hud_minimap_overlay.h"
+#include "fx/fx_death.h"
+#include "fx/fx_level_up.h"
 #include "ui/inventory_bar.h"
 #include "fx/loot_fx.h"
 #include "ui/inventory_modal.h"
@@ -252,9 +254,11 @@ void game_render_world(void) {
     // 7. Foregrounds (always on top of entities) - creates depth
     game_render_foregrounds();
 
-    // 8. Effects — FCT pop-ups, loot flights
+    // 8. Effects — FCT pop-ups, loot flights, level-up auras, death cues
     fct_draw();
     game_render_loot_fx();
+    fx_level_up_draw();
+    fx_death_draw();
 
     // 9. Grid overlay (if dev_ui enabled - renders on top of everything)
     if (presentation_runtime_dev_ui()) {
@@ -847,7 +851,7 @@ void game_render_entities(void) {
              * them carry combat/identity overhead (is_non_combat_bot computed
              * above, shared with the ground-shadow gate). */
             if (!is_non_combat_bot) {
-                /* Every entity carries a stats_sum (server-clamped sum of its
+                /* Every entity carries a stats_sum (server sum of its
                  * active stats) used by the overhead capability bar.  */
                 bool np_is_player = (entry->type == ENTITY_TYPE_PLAYER
                                   || entry->type == ENTITY_TYPE_OTHER_PLAYER);
@@ -874,7 +878,7 @@ void game_render_entities(void) {
                  * per-player capability bitmask drives the overhead overlays. */
                 uint8_t np_flags = 0;
                 /* Provider NPCs (mission/action givers) are immortal and inert:
-                 * suppress their HP bar and the Σ-stats value — their action/quest
+                 * suppress their HP bar and the level and stats-sum lead — their action/quest
                  * capability icons still show. */
                 bool np_is_provider = false;
                 if (!np_is_player) {
@@ -893,22 +897,29 @@ void game_render_entities(void) {
                         }
                     }
                 }
+                /* A running level-up or death cue takes the whole overhead
+                 * space: every row and the presence icon yield to it. */
+                bool cue = fx_level_up_active(entity_base->id) || fx_death_active(entity_base->id);
                 EntityOverheadParams ohp = {
                     .name              = np_buf,
                     .stats_sum         = entity_base->stats_sum,
+                    .level             = entity_base->level,
                     .life              = entity_base->life,
                     .max_life          = entity_base->max_life,
-                    .show_name         = true,
-                    .show_stats        = entity_base->respawn_in <= 0.0f
+                    .xp_ratio          = entry->is_main_player ? local_player_xp_ratio() : 0.0f,
+                    .xp                = entry->is_main_player ? g_local_player.xp : 0.0,
+                    .xp_next           = entry->is_main_player ? g_local_player.next_level_xp : 0.0,
+                    .show_name         = !cue,
+                    .show_stats        = !cue && entity_base->respawn_in <= 0.0f
                                          && (!np_is_provider || np_flags != 0),
                     .show_stats_value  = !np_is_provider,
-                    .show_hp           = !np_is_provider && entity_base->max_life > 0.0f
+                    .show_hp           = !cue && !np_is_provider && entity_base->max_life > 0.0f
                                          && entity_base->respawn_in <= 0.0f,
-                    .status_icon       = entity_base->status_icon,
+                    .status_icon       = cue ? 0 : entity_base->status_icon,
                     .interaction_flags = np_flags,
                     /* Respawn countdown is local-player-only: a remote client
                      * must never see another player's countdown. */
-                    .respawn_seconds   = (entry->is_main_player && entity_base->respawn_in > 0.0f)
+                    .respawn_seconds   = (!cue && entry->is_main_player && entity_base->respawn_in > 0.0f)
                                          ? (int)(entity_base->respawn_in + 0.5f) : 0,
                 };
                 entity_overhead_ui_draw(
