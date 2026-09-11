@@ -809,16 +809,8 @@ static void draw_node_overlay(int idx, float fade, double t) {
         const char* icon = presentation_runtime_status_icon(status);
         Color tint = presence_color(poi->presence_status);
         if (zoomed) {
-            /* Sum-stats readout only for plain living presence — never
-             * portals, quest/action provider cells, or provider/static
-             * behaviors (the engine zeroes those, so a 0 means "hidden"). */
-            bool living = IMAP_PRESENCE_PASSIVE == poi->presence_status ||
-                          IMAP_PRESENCE_HOSTILE == poi->presence_status ||
-                          IMAP_PRESENCE_RESOURCE == poi->presence_status;
-            bool show_stats = poi->show_stats_value && living &&
-                              0 == poi->capabilities;
             draw_zoomed_capability_tab(at, icon, poi->capabilities, poi->action_active,
-                                       poi->quest_active, show_stats, poi->stats_sum,
+                                       poi->quest_active, false, 0,
                                        tint, (Color){ 0 }, fade, t);
         } else {
             draw_presence_marker(at, icon, tint, icon_size, fade);

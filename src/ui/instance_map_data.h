@@ -13,7 +13,7 @@
  *   open  → GET /api/cyberia-instance/instance-map/:code/dynamic  (~1/s)
  *   close → polling stops immediately; late responses are discarded.
  *
- * Static POIs carry authored presence, baseline ObjectLayer stats, and
+ * Static POIs carry authored presence and
  * capability membership. Live player position and stats remain client-side.
  */
 
@@ -71,8 +71,6 @@ typedef struct {
 typedef struct {
     int  node;
     int  cell_x, cell_y;
-    int  stats_sum;                 /* living presence only; 0 for portals */
-    bool show_stats_value;
     ImapPresenceStatus presence_status;
     uint8_t capabilities;
     bool action_active;

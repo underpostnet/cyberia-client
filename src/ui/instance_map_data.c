@@ -134,8 +134,6 @@ static void parse_presence_pois(const cJSON* doc) {
             *poi = (ImapPresencePoi){ .node = node, .cell_x = cell_x, .cell_y = cell_y };
         }
         poi->presence_status = presence;
-        poi->stats_sum = json_int(poi_doc, "statsSum", 0);
-        poi->show_stats_value = json_bool(poi_doc, "showStatsValue", false);
         poi->capabilities |= parse_capabilities(poi_doc);
     }
     refresh_node_capability_counts();
