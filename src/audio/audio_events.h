@@ -7,7 +7,8 @@
  * (src/client/components/cyberia/SharedDefaultsCyberia.js AUDIO_LOGIC_IDS, bound by
  * DEFAULT_AUDIO_BINDINGS). An id emitted here with no counterpart there is silence, so the
  * two lists must be changed together. Skill LogicIds (SKILL_LOGIC_IDS) are emitted by the
- * same call and bind the same way. */
+ * same call and bind the same way. World events every viewer must hear alike — a defeat,
+ * a level gained — arrive as `audio_event` messages from the server and carry their id. */
 
 #define AUDIO_EVENT_IDLE            "idle"
 #define AUDIO_EVENT_COMBAT          "combat"

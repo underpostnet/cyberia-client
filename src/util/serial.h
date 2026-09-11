@@ -104,6 +104,7 @@ int   serial_get_int_default(const cJSON* json, const char* key, int default_val
  * survives. cJSON clamps its int field at INT_MAX. */
 uint32_t serial_get_u32_default(const cJSON* json, const char* key, uint32_t default_val);
 float serial_get_float_default(const cJSON* json, const char* key, float default_val);
+double serial_get_double_default(const cJSON* json, const char* key, double default_val);
 bool  serial_get_bool_default(const cJSON* json, const char* key, bool default_val);
 
 #endif // CYBERIA_UTIL_SERIAL_H

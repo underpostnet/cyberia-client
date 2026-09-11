@@ -230,10 +230,14 @@ uint32_t serial_get_u32_default(const cJSON* json, const char* key, uint32_t def
 }
 
 float serial_get_float_default(const cJSON* json, const char* key, float default_val) {
+    return (float)serial_get_double_default(json, key, (double)default_val);
+}
+
+double serial_get_double_default(const cJSON* json, const char* key, double default_val) {
     assert(json && key);
     const cJSON* item = cJSON_GetObjectItemCaseSensitive(json, key);
     if (!item || !cJSON_IsNumber(item)) return default_val;
-    return (float)item->valuedouble;
+    return item->valuedouble;
 }
 
 bool serial_get_bool_default(const cJSON* json, const char* key, bool default_val) {

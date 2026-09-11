@@ -7,12 +7,13 @@
 
 #include "ui/floating_combat_text.h"   /* FCTType */
 #include "object_layer.h"
+#include "domain/stat_contract_generated.h"
 #include "world_types.h"
 
 /* Local-player state — the one owner of everything the AOI self-player block
  * says about this client and nobody else:
  *
- *   - identity, map code, coin balance, stat caps and the full inventory
+ *   - identity, map code, coin balance, progression and the full inventory
  *     (g_local_player)
  *   - frozen flag (FrozenInteractionState)
  *   - status icon ID (overhead UI hint)
@@ -33,8 +34,12 @@ typedef struct {
     char             id[MAX_ID_LENGTH];
     char             map_code[MAX_ID_LENGTH];
     int              coins;
-    int              sum_stats_limit;
-    int              active_stats_sum;
+    double           xp;             /* total XP */
+    double           level_xp;       /* threshold of the current level */
+    double           next_level_xp;  /* threshold of the next level */
+    float            base_stats[CYBERIA_STAT_COUNT];
+    float            layer_stats[CYBERIA_STAT_COUNT];
+    float            temporary_stats[CYBERIA_STAT_COUNT];
     ObjectLayerState inventory[MAX_OBJECT_LAYERS];
     int              inventory_count;
 } LocalPlayer;
@@ -42,6 +47,15 @@ typedef struct {
 extern LocalPlayer g_local_player;
 
 static inline int local_player_coins(void) { return g_local_player.coins; }
+
+/* Progress through the current level, 0..1. A full bar at the maximum level,
+ * where both thresholds meet. */
+static inline float local_player_xp_ratio(void) {
+    double span = g_local_player.next_level_xp - g_local_player.level_xp;
+    if (0.0 >= span) return 1.0f;
+    double ratio = (g_local_player.xp - g_local_player.level_xp) / span;
+    return 0.0 > ratio ? 0.0f : 1.0 < ratio ? 1.0f : (float)ratio;
+}
 
 /* Quantity of an item the player holds; 0 when the inventory has no stack for
  * it. Coins included — the server keeps their display slot in sync with the

@@ -2,6 +2,9 @@
 
 #include "config.h"
 #include "game_state.h"
+#include "fx/fx_death.h"
+#include "fx/fx_level_up.h"
+#include "domain/stat_contract_generated.h"
 #include "util/serial.h"
 #include "world_types.h"
 #include "object_layer.h"
@@ -29,6 +32,7 @@
 #include <cJSON.h>
 #include <raylib.h>
 #include <assert.h>
+#include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -48,12 +52,38 @@ void message_set_init_handler(MessageInitHandler handler) {
  * position for a smooth lerp.
  */
 
-typedef struct { char id[MAX_ID_LENGTH]; Vector2 pos_server; } PrevPos;
+typedef struct { char id[MAX_ID_LENGTH]; Vector2 pos_server; int level; bool alive; } PrevPos;
 
 static PrevPos s_prev_bots[MAX_ENTITIES];
 static int     s_prev_bot_count = 0;
 static PrevPos s_prev_players[MAX_ENTITIES];
 static int     s_prev_player_count = 0;
+static PrevPos s_prev_resources[MAX_ENTITIES];
+static int     s_prev_resource_count = 0;
+
+/* A living thing: it has life and is not waiting to respawn. */
+static bool entity_alive(const EntityState* e) {
+    return 0.0f < e->max_life && 0.0f < e->life && 0.0f >= e->respawn_in;
+}
+
+/* The prior snapshot's record of `id` across every entity table, or NULL. */
+static const PrevPos* find_prev(const char* id) {
+    for (int i = 0; s_prev_player_count > i; i++) if (0 == strcmp(s_prev_players[i].id, id)) return &s_prev_players[i];
+    for (int i = 0; s_prev_bot_count > i; i++) if (0 == strcmp(s_prev_bots[i].id, id)) return &s_prev_bots[i];
+    for (int i = 0; s_prev_resource_count > i; i++) if (0 == strcmp(s_prev_resources[i].id, id)) return &s_prev_resources[i];
+    return NULL;
+}
+
+static void remember_prev(PrevPos* out, int* count, const BotState* bots, const PlayerState* players, int n) {
+    *count = n;
+    for (int i = 0; n > i; i++) {
+        const EntityState* base = NULL != bots ? &bots[i].base : &players[i].base;
+        memcpy(out[i].id, base->id, MAX_ID_LENGTH);
+        out[i].pos_server = base->pos_server;
+        out[i].level = base->level;
+        out[i].alive = entity_alive(base);
+    }
+}
 
 /* lookup_prev_server_pos returns the previous server position for `id` if it
  * appeared in the prior snapshot, else `fallback` — so a first appearance or a
@@ -68,8 +98,11 @@ static Vector2 lookup_prev_server_pos(const PrevPos* arr, int n,
 
 void message_reset_prev_snapshots(void) {
     audio_context_reset();
+    fx_level_up_reset();
+    fx_death_reset();
     s_prev_bot_count = 0;
     s_prev_player_count = 0;
+    s_prev_resource_count = 0;
 }
 
 /* ============================================================================
@@ -135,18 +168,43 @@ static Vector2 read_pos(const cJSON* e) {
                       serial_get_float_default(e, "posY", 0.0f) };
 }
 
-/* read_entity_state fills every field an active entity shares. Position is the
- * caller's job — interpolation differs per entity kind. */
-static void read_entity_state(const cJSON* e, EntityState* base, FetchPriority priority) {
+static void read_stats(const cJSON* owner, const char* key, float values[CYBERIA_STAT_COUNT]) {
+    const cJSON* array = serial_get_array(owner, key);
+    for (int i = 0; CYBERIA_STAT_COUNT > i; i++) {
+        const cJSON* item = cJSON_GetArrayItem(array, i);
+        values[i] = cJSON_IsNumber(item) ? (float)item->valuedouble : 0.0f;
+    }
+}
+
+/* `death_cue` is false for what is extracted rather than slain: a resource
+ * goes straight to its extracted state with no visual cue. */
+static void read_entity_state(const cJSON* e, EntityState* base, FetchPriority priority, bool death_cue) {
     GameState* gs = &g_game_state;
     base->dims = (Vector2){ serial_get_float_default(e, "dimW", 0.0f),
                             serial_get_float_default(e, "dimH", 0.0f) };
     base->direction   = (Direction)serial_get_int_default(e, "direction", 0);
     base->mode        = (ObjectLayerMode)serial_get_int_default(e, "mode", 0);
+    /* The local player's record persists; everyone else's prior state is in
+     * the tables the last snapshot left. */
+    int prior_level = 0;
+    bool prior_alive = false;
+    if (FETCH_P0 == priority) {
+        prior_level = base->level;
+        prior_alive = entity_alive(base);
+    } else {
+        const PrevPos* prev = find_prev(base->id);
+        if (NULL != prev) { prior_level = prev->level; prior_alive = prev->alive; }
+    }
     base->life        = serial_get_float_default(e, "life", 0.0f);
     base->max_life    = serial_get_float_default(e, "maxLife", 0.0f);
     base->respawn_in  = serial_get_float_default(e, "respawnIn", 0.0f);
     base->stats_sum   = serial_get_int_default(e, "statsSum", 0);
+    base->level = serial_get_int_default(e, "level", 0);
+    read_stats(e, "effectiveStats", base->effective_stats);
+    /* Visual cues only: the server raises the matching audio event for
+     * everyone in reach, so the sound never depends on what this client saw. */
+    fx_level_up_observe(prior_level, base->level, base);
+    if (death_cue) fx_death_observe(prior_alive, 0.0f < base->max_life && !entity_alive(base), base);
     base->status_icon = (uint8_t)serial_get_int_default(e, "statusIcon", 0);
     base->layer_count = read_pooled_layers(e, "objectLayers", &base->layer_offset, priority);
     base->snapshot_time = gs->last_update_time;
@@ -169,7 +227,7 @@ static void unpack_player(const cJSON* e) {
     }
 
     PlayerState* p = &gs->other_players[idx];
-    read_entity_state(e, &p->base, FETCH_P2);
+    read_entity_state(e, &p->base, FETCH_P2, true);
     Vector2 incoming = read_pos(e);
     /* TELEPORTING is a one-snapshot signal that the entity jumped (portal), so
      * a lerp from the old position would sweep across the map. */
@@ -196,7 +254,7 @@ static void unpack_bot(const cJSON* e) {
     }
 
     BotState* b = &gs->bots[idx];
-    read_entity_state(e, &b->base, FETCH_P2);
+    read_entity_state(e, &b->base, FETCH_P2, true);
     Vector2 incoming = read_pos(e);
     b->base.pos_prev = (MODE_TELEPORTING == b->base.mode)
         ? incoming
@@ -240,7 +298,7 @@ static void unpack_resource(const cJSON* e) {
     memset(res, 0, sizeof(BotState));
     serial_get_string(e, "id", res->base.id, MAX_ID_LENGTH);
 
-    read_entity_state(e, &res->base, FETCH_P2);
+    read_entity_state(e, &res->base, FETCH_P2, false);
     res->base.pos_server = read_pos(e);
     res->base.pos_prev   = res->base.pos_server;
     res->base.interp_pos = res->base.pos_server; /* static — no interpolation */
@@ -301,12 +359,16 @@ static void unpack_self(const cJSON* e) {
     serial_get_string(e, "id", p->base.id, MAX_ID_LENGTH);
     strncpy(g_local_player.id, p->base.id, MAX_ID_LENGTH - 1);
 
-    read_entity_state(e, &p->base, FETCH_P0);
+    read_entity_state(e, &p->base, FETCH_P0, true);
     p->base.pos_prev   = p->base.pos_server;
     p->base.pos_server = read_pos(e);
 
-    g_local_player.sum_stats_limit  = serial_get_int_default(e, "sumStatsLimit", 0);
-    g_local_player.active_stats_sum = serial_get_int_default(e, "activeStatsSum", 0);
+    g_local_player.xp = serial_get_double_default(e, "xp", 0.0);
+    g_local_player.level_xp = serial_get_double_default(e, "levelXp", 0.0);
+    g_local_player.next_level_xp = serial_get_double_default(e, "nextLevelXp", 0.0);
+    read_stats(e, "baseStats", g_local_player.base_stats);
+    read_stats(e, "layerStats", g_local_player.layer_stats);
+    read_stats(e, "temporaryStats", g_local_player.temporary_stats);
     g_local_player.coins            = serial_get_int_default(e, "coinBalance", 0);
 
     serial_get_string(e, "mapCode", g_local_player.map_code, MAX_ID_LENGTH);
@@ -369,17 +431,11 @@ static void json_unpack_snapshot(const cJSON* payload) {
      * t stays at 1.0 and entities teleport between snapshots. */
     gs->last_update_time = GetTime();
 
-    /* Keep the current positions so the readers can recover pos_prev. */
-    s_prev_bot_count = gs->bot_count;
-    for (int i = 0; i < s_prev_bot_count; i++) {
-        memcpy(s_prev_bots[i].id, gs->bots[i].base.id, MAX_ID_LENGTH);
-        s_prev_bots[i].pos_server = gs->bots[i].base.pos_server;
-    }
-    s_prev_player_count = gs->other_player_count;
-    for (int i = 0; i < s_prev_player_count; i++) {
-        memcpy(s_prev_players[i].id, gs->other_players[i].base.id, MAX_ID_LENGTH);
-        s_prev_players[i].pos_server = gs->other_players[i].base.pos_server;
-    }
+    /* Keep the current state so the readers can recover pos_prev and see
+     * what changed. */
+    remember_prev(s_prev_bots, &s_prev_bot_count, gs->bots, NULL, gs->bot_count);
+    remember_prev(s_prev_players, &s_prev_player_count, NULL, gs->other_players, gs->other_player_count);
+    remember_prev(s_prev_resources, &s_prev_resource_count, gs->resources, NULL, gs->resource_count);
 
     /* Each snapshot re-lists everything in the area of interest. */
 
@@ -412,15 +468,25 @@ static void json_unpack_snapshot(const cJSON* payload) {
     audio_context_snapshot();
 }
 
+/* A world sound the server raised for everyone in reach. The id is an audio
+ * LogicId; the map bindings decide what it plays. */
+static void json_unpack_audio_event(const cJSON* payload) {
+    char logic_event_id[64] = {0};
+    serial_get_string(payload, "logicEventId", logic_event_id, sizeof(logic_event_id));
+    if ('\0' != logic_event_id[0]) audio_event(logic_event_id);
+}
+
 static void json_unpack_combat_text(const cJSON* payload) {
     char kind[16] = {0};
     serial_get_string(payload, "kind", kind, sizeof(kind));
-    /* `kind` mirrors game/snapshot.go: FCTDamage "damage", FCTRegen "regen". */
+    /* `kind` mirrors game/snapshot.go: FCTDamage "damage", FCTRegen "regen", FCTXp "xp". */
     LocalFctEvent ev = {
         .world_x = serial_get_float_default(payload, "worldX", 0.0f),
         .world_y = serial_get_float_default(payload, "worldY", 0.0f),
         .value   = (uint32_t)serial_get_int_default(payload, "value", 0),
-        .type    = (0 == strcmp(kind, "regen")) ? FCT_TYPE_REGEN : FCT_TYPE_DAMAGE,
+        .type    = 0 == strcmp(kind, "regen") ? FCT_TYPE_REGEN
+                 : 0 == strcmp(kind, "xp")    ? FCT_TYPE_XP
+                 : FCT_TYPE_DAMAGE,
     };
     local_player_fct_push(&ev);
     /* The authoritative collision signal: the server emits one of these wherever damage lands,
@@ -508,7 +574,6 @@ static void json_unpack_init_data(const cJSON* payload) {
     g_game_state.grid_h = serial_get_int_default(payload, "gridH", 100);
     g_game_state.aoi_radius = serial_get_float_default(payload, "aoiRadius", 15.0f);
 
-    g_local_player.sum_stats_limit = serial_get_int_default(payload, "sumStatsLimit", 9999);
 
     /* Skill map lives in ui_state — pure presentation lookup. */
     ui_state_clear_skills();
@@ -858,6 +923,7 @@ void message_receive(const uint8_t* data, size_t len) {
 
     if      (0 == strcmp(type, "snapshot"))        json_unpack_snapshot(payload);
     else if (0 == strcmp(type, "combat_text"))     json_unpack_combat_text(payload);
+    else if (0 == strcmp(type, "audio_event"))     json_unpack_audio_event(payload);
     else if (0 == strcmp(type, "drop_collect"))    json_unpack_drop_collect(payload);
     else if (0 == strcmp(type, "drop_spawn"))      json_unpack_drop_spawn(payload);
     else if (0 == strcmp(type, "init_data"))       json_unpack_init_data(payload);
