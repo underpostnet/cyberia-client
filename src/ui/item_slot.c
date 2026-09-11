@@ -2,6 +2,7 @@
 #include "text.h"
 
 #include "domain/local_player.h"
+#include "domain/stat_contract_generated.h"
 #include "game_state.h"
 #include "ol_as_animated_ico.h"
 #include "world_types.h"
@@ -120,9 +121,10 @@ void item_slot_draw_ex(Rectangle r, const ObjectLayerState* ols, ObjectLayersMan
     if (mgr && ols->item_id[0] != '\0') {
         ObjectLayer* ol_data = lookup_cached_layer(ols->item_id);
         if (ol_data) {
-            Stats st = ol_data->data.stats;
-            int sum = st.effect + st.resistance + st.agility + st.range
-                      + st.intelligence + st.utility;
+            int values[CYBERIA_STAT_COUNT];
+            cyberia_stats_values(&ol_data->data.stats, values);
+            int sum = 0;
+            for (int i = 0; CYBERIA_STAT_COUNT > i; i++) sum += values[i];
             if (sum != 0) {
                 /* Icon slightly larger, font scaled up */
                 int stat_icon_sz = fs;
@@ -139,7 +141,7 @@ void item_slot_draw_ex(Rectangle r, const ObjectLayerState* ols, ObjectLayersMan
                 int sum_ty = (int)(r.y + 3.0f);
                 float si_cx = sum_tx - stat_icon_sz * 0.5f - 4.0f;
                 float si_cy = r.y + stat_icon_sz * 0.5f + 3.0f;
-                ui_icon_draw("stats", si_cx, si_cy, stat_icon_sz, false, 0.0f);
+                ui_icon_draw("stack", si_cx, si_cy, stat_icon_sz, false, 0.0f);
 
                 /* Black outline around text chars for legibility */
                 for (int dy = -1; dy <= 1; dy++) {
@@ -148,7 +150,8 @@ void item_slot_draw_ex(Rectangle r, const ObjectLayerState* ols, ObjectLayersMan
                         DrawText(sum_str, sum_tx + dx, sum_ty + dy, stat_font, BLACK);
                     }
                 }
-                DrawText(sum_str, sum_tx, sum_ty, stat_font, (Color){ 120, 220, 140, 255 });
+                DrawText(sum_str, sum_tx, sum_ty, stat_font,
+                         0 > sum ? (Color){ 200, 80, 80, 255 } : (Color){ 120, 220, 140, 255 });
             }
         }
     }

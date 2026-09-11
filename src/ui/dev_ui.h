@@ -48,7 +48,7 @@ void dev_ui_draw(int screen_width, int screen_height, int hud_occupied);
 void dev_ui_update_network_stats(size_t download_bytes, size_t upload_bytes);
 
 /* Both return 0 when the player is absent. */
-int dev_ui_get_active_stats_sum(const char* player_id);
+int dev_ui_get_effective_stats_sum(const char* player_id);
 int dev_ui_get_active_item_count(const char* player_id);
 
 #endif // DEV_UI_H

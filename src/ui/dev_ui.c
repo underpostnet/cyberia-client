@@ -130,13 +130,12 @@ void dev_ui_update_network_stats(size_t download_bytes, size_t upload_bytes) {
     g_dev_ui.last_network_update = current_time;
 }
 
-int dev_ui_get_active_stats_sum(const char* player_id) {
+int dev_ui_get_effective_stats_sum(const char* player_id) {
     assert(player_id);
 
-    // Server computes the sum of all active object layer stats and sends it
-    // in the binary AOI self-player section — just use it directly.
+    // The snapshot carries the effective stat sum.
     if (strcmp(g_local_player.id, player_id) == 0) {
-        return g_local_player.active_stats_sum;
+        return g_game_state.player.base.stats_sum;
     }
 
     return 0;
@@ -210,10 +209,9 @@ void dev_ui_draw(int screen_width, int screen_height, int hud_occupied) {
     const char* dir_str = direction_to_string(local_player_view_direction());
     Vector2 player_pos = g_game_state.player.base.interp_pos;
     Vector2 target_pos = prediction_route_target();
-    int sum_stats_limit = g_local_player.sum_stats_limit;
 
     // Get active stats and item count
-    int active_stats_sum = dev_ui_get_active_stats_sum(player_id);
+    int effective_stats_sum = dev_ui_get_effective_stats_sum(player_id);
     int active_item_count = dev_ui_get_active_item_count(player_id);
 
     // Prepare text lines
@@ -227,8 +225,7 @@ void dev_ui_draw(int screen_width, int screen_height, int hud_occupied) {
     snprintf(text_lines[line_count++], 128, "Target: (%.0f, %.0f)", target_pos.x, target_pos.y);
     snprintf(text_lines[line_count++], 128, "Download: %.2f kbps | Upload: %.2f kbps",
              g_dev_ui.download_kbps, g_dev_ui.upload_kbps);
-    snprintf(text_lines[line_count++], 128, "SumStatsLimit: %d", sum_stats_limit);
-    snprintf(text_lines[line_count++], 128, "ActiveStatsSum: %d", active_stats_sum);
+    snprintf(text_lines[line_count++], 128, "EffectiveStatsSum: %d", effective_stats_sum);
     snprintf(text_lines[line_count++], 128, "ActiveItems: %d", active_item_count);
 
     // Draw all text lines

@@ -35,9 +35,8 @@
 #include "object_layer.h"
 #include "object_layers_management.h"
 #include "ol_as_animated_ico.h"
-#include "ui_icon.h"
 #include "util/serial.h"
-#include "sum_stat.h"
+#include "stat_panel.h"
 #include "toolbar.h"
 #include "ui_button.h"
 #include "ui_scroll.h"
@@ -145,8 +144,6 @@ static ModalAnchorLayout s_layout = { .height = -1.0f };
 static const Color C_CARD_BORDER   = {  80,  80, 130, 220 };
 static const Color C_TITLE         = { 220, 220, 255, 255 };
 static const Color C_BODY          = { 180, 180, 200, 220 };
-static const Color C_STAT_LABEL    = { 140, 160, 200, 220 };
-static const Color C_STAT_VAL      = { 100, 220, 140, 255 };
 static const Color C_BTN_ACTIVATE  = {  30, 120,  60, 240 };
 static const Color C_BTN_DEACT     = { 120,  40,  40, 240 };
 static const Color C_BTN_TEXT      = { 230, 230, 230, 255 };
@@ -766,8 +763,7 @@ void inventory_modal_draw(void) {
     const char* item_name = ols->item_id;
     const char* item_type = "";
     const char* item_desc = "";
-    int st_effect = 0, st_resist = 0, st_agility = 0;
-    int st_range  = 0, st_intel  = 0, st_utility  = 0;
+    float item_stats[CYBERIA_STAT_COUNT] = {0};
     bool activable = true;
 
     if (s_ol_manager) {
@@ -777,12 +773,9 @@ void inventory_modal_draw(void) {
             item_type   = ol_data->data.item.type;
             item_desc   = ol_data->data.item.description;
             activable   = ol_data->data.item.activable;
-            st_effect   = ol_data->data.stats.effect;
-            st_resist   = ol_data->data.stats.resistance;
-            st_agility  = ol_data->data.stats.agility;
-            st_range    = ol_data->data.stats.range;
-            st_intel    = ol_data->data.stats.intelligence;
-            st_utility  = ol_data->data.stats.utility;
+            int values[CYBERIA_STAT_COUNT];
+            cyberia_stats_values(&ol_data->data.stats, values);
+            for (int i = 0; CYBERIA_STAT_COUNT > i; i++) item_stats[i] = (float)values[i];
         }
     }
 
@@ -806,19 +799,9 @@ void inventory_modal_draw(void) {
         y_cursor += tbf + 6;
     }
 
-    /* Sum-stat summary — shared container/style with the interact modal's
-     * Stats tab; single item here (array[0]). Inset left/right by `pad` to
-     * match the description and per-stat rows below (instead of spanning
-     * the full pane and touching the card edge), with a small top gap off
-     * the type badge and a tighter gap before the separator than the full
-     * `pad` used elsewhere, so the block reads as part of the column
-     * instead of floating with an oversized footer gap. */
-    {
-        y_cursor += 6.0f;
-        Stats sst = sum_stat_compute(ols, 1, s_ol_manager);
-        int sst_sum = sst.effect + sst.resistance + sst.agility + sst.range + sst.intelligence + sst.utility;
-        y_cursor += sum_stat_draw(info_x + pad, y_cursor, info_w - 2.0f * pad, (float)pad, sst_sum) + 8.0f;
-    }
+    /* The selected item's own modifiers. */
+    y_cursor += 6.0f;
+    y_cursor += stat_panel_sum_draw(info_x + pad, y_cursor, info_w - 2.0f * pad, (float)pad, item_stats, "OL modifiers") + 8.0f;
 
     DrawLine((int)(info_x + pad), (int)y_cursor, (int)(info_x + info_w - pad), (int)y_cursor,
              (Color){ 70, 70, 100, 180 });
@@ -857,39 +840,9 @@ void inventory_modal_draw(void) {
     }
 
     /* 9. Stats grid (2-column) */
-    {
-        int fs_s  = stat_font;
-        int col_w = (int)(info_w * 0.5f) - pad;
-        struct { const char* label; const char* icon_id; int val; } rows[6] = {
-            { "Effect",       "stat-effect",       st_effect  },
-            { "Resistance",   "stat-resistance",   st_resist  },
-            { "Agility",      "stat-agility",      st_agility },
-            { "Range",        "stat-range",        st_range   },
-            { "Intelligence", "stat-intelligence", st_intel   },
-            { "Utility",      "stat-utility",      st_utility },
-        };
-        DrawText("Stats", (int)(info_x + pad), (int)y_cursor, fs_s,
-                 (Color){ 160, 180, 255, 220 });
-        y_cursor += fs_s + 3;
-        for (int r = 0; r < 3; r++) {
-            for (int col = 0; col < 2; col++) {
-                int si = r * 2 + col;
-                int sx = (int)(info_x + pad + col * col_w);
-                int sy = (int)y_cursor;
-                /* Draw stat icon before the label */
-                int icon_sz = fs_s * 2;
-                ui_icon_draw(rows[si].icon_id, (float)(sx + icon_sz / 2), (float)(sy + icon_sz / 2), icon_sz, false, 0.0f);
-                DrawText(rows[si].label, sx + icon_sz + 4, sy, fs_s, C_STAT_LABEL);
-                char vbuf[16];
-                snprintf(vbuf, sizeof(vbuf), "%+d", rows[si].val);
-                int vw = MeasureText(vbuf, fs_s);
-                DrawText(vbuf, sx + col_w - vw - 4, sy, fs_s,
-                         rows[si].val > 0 ? C_STAT_VAL : (Color){ 200, 80, 80, 220 });
-            }
-            y_cursor += fs_s + 4;
-        }
-        y_cursor += 6;
-    }
+    DrawText("Stats", (int)(info_x + pad), (int)y_cursor, stat_font, (Color){ 160, 180, 255, 220 });
+    y_cursor += stat_font + 3;
+    y_cursor += stat_panel_grid_draw(info_x + pad, y_cursor, info_w - 2.0f * pad, (float)pad, stat_font, item_stats) + 6.0f;
 
     /* 10. Quantity */
     if (ols->quantity > 0) {

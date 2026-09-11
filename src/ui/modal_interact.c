@@ -29,7 +29,7 @@
 #include "ol_as_animated_ico.h"
 #include "quest_progress_store.h"
 #include "quest_cache.h"
-#include "sum_stat.h"
+#include "stat_panel.h"
 #include "ui_button.h"
 #include "ui_scroll.h"
 #include "ui_icon.h"
@@ -1180,40 +1180,35 @@ static void draw_stack_tab(Rectangle content) {
     ui_scroll_end(&s_stack_scroll);
 }
 
+/* Every entity shows the server's effective stats. The local player also gets
+ * the breakdown the self snapshot carries. */
 static void draw_stats_tab(Rectangle content) {
-    Stats t = sum_stat_compute(s_cached_layers, s_cached_layer_count, obj_layers_mgr_get());
-    int sum = t.effect + t.resistance + t.agility + t.range + t.intelligence + t.utility;
-
+    const EntityState* entity = game_state_find_entity(s_entity_id);
     float pad = mi_pad();
-    float content_y = content.y - ui_scroll_offset(&s_s_scroll);
-    float y = content_y;
-
+    float top = content.y - ui_scroll_offset(&s_s_scroll);
+    float y = top;
     ui_scroll_begin(&s_s_scroll);
-
-    /* ── Sum stat container (scrolls with content) ─────────────────────── */
-    y += sum_stat_draw(content.x, y, content.width, pad, sum) + pad;
-
-    /* ── Per-stat rows ─────────────────────────────────────────────────── */
-    const char* names[6] = { "Effect", "Resistance", "Agility", "Range", "Intelligence", "Utility" };
-    const char* icon_ids[6] = { "stat-effect", "stat-resistance", "stat-agility", "stat-range", "stat-intelligence", "stat-utility" };
-    int values[6] = { t.effect, t.resistance, t.agility, t.range, t.intelligence, t.utility };
-    float row_h = MI_FONT_STAT + 8.0f;
-    float col_w = content.width * 0.5f;
-    int icon_sz = MI_FONT_STAT * 2;
-
-    for (int i = 0; i < 6; i++) {
-        float cx = content.x + (i % 2) * col_w;
-        float cy = y + (i / 2) * row_h;
-        ui_icon_draw(icon_ids[i], cx + icon_sz / 2.0f, cy + icon_sz / 2.0f, icon_sz, false, 0.0f);
-        DrawText(names[i], (int)(cx + icon_sz + 4), (int)cy, MI_FONT_STAT, C_LABEL);
-        char val[16];
-        snprintf(val, sizeof(val), "%+d", values[i]);
-        int vw = MeasureText(val, MI_FONT_STAT);
-        DrawText(val, (int)(cx + col_w - vw - mi_pad()), (int)cy, MI_FONT_STAT,
-                 values[i] > 0 ? C_STAT : (Color){ 200, 80, 80, 220 });
+    if (NULL == entity) {
+        DrawText("Entity outside view.", (int)content.x, (int)y, MI_FONT_LABEL, C_LABEL);
+        y += MI_FONT_LABEL + pad;
+    } else {
+        bool self = entity == &g_game_state.player.base;
+        int icon_sz = MI_FONT_LABEL * 2;
+        ui_icon_draw("stats", content.x + icon_sz * 0.5f, y + icon_sz * 0.5f, icon_sz, false, 0.0f);
+        char heading[64];
+        if (self) snprintf(heading, sizeof(heading), "Level %d   XP %.0f / %.0f",
+                           entity->level, g_local_player.xp, g_local_player.next_level_xp);
+        else snprintf(heading, sizeof(heading), "Level %d", entity->level);
+        DrawText(heading, (int)(content.x + icon_sz + 4.0f), (int)(y + (icon_sz - MI_FONT_LABEL) * 0.5f), MI_FONT_LABEL, GOLD);
+        y += icon_sz + pad;
+        y += stat_panel_draw(content.x, y, content.width, pad, MI_FONT_STAT, entity->effective_stats, "Effective stats") + pad;
+        if (self) {
+            y += stat_panel_draw(content.x, y, content.width, pad, MI_FONT_STAT, g_local_player.layer_stats, "OL modifiers") + pad;
+            y += stat_panel_draw(content.x, y, content.width, pad, MI_FONT_STAT, g_local_player.base_stats, "Base stats") + pad;
+            y += stat_panel_draw(content.x, y, content.width, pad, MI_FONT_STAT, g_local_player.temporary_stats, "Temporary") + pad;
+        }
     }
-    y += 3 * row_h + pad;
-    s_s_content_height = y - content_y + pad;
+    s_s_content_height = y - top;
     ui_scroll_end(&s_s_scroll);
 }
 

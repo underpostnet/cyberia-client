@@ -8,7 +8,6 @@
 #include "world_types.h"
 
 #include <math.h>
-#include <string.h>
 
 bool modal_anchor_active(void) {
     return !viewport_is_mobile() && GetScreenWidth() > MODAL_ANCHOR_MIN_SCREEN_W;
@@ -25,27 +24,6 @@ Rectangle modal_anchor_safe_area(float pad, float min_h) {
     return (Rectangle){ pad, top, width, bottom - top };
 }
 
-/* Resolve an id across every world-mirror entity array the interact and
- * inventory modals can target: bots, resource nodes, other players, and the
- * local player. */
-static const EntityState* find_entity(const char* entity_id) {
-    if (NULL == entity_id || '\0' == entity_id[0]) return &g_game_state.player.base;
-    if (0 == strcmp(entity_id, g_game_state.player.base.id))
-        return &g_game_state.player.base;
-
-    const BotState* bot = game_state_find_bot(entity_id);
-    if (bot) return &bot->base;
-
-    const PlayerState* player = game_state_find_player(entity_id);
-    if (player) return &player->base;
-
-    for (int i = 0; i < g_game_state.resource_count; i++) {
-        if (0 == strcmp(g_game_state.resources[i].base.id, entity_id))
-            return &g_game_state.resources[i].base;
-    }
-    return NULL;
-}
-
 /* Screen point to hang a card from: the top-centre of `entity_id`'s bounding
  * box, converted from world space through the gameplay camera. NULL or an empty
  * id resolves to the local player. False when the id names no entity in the
@@ -53,7 +31,7 @@ static const EntityState* find_entity(const char* entity_id) {
  * projection — the capture then falls back to a centred placement. */
 static bool entity_point(const char* entity_id, Vector2* out_point) {
     if (NULL == out_point) return false;
-    const EntityState* entity = find_entity(entity_id);
+    const EntityState* entity = game_state_find_entity(entity_id);
     if (NULL == entity) return false;
 
     /* Grid-space top-centre of the bounding box; game_render_world_to_screen
