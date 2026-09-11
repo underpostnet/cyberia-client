@@ -9,6 +9,7 @@
 
 extern const Color FX_SPARK_GOLD;   /* golden yellow — loot the player may collect */
 extern const Color FX_SPARK_GRAY;   /* neutral gray — another player's loot */
+extern const Color FX_SPARK_RED;    /* blood red — a defeat */
 
 /* Pixel-snapped filled rectangle with a solid black border `border` px larger on
  * every side (the tap-effect bar look). */
@@ -17,5 +18,9 @@ void fx_shape_bar(float x, float y, float w, float h, float border, Color body);
 /* Filled square spark centered at (cx,cy) with a wide black border. `alpha`
  * (0..1) scales the opacity of both body and border. Pixel-snapped. */
 void fx_shape_spark(float cx, float cy, float size_px, Color body, float alpha);
+
+/* Opaque spark with pixel-art shading: a highlight band along the top and
+ * left, a shade band along the bottom and right, inside the black border. */
+void fx_shape_spark_shaded(float cx, float cy, float size_px, Color body);
 
 #endif /* CYBERIA_FX_FX_SHAPES_H */

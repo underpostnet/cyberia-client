@@ -133,6 +133,10 @@ int          game_state_layer_alloc(int count);
 PlayerState* game_state_find_player(const char* id);
 BotState*    game_state_find_bot(const char* id);
 
+/* Any entity a modal can target: the local player, other players, bots and
+ * resources. NULL or "" resolves to the local player. */
+const EntityState* game_state_find_entity(const char* id);
+
 static inline const EntityTypeDefault* game_state_get_entity_default(const char* entity_type) {
     for (int i = 0; i < g_game_state.entity_defaults_count; i++) {
         if (strcmp(g_game_state.entity_defaults[i].entity_type, entity_type) == 0)

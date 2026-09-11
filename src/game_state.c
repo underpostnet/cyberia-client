@@ -61,3 +61,16 @@ BotState* game_state_find_bot(const char* id) {
     }
     return NULL;
 }
+
+const EntityState* game_state_find_entity(const char* id) {
+    if (NULL == id || '\0' == id[0] || 0 == strcmp(id, g_game_state.player.base.id))
+        return &g_game_state.player.base;
+    const BotState* bot = game_state_find_bot(id);
+    if (NULL != bot) return &bot->base;
+    const PlayerState* player = game_state_find_player(id);
+    if (NULL != player) return &player->base;
+    for (int i = 0; g_game_state.resource_count > i; i++) {
+        if (0 == strcmp(g_game_state.resources[i].base.id, id)) return &g_game_state.resources[i].base;
+    }
+    return NULL;
+}
