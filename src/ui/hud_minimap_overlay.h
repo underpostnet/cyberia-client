@@ -3,10 +3,11 @@
 
 #include <stdbool.h>
 
+/* Full side of the map square; hud_side_stack shortens it when the column is short. */
 #define HUD_MINIMAP_OVERLAY_SIZE 300.0f
 
 /* Gameplay HUD whose map content remains click-through; only its close button
- * participates in input dispatch. */
+ * participates in input dispatch. Its zoom persists across show and hide. */
 void hud_minimap_overlay_init(void);
 void hud_minimap_overlay_cleanup(void);
 

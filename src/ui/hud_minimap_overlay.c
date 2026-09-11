@@ -1,8 +1,8 @@
 #include "hud_minimap_overlay.h"
 
+#include "hud_side_stack.h"
 #include "instance_map_data.h"
 #include "text.h"
-#include "toolbar.h"
 #include "ui_button.h"
 
 #include "domain/local_player.h"
@@ -36,9 +36,7 @@ static bool s_visible = false;
 static int  s_zoom_level = MINIMAP_ZOOM_DEFAULT;
 
 static Rectangle overlay_bounds(void) {
-    return (Rectangle){ (float)GetScreenWidth() - HUD_MINIMAP_OVERLAY_SIZE,
-                        toolbar_height(),
-                        HUD_MINIMAP_OVERLAY_SIZE, HUD_MINIMAP_OVERLAY_SIZE };
+    return hud_side_stack_map_slot();
 }
 
 static Vector2 overlay_center(Rectangle bounds) {
@@ -298,7 +296,6 @@ void hud_minimap_overlay_cleanup(void) {
 void hud_minimap_overlay_show(void) {
     if (s_visible) return;
     s_visible = true;
-    s_zoom_level = MINIMAP_ZOOM_DEFAULT;
     instance_map_data_open();
     input_gestures_set_blocked(false);
 }

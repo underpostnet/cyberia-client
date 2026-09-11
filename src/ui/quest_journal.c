@@ -1,11 +1,10 @@
 #include "quest_journal.h"
 #include "text.h"
 
-#include "inventory_bar.h"
+#include "hud_side_stack.h"
 #include "modal.h"
 #include "quest_cache.h"
 #include "quest_progress_store.h"
-#include "toolbar.h"
 #include "ui_button.h"
 #include "ui_icon.h"
 #include "ui_scroll.h"
@@ -17,7 +16,6 @@
 
 /* ── Layout ───────────────────────────────────────────────────────────── */
 
-#define QJ_PANEL_W        300
 #define QJ_HEADER_H       28
 #define QJ_HEADER_PAD     7
 #define QJ_PAGER_H        22
@@ -31,7 +29,6 @@
 #define QJ_CARD_MX        6    /* card horizontal margin inside the panel */
 #define QJ_CARD_PAD       7    /* card inner padding                      */
 #define QJ_CARD_GAP       6    /* vertical gap between cards              */
-#define QJ_BOTTOM_MARGIN  8    /* gap kept above the inventory bar        */
 
 /* Header and cards sit over the translucent HUD panel. */
 static const Color C_HEADER   = {   3,   7,  16, 148 };
@@ -73,15 +70,10 @@ static int page_count(int count) {
     return (count + QUEST_JOURNAL_PAGE_SIZE - 1) / QUEST_JOURNAL_PAGE_SIZE;
 }
 
-/* Sits directly below the top toolbar. */
-static float panel_top(void) {
-    return toolbar_height();
-}
-
+/* The journal's slot in the right-hand column: under the minimap when that
+ * is open, as tall as the content needs within the room the column leaves. */
 static Rectangle panel_rect(void) {
-    int sw = GetScreenWidth();
-    return (Rectangle){ (float)(sw - QJ_PANEL_W), panel_top(),
-                        (float)QJ_PANEL_W, 0.0f };
+    return hud_side_stack_journal_slot(s_header_h + s_content_h);
 }
 
 static bool hit(int mx, int my, Rectangle r) {
@@ -97,16 +89,6 @@ static void ensure_init(void) {
     }
     ui_scroll_reset(&s_scroll);
     s_init = true;
-}
-
-/* Height available to the whole panel: from its top down to the inventory
- * bar, whose top edge moves as the bar shows/hides. Always leaves room for
- * the header so the close/collapse controls stay reachable. */
-static float available_height(void) {
-    float inv_top = (float)GetScreenHeight() - inventory_bar_visible_height();
-    float avail = inv_top - QJ_BOTTOM_MARGIN - panel_top();
-    if (avail < QJ_HEADER_H) avail = QJ_HEADER_H;
-    return avail;
 }
 
 /* Render (or measure) one quest as a single flat card — no nested expand:
@@ -270,13 +252,12 @@ void quest_journal_init(void) {
     }
 }
 
+/* Sections, pages and the scroll offset persist across toggles. */
 void quest_journal_toggle(void) {
     s_visible = !s_visible;
     if (s_visible) {
         ensure_init();
         s_age = 0.0f;                          /* replay the panel pop on each open */
-        ui_scroll_reset(&s_scroll);            /* start scrolled to the top         */
-        s_section[QUEST_ACTIVE].expanded = true; /* Active quests open by default   */
     }
 }
 
@@ -321,18 +302,18 @@ void quest_journal_update(float dt) {
 void quest_journal_draw(void) {
     if (!s_visible) return;
     ensure_init();
+    /* Measure: fixed header, then the full (unclipped) section height. The
+     * slot the column hands back is sized from that measure. */
+    Rectangle probe = panel_rect();
+    s_header_h = header_walk(JW_MEASURE, 0, 0, probe.x, probe.y, probe.width);
+    s_content_h = sections_walk(JW_MEASURE, 0, 0, probe.x, probe.y + s_header_h, probe.width) - (probe.y + s_header_h);
     Rectangle panel = panel_rect();
     float x = panel.x, w = panel.width, y = panel.y;
 
-    /* Measure: fixed header, then the full (unclipped) section height. */
-    s_header_h = header_walk(JW_MEASURE, 0, 0, x, y, w);
-    s_content_h = sections_walk(JW_MEASURE, 0, 0, x, y + s_header_h, w) - (y + s_header_h);
-
-    /* Clamp the scroll viewport to the room between the header and the
-     * inventory bar; the panel only grows as tall as it needs within that. */
-    float view_h_avail = available_height() - s_header_h;
-    if (view_h_avail < 0.0f) view_h_avail = 0.0f;
-    float view_h = s_content_h < view_h_avail ? s_content_h : view_h_avail;
+    /* The header always draws so its close control stays reachable; the
+     * sections scroll inside whatever room is left under it. */
+    float view_h = panel.height - s_header_h;
+    if (view_h < 0.0f) view_h = 0.0f;
     s_view = (Rectangle){ x, y + s_header_h, w, view_h };
     s_panel_h = s_header_h + view_h;
 

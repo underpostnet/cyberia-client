@@ -86,22 +86,29 @@ static void close_interact_inventory_chain(void) {
     inventory_modal_close();
 }
 
+/* The minimap and the quest journal share the right-hand column and stay
+ * open together. Any world-covering modal gives way to whichever is tapped;
+ * a tap that only dismissed one leaves the panel it targets open. */
 static void toggle_minimap(void) {
-    if (interact_inventory_chain_is_open()) {
-        quest_journal_close();
-        close_interact_inventory_chain();
-        modal_instance_map_close();
+    bool dismissed = interact_inventory_chain_is_open() || modal_instance_map_is_open();
+    close_interact_inventory_chain();
+    modal_instance_map_close();
+    if (dismissed || !hud_minimap_overlay_is_visible()) {
         if (!hud_minimap_overlay_is_visible()) hud_minimap_overlay_show();
         return;
     }
-    if (hud_minimap_overlay_is_visible()) {
-        hud_minimap_overlay_hide();
-        return;
-    }
-    quest_journal_close();
+    hud_minimap_overlay_hide();
+}
+
+static void toggle_quest_journal(void) {
+    bool dismissed = interact_inventory_chain_is_open() || modal_instance_map_is_open();
     close_interact_inventory_chain();
     modal_instance_map_close();
-    hud_minimap_overlay_show();
+    if (dismissed || !quest_journal_is_visible()) {
+        if (!quest_journal_is_visible()) quest_journal_toggle();
+        return;
+    }
+    quest_journal_toggle();
 }
 
 static void toggle_expanded_instance_map(void) {
@@ -110,7 +117,6 @@ static void toggle_expanded_instance_map(void) {
         return;
     }
     hud_minimap_overlay_hide();
-    quest_journal_close();
     modal_instance_map_toggle();
 }
 
@@ -155,23 +161,7 @@ bool toolbar_handle_click(int mx, int my) {
     }
     if (ui_button_hit(btn_rect(3), mx, my)) { audio_toggle_mute(); return true; }
     if (ui_button_hit(btn_rect(2), mx, my)) {
-        /* The quest button returns to the grid: if any world-covering modal is
-         * up, dismiss them all and surface the Quest Journal instead of
-         * toggling it. Otherwise it toggles the journal as usual. */
-        bool minimap_was_visible = hud_minimap_overlay_is_visible();
-        hud_minimap_overlay_hide();
-        if (interact_inventory_chain_is_open() ||
-            modal_instance_map_is_open() || minimap_was_visible) {
-            /* Clear the inventory modal's on-close callback before closing it,
-             * so that a pending modal_interact_reopen (set when the inventory
-             * modal was opened from the interact modal's stack/quest tab) does
-             * not re-open the interact modal after we close it here. */
-            close_interact_inventory_chain();
-            modal_instance_map_close();
-            if (!quest_journal_is_visible()) quest_journal_toggle();
-        } else {
-            quest_journal_toggle();
-        }
+        toggle_quest_journal();
         return true;
     }
     /* The coordinate readout opens the expanded inspection map. */
