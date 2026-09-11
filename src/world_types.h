@@ -5,6 +5,7 @@
 #include <stdint.h>
 
 #include "object_layer.h"
+#include "domain/stat_contract_generated.h"
 
 /* World-entity structures for the game-state mirror. Definitions only — no
  * behaviour and no global state — so a module can use them without pulling
@@ -35,7 +36,9 @@ struct EntityState {
     double snapshot_time;   /* wall-clock time of the snapshot that produced
                              * pos_server. Used by interpolation to compute
                              * a per-entity alpha instead of a global one. */
-    int stats_sum;          /* sum of active stats, capped at sum_stats_limit */
+    int stats_sum;
+    int level;
+    float effective_stats[CYBERIA_STAT_COUNT];
     uint8_t status_icon;
 };
 

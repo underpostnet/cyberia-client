@@ -1,5 +1,6 @@
 #ifndef OBJECT_LAYER_H
 #define OBJECT_LAYER_H
+#include "domain/stat_contract_generated.h"
 
 #include <stdbool.h>
 
@@ -52,14 +53,7 @@ typedef struct {
     int quantity;
 } ObjectLayerState;
 
-typedef struct {
-    int effect;
-    int resistance;
-    int agility;
-    int range;
-    int intelligence;
-    int utility;
-} Stats;
+
 
 /* Position and size of one frame inside the atlas PNG. The renderer clips
  * this sub-region out of the single atlas texture. */

@@ -1,4 +1,5 @@
 #include "object_layers_management.h"
+#include "domain/stat_contract_generated.h"
 #include "config.h"
 #include "util/hash_table.h"
 #include "network/engine_client.h"
@@ -65,12 +66,11 @@ static bool json_get_bool_safe(cJSON* item, const char* key, bool default_val) {
 static void parse_stats(cJSON* stats_json, Stats* stats) {
     assert(stats_json);
     assert(stats);
-    stats->effect = json_get_int_safe(stats_json, "effect", 0);
-    stats->resistance = json_get_int_safe(stats_json, "resistance", 0);
-    stats->agility = json_get_int_safe(stats_json, "agility", 0);
-    stats->range = json_get_int_safe(stats_json, "range", 0);
-    stats->intelligence = json_get_int_safe(stats_json, "intelligence", 0);
-    stats->utility = json_get_int_safe(stats_json, "utility", 0);
+    int values[CYBERIA_STAT_COUNT];
+    for (int i = 0; CYBERIA_STAT_COUNT > i; i++) {
+        values[i] = json_get_int_safe(stats_json, CYBERIA_STAT_NAMES[i], 0);
+    }
+    *stats = cyberia_stats_from_values(values);
 }
 
 static void parse_render(cJSON* render_json, Render* render) {
