@@ -219,12 +219,15 @@ The client speaks REST directly to engine-cyberia for content. None of these cal
 
 The atlas blob is the minified render, at one pixel per cell, and the atlas metadata describes that
 same render. The engine keeps a second, human-resolution render for viewing; the client never
-downloads it. `cyberia ol --minify` refreshes the minified render of stored items.
+downloads it. The idle still is the first down-idle frame cut out of that render, and is what the
+interact overlay and every engine editor show as an item's picture. `cyberia ol --minify` refreshes
+the minified render and the idle still of stored items.
 
 | Endpoint                                                       | Purpose                                    |
 | -------------------------------------------------------------- | ------------------------------------------ |
 | `GET /api/atlas-sprite-sheet/metadata/:itemKey`                | Frame layout JSON for a sprite atlas       |
 | `GET /api/atlas-sprite-sheet/blob/:itemKey`                    | Minified atlas PNG, one pixel per cell     |
+| `GET /api/atlas-sprite-sheet/idle-preview/:itemKey`            | Down-idle still PNG, the item's picture    |
 | `GET /api/object-layer/:itemId`                                | ObjectLayer JSON metadata                  |
 | `GET /api/cyberia-dialogue/code/default-:itemId`               | Dialogue lines for an NPC                  |
 | `GET /assets/ui-icons/:iconId.png`                             | Status-bar icons                           |
@@ -285,8 +288,6 @@ The cues are visual only. Their sounds arrive as `audio_event` messages the serv
 Item slots badge an object layer with the `stack` icon and its signed stat sum, red when negative.
 
 The server sends six values in canonical order. The client displays these values and uses the supplied movement speed.
-
-See [Stats and progression](https://github.com/underpostnet/engine/blob/master/src/client/public/cyberia-docs/STATS-PROGRESSION.md) for the contract and tests.
 
 ## Build and run
 
