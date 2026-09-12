@@ -65,6 +65,9 @@ int main(void) {
     assert(0 == sparks && 0 == skulls && false == fx_death_active("e"));
 
     assert(true == fx_death_observe(true, true, &entity));
+    reset_probe();
+    fx_death_draw();
+    assert(0 < sparks && true == fx_death_active("e"));
     fx_death_reset();
     reset_probe();
     fx_death_draw();

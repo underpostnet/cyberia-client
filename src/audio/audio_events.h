@@ -18,6 +18,7 @@
 #define AUDIO_EVENT_PORTAL          "portal"
 #define AUDIO_EVENT_HIT             "hit"
 #define AUDIO_EVENT_HEAL            "heal"
+#define AUDIO_EVENT_DEATH           "death"
 #define AUDIO_EVENT_DROP            "drop"
 #define AUDIO_EVENT_ITEM_PICKUP     "item-pickup"
 #define AUDIO_EVENT_CRAFT           "craft"

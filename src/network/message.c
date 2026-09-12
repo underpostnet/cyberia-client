@@ -177,7 +177,7 @@ static void read_stats(const cJSON* owner, const char* key, float values[CYBERIA
 }
 
 /* `death_cue` is false for what is extracted rather than slain: a resource
- * goes straight to its extracted state with no visual cue. */
+ * goes straight to its extracted state with no death cue. */
 static void read_entity_state(const cJSON* e, EntityState* base, FetchPriority priority, bool death_cue) {
     GameState* gs = &g_game_state;
     base->dims = (Vector2){ serial_get_float_default(e, "dimW", 0.0f),
@@ -201,10 +201,12 @@ static void read_entity_state(const cJSON* e, EntityState* base, FetchPriority p
     base->stats_sum   = serial_get_int_default(e, "statsSum", 0);
     base->level = serial_get_int_default(e, "level", 0);
     read_stats(e, "effectiveStats", base->effective_stats);
-    /* Visual cues only: the server raises the matching audio event for
-     * everyone in reach, so the sound never depends on what this client saw. */
+    /* Snapshots own typed death cues. The server owns level-up audio. */
     fx_level_up_observe(prior_level, base->level, base);
-    if (death_cue) fx_death_observe(prior_alive, 0.0f < base->max_life && !entity_alive(base), base);
+    if (death_cue &&
+        fx_death_observe(prior_alive, 0.0f < base->max_life && !entity_alive(base), base)) {
+        audio_event(AUDIO_EVENT_DEATH);
+    }
     base->status_icon = (uint8_t)serial_get_int_default(e, "statusIcon", 0);
     base->layer_count = read_pooled_layers(e, "objectLayers", &base->layer_offset, priority);
     base->snapshot_time = gs->last_update_time;
@@ -473,7 +475,9 @@ static void json_unpack_snapshot(const cJSON* payload) {
 static void json_unpack_audio_event(const cJSON* payload) {
     char logic_event_id[64] = {0};
     serial_get_string(payload, "logicEventId", logic_event_id, sizeof(logic_event_id));
-    if ('\0' != logic_event_id[0]) audio_event(logic_event_id);
+    /* The entity snapshot handles death because this event has no entity type. */
+    if ('\0' != logic_event_id[0] && 0 != strcmp(logic_event_id, AUDIO_EVENT_DEATH))
+        audio_event(logic_event_id);
 }
 
 static void json_unpack_combat_text(const cJSON* payload) {
