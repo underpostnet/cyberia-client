@@ -38,7 +38,7 @@ mergeInto(LibraryManager.library, {
    * (js_init_engine_api) with the --data-server-url command line argument. It
    * is NEVER the internal cluster/service address (that stays server-side
    * only). Read here for:
-   *   - asset previews:      GET {api_base_url}/assets/{type}/{itemId}/08/0.png
+   *   - item previews:       GET {api_base_url}/api/atlas-sprite-sheet/idle-preview/{itemId}
    *   - integration links:   {api_base_url}/object-layer-engine-viewer?...
    *
    * The <img src> asset fetch is the ONLY sanctioned JS-side fetch surface, and
@@ -461,9 +461,8 @@ mergeInto(LibraryManager.library, {
 
   /* ================================================================
    * OL Stack Preview — renders entity's active OL stack as composited
-   * images using the public static asset directory convention:
-   *   {api_base_url}/assets/{type}/{itemId}/08/0.png
-   * Direction code 08 = down_idle (standard icon direction).
+   * idle-preview stills, one per item, from the atlas endpoint:
+   *   {api_base_url}/api/atlas-sprite-sheet/idle-preview/{itemId}
    * ================================================================ */
 
   $ipBuildOlStackPreview__deps: ['$IP', '$IPS', '$ipEl', '$FetchState'],
@@ -491,7 +490,7 @@ mergeInto(LibraryManager.library, {
     var base = FetchState.api_base_url;
     for (var i = 0; i < stack.length; i++) {
       var ol = stack[i];
-      if (!ol.type) continue;
+      if (!ol.itemId) continue;
       var img = ipEl(
         'img',
         {
@@ -505,7 +504,7 @@ mergeInto(LibraryManager.library, {
         },
         wrap,
       );
-      img.src = base + '/assets/' + ol.type + '/' + ol.itemId + '/08/0.png';
+      img.src = base + '/api/atlas-sprite-sheet/idle-preview/' + ol.itemId;
       img.alt = '';
       img.onerror = function () {
         this.style.display = 'none';
@@ -586,25 +585,23 @@ mergeInto(LibraryManager.library, {
             '_blank',
           );
         };
-        if (ol.type) {
-          var ico = ipEl(
-            'img',
-            {
-              width: '24px',
-              height: '24px',
-              imageRendering: 'pixelated',
-              flexShrink: '0',
-              borderRadius: '3px',
-              background: 'rgba(14,14,28,0.6)',
-            },
-            itemRow,
-          );
-          ico.src = base + '/assets/' + ol.type + '/' + ol.itemId + '/08/0.png';
-          ico.alt = '';
-          ico.onerror = function () {
-            this.style.display = 'none';
-          };
-        }
+        var ico = ipEl(
+          'img',
+          {
+            width: '24px',
+            height: '24px',
+            imageRendering: 'pixelated',
+            flexShrink: '0',
+            borderRadius: '3px',
+            background: 'rgba(14,14,28,0.6)',
+          },
+          itemRow,
+        );
+        ico.src = base + '/api/atlas-sprite-sheet/idle-preview/' + ol.itemId;
+        ico.alt = '';
+        ico.onerror = function () {
+          this.style.display = 'none';
+        };
         var lbl = ipEl(
           'span',
           {

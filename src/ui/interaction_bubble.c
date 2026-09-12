@@ -772,19 +772,12 @@ static void open_js_overlay_for_slot(InteractionBubbleSlot* slot, int initial_ta
 
     for (int j = 0; j < z_count; j++) {
         const ObjectLayerState* ls = &icon_layers[z_sorted[j].index];
-
-        const char* item_type = "";
-        ObjectLayer* ol_data = lookup_cached_layer(ls->item_id);
-        if (ol_data && ol_data->data.item.type[0] != '\0')
-            item_type = ol_data->data.item.type;
-
         bool has_dlg = dialogue_data_available(ls->item_id);
 
         int wrote = snprintf(json + off, sizeof(json) - off,
-            "%s{\"itemId\":\"%s\",\"type\":\"%s\",\"hasDialogue\":%s}",
+            "%s{\"itemId\":\"%s\",\"hasDialogue\":%s}",
             off > 1 ? "," : "",
             ls->item_id,
-            item_type,
             has_dlg ? "true" : "false");
         if (wrote > 0 && off + wrote < (int)sizeof(json) - 2)
             off += wrote;
