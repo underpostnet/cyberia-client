@@ -1,4 +1,4 @@
-#include "network/engine_client.h"
+#include "network/data/engine_client.h"
 /**
  * @file inventory_modal.c
  * @brief Full-screen inventory item detail modal implementation.
@@ -23,7 +23,7 @@
 
 #include "domain/local_player.h"
 #include "domain/viewport.h"
-#include "network/game_client.h"
+#include "network/game/game_client.h"
 #include "dialogue_data.h"
 #include "game_state.h"
 #include "interaction_bubble.h"

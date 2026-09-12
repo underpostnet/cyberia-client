@@ -2,7 +2,7 @@
 #include "domain/stat_contract_generated.h"
 #include "config.h"
 #include "util/hash_table.h"
-#include "network/engine_client.h"
+#include "network/data/engine_client.h"
 #include "util/log.h"
 #include <raylib.h>
 #include <cJSON.h>

@@ -2,7 +2,7 @@
 
 #include "domain/local_player.h"
 #include "game_state.h"
-#include "network/engine_client.h"
+#include "network/data/engine_client.h"
 #include "util/log.h"
 #include "util/utils.h"
 

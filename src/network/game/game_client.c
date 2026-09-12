@@ -1,5 +1,5 @@
 #include "game_client.h"
-#include "network/socket.h"
+#include "network/game/socket.h"
 #include "config.h"
 #include "game_state.h"
 #include "message.h"

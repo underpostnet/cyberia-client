@@ -2,7 +2,7 @@
 #include "text.h"
 #include "toolbar.h"
 
-#include "network/game_client.h"
+#include "network/game/game_client.h"
 #include "domain/local_player.h"
 #include "game_state.h"
 

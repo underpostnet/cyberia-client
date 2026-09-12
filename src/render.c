@@ -28,7 +28,7 @@
 #include "fx/fx_footsteps.h"
 #include "fx/fx_tap.h"
 #include "ui/ui_icon.h"
-#include "network/engine_client.h"
+#include "network/data/engine_client.h"
 #include "util/log.h"
 
 #include <assert.h>

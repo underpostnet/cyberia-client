@@ -3,7 +3,7 @@
 #include <raylib.h>
 #include <string.h>
 
-#include "network/game_client.h"
+#include "network/game/game_client.h"
 #include "util/serial.h"
 #include "util/log.h"
 

@@ -13,7 +13,7 @@
 #ifndef CYBERIA_UI_META_CACHE_H
 #define CYBERIA_UI_META_CACHE_H
 
-#include "network/engine_client.h"
+#include "network/data/engine_client.h"
 
 #include <cJSON.h>
 #include <stddef.h>

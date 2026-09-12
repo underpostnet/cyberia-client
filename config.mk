@@ -37,6 +37,8 @@ src_files = \
 	$(wildcard $(SRC_DIR)/*.c) \
 	$(wildcard $(SRC_DIR)/js/*.c) \
 	$(wildcard $(SRC_DIR)/network/*.c) \
+	$(wildcard $(SRC_DIR)/network/data/*.c) \
+	$(wildcard $(SRC_DIR)/network/game/*.c) \
 	$(wildcard $(SRC_DIR)/ui/*.c) \
 	$(wildcard $(SRC_DIR)/input/*.c) \
 	$(wildcard $(SRC_DIR)/audio/*.c) \

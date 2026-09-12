@@ -1,11 +1,11 @@
-#include "network/replication.h"
+#include "network/game/replication.h"
 
 #include "domain/presentation_runtime.h"
 #include "game_state.h"
 #include "util/serial.h"
 #include "input/input_command.h"
 #include "input/input.h"
-#include "network/game_client.h"
+#include "network/game/game_client.h"
 #include "domain/local_player.h"
 #include "util/log.h"
 #include "config.h"

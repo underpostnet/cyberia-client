@@ -8,7 +8,7 @@
 #include "domain/presentation_runtime.h"
 #include "entity_render.h"
 #include "game_state.h"
-#include "network/replication.h"
+#include "network/game/replication.h"
 #include "ui/toolbar.h"
 #include "object_layers_management.h"
 #include "ol_as_animated_ico.h"

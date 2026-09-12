@@ -1,7 +1,7 @@
 #ifndef OBJECT_LAYERS_MANAGEMENT_H
 #define OBJECT_LAYERS_MANAGEMENT_H
 
-#include "network/engine_client.h"
+#include "network/data/engine_client.h"
 #include "object_layer.h"
 #include <raylib.h>
 #include <cJSON.h>

@@ -1,8 +1,8 @@
 #include "dev_ui.h"
 #include "text.h"
 
-#include "network/game_client.h"
-#include "network/replication.h"
+#include "network/game/game_client.h"
+#include "network/game/replication.h"
 #include "game_render.h"
 #include "domain/local_player.h"
 #include "game_state.h"

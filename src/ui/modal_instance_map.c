@@ -12,7 +12,7 @@
 #include "domain/presentation_runtime.h"
 #include "game_state.h"
 #include "input/input.h"
-#include "network/engine_client.h"
+#include "network/data/engine_client.h"
 #include "world_types.h"
 
 #include <assert.h>

@@ -5,7 +5,7 @@
 
 #include "domain/presentation_runtime.h"
 #include "domain/viewport.h"
-#include "network/engine_client.h"
+#include "network/data/engine_client.h"
 #include "util/log.h"
 
 #include <raylib.h>

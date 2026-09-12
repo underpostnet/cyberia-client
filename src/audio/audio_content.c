@@ -1,7 +1,7 @@
 #include "audio.h"
 #include "audio_events.h"
 #include "audio_internal.h"
-#include "network/engine_client.h"
+#include "network/data/engine_client.h"
 #include "util/serial.h"
 #include "util/utils.h"
 

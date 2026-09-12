@@ -1,6 +1,6 @@
 #include "input_command.h"
 #include "input.h"
-#include "network/replication.h"
+#include "network/game/replication.h"
 #include "domain/camera.h"
 #include "domain/local_player.h"
 #include "domain/presentation_runtime.h"

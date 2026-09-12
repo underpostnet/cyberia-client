@@ -4,7 +4,7 @@
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
-#include "network/engine_client.h"
+#include "network/data/engine_client.h"
 
 #define AUDIO_CODE_CAP 96
 #define AUDIO_ASSET_CAP 32

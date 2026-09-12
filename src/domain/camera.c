@@ -3,7 +3,7 @@
 #include "presentation_runtime.h"
 #include "viewport.h"
 #include "game_state.h"
-#include "network/replication.h"
+#include "network/game/replication.h"
 #include "util/log.h"
 
 #include <math.h>

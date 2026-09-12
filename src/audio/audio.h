@@ -3,7 +3,7 @@
 
 #include <stdbool.h>
 
-#include "network/engine_client.h"
+#include "network/data/engine_client.h"
 #include <stddef.h>
 
 typedef enum { AUDIO_MASTER, AUDIO_MUSIC, AUDIO_SFX, AUDIO_BUS_COUNT } AudioBus;

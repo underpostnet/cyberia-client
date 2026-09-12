@@ -1,5 +1,5 @@
 #include "audio_context.h"
-#include "network/engine_client.h"
+#include "network/data/engine_client.h"
 #include "audio/audio.h"
 #include "audio/audio_events.h"
 #include "game_state.h"

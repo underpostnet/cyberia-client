@@ -2,7 +2,7 @@
 #include "object_layer.h"
 #include "game_state.h"
 #include "world_types.h"
-#include "network/engine_client.h"
+#include "network/data/engine_client.h"
 #include "domain/local_player_view.h"
 #include "domain/camera.h"
 #include "ui/text.h"

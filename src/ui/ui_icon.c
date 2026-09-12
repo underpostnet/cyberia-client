@@ -1,6 +1,6 @@
 #include "ui_icon.h"
 
-#include "network/engine_client.h"
+#include "network/data/engine_client.h"
 
 #include <assert.h>
 #include <math.h>

@@ -1,4 +1,4 @@
-#include "network/engine_client.h"
+#include "network/data/engine_client.h"
 /**
  * @file ol_as_animated_ico.c
  * @brief General-purpose animated ObjectLayer icon renderer implementation.

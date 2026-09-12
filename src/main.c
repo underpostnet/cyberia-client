@@ -5,14 +5,14 @@
 
 #include "input/input.h"
 #include "game_state.h"
-#include "network/engine_client.h"
+#include "network/data/engine_client.h"
 #include "entity_render.h"
 #include "world_types.h"
 #include "object_layer.h"
 #include "util/utils.h"
 #include "render.h"
-#include "network/game_client.h"
-#include "network/replication.h"
+#include "network/game/game_client.h"
+#include "network/game/replication.h"
 #include "config.h"
 
 #include <raylib.h>
