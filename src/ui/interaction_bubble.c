@@ -615,9 +615,12 @@ void interaction_bubble_draw(void) {
          * only while there are unread notifications; reading the chat (Chat
          * button) clears the count and hides this. Never intercepts taps. */
         const NotifyEntry* ne = notify_store_get(slot->entity_id);
+        const NotifyMessage* last = NULL;
+        for (int k = NULL != ne ? ne->count - 1 : -1; 0 <= k && NULL == last; k--) {
+            if (!ne->messages[k].mine) last = &ne->messages[k];
+        }
         int notif = notification_target_total(slot->entity_id);
-        if (notif > 0 && ne && ne->count > 0 && ne->messages[ne->count - 1].text[0] != '\0') {
-            const NotifyMessage* last = &ne->messages[ne->count - 1];
+        if (notif > 0 && NULL != last && '\0' != last->text[0]) {
             int mfs = 11;
             char buf[48];
             strncpy(buf, last->text, sizeof(buf) - 1);

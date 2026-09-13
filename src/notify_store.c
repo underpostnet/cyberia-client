@@ -43,7 +43,7 @@ static NotifyEntry* find_or_create(const char* entity_id) {
 
 /* ── Public API ───────────────────────────────────────────────────────── */
 
-void notify_store_push(const char* entity_id, const char* sender, const char* text) {
+void notify_store_push(const char* entity_id, const char* sender, const char* text, bool mine) {
     NotifyEntry* e = find_or_create(entity_id);
     if (!e) return;
 
@@ -58,6 +58,7 @@ void notify_store_push(const char* entity_id, const char* sender, const char* te
     strncpy(m->sender, sender ? sender : "",  NS_SENDER_LEN - 1);
     strncpy(m->text,   text   ? text   : "",  NS_TEXT_LEN   - 1);
     m->ts_ms = GetTime() * 1000.0;
+    m->mine  = mine;
 }
 
 const NotifyEntry* notify_store_get(const char* entity_id) {

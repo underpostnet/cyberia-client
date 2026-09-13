@@ -769,7 +769,7 @@ static void json_unpack_chat(const cJSON* payload) {
     serial_get_string(payload, "from", from_id, sizeof(from_id));
     serial_get_string(payload, "text", text, sizeof(text));
     if (from_id[0] && text[0]) {
-        notify_store_push(from_id, from_id, text);
+        notify_store_push(from_id, from_id, text, false);
         notification_push(NOTIF_CHAT, from_id);
         js_interact_overlay_receive_chat(from_id, from_id, text);
     }
