@@ -10,6 +10,11 @@
  * A NULL `src` gives an empty string. */
 void copy_str(char* dst, size_t cap, const char* src);
 
+/* Percent-encodes `src` into a `cap`-byte buffer and always terminates it.
+ * RFC 3986 unreserved bytes pass through. Output stops before an escape that
+ * does not fit. */
+void url_encode(char* dst, size_t cap, const char* src);
+
 /* Takes a slot from a fixed array: the first free one, else the stalest.
  * The slot comes back zeroed; the caller marks it in use.
  *

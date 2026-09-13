@@ -1,6 +1,7 @@
 #include "util/utils.h"
 
 #include <assert.h>
+#include <ctype.h>
 #include <string.h>
 
 void copy_str(char* dst, size_t cap, const char* src) {
@@ -8,6 +9,24 @@ void copy_str(char* dst, size_t cap, const char* src) {
     if (!src) { dst[0] = '\0'; return; }
     strncpy(dst, src, cap - 1);
     dst[cap - 1] = '\0';
+}
+
+void url_encode(char* dst, size_t cap, const char* src) {
+    assert(dst && cap > 0 && src);
+    static const char hex[] = "0123456789ABCDEF";
+    size_t used = 0;
+    for (const unsigned char* p = (const unsigned char*)src; '\0' != *p; p++) {
+        if (isalnum(*p) || '-' == *p || '_' == *p || '.' == *p || '~' == *p) {
+            if (used + 1 >= cap) break;
+            dst[used++] = (char)*p;
+        } else {
+            if (used + 3 >= cap) break;
+            dst[used++] = '%';
+            dst[used++] = hex[*p >> 4];
+            dst[used++] = hex[*p & 0x0F];
+        }
+    }
+    dst[used] = '\0';
 }
 
 void* pool_take(void* base, size_t elem_size, int count,

@@ -123,12 +123,9 @@ static void fetch_match(const char* api, const char* field, const char* value,
     char* json = cJSON_PrintUnformatted(filter);
     assert(json);
     char url[2048];
-    size_t used = (size_t)snprintf(url, sizeof(url), "/api/%s?limit=1&filterModel=", api);
-    for (const unsigned char* p = (const unsigned char*)json; '\0' != *p && sizeof(url) - 4 > used; p++) {
-        if (isalnum(*p) || '-' == *p || '_' == *p || '.' == *p || '~' == *p) url[used++] = (char)*p;
-        else used += (size_t)snprintf(url + used, sizeof(url) - used, "%%%02X", *p);
-    }
-    url[used] = '\0';
+    int used = snprintf(url, sizeof(url), "/api/%s?limit=1&filterModel=", api);
+    assert(0 < used && sizeof(url) > (size_t)used);
+    url_encode(url + used, sizeof(url) - (size_t)used, json);
     cJSON_free(json);
     cJSON_Delete(filter);
     fetch_request_start_limited(token, url, callback, 65536, 10000, priority);
