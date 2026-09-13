@@ -74,7 +74,7 @@ Every difference from the reference must be necessary. If you find a difference 
 This rule applies to all JS: `EM_JS`, `EM_ASM`, `--js-library` files, and inline scripts.
 
 1. Search the full codebase for a C path or an existing bridge that does the task.
-2. Use standard C, raylib, or emscripten `html5.h` / `emscripten_fetch` when they do the task.
+2. Use standard C, raylib, or emscripten `html5.h` / `emscripten_fetch` when they do the task. Optionally, search the internet and suggest open source libraries.
 3. Write new JS only if no alternative exists. Keep it small, and put it in an existing bridge in `src/js/` when possible.
 
 ## Asserts over defensive checks
@@ -112,6 +112,15 @@ it here. This repo is a passive consumer.
 - Never bundle a `manifests/` edit with source changes in one commit.
 - Do not read it as the source of truth for deploy config.
 
+## Browser support
+
+Browser compatibility is not a goal. Keep the code minimal and target recent browsers.
+
+- If a change needs a compatibility layer (a polyfill, a vendor prefix, a feature check or a fallback), do not write it. Drop support for the older browser instead.
+- `Web.mk` holds the supported minimums: `-sMIN_CHROME_VERSION`, `-sMIN_FIREFOX_VERSION`, `-sMIN_SAFARI_VERSION`. Check them before you use a browser API. If the API needs a newer version, raise the minimum in the same commit.
+- Raise a minimum when the higher value makes emscripten emit less code. To find the version gates, grep `MIN_*_VERSION` in the emsdk `src/` and `emcc.py`.
+- A `Web.mk` edit needs approval. See "Never auto-edit Makefiles".
+- Code for a behavior of a current browser is not a compatibility layer. Keep it. Example: iOS zooms on focus of an input under 16px.
 
 # System Map
 

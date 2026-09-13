@@ -22,6 +22,9 @@ LDFLAGS += -s 'EXPORTED_RUNTIME_METHODS=["allocateUTF8"]'
 LDFLAGS += -sASYNCIFY
 LDFLAGS += -sFETCH=1
 LDFLAGS += -sEXPORTED_FUNCTIONS='["_main"]'
+LDFLAGS += -sMIN_CHROME_VERSION=116
+LDFLAGS += -sMIN_FIREFOX_VERSION=124
+LDFLAGS += -sMIN_SAFARI_VERSION=170400
 
 #---------------------------------------------------------------------------------------------
 # Web target html container

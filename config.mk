@@ -55,11 +55,3 @@ CFLAGS += -I$(RAYLIB_PATH)/src -isystem$(RAYLIB_PATH)/src
 # cJSON Dependency
 CJSON_PATH := $(LIBS_DIR)/cJSON
 CFLAGS += -I$(CJSON_PATH)
-
-#------------------------------------------------
-# CYBERIA config
-ifeq ($(BUILD_MODE),RELEASE)
-CFLAGS  += -DCYBERIA_LOG_LEVEL=3
-else
-CFLAGS += -DCYBERIA_LOG_LEVEL=4
-endif
