@@ -54,7 +54,4 @@ extern void js_init_engine_api(const char* api_base_url);
 
 void c_send_chat_binary(const char* to_id, const char* text);
 
-/* Called from JS when the interact overlay closes — reopens modal_interact. */
-void c_interact_overlay_closed(void);
-
 #endif /* INTERACT_BRIDGE_H */

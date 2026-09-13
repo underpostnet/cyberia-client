@@ -7,8 +7,8 @@
  *           [shop]   vendor catalog     — only for entities selling items
  *           [stack]  active item slots
  *           [stats]  six-stat stack totals
- *   Bottom: [ Chat ]        opens the JS overlay on the Chat tab
- *           [ Integration ] opens the JS overlay on the Integration tab
+ *   Bottom: [ Chat ]        chat pane (ui/chat_pane.h)
+ *           [ Integration ] stack composite + viewer links, dev UI only
  *
  * The paired modal_dialogue (bottom half) carries the talk flow; server
  * validation drives quest grant/advance. Dismiss closes both.
@@ -37,17 +37,6 @@ void modal_interact_close(void);
 bool modal_interact_is_open(void);
 float modal_interact_layout_bottom(void);
 
-/* True while the JS interact overlay has taken over this modal's session. The
- * card and its paired dialogue stay out of the frame for the duration —
- * without this they show through the overlay's transparent backdrop. */
-bool modal_interact_overlay_is_open(void);
-
-/* Anchored card rect this modal is currently showing for `entity_id`, for a
- * panel taking its place (the DOM overlay). False when the modal is closed,
- * showing a different entity, or using the full-width layout — the caller then
- * resolves its own placement. */
-bool modal_interact_card_rect(const char* entity_id, Rectangle* out);
-
 /* Quest-talk switcher for the paired dialogue: one entry per active quest with
  * an incomplete talk objective this NPC's action maps to a dialogue. The
  * dialogue draws a button bar above its title; selecting an index swaps the
@@ -60,9 +49,6 @@ void modal_interact_update(float dt);
 void modal_interact_draw(void);
 bool modal_interact_handle_click(int mx, int my);
 bool modal_interact_handle_wheel(float wheel_delta);
-
-/* Called when the JS overlay closes — reopens this modal. */
-void modal_interact_overlay_closed(void);
 
 /* Inventory-bar slot tap while this modal is open: stack the player-item
  * inventory modal on top of the session; closing it returns here. */

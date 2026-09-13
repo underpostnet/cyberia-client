@@ -9,7 +9,7 @@
  * palette, status-icon table, or camera tuning: every value arrives from
  * GET /api/cyberia-client-hints/:CYBERIA_CLIENT_HINTS_CODE.
  *
- * main() starts the async fetch once, after js_init_engine_api(). The
+ * main() starts the async fetch once, after config_init(). The
  * engine_client callback parses the palette, the entity colour keys, the
  * status-icon visuals, and the camera and cell tunings. Renderers and UI
  * read the accessors below; domain/camera.c reads the zoom on demand.
@@ -25,7 +25,7 @@
 extern "C" {
 #endif
 
-/* Start the fetch. Call once at startup, after js_init_engine_api. Later
+/* Start the fetch. Call once at startup, after config_init. Later
  * calls are no-ops. */
 void presentation_runtime_start_fetch(const char* client_hints_code);
 

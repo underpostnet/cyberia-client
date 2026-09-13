@@ -18,8 +18,8 @@
 #include <raylib.h>
 #include <emscripten/emscripten.h>
 
-#include "js/interact_bridge.h"
 #include "js/loading_bridge.h"
+#include "js/text_input_bridge.h"
 
 #include "domain/camera.h"
 #include "domain/presentation_runtime.h"
@@ -243,6 +243,7 @@ int main(int argc, char** argv) {
     // init window
     const int vp_w = EM_ASM_INT({ return window.innerWidth; });
     const int vp_h = EM_ASM_INT({ return window.innerHeight; });
+    text_input_bridge_init(); // before InitWindow: its key guard must precede GLFW's
     InitWindow(vp_w, vp_h, "CYBERIA MMO");
 
     // Resolves the instance code from the URL and the Data Server URL from the
@@ -258,9 +259,6 @@ int main(int argc, char** argv) {
     prediction_init(); // Note: this is just data, should be replaced by GameState
     render_init(vp_w, vp_h); // NOTE: if render is the window, then combine with it
     text_font_init(); // main UI font (loaded async once client-hints name a fontFamily)
-
-    // [preload] start loading step, fetch from Data Server (Engine)
-    js_init_engine_api(config_data_server_url());
 
     // NOTE: Do not mix the start fetch loop with the running game loop
     // if need to be non blocking then wait in a loading screen before starting main_loop

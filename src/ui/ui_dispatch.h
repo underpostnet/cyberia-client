@@ -14,7 +14,6 @@
 #include "modal_instance_map.h"
 #include "modal_interact.h"
 #include "quest_journal.h"
-#include "js/interact_bridge.h"
 
 
 /* UI tap dispatcher.
@@ -33,10 +32,6 @@ bool ui_dispatch_tap(int screen_x, int screen_y);
 bool ui_dispatch_covers_point(int screen_x, int screen_y);
 
 static bool ui_dispatch_escape(void) {
-    if (js_interact_overlay_is_open()) {
-        js_interact_overlay_close();
-        return true;
-    }
     if (modal_instance_map_is_open()) {
         modal_instance_map_close();
         return true;

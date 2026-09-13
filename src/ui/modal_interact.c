@@ -4,6 +4,8 @@
 #include "text.h"
 
 #include "action_cache.h"
+#include "chat_pane.h"
+#include "config.h"
 #include "dialogue_data.h"
 #include "fx/fx_grant_delivery.h"
 #include "fx/fx_inventory_bar_qty.h"
@@ -21,12 +23,14 @@
 #include "modal.h"
 #include "modal_anchor.h"
 #include "modal_dialogue.h"
+#include "modal_instance_map.h"
 #include "modal_notification.h"
 #include "notification.h"
 #include "toolbar.h"
 #include "object_layer.h"
 #include "object_layers_management.h"
 #include "ol_as_animated_ico.h"
+#include "ol_stack_ico.h"
 #include "quest_progress_store.h"
 #include "quest_cache.h"
 #include "stat_panel.h"
@@ -34,18 +38,24 @@
 #include "ui_scroll.h"
 #include "ui_icon.h"
 #include "util/log.h"
+#include "util/utils.h"
 
+#include <assert.h>
+#include <cJSON.h>
 #include <raylib.h>
 #include <stdio.h>
 #include <string.h>
 
 /* ── Tabs ─────────────────────────────────────────────────────────────── */
 
+/* Chat and Integration are panes: the bottom bar opens them, not the strip. */
 enum { MI_TAB_STACK = 0, MI_TAB_STATS, MI_TAB_QUEST, MI_TAB_SHOP, MI_TAB_CRAFT,
-       MI_TAB_STORAGE, MI_TAB_COUNT };
+       MI_TAB_STORAGE, MI_TAB_CHAT, MI_TAB_INTEGRATION, MI_TAB_COUNT };
 
-static const char* MI_TAB_ICON[MI_TAB_COUNT]  = { "stack", "stats", "quest", "home-red", "engine", "grid" };
-static const char* MI_TAB_LABEL[MI_TAB_COUNT] = { "Stack", "Stats", "Quest", "Shop", "Assembly", "Storage" };
+static const char* MI_TAB_ICON[MI_TAB_COUNT]  = { "stack", "stats", "quest", "home-red", "engine", "grid",
+                                                  "chat", "reload" };
+static const char* MI_TAB_LABEL[MI_TAB_COUNT] = { "Stack", "Stats", "Quest", "Shop", "Assembly", "Storage",
+                                                  "Chat", "Integration" };
 
 /* ── Module state ─────────────────────────────────────────────────────── */
 
@@ -119,6 +129,8 @@ static UIScroll  s_s_scroll;
 static float     s_s_content_height = 0.0f;
 static UIScroll  s_stack_scroll;
 static float     s_stack_content_height = 0.0f;
+static UIScroll  s_integration_scroll;
+static float     s_integration_content_height = 0.0f;
 
 /* Shop tab: one card per catalog row, each with a Buy control. Rects are
  * captured during the draw so the click handler hit-tests the same layout. */
@@ -164,12 +176,10 @@ static bool  s_dialogue_open_requested = false;
 static ObjectLayerState s_cached_layers[IBUBBLE_MAX_LAYERS];
 static int              s_cached_layer_count = 0;
 
-/* The JS overlay is open and we wait for it to close to reopen this modal. */
-static bool  s_overlay_open = false;
-
 static void handle_quest_click(int mx, int my);
 static void handle_shop_click(int mx, int my);
 static void handle_craft_click(int mx, int my);
+static void handle_integration_click(int mx, int my);
 static bool storage_tab_visible(void);
 static void draw_storage_tab(Rectangle content);
 static void handle_storage_event(const ItemSlotGridEvent* ev);
@@ -551,6 +561,8 @@ static float active_tab_content_height(void) {
         case MI_TAB_SHOP:    return s_shop_content_height;
         case MI_TAB_CRAFT:   return s_craft_content_height;
         case MI_TAB_STORAGE: return s_storage_content_height;
+        case MI_TAB_CHAT:    return CHAT_PANE_HEIGHT;
+        case MI_TAB_INTEGRATION: return s_integration_content_height;
         default:             return 0.0f;
     }
 }
@@ -759,14 +771,6 @@ void modal_interact_set_quest_talk(int index) {
     request_active_dialogue();
 }
 
-static void open_overlay(int tab) {
-    s_overlay_open = true;
-    char entity[64];
-    strncpy(entity, s_entity_id, sizeof(entity) - 1);
-    entity[sizeof(entity) - 1] = '\0';
-    interaction_bubble_open_js_overlay(entity, tab);
-}
-
 /* Re-open the interact modal from ephemeral session data rather than
  * re-snapshotting from the AOI — the entity may have left the bubble. */
 static void modal_interact_reopen(void) {
@@ -775,7 +779,6 @@ static void modal_interact_reopen(void) {
     s_age              = 0.0f;
     s_dialogue_opened  = false;
     s_dialogue_open_requested = false;
-    s_overlay_open     = false;
     local_player_request_freeze(true, "interact");
 
     /* The paired dialogue key was restored by es_pop. Text resolves async in
@@ -784,12 +787,6 @@ static void modal_interact_reopen(void) {
 
     LOG_INFO("[MODAL_INTERACT] Reopen from ephemeral session: entity=%s layers=%d\n",
              s_entity_id, s_cached_layer_count);
-}
-
-void modal_interact_overlay_closed(void) {
-    if (!s_overlay_open) return;
-    s_overlay_open = false;
-    modal_interact_reopen();
 }
 
 void modal_interact_stack_player_item(int inv_idx) {
@@ -824,7 +821,6 @@ void modal_interact_discard_stack(void) {
 
 void modal_interact_init(void) {
     s_open = false;
-    s_overlay_open = false;
     s_dialogue_open_requested = false;
     ui_scroll_reset(&s_q_scroll);
     s_q_content_height = 0.0f;
@@ -832,6 +828,8 @@ void modal_interact_init(void) {
     s_s_content_height = 0.0f;
     ui_scroll_reset(&s_stack_scroll);
     s_stack_content_height = 0.0f;
+    ui_scroll_reset(&s_integration_scroll);
+    s_integration_content_height = 0.0f;
     ui_scroll_reset(&s_shop_scroll);
     s_shop_content_height = 0.0f;
     s_shop_card_count = 0;
@@ -883,7 +881,6 @@ void modal_interact_open(const char* entity_id, const char* display_name,
     s_age                = 0.0f;
     s_dialogue_opened    = false;
     s_dialogue_open_requested = false;
-    s_overlay_open       = false;
     s_open               = true;
     s_tab                = MI_TAB_STACK;
     s_tab_age            = MODAL_POP_DURATION;
@@ -902,6 +899,8 @@ void modal_interact_open(const char* entity_id, const char* display_name,
     s_storage_bound = false;
     ui_scroll_reset(&s_storage_scroll);
     s_storage_content_height = 0.0f;
+    ui_scroll_reset(&s_integration_scroll);
+    s_integration_content_height = 0.0f;
     s_q_expanded = -1;
     s_q_expand_age = MODAL_POP_DURATION;
     s_dlg_collapse_t = 0.0f;
@@ -951,8 +950,8 @@ void modal_interact_open(const char* entity_id, const char* display_name,
 
 void modal_interact_close(void) {
     s_open = false;
-    s_overlay_open = false;
     s_dialogue_open_requested = false;
+    chat_pane_hide();
     es_clear();
     if (modal_dialogue_is_open()) modal_dialogue_close();
     local_player_request_freeze(false, "interact");
@@ -965,15 +964,6 @@ void modal_interact_close(void) {
 }
 
 bool modal_interact_is_open(void) { return s_open; }
-
-bool modal_interact_overlay_is_open(void) { return s_overlay_open; }
-
-bool modal_interact_card_rect(const char* entity_id, Rectangle* out) {
-    if (NULL == out || !s_open || !modal_anchor_active()) return false;
-    if (NULL == entity_id || 0 != strcmp(entity_id, s_entity_id)) return false;
-    *out = card_rect();
-    return true;
-}
 
 /* Bottom of the horizontal band this modal reserves, which the paired dialogue
  * stacks under. The anchored card floats over its entity and reserves nothing,
@@ -1010,6 +1000,13 @@ bool modal_interact_handle_wheel(float wheel_delta) {
     if (s_tab == MI_TAB_STORAGE) {
         return ui_scroll_on_wheel(&s_storage_scroll, content_rect(card_rect()),
                                   s_storage_content_height, wheel_delta);
+    }
+    if (MI_TAB_CHAT == s_tab) {
+        return chat_pane_wheel(content_rect(card_rect()), wheel_delta);
+    }
+    if (MI_TAB_INTEGRATION == s_tab) {
+        return ui_scroll_on_wheel(&s_integration_scroll, content_rect(card_rect()),
+                                  s_integration_content_height, wheel_delta);
     }
     return false;
 }
@@ -1121,6 +1118,22 @@ void modal_interact_update(float dt) {
             handle_storage_event(&ev);
             if (!s_open) return;
         }
+    } else if (MI_TAB_INTEGRATION == s_tab) {
+        ui_scroll_update(&s_integration_scroll, content_rect(card_rect()),
+                         s_integration_content_height, dt);
+        if (ui_scroll_take_click(&s_integration_scroll, &click_x, &click_y) && content_ready) {
+            handle_integration_click(click_x, click_y);
+        }
+    }
+
+    /* The DOM input floats above the canvas, so it shows only while nothing
+     * drawn in the canvas covers the settled card. */
+    if (MI_TAB_CHAT == s_tab) {
+        bool input_visible = content_ready && MODAL_POP_DURATION <= s_age &&
+                             !modal_dialogue_is_fullscreen() && !modal_instance_map_is_open();
+        chat_pane_update(content_rect(card_rect()), s_entity_id, input_visible, dt);
+    } else {
+        chat_pane_hide();
     }
 
     if (!s_dialogue_opened) {
@@ -2478,6 +2491,83 @@ bool modal_interact_storage_accepts_drag(void) {
 }
 
 
+/* ── Integration tab: the stack composite and a viewer link per item ───── */
+
+#define MI_INTEGRATION_ROW_SZ 32.0f
+
+static float integration_preview_size(Rectangle content) {
+    float size = content.width * 0.35f;
+    return size < 120.0f ? size : 120.0f;
+}
+
+/* Row `index` in screen space, shifted by the scroll offset. */
+static Rectangle integration_row_rect(Rectangle content, int index) {
+    float x = content.x + integration_preview_size(content) + mi_pad();
+    float y = content.y - ui_scroll_offset(&s_integration_scroll) +
+              (float)index * (MI_INTEGRATION_ROW_SZ + MI_TAB_GAP);
+    return (Rectangle){ x, y, content.x + content.width - x, MI_INTEGRATION_ROW_SZ };
+}
+
+static void draw_integration_tab(Rectangle content) {
+    if (0 == s_cached_layer_count) {
+        DrawText("No active layers.", (int)content.x, (int)content.y, MI_FONT_LABEL, C_LABEL);
+        s_integration_content_height = (float)text_line_height(MI_FONT_LABEL);
+        return;
+    }
+    ObjectLayersManager* olm = obj_layers_mgr_get();
+    float preview = integration_preview_size(content);
+    int font = mi_font_label();
+
+    ui_scroll_begin(&s_integration_scroll);
+    ol_stack_ico_draw(olm, s_cached_layers, s_cached_layer_count, (int)content.x,
+                      (int)(content.y - ui_scroll_offset(&s_integration_scroll)), (int)preview,
+                      "down_idle", 0, WHITE);
+    for (int i = 0; s_cached_layer_count > i; i++) {
+        Rectangle row = integration_row_rect(content, i);
+        Rectangle slot = { row.x, row.y, row.height, row.height };
+        item_slot_draw(slot, &s_cached_layers[i], olm);
+        int text_x = (int)(slot.x + slot.width + 6.0f);
+        modal_draw_clipped_text(s_cached_layers[i].item_id, text_x,
+                                (int)(row.y + (row.height - (float)font) * 0.5f),
+                                (int)(row.x + row.width) - text_x, font, C_TEXT);
+    }
+    float rows = (float)s_cached_layer_count * (MI_INTEGRATION_ROW_SZ + MI_TAB_GAP);
+    s_integration_content_height = rows > preview ? rows : preview;
+    ui_scroll_end(&s_integration_scroll);
+}
+
+/* Open the item in the object-layer engine viewer, a page on the Data Server. */
+static void open_item_viewer(const char* item_id) {
+    cJSON* filter = cJSON_CreateObject();
+    assert(filter);
+    cJSON* item = cJSON_AddObjectToObject(filter, "data.item.id");
+    assert(item);
+    cJSON_AddStringToObject(item, "filterType", "text");
+    cJSON_AddStringToObject(item, "type", "contains");
+    cJSON_AddStringToObject(item, "filter", item_id);
+    char* json = cJSON_PrintUnformatted(filter);
+    assert(json);
+    char encoded[1024];
+    url_encode(encoded, sizeof(encoded), json);
+    cJSON_free(json);
+    cJSON_Delete(filter);
+
+    char url[1536];
+    snprintf(url, sizeof(url), "%s/object-layer-engine-viewer?page=1&limit=10&id=&filterModel=%s",
+             config_data_server_url(), encoded);
+    OpenURL(url);
+}
+
+static void handle_integration_click(int mx, int my) {
+    Rectangle content = content_rect(card_rect());
+    for (int i = 0; s_cached_layer_count > i; i++) {
+        if (ui_button_hit(integration_row_rect(content, i), mx, my)) {
+            open_item_viewer(s_cached_layers[i].item_id);
+            return;
+        }
+    }
+}
+
 /* ── Draw ─────────────────────────────────────────────────────────────── */
 
 void modal_interact_draw(void) {
@@ -2533,7 +2623,8 @@ void modal_interact_draw(void) {
      * the capability tabs the entity exposes are drawn. Pixel retro style. */
     int tabs[MI_TAB_COUNT];
     int tabs_n = visible_tabs(tabs);
-    bool tab_shown = false;
+    bool tab_shown = MI_TAB_CHAT == s_tab ||
+                     (MI_TAB_INTEGRATION == s_tab && integration_btn_visible());
     for (int k = 0; k < tabs_n; k++) if (tabs[k] == s_tab) tab_shown = true;
     if (!tab_shown) set_tab(MI_TAB_STACK);
     for (int k = 0; k < tabs_n; k++) {
@@ -2576,6 +2667,8 @@ void modal_interact_draw(void) {
     else if (s_tab == MI_TAB_SHOP)   draw_shop_tab(tab_content, mx, my);
     else if (s_tab == MI_TAB_CRAFT)  draw_craft_tab(tab_content, mx, my);
     else if (s_tab == MI_TAB_STORAGE) draw_storage_tab(tab_content);
+    else if (MI_TAB_CHAT == s_tab)   chat_pane_draw(tab_content, s_entity_id, s_display_name);
+    else if (MI_TAB_INTEGRATION == s_tab) draw_integration_tab(tab_content);
 
     /* Fade the new content up by lifting a panel-coloured veil off it —
      * raylib has no global alpha, and a veil costs one rect instead of a
@@ -2620,7 +2713,7 @@ void modal_interact_draw(void) {
         .label = "Chat",
         .font_size = cfont,
         .text_color = C_TEXT,
-        .selected = false,
+        .selected = MI_TAB_CHAT == s_tab,
         .enabled = true,
     };
     ui_button_pixel_retro_draw(chat, &chat_st, ui_button_hit(chat, mx, my));
@@ -2645,7 +2738,7 @@ void modal_interact_draw(void) {
             .label = "Integration",
             .font_size = ifont,
             .text_color = C_TEXT,
-            .selected = false,
+            .selected = MI_TAB_INTEGRATION == s_tab,
             .enabled = true,
         };
         ui_button_pixel_retro_draw(integration, &integration_st, ui_button_hit(integration, mx, my));
@@ -2694,16 +2787,29 @@ bool modal_interact_handle_click(int mx, int my) {
         return true;
     }
     if (ui_button_hit(chat, mx, my)) {
-        notification_clear(NOTIF_CHAT, s_entity_id);
-        open_overlay(INTERACT_OVERLAY_TAB_CHAT);
+        s_tab_picked = true;
+        set_tab(MI_TAB_CHAT);
         return true;
     }
     if (integration_btn_visible() && ui_button_hit(integration, mx, my)) {
-        open_overlay(INTERACT_OVERLAY_TAB_INTEGRATION);
+        s_tab_picked = true;
+        set_tab(MI_TAB_INTEGRATION);
         return true;
     }
 
     Rectangle content = content_rect(card);
+
+    if (MI_TAB_CHAT == s_tab &&
+        CheckCollisionPointRec((Vector2){ (float)mx, (float)my }, content)) {
+        chat_pane_press(content, s_entity_id, mx, my);
+        return true;
+    }
+
+    if (MI_TAB_INTEGRATION == s_tab &&
+        CheckCollisionPointRec((Vector2){ (float)mx, (float)my }, content)) {
+        ui_scroll_on_press(&s_integration_scroll, mx, my);
+        return true;
+    }
 
     if (s_tab == MI_TAB_QUEST &&
         CheckCollisionPointRec((Vector2){ (float)mx, (float)my }, content)) {

@@ -7,7 +7,7 @@
  * The icon is the entity's full active ObjectLayer stack rendered at
  * icon size, so players recognise entities at a glance.
  *
- * Tapping a bubble opens the JS interact overlay (via interact_bridge.h).
+ * Tapping a bubble opens modal_interact.
  */
 
 #include "interaction_bubble.h"
@@ -21,15 +21,12 @@
 #include "domain/local_player.h"
 #include "game_state.h"
 #include "world_types.h"
-#include "js/interact_bridge.h"
 #include "modal_interact.h"
 #include "notification.h"
 #include "toolbar.h"
 #include "notify_store.h"
-#include "layer_z_order.h"
 #include "inventory_bar.h"
 #include "inventory_modal.h"
-#include "modal_anchor.h"
 #include "modal_dialogue.h"
 #include "modal_instance_map.h"
 #include "ui_toggle.h"
@@ -82,11 +79,6 @@ static float column_width(void) {
  * travel (a time-constant ease toward the target would instead spend its
  * fastest stretch on the visible part of the hide). */
 #define IBUBBLE_SLIDE_DURATION 0.35f
-
-/* Anchored DOM overlay opened straight from a bubble, with no interact card to
- * inherit a placement from. */
-#define IB_OVERLAY_PAD  18.0f
-#define IB_OVERLAY_H   420.0f
 
 static float s_col_reach   = IBUBBLE_SLIDE_REACH_MIN;
 static float s_col_slide_t = 1.0f; /* 0 = fully hidden, 1 = fully expanded */
@@ -721,84 +713,6 @@ bool interaction_bubble_handle_wheel(float wheel_delta) {
     ui_scroll_set_input_bounds(&s_col_scroll, column_input_bounds(view));
     ui_scroll_set_scrollbar_bounds(&s_col_scroll, column_scrollbar_bounds(view));
     return ui_scroll_on_wheel(&s_col_scroll, view, column_content_height(), wheel_delta);
-}
-
-/* Screen rect the DOM overlay opens on. It takes over the interact card's exact
- * place when that modal handed the session over, so switching to a DOM tab
- * moves nothing; a bubble tap with no modal open resolves a fresh placement
- * over the entity. False keeps the overlay full-bleed. */
-static bool overlay_anchor_rect(const char* entity_id, Rectangle* out) {
-    if (!modal_anchor_active()) return false;
-    if (modal_interact_card_rect(entity_id, out)) return true;
-
-    Rectangle safe = modal_anchor_safe_area(IB_OVERLAY_PAD, IB_OVERLAY_H);
-    Vector2 size = { safe.width < MODAL_ANCHOR_MAX_W ? safe.width : MODAL_ANCHOR_MAX_W,
-                     IB_OVERLAY_H };
-    ModalAnchor anchor = { 0 };
-    modal_anchor_capture(&anchor, entity_id, size, MODAL_ANCHOR_GAP, safe);
-    *out = modal_anchor_rect(&anchor, size, safe);
-    return true;
-}
-
-/* Open the JS overlay for one resolved slot on a given tab, pushing its OL
- * stack for preview rendering. NO freeze — the overlay is real-time-safe. */
-static void open_js_overlay_for_slot(InteractionBubbleSlot* slot, int initial_tab) {
-    bool is_self = (strcmp(slot->entity_id, g_local_player.id) == 0);
-    Color bc = status_border_color(slot, is_self);
-
-    Rectangle anchor = { 0 };
-    bool anchored = overlay_anchor_rect(slot->entity_id, &anchor);
-    js_interact_overlay_set_anchor(anchored ? 1 : 0, (int)anchor.x, (int)anchor.y,
-                                   (int)anchor.width, (int)anchor.height);
-
-    js_interact_overlay_open(slot->entity_id,
-                             slot->display_name,
-                             slot->dialogue_item_id,
-                             slot->interact_flags,
-                             slot->is_player ? 1 : 0,
-                             is_self ? 1 : 0,
-                             (int)bc.r, (int)bc.g,
-                             (int)bc.b, (int)bc.a,
-                             initial_tab);
-
-    int icon_lc = slot->alive_layer_count > 0
-        ? slot->alive_layer_count : slot->layer_count;
-    const ObjectLayerState* icon_layers = slot->alive_layer_count > 0
-        ? slot->alive_layers : slot->layers;
-
-    LayerZEntry z_sorted[32];
-    int z_count = layer_z_sort(icon_layers, icon_lc, z_sorted, 32, false);
-
-    char json[4096];
-    int off = 0;
-    json[off++] = '[';
-
-    for (int j = 0; j < z_count; j++) {
-        const ObjectLayerState* ls = &icon_layers[z_sorted[j].index];
-        bool has_dlg = dialogue_data_available(ls->item_id);
-
-        int wrote = snprintf(json + off, sizeof(json) - off,
-            "%s{\"itemId\":\"%s\",\"hasDialogue\":%s}",
-            off > 1 ? "," : "",
-            ls->item_id,
-            has_dlg ? "true" : "false");
-        if (wrote > 0 && off + wrote < (int)sizeof(json) - 2)
-            off += wrote;
-    }
-
-    json[off++] = ']';
-    json[off] = '\0';
-    js_interact_overlay_set_ol_stack(json);
-}
-
-void interaction_bubble_open_js_overlay(const char* entity_id, int initial_tab) {
-    if (!entity_id || '\0' == entity_id[0]) return;
-    for (int i = 0; i < s_slot_count; i++) {
-        if (0 == strcmp(s_slots[i].entity_id, entity_id)) {
-            open_js_overlay_for_slot(&s_slots[i], initial_tab);
-            return;
-        }
-    }
 }
 
 bool interaction_bubble_point_covered(int x, int y) {

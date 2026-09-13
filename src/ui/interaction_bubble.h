@@ -9,8 +9,7 @@
 /* Screen-space bubble column, one bubble per interactable entity in the AOI
  * (NPC bot or other player), keyed by entity ID. Each bubble icon is the
  * entity's full active ObjectLayer stack, so it matches how the entity looks
- * in the world. A tap opens the JS interact overlay through interact_bridge,
- * which carries the Dialog, Chat, and Actions tabs. */
+ * in the world. A tap opens modal_interact. */
 
 /* ── Layout constants ──────────────────────────────────────────────────── */
 
@@ -70,14 +69,6 @@ void interaction_bubble_dead_equip(const char* item_id, bool active);
  * when the entity has no bubble slot or no alive cache. */
 const ObjectLayerState* interaction_bubble_get_alive_layers(
     const char *entity_id, int *out_count);
-
-/* Initial JS overlay tab, selected by modal_interact's action buttons. */
-#define INTERACT_OVERLAY_TAB_CHAT         0
-#define INTERACT_OVERLAY_TAB_INTEGRATION  1
-
-/* Open the JS overlay on `initial_tab` (INTERACT_OVERLAY_TAB_*) and push the
- * entity's layer stack for the preview. No-op when the entity has no slot. */
-void interaction_bubble_open_js_overlay(const char* entity_id, int initial_tab);
 
 /* True when the bubble column UI covers the point. The toggle tab always
  * counts; the bubble band counts only while the column is expanded, so a

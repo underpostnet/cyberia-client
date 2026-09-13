@@ -15,7 +15,6 @@
 #include "domain/audio_context.h"
 #include "audio/audio.h"
 #include "audio/audio_events.h"
-#include "js/interact_bridge.h"
 #include "replication.h"
 #include "notification.h"
 #include "notify_store.h"
@@ -771,7 +770,6 @@ static void json_unpack_chat(const cJSON* payload) {
     if (from_id[0] && text[0]) {
         notify_store_push(from_id, from_id, text, false);
         notification_push(NOTIF_CHAT, from_id);
-        js_interact_overlay_receive_chat(from_id, from_id, text);
     }
 }
 
