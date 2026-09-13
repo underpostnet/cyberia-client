@@ -7,13 +7,15 @@ stale WASM/JS.
 
 Usage
 -----
-  python3 wasm-driver.py [--port=<port>] [--directory=<dir>] [--data-server-url=<url>]
+  python3 wasm-driver.py [--port=<port>] [--directory=<dir>] [--data-server-url=<url>] [client flags]
 
   --port              TCP port (default: 8080)
   --directory         Directory to serve (default: current directory)
   --data-server-url   Data Server origin (default: https://cyberiaonline.com).
                       Passed to the WASM client as window.CYBERIA_ARGV, which
                       emscripten turns into the client's own argv.
+  client flags        Any other flag is appended to the client argv, e.g.
+                      --stream-disable=audio,atlas or --stream-profile.
 
 Multi-instance routing
 ----------------------
@@ -181,11 +183,11 @@ if __name__ == "__main__":
         default="https://cyberiaonline.com",
         help="Data Server origin (default: https://cyberiaonline.com)",
     )
-    args = parser.parse_args()
+    args, client_flags = parser.parse_known_args()
 
     port = args.port
     directory = args.directory
-    CLIENT_ARGV = [f"--data-server-url={args.data_server_url}"]
+    CLIENT_ARGV = [f"--data-server-url={args.data_server_url}", *client_flags]
     container_id = os.environ.get("CONTAINER_DEPLOY_ID", "")
 
     os.chdir(directory)

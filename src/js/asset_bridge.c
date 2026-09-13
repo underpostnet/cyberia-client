@@ -114,18 +114,12 @@ EM_JS(void, asset_bridge_upload, (int handle, unsigned texture, int row, int cou
 
 double asset_bridge_now(void) { return emscripten_get_now(); }
 
-EM_JS(unsigned, asset_bridge_diagnostics, (void), {
-    const query = new URLSearchParams(location.search);
-    const modes = {audio: 1, 'audio-network': 2, 'audio-runtime': 4, atlas: 8, dynamic: 16};
-    let flags = 0;
-    for (const mode of (query.get('stream-disable') || "").split(',')) flags |= modes[mode] || 0;
-    Module.streamTrace = query.has('stream-profile') ? [] : null;
-    Module.streamTraceCursor = 0;
-    return flags;
-})
-
+// DevTools reads Module.streamTrace. C calls this only under --stream-profile.
 EM_JS(void, asset_bridge_trace, (const char* event, const char* id, double bytes, double duration, int priority, const char* consumer), {
-    if (!Module.streamTrace) return;
+    if (!Module.streamTrace) {
+        Module.streamTrace = [];
+        Module.streamTraceCursor = 0;
+    }
     Module.streamTrace[Module.streamTraceCursor++ % 30000] = {
         time: performance.now(), event: UTF8ToString(event), id: UTF8ToString(id),
         bytes, duration: priority < 0 ? duration : 0, residentBytes: priority < 0 ? 0 : duration,

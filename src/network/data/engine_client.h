@@ -29,7 +29,11 @@ typedef void (*FetchCompletedCb)(const FetchResponse* response);
 #define FETCH_DEFAULT_MAX_CONCURRENT 8
 #define FETCH_QUEUE_CAP 512
 
-void fetch_init(void);
+/* Reads the diagnostics from the command line:
+ *   --stream-disable=<mode>[,<mode>...]  audio, audio-network, audio-runtime,
+ *                                        atlas, dynamic
+ *   --stream-profile                     record events in Module.streamTrace */
+void fetch_init(int argc, char** argv);
 void fetch_shutdown(void);
 void fetch_frame_begin(double frame_ms, bool critical);
 void fetch_frame_end(void);

@@ -249,7 +249,7 @@ int main(int argc, char** argv) {
     // Resolves the instance code from the URL and the Data Server URL from the
     // command line. Must precede any connection or Data Server call.
     config_init(argc, argv);
-    fetch_init();
+    fetch_init(argc, argv);
     fetch_event("boot_start", "", 0, 0);
     audio_init();
 

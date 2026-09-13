@@ -21,7 +21,6 @@ static char order[2048][80];
 
 const char* config_data_server_url(void) { return "https://content.test"; }
 double asset_bridge_now(void) { return clock_ms; }
-unsigned asset_bridge_diagnostics(void) { return 0; }
 void asset_bridge_trace(const char* event, const char* id, double bytes, double duration, int priority, const char* consumer) {}
 int asset_bridge_fetch(const char* url, unsigned timeout, size_t limit) {
     int handle = ++network_count;
@@ -72,7 +71,7 @@ static void settle(void) {
 }
 
 int main(void) {
-    fetch_init();
+    fetch_init(0, NULL);
     fetch_set_max_concurrent(1);
     fetch_request_start_at("background", "/p2", release, FETCH_P2);
     fetch_request_start_at("player", "/p0", release, FETCH_P0);
@@ -179,5 +178,13 @@ int main(void) {
     assert(ASSET_READY == fetch_state("/current"));
     fetch_shutdown();
     assert(0 == fetch_pending_count() && 0 == fetch_in_flight_count());
+
+    char* argv[] = {"client", "--stream-disable=audio-network,bogus,atlas", "--stream-profile"};
+    fetch_init(3, argv);
+    assert(fetch_disabled(STREAM_AUDIO_NETWORK_DISABLED) && fetch_disabled(STREAM_ATLAS_DISABLED));
+    assert(!fetch_disabled(STREAM_AUDIO_DISABLED) && !fetch_disabled(STREAM_DYNAMIC_DISABLED));
+    assert(s_profile);
+    fetch_init(1, argv);
+    assert(!fetch_disabled(STREAM_ATLAS_DISABLED) && !s_profile);
     puts("asset request tests passed");
 }

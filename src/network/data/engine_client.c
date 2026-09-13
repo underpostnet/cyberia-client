@@ -1,6 +1,7 @@
 #include "engine_client.h"
 #include "js/asset_bridge.h"
 #include "config.h"
+#include "util/log.h"
 
 #include <raylib.h>
 #include <rlgl.h>
@@ -61,6 +62,7 @@ static double s_frame_ms;
 static double s_spent;
 static double s_budget;
 static unsigned s_flags;
+static bool s_profile;
 static double s_upload_cost = 0.5 / FETCH_UPLOAD_BYTES;
 
 void fetch_data_release(void* data) {
@@ -92,6 +94,7 @@ static Request* find_request(const char* url) {
 }
 
 static void trace_request(const char* event, const Request* request) {
+    if (!s_profile) return;
     const char* consumer = 0 < request->count ? request->consumers[0].id :
         FETCH_P0 == request->priority ? "player" : FETCH_P1 == request->priority ? "visible" : "nearby";
     asset_bridge_trace(event, request->url, request->size, resident_bytes(request), request->priority, consumer);
@@ -171,7 +174,7 @@ static Request* enqueue(const char* id, const char* url, int pixel_scale, size_t
         .limit = 0 != limit ? limit : FETCH_BODY_LIMIT, .timeout = timeout, .pixel_scale = pixel_scale,
         .order = ++s_order, .touched = s_frame};
     assert(NULL != request->url);
-    asset_bridge_trace("asset_queued", url, 0, 0, priority, id);
+    if (s_profile) asset_bridge_trace("asset_queued", url, 0, 0, priority, id);
     return request;
 }
 
@@ -361,7 +364,30 @@ void fetch_process_frame(void) {
     s_spent = spent_before + fetch_now() - pump_start;
 }
 
-void fetch_init(void) { s_flags = asset_bridge_diagnostics(); }
+void fetch_init(int argc, char** argv) {
+    static const char kDisable[] = "--stream-disable=";
+    static const struct { const char* name; StreamDiagnostic flag; } kModes[] = {
+        {"audio", STREAM_AUDIO_DISABLED}, {"audio-network", STREAM_AUDIO_NETWORK_DISABLED},
+        {"audio-runtime", STREAM_AUDIO_RUNTIME_DISABLED}, {"atlas", STREAM_ATLAS_DISABLED},
+        {"dynamic", STREAM_DYNAMIC_DISABLED},
+    };
+    s_flags = 0;
+    s_profile = false;
+    for (int i = 1; argc > i; i++) {
+        if (0 == strcmp(argv[i], "--stream-profile")) s_profile = true;
+        if (0 != strncmp(argv[i], kDisable, sizeof(kDisable) - 1)) continue;
+        for (const char* mode = argv[i] + sizeof(kDisable) - 1; '\0' != *mode;) {
+            const size_t length = strcspn(mode, ",");
+            size_t m = 0;
+            while (sizeof(kModes) / sizeof(kModes[0]) > m &&
+                   !(length == strlen(kModes[m].name) && 0 == strncmp(mode, kModes[m].name, length))) m++;
+            if (sizeof(kModes) / sizeof(kModes[0]) > m) s_flags |= kModes[m].flag;
+            else LOG_WARN("unknown --stream-disable mode: %.*s", (int)length, mode);
+            mode += length;
+            if (',' == *mode) mode++;
+        }
+    }
+}
 void fetch_shutdown(void) { for (int i = 0; FETCH_QUEUE_CAP > i; i++) discard(&s_requests[i]); }
 double fetch_now(void) { return asset_bridge_now(); }
 bool fetch_disabled(StreamDiagnostic flag) { return 0 != (s_flags & flag); }
@@ -374,6 +400,7 @@ void fetch_frame_begin(double frame_ms, bool critical) {
 }
 bool fetch_has_budget(void) { return s_budget > s_spent && s_frame_start + 16.0 > fetch_now(); }
 void fetch_event(const char* event, const char* id, size_t bytes, double duration_ms) {
+    if (!s_profile) return;
     asset_bridge_trace(event, NULL != id ? id : "", bytes, duration_ms, -1, "");
 }
 void fetch_account(const char* operation, const char* id, size_t bytes, double start_ms) {
