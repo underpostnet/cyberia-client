@@ -44,7 +44,7 @@ queue.count == 0       // no
 - Third-party: `<>` brackets — `<raylib.h>`, `<raymath.h>`, `<cJSON.h>`.
 
 ## No `(void)param;` for unused args
-Drop the silencer cast. Leave param unused.
+Drop the silencer cast. Leave param unused. Warnings for this are allowed.
 
 ## Inline single-use helpers
 One call site → keep inline. Extract only if ≥2 sites or inline obscures control flow at function scale (not loop scale).
@@ -55,6 +55,27 @@ One call site → keep inline. Extract only if ≥2 sites or inline obscures con
 - If a change seems to require a Makefile edit: STOP, explain what flag/line you want to change and why, ask the user to confirm they understand the implication. Wait for explicit approval.
 - There is no recursive glob. `config.mk` lists one wildcard per directory: `src`, `js`, `network`, `ui`, `input`, `domain`, `fx`, `util`.
 - A new `.c` in one of those directories builds with no edit. A new directory does not — it needs a `config.mk` line, so stop and ask. A file in an unlisted directory compiles nowhere and links to nothing.
+
+## src/shell.html — keep it close to raylib's shell
+
+`libs/raylib/src/shell.html` is the reference. Keep `src/shell.html` as close to it as possible.
+
+Before you change `src/shell.html`, do these steps in sequence:
+
+1. Search the codebase. Find out if the change can go in C.
+2. Use standard C when possible.
+3. Else use a well-known library: raylib, emscripten `html5.h`. Optionally, search the internet and suggest open source libraries.
+4. Change `src/shell.html` only if no library does it and standard C cannot do it.
+
+Every difference from the reference must be necessary. If you find a difference that C or a library can replace, move it out of the shell.
+
+## JS — last resort
+
+This rule applies to all JS: `EM_JS`, `EM_ASM`, `--js-library` files, and inline scripts.
+
+1. Search the full codebase for a C path or an existing bridge that does the task.
+2. Use standard C, raylib, or emscripten `html5.h` / `emscripten_fetch` when they do the task.
+3. Write new JS only if no alternative exists. Keep it small, and put it in an existing bridge in `src/js/` when possible.
 
 ## Asserts over defensive checks
 - Prefer `assert(x);` over `if (!x) { LOG_ERROR(...); return; }` for invariant violations.
