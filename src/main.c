@@ -243,7 +243,7 @@ int main(int argc, char** argv) {
     // init window
     const int vp_w = EM_ASM_INT({ return window.innerWidth; });
     const int vp_h = EM_ASM_INT({ return window.innerHeight; });
-    InitWindow(vp_w, vp_h, NULL);
+    InitWindow(vp_w, vp_h, "CYBERIA MMO");
 
     // Resolves the instance code from the URL and the Data Server URL from the
     // command line. Must precede any connection or Data Server call.

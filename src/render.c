@@ -33,7 +33,6 @@
 
 #include <assert.h>
 #include <raylib.h>
-#include <emscripten/emscripten.h>
 #include <emscripten/html5.h>
 
 /* render.c — top-level frame orchestrator. Owns nothing; only sequences
@@ -49,8 +48,8 @@ void render_fallback(int width, int height);
 /* Browser window resize → raylib viewport + camera. raylib's IsWindowResized
  * does not fire reliably under Emscripten, so we drive it from the DOM event. */
 static EM_BOOL on_window_resize(int eventType, const EmscriptenUiEvent* uiEvent, void* userData) {
-    int w = EM_ASM_INT({ return window.innerWidth; });
-    int h = EM_ASM_INT({ return window.innerHeight; });
+    int w = uiEvent->windowInnerWidth;
+    int h = uiEvent->windowInnerHeight;
     SetWindowSize(w, h);
     game_render_set_screen_size(w, h);
     camera_resize(w, h);
