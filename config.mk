@@ -12,7 +12,7 @@ SRC_DIR         ?= src
 # Define common compiler flags
 #-------------------------------
 CFLAGS = -I$(SRC_DIR)
-CFLAGS += -Wextra
+CFLAGS += -Wall
 CFLAGS += -Wpointer-arith
 CFLAGS += -fdiagnostics-color=always
 
@@ -23,12 +23,12 @@ CFLAGS += -pedantic
 ifeq ($(BUILD_MODE),RELEASE)
 CFLAGS += -DNDEBUG
 CFLAGS += -O3
-CFLAGS += -Wunused-result
-CFLAGS += -Wunused-variable -Wunused-const-variable
 # CFLAGS += -Werror
 else
 CFLAGS += -DCYBERIA_DEBUG -g
-CFLAGS += -Wno-unused-parameter
+CFLAGS += -Wunused-result
+CFLAGS += -Wunused-variable -Wunused-const-variable
+CFLAGS += -Wextra
 endif
 
 #------------------------------------------------
