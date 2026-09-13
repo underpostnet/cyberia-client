@@ -21,8 +21,7 @@ LDFLAGS = -lwebsocket.js
 LDFLAGS += -s 'EXPORTED_RUNTIME_METHODS=["allocateUTF8"]'
 LDFLAGS += -sASYNCIFY
 LDFLAGS += -sFETCH=1
-LDFLAGS += --js-library $(SRC_DIR)/js/interact_overlay.js
-LDFLAGS += -sEXPORTED_FUNCTIONS='["_main","_c_send_chat_binary"]'
+LDFLAGS += -sEXPORTED_FUNCTIONS='["_main"]'
 
 #---------------------------------------------------------------------------------------------
 # Web target html container
