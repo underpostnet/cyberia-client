@@ -77,6 +77,11 @@ This rule applies to all JS: `EM_JS`, `EM_ASM`, `--js-library` files, and inline
 2. Use standard C, raylib, or emscripten `html5.h` / `emscripten_fetch` when they do the task. Optionally, search the internet and suggest open source libraries.
 3. Write new JS only if no alternative exists. Keep it small, and put it in an existing bridge in `src/js/` when possible.
 
+The rule counts only the JS we write. JS inside raylib, emscripten or another library we use does not count.
+
+- A library call that runs JS internally is a correct replacement for our own JS. Do not reject it because the JS moves into the library.
+- Judge the library call on behavior only: does it do the task correctly?
+
 ## Asserts over defensive checks
 - Prefer `assert(x);` over `if (!x) { LOG_ERROR(...); return; }` for invariant violations.
 - Applies to callback ctx/data params, malloc OOM, and any value that's a bug if null/invalid, not a recoverable runtime condition.
