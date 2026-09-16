@@ -416,7 +416,7 @@ void game_render_world_objects(void) {
             .interaction_flags = 0,
         };
         entity_overhead_ui_draw(&ohp, portal->pos.x, portal->pos.y,
-                                portal->dims.x, portal->dims.y, cell_size);
+                                portal->dims.x, cell_size);
     }
 }
 
@@ -871,7 +871,6 @@ void game_render_entities(void) {
                 }
                 nameplate_resolve(entity_base->id, np_is_player,
                                   np_layers, np_lc,
-                                  obj_layers_mgr_get(),
                                   np_buf, (int)sizeof(np_buf));
                 /* Action bots show the action's label (NPC name) once its
                  * metadata loads, fetched by the action code from AOI. The
@@ -927,7 +926,6 @@ void game_render_entities(void) {
                     entity_base->interp_pos.x,
                     entity_base->interp_pos.y,
                     entity_base->dims.x,
-                    entity_base->dims.y,
                     cell_size
                 );
             }
@@ -1065,10 +1063,10 @@ void game_render_ui(void) {
     // Top toolbar + the compact map readout it hosts draw above the
     // expanded container so its toggles can retract it.
     toolbar_draw(g_renderer.screen_width);
-    modal_map_draw(g_renderer.screen_width, g_renderer.screen_height);
+    modal_map_draw();
 
     if (presentation_runtime_dev_ui()) {
-        dev_ui_draw(g_renderer.screen_width, g_renderer.screen_height, 0);
+        dev_ui_draw(g_renderer.screen_width, g_renderer.screen_height);
     }
 
     // Transient notification toast — draws first so the loot delivery flight

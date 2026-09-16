@@ -35,7 +35,7 @@ void item_slot_draw_ex(Rectangle r, const ObjectLayerState* ols, ObjectLayersMan
 
     bool active    = ols->active;
     bool activable = true;
-    if (mgr && ols->item_id[0] != '\0') {
+    if (ols->item_id[0] != '\0') {
         ObjectLayer* ol_data = lookup_cached_layer(ols->item_id);
         if (ol_data) activable = ol_data->data.item.activable;
     }
@@ -117,7 +117,7 @@ void item_slot_draw_ex(Rectangle r, const ObjectLayerState* ols, ObjectLayersMan
     }
 
     /* ── Sum-stat badge (top-right) ───────────────────────────────────── */
-    if (mgr && ols->item_id[0] != '\0') {
+    if (ols->item_id[0] != '\0') {
         ObjectLayer* ol_data = lookup_cached_layer(ols->item_id);
         if (ol_data) {
             int values[CYBERIA_STAT_COUNT];

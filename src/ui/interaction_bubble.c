@@ -263,7 +263,7 @@ static void scan_entity(const char* entity_id, const EntityState* base,
      * for the very first scan (entity spawned alive). */
     InteractionBubbleSlot* existing = find_slot(entity_id);
 
-    uint32_t flags = 0;
+    bool has_dialogue = false;
     char dlg_item[128] = {0};
 
     /* Talk is available only when the entity's ACTIVE SKIN has dialogue —
@@ -284,24 +284,18 @@ static void scan_entity(const char* entity_id, const EntityState* base,
         if (skin) {
             dialogue_data_request(skin);
             if (dialogue_data_available(skin)) {
-                flags |= INTERACT_DIALOGUE;
+                has_dialogue = true;
                 strncpy(dlg_item, skin, sizeof(dlg_item) - 1);
             }
         }
     }
 
-    /* Every interactable entity gets INTERACT_SOCIAL so the chat
-     * section is available.  In the future the server's bot module
-     * will relay chat to AI-driven NPCs the same way it relays to
-     * players — the client doesn't need to distinguish. */
-    flags |= INTERACT_SOCIAL;
-
-    if (flags == 0) return;
-
+    /* Every interactable entity gets a bubble, with or without dialogue: the
+     * chat section is always available. */
     InteractionBubbleSlot* slot = upsert_slot(entity_id);
     if (!slot) return;
 
-    slot->interact_flags = flags;
+    slot->has_dialogue = has_dialogue;
     slot->status_icon = base->status_icon;
     slot->interaction_flags = interaction_flags;
     slot->is_player = is_player;
@@ -335,15 +329,14 @@ static void scan_entity(const char* entity_id, const EntityState* base,
 
     /* Display name: resolved centrally by the nameplate module.
      * Players → "AnonPlayer<first 8 chars of ws id>".
-     * Bots    → skin/body item_id (with manager lookup). */
+     * Bots    → skin/body item_id. */
     {
-        ObjectLayersManager* np_mgr = obj_layers_mgr_get();
         const ObjectLayerState* np_layers = slot->alive_layer_count > 0
             ? slot->alive_layers : OBJ_LAYERS(base);
         int np_lc = slot->alive_layer_count > 0
             ? slot->alive_layer_count : base->layer_count;
         nameplate_resolve(entity_id, is_player,
-                          np_layers, np_lc, np_mgr,
+                          np_layers, np_lc,
                           slot->display_name,
                           (int)sizeof(slot->display_name));
     }
@@ -668,15 +661,12 @@ static bool open_slot_at(int mx, int my) {
         Rectangle r = slot_rect(i, view);
         if (hit_rect(mx, my, r)) {
             InteractionBubbleSlot* slot = &s_slots[i];
-            LOG_INFO("[INTERACTION_BUBBLE] Slot %d clicked: entity=%s flags=0x%x\n",
-                   i, slot->entity_id, slot->interact_flags);
+            LOG_INFO("[INTERACTION_BUBBLE] Slot %d clicked: entity=%s dialogue=%d\n",
+                   i, slot->entity_id, (int)slot->has_dialogue);
 
-            /* Bubble tap opens modal_interact. has_dialogue is true when the
-             * active skin has dialogue; the capability bitmask gates the Action
-             * and Quest tabs. */
+            /* Bubble tap opens modal_interact. */
             bool is_self      = (strcmp(slot->entity_id, g_local_player.id) == 0);
-            bool has_dialogue = (slot->interact_flags & INTERACT_DIALOGUE) != 0 &&
-                                slot->dialogue_item_id[0] != '\0';
+            bool has_dialogue = slot->has_dialogue && slot->dialogue_item_id[0] != '\0';
             Color bc = status_border_color(slot, is_self);
             modal_interact_open(slot->entity_id, slot->display_name,
                                 slot->dialogue_item_id, has_dialogue, bc);

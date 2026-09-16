@@ -51,7 +51,7 @@ static bool ui_dispatch_escape(void) {
     return false;
 }
 
-static bool ui_consume_event(const input_event_t* e, void* ctx) {
+static bool ui_consume_event(const input_event_t* e) {
     bool consumed = false;
     /* A synthetic tap has no pointer on its target pixel, so HUD chrome
      * must not absorb it. Modals still block it: they freeze the local
@@ -120,7 +120,7 @@ static void ui_on_tick(input_queue_t* input_queue, double dt) {
         else if (!modal_dialogue_is_open())  inventory_modal_open(inv_tap);
     }
 
-    input_queue_filter(input_queue, ui_consume_event, NULL);
+    input_queue_filter(input_queue, ui_consume_event);
 }
 
 #endif /* CYBERIA_UI_DISPATCH_H */

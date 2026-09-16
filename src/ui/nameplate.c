@@ -25,7 +25,6 @@ void nameplate_resolve(const char *entity_id,
                        bool is_player,
                        const ObjectLayerState *layers,
                        int layer_count,
-                       ObjectLayersManager *mgr,
                        char *out,
                        int out_size) {
     if (!out || out_size <= 0) return;
@@ -45,7 +44,7 @@ void nameplate_resolve(const char *entity_id,
 
     /* ── Bots: "<Skin_item_id>" (+ "-<first 8 chars of entity ID>" in dev),
      *    first character uppercased. ───────────────────────────────────── */
-    if (layers && layer_count > 0 && mgr) {
+    if (layers && layer_count > 0) {
         const char *skin_id = NULL;
         const char *first_active_id = NULL;
 

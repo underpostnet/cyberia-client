@@ -64,12 +64,8 @@ void render_init(int width, int height) {
 
     game_render_init(width, height);
 
-    if (0 != dev_ui_init()) {
-        LOG_WARN("dev_ui_init failed");
-    }
-    if (0 != modal_map_init()) {
-        LOG_WARN("modal_map_init failed");
-    }
+    dev_ui_init();
+    modal_map_init();
     modal_instance_map_init();
     hud_minimap_overlay_init();
 
@@ -113,7 +109,7 @@ void render_on_tick(float delta_time) {
     fx_assemble_update(delta_time);
 
     interaction_bubble_update();
-    dev_ui_on_tick(delta_time);
+    dev_ui_on_tick();
     modal_map_update(delta_time);
     modal_instance_map_update(delta_time);
     hud_minimap_overlay_update(delta_time);

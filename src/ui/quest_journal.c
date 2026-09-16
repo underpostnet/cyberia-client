@@ -174,8 +174,7 @@ static float sections_walk(int mode, int mx, int my, float x, float y0, float w)
         char label[64];
         snprintf(label, sizeof(label), "%s (%d)", C_SECTION_LABEL[sec], count);
         float srow_h = ui_toggle_header(&s_section[sec], x, y, w, label, QJ_FONT_SECTION,
-                                        C_TEXT, UI_TOGGLE_HEADER_LEFT,
-                                        0.0f, 0.0f, UI_TOGGLE_HDR_CHEVRON, JW_DRAW == mode);
+                                        C_TEXT, JW_DRAW == mode);
         Rectangle srow = { x, y, w, srow_h };
         if (JW_CLICK == mode && hit(mx, my, srow)) {
             s_section[sec].expanded = !s_section[sec].expanded;

@@ -42,7 +42,7 @@ const char* mode_to_string(ObjectLayerMode mode) {
 // Global dev UI instance
 DevUI g_dev_ui = {0};
 
-int dev_ui_init(void) {
+void dev_ui_init(void) {
     LOG_INFO("[DEV_UI] Initializing development UI...\n");
 
     memset(&g_dev_ui, 0, sizeof(DevUI));
@@ -68,7 +68,6 @@ int dev_ui_init(void) {
     g_dev_ui.last_fps_update = 0.0;
 
     LOG_INFO("[DEV_UI] Development UI initialized\n");
-    return 0;
 }
 
 void dev_ui_cleanup(void) {
@@ -76,7 +75,7 @@ void dev_ui_cleanup(void) {
     memset(&g_dev_ui, 0, sizeof(DevUI));
 }
 
-void dev_ui_on_tick(float delta_time) {
+void dev_ui_on_tick(void) {
     // Update FPS tracking
     double current_time = GetTime();
     if (current_time - g_dev_ui.last_fps_update >= 0.1) {
@@ -155,19 +154,12 @@ int dev_ui_get_active_item_count(const char* player_id) {
     return active_count;
 }
 
-void dev_ui_draw(int screen_width, int screen_height, int hud_occupied) {
+void dev_ui_draw(int screen_width, int screen_height) {
     if (!presentation_runtime_dev_ui()) {
         return;
     }
 
-    // Calculate dev UI height based on HUD occupation
     int dev_ui_height = g_dev_ui.dev_ui_height;
-    if (hud_occupied > 0) {
-        dev_ui_height = screen_height - hud_occupied;
-        if (dev_ui_height < 80) {
-            dev_ui_height = 80;
-        }
-    }
 
     // Position the panel at bottom-right, above the inventory bar.
     // The zoom buttons sit to the right (they are narrow, ~54px from right edge)

@@ -84,14 +84,14 @@ typedef struct {
 } EntityOverheadParams;
 
 /* Draw the stack above one entity. Call inside BeginMode2D / EndMode2D. The
- * world_* rect is the entity footprint in grid units; `cell_size` is pixels
- * per world unit. Stateless — call in any order, for any entity count. */
+ * stack sits on the top edge of the entity footprint, so only the width is
+ * needed; `cell_size` is pixels per world unit. Stateless — call in any order,
+ * for any entity count. */
 void entity_overhead_ui_draw(
     const EntityOverheadParams *p,
     float world_x,
     float world_y,
     float world_w,
-    float world_h,
     float cell_size
 );
 

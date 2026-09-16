@@ -390,7 +390,6 @@ static const char* resolve_summoned_item_id(const char* raw_id) {
     for (int i = 0; i < g_local_player.inventory_count; i++) {
         const ObjectLayerState* ol = &g_local_player.inventory[i];
         if (!ol->active || ol->item_id[0] == '\0') continue;
-        if (!s_ol_manager) continue;
         ObjectLayer* data = lookup_cached_layer(ol->item_id);
         if (data && strcmp(data->data.item.type, "skin") == 0) {
             strncpy(s_resolved, ol->item_id, MAX_ID_LENGTH - 1);
@@ -481,7 +480,7 @@ void inventory_modal_open_external(const ObjectLayerState* ols) {
     s_open        = true;
     reset_view_state();
     /* Kick the sprite atlas fetch so the preview is ready promptly. */
-    if (s_ol_manager) get_or_fetch_atlas_data(ols->item_id, FETCH_P1);
+    get_or_fetch_atlas_data(ols->item_id, FETCH_P1);
     /* Read-only or not, this is a modal the player reads with the world still
      * running, and inventory_modal_close always releases the matching freeze —
      * so it has to take one. Openers reach here from another modal that just
@@ -657,7 +656,7 @@ void inventory_modal_draw(void) {
 
     /* ── Fetch atlas for direction button enable state ───────────────── */
     AtlasSpriteSheetData* atlas = NULL;
-    if (s_ol_manager && ols->item_id[0] != '\0')
+    if (ols->item_id[0] != '\0')
         atlas = get_or_fetch_atlas_data(ols->item_id, FETCH_P1);
 
     /* 4. Animated sprite via ol_as_animated_ico
@@ -765,7 +764,7 @@ void inventory_modal_draw(void) {
     float item_stats[CYBERIA_STAT_COUNT] = {0};
     bool activable = true;
 
-    if (s_ol_manager) {
+    {
         ObjectLayer* ol_data = lookup_cached_layer(ols->item_id);
         if (ol_data) {
             if (ol_data->data.item.id[0] != '\0') item_name = ol_data->data.item.id;
@@ -1130,7 +1129,7 @@ bool inventory_modal_handle_click(int mx, int my) {
         const ObjectLayerState* ols = &g_local_player.inventory[s_inv_idx];
         bool activable = true;
         const char* item_type = "";
-        if (s_ol_manager) {
+        {
             ObjectLayer* ol_data = lookup_cached_layer(ols->item_id);
             if (ol_data) {
                 activable = ol_data->data.item.activable;

@@ -100,11 +100,6 @@ static int   s_quest_code_count = 0;
  * vendor catalog the Shop tab renders. */
 static char  s_action_code[64] = {0};
 
-/* True while this modal holds a server interaction context (dlg_start sent on
- * open, freezing the player and binding the entity); released on close. */
-static bool  s_dlg_context = false;
-
-
 /* Max reward icons rendered per mission card. */
 #define MI_REWARD_SLOT_MAX 8
 
@@ -120,7 +115,6 @@ static float     s_q_expand_age = MODAL_POP_DURATION;
 static Rectangle s_q_close;                  /* detail-mode close button    */
 static Rectangle s_q_btn[MI_QUEST_MAX];
 static int       s_q_btn_kind[MI_QUEST_MAX]; /* 0 none, 1 accept, 2 abandon */
-static char      s_q_btn_code[MI_QUEST_MAX][64];
 static int       s_q_count = 0;
 static UIScroll  s_q_scroll;
 static float     s_q_content_height = 0.0f;
@@ -930,13 +924,11 @@ void modal_interact_open(const char* entity_id, const char* display_name,
 
     request_active_dialogue();
 
-    /* The dialogue modal (paired with this interact modal) already sends its own
-     * dlg_start on open and dlg_complete/cancel on finish — it owns the freeze/
-     * unfreeze lifecycle. We do NOT send a redundant dlg_start here; doing so
-     * creates a double-freeze that leaks the server-side ActiveDialogueEntityID
-     * and breaks quest-talk validation when the bot leaves the AOI. The dialogue
-     * modal's handshake is authoritative. */
-    s_dlg_context = false;
+    /* The dialogue modal owns the freeze lifecycle: it sends dlg_start on open
+     * and dlg_complete/cancel on finish. This modal sends no dlg_start, because
+     * a second one double-freezes the player, leaks the server-side
+     * ActiveDialogueEntityID and breaks quest-talk validation when the bot
+     * leaves the AOI. */
     LOG_INFO("[MODAL_INTERACT] Open: entity=%s layers=%d quests=%d\n",
              s_entity_id, s_cached_layer_count, s_quest_code_count);
 }
@@ -948,12 +940,6 @@ void modal_interact_close(void) {
     es_clear();
     if (modal_dialogue_is_open()) modal_dialogue_close();
     local_player_request_freeze(false, "interact");
-    /* Release the interaction context/freeze established on open. Dropped by the
-     * server if the dialogue already completed/cancelled it. */
-    if (s_dlg_context) {
-        local_player_request_dialogue_cancel(s_entity_id, s_dlg_item);
-        s_dlg_context = false;
-    }
 }
 
 bool modal_interact_is_open(void) { return s_open; }
@@ -1173,7 +1159,7 @@ static void draw_stack_tab(Rectangle content) {
         DrawText(s_cached_layers[i].item_id, tx, ty, font_id, C_TEXT);
 
         /* Item type — resolve from layer data if available */
-        if (olm && s_cached_layers[i].item_id[0] != '\0') {
+        if (s_cached_layers[i].item_id[0] != '\0') {
             ObjectLayer* ol = lookup_cached_layer(s_cached_layers[i].item_id);
             if (ol && ol->data.item.type[0] != '\0') {
                 ty += font_id + 4;
@@ -1601,8 +1587,6 @@ static void draw_quest_detail(int slot, const char* code, float x, float w,
         ui_button_pixel_retro_draw(btn, &st, ui_button_hit(btn, mx, my));
         s_q_btn[slot] = btn;
         s_q_btn_kind[slot] = active ? 2 : 1;
-        strncpy(s_q_btn_code[slot], code, 63);
-        s_q_btn_code[slot][63] = '\0';
         *y += button_height + 8.0f;
     }
 
@@ -1734,7 +1718,7 @@ static void handle_quest_click(int mx, int my) {
         }
         int i = s_q_expanded;
         if (0 != s_q_btn_kind[i] && ui_button_hit(s_q_btn[i], mx, my)) {
-            request_quest_action(s_q_btn_kind[i], s_q_btn_code[i]);
+            request_quest_action(s_q_btn_kind[i], s_quest_codes[i]);
             return;
         }
         for (int r = 0; r < s_reward_slot_count; r++) {
@@ -2315,8 +2299,7 @@ static void storage_apply_local_swap(int from, int to) {
 static Rectangle storage_bar_slot_rect(const char* item_id) {
     Rectangle slot;
     if (inventory_bar_predicted_item_slot_rect(item_id, &slot)) return slot;
-    Rectangle toggle = inventory_bar_toggle_bounds();
-    return (Rectangle){ toggle.x, toggle.y, toggle.width, toggle.height };
+    return inventory_bar_toggle_bounds();
 }
 
 /* Dropping a vault cell outside the visible grid withdraws it into inventory. */

@@ -15,13 +15,11 @@
  *             active layer, then to the raw ID. */
 
 /* `entity_id` is the websocket session ID for a player, the server UUID for
- * a bot. `layers` may be NULL. A NULL `mgr` skips the bot skin lookup.
- * `out_size` counts the terminator. */
+ * a bot. `layers` may be NULL. `out_size` counts the terminator. */
 void nameplate_resolve(const char *entity_id,
                        bool is_player,
                        const ObjectLayerState *layers,
                        int layer_count,
-                       ObjectLayersManager *mgr,
                        char *out,
                        int out_size);
 

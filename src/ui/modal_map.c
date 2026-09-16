@@ -20,11 +20,10 @@ ModalMap g_modal_map = {0};
 
 /* ── Initialisation ───────────────────────────────────────────────────── */
 
-int modal_map_init(void) {
+void modal_map_init(void) {
     memset(&g_modal_map, 0, sizeof(ModalMap));
     g_modal_map.cached_fps      = 60.0f;
     g_modal_map.last_fps_update = 0.0;
-    return 0;
 }
 
 void modal_map_cleanup(void) {
@@ -72,7 +71,7 @@ static void shadow_text(const char* text, int x, int y, int fs, Color c) {
 
 /* ── Draw ─────────────────────────────────────────────────────────────── */
 
-void modal_map_draw(int screen_width, int screen_height) {
+void modal_map_draw(void) {
     const char* map = g_local_player.map_code;
     float px        = g_game_state.player.base.interp_pos.x;
     float py        = g_game_state.player.base.interp_pos.y;

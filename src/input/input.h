@@ -41,11 +41,11 @@ bool input_pop(input_queue_t* q, input_event_t* out);
 void input_push(input_queue_t* q, input_event_t e);
 
 /* True if the event is consumed and must leave the queue. */
-typedef bool (*input_consume_fn)(const input_event_t* e, void* ctx);
+typedef bool (*input_consume_fn)(const input_event_t* e);
 
 /* Drains `q`, drops every event `consume` accepts, and refills `q` with the
  * rest in their original order. */
-void input_queue_filter(input_queue_t* q, input_consume_fn consume, void* ctx);
+void input_queue_filter(input_queue_t* q, input_consume_fn consume);
 
 /* While blocked, the capture layer runs no gameplay pinch zoom — a
  * full-screen UI surface (the Instance Map) owns touch gestures instead.

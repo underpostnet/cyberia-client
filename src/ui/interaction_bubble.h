@@ -21,11 +21,6 @@
 #define IBUBBLE_MIN_DISPLAY_SEC  3.0
 #define IBUBBLE_MAX_LAYERS  MAX_OBJECT_LAYERS
 
-/* ── Interaction type flags (bitmask) ──────────────────────────────────── */
-
-#define INTERACT_DIALOGUE   (1 << 0)
-#define INTERACT_SOCIAL     (1 << 1)
-
 /* One bubble slot. `alive_layers` keeps the last known alive stack, so the
  * icon always shows the living appearance even for a dead or ghost entity;
  * `layers` tracks whatever the server currently sends. */
@@ -36,7 +31,7 @@ typedef struct {
     int layer_count;
     ObjectLayerState alive_layers[IBUBBLE_MAX_LAYERS];
     int alive_layer_count;
-    uint32_t interact_flags;
+    bool has_dialogue;          /* the active skin has a dialogue script */
     char dialogue_item_id[128];
     uint8_t status_icon;        /* presence lifecycle icon */
     uint8_t interaction_flags;  /* INTERACTION_FLAG_* capability bits */

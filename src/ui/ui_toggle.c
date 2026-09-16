@@ -22,9 +22,8 @@
 #define UI_TOGGLE_DRAG_RETURN_RATE 16.0f
 #define UI_TOGGLE_ICON_SCALE_RATE  20.0f
 
-/* Header row geometry — uniform across every collapsible list except the
- * chevron glyph size, which callers may override (UI_TOGGLE_HDR_CHEVRON is
- * the standard, declared in ui_toggle.h). */
+/* Header row geometry — uniform across every collapsible list. */
+#define UI_TOGGLE_HDR_CHEVRON  22.0f
 #define UI_TOGGLE_HDR_GAP      6.0f
 #define UI_TOGGLE_HDR_VPAD     6.0f
 
@@ -234,26 +233,20 @@ bool ui_toggle_handle_click(UIToggle* t, int mx, int my) {
 }
 
 float ui_toggle_header(UIToggle* t, float x, float y, float width,
-                       const char* label, int font, Color text_col,
-                       UIToggleHeaderSide side, float reserve_left, float reserve_right,
-                       float chevron_size, bool draw) {
-    const float chev = chevron_size;
-
-    float text_w = width - chev - UI_TOGGLE_HDR_GAP - reserve_left - reserve_right;
+                       const char* label, int font, Color text_col, bool draw) {
+    float text_w = width - UI_TOGGLE_HDR_CHEVRON - UI_TOGGLE_HDR_GAP;
     if (text_w < 8.0f) text_w = 8.0f;
 
     float text_h = (float)text_wrap(label, 0, 0, (int)text_w, font, text_col, false, false);
-    float content_h = text_h > chev ? text_h : chev;
+    float content_h = text_h > UI_TOGGLE_HDR_CHEVRON ? text_h : UI_TOGGLE_HDR_CHEVRON;
     float row_h = content_h + 2.0f * UI_TOGGLE_HDR_VPAD;
 
     if (draw) {
-        float chev_x = (UI_TOGGLE_HEADER_LEFT == side) ? x : (x + width - chev);
-        ui_toggle_set_anchor(t, (Rectangle){ chev_x, y + (row_h - chev) / 2.0f, chev, chev });
+        ui_toggle_set_anchor(t, (Rectangle){ x, y + (row_h - UI_TOGGLE_HDR_CHEVRON) / 2.0f,
+                                             UI_TOGGLE_HDR_CHEVRON, UI_TOGGLE_HDR_CHEVRON });
         ui_toggle_draw(t);
 
-        float text_x = (UI_TOGGLE_HEADER_LEFT == side)
-                     ? (x + chev + UI_TOGGLE_HDR_GAP + reserve_left)
-                     : (x + reserve_left);
+        float text_x = x + UI_TOGGLE_HDR_CHEVRON + UI_TOGGLE_HDR_GAP;
         float text_y = y + (row_h - text_h) / 2.0f;
         text_wrap(label, (int)text_x, (int)text_y, (int)text_w, font, text_col, false, true);
     }

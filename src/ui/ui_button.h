@@ -12,7 +12,7 @@
  * baseline; a color with alpha 0 means "use the default for that slot".
  *
  * Also provides ui_button_pixel_retro_draw — a pixel-art retro button chrome
- * with black outer border, flat fill, lighter top edge, darker bottom edge,
+ * with black outer border, plain fill, lighter top edge, darker bottom edge,
  * optional left icon, and outlined label. Used for retro-styled tap targets.
  */
 
@@ -81,9 +81,6 @@ typedef struct {
     bool        selected;   /* white inner outline (also drawn on hover)        */
     bool        enabled;    /* false → no hover response, caller mutes bg       */
     bool        wrap_label; /* true → left icon + wrapped label; else centered  */
-    bool        flat;       /* clean icon button: no black border, no bevel
-                             * edges, no icon drop-shadow — just fill + icon
-                             * (toggle arrows, toolbar)                         */
 } UIButtonPixelRetroStyle;
 
 void ui_button_pixel_retro_draw(Rectangle bounds, const UIButtonPixelRetroStyle* style, bool hovered);

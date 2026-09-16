@@ -78,7 +78,6 @@ static ModalInstanceMap s_m = {0};
 /* Quarter-turn rotation keeps the packed map-card grid flush. */
 static int       s_grid_rotation = 0;  /* settled target orientation */
 static int       s_rotation_from = 0;
-static int       s_rotation_to = 0;
 static int       s_rotation_step = 0;
 static float     s_rotation_age = IMAP_ROTATE_DURATION;
 static Rectangle s_close_btn, s_rotate_left_btn, s_rotate_right_btn;
@@ -91,7 +90,6 @@ void modal_instance_map_init(void) {
     s_m.selected_node = -1;
     s_grid_rotation = 0;
     s_rotation_from = 0;
-    s_rotation_to = 0;
     s_rotation_step = 0;
     s_rotation_age = IMAP_ROTATE_DURATION;
     s_close_btn = (Rectangle){ 0 };
@@ -118,7 +116,6 @@ void modal_instance_map_toggle(void) {
     s_m.selected_node = -1;
     s_m.pressed = s_m.dragging = s_m.pinching = false;
     s_rotation_from = s_grid_rotation;
-    s_rotation_to = s_grid_rotation;
     s_rotation_step = 0;
     s_rotation_age = IMAP_ROTATE_DURATION;
     s_close_btn = (Rectangle){ 0 };
@@ -253,7 +250,6 @@ static void begin_grid_rotation(int step) {
     s_rotation_from = s_grid_rotation;
     s_rotation_step = step;
     s_grid_rotation = (s_grid_rotation + step + 4) % 4;
-    s_rotation_to = s_grid_rotation;
     s_rotation_age = 0.0f;
 }
 
@@ -342,7 +338,7 @@ void modal_instance_map_update(float dt) {
         s_rotation_age += dt;
         if (s_rotation_age > IMAP_ROTATE_DURATION) {
             s_rotation_age = IMAP_ROTATE_DURATION;
-            s_rotation_from = s_rotation_to;
+            s_rotation_from = s_grid_rotation;
             s_rotation_step = 0;
         }
     }

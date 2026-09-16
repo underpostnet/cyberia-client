@@ -234,7 +234,6 @@ void entity_overhead_ui_draw(
     float world_x,
     float world_y,
     float world_w,
-    float world_h,
     float cell_size)
 {
     float entity_top_px = world_y * cell_size;

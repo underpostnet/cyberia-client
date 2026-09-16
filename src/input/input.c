@@ -27,13 +27,13 @@ bool input_pop(input_queue_t* q, input_event_t* out) {
     return true;
 }
 
-void input_queue_filter(input_queue_t* q, input_consume_fn consume, void* ctx) {
+void input_queue_filter(input_queue_t* q, input_consume_fn consume) {
     assert(q);
     assert(consume);
     input_queue_t keep = { 0 };
     input_event_t evt = { 0 };
     while (input_pop(q, &evt)) {
-        if (!consume(&evt, ctx)) { input_push(&keep, evt); }
+        if (!consume(&evt)) { input_push(&keep, evt); }
     }
     while (input_pop(&keep, &evt)) { input_push(q, evt); }
 }

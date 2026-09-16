@@ -30,11 +30,11 @@ typedef struct {
 
 } ModalMap;
 
-int modal_map_init(void);
+void modal_map_init(void);
 void modal_map_cleanup(void);
 
 void modal_map_update(float delta_time);
-void modal_map_draw(int screen_width, int screen_height);
+void modal_map_draw(void);
 
 /* Screen-space rect of the last drawn compact box. Zero-sized until the
  * first draw. Also the morph origin/target of the expanded container. */

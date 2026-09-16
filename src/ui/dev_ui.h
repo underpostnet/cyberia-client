@@ -30,14 +30,13 @@ typedef struct {
 extern DevUI g_dev_ui;
 
 /* Returns 0 on success, -1 on failure. */
-int dev_ui_init(void);
+void dev_ui_init(void);
 void dev_ui_cleanup(void);
 
 /* Recompute the throughput figures. Call once per frame. */
-void dev_ui_on_tick(float delta_time);
+void dev_ui_on_tick(void);
 
-/* `hud_occupied` is the height the HUD already takes. */
-void dev_ui_draw(int screen_width, int screen_height, int hud_occupied);
+void dev_ui_draw(int screen_width, int screen_height);
 
 /* Feed the running byte totals; the module derives the kbps values. */
 void dev_ui_update_network_stats(size_t download_bytes, size_t upload_bytes);

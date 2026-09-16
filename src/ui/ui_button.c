@@ -119,19 +119,13 @@ void ui_button_pixel_retro_draw(Rectangle r, const UIButtonPixelRetroStyle* styl
 
     Rectangle inner = { r.x + 2.0f, r.y + 2.0f, r.width - 4.0f, r.height - 4.0f };
 
-    if (style->flat) {
-        /* Clean icon button: no fill, no black border, no bevel edges.
-         * Only the icon is drawn, with an optional hover/selected outline. */
-    } else {
-        DrawRectangleRounded(inner, 0.18f, 6, fill);
-        DrawRectangle((int)(inner.x + 4.0f), (int)inner.y, (int)(inner.width - 8.0f), 2, highlight);
-        DrawRectangle((int)(inner.x + 4.0f), (int)(inner.y + inner.height - 2.0f),
-                      (int)(inner.width - 8.0f), 2, shadow);
-        DrawRectangleRoundedLinesEx(r, 0.18f, 6, 2.0f, BLACK);
-    }
+    DrawRectangleRounded(inner, 0.18f, 6, fill);
+    DrawRectangle((int)(inner.x + 4.0f), (int)inner.y, (int)(inner.width - 8.0f), 2, highlight);
+    DrawRectangle((int)(inner.x + 4.0f), (int)(inner.y + inner.height - 2.0f),
+                  (int)(inner.width - 8.0f), 2, shadow);
+    DrawRectangleRoundedLinesEx(r, 0.18f, 6, 2.0f, BLACK);
     if (style->selected || active_hover) {
-        Rectangle outline = style->flat ? r : inner;
-        DrawRectangleRoundedLinesEx(outline, 0.18f, 6, 1.0f, WHITE);
+        DrawRectangleRoundedLinesEx(inner, 0.18f, 6, 1.0f, WHITE);
     }
 
     bool has_icon  = style->icon_id && '\0' != style->icon_id[0];
@@ -142,8 +136,7 @@ void ui_button_pixel_retro_draw(Rectangle r, const UIButtonPixelRetroStyle* styl
         if (has_icon) {
             float cx = r.x + 8.0f + icon_sz * 0.5f;
             float cy = r.y + r.height * 0.5f;
-            if (!style->flat)
-                ui_icon_draw_ex(style->icon_id, cx + 1.0f, cy + 1.0f, icon_sz, 0.0f, BLACK);
+            ui_icon_draw_ex(style->icon_id, cx + 1.0f, cy + 1.0f, icon_sz, 0.0f, BLACK);
             ui_icon_draw_ex(style->icon_id, cx, cy, icon_sz, 0.0f, text_col);
         }
         if (has_label) {
@@ -176,8 +169,7 @@ void ui_button_pixel_retro_draw(Rectangle r, const UIButtonPixelRetroStyle* styl
     float cy = r.y + r.height * 0.5f;
 
     if (has_icon) {
-        if (!style->flat)
-            ui_icon_draw_ex(style->icon_id, gx + icon_sz * 0.5f + 1.0f, cy + 1.0f, icon_sz, 0.0f, BLACK);
+        ui_icon_draw_ex(style->icon_id, gx + icon_sz * 0.5f + 1.0f, cy + 1.0f, icon_sz, 0.0f, BLACK);
         ui_icon_draw_ex(style->icon_id, gx + icon_sz * 0.5f, cy, icon_sz, 0.0f, text_col);
         gx += icon_sz + gap;
     }
