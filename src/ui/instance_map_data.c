@@ -35,11 +35,6 @@ static int json_int(const cJSON* obj, const char* key, int fallback) {
     return cJSON_IsNumber(v) ? v->valueint : fallback;
 }
 
-static bool json_bool(const cJSON* obj, const char* key, bool fallback) {
-    const cJSON* v = cJSON_GetObjectItemCaseSensitive(obj, key);
-    return cJSON_IsBool(v) ? cJSON_IsTrue(v) : fallback;
-}
-
 int instance_map_data_find_node(const char* map_code) {
     if (!map_code) return -1;
     for (int i = 0; i < s_graph.node_count; ++i) {

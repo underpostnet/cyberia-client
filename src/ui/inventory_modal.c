@@ -141,7 +141,6 @@ static ModalAnchorLayout s_layout = { .height = -1.0f };
 
 /* ── Colours ──────────────────────────────────────────────────────────── */
 
-static const Color C_CARD_BORDER   = {  80,  80, 130, 220 };
 static const Color C_TITLE         = { 220, 220, 255, 255 };
 static const Color C_BODY          = { 180, 180, 200, 220 };
 static const Color C_BTN_ACTIVATE  = {  30, 120,  60, 240 };
@@ -607,11 +606,11 @@ void inventory_modal_draw(void) {
     Color card_bg = MODAL_PANEL_BG;
     card_bg.a = (unsigned char)((anchored ? IM_ANCHOR_PANEL_ALPHA : 150) * alpha);
     DrawRectangleRec(card, card_bg);
-    Color card_bc = C_CARD_BORDER;
+    Color card_bc = MODAL_PANEL_BORDER;
     card_bc.a = (unsigned char)(card_bc.a * alpha);
     DrawRectangleLinesEx(card, 1.0f, card_bc);
     DrawRectangle((int)card.x, (int)card.y, (int)card.width, (int)IM_HEADER_H,
-                  (Color){ C_CARD_BORDER.r, C_CARD_BORDER.g, C_CARD_BORDER.b, 40 });
+                  (Color){ MODAL_PANEL_BORDER.r, MODAL_PANEL_BORDER.g, MODAL_PANEL_BORDER.b, 40 });
 
     bool lore_available = inventory_lore_available(ols);
     InventoryModalLayout layout = inventory_modal_layout(card);

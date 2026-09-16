@@ -261,10 +261,6 @@ void quest_journal_toggle(void) {
     }
 }
 
-void quest_journal_close(void) {
-    s_visible = false;
-}
-
 bool quest_journal_is_visible(void) {
     return s_visible;
 }

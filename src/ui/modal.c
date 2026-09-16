@@ -36,16 +36,6 @@ void modal_draw_overlay(int screen_width, int screen_height, float age) {
     DrawRectangle(0, 0, screen_width, screen_height, c);
 }
 
-void modal_draw_panel_ex(Rectangle rect, float age, Color border, float border_width) {
-    float a = modal_pop_alpha(age);
-    Color bg = MODAL_PANEL_BG;
-    bg.a = (unsigned char)(bg.a * a);
-    DrawRectangleRec(rect, bg);
-    Color bc = border;
-    bc.a = (unsigned char)(bc.a * a);
-    DrawRectangleLinesEx(rect, border_width, bc);
-}
-
 void modal_draw_float_shadow(Rectangle rect, float age) {
     float a = modal_pop_alpha(age);
     for (int i = MODAL_SHADOW_LAYERS; i >= 1; i--) {

@@ -31,9 +31,6 @@ Rectangle modal_scale_rect(Rectangle rect, float scale);
 /* Dim the whole screen behind a centred modal (alpha eased by age). */
 void modal_draw_overlay(int screen_width, int screen_height, float age);
 
-/* Fill + border a panel rect with the standardized chrome (faded by age). */
-void modal_draw_panel_ex(Rectangle rect, float age, Color border, float border_width);
-
 /* Soft drop shadow under a panel that floats over the live world with no
  * dimmed backdrop behind it — without it the card has no edge against a busy
  * scene. Draw before the panel fill. */

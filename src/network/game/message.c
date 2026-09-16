@@ -579,7 +579,7 @@ static void json_unpack_init_data(const cJSON* payload) {
 
 
     /* Skill map lives in ui_state — pure presentation lookup. */
-    ui_state_clear_skills();
+    ui_state_reset();
     cJSON* skill_map_json = cJSON_GetObjectItem(payload, "skillMap");
 
     // Parse entity type defaults

@@ -13,7 +13,6 @@
 #include <stdio.h>
 
 static const Color C_SLOT_BG      = {  25,  25,  40, 200 };
-static const Color C_SLOT_BORDER  = {  70,  70, 100, 180 };
 static const Color C_ACTIVE_GLOW  = { 100, 200, 255, 240 };
 static const Color C_QTY_BG       = {   0,   0,   0, 190 };
 static const Color C_QTY_TEXT     = { 255, 230,  80, 255 };

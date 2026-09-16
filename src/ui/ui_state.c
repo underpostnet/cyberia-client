@@ -11,7 +11,6 @@ void ui_state_reset(void) {
     g_ui.skill_count = 0;
 }
 
-void ui_state_clear_skills(void)            { g_ui.skill_count = 0; }
 int  ui_state_skill_count(void)             { return g_ui.skill_count; }
 
 const UiSkillEntry* ui_state_skill_at(int idx) {

@@ -845,11 +845,6 @@ static void draw_node_overlay(int idx, float fade, double t) {
     draw_node_name(n, card, selected, fade);
 }
 
-/* Packed cards share grid edges, so declaration order is the stable painter order. */
-static void sorted_node_order(int* order, int n) {
-    for (int i = 0; i < n; ++i) order[i] = i;
-}
-
 static void draw_info_panel(float fade) {
     const ImapGraph* gr = instance_map_data_graph();
     if (s_m.selected_node < 0 || s_m.selected_node >= gr->node_count) return;
@@ -1054,14 +1049,12 @@ void modal_instance_map_draw(int screen_width, int screen_height) {
     const ImapGraph* gr = instance_map_data_graph();
     if (content > 0.0f) {
         if (IMAP_DATA_READY == instance_map_data_state()) {
-            int order[IMAP_MAX_NODES];
-            sorted_node_order(order, gr->node_count);
-
             /* Cards → edges → overlays: link lines land on the map surfaces
-             * and the POI icons plug into them from above. */
-            for (int i = 0; i < gr->node_count; ++i) draw_node_card(order[i], content, t);
+             * and the POI icons plug into them from above. Packed cards share
+             * grid edges, so declaration order is the stable painter order. */
+            for (int i = 0; i < gr->node_count; ++i) draw_node_card(i, content, t);
             for (int e = 0; e < gr->edge_count; ++e) draw_edge(&gr->edges[e], e, content, t);
-            for (int i = 0; i < gr->node_count; ++i) draw_node_overlay(order[i], content, t);
+            for (int i = 0; i < gr->node_count; ++i) draw_node_overlay(i, content, t);
 
             draw_info_panel(content);
         } else {

@@ -39,7 +39,6 @@ typedef struct {
 
     int   font_size;         /* 0 = UI_BUTTON_DEFAULT_FONT */
     int   icon_size;         /* 0 = derived from label / bounds */
-    float padding;           /* inner padding per side; 0 = UI_BUTTON_DEFAULT_PAD */
     float gap;               /* icon-to-text gap; 0 = UI_BUTTON_DEFAULT_GAP */
 
     /* Backgrounds per state. alpha 0 → built-in default for that state. */

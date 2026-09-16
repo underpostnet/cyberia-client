@@ -23,10 +23,6 @@ static int resolve_font(const UIButtonStyle* s) {
     return s->font_size > 0 ? s->font_size : UI_BUTTON_DEFAULT_FONT;
 }
 
-static float resolve_pad(const UIButtonStyle* s) {
-    return s->padding > 0.0f ? s->padding : UI_BUTTON_DEFAULT_PAD;
-}
-
 static float resolve_gap(const UIButtonStyle* s) {
     return s->gap > 0.0f ? s->gap : UI_BUTTON_DEFAULT_GAP;
 }

@@ -26,7 +26,6 @@ typedef struct {
 
 void ui_state_reset(void);
 
-void   ui_state_clear_skills(void);
 int    ui_state_skill_count(void);
 const UiSkillEntry* ui_state_skill_at(int idx);
 int    ui_state_push_skill(const UiSkillEntry* entry);

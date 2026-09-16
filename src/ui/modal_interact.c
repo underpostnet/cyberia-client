@@ -285,7 +285,6 @@ static void es_clear(void) {
 #define MI_BAR_BTN_MAXW   150
 #define MI_BAR_BTN_GAP    8
 #define MI_SLOT_SZ        56
-#define MI_SLOT_GAP       8
 #define MI_FONT_NAME      22
 #define MI_FONT_BTN       18
 #define MI_FONT_LABEL     14
@@ -2148,10 +2147,6 @@ static void draw_craft_tab(Rectangle content, int mx, int my) {
     ui_scroll_end(&s_craft_scroll);
 }
 
-static void cancel_craft(void) {
-    local_player_request_craft_cancel();
-}
-
 /* Assemble hands the synthesis to the server, flashes the card, and opens the
  * assembly notification: its progress bar charges over the recipe's duration
  * while the consumed ingredients drain from the inventory, and the outputs fly
@@ -2180,7 +2175,7 @@ static void request_craft(int slot, const ActionCraftRecipe* recipe) {
         .outputs = outputs,
         .output_count = recipe->output_count,
         .craft_seconds = (float)recipe->craft_time_ms / 1000.0f,
-        .on_cancel = cancel_craft,
+        .on_cancel = local_player_request_craft_cancel,
     };
     modal_notification_show_assemble(&assemble);
 

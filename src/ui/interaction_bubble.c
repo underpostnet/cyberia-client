@@ -513,7 +513,7 @@ void interaction_bubble_draw(void) {
          * fill with highlight/shadow edges, status border colour overlay,
          * white outline on hover. */
         Color border = status_border_color(slot, is_self);
-        Color slot_fill = hovered ? (Color){ 35, 45, 75, 230 } : C_SLOT_BG;
+        Color slot_fill = hovered ? C_SLOT_HOVER : C_SLOT_BG;
         Color slot_highlight = (Color){
             (unsigned char)(slot_fill.r + (255 - slot_fill.r) * 0.45f),
             (unsigned char)(slot_fill.g + (255 - slot_fill.g) * 0.45f),
