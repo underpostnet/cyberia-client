@@ -25,13 +25,11 @@
 void modal_interact_init(void);
 
 /* dialogue_item_id is the entity's active skin; has_dialogue is true when that
- * skin has a default dialogue. interaction_flags is the server's per-player
- * capability bitmask (INTERACTION_FLAG_*): the action bit gates the Action tab,
- * the quest bit gates the Quest tab. border tints the header to match the
- * entity's status indicator. */
+ * skin has a default dialogue. border tints the header to match the entity's
+ * status indicator. */
 void modal_interact_open(const char* entity_id, const char* display_name,
                          const char* dialogue_item_id, bool has_dialogue,
-                         uint8_t interaction_flags, Color border);
+                         Color border);
 
 void modal_interact_close(void);
 bool modal_interact_is_open(void);

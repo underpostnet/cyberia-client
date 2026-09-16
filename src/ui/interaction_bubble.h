@@ -36,7 +36,6 @@ typedef struct {
     int layer_count;
     ObjectLayerState alive_layers[IBUBBLE_MAX_LAYERS];
     int alive_layer_count;
-    int direction;
     uint32_t interact_flags;
     char dialogue_item_id[128];
     uint8_t status_icon;        /* presence lifecycle icon */

@@ -50,7 +50,6 @@ int dev_ui_init(void) {
     // Set default dimensions
     g_dev_ui.dev_ui_width = 450;
     g_dev_ui.dev_ui_height = 280;
-    g_dev_ui.background_alpha = 0.4f;
 
     // Set default colors
     g_dev_ui.background_color = (Color){0, 0, 0, (unsigned char)(255 * 0.4f)};
@@ -67,11 +66,6 @@ int dev_ui_init(void) {
     // Performance tracking
     g_dev_ui.last_fps = 60;
     g_dev_ui.last_fps_update = 0.0;
-
-    // Display toggles (all on by default)
-    g_dev_ui.show_network_stats = true;
-    g_dev_ui.show_player_stats = true;
-    g_dev_ui.show_game_stats = true;
 
     LOG_INFO("[DEV_UI] Development UI initialized\n");
     return 0;

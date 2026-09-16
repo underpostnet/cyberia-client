@@ -86,13 +86,6 @@ static void ingest_quest_doc(void* entry, const cJSON* doc) {
         }
     }
 
-    const cJSON* smc = cJSON_GetObjectItemCaseSensitive(doc, "sourceMapCode");
-    if (cJSON_IsString(smc)) copy_str(e->source_map_code, QUEST_CACHE_CODE_MAX, smc->valuestring);
-    const cJSON* scx = cJSON_GetObjectItemCaseSensitive(doc, "sourceCellX");
-    e->source_cell_x = cJSON_IsNumber(scx) ? scx->valueint : 0;
-    const cJSON* scy = cJSON_GetObjectItemCaseSensitive(doc, "sourceCellY");
-    e->source_cell_y = cJSON_IsNumber(scy) ? scy->valueint : 0;
-
     e->reward_count = 0;
     const cJSON* rewards = cJSON_GetObjectItemCaseSensitive(doc, "rewards");
     if (cJSON_IsArray(rewards)) {

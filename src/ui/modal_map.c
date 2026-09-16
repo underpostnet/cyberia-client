@@ -22,10 +22,6 @@ ModalMap g_modal_map = {0};
 
 int modal_map_init(void) {
     memset(&g_modal_map, 0, sizeof(ModalMap));
-    g_modal_map.show_connection = true;
-    g_modal_map.show_map        = true;
-    g_modal_map.show_position   = true;
-    g_modal_map.show_fps        = true;
     g_modal_map.cached_fps      = 60.0f;
     g_modal_map.last_fps_update = 0.0;
     return 0;

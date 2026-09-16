@@ -61,7 +61,6 @@ typedef struct {
     int  source_node;
     int  target_node;
     bool intra;                     /* same-map edge (intra-* mode)    */
-    char portal_mode[16];
     /* Endpoint cells on each node's map; -1 = random destination (the
      * rendered link anchors to the node centre with a vibration). */
     int  source_cell_x, source_cell_y;
@@ -75,7 +74,6 @@ typedef struct {
     uint8_t capabilities;
     bool action_active;
     bool quest_active;
-    bool quest_acceptable;
 } ImapPresencePoi;
 
 typedef struct {

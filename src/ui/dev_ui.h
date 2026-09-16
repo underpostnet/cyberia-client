@@ -17,7 +17,6 @@ typedef struct {
 
     int dev_ui_width;
     int dev_ui_height;
-    float background_alpha;
 
     Color background_color;
     Color text_color;
@@ -25,10 +24,6 @@ typedef struct {
 
     int last_fps;
     double last_fps_update;
-
-    bool show_network_stats;
-    bool show_player_stats;
-    bool show_game_stats;
 
 } DevUI;
 

@@ -168,7 +168,6 @@ static bool parse_static_doc(const cJSON* doc) {
             e->source_node   = src;
             e->target_node   = tgt;
             e->intra         = (src == tgt);
-            copy_str(e->portal_mode, sizeof(e->portal_mode), json_str(ed, "portalMode"));
             e->source_cell_x = json_int(ed, "sourceCellX", -1);
             e->source_cell_y = json_int(ed, "sourceCellY", -1);
             e->target_cell_x = json_int(ed, "targetCellX", -1);
@@ -214,7 +213,6 @@ static void clear_dynamic_capabilities(void) {
     for (int i = 0; i < s_graph.presence_poi_count; ++i) {
         s_graph.presence_pois[i].action_active = false;
         s_graph.presence_pois[i].quest_active = false;
-        s_graph.presence_pois[i].quest_acceptable = false;
     }
 }
 
@@ -230,8 +228,6 @@ static void apply_dynamic_capabilities(const cJSON* doc, const char* key, bool q
         if (NULL == poi) continue;
         if (quest && (poi->capabilities & IMAP_CAPABILITY_QUEST)) {
             poi->quest_active = true;
-            const char* state = json_str(p, "state");
-            poi->quest_acceptable = state && 0 == strcmp(state, "acceptable");
         } else if (!quest && (poi->capabilities & IMAP_CAPABILITY_ACTION)) {
             poi->action_active = true;
         }

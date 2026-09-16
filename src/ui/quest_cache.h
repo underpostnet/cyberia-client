@@ -51,9 +51,6 @@ typedef struct {
     int     reward_count;
     char    prerequisites[QUEST_CACHE_PREREQ_MAX][QUEST_CACHE_CODE_MAX];
     int     prerequisite_count;
-    char    source_map_code[QUEST_CACHE_CODE_MAX];
-    int     source_cell_x;
-    int     source_cell_y;
 } QuestMetadataEntry;
 
 /* Look up cached metadata by code. Returns NULL if not present. */

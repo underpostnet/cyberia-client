@@ -52,13 +52,6 @@ static void parse_response(DialogueDataSet* d, const unsigned char* data, int si
         if (cJSON_IsString(text) && text->valuestring)
             strncpy(line->text, text->valuestring, DIALOGUE_MAX_TEXT - 1);
 
-        cJSON* mood = cJSON_GetObjectItemCaseSensitive(item, "mood");
-        if (cJSON_IsString(mood) && mood->valuestring)
-            strncpy(line->mood, mood->valuestring, sizeof(line->mood) - 1);
-
-        cJSON* order = cJSON_GetObjectItemCaseSensitive(item, "order");
-        line->order = cJSON_IsNumber(order) ? order->valueint : count;
-
         count++;
     }
 

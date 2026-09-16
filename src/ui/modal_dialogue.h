@@ -16,8 +16,6 @@
 typedef struct {
     char speaker[DIALOGUE_MAX_SPEAKER];
     char text[DIALOGUE_MAX_TEXT];
-    char mood[32];
-    int  order;
 } DialogueLine;
 
 /* Fires after the modal closes and the "dialogue_end" message goes out. The

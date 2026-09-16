@@ -2,8 +2,7 @@
  * action_cache — client cache of CyberiaAction metadata fetched by code.
  *
  * The Go server sends only the bot's action CODE over AOI. The presentation
- * metadata — overhead label, greeting, the per-quest dialogue map that names
- * which quests the NPC handles, the vendor catalog and the assembler recipe
+ * metadata — overhead label, the vendor catalog and the assembler recipe
  * book — is fetched lazily from GET /api/cyberia-action/code/:code and cached
  * here. Immutable, so each code is fetched at most once per session.
  *
@@ -18,16 +17,10 @@
 
 #define ACTION_CACHE_CODE_MAX   64
 #define ACTION_CACHE_LABEL_MAX  64
-#define ACTION_CACHE_QUEST_MAX  8
 #define ACTION_CACHE_SHOP_MAX   16
 #define ACTION_CACHE_CRAFT_MAX  16
 #define ACTION_CACHE_CRAFT_ITEMS_MAX 6
 #define ACTION_CACHE_CAP  32
-
-typedef struct {
-    char quest_code[ACTION_CACHE_CODE_MAX];
-    char dialog_code[ACTION_CACHE_CODE_MAX];
-} ActionQuestDlg;
 
 typedef struct {
     char item_id[ACTION_CACHE_CODE_MAX];
@@ -53,12 +46,6 @@ typedef struct {
 typedef struct {
     MetaCacheHead head;
     char label[ACTION_CACHE_LABEL_MAX];
-    char dialog_code[ACTION_CACHE_CODE_MAX];
-    char source_map_code[ACTION_CACHE_CODE_MAX];
-    int  source_cell_x;
-    int  source_cell_y;
-    ActionQuestDlg quests[ACTION_CACHE_QUEST_MAX];
-    int  quest_count;
     ActionShopItem shop_items[ACTION_CACHE_SHOP_MAX];
     int  shop_count;
     ActionCraftRecipe craft_recipes[ACTION_CACHE_CRAFT_MAX];

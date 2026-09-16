@@ -17,12 +17,6 @@
  */
 
 typedef struct {
-    // Display options
-    bool show_connection;
-    bool show_map;
-    bool show_position;
-    bool show_fps;
-
     // Cached values for smooth updates
     float cached_fps;
     double last_fps_update;

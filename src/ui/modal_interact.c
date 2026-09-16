@@ -77,7 +77,6 @@ static bool  s_has_dialogue = false;
 /* Per-player interaction capability bitmask (INTERACTION_FLAG_*), from AOI.
  * The action bit marks a pending action-talk-quest; the quest bit enables the
  * Quest tab. */
-static uint8_t s_interaction_flags = 0;
 static Color s_border = { 80, 160, 220, 240 };
 
 /* Per-player pending quest-talks (from AOI): one entry per active quest whose
@@ -216,7 +215,6 @@ typedef struct {
     int   talk_count;
     int   talk_sel;
     bool  has_dialogue;
-    uint8_t interaction_flags;
     Color border;
     ObjectLayerState layers[IBUBBLE_MAX_LAYERS];
     int   layer_count;
@@ -238,7 +236,6 @@ static void es_push(void) {
     f->talk_count         = s_talk_count;
     f->talk_sel           = s_talk_sel;
     f->has_dialogue       = s_has_dialogue;
-    f->interaction_flags  = s_interaction_flags;
     f->border             = s_border;
     f->layer_count        = s_cached_layer_count;
     f->tab                = s_tab;
@@ -260,7 +257,6 @@ static void es_pop(void) {
     s_talk_count         = f->talk_count;
     s_talk_sel           = f->talk_sel;
     s_has_dialogue       = f->has_dialogue;
-    s_interaction_flags  = f->interaction_flags;
     s_border             = f->border;
     s_tab                = f->tab;
     s_cached_layer_count = f->layer_count;
@@ -398,7 +394,6 @@ static bool refresh_bot_snapshot(void) {
     char prev_dialogs[BOT_QUEST_CODES_MAX][64];
     memcpy(prev_dialogs, s_talk_dialog_codes, sizeof(prev_dialogs));
 
-    s_interaction_flags = bot->interaction_flags;
     strncpy(s_action_code, bot->action_code, sizeof(s_action_code) - 1);
     s_action_code[sizeof(s_action_code) - 1] = '\0';
     action_cache_fetch(s_action_code);
@@ -849,7 +844,7 @@ void modal_interact_init(void) {
 
 void modal_interact_open(const char* entity_id, const char* display_name,
                          const char* dialogue_item_id, bool has_dialogue,
-                         uint8_t interaction_flags, Color border) {
+                         Color border) {
     /* A different entity starts a fresh session → drop the prior snapshot.
      * Reopening the same entity (e.g. returning from item inspection) keeps
      * it, so the modal still renders even if the entity left the AOI. */
@@ -875,7 +870,6 @@ void modal_interact_open(const char* entity_id, const char* display_name,
     s_dlg_item[sizeof(s_dlg_item) - 1] = '\0';
 
     s_has_dialogue       = has_dialogue && s_dlg_item[0] != '\0';
-    s_interaction_flags  = interaction_flags;
     s_border             = border;
     s_age                = 0.0f;
     s_dialogue_opened    = false;
@@ -943,8 +937,8 @@ void modal_interact_open(const char* entity_id, const char* display_name,
      * and breaks quest-talk validation when the bot leaves the AOI. The dialogue
      * modal's handshake is authoritative. */
     s_dlg_context = false;
-    LOG_INFO("[MODAL_INTERACT] Open: entity=%s flags=0x%x layers=%d quests=%d\n",
-             s_entity_id, s_interaction_flags, s_cached_layer_count, s_quest_code_count);
+    LOG_INFO("[MODAL_INTERACT] Open: entity=%s layers=%d quests=%d\n",
+             s_entity_id, s_cached_layer_count, s_quest_code_count);
 }
 
 void modal_interact_close(void) {

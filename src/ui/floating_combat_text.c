@@ -91,7 +91,6 @@ typedef struct {
     float   pop_overshoot;           /* peak scale during pop-in (type + value)      */
     char    text[32];                /* formatted string: "+42 wood", "-1337", etc.  */
     Color   base_color;              /* colour before alpha is applied               */
-    FCTType type;                    /* FCT_TYPE_* — for draw-time differentiation   */
     bool    active;
 } FCTEntry;
 
@@ -162,7 +161,6 @@ void fct_spawn(float world_x, float world_y, uint32_t value, FCTType type) {
     slot->pop_overshoot = tune->overshoot + 0.25f * t_norm;
 
     slot->base_color = tune->color;
-    slot->type       = type;
 
     /* ── Velocity — random drift direction ────────────────────────────── */
     float drift = FCT_DRIFT_MIN + lcg_f01() * (tune->drift - FCT_DRIFT_MIN);

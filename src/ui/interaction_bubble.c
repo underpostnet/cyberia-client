@@ -197,10 +197,8 @@ static bool hit_rect(int mx, int my, Rectangle r) {
 }
 
 static void snapshot_layers(InteractionBubbleSlot* slot,
-                            const ObjectLayerState* layers, int count,
-                            int direction) {
+                            const ObjectLayerState* layers, int count) {
     slot->layer_count = 0;
-    slot->direction = direction;
     for (int i = 0; i < count && slot->layer_count < IBUBBLE_MAX_LAYERS; i++) {
         if (layers[i].active && layers[i].item_id[0] != '\0') {
             slot->layers[slot->layer_count] = layers[i];
@@ -314,8 +312,7 @@ static void scan_entity(const char* entity_id, const EntityState* base,
     slot->fallback_color = presentation_runtime_entity_fallback_color(etype);
 
     /* Always snapshot current layers (dead or alive) into layers[]. */
-    snapshot_layers(slot, OBJ_LAYERS(base), base->layer_count,
-                    (int)base->direction);
+    snapshot_layers(slot, OBJ_LAYERS(base), base->layer_count);
 
     /* Cache alive layers: only update when entity is alive.
      * When dead, alive_layers[] retains the last alive snapshot. */
@@ -682,8 +679,7 @@ static bool open_slot_at(int mx, int my) {
                                 slot->dialogue_item_id[0] != '\0';
             Color bc = status_border_color(slot, is_self);
             modal_interact_open(slot->entity_id, slot->display_name,
-                                slot->dialogue_item_id, has_dialogue,
-                                slot->interaction_flags, bc);
+                                slot->dialogue_item_id, has_dialogue, bc);
             return true;
         }
     }

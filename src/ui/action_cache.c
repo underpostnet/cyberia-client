@@ -56,35 +56,6 @@ static void ingest_doc(void* entry, const cJSON* doc) {
     const cJSON* label = cJSON_GetObjectItemCaseSensitive(doc, "label");
     if (cJSON_IsString(label)) copy_str(e->label, ACTION_CACHE_LABEL_MAX, label->valuestring);
 
-    const cJSON* dlg = cJSON_GetObjectItemCaseSensitive(doc, "dialogCode");
-    if (cJSON_IsString(dlg)) copy_str(e->dialog_code, ACTION_CACHE_CODE_MAX, dlg->valuestring);
-
-    const cJSON* smc = cJSON_GetObjectItemCaseSensitive(doc, "sourceMapCode");
-    if (cJSON_IsString(smc)) copy_str(e->source_map_code, ACTION_CACHE_CODE_MAX, smc->valuestring);
-    const cJSON* scx = cJSON_GetObjectItemCaseSensitive(doc, "sourceCellX");
-    e->source_cell_x = cJSON_IsNumber(scx) ? scx->valueint : 0;
-    const cJSON* scy = cJSON_GetObjectItemCaseSensitive(doc, "sourceCellY");
-    e->source_cell_y = cJSON_IsNumber(scy) ? scy->valueint : 0;
-
-    /* quests[] is the action's talk-step dialogue map: which dialogue to show for
-     * a quest's `talk` objective handled here. It does NOT define which quests are
-     * OFFERED — offers are located by cell via the cyberia-quest API. */
-    e->quest_count = 0;
-    const cJSON* qds = cJSON_GetObjectItemCaseSensitive(doc, "questDialogueCodes");
-    if (cJSON_IsArray(qds)) {
-        const cJSON* qd = NULL;
-        cJSON_ArrayForEach(qd, qds) {
-            if (e->quest_count >= ACTION_CACHE_QUEST_MAX) break;
-            const cJSON* qc = cJSON_GetObjectItemCaseSensitive(qd, "questCode");
-            const cJSON* dc = cJSON_GetObjectItemCaseSensitive(qd, "dialogCode");
-            if (!cJSON_IsString(qc)) continue;
-            ActionQuestDlg* slot = &e->quests[e->quest_count];
-            copy_str(slot->quest_code, ACTION_CACHE_CODE_MAX, qc->valuestring);
-            if (cJSON_IsString(dc)) copy_str(slot->dialog_code, ACTION_CACHE_CODE_MAX, dc->valuestring);
-            e->quest_count++;
-        }
-    }
-
     /* shopItems[] is the vendor catalog. A non-empty list is what makes the
      * entity a vendor — there is no action type flag. */
     e->shop_count = 0;

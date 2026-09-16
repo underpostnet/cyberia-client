@@ -53,7 +53,6 @@ static float scroll_move(UIScroll* s, float delta) {
 }
 
 static void scroll_show_bar(UIScroll* s) {
-    if (!s->scrollbar_enabled) return;
     s->bar_hold_s = UI_SCROLL_BAR_HOLD_S;
     s->bar_alpha = 1.0f;
 }
@@ -61,7 +60,6 @@ static void scroll_show_bar(UIScroll* s) {
 void ui_scroll_reset(UIScroll* s) {
     if (!s) return;
     *s = (UIScroll){ 0 };
-    s->scrollbar_enabled = true;
 }
 
 void ui_scroll_set_input_bounds(UIScroll* s, Rectangle bounds) {

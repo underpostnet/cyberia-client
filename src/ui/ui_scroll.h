@@ -52,7 +52,6 @@ typedef struct {
     float     last_pointer_y;
     bool      click_pending;  /* clean release — deferred activation           */
     Vector2   click_pos;
-    bool      scrollbar_enabled;
     float     bar_hold_s;     /* seconds of scrollbar visibility remaining     */
     float     bar_alpha;
 } UIScroll;
