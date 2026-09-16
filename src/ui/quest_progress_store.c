@@ -9,7 +9,7 @@ void quest_progress_store_reset(void) {
     s_count = 0;
 }
 
-QuestStatus quest_progress_store_parse_status(const char* status_str) {
+static QuestStatus quest_progress_store_parse_status(const char* status_str) {
     if (status_str) {
         if (0 == strcmp(status_str, "completed")) return QUEST_COMPLETED;
         if (0 == strcmp(status_str, "failed"))    return QUEST_FAILED;

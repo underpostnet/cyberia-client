@@ -15,7 +15,10 @@
 #include <stdio.h>
 #include <string.h>
 
-const char* direction_to_string(Direction dir) {
+/* Feed the running byte totals; the module derives the kbps values. */
+static void dev_ui_update_network_stats(size_t download_bytes, size_t upload_bytes);
+
+static const char* direction_to_string(Direction dir) {
     switch (dir) {
         case DIRECTION_UP: return "UP";
         case DIRECTION_UP_RIGHT: return "UP_RIGHT";
@@ -30,7 +33,7 @@ const char* direction_to_string(Direction dir) {
     }
 }
 
-const char* mode_to_string(ObjectLayerMode mode) {
+static const char* mode_to_string(ObjectLayerMode mode) {
     switch (mode) {
         case MODE_IDLE: return "IDLE";
         case MODE_WALKING: return "WALKING";
@@ -39,8 +42,26 @@ const char* mode_to_string(ObjectLayerMode mode) {
     }
 }
 
-// Global dev UI instance
-DevUI g_dev_ui = {0};
+/* Module state. */
+typedef struct {
+    float download_kbps;
+    float upload_kbps;
+    double last_network_update;
+    size_t last_download_bytes;
+    size_t last_upload_bytes;
+
+    int dev_ui_width;
+    int dev_ui_height;
+
+    Color background_color;
+    Color text_color;
+    Color debug_text_color;
+
+    int last_fps;
+    double last_fps_update;
+} DevUI;
+
+static DevUI g_dev_ui = {0};
 
 void dev_ui_init(void) {
     LOG_INFO("[DEV_UI] Initializing development UI...\n");
@@ -91,7 +112,7 @@ void dev_ui_on_tick(void) {
     }
 }
 
-void dev_ui_update_network_stats(size_t download_bytes, size_t upload_bytes) {
+static void dev_ui_update_network_stats(size_t download_bytes, size_t upload_bytes) {
     double current_time = GetTime();
     double time_delta = current_time - g_dev_ui.last_network_update;
 
@@ -123,7 +144,7 @@ void dev_ui_update_network_stats(size_t download_bytes, size_t upload_bytes) {
     g_dev_ui.last_network_update = current_time;
 }
 
-int dev_ui_get_effective_stats_sum(const char* player_id) {
+static int dev_ui_get_effective_stats_sum(const char* player_id) {
     assert(player_id);
 
     // The snapshot carries the effective stat sum.
@@ -134,7 +155,7 @@ int dev_ui_get_effective_stats_sum(const char* player_id) {
     return 0;
 }
 
-int dev_ui_get_active_item_count(const char* player_id) {
+static int dev_ui_get_active_item_count(const char* player_id) {
     assert(player_id);
 
     int active_count = 0;

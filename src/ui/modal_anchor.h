@@ -55,25 +55,11 @@ typedef struct {
     bool    captured;
 } ModalAnchor;
 
-/* Resolve the corner from `entity_id`'s current screen position: a `size` card
- * centred on the entity and sitting `gap` above its top edge, fitted into
- * `safe`. Falls back to the centre of `safe` when the entity cannot be
- * projected. Call each frame while the modal opens, then stop — the last call
- * is the placement the card keeps. */
-void modal_anchor_capture(ModalAnchor* anchor, const char* entity_id,
-                          Vector2 size, float gap, Rectangle safe);
-
 /* The card rect for a captured corner at the current `size`. The corner stays
  * put and the height extends downward from it; the result is re-fitted into
  * `safe` every frame, so neither a window resize nor a growing panel can push
  * it off screen. */
 Rectangle modal_anchor_rect(const ModalAnchor* anchor, Vector2 size, Rectangle safe);
-
-/* Ease an anchored card's height toward the height its content wants. A
- * negative `current` snaps (the first measurement of a session); otherwise the
- * height chases exponentially, so a tab switch or a late catalog fetch resizes
- * the card instead of jumping it. */
-float modal_anchor_ease_height(float current, float target, float dt);
 
 /* Everything a panel modal keeps about its anchored card between frames. */
 typedef struct {

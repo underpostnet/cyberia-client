@@ -47,8 +47,6 @@ bool quest_progress_store_upsert(const char* code, const char* title, const char
                         const char* status_str, const char* active_step,
                         const char* objectives);
 
-QuestStatus quest_progress_store_parse_status(const char* status_str);
-
 /* Number of entries currently in a given section. */
 int quest_progress_store_count(QuestStatus status);
 

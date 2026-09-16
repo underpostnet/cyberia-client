@@ -16,20 +16,6 @@
  * Toggling back retracts the container to the compact readout.
  */
 
-typedef struct {
-    // Cached values for smooth updates
-    float cached_fps;
-    double last_fps_update;
-
-    float age;         // seconds since init, feeds modal_pop_alpha()
-    Rectangle bounds;  // last drawn compact box rect, screen pixels
-
-    // Container expansion: 0 = compact readout, 1 = full-screen container.
-    bool  expanded;
-    float expand_t;    // raw linear parameter, eased via accessor
-
-} ModalMap;
-
 void modal_map_init(void);
 void modal_map_cleanup(void);
 

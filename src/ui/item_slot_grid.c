@@ -99,7 +99,7 @@ Rectangle item_slot_grid_cell_rect(const ItemSlotGrid* g, int index) {
                         g->cell_size, g->cell_size };
 }
 
-int item_slot_grid_index_at(const ItemSlotGrid* g, int mx, int my) {
+static int item_slot_grid_index_at(const ItemSlotGrid* g, int mx, int my) {
     if (!g) return -1;
     /* A wrapped grid overflows the panel that scrolls it, so cells exist below
      * the viewport — and under the inventory bar. Only what the player can see

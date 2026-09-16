@@ -83,7 +83,7 @@ static Rectangle place_center(Vector2 size, Rectangle safe) {
     };
 }
 
-void modal_anchor_capture(ModalAnchor* anchor, const char* entity_id,
+static void modal_anchor_capture(ModalAnchor* anchor, const char* entity_id,
                           Vector2 size, float gap, Rectangle safe) {
     if (NULL == anchor) return;
 
@@ -108,7 +108,7 @@ Rectangle modal_anchor_rect(const ModalAnchor* anchor, Vector2 size, Rectangle s
 /* Exponential rate the card height chases its content target at. */
 #define MODAL_ANCHOR_RESIZE_LAMBDA 16.0f
 
-float modal_anchor_ease_height(float current, float target, float dt) {
+static float modal_anchor_ease_height(float current, float target, float dt) {
     if (current < 0.0f) return target;
     return current + (target - current) * (1.0f - expf(-MODAL_ANCHOR_RESIZE_LAMBDA * dt));
 }

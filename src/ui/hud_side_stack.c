@@ -11,7 +11,7 @@ static float column_x(void) {
     return (float)GetScreenWidth() - HUD_SIDE_STACK_W;
 }
 
-float hud_side_stack_available(void) {
+static float hud_side_stack_available(void) {
     float bottom = (float)GetScreenHeight() - inventory_bar_visible_height() - HUD_SIDE_STACK_MARGIN;
     float avail = bottom - toolbar_height();
     return 0.0f < avail ? avail : 0.0f;

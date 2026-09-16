@@ -20,11 +20,8 @@
 /* ── Layout constants (screen pixels) ────────────────────────────────── */
 
 #define INV_BAR_HEIGHT      72
-#define INV_SLOT_SIZE       60      /* square */
-#define INV_SLOT_GAP        6
-#define INV_SLOT_PADDING    4       /* around the sprite, inside the slot */
-#define INV_BAR_ALPHA       210     /* backing rectangle, 0-255 */
-#define INV_QTY_FONT_SIZE   10
+
+/* The slot metrics live in inventory_bar.c — only the bar itself lays them out. */
 
 /* ── Public API ───────────────────────────────────────────────────────── */
 

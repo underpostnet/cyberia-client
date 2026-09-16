@@ -94,6 +94,8 @@ typedef struct {
     bool    active;
 } FCTEntry;
 
+#define FCT_MAX_ENTRIES 64
+
 static FCTEntry s_pool[FCT_MAX_ENTRIES];
 static bool     s_init = false;
 

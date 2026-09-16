@@ -81,7 +81,7 @@ bool text_font_settled(void) {
     return !s_fetching && (NULL == family || '\0' == family[0] || 0 == strcmp(family, s_family));
 }
 
-Font text_active_font(void) {
+static Font text_active_font(void) {
     return s_loaded ? s_font : GetFontDefault();
 }
 

@@ -14,9 +14,6 @@
  * of the column before the journal is squeezed. */
 #define HUD_SIDE_STACK_JOURNAL_RESERVE 200.0f
 
-/* Vertical room of the whole column this frame. */
-float hud_side_stack_available(void);
-
 /* The minimap slot: its full square when alone, shorter when the journal is
  * open and the column is short. Zero-height when the minimap is hidden. */
 Rectangle hud_side_stack_map_slot(void);

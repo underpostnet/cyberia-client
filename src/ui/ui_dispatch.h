@@ -3,18 +3,6 @@
 
 #include <stdbool.h>
 #include "input/input.h"
-#include "domain/presentation_runtime.h"
-#include "domain/camera.h"
-#include "audio/audio.h"
-#include "audio/audio_events.h"
-#include "interaction_bubble.h"
-#include "inventory_bar.h"
-#include "inventory_modal.h"
-#include "modal_dialogue.h"
-#include "modal_instance_map.h"
-#include "modal_interact.h"
-#include "quest_journal.h"
-
 
 /* UI tap dispatcher.
  *
@@ -31,96 +19,8 @@
 bool ui_dispatch_tap(int screen_x, int screen_y);
 bool ui_dispatch_covers_point(int screen_x, int screen_y);
 
-static bool ui_dispatch_escape(void) {
-    if (modal_instance_map_is_open()) {
-        modal_instance_map_close();
-        return true;
-    }
-    if (inventory_modal_is_open()) {
-        inventory_modal_close();
-        return true;
-    }
-    if (modal_interact_is_open()) {
-        modal_interact_close();
-        return true;
-    }
-    if (modal_dialogue_is_open()) {
-        modal_dialogue_close();
-        return true;
-    }
-    return false;
-}
-
-static bool ui_consume_event(const input_event_t* e) {
-    bool consumed = false;
-    /* A synthetic tap has no pointer on its target pixel, so HUD chrome
-     * must not absorb it. Modals still block it: they freeze the local
-     * player, and main drops taps while frozen. */
-    if(!consumed && INPUT_TAP == e->type && !e->synthetic) {
-        int mx = (int)e->screen_position.x;
-        int my = (int)e->screen_position.y;
-        /* One funnel for every UI surface — toolbar, modals, bubbles, inventory — so the click
-         * cue follows what the interface actually accepted, not every tap on the world. */
-        if (!consumed && ui_dispatch_tap(mx, my)) { consumed = true; audio_event(AUDIO_EVENT_UI_CLICK); }
-        if (!consumed && ui_dispatch_covers_point(mx, my)) { consumed = true; }
-    }
-    if(!consumed && INPUT_KEY_DEBUG == e->type) {
-        presentation_runtime_toggle_dev_ui();
-        consumed = true;
-    }
-    if(!consumed && INPUT_KEY_ESCAPE == e->type) {
-        consumed = ui_dispatch_escape();
-    }
-
-    if(!consumed && INPUT_ZOOM == e->type) {
-        if (inventory_modal_handle_wheel(e->wheel_delta)) { consumed = true; }
-    }
-    if(!consumed && INPUT_ZOOM == e->type) {
-        if (modal_instance_map_handle_wheel(e->wheel_delta)) { consumed = true; }
-    }
-    if(!consumed && INPUT_ZOOM == e->type) {
-        if (modal_interact_handle_wheel(e->wheel_delta)) { consumed = true; }
-    }
-    if(!consumed && INPUT_ZOOM == e->type) {
-        if (quest_journal_handle_wheel(e->wheel_delta)) { consumed = true; }
-    }
-    if(!consumed && INPUT_ZOOM == e->type) {
-        if (!modal_interact_is_open() &&
-            interaction_bubble_handle_wheel(e->wheel_delta)) { consumed = true; }
-    }
-    if(!consumed && INPUT_ZOOM == e->type) {
-        if(e->zoom_in) { camera_zoom_by(1.1); } else { camera_zoom_by(0.9); }
-        consumed = true;
-    }
-
-    return consumed;
-}
-
-static void ui_on_tick(input_queue_t* input_queue, double dt) {
-    /* Inventory-bar slots activate on a clean release, so a horizontal drag
-     * scrolls the strip instead of opening a modal. A standalone dialogue keeps
-     * the slots read-only. */
-    int inv_tap = -1;
-    if (inventory_bar_take_tap(&inv_tap) && 0 <= inv_tap) {
-        /* Modal already open → switch it straight to the tapped slot (closing
-         * any opener chain). Interact open → stack the item on top. An
-         * inventory-lore dialogue (opened from the inventory modal) → close
-         * the dialogue chain and open the new slot. Otherwise open a fresh
-         * modal, unless a standalone entity dialogue keeps slots read-only. */
-        if (inventory_modal_is_open())       inventory_modal_switch_slot(inv_tap);
-        else if (modal_interact_is_open())   modal_interact_stack_player_item(inv_tap);
-        else if (modal_dialogue_is_item_lore()) {
-            /* Open the new modal first so its "inventory" freeze bridges over
-             * the dialogue's before the dialogue's thaw fires; drop the
-             * dialogue's reopen callback so the old chain does not return. */
-            modal_dialogue_set_on_close(NULL);
-            inventory_modal_open(inv_tap);
-            modal_dialogue_close();
-        }
-        else if (!modal_dialogue_is_open())  inventory_modal_open(inv_tap);
-    }
-
-    input_queue_filter(input_queue, ui_consume_event);
-}
+/* Per-frame UI step: drains the inventory-bar tap, then filters `input_queue`
+ * so every event the UI consumes leaves the queue before the world sees it. */
+void ui_on_tick(input_queue_t* input_queue, double dt);
 
 #endif /* CYBERIA_UI_DISPATCH_H */

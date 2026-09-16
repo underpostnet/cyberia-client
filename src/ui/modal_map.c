@@ -15,8 +15,21 @@
 /* Container expand/retract transition length, seconds. */
 #define MODAL_MAP_EXPAND_DURATION 0.28f
 
-/* Global instance */
-ModalMap g_modal_map = {0};
+/* Module state. */
+typedef struct {
+    // Cached values for smooth updates
+    float cached_fps;
+    double last_fps_update;
+
+    float age;         // seconds since init, feeds modal_pop_alpha()
+    Rectangle bounds;  // last drawn compact box rect, screen pixels
+
+    // Container expansion: 0 = compact readout, 1 = full-screen container.
+    bool  expanded;
+    float expand_t;    // raw linear parameter, eased via accessor
+} ModalMap;
+
+static ModalMap g_modal_map = {0};
 
 /* ── Initialisation ───────────────────────────────────────────────────── */
 

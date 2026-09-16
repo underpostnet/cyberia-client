@@ -43,6 +43,35 @@
 #include <stdio.h>
 #include <string.h>
 
+/* ── Layout constants ─────────────────────────────────────────────────── */
+
+#define IBUBBLE_ICON_SIZE   56
+#define IBUBBLE_GAP         6
+#define IBUBBLE_MARGIN_X    8
+#define IBUBBLE_MARGIN_Y    8
+#define IBUBBLE_MAX_SLOTS   12
+#define IBUBBLE_MIN_DISPLAY_SEC  3.0
+
+/* One bubble slot. `alive_layers` keeps the last known alive stack, so the
+ * icon always shows the living appearance even for a dead or ghost entity;
+ * `layers` tracks whatever the server currently sends. */
+typedef struct {
+    char entity_id[MAX_ID_LENGTH];
+    char display_name[MAX_ID_LENGTH];
+    ObjectLayerState layers[IBUBBLE_MAX_LAYERS];
+    int layer_count;
+    ObjectLayerState alive_layers[IBUBBLE_MAX_LAYERS];
+    int alive_layer_count;
+    bool has_dialogue;          /* the active skin has a dialogue script */
+    char dialogue_item_id[128];
+    uint8_t status_icon;        /* presence lifecycle icon */
+    uint8_t interaction_flags;  /* INTERACTION_FLAG_* capability bits */
+    bool is_player;
+    bool active;
+    double appeared_at;
+    Color fallback_color; /* solid colour when no OLs — entity DB colour or palette default */
+} InteractionBubbleSlot;
+
 /* ── Module state ─────────────────────────────────────────────────────── */
 
 static InteractionBubbleSlot s_slots[IBUBBLE_MAX_SLOTS];

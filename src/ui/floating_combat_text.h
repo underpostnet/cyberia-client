@@ -26,8 +26,6 @@ typedef enum {
     FCT_TYPE_COUNT
 } FCTType;
 
-#define FCT_MAX_ENTRIES 64
-
 /* Call before any other fct_* function. Idempotent. */
 void fct_init(void);
 

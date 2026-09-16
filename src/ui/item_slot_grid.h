@@ -141,9 +141,6 @@ bool item_slot_grid_is_dragging(const ItemSlotGrid* g);
 /* Cell rect for an index, in the coordinates of the last layout. */
 Rectangle item_slot_grid_cell_rect(const ItemSlotGrid* g, int index);
 
-/* Index of the visible cell under a screen point, or -1. */
-int item_slot_grid_index_at(const ItemSlotGrid* g, int mx, int my);
-
 /* Slide an occupant into `index` from an arbitrary screen point — where a
  * deposit was released, say. Call after applying the change. */
 void item_slot_grid_animate_from_point(ItemSlotGrid* g, int index, Vector2 origin);
