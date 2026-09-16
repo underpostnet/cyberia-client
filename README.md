@@ -343,10 +343,10 @@ fallback, no config file and no runtime override.
 `wasm-driver.py` appends any other flag to the client argv. `fetch_init()` reads
 two stream diagnostics:
 
-| Flag | Effect |
-|---|---|
+| Flag                                  | Effect                                                                               |
+| ------------------------------------- | ------------------------------------------------------------------------------------ |
 | `--stream-disable=<mode>[,<mode>...]` | Turns off `audio`, `audio-network`, `audio-runtime`, `atlas` or `dynamic` streaming. |
-| `--stream-profile` | Records stream events in `Module.streamTrace` (30,000-entry ring, read in DevTools). |
+| `--stream-profile`                    | Records stream events in `Module.streamTrace` (30,000-entry ring, read in DevTools). |
 
 ### Constants (`src/config.h`)
 
