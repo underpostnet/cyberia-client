@@ -17,11 +17,6 @@ static const Color C_ACTIVE_GLOW  = { 100, 200, 255, 240 };
 static const Color C_QTY_BG       = {   0,   0,   0, 190 };
 static const Color C_QTY_TEXT     = { 255, 230,  80, 255 };
 
-bool item_slot_hit(Rectangle r, int mx, int my) {
-    return ((float)mx >= r.x && (float)mx < r.x + r.width &&
-            (float)my >= r.y && (float)my < r.y + r.height);
-}
-
 void item_slot_draw(Rectangle r, const ObjectLayerState* ols, ObjectLayersManager* mgr) {
     item_slot_draw_ex(r, ols, mgr, WHITE, 0.0f, false);
 }

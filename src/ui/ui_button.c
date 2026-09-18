@@ -48,8 +48,7 @@ UIButtonState ui_button_resolve_state(bool enabled, bool selected, bool hovered)
 }
 
 bool ui_button_hit(Rectangle b, int mx, int my) {
-    return ((float)mx >= b.x && (float)mx < b.x + b.width &&
-            (float)my >= b.y && (float)my < b.y + b.height);
+    return CheckCollisionPointRec((Vector2){ (float)mx, (float)my }, b);
 }
 
 static Color state_bg(const UIButtonStyle* s, UIButtonState st) {

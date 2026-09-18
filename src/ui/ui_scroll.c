@@ -19,14 +19,9 @@ static float scroll_max_offset(const UIScroll* s) {
     return max_offset > 0.0f ? max_offset : 0.0f;
 }
 
-static bool scroll_contains(const Rectangle view, Vector2 point) {
-    return point.x >= view.x && point.x < view.x + view.width &&
-           point.y >= view.y && point.y < view.y + view.height;
-}
-
 static bool scroll_input_contains(const UIScroll* s, Vector2 point) {
     Rectangle bounds = s->has_input_bounds ? s->input_bounds : s->view;
-    return scroll_contains(bounds, point);
+    return CheckCollisionPointRec(point, bounds);
 }
 
 static Vector2 scroll_pointer_position(void) {

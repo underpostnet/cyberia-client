@@ -197,11 +197,6 @@ static int dlg_sprite_size(float card_w) {
     return (int)(card_w * frac);
 }
 
-static bool hit_rect(int mx, int my, Rectangle r) {
-    return ((float)mx >= r.x && (float)mx < r.x + r.width &&
-            (float)my >= r.y && (float)my < r.y + r.height);
-}
-
 /* Quest-talk switcher button — gold pixel-retro (ui_button_pixel_retro):
  * `icon_id` on the left (quest for a mission, close for the "Cancel Dialog"
  * state), wrapped label filling the rest. */
@@ -217,7 +212,7 @@ static void draw_quest_talk_btn(Rectangle r, bool selected, const char* icon_id,
         .icon_id = icon_id, .label = label, .font_size = font,
         .selected = selected, .enabled = true, .wrap_label = true,
     };
-    ui_button_pixel_retro_draw(r, &st, hit_rect(GetMouseX(), GetMouseY(), r));
+    ui_button_pixel_retro_draw(r, &st, ui_button_hit(r, GetMouseX(), GetMouseY()));
 }
 
 /* Draw the left-column sprite: a single item (inventory lore) or the
@@ -595,7 +590,7 @@ bool modal_dialogue_handle_click(int mx, int my) {
     /* Close button: the mobile reader collapses to the hidden state; a
      * desktop paired dialogue collapses so the interact modal reclaims its
      * space (the Dialog button restores it); anything else dismisses. */
-    if (hit_rect(mx, my, s_fs_close_rect)) {
+    if (ui_button_hit(s_fs_close_rect, mx, my)) {
         if (viewport_is_mobile() && s_fullscreen) {
             s_fullscreen = false;
             s_age = 0.0f;
@@ -611,13 +606,13 @@ bool modal_dialogue_handle_click(int mx, int my) {
     /* Quest-talk switcher: select a quest-talk, or (when one is selected) the
      * lone "Cancel Dialog" button returns to the greeting. */
     for (int i = 0; i < s_qt_btn_count; i++) {
-        if (!hit_rect(mx, my, s_qt_btn_rect[i])) continue;
+        if (!ui_button_hit(s_qt_btn_rect[i], mx, my)) continue;
         int qt = s_qt_btn_index[i];
         modal_interact_set_quest_talk(qt == modal_interact_quest_talk_selected() ? -1 : qt);
         return true;
     }
 
-    bool inside = hit_rect(mx, my, card);
+    bool inside = ui_button_hit(card, mx, my);
 
     if (!inside) {
         /* The fullscreen reader owns the whole screen — swallow. */
@@ -631,7 +626,7 @@ bool modal_dialogue_handle_click(int mx, int my) {
          * on_close callback so the inventory modal is not reopened. */
         if (interaction_bubble_point_covered(mx, my)) {
             Rectangle dlg_card = panel_rect(GetScreenWidth(), GetScreenHeight());
-            if (hit_rect(mx, my, dlg_card)) return true;
+            if (ui_button_hit(dlg_card, mx, my)) return true;
             /* Bubble click outside dialogue card: clear on_close so the
              * inventory modal is not reopened, then dismiss the dialogue
              * and let the tap fall through to the bubble handler. */

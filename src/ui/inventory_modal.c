@@ -344,12 +344,6 @@ static void send_freeze(bool start) {
     local_player_request_freeze(start, "inventory");
 }
 
-/* hit_rect returns true if (mx,my) is inside r. */
-static bool hit_rect(int mx, int my, Rectangle r) {
-    return ((float)mx >= r.x && (float)mx < r.x + r.width &&
-            (float)my >= r.y && (float)my < r.y + r.height);
-}
-
 /* draw_small_btn draws direction/mode buttons (icon, label, or both) using
  * pixel-retro style. */
 static void draw_small_btn(Rectangle r, const char* label, const char* icon_id,
@@ -365,7 +359,7 @@ static void draw_small_btn(Rectangle r, const char* label, const char* icon_id,
         .selected = selected,
         .enabled = enabled,
     };
-    ui_button_pixel_retro_draw(r, &st, enabled && hit_rect(mx, my, r));
+    ui_button_pixel_retro_draw(r, &st, enabled && ui_button_hit(r, mx, my));
 }
 
 /* dir_has_frames checks if the atlas has any frames for dir+mode combo. */
@@ -513,14 +507,14 @@ bool inventory_modal_is_open(void) { return s_open; }
 static void inventory_modal_handle_content_click(int mx, int my) {
     const char* dirs[4] = { "up", "down", "left", "right" };
     for (int i = 0; i < 4; i++) {
-        if (s_dir_btn_enabled[i] && hit_rect(mx, my, s_dir_btn_rects[i])) {
+        if (s_dir_btn_enabled[i] && ui_button_hit(s_dir_btn_rects[i], mx, my)) {
             strncpy(s_dir, dirs[i], sizeof(s_dir) - 1);
             rebuild_dir_str();
             return;
         }
     }
 
-    if (s_dir_btn_enabled[4] && hit_rect(mx, my, s_dir_btn_rects[4])) {
+    if (s_dir_btn_enabled[4] && ui_button_hit(s_dir_btn_rects[4], mx, my)) {
         if (0 == strcmp(s_mode, "idle"))
             strncpy(s_mode, "walking", sizeof(s_mode) - 1);
         else
@@ -530,11 +524,11 @@ static void inventory_modal_handle_content_click(int mx, int my) {
     }
 
     if (s_skill_arrows_visible && s_skill_total > 1) {
-        if (s_skill_page > 0 && hit_rect(mx, my, s_skill_prev_rect)) {
+        if (s_skill_page > 0 && ui_button_hit(s_skill_prev_rect, mx, my)) {
             s_skill_page--;
             return;
         }
-        if (s_skill_page < s_skill_total - 1 && hit_rect(mx, my, s_skill_next_rect)) {
+        if (s_skill_page < s_skill_total - 1 && ui_button_hit(s_skill_next_rect, mx, my)) {
             s_skill_page++;
         }
     }
@@ -649,7 +643,7 @@ void inventory_modal_draw(void) {
         int mx = GetMouseX(), my = GetMouseY();
         UIButtonStyle close_btn = { .icon_id = "close-yellow", .no_fill = true };
         ui_button_draw(close_r, &close_btn,
-                       ui_button_resolve_state(true, false, hit_rect(mx, my, close_r)));
+                       ui_button_resolve_state(true, false, ui_button_hit(close_r, mx, my)));
     }
 
     ui_scroll_begin(&s_content_scroll);
@@ -929,10 +923,10 @@ void inventory_modal_draw(void) {
                     bool can_next = s_skill_page < match_count - 1;
                     arrow.text = "<";
                     ui_button_draw(s_skill_prev_rect, &arrow,
-                        ui_button_resolve_state(can_prev, false, hit_rect(mx, my, s_skill_prev_rect)));
+                        ui_button_resolve_state(can_prev, false, ui_button_hit(s_skill_prev_rect, mx, my)));
                     arrow.text = ">";
                     ui_button_draw(s_skill_next_rect, &arrow,
-                        ui_button_resolve_state(can_next, false, hit_rect(mx, my, s_skill_next_rect)));
+                        ui_button_resolve_state(can_next, false, ui_button_hit(s_skill_next_rect, mx, my)));
                 }
 
                 y_cursor += stat_font + 6;
@@ -1030,7 +1024,7 @@ void inventory_modal_draw(void) {
         UIButtonPixelRetroStyle lore_btn = { .label = "Dialog", .icon_id = "chat",
                                              .font_size = body_font, .bg = C_LORE_BTN,
                                              .text_color = C_BTN_TEXT, .enabled = true };
-        ui_button_pixel_retro_draw(s_lore_btn_rect, &lore_btn, hit_rect(mx, my, s_lore_btn_rect));
+        ui_button_pixel_retro_draw(s_lore_btn_rect, &lore_btn, ui_button_hit(s_lore_btn_rect, mx, my));
     }
 
     /* 12. Activate / Deactivate button — only for the player's own items. */
@@ -1067,7 +1061,7 @@ void inventory_modal_draw(void) {
         UIButtonPixelRetroStyle act_btn = { .label = btn_label, .icon_id = btn_icon,
                                             .font_size = body_font + 2, .bg = btn_color,
                                             .text_color = txt_color, .enabled = btn_enabled };
-        ui_button_pixel_retro_draw(btn_r, &act_btn, hit_rect(mx, my, btn_r));
+        ui_button_pixel_retro_draw(btn_r, &act_btn, ui_button_hit(btn_r, mx, my));
     }
 }
 
@@ -1080,7 +1074,7 @@ bool inventory_modal_handle_click(int mx, int my) {
 
     if (s_age < 0.15f) return true; /* block during pop-in */
 
-    bool inside = hit_rect(mx, my, card);
+    bool inside = ui_button_hit(card, mx, my);
     if (!inside) { inventory_modal_close(); return true; }
 
     /* Close button — right-aligned in the header strip */
@@ -1088,10 +1082,10 @@ bool inventory_modal_handle_click(int mx, int my) {
     Rectangle close_r = { card.x + card.width - close_size - 4.0f,
                            card.y + (IM_HEADER_H - close_size) * 0.5f,
                            close_size, close_size };
-    if (hit_rect(mx, my, close_r)) { inventory_modal_close(); return true; }
+    if (ui_button_hit(close_r, mx, my)) { inventory_modal_close(); return true; }
 
     /* Lore button */
-    if (s_lore_btn_visible && hit_rect(mx, my, s_lore_btn_rect)) {
+    if (s_lore_btn_visible && ui_button_hit(s_lore_btn_rect, mx, my)) {
         if (s_inv_idx >= 0 && s_inv_idx < g_local_player.inventory_count) {
             const ObjectLayerState* ols = &g_local_player.inventory[s_inv_idx];
             const DialogueDataSet* d = dialogue_data_get(ols->item_id);
@@ -1147,7 +1141,7 @@ bool inventory_modal_handle_click(int mx, int my) {
                 btn_enabled = false;
         }
         if (btn_enabled) {
-            if (s_activate_btn_visible && hit_rect(mx, my, s_activate_btn_rect)) {
+            if (s_activate_btn_visible && ui_button_hit(s_activate_btn_rect, mx, my)) {
                 bool new_active = !ols->active;
                 send_activation(ols->item_id, new_active);
 
@@ -1167,7 +1161,7 @@ bool inventory_modal_handle_click(int mx, int my) {
     if (NULL != ols) {
         InventoryModalLayout layout = inventory_modal_layout(card);
         Rectangle view = inventory_content_view(card, layout, inventory_lore_available(ols));
-        if (hit_rect(mx, my, view)) {
+        if (ui_button_hit(view, mx, my)) {
             ui_scroll_on_press(&s_content_scroll, mx, my);
             return true;
         }

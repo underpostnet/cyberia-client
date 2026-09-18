@@ -26,6 +26,4 @@ void item_slot_draw(Rectangle r, const ObjectLayerState* ols, ObjectLayersManage
 void item_slot_draw_ex(Rectangle r, const ObjectLayerState* ols, ObjectLayersManager* mgr,
                        Color highlight, float highlight_t, bool sprite_full_color);
 
-bool item_slot_hit(Rectangle r, int mx, int my);
-
 #endif /* ITEM_SLOT_H */

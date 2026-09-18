@@ -76,11 +76,6 @@ static Rectangle panel_rect(void) {
     return hud_side_stack_journal_slot(s_header_h + s_content_h);
 }
 
-static bool hit(int mx, int my, Rectangle r) {
-    return ((float)mx >= r.x && (float)mx < r.x + r.width &&
-            (float)my >= r.y && (float)my < r.y + r.height);
-}
-
 static void ensure_init(void) {
     if (s_init) return;
     Rectangle z = { 0, 0, QJ_CHEVRON, QJ_CHEVRON };
@@ -158,7 +153,7 @@ static float header_walk(int mode, int mx, int my, float x, float y, float w) {
                  QJ_FONT_TITLE, C_HEADER_TEXT);
         UIButtonStyle cb = { .icon_id = "close-yellow", .no_fill = true };
         ui_button_draw(close_r, &cb, UI_BUTTON_NORMAL);
-    } else if (JW_CLICK == mode && hit(mx, my, close_r)) {
+    } else if (JW_CLICK == mode && ui_button_hit(close_r, mx, my)) {
         s_visible = false;
     }
     return header_h;
@@ -176,7 +171,7 @@ static float sections_walk(int mode, int mx, int my, float x, float y0, float w)
         float srow_h = ui_toggle_header(&s_section[sec], x, y, w, label, QJ_FONT_SECTION,
                                         C_TEXT, JW_DRAW == mode);
         Rectangle srow = { x, y, w, srow_h };
-        if (JW_CLICK == mode && hit(mx, my, srow)) {
+        if (JW_CLICK == mode && ui_button_hit(srow, mx, my)) {
             s_section[sec].expanded = !s_section[sec].expanded;
             return y;
         }
@@ -227,10 +222,10 @@ static float sections_walk(int mode, int mx, int my, float x, float y0, float w)
                 snprintf(ctr, sizeof(ctr), "Page %d/%d", s_page[sec] + 1, pages);
                 int cw = MeasureText(ctr, QJ_FONT_SMALL);
                 DrawText(ctr, (int)(x + (w - cw) / 2), (int)(y + 4), QJ_FONT_SMALL, C_DIM);
-            } else if (JW_CLICK == mode && can_prev && hit(mx, my, prev)) {
+            } else if (JW_CLICK == mode && can_prev && ui_button_hit(prev, mx, my)) {
                 s_page[sec]--;
                 return y;
-            } else if (JW_CLICK == mode && can_next && hit(mx, my, next)) {
+            } else if (JW_CLICK == mode && can_next && ui_button_hit(next, mx, my)) {
                 s_page[sec]++;
                 return y;
             }
@@ -332,12 +327,12 @@ bool quest_journal_handle_click(int mx, int my) {
     if (!s_visible) return false;
     Rectangle panel = panel_rect();
     Rectangle bounds = { panel.x, panel.y, panel.width, s_panel_h };
-    if (!hit(mx, my, bounds)) return false;
+    if (!ui_button_hit(bounds, mx, my)) return false;
 
     /* The header is fixed and handled immediately; taps in the section area
      * arm the scroll gesture, with activation deferred to a clean release. */
     Rectangle header = { panel.x, panel.y, panel.width, s_header_h };
-    if (hit(mx, my, header)) {
+    if (ui_button_hit(header, mx, my)) {
         header_walk(JW_CLICK, mx, my, panel.x, panel.y, panel.width);
         return true;
     }

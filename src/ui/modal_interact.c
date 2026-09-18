@@ -1722,7 +1722,7 @@ static void handle_quest_click(int mx, int my) {
             return;
         }
         for (int r = 0; r < s_reward_slot_count; r++) {
-            if (item_slot_hit(s_reward_rects[r], mx, my)) {
+            if (ui_button_hit(s_reward_rects[r], mx, my)) {
                 ObjectLayerState ols = s_reward_ols[r];
                 stack_item_inspect(&ols);
                 return;
@@ -1956,7 +1956,7 @@ static void handle_shop_click(int mx, int my) {
         }
         /* The item slot opens the same read-only inspection as the stack tab,
          * so a buyer can read an item's stats before paying for it. */
-        if (item_slot_hit(s_shop_item_slot[i], mx, my)) {
+        if (ui_button_hit(s_shop_item_slot[i], mx, my)) {
             ObjectLayerState ols = { 0 };
             strncpy(ols.item_id, am->shop_items[i].item_id, MAX_ID_LENGTH - 1);
             ols.quantity = 1;
@@ -2181,13 +2181,13 @@ static void handle_craft_click(int mx, int my) {
             return;
         }
         for (int k = 0; k < recipe->ingredient_count; k++) {
-            if (item_slot_hit(s_craft_in_slot[i][k], mx, my)) {
+            if (ui_button_hit(s_craft_in_slot[i][k], mx, my)) {
                 inspect_craft_item(&recipe->ingredients[k]);
                 return;
             }
         }
         for (int k = 0; k < recipe->output_count; k++) {
-            if (item_slot_hit(s_craft_out_slot[i][k], mx, my)) {
+            if (ui_button_hit(s_craft_out_slot[i][k], mx, my)) {
                 inspect_craft_item(&recipe->outputs[k]);
                 return;
             }
@@ -2836,7 +2836,7 @@ bool modal_interact_handle_click(int mx, int my) {
         for (int i = 0; i < s_cached_layer_count; i++) {
             float row_y = content.y - scroll_off + i * row_h;
             Rectangle slot_r = { content.x, row_y, slot_sz, slot_sz };
-            if (item_slot_hit(slot_r, mx, my)) {
+            if (ui_button_hit(slot_r, mx, my)) {
                 ObjectLayerState ols = s_cached_layers[i];
                 stack_item_inspect(&ols);
                 return true;

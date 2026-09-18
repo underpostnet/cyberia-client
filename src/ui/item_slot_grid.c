@@ -1,6 +1,7 @@
 #include "ui/item_slot_grid.h"
 
 #include "item_slot.h"
+#include "ui_button.h"
 
 #include <math.h>
 #include <string.h>
@@ -107,7 +108,7 @@ static int item_slot_grid_index_at(const ItemSlotGrid* g, int mx, int my) {
     if (g->clip.width > 0.0f && g->clip.height > 0.0f &&
         !CheckCollisionPointRec((Vector2){ (float)mx, (float)my }, g->clip)) return -1;
     for (int i = 0; i < g->capacity; i++) {
-        if (item_slot_hit(item_slot_grid_cell_rect(g, i), mx, my)) return i;
+        if (ui_button_hit(item_slot_grid_cell_rect(g, i), mx, my)) return i;
     }
     return -1;
 }

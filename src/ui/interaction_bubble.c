@@ -29,6 +29,7 @@
 #include "inventory_modal.h"
 #include "modal_dialogue.h"
 #include "modal_instance_map.h"
+#include "ui_button.h"
 #include "ui_toggle.h"
 #include "ui_scroll.h"
 #include "nameplate.h"
@@ -218,11 +219,6 @@ static Rectangle slot_rect(int index, Rectangle view) {
               (float)index * (float)(IBUBBLE_ICON_SIZE + IBUBBLE_GAP) -
               ui_scroll_offset(&s_col_scroll);
     return (Rectangle){ x, y, (float)IBUBBLE_ICON_SIZE, (float)IBUBBLE_ICON_SIZE };
-}
-
-static bool hit_rect(int mx, int my, Rectangle r) {
-    return ((float)mx >= r.x && (float)mx < r.x + r.width &&
-            (float)my >= r.y && (float)my < r.y + r.height);
 }
 
 static void snapshot_layers(InteractionBubbleSlot* slot,
@@ -495,7 +491,7 @@ void interaction_bubble_draw(void) {
     for (int i = 0; i < s_slot_count; i++) {
         InteractionBubbleSlot* slot = &s_slots[i];
         Rectangle r = slot_rect(i, view);
-        bool hovered = hit_rect(mx, my, r);
+        bool hovered = ui_button_hit(r, mx, my);
         bool is_self = (strcmp(slot->entity_id, g_local_player.id) == 0);
 
         /* Pixel-retro quest/action provider effect: animated pixel particles
@@ -688,7 +684,7 @@ static bool open_slot_at(int mx, int my) {
     Rectangle view = column_scroll_view();
     for (int i = 0; i < s_slot_count; i++) {
         Rectangle r = slot_rect(i, view);
-        if (hit_rect(mx, my, r)) {
+        if (ui_button_hit(r, mx, my)) {
             InteractionBubbleSlot* slot = &s_slots[i];
             LOG_INFO("[INTERACTION_BUBBLE] Slot %d clicked: entity=%s dialogue=%d\n",
                    i, slot->entity_id, (int)slot->has_dialogue);
@@ -716,7 +712,7 @@ bool interaction_bubble_handle_click(int mx, int my) {
     if (!s_col_toggle.expanded || s_slot_count <= 0) return false;
     Rectangle view = column_scroll_view();
     Rectangle input = column_input_bounds(view);
-    if (!hit_rect(mx, my, input)) return false;
+    if (!ui_button_hit(input, mx, my)) return false;
     ui_scroll_on_press(&s_col_scroll, mx, my);
     return true;
 }
@@ -732,10 +728,10 @@ bool interaction_bubble_handle_wheel(float wheel_delta) {
 
 bool interaction_bubble_point_covered(int x, int y) {
     column_ensure_toggle();
-    if (hit_rect(x, y, s_col_toggle.anchor)) return true; /* tab always blocks */
+    if (ui_button_hit(s_col_toggle.anchor, x, y)) return true; /* tab always blocks */
     if (!s_col_toggle.expanded) return false;             /* collapsed → free for game */
     if (s_slot_count <= 0) return false;
-    return hit_rect(x, y, column_input_bounds(column_scroll_view()));
+    return ui_button_hit(column_input_bounds(column_scroll_view()), x, y);
 }
 
 /* ── Dead-equip: optimistically update self-player alive_layers ──────── */

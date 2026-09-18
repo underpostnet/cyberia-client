@@ -579,8 +579,7 @@ static int inventory_bar_slot_at(int mx, int my, Rectangle* out_rect) {
 
     /* Coin slot: return coin idx so modal can show it */
     Rectangle cr = coin_slot_rect(screen_w, current_bar_top);
-    if ((float)mx >= cr.x && (float)mx < cr.x + cr.width &&
-        (float)my >= cr.y && (float)my < cr.y + cr.height) {
+    if (ui_button_hit(cr, mx, my)) {
         if (0 <= coin_idx && NULL != out_rect) *out_rect = cr;
         return (0 <= coin_idx) ? coin_idx : -1;
     }
@@ -594,8 +593,7 @@ static int inventory_bar_slot_at(int mx, int my, Rectangle* out_rect) {
         Rectangle r = slot_rect(si, current_bar_top);
         if (r.x + r.width <= left) continue;
         if (r.x >= right)          break;
-        if ((float)mx >= r.x && (float)mx < r.x + r.width &&
-            (float)my >= r.y && (float)my < r.y + r.height) {
+        if (ui_button_hit(r, mx, my)) {
             if (NULL != out_rect) *out_rect = r;
             return scroll_map[si];
         }

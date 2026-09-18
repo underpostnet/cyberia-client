@@ -91,11 +91,6 @@ static Vector2 follow_offset(const UIToggle* t, float dx, float dy) {
     return (Vector2){ dx * k, dy * k };
 }
 
-static bool anchor_contains(const UIToggle* t, float x, float y) {
-    return x >= t->anchor.x && x < t->anchor.x + t->anchor.width &&
-           y >= t->anchor.y && y < t->anchor.y + t->anchor.height;
-}
-
 static void arm_gesture(UIToggle* t, Vector2 press) {
     t->press_armed = true;
     t->dragging    = false;
@@ -116,7 +111,7 @@ static void update_gesture(UIToggle* t, float dt) {
      * Mouse presses arrive through the dispatcher with no such delay, so they
      * stay on it and keep its z-order gating. */
     if (t->input_enabled && !t->press_armed && down && !t->pointer_was_down &&
-        GetTouchPointCount() > 0 && anchor_contains(t, p.x, p.y)) {
+        GetTouchPointCount() > 0 && CheckCollisionPointRec(p, t->anchor)) {
         arm_gesture(t, p);
     }
     t->pointer_was_down = down;
@@ -221,7 +216,7 @@ void ui_toggle_draw(const UIToggle* t) {
 }
 
 bool ui_toggle_handle_click(UIToggle* t, int mx, int my) {
-    if (!anchor_contains(t, (float)mx, (float)my)) return false;
+    if (!CheckCollisionPointRec((Vector2){ (float)mx, (float)my }, t->anchor)) return false;
     if (t->drag_enabled) {
         /* Arm only — the press may still become a swipe. Re-arming an active
          * gesture would move its origin, so a repeated press is ignored. */
