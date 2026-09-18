@@ -310,18 +310,8 @@ static void draw_coin_slot(Rectangle r, int coin_idx, ObjectLayersManager* mgr) 
      * highlight/shadow edges, gold border overlay, hover brightens fill. */
     bool hovered = CheckCollisionPointRec(GetMousePosition(), r);
     Color gold_fill = hovered ? (Color){ 55, 44, 20, 230 } : (Color){ 35, 28, 10, 210 };
-    Color gold_highlight = (Color){
-        (unsigned char)(gold_fill.r + (255 - gold_fill.r) * 0.45f),
-        (unsigned char)(gold_fill.g + (255 - gold_fill.g) * 0.45f),
-        (unsigned char)(gold_fill.b + (255 - gold_fill.b) * 0.45f),
-        gold_fill.a
-    };
-    Color gold_shadow = (Color){
-        (unsigned char)(gold_fill.r * 0.55f),
-        (unsigned char)(gold_fill.g * 0.55f),
-        (unsigned char)(gold_fill.b * 0.55f),
-        gold_fill.a
-    };
+    Color gold_highlight = ColorBrightness(gold_fill, 0.45f);
+    Color gold_shadow = ColorBrightness(gold_fill, -0.45f);
 
     /* Black outer border via rounded rect */
     DrawRectangleRec(r, BLACK);

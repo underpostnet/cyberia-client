@@ -72,26 +72,6 @@ static Color state_text(const UIButtonStyle* s, UIButtonState st) {
 
 /* ── Pixel-retro helpers ─────────────────────────────────────────────── */
 
-static unsigned char clamp_u8(float v) {
-    if (v < 0.0f) return 0;
-    if (v > 255.0f) return 255;
-    return (unsigned char)(v + 0.5f);
-}
-
-/* Move a colour toward white by `amt` (0..1). */
-static Color pixel_lighten(Color c, float amt) {
-    return (Color){ clamp_u8(c.r + (255 - c.r) * amt),
-                    clamp_u8(c.g + (255 - c.g) * amt),
-                    clamp_u8(c.b + (255 - c.b) * amt), c.a };
-}
-
-/* Move a colour toward black by `amt` (0..1). */
-static Color pixel_darken(Color c, float amt) {
-    return (Color){ clamp_u8(c.r * (1.0f - amt)),
-                    clamp_u8(c.g * (1.0f - amt)),
-                    clamp_u8(c.b * (1.0f - amt)), c.a };
-}
-
 static void draw_outlined(const char* text, int x, int y, int font, Color col) {
     for (int oy = -1; oy <= 1; oy++)
         for (int ox = -1; ox <= 1; ox++)
@@ -111,9 +91,9 @@ static void draw_outlined_wrap(const char* text, int x, int y, int maxw, int fon
 void ui_button_pixel_retro_draw(Rectangle r, const UIButtonPixelRetroStyle* style, bool hovered) {
     bool active_hover = hovered && style->enabled;
     Color base = style->bg;
-    Color fill = active_hover ? pixel_lighten(base, 0.14f) : base;
-    Color highlight = pixel_lighten(base, 0.45f);
-    Color shadow = pixel_darken(base, 0.45f);
+    Color fill = active_hover ? ColorBrightness(base, 0.14f) : base;
+    Color highlight = ColorBrightness(base, 0.45f);
+    Color shadow = ColorBrightness(base, -0.45f);
     Color text_col = style->text_color.a == 0 ? WHITE : style->text_color;
 
     Rectangle inner = { r.x + 2.0f, r.y + 2.0f, r.width - 4.0f, r.height - 4.0f };

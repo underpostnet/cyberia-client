@@ -529,18 +529,8 @@ void interaction_bubble_draw(void) {
          * white outline on hover. */
         Color border = status_border_color(slot, is_self);
         Color slot_fill = hovered ? C_SLOT_HOVER : C_SLOT_BG;
-        Color slot_highlight = (Color){
-            (unsigned char)(slot_fill.r + (255 - slot_fill.r) * 0.45f),
-            (unsigned char)(slot_fill.g + (255 - slot_fill.g) * 0.45f),
-            (unsigned char)(slot_fill.b + (255 - slot_fill.b) * 0.45f),
-            slot_fill.a
-        };
-        Color slot_shadow = (Color){
-            (unsigned char)(slot_fill.r * 0.55f),
-            (unsigned char)(slot_fill.g * 0.55f),
-            (unsigned char)(slot_fill.b * 0.55f),
-            slot_fill.a
-        };
+        Color slot_highlight = ColorBrightness(slot_fill, 0.45f);
+        Color slot_shadow = ColorBrightness(slot_fill, -0.45f);
 
         float rrd = 0.15f;
         DrawRectangleRounded(r, rrd, 4, BLACK);

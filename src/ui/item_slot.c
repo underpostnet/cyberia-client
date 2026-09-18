@@ -44,24 +44,9 @@ void item_slot_draw_ex(Rectangle r, const ObjectLayerState* ols, ObjectLayersMan
      * white inner outline on hover/active. */
     bool hovered = CheckCollisionPointRec(GetMousePosition(), r);
     Color base = (active && activable) ? (Color){ 40, 60, 100, 235 } : C_SLOT_BG;
-    Color fill = hovered ? (Color){
-        (unsigned char)(base.r + (255 - base.r) * 0.14f),
-        (unsigned char)(base.g + (255 - base.g) * 0.14f),
-        (unsigned char)(base.b + (255 - base.b) * 0.14f),
-        base.a
-    } : base;
-    Color highlight_edge = (Color){
-        (unsigned char)(fill.r + (255 - fill.r) * 0.45f),
-        (unsigned char)(fill.g + (255 - fill.g) * 0.45f),
-        (unsigned char)(fill.b + (255 - fill.b) * 0.45f),
-        fill.a
-    };
-    Color shadow_edge = (Color){
-        (unsigned char)(fill.r * 0.55f),
-        (unsigned char)(fill.g * 0.55f),
-        (unsigned char)(fill.b * 0.55f),
-        fill.a
-    };
+    Color fill = hovered ? ColorBrightness(base, 0.14f) : base;
+    Color highlight_edge = ColorBrightness(fill, 0.45f);
+    Color shadow_edge = ColorBrightness(fill, -0.45f);
 
     /* highlight_t blends the slot's neutral bg/border toward `highlight` — used
      * to briefly "color" a slot (e.g. a fresh reward settling in). */
