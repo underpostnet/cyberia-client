@@ -390,10 +390,6 @@ static void shadow_label(const char* s, int x, int y, int fs, Color c) {
     DrawText(s, x, y, fs, c);
 }
 
-static Color unfiltered_icon_color(float fade) {
-    return (Color){ 255, 255, 255, (unsigned char)(255.0f * fade) };
-}
-
 static Rectangle pixel_inner(Rectangle bounds, float inset) {
     return (Rectangle){ bounds.x + inset, bounds.y + inset,
                         bounds.width - 2.0f * inset, bounds.height - 2.0f * inset };
@@ -479,7 +475,7 @@ static void draw_pixel_icon_button(Rectangle button, const char* icon_id, bool e
         float size = button.width < button.height ? button.width : button.height;
         ui_icon_draw_ex(icon_id, button.x + button.width * 0.5f,
                         button.y + button.height * 0.5f, size * 0.56f, 0.0f,
-                        unfiltered_icon_color(fade));
+                        Fade(WHITE, fade));
     }
 }
 
@@ -570,7 +566,7 @@ static void draw_edge(const ImapEdge* e, int idx, float fade, double t) {
         int py = (int)roundf(a.y);
         DrawRectangle(px - 8, py - 8, 17, 17, fade_c(BLACK, fade));
         DrawRectangle(px - 5, py - 5, 11, 11, fade_c(base, fade));
-        DrawRectangle(px - 2, py - 2, 5, 5, unfiltered_icon_color(fade));
+        DrawRectangle(px - 2, py - 2, 5, 5, Fade(WHITE, fade));
         return;
     }
 
@@ -582,7 +578,7 @@ static void draw_edge(const ImapEdge* e, int idx, float fade, double t) {
     int py = (int)pulse.y;
     DrawRectangle(px - 7, py - 7, 15, 15, fade_c(BLACK, fade));
     DrawRectangle(px - 5, py - 5, 11, 11, fade_c(base, fade));
-    DrawRectangle(px - 2, py - 2, 5, 5, unfiltered_icon_color(fade));
+    DrawRectangle(px - 2, py - 2, 5, 5, Fade(WHITE, fade));
 }
 
 /* Map cell → screen position inside the node card (the preview capture and
@@ -633,7 +629,7 @@ static void draw_presence_marker(Vector2 at, const char* icon, Color tint,
                         shell_size, shell_size };
     draw_pixel_panel(shell, (Color){ 10, 16, 30, 220 }, tint, false, fade);
     if (icon && '\0' != icon[0]) {
-        ui_icon_draw_ex(icon, at.x, at.y, size, 0.0f, unfiltered_icon_color(fade));
+        ui_icon_draw_ex(icon, at.x, at.y, size, 0.0f, Fade(WHITE, fade));
         return;
     }
     float fallback_size = floorf(size * 0.55f);
@@ -699,7 +695,7 @@ static void draw_zoomed_capability_tab(Vector2 at, const char* status_icon,
     has_item = false;
     if (show_stats) {
         ui_icon_draw_ex("stats", x + icon_size * 0.5f, at.y, (float)icon_size, 0.0f,
-                        unfiltered_icon_color(fade));
+                        Fade(WHITE, fade));
         x += icon_size + 4.0f;
         shadow_label(stats, (int)x, (int)(at.y - font_size * 0.5f), font_size,
                      fade_c(IMAP_TEXT, fade));
@@ -709,7 +705,7 @@ static void draw_zoomed_capability_tab(Vector2 at, const char* status_icon,
     if (show_status) {
         if (has_item) x += 6.0f;
         ui_icon_draw_ex(status_icon, x + icon_size * 0.5f, at.y, (float)icon_size, 0.0f,
-                        unfiltered_icon_color(fade));
+                        Fade(WHITE, fade));
         x += icon_size;
         has_item = true;
     }
@@ -718,7 +714,7 @@ static void draw_zoomed_capability_tab(Vector2 at, const char* status_icon,
         const char* icon = capability_icons[i];
         if (icon && '\0' != icon[0]) {
             ui_icon_draw_ex(icon, x + icon_size * 0.5f, at.y, (float)icon_size, 0.0f,
-                            unfiltered_icon_color(fade));
+                            Fade(WHITE, fade));
         }
         DrawRectangle((int)(x + icon_size * 0.5f - 2.0f), (int)(at.y + icon_size * 0.5f - 3.0f),
                       4, 3, fade_c(capability_colors[i], fade));
@@ -748,7 +744,7 @@ static void draw_node_card(int idx, float fade, double time) {
             Rectangle src  = { 0, 0, (float)tex.width, (float)tex.height };
             Rectangle dest = pixel_inner(card, 4.0f);
             DrawTexturePro(tex, src, dest, (Vector2){ 0, 0 }, 0.0f,
-                           unfiltered_icon_color(fade));
+                           Fade(WHITE, fade));
         }
     }
     draw_pixel_border(card, accent, selected || hovered, fade);
