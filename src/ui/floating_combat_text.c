@@ -39,6 +39,7 @@
 #include "domain/local_player.h"
 #include "domain/presentation_runtime.h"
 #include "game_state.h"
+#include "util/utils.h"
 #include "world_types.h"
 
 #include <assert.h>
@@ -120,6 +121,12 @@ static bool fct_event_on_self(float wx, float wy) {
         && wy >= self->interp_pos.y && wy <= self->interp_pos.y + self->dims.y;
 }
 
+static float fct_rank(const void* elem) {
+    const FCTEntry* e = elem;
+    if (!e->active) return INFINITY;
+    return e->age;   /* the oldest entry ranks highest */
+}
+
 /* ── Public API ─────────────────────────────────────────────────────────── */
 
 void fct_init(void) {
@@ -131,15 +138,8 @@ void fct_init(void) {
 void fct_spawn(float world_x, float world_y, uint32_t value, FCTType type) {
     if (!s_init) fct_init();
 
-    /* Find a free slot; evict the oldest active entry if the pool is full. */
-    FCTEntry *slot      = NULL;
-    float     oldest   = -1.0f;
-    int       oldest_i = 0;
-    for (int i = 0; i < FCT_MAX_ENTRIES; i++) {
-        if (!s_pool[i].active) { slot = &s_pool[i]; break; }
-        if (s_pool[i].age > oldest) { oldest = s_pool[i].age; oldest_i = i; }
-    }
-    if (!slot) slot = &s_pool[oldest_i];
+    /* Free slot, else the oldest entry — a spawn never fails, it recycles. */
+    FCTEntry* slot = pool_take(s_pool, sizeof(*s_pool), FCT_MAX_ENTRIES, fct_rank);
 
     assert(type >= 0 && type < FCT_TYPE_COUNT);
     const FCTTuning* tune = &FCT_TUNING[type];
