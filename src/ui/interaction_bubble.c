@@ -37,6 +37,7 @@
 #include "ol_stack_ico.h"
 #include "ui_icon.h"
 #include "util/log.h"
+#include "util/utils.h"
 
 #include <assert.h>
 #include <math.h>
@@ -620,8 +621,7 @@ void interaction_bubble_draw(void) {
         if (notif > 0 && NULL != last && '\0' != last->text[0]) {
             int mfs = 11;
             char buf[48];
-            strncpy(buf, last->text, sizeof(buf) - 1);
-            buf[sizeof(buf) - 1] = '\0';
+            copy_str(buf, sizeof(buf), last->text);
             if (strlen(last->text) > sizeof(buf) - 1) {
                 buf[sizeof(buf) - 2] = '.';
                 buf[sizeof(buf) - 3] = '.';

@@ -42,6 +42,7 @@
 #include "fx/fx_reward.h"
 #include "ui_button.h"
 #include "ui_icon.h"
+#include "util/utils.h"
 
 #include <raylib.h>
 #include <math.h>
@@ -221,23 +222,18 @@ static void show_next(void) {
     const NotifEntry* e = &s_queue[s_queue_head];
     s_queue_head = (s_queue_head + 1) % MN_QUEUE_CAP;
 
-    strncpy(s_title, e->title, sizeof(s_title) - 1);
-    s_title[sizeof(s_title) - 1] = '\0';
-    strncpy(s_message, e->message, sizeof(s_message) - 1);
-    s_message[sizeof(s_message) - 1] = '\0';
+    copy_str(s_title, sizeof(s_title), e->title);
+    copy_str(s_message, sizeof(s_message), e->message);
     memcpy(s_items, e->items, sizeof(s_items));
     s_item_count = e->item_count;
     s_qty_min    = e->qty_min;
     s_qty_max    = e->qty_max;
     s_qty_step   = 1;
     s_on_confirm = e->on_confirm;
-    strncpy(s_price_item, e->price_item, sizeof(s_price_item) - 1);
-    s_price_item[sizeof(s_price_item) - 1] = '\0';
+    copy_str(s_price_item, sizeof(s_price_item), e->price_item);
     s_price_qty = e->price_qty;
-    strncpy(s_confirm_label, e->confirm_label, sizeof(s_confirm_label) - 1);
-    s_confirm_label[sizeof(s_confirm_label) - 1] = '\0';
-    strncpy(s_confirm_icon, e->confirm_icon, sizeof(s_confirm_icon) - 1);
-    s_confirm_icon[sizeof(s_confirm_icon) - 1] = '\0';
+    copy_str(s_confirm_label, sizeof(s_confirm_label), e->confirm_label);
+    copy_str(s_confirm_icon, sizeof(s_confirm_icon), e->confirm_icon);
     memcpy(s_inputs, e->inputs, sizeof(s_inputs));
     s_input_count  = e->input_count;
     s_craft_total  = e->craft_seconds;
@@ -1127,8 +1123,7 @@ bool modal_notification_handle_click(int mx, int my) {
             ModalNotificationConfirmFn confirm = s_on_confirm;
             s_on_confirm = NULL;
             char item[64];
-            strncpy(item, s_items[0].item_id, sizeof(item) - 1);
-            item[sizeof(item) - 1] = '\0';
+            copy_str(item, sizeof(item), s_items[0].item_id);
             int qty = s_items[0].qty;
             if (notif_has_price()) {
                 const char* spent = s_price_item;

@@ -388,23 +388,19 @@ static bool refresh_bot_snapshot(void) {
     char prev_dialogs[BOT_QUEST_CODES_MAX][64];
     memcpy(prev_dialogs, s_talk_dialog_codes, sizeof(prev_dialogs));
 
-    strncpy(s_action_code, bot->action_code, sizeof(s_action_code) - 1);
-    s_action_code[sizeof(s_action_code) - 1] = '\0';
+    copy_str(s_action_code, sizeof(s_action_code), bot->action_code);
     action_cache_fetch(s_action_code);
     s_quest_code_count = 0;
     s_talk_count = 0;
     for (int i = 0; i < bot->quest_code_count && i < BOT_QUEST_CODES_MAX; i++) {
-        strncpy(s_quest_codes[s_quest_code_count], bot->quest_codes[i], 63);
-        s_quest_codes[s_quest_code_count][63] = '\0';
+        copy_str(s_quest_codes[s_quest_code_count], 64, bot->quest_codes[i]);
         quest_cache_fetch(s_quest_codes[s_quest_code_count]);
         s_quest_code_count++;
 
         /* Parallel entry: non-empty only for a quest with a pending talk. */
         if ('\0' == bot->quest_talk_dialog_codes[i][0] || s_talk_count >= BOT_QUEST_CODES_MAX) continue;
-        strncpy(s_talk_quest_codes[s_talk_count], bot->quest_codes[i], 63);
-        s_talk_quest_codes[s_talk_count][63] = '\0';
-        strncpy(s_talk_dialog_codes[s_talk_count], bot->quest_talk_dialog_codes[i], 63);
-        s_talk_dialog_codes[s_talk_count][63] = '\0';
+        copy_str(s_talk_quest_codes[s_talk_count], 64, bot->quest_codes[i]);
+        copy_str(s_talk_dialog_codes[s_talk_count], 64, bot->quest_talk_dialog_codes[i]);
         s_talk_count++;
     }
 
@@ -856,12 +852,9 @@ void modal_interact_open(const char* entity_id, const char* display_name,
         es_clear();
     }
 
-    strncpy(s_entity_id, entity_id ? entity_id : "", sizeof(s_entity_id) - 1);
-    s_entity_id[sizeof(s_entity_id) - 1] = '\0';
-    strncpy(s_display_name, display_name ? display_name : "", sizeof(s_display_name) - 1);
-    s_display_name[sizeof(s_display_name) - 1] = '\0';
-    strncpy(s_dlg_item, dialogue_item_id ? dialogue_item_id : "", sizeof(s_dlg_item) - 1);
-    s_dlg_item[sizeof(s_dlg_item) - 1] = '\0';
+    copy_str(s_entity_id, sizeof(s_entity_id), entity_id ? entity_id : "");
+    copy_str(s_display_name, sizeof(s_display_name), display_name ? display_name : "");
+    copy_str(s_dlg_item, sizeof(s_dlg_item), dialogue_item_id ? dialogue_item_id : "");
 
     s_has_dialogue       = has_dialogue && s_dlg_item[0] != '\0';
     s_border             = border;
@@ -1382,8 +1375,7 @@ static int card_title_wrap(const char* title, int x, int y, int width,
             if ('\0' != line[0]) {
                 snprintf(candidate, sizeof(candidate), "%s %s", line, word + word_offset);
                 if (MeasureText(candidate, font) <= width) {
-                    strncpy(line, candidate, sizeof(line) - 1);
-                    line[sizeof(line) - 1] = '\0';
+                    copy_str(line, sizeof(line), candidate);
                     word_offset = word_length;
                     continue;
                 }
@@ -1395,8 +1387,7 @@ static int card_title_wrap(const char* title, int x, int y, int width,
 
             const char* remainder = word + word_offset;
             if (MeasureText(remainder, font) <= width) {
-                strncpy(line, remainder, sizeof(line) - 1);
-                line[sizeof(line) - 1] = '\0';
+                copy_str(line, sizeof(line), remainder);
                 word_offset = word_length;
                 continue;
             }

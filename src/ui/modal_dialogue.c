@@ -27,6 +27,7 @@
 #include "ui_button.h"
 #include "ui_icon.h"
 #include "util/log.h"
+#include "util/utils.h"
 
 #include <assert.h>
 #include <math.h>
@@ -269,12 +270,9 @@ void modal_dialogue_open(const char* entity_id, const char* item_id,
     s_render     = render;
     s_auto_dismiss = (MODAL_DIALOGUE_RENDER_ITEM == render);
 
-    strncpy(s_entity_id, entity_id ? entity_id : "", sizeof(s_entity_id) - 1);
-    s_entity_id[sizeof(s_entity_id) - 1] = '\0';
-    strncpy(s_item_id, item_id ? item_id : "", sizeof(s_item_id) - 1);
-    s_item_id[sizeof(s_item_id) - 1] = '\0';
-    strncpy(s_dialog_code, dialog_code ? dialog_code : "", sizeof(s_dialog_code) - 1);
-    s_dialog_code[sizeof(s_dialog_code) - 1] = '\0';
+    copy_str(s_entity_id, sizeof(s_entity_id), entity_id ? entity_id : "");
+    copy_str(s_item_id, sizeof(s_item_id), item_id ? item_id : "");
+    copy_str(s_dialog_code, sizeof(s_dialog_code), dialog_code ? dialog_code : "");
 
     s_age           = 0.0f;
     s_char_timer    = 0.0f;
@@ -531,8 +529,7 @@ void modal_dialogue_draw(void) {
 
     {
         char copy[DIALOGUE_MAX_TEXT];
-        strncpy(copy, partial, sizeof(copy) - 1);
-        copy[sizeof(copy) - 1] = '\0';
+        copy_str(copy, sizeof(copy), partial);
 
         char line_buf[512] = {0};
         float cur_y = text_y;

@@ -36,6 +36,7 @@
 #include "object_layers_management.h"
 #include "ol_as_animated_ico.h"
 #include "util/serial.h"
+#include "util/utils.h"
 #include "stat_panel.h"
 #include "toolbar.h"
 #include "ui_button.h"
@@ -386,14 +387,12 @@ static const char* resolve_summoned_item_id(const char* raw_id) {
         if (!ol->active || ol->item_id[0] == '\0') continue;
         ObjectLayer* data = lookup_cached_layer(ol->item_id);
         if (data && strcmp(data->data.item.type, "skin") == 0) {
-            strncpy(s_resolved, ol->item_id, MAX_ID_LENGTH - 1);
-            s_resolved[MAX_ID_LENGTH - 1] = '\0';
+            copy_str(s_resolved, MAX_ID_LENGTH, ol->item_id);
             return s_resolved;
         }
     }
     /* Fallback if no active skin found */
-    strncpy(s_resolved, raw_id, MAX_ID_LENGTH - 1);
-    s_resolved[MAX_ID_LENGTH - 1] = '\0';
+    copy_str(s_resolved, MAX_ID_LENGTH, raw_id);
     return s_resolved;
 }
 
@@ -435,8 +434,7 @@ static void reset_view_state(void) {
 
 void inventory_modal_set_anchor_entity(const char* entity_id) {
     if (NULL == entity_id) { s_anchor_entity[0] = '\0'; return; }
-    strncpy(s_anchor_entity, entity_id, sizeof(s_anchor_entity) - 1);
-    s_anchor_entity[sizeof(s_anchor_entity) - 1] = '\0';
+    copy_str(s_anchor_entity, sizeof(s_anchor_entity), entity_id);
 }
 
 void inventory_modal_open(int inv_idx) {
@@ -738,8 +736,7 @@ void inventory_modal_draw(void) {
          * available direction. */
         for (int i = 0; i < DIR_BTN_COUNT; i++) s_dir_btn_enabled[i] = false;
         if (n_present == 1 && 0 != strcmp(s_dir, dirs[present[0]])) {
-            strncpy(s_dir, dirs[present[0]], sizeof(s_dir) - 1);
-            s_dir[sizeof(s_dir) - 1] = '\0';
+            copy_str(s_dir, sizeof(s_dir), dirs[present[0]]);
             rebuild_dir_str();
         }
     }
@@ -802,8 +799,7 @@ void inventory_modal_draw(void) {
     /* 8. Description with word-wrap */
     if (item_desc && item_desc[0] != '\0') {
         char desc_copy[MAX_DESCRIPTION_LENGTH];
-        strncpy(desc_copy, item_desc, sizeof(desc_copy) - 1);
-        desc_copy[sizeof(desc_copy) - 1] = '\0';
+        copy_str(desc_copy, sizeof(desc_copy), item_desc);
 
         int fs_d  = body_font;
         int max_w = (int)(info_w - pad * 2);
@@ -959,8 +955,7 @@ void inventory_modal_draw(void) {
                 int fs_sk = stat_font - 1;
                 int max_desc_w = (int)(info_x + info_w - pad - text_x);
                 char sk_desc[256];
-                strncpy(sk_desc, se->description, sizeof(sk_desc) - 1);
-                sk_desc[sizeof(sk_desc) - 1] = '\0';
+                copy_str(sk_desc, sizeof(sk_desc), se->description);
 
                 char sk_line[256] = {0};
                 char* stok = strtok(sk_desc, " ");

@@ -7,6 +7,7 @@
 #include "domain/viewport.h"
 #include "network/data/engine_client.h"
 #include "util/log.h"
+#include "util/utils.h"
 
 #include <raylib.h>
 #include <stdlib.h>
@@ -66,8 +67,7 @@ void text_font_sync(void) {
      * the hint names a different one — this also stops a retry loop on failure. */
     if (0 == strcmp(family, s_family)) return;
 
-    strncpy(s_family, family, sizeof(s_family) - 1);
-    s_family[sizeof(s_family) - 1] = '\0';
+    copy_str(s_family, sizeof(s_family), family);
 
     char url[256];
     snprintf(url, sizeof(url), "/assets/fonts/%s", s_family);
@@ -119,8 +119,7 @@ int text_line_height(int size) {
 int text_wrap(const char *text, int x, int y, int maxw, int size, Color col, bool center, bool draw) {
     if (NULL == text || '\0' == text[0]) return 0;
     char buf[512];
-    strncpy(buf, text, sizeof(buf) - 1);
-    buf[sizeof(buf) - 1] = '\0';
+    copy_str(buf, sizeof(buf), text);
 
     int line_h = text_line_height(size);
     int cy = y;

@@ -13,6 +13,7 @@
 #include "game_state.h"
 #include "input/input.h"
 #include "network/data/engine_client.h"
+#include "util/utils.h"
 #include "world_types.h"
 
 #include <assert.h>
@@ -759,8 +760,7 @@ static void draw_node_name(const ImapNode* n, Rectangle card, bool selected, flo
     int font_size = card.width >= 150.0f ? 15 : 11;
     int max_width = (int)card.width - 8;
     char label[IMAP_NAME_MAX];
-    strncpy(label, n->name, sizeof(label) - 1);
-    label[sizeof(label) - 1] = '\0';
+    copy_str(label, sizeof(label), n->name);
     int length = (int)strlen(label);
     while (length > 3 && MeasureText(label, font_size) > max_width) {
         label[--length] = '\0';
@@ -887,8 +887,7 @@ static void draw_info_panel(float fade) {
     {
         int max_name_w = (int)(panel_w - pad * 2.0f - 6.0f - 8.0f);
         char name_buf[IMAP_NAME_MAX + 4];
-        strncpy(name_buf, n->name, sizeof(name_buf) - 1);
-        name_buf[sizeof(name_buf) - 1] = '\0';
+        copy_str(name_buf, sizeof(name_buf), n->name);
         while ((int)strlen(name_buf) > 3 && MeasureText(name_buf, name_font) > max_name_w) {
             name_buf[strlen(name_buf) - 1] = '\0';
         }

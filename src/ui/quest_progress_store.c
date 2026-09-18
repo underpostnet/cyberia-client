@@ -1,5 +1,7 @@
 #include "quest_progress_store.h"
 
+#include "util/utils.h"
+
 #include <string.h>
 
 static QuestProgressEntry s_entries[QUEST_PROGRESS_STORE_CAP];
@@ -15,12 +17,6 @@ static QuestStatus quest_progress_store_parse_status(const char* status_str) {
         if (0 == strcmp(status_str, "failed"))    return QUEST_FAILED;
     }
     return QUEST_ACTIVE;
-}
-
-static void copy_field(char* dst, size_t cap, const char* src) {
-    if (!src) { dst[0] = '\0'; return; }
-    strncpy(dst, src, cap - 1);
-    dst[cap - 1] = '\0';
 }
 
 static QuestProgressEntry* find_by_code(const char* code) {
@@ -40,13 +36,13 @@ bool quest_progress_store_upsert(const char* code, const char* title, const char
     if (NULL == e) {
         if (s_count >= QUEST_PROGRESS_STORE_CAP) return false;
         e = &s_entries[s_count++];
-        copy_field(e->code, QUEST_CODE_MAX, code);
+        copy_str(e->code, QUEST_CODE_MAX, code);
         added = true;
     }
-    if (title) copy_field(e->title, QUEST_TITLE_MAX, title);
-    if (description) copy_field(e->description, QUEST_DESC_MAX, description);
-    copy_field(e->active_step, QUEST_STEP_MAX, active_step);
-    copy_field(e->objectives,  QUEST_OBJECTIVES_MAX, objectives);
+    if (title) copy_str(e->title, QUEST_TITLE_MAX, title);
+    if (description) copy_str(e->description, QUEST_DESC_MAX, description);
+    copy_str(e->active_step, QUEST_STEP_MAX, active_step);
+    copy_str(e->objectives,  QUEST_OBJECTIVES_MAX, objectives);
     e->status = quest_progress_store_parse_status(status_str);
     return added;
 }
@@ -84,7 +80,7 @@ bool quest_progress_store_set_meta(const char* code, const char* title,
                           const char* description) {
     QuestProgressEntry* e = find_by_code(code);
     if (!e) return false;
-    if (title) copy_field(e->title, QUEST_TITLE_MAX, title);
-    if (description) copy_field(e->description, QUEST_DESC_MAX, description);
+    if (title) copy_str(e->title, QUEST_TITLE_MAX, title);
+    if (description) copy_str(e->description, QUEST_DESC_MAX, description);
     return true;
 }
