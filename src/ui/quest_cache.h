@@ -11,6 +11,7 @@
 #define QUEST_CACHE_H
 
 #include "meta_cache.h"
+#include "quest_progress_store.h"
 
 #define QUEST_CACHE_CODE_MAX   64
 #define QUEST_CACHE_TITLE_MAX  96
@@ -60,5 +61,11 @@ const QuestMetadataEntry* quest_cache_get(const char* code);
  * engine_client if not already cached/loading. Parses the
  * `{ status, data: <quest doc> }` envelope on completion. */
 void quest_cache_fetch(const char* code);
+
+/* Index of the step the progress entry is on. The server puts the step
+ * description into `active_step`, so match the description as well as the id.
+ * Returns 0 when there is no match. */
+int quest_active_step_index(const QuestMetadataEntry* metadata,
+                            const QuestProgressEntry* progress);
 
 #endif /* QUEST_CACHE_H */

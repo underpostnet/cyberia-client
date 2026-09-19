@@ -1199,19 +1199,6 @@ static void draw_stats_tab(Rectangle content) {
 
 /* ── Quest tab: show the entity's active-quest description + rewards ──── */
 
-static int quest_active_step_index(const QuestMetadataEntry* metadata,
-                                   const QuestProgressEntry* progress) {
-    if (NULL == metadata || NULL == progress || '\0' == progress->active_step[0]) return 0;
-    for (int i = 0; i < metadata->step_count; i++) {
-        const QuestStepMeta* step = &metadata->steps[i];
-        if (0 == strcmp(step->id, progress->active_step) ||
-            0 == strcmp(step->description, progress->active_step)) {
-            return i;
-        }
-    }
-    return 0;
-}
-
 static const char* quest_objective_verb(const char* type) {
     if (type && 0 == strcmp(type, "collect")) return "Collect";
     if (type && 0 == strcmp(type, "kill"))    return "Defeat";

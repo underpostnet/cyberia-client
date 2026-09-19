@@ -108,10 +108,7 @@ static int quest_card_layout(bool draw, const QuestProgressEntry* e, QuestStatus
          * line), future steps visually disabled. */
         const QuestMetadataEntry* qm = quest_cache_get(e->code);
         if (qm && META_CACHE_READY == qm->head.state && qm->step_count > 0) {
-            int active_idx = 0;
-            for (int s = 0; s < qm->step_count; s++) {
-                if (0 == strcmp(qm->steps[s].id, e->active_step)) { active_idx = s; break; }
-            }
+            int active_idx = quest_active_step_index(qm, e);
             for (int s = 0; s < qm->step_count; s++) {
                 bool current = s == active_idx;
                 Color c = current ? C_STEP : (s < active_idx ? C_STEP_DONE : C_DIS);

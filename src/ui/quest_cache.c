@@ -42,6 +42,19 @@ void quest_cache_fetch(const char* code) {
     meta_cache_fetch(&s_cache, code, on_quest_fetched);
 }
 
+int quest_active_step_index(const QuestMetadataEntry* metadata,
+                            const QuestProgressEntry* progress) {
+    if (NULL == metadata || NULL == progress || '\0' == progress->active_step[0]) return 0;
+    for (int i = 0; i < metadata->step_count; i++) {
+        const QuestStepMeta* step = &metadata->steps[i];
+        if (0 == strcmp(step->id, progress->active_step) ||
+            0 == strcmp(step->description, progress->active_step)) {
+            return i;
+        }
+    }
+    return 0;
+}
+
 /* Parse the quest doc (`data` object of the engine envelope) into entry, then
  * mirror title and description into quest_progress_store so the journal and
  * action tab render without polling. */
