@@ -17,11 +17,8 @@
  * glide. A press that never became a drag taps the slot below it, so
  * scrolling never opens a modal. */
 
-/* ── Layout constants (screen pixels) ────────────────────────────────── */
-
-#define INV_BAR_HEIGHT      72
-
-/* The slot metrics live in inventory_bar.c — only the bar itself lays them out. */
+/* The layout metrics live in inventory_bar.c — only the bar itself lays them
+ * out. Ask `inventory_bar_visible_height` for the height on screen. */
 
 /* ── Public API ───────────────────────────────────────────────────────── */
 

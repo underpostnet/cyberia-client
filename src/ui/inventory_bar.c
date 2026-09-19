@@ -40,6 +40,7 @@
 
 /* ── Layout constants (screen pixels) ────────────────────────────────── */
 
+#define INV_BAR_HEIGHT      72
 #define INV_SLOT_SIZE       60      /* square */
 #define INV_SLOT_GAP        6
 #define INV_SLOT_PADDING    4       /* around the sprite, inside the slot */

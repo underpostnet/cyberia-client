@@ -183,13 +183,10 @@ void dev_ui_draw(int screen_width, int screen_height) {
     int dev_ui_height = g_dev_ui.dev_ui_height;
 
     // Position the panel at bottom-right, above the inventory bar.
-    // The zoom buttons sit to the right (they are narrow, ~54px from right edge)
-    // so the dev UI spans from the left edge up to before the zoom column.
-    // ZOOM_BTN_SIZE=44, ZOOM_BTN_GAP=6, ZOOM_BTN_MARGIN=10 → zoom column ~54px.
     #define DEV_UI_RIGHT_MARGIN 56
     int panel_x = screen_width - g_dev_ui.dev_ui_width - DEV_UI_RIGHT_MARGIN;
     if (panel_x < 0) panel_x = 0;
-    int panel_y = screen_height - INV_BAR_HEIGHT - dev_ui_height - 4;
+    int panel_y = screen_height - (int)inventory_bar_visible_height() - dev_ui_height - 4;
     if (panel_y < 0) panel_y = 0;
 
     // Draw background panel (bottom-right, above inventory bar)
