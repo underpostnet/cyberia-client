@@ -798,33 +798,8 @@ void inventory_modal_draw(void) {
 
     /* 8. Description with word-wrap */
     if (item_desc && item_desc[0] != '\0') {
-        char desc_copy[MAX_DESCRIPTION_LENGTH];
-        copy_str(desc_copy, sizeof(desc_copy), item_desc);
-
-        int fs_d  = body_font;
-        int max_w = (int)(info_w - pad * 2);
-        char line_buf[256] = {0};
-        char* tok = strtok(desc_copy, " ");
-        while (tok) {
-            char test[256];
-            if (line_buf[0] == '\0')
-                snprintf(test, sizeof(test), "%s", tok);
-            else
-                snprintf(test, sizeof(test), "%s %s", line_buf, tok);
-
-            if (MeasureText(test, fs_d) > max_w && line_buf[0] != '\0') {
-                DrawText(line_buf, (int)(info_x + pad), (int)y_cursor, fs_d, C_BODY);
-                y_cursor += fs_d + 2;
-                snprintf(line_buf, sizeof(line_buf), "%s", tok);
-            } else {
-                snprintf(line_buf, sizeof(line_buf), "%s", test);
-            }
-            tok = strtok(NULL, " ");
-        }
-        if (line_buf[0] != '\0') {
-            DrawText(line_buf, (int)(info_x + pad), (int)y_cursor, fs_d, C_BODY);
-            y_cursor += fs_d + 6;
-        }
+        y_cursor += (float)text_wrap(item_desc, (int)(info_x + pad), (int)y_cursor,
+                                     (int)(info_w - pad * 2), body_font, C_BODY, false, true);
     }
 
     /* 9. Stats grid (2-column) */
@@ -952,35 +927,10 @@ void inventory_modal_draw(void) {
             /* Skill description below the name, word-wrapped */
             if (se->description[0] != '\0') {
                 float desc_y = ico_y + stat_font + 3;
-                int fs_sk = stat_font - 1;
-                int max_desc_w = (int)(info_x + info_w - pad - text_x);
-                char sk_desc[256];
-                copy_str(sk_desc, sizeof(sk_desc), se->description);
-
-                char sk_line[256] = {0};
-                char* stok = strtok(sk_desc, " ");
-                while (stok) {
-                    char stest[256];
-                    if (sk_line[0] == '\0')
-                        snprintf(stest, sizeof(stest), "%s", stok);
-                    else
-                        snprintf(stest, sizeof(stest), "%s %s", sk_line, stok);
-
-                    if (MeasureText(stest, fs_sk) > max_desc_w && sk_line[0] != '\0') {
-                        DrawText(sk_line, (int)text_x, (int)desc_y, fs_sk,
-                                 (Color){ 160, 165, 180, 200 });
-                        desc_y += fs_sk + 2;
-                        snprintf(sk_line, sizeof(sk_line), "%s", stok);
-                    } else {
-                        snprintf(sk_line, sizeof(sk_line), "%s", stest);
-                    }
-                    stok = strtok(NULL, " ");
-                }
-                if (sk_line[0] != '\0') {
-                    DrawText(sk_line, (int)text_x, (int)desc_y, fs_sk,
-                             (Color){ 160, 165, 180, 200 });
-                    desc_y += fs_sk + 2;
-                }
+                desc_y += (float)text_wrap(se->description, (int)text_x, (int)desc_y,
+                                           (int)(info_x + info_w - pad - text_x),
+                                           stat_font - 1, (Color){ 160, 165, 180, 200 },
+                                           false, true);
                 /* Advance y_cursor to the bottom of the taller element */
                 float sprite_bottom = ico_y + ico_sz;
                 float text_bottom = desc_y;

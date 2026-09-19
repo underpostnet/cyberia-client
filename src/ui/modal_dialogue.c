@@ -527,33 +527,7 @@ void modal_dialogue_draw(void) {
     memcpy(partial, line->text, len);
     partial[len] = '\0';
 
-    {
-        char copy[DIALOGUE_MAX_TEXT];
-        copy_str(copy, sizeof(copy), partial);
-
-        char line_buf[512] = {0};
-        float cur_y = text_y;
-        char* tok = strtok(copy, " ");
-        while (tok) {
-            char test[512];
-            if (line_buf[0] == '\0')
-                snprintf(test, sizeof(test), "%s", tok);
-            else
-                snprintf(test, sizeof(test), "%s %s", line_buf, tok);
-
-            if (MeasureText(test, fs) > (int)txt_max && line_buf[0] != '\0') {
-                DrawText(line_buf, (int)txt_x, (int)cur_y, fs, C_TEXT);
-                cur_y += fs + 4;
-                snprintf(line_buf, sizeof(line_buf), "%s", tok);
-            } else {
-                snprintf(line_buf, sizeof(line_buf), "%s", test);
-            }
-            tok = strtok(NULL, " ");
-        }
-        if (line_buf[0] != '\0') {
-            DrawText(line_buf, (int)txt_x, (int)cur_y, fs, C_TEXT);
-        }
-    }
+    text_wrap(partial, (int)txt_x, (int)text_y, (int)txt_max, fs, C_TEXT, false, true);
 
     /* ── Hint at bottom-right of panel ─────────────────────────────── */
     const char* hint;
