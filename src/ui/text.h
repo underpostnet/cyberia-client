@@ -34,6 +34,15 @@ int  text_line_height(int size);
  * consumed — the single source of truth for text-driven dynamic layout height. */
 int  text_wrap(const char *text, int x, int y, int maxw, int size, Color col, bool center, bool draw);
 
+/* Moves `index` back to the start of a UTF-8 character. Truncate or overwrite
+ * at the result, never at a raw byte offset: a cut inside a multi-byte
+ * character leaves an orphan byte that raylib draws as a replacement glyph.
+ * An ASCII `index` comes back unchanged. */
+static inline int text_utf8_floor(const char *s, int index) {
+    while (0 < index && 0x80 == (0xC0 & (unsigned char)s[index])) index--;
+    return index;
+}
+
 /* Variadic so a compound-literal Color argument — `(Color){ r, g, b, a }` — is
  * passed through as raw tokens and parsed by the C compiler, not split on its
  * inner commas by the preprocessor. */

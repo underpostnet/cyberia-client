@@ -59,9 +59,7 @@ void modal_draw_clipped_text(const char* text, int x, int y, int max_w,
     size_t n = strlen(text);
     if (n > sizeof(buf) - 4) n = sizeof(buf) - 4;
     while (n > 0) {
-        n--;
-        /* Land on a UTF-8 lead byte so a cut never splits a codepoint. */
-        while (n > 0 && 0x80 == ((unsigned char)text[n] & 0xC0)) n--;
+        n = (size_t)text_utf8_floor(text, (int)n - 1);
         memcpy(buf, text, n);
         memcpy(buf + n, "...", 4);
         if (MeasureText(buf, font_size) <= max_w) {

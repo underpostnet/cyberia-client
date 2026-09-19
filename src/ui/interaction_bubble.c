@@ -623,8 +623,10 @@ void interaction_bubble_draw(void) {
             char buf[48];
             copy_str(buf, sizeof(buf), last->text);
             if (strlen(last->text) > sizeof(buf) - 1) {
-                buf[sizeof(buf) - 2] = '.';
-                buf[sizeof(buf) - 3] = '.';
+                int dot = text_utf8_floor(buf, (int)sizeof(buf) - 3);
+                buf[dot] = '.';
+                buf[dot + 1] = '.';
+                buf[dot + 2] = '\0';
             }
             /* Fade in on arrival for a subtle "new message" pop. */
             double age  = GetTime() * 1000.0 - last->ts_ms;

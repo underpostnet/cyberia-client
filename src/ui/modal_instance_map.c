@@ -763,12 +763,15 @@ static void draw_node_name(const ImapNode* n, Rectangle card, bool selected, flo
     copy_str(label, sizeof(label), n->name);
     int length = (int)strlen(label);
     while (length > 3 && MeasureText(label, font_size) > max_width) {
-        label[--length] = '\0';
+        length = text_utf8_floor(label, length - 1);
+        label[length] = '\0';
     }
     if (length < (int)strlen(n->name) && length >= 3) {
-        label[length - 3] = '.';
-        label[length - 2] = '.';
-        label[length - 1] = '.';
+        int dot = text_utf8_floor(label, length - 3);
+        label[dot] = '.';
+        label[dot + 1] = '.';
+        label[dot + 2] = '.';
+        label[dot + 3] = '\0';
     }
     float label_height = (float)text_line_height(font_size) + 4.0f;
     Rectangle strip = { card.x, card.y + card.height - label_height, card.width, label_height };
@@ -889,14 +892,15 @@ static void draw_info_panel(float fade) {
         char name_buf[IMAP_NAME_MAX + 4];
         copy_str(name_buf, sizeof(name_buf), n->name);
         while ((int)strlen(name_buf) > 3 && MeasureText(name_buf, name_font) > max_name_w) {
-            name_buf[strlen(name_buf) - 1] = '\0';
+            name_buf[text_utf8_floor(name_buf, (int)strlen(name_buf) - 1)] = '\0';
         }
         int nlen = (int)strlen(name_buf);
         if (nlen < (int)strlen(n->name) && nlen >= 3) {
-            name_buf[nlen - 3] = '.';
-            name_buf[nlen - 2] = '.';
-            name_buf[nlen - 1] = '.';
-            name_buf[nlen] = '\0';
+            int dot = text_utf8_floor(name_buf, nlen - 3);
+            name_buf[dot] = '.';
+            name_buf[dot + 1] = '.';
+            name_buf[dot + 2] = '.';
+            name_buf[dot + 3] = '\0';
         }
         shadow_label(name_buf, x, y, name_font, fade_c(IMAP_SELECTED, fade));
     }

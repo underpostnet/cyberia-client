@@ -140,9 +140,10 @@ static void draw_node(Rectangle rect, const ImapNode* node, bool current) {
     }
 
     const char* name = '\0' != node->name[0] ? node->name : node->map_code;
-    int max_chars = 17;
+    int max_bytes = 17;
+    if ((int)strlen(name) > max_bytes) max_bytes = text_utf8_floor(name, max_bytes);
     char label[20];
-    snprintf(label, sizeof(label), "%.*s", max_chars, name);
+    snprintf(label, sizeof(label), "%.*s", max_bytes, name);
     DrawText(label, (int)rect.x + 5, (int)rect.y + 3, 10,
              current ? MINIMAP_PLAYER : MINIMAP_TEXT_DIM);
 }
