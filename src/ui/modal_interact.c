@@ -1212,7 +1212,7 @@ static float draw_quest_step_objectives(const QuestStepMeta* step,
     float used = 0.0f;
     for (int i = 0; i < step->objective_count; i++) {
         const QuestObjectiveMeta* objective = &step->objectives[i];
-        char line[QUEST_CACHE_ITEM_MAX + 40];
+        char line[MAX_ITEM_ID_LENGTH + 40];
         snprintf(line, sizeof(line), "Objective: %s %s x%d",
                  quest_objective_verb(objective->type), objective->item_id,
                  objective->quantity);
@@ -1241,7 +1241,7 @@ static void draw_quest_steps(const QuestMetadataEntry* metadata,
         float marker_y = *y + text_line_height(step_font) * 0.5f;
         DrawCircle((int)(x + 4.0f), (int)marker_y, is_current ? 4.0f : 3.0f, step_color);
 
-        char line[QUEST_CACHE_STEPDESC_MAX + 24];
+        char line[QUEST_STEP_MAX + 24];
         snprintf(line, sizeof(line), "Step %d: %s", i + 1, metadata->steps[i].description);
         *y += text_wrap(line, (int)(x + 14.0f), (int)*y, width - 14,
                         step_font, step_color, false, true);
@@ -1324,9 +1324,9 @@ static int card_title_wrap(const char* title, int x, int y, int width,
     if (NULL == title || '\0' == title[0]) return 0;
     if (width < 1) width = 1;
 
-    char line[QUEST_CACHE_TITLE_MAX] = { 0 };
-    char word[QUEST_CACHE_TITLE_MAX] = { 0 };
-    char candidate[QUEST_CACHE_TITLE_MAX] = { 0 };
+    char line[QUEST_TITLE_MAX] = { 0 };
+    char word[QUEST_TITLE_MAX] = { 0 };
+    char candidate[QUEST_TITLE_MAX] = { 0 };
     const char* cursor = title;
     int line_height = text_line_height(font);
     int line_y = y;
@@ -1580,7 +1580,7 @@ static void draw_quest_detail(int slot, const char* code, float x, float w,
             ObjectLayersManager* mgr = obj_layers_mgr_get();
             for (int r = 0; r < qm->reward_count && r < MI_REWARD_SLOT_MAX; r++) {
                 ObjectLayerState ol = { 0 };
-                strncpy(ol.item_id, qm->rewards[r].item_id, MAX_ID_LENGTH - 1);
+                copy_str(ol.item_id, sizeof(ol.item_id), qm->rewards[r].item_id);
                 ol.active = true;
                 ol.quantity = qm->rewards[r].quantity;
                 Rectangle rr = { rx + r * (slot_sz + slot_gap), *y - 4, slot_sz, slot_sz };
@@ -1800,7 +1800,7 @@ static void draw_shop_card(Rectangle card, const ActionShopItem* item, int slot,
                          card.y + MI_CARD_PAD + (detail_h - slot_sz) * 0.5f,
                          slot_sz, slot_sz };
     ObjectLayerState ols = { 0 };
-    strncpy(ols.item_id, item->item_id, MAX_ID_LENGTH - 1);
+    copy_str(ols.item_id, sizeof(ols.item_id), item->item_id);
     ols.active = true;
     ols.quantity = 1;
     item_slot_draw(item_r, &ols, olm);
@@ -1929,7 +1929,7 @@ static void handle_shop_click(int mx, int my) {
          * so a buyer can read an item's stats before paying for it. */
         if (ui_button_hit(s_shop_item_slot[i], mx, my)) {
             ObjectLayerState ols = { 0 };
-            strncpy(ols.item_id, am->shop_items[i].item_id, MAX_ID_LENGTH - 1);
+            copy_str(ols.item_id, sizeof(ols.item_id), am->shop_items[i].item_id);
             ols.quantity = 1;
             stack_item_inspect(&ols);
             return;
@@ -1989,7 +1989,7 @@ static void draw_craft_stack(Rectangle card, float top, float slot_sz,
                     local_player_item_quantity(it->item_id) >= it->qty;
 
         ObjectLayerState ols = { 0 };
-        strncpy(ols.item_id, it->item_id, MAX_ID_LENGTH - 1);
+        copy_str(ols.item_id, sizeof(ols.item_id), it->item_id);
         ols.active = held;
         ols.quantity = it->qty;
         Rectangle slot = { x, top, slot_sz, slot_sz };
@@ -2135,7 +2135,7 @@ static void request_craft(int slot, const ActionCraftRecipe* recipe) {
  * what a schematic consumes or yields before running it. */
 static void inspect_craft_item(const ActionCraftItem* item) {
     ObjectLayerState ols = { 0 };
-    strncpy(ols.item_id, item->item_id, MAX_ID_LENGTH - 1);
+    copy_str(ols.item_id, sizeof(ols.item_id), item->item_id);
     ols.quantity = item->qty;
     stack_item_inspect(&ols);
 }

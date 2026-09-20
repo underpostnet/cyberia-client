@@ -11,46 +11,42 @@
 #define QUEST_CACHE_H
 
 #include "meta_cache.h"
+#include "object_layer.h"
 #include "quest_progress_store.h"
 
-#define QUEST_CACHE_CODE_MAX   64
-#define QUEST_CACHE_TITLE_MAX  96
-#define QUEST_CACHE_DESC_MAX   256
-#define QUEST_CACHE_ITEM_MAX   64
 #define QUEST_CACHE_REWARD_MAX 6
 #define QUEST_CACHE_PREREQ_MAX 6
 #define QUEST_CACHE_STEP_MAX   8
 #define QUEST_CACHE_OBJ_MAX    4
-#define QUEST_CACHE_STEPDESC_MAX 160
 #define QUEST_CACHE_CAP 64
 
 typedef struct {
-    char item_id[QUEST_CACHE_ITEM_MAX];
+    char item_id[MAX_ITEM_ID_LENGTH];
     int  quantity;
 } QuestRewardMeta;
 
 typedef struct {
     char type[16]; /* talk | collect | kill */
-    char item_id[QUEST_CACHE_ITEM_MAX];
+    char item_id[MAX_ITEM_ID_LENGTH];
     int  quantity;
 } QuestObjectiveMeta;
 
 typedef struct {
-    char id[QUEST_CACHE_CODE_MAX];
-    char description[QUEST_CACHE_STEPDESC_MAX];
+    char id[META_CACHE_CODE_MAX];
+    char description[QUEST_STEP_MAX];
     QuestObjectiveMeta objectives[QUEST_CACHE_OBJ_MAX];
     int  objective_count;
 } QuestStepMeta;
 
 typedef struct {
     MetaCacheHead head;
-    char    title[QUEST_CACHE_TITLE_MAX];
-    char    description[QUEST_CACHE_DESC_MAX];
+    char    title[QUEST_TITLE_MAX];
+    char    description[QUEST_DESC_MAX];
     int     step_count;
     QuestStepMeta steps[QUEST_CACHE_STEP_MAX];
     QuestRewardMeta rewards[QUEST_CACHE_REWARD_MAX];
     int     reward_count;
-    char    prerequisites[QUEST_CACHE_PREREQ_MAX][QUEST_CACHE_CODE_MAX];
+    char    prerequisites[QUEST_CACHE_PREREQ_MAX][META_CACHE_CODE_MAX];
     int     prerequisite_count;
 } QuestMetadataEntry;
 

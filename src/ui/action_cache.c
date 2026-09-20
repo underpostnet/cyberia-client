@@ -42,7 +42,7 @@ static int ingest_craft_items(const cJSON* arr, ActionCraftItem* out) {
         if (count >= ACTION_CACHE_CRAFT_ITEMS_MAX) break;
         const char* item = json_str(row, "itemId");
         if (NULL == item) continue;
-        copy_str(out[count].item_id, ACTION_CACHE_CODE_MAX, item);
+        copy_str(out[count].item_id, sizeof(out[count].item_id), item);
         out[count].qty = json_int(row, "qty", 1);
         count++;
     }
@@ -66,8 +66,8 @@ static void ingest_doc(void* entry, const cJSON* doc) {
             if (NULL == item) continue;
             const char* price_item = json_str(si, "priceItemId");
             ActionShopItem* slot = &e->shop_items[e->shop_count];
-            copy_str(slot->item_id, ACTION_CACHE_CODE_MAX, item);
-            copy_str(slot->price_item_id, ACTION_CACHE_CODE_MAX,
+            copy_str(slot->item_id, sizeof(slot->item_id), item);
+            copy_str(slot->price_item_id, sizeof(slot->price_item_id),
                      price_item ? price_item : "coin");
             slot->price_qty = json_int(si, "priceQty", 1);
             e->shop_count++;

@@ -14,8 +14,8 @@
 #define ACTION_CACHE_H
 
 #include "meta_cache.h"
+#include "object_layer.h"
 
-#define ACTION_CACHE_CODE_MAX   64
 #define ACTION_CACHE_LABEL_MAX  64
 #define ACTION_CACHE_SHOP_MAX   16
 #define ACTION_CACHE_CRAFT_MAX  16
@@ -23,13 +23,13 @@
 #define ACTION_CACHE_CAP  32
 
 typedef struct {
-    char item_id[ACTION_CACHE_CODE_MAX];
-    char price_item_id[ACTION_CACHE_CODE_MAX];
+    char item_id[MAX_ITEM_ID_LENGTH];
+    char price_item_id[MAX_ITEM_ID_LENGTH];
     int  price_qty;
 } ActionShopItem;
 
 typedef struct {
-    char item_id[ACTION_CACHE_CODE_MAX];
+    char item_id[MAX_ITEM_ID_LENGTH];
     int  qty;
 } ActionCraftItem;
 

@@ -36,7 +36,7 @@ bool quest_progress_store_upsert(const char* code, const char* title, const char
     if (NULL == e) {
         if (s_count >= QUEST_PROGRESS_STORE_CAP) return false;
         e = &s_entries[s_count++];
-        copy_str(e->code, QUEST_CODE_MAX, code);
+        copy_str(e->code, META_CACHE_CODE_MAX, code);
         added = true;
     }
     if (title) copy_str(e->title, QUEST_TITLE_MAX, title);

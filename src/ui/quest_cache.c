@@ -61,8 +61,8 @@ int quest_active_step_index(const QuestMetadataEntry* metadata,
 static void ingest_quest_doc(void* entry, const cJSON* doc) {
     QuestMetadataEntry* e = entry;
 
-    copy_str(e->title, QUEST_CACHE_TITLE_MAX, json_str(doc, "title"));
-    copy_str(e->description, QUEST_CACHE_DESC_MAX, json_str(doc, "description"));
+    copy_str(e->title, QUEST_TITLE_MAX, json_str(doc, "title"));
+    copy_str(e->description, QUEST_DESC_MAX, json_str(doc, "description"));
 
     e->step_count = 0;
     const cJSON* steps = cJSON_GetObjectItemCaseSensitive(doc, "steps");
@@ -72,8 +72,8 @@ static void ingest_quest_doc(void* entry, const cJSON* doc) {
             if (e->step_count >= QUEST_CACHE_STEP_MAX) break;
             QuestStepMeta* sm = &e->steps[e->step_count];
             memset(sm, 0, sizeof(*sm));
-            copy_str(sm->id, QUEST_CACHE_CODE_MAX, json_str(st, "id"));
-            copy_str(sm->description, QUEST_CACHE_STEPDESC_MAX, json_str(st, "description"));
+            copy_str(sm->id, META_CACHE_CODE_MAX, json_str(st, "id"));
+            copy_str(sm->description, QUEST_STEP_MAX, json_str(st, "description"));
 
             const cJSON* objs = cJSON_GetObjectItemCaseSensitive(st, "objectives");
             if (cJSON_IsArray(objs)) {
@@ -82,7 +82,7 @@ static void ingest_quest_doc(void* entry, const cJSON* doc) {
                     if (sm->objective_count >= QUEST_CACHE_OBJ_MAX) break;
                     QuestObjectiveMeta* om = &sm->objectives[sm->objective_count];
                     copy_str(om->type, sizeof(om->type), json_str(o, "type"));
-                    copy_str(om->item_id, QUEST_CACHE_ITEM_MAX, json_str(o, "itemId"));
+                    copy_str(om->item_id, MAX_ITEM_ID_LENGTH, json_str(o, "itemId"));
                     om->quantity = json_int(o, "quantity", 1);
                     sm->objective_count++;
                 }
@@ -100,7 +100,7 @@ static void ingest_quest_doc(void* entry, const cJSON* doc) {
             const char* item_id = json_str(r, "itemId");
             if (NULL == item_id) continue;
             QuestRewardMeta* rm = &e->rewards[e->reward_count];
-            copy_str(rm->item_id, QUEST_CACHE_ITEM_MAX, item_id);
+            copy_str(rm->item_id, MAX_ITEM_ID_LENGTH, item_id);
             rm->quantity = json_int(r, "quantity", 1);
             e->reward_count++;
         }
@@ -113,7 +113,7 @@ static void ingest_quest_doc(void* entry, const cJSON* doc) {
         cJSON_ArrayForEach(p, prereqs) {
             if (e->prerequisite_count >= QUEST_CACHE_PREREQ_MAX) break;
             if (!cJSON_IsString(p) || p->valuestring[0] == '\0') continue;
-            copy_str(e->prerequisites[e->prerequisite_count], QUEST_CACHE_CODE_MAX, p->valuestring);
+            copy_str(e->prerequisites[e->prerequisite_count], META_CACHE_CODE_MAX, p->valuestring);
             e->prerequisite_count++;
         }
     }

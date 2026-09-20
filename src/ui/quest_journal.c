@@ -111,7 +111,7 @@ static int quest_card_layout(bool draw, const QuestProgressEntry* e, QuestStatus
             for (int s = 0; s < qm->step_count; s++) {
                 bool current = s == active_idx;
                 Color c = current ? C_STEP : (s < active_idx ? C_STEP_DONE : C_DIS);
-                char line[QUEST_CACHE_STEPDESC_MAX + 4];
+                char line[QUEST_STEP_MAX + 4];
                 snprintf(line, sizeof(line), "%s %s", current ? ">" : "-", qm->steps[s].description);
                 cy += text_wrap(line, tx, cy, tw, QJ_FONT_SMALL, c, false, draw);
                 if (current) {

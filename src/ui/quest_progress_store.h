@@ -15,8 +15,8 @@
 #define QUEST_PROGRESS_STORE_H
 
 #include <stdbool.h>
+#include "meta_cache.h"
 
-#define QUEST_CODE_MAX        64
 #define QUEST_TITLE_MAX       96
 #define QUEST_DESC_MAX        256
 #define QUEST_STEP_MAX        160
@@ -31,7 +31,7 @@ typedef enum {
 } QuestStatus;
 
 typedef struct {
-    char        code[QUEST_CODE_MAX];
+    char        code[META_CACHE_CODE_MAX];
     char        title[QUEST_TITLE_MAX];
     char        description[QUEST_DESC_MAX];
     char        active_step[QUEST_STEP_MAX];
