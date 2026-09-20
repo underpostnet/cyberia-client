@@ -42,7 +42,6 @@ static const Color C_PILL_BORDER = {120, 120, 120, 160 };
 
 /* HP bar — black background (the depleted portion reads as black) + outline. */
 static const Color C_HP_BG       = {  0,   0,   0, 235 };
-static const Color C_HP_BORDER   = {  0,   0,   0, 235 };
 
 /* XP bar — translucent gold over a translucent dark track. */
 static const Color C_XP_FILL     = {255, 215,   0, 220 };
@@ -55,16 +54,14 @@ static const Color C_NAME_SHADOW = {  0,   0,   0, 200 };
 /* Respawn countdown — yellow, marking player death. */
 static const Color C_RESPAWN_TEXT = {255, 220,  40, 255 };
 static const Color C_LABEL       = {255, 255, 255, 245 };
-static const Color C_LABEL_SHADOW = {  0,   0,   0, 200 };
 
-/* Stronger, fully-opaque shadow for the sum-of-stats value only. */
+/* Stronger, fully-opaque outline for the sum-of-stats value and the death
+ * countdown. */
 static const Color C_STAT_SHADOW = {  0,   0,   0, 255 };
 
-/* Death countdown gets a black outline instead of a shadow, so the yellow
- * digits read clearly against any world background. */
-static const Color C_RESPAWN_OUTLINE = {   0,   0,   0, 255 };
-#define EOHUD_STAT_OUTLINE_RINGS    2
-#define EOHUD_RESPAWN_OUTLINE_RINGS 2
+/* Two rings of black around the sum-of-stats value and the death countdown,
+ * so both read clearly against any world background. */
+#define EOHUD_OUTLINE_RINGS 2
 
 /* ── Shared pill ─────────────────────────────────────────────────────── */
 
@@ -124,12 +121,12 @@ static void draw_hp_bar(float cx, float top_y, float life, float max_life) {
         if (fr.width < 1.0f && life > 0.0f) fr.width = 1.0f;
         DrawRectangleRounded(fr, EOHUD_PILL_ROUND, 8, fill);
     }
-    DrawRectangleRoundedLinesEx(bar, EOHUD_PILL_ROUND, 8, 1.0f, C_HP_BORDER);
+    DrawRectangleRoundedLinesEx(bar, EOHUD_PILL_ROUND, 8, 1.0f, C_HP_BG);
 
     int ilif = (int)(life + 0.5f), imaxl = (int)(max_life + 0.5f);
     char label[32];
     snprintf(label, sizeof(label), "HP %d / %d", ilif, imaxl);
-    draw_centered_label(label, cx, top_y, EOHUD_HP_LABEL_FONT_SIZE, C_LABEL, C_LABEL_SHADOW, (float)EOHUD_BAR_H);
+    draw_centered_label(label, cx, top_y, EOHUD_HP_LABEL_FONT_SIZE, C_LABEL, C_NAME_SHADOW, (float)EOHUD_BAR_H);
 }
 
 static void draw_xp_bar(float cx, float top_y, float ratio, double xp, double xp_next) {
@@ -146,7 +143,7 @@ static void draw_xp_bar(float cx, float top_y, float ratio, double xp, double xp
     if (xp_next > 0.0) {
         char label[40];
         snprintf(label, sizeof(label), "XP %.0f / %.0f", xp, xp_next);
-        draw_centered_label(label, cx, top_y, EOHUD_XP_LABEL_FONT_SIZE, C_LABEL, C_LABEL_SHADOW, (float)EOHUD_XP_BAR_H);
+        draw_centered_label(label, cx, top_y, EOHUD_XP_LABEL_FONT_SIZE, C_LABEL, C_NAME_SHADOW, (float)EOHUD_XP_BAR_H);
     }
 }
 
@@ -163,7 +160,7 @@ static float draw_capability_item(const char *icon, const char *text, float x, f
     ui_icon_draw(icon, x + EOHUD_CAP_ICON_SIZE * 0.5f, row_cy, EOHUD_CAP_ICON_SIZE, false, phase);
     float text_x = x + EOHUD_CAP_ICON_SIZE + EOHUD_ITEM_GAP;
     text_draw_outlined(text, (int)text_x, (int)(row_cy - EOHUD_STATS_FONT_SIZE * 0.5f),
-                       EOHUD_STATS_FONT_SIZE, C_LABEL, C_STAT_SHADOW, EOHUD_STAT_OUTLINE_RINGS);
+                       EOHUD_STATS_FONT_SIZE, C_LABEL, C_STAT_SHADOW, EOHUD_OUTLINE_RINGS);
     return text_x - x + (float)MeasureText(text, EOHUD_STATS_FONT_SIZE);
 }
 
@@ -255,9 +252,9 @@ void entity_overhead_ui_draw(
     }
 
     /* Death/respawn countdown — local player only (caller gates), above the
-     * nameplate and below the presence icon. Larger, dark red, and wrapped in
-     * a wide white outline so a death reads unmistakably, unlike the
-     * shared-size white rows above. */
+     * nameplate and below the presence icon. Larger, yellow, and wrapped in
+     * a black outline so a death reads unmistakably, unlike the shared-size
+     * white rows above. */
     if (p->respawn_seconds > 0) {
         cursor_px -= EOHUD_RESPAWN_BAR_H;
         char rbuf[16];
@@ -265,7 +262,7 @@ void entity_overhead_ui_draw(
         int tw = MeasureText(rbuf, EOHUD_RESPAWN_FONT_SIZE);
         draw_pill(entity_cx_px, cursor_px, (float)tw, (float)EOHUD_RESPAWN_BAR_H);
         draw_centered_outlined_label(rbuf, entity_cx_px, cursor_px, EOHUD_RESPAWN_FONT_SIZE,
-                                     C_RESPAWN_TEXT, C_RESPAWN_OUTLINE, EOHUD_RESPAWN_OUTLINE_RINGS,
+                                     C_RESPAWN_TEXT, C_STAT_SHADOW, EOHUD_OUTLINE_RINGS,
                                      (float)EOHUD_RESPAWN_BAR_H);
         cursor_px -= EOHUD_ROW_GAP;
     }
