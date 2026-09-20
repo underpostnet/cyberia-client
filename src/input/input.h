@@ -5,6 +5,17 @@
 #include <stdbool.h>
 #include <stdint.h>
 
+/* The single pointer the UI tracks: the first touch point when one exists,
+ * else the mouse. */
+static inline Vector2 input_pointer_position(void) {
+    if (0 < GetTouchPointCount()) return GetTouchPosition(0);
+    return GetMousePosition();
+}
+
+static inline bool input_pointer_down(void) {
+    return 0 < GetTouchPointCount() || IsMouseButtonDown(MOUSE_BUTTON_LEFT);
+}
+
 /* Raw per-frame input event ring. Captures OS events (tap, debug key, zoom)
  * and hands them to the UI dispatch and prediction/replication stages. The
  * typed wire command lives separately in input/input_command.h. */

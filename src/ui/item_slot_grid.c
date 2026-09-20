@@ -1,4 +1,5 @@
 #include "ui/item_slot_grid.h"
+#include "input/input.h"
 #include "ease.h"
 
 #include "item_slot.h"
@@ -19,17 +20,6 @@ static const Color GRID_CELL_EMPTY  = {  18,  24,  38, 200 };
 static const Color GRID_CELL_BORDER = {  58,  78, 110, 200 };
 static const Color GRID_HOVER_FREE  = { 120, 200, 140, 255 };
 static const Color GRID_HOVER_SWAP  = { 235, 190,  70, 255 };
-
-/* ── Pointer ──────────────────────────────────────────────────────────── */
-
-static Vector2 grid_pointer_position(void) {
-    if (GetTouchPointCount() > 0) return GetTouchPosition(0);
-    return GetMousePosition();
-}
-
-static bool grid_pointer_down(void) {
-    return GetTouchPointCount() > 0 || IsMouseButtonDown(MOUSE_BUTTON_LEFT);
-}
 
 /* ── Lifecycle ────────────────────────────────────────────────────────── */
 
@@ -193,7 +183,7 @@ void item_slot_grid_update(ItemSlotGrid* g, float dt) {
     }
     if (!g->pressed) return;
 
-    g->pointer = grid_pointer_position();
+    g->pointer = input_pointer_position();
     if (!g->dragging && g->drag_index >= 0) {
         float dx = g->pointer.x - g->press_point.x;
         float dy = g->pointer.y - g->press_point.y;
@@ -204,7 +194,7 @@ void item_slot_grid_update(ItemSlotGrid* g, float dt) {
     g->hover_index = g->dragging
         ? item_slot_grid_index_at(g, (int)g->pointer.x, (int)g->pointer.y) : -1;
 
-    if (grid_pointer_down()) return;
+    if (input_pointer_down()) return;
 
     if (!g->dragging) {
         /* A press that never travelled is a tap on whatever it landed on. */

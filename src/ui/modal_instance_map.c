@@ -296,8 +296,8 @@ static void track_pointer(void) {
     if (GetTouchPointCount() >= 2) { track_pinch(); return; }
     s_m.pinching = false;
 
-    Vector2 p    = GetTouchPointCount() > 0 ? GetTouchPosition(0) : GetMousePosition();
-    bool    down = GetTouchPointCount() > 0 || IsMouseButtonDown(MOUSE_BUTTON_LEFT);
+    Vector2 p    = input_pointer_position();
+    bool    down = input_pointer_down();
 
     if (down && !s_m.pointer_was_down) {
         s_m.pressed   = CheckCollisionPointRec(p, s_m.panel);

@@ -1,4 +1,5 @@
 #include "ui_toggle.h"
+#include "input/input.h"
 #include "ease.h"
 #include "ui_button.h"
 #include "ui_icon.h"
@@ -71,16 +72,6 @@ static void toggle_flip(UIToggle* t) {
     t->changed  = true;
 }
 
-/* Touch drives the gesture when present; mouse otherwise. */
-static Vector2 toggle_pointer_position(void) {
-    if (GetTouchPointCount() > 0) return GetTouchPosition(0);
-    return GetMousePosition();
-}
-
-static bool toggle_pointer_down(void) {
-    return GetTouchPointCount() > 0 || IsMouseButtonDown(MOUSE_BUTTON_LEFT);
-}
-
 /* Follow offset for the icon: 1:1 with the pointer near the seat, easing into a
  * radial ceiling so a long drag never carries the glyph off its corner. */
 static Vector2 follow_offset(const UIToggle* t, float dx, float dy) {
@@ -104,8 +95,8 @@ static void arm_gesture(UIToggle* t, Vector2 press) {
  * the pointer may already have travelled — or lifted — by the first pass here;
  * both are read from the recorded press position, never assumed fresh. */
 static void update_gesture(UIToggle* t, float dt) {
-    Vector2 p    = toggle_pointer_position();
-    bool    down = toggle_pointer_down();
+    Vector2 p    = input_pointer_position();
+    bool    down = input_pointer_down();
 
     /* Touch arms on the press itself rather than waiting out that window,
      * which is what keeps the icon under the finger from the first frame.

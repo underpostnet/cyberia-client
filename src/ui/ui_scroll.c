@@ -1,4 +1,5 @@
 #include "ui_scroll.h"
+#include "input/input.h"
 #include "ease.h"
 
 #include <math.h>
@@ -23,15 +24,6 @@ static float scroll_max_offset(const UIScroll* s) {
 static bool scroll_input_contains(const UIScroll* s, Vector2 point) {
     Rectangle bounds = s->has_input_bounds ? s->input_bounds : s->view;
     return CheckCollisionPointRec(point, bounds);
-}
-
-static Vector2 scroll_pointer_position(void) {
-    if (GetTouchPointCount() > 0) return GetTouchPosition(0);
-    return GetMousePosition();
-}
-
-static bool scroll_pointer_down(void) {
-    return GetTouchPointCount() > 0 || IsMouseButtonDown(MOUSE_BUTTON_LEFT);
 }
 
 static void scroll_capture_bounds(UIScroll* s, Rectangle view, float content_h) {
@@ -117,7 +109,7 @@ bool ui_scroll_on_wheel(UIScroll* s, Rectangle view, float content_h, float whee
     if (!s || wheel_delta == 0.0f) return false;
 
     scroll_capture_bounds(s, view, content_h);
-    if (!scroll_input_contains(s, scroll_pointer_position())) return false;
+    if (!scroll_input_contains(s, input_pointer_position())) return false;
 
     s->nudge_active = false;
     s->vel = 0.0f;
@@ -130,8 +122,8 @@ void ui_scroll_update(UIScroll* s, Rectangle view, float content_h, float dt) {
     if (!s) return;
 
     scroll_capture_bounds(s, view, content_h);
-    Vector2 pointer = scroll_pointer_position();
-    bool pointer_down = scroll_pointer_down();
+    Vector2 pointer = input_pointer_position();
+    bool pointer_down = input_pointer_down();
 
     /* Touch can be independent of mouse press events on some platforms. */
     if (!s->pressed && pointer_down && !s->pointer_was_down &&

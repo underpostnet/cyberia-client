@@ -20,6 +20,7 @@
  */
 
 #include "inventory_bar.h"
+#include "input/input.h"
 #include "ease.h"
 #include "text.h"
 
@@ -346,16 +347,6 @@ static void draw_coin_slot(Rectangle r, int coin_idx, ObjectLayersManager* mgr) 
     DrawText("-", (int)r.x + 3, (int)r.y + 2, lfs, (Color){255, 165, 0, 200});
 }
 
-/* Touch drives the gesture when present; mouse otherwise. */
-static Vector2 pointer_position(void) {
-    if (GetTouchPointCount() > 0) return GetTouchPosition(0);
-    return GetMousePosition();
-}
-
-static bool pointer_down(void) {
-    return GetTouchPointCount() > 0 || IsMouseButtonDown(MOUSE_BUTTON_LEFT);
-}
-
 /* Track the press-drag gesture and the inertial glide that follows it. */
 static void update_drag(float dt) {
     if (!bar_slots_settled()) {
@@ -365,8 +356,8 @@ static void update_drag(float dt) {
         return;
     }
 
-    bool down = pointer_down();
-    Vector2 p = pointer_position();
+    bool down = input_pointer_down();
+    Vector2 p = input_pointer_position();
 
     if (down && s_press_armed) {
         if (!s_dragging && fabsf(p.x - s_press_x) > INV_DRAG_SLOP_PX) s_dragging = true;
