@@ -1,16 +1,15 @@
 #include "stat_panel.h"
+#include "modal.h"
 #include "text.h"
 #include "ui_icon.h"
 
 #include <raylib.h>
 #include <stdio.h>
 
-static const Color C_LABEL    = { 150, 160, 190, 220 };
-static const Color C_POSITIVE = { 120, 220, 140, 255 };
 static const Color C_NEGATIVE = { 200,  80,  80, 220 };
 
 static Color value_color(float value) {
-    return 0.0f < value ? C_POSITIVE : 0.0f > value ? C_NEGATIVE : C_LABEL;
+    return 0.0f < value ? MODAL_POSITIVE : 0.0f > value ? C_NEGATIVE : MODAL_LABEL;
 }
 
 float stat_panel_sum_draw(float x, float y, float width, float pad,
@@ -37,7 +36,7 @@ float stat_panel_sum_draw(float x, float y, float width, float pad,
     int label_font = 12;
     float label_tx = sum_tx + MeasureText(sum_label, sum_font) + 8.0f;
     float label_ty = y + (STAT_PANEL_SUM_H - (float)text_line_height(label_font)) * 0.5f;
-    DrawText(label, (int)label_tx, (int)label_ty, label_font, C_LABEL);
+    DrawText(label, (int)label_tx, (int)label_ty, label_font, MODAL_LABEL);
 
     return STAT_PANEL_SUM_H;
 }
@@ -51,7 +50,7 @@ float stat_panel_grid_draw(float x, float y, float width, float pad, int font,
         float cx = x + (i % 2) * col_w;
         float cy = y + (i / 2) * row_h;
         ui_icon_draw(CYBERIA_STAT_ICONS[i], cx + icon_sz * 0.5f, cy + icon_sz * 0.5f, icon_sz, false, 0.0f);
-        DrawText(CYBERIA_STAT_LABELS[i], (int)(cx + icon_sz + 4.0f), (int)cy, font, C_LABEL);
+        DrawText(CYBERIA_STAT_LABELS[i], (int)(cx + icon_sz + 4.0f), (int)cy, font, MODAL_LABEL);
         char value[16];
         snprintf(value, sizeof(value), "%+.0f", values[i]);
         DrawText(value, (int)(cx + col_w - MeasureText(value, font) - pad), (int)cy, font, value_color(values[i]));

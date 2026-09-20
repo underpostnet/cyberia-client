@@ -100,7 +100,6 @@ static ModalDialogueOnClose s_on_close = NULL;
 /* ── Colours ──────────────────────────────────────────────────────────── */
 
 static const Color C_SPEAKER   = { 200, 220, 255, 255 };
-static const Color C_TEXT      = { 220, 220, 230, 240 };
 static const Color C_HINT      = { 140, 140, 160, 180 };
 static const Color C_CARD_BORD = {  70,  70, 120, 200 };
 /* ── Helpers ──────────────────────────────────────────────────────────── */
@@ -418,7 +417,7 @@ void modal_dialogue_draw(void) {
     bg.a = 190;
     DrawRectangleRec(card, bg);
     if (s_quest_style) {
-        DrawRectangleLinesEx(card, 2.0f, (Color){ 230, 200, 60, 230 });
+        DrawRectangleLinesEx(card, 2.0f, MODAL_QUEST_FRAME);
     } else {
         DrawLine((int)card.x, (int)card.y,
                  (int)(card.x + card.width), (int)card.y, C_CARD_BORD);
@@ -530,7 +529,7 @@ void modal_dialogue_draw(void) {
     memcpy(partial, line->text, len);
     partial[len] = '\0';
 
-    text_wrap(partial, (int)txt_x, (int)text_y, (int)txt_max, fs, C_TEXT, false, true);
+    text_wrap(partial, (int)txt_x, (int)text_y, (int)txt_max, fs, MODAL_TEXT, false, true);
 
     /* ── Hint at bottom-right of panel ─────────────────────────────── */
     const char* hint;

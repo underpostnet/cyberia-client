@@ -18,6 +18,16 @@ extern const Color MODAL_OVERLAY_BG;   /* dim backdrop behind centred modals */
 extern const Color MODAL_PANEL_BG;     /* standardized dark panel fill        */
 extern const Color MODAL_PANEL_BORDER; /* standardized panel border           */
 
+/* Shared UI palette. Only exact copies live here — two colours that merely
+ * look alike stay with their own module. */
+extern const Color MODAL_TEXT;         /* body text on a panel                */
+extern const Color MODAL_LABEL;        /* dimmer label beside a value         */
+extern const Color MODAL_POSITIVE;     /* a gain, a match, an affordable price */
+extern const Color MODAL_ACCEPT;       /* the green of an accept button       */
+extern const Color MODAL_QUEST_FRAME;  /* gold frame marking a quest context  */
+extern const Color MODAL_QUEST;        /* quest capability marker             */
+extern const Color MODAL_ACTION;       /* action capability marker            */
+
 /* Eased pop-in scale (0.80 → 1.0) over MODAL_POP_DURATION; 1.0 afterwards. */
 float modal_pop_scale(float age);
 

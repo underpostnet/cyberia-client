@@ -336,12 +336,9 @@ static inline int   mi_font_btn(void)     { return viewport_is_mobile() ? 14 : M
 static const Color C_BTN        = {  24,  30,  48, 255 };
 static const Color C_CONTENT    = {  60,  80, 130,  36 };
 static const Color C_TAB_ACTIVE = {  70, 110, 175, 200 };
-static const Color C_TEXT       = { 220, 220, 230, 240 };
 static const Color C_TAB_DIM    = { 130, 140, 165, 220 };
-static const Color C_LABEL      = { 150, 160, 190, 220 };
-static const Color C_STAT       = { 120, 220, 140, 255 };
 static const Color C_REW_LABEL  = { 255, 215,   0, 220 };
-static const Color C_DESC_TEXT  = { 170, 180, 200, 220 };
+static const Color C_DESMODAL_TEXT  = { 170, 180, 200, 220 };
 
 /* ── Capability tabs ─────────────────────────────────────────────────── */
 
@@ -1119,7 +1116,7 @@ void modal_interact_update(float dt) {
 static void draw_stack_tab(Rectangle content) {
     ObjectLayersManager* olm = obj_layers_mgr_get();
     if (s_cached_layer_count == 0) {
-        DrawText("No active items.", (int)content.x, (int)content.y, MI_FONT_LABEL, C_LABEL);
+        DrawText("No active items.", (int)content.x, (int)content.y, MI_FONT_LABEL, MODAL_LABEL);
         return;
     }
 
@@ -1145,14 +1142,14 @@ static void draw_stack_tab(Rectangle content) {
         int ty = (int)(row_y + 2.0f);
 
         /* Item ID — show the item_id field */
-        DrawText(s_cached_layers[i].item_id, tx, ty, font_id, C_TEXT);
+        DrawText(s_cached_layers[i].item_id, tx, ty, font_id, MODAL_TEXT);
 
         /* Item type — resolve from layer data if available */
         if (s_cached_layers[i].item_id[0] != '\0') {
             ObjectLayer* ol = lookup_cached_layer(s_cached_layers[i].item_id);
             if (ol && ol->data.item.type[0] != '\0') {
                 ty += font_id + 4;
-                DrawText(ol->data.item.type, tx, ty, font_type, C_LABEL);
+                DrawText(ol->data.item.type, tx, ty, font_type, MODAL_LABEL);
             }
         }
     }
@@ -1170,7 +1167,7 @@ static void draw_stats_tab(Rectangle content) {
     float y = top;
     ui_scroll_begin(&s_s_scroll);
     if (NULL == entity) {
-        DrawText("Entity outside view.", (int)content.x, (int)y, MI_FONT_LABEL, C_LABEL);
+        DrawText("Entity outside view.", (int)content.x, (int)y, MI_FONT_LABEL, MODAL_LABEL);
         y += MI_FONT_LABEL + pad;
     } else {
         bool self = entity == &g_game_state.player.base;
@@ -1239,7 +1236,7 @@ static void draw_quest_steps(const QuestMetadataEntry* metadata,
     for (int i = 0; i < metadata->step_count; i++) {
         bool is_current = i == current_step;
         bool is_done = completed || (active && i < current_step);
-        Color step_color = is_current ? C_STAT : is_done ? (Color){ 105, 145, 118, 185 }
+        Color step_color = is_current ? MODAL_POSITIVE : is_done ? (Color){ 105, 145, 118, 185 }
                                       : (Color){ 120, 130, 155, 175 };
         float marker_y = *y + text_line_height(step_font) * 0.5f;
         DrawCircle((int)(x + 4.0f), (int)marker_y, is_current ? 4.0f : 3.0f, step_color);
@@ -1250,7 +1247,7 @@ static void draw_quest_steps(const QuestMetadataEntry* metadata,
                         step_font, step_color, false, true);
 
         const char* live_progress = is_current && progress ? progress->objectives : NULL;
-        Color objective_color = is_current ? C_DESC_TEXT : step_color;
+        Color objective_color = is_current ? C_DESMODAL_TEXT : step_color;
         *y += draw_quest_step_objectives(&metadata->steps[i], live_progress,
                                          (int)(x + 22.0f), *y, width - 22,
                                          objective_font, objective_color);
@@ -1442,7 +1439,7 @@ static void draw_bar_button(Rectangle r, const char* icon, const char* label,
         .icon_id = icon,
         .label = label,
         .font_size = viewport_is_mobile() ? 12 : mi_font_btn(),
-        .text_color = C_TEXT,
+        .text_color = MODAL_TEXT,
         .selected = selected,
         .enabled = true,
     };
@@ -1502,7 +1499,7 @@ static void draw_quest_grid_button(Rectangle card, const QuestCardInfo* info,
                                        action_width, action_height };
     const char* action_label = info->acceptable ? "Accept"
                              : info->active ? "Abandon" : info->word;
-    Color action_color = info->acceptable ? (Color){ 38, 138, 76, 255 }
+    Color action_color = info->acceptable ? MODAL_ACCEPT
                        : info->active ? (Color){ 150, 48, 52, 255 }
                        : (Color){ 70, 74, 88, 255 };
     s_q_grid_action_kind[slot] = info->acceptable ? 1 : info->active ? 2 : 0;
@@ -1541,7 +1538,7 @@ static void draw_quest_detail(int slot, const char* code, float x, float w,
              (int)(row_top + (close_sz - text_line_height(rfont)) * 0.5f), rfont, in.color);
     float th = (float)text_wrap(in.title, (int)(x + 26.0f), (int)(row_top + 3.0f),
                                 (int)(w - close_sz - sww - 26.0f - 24.0f),
-                                qfont, C_TEXT, false, true);
+                                qfont, MODAL_TEXT, false, true);
     float row_h = th + 6.0f > close_sz + 4.0f ? th + 6.0f : close_sz + 4.0f;
     *y += row_h + 4.0f;
 
@@ -1555,7 +1552,7 @@ static void draw_quest_detail(int slot, const char* code, float x, float w,
         int bfont = desktop ? MI_FONT_QBTN_DESKTOP : (MI_FONT_BTN - 3);
         const char* label = active ? "Abandon quest" : "Accept quest";
         UIButtonPixelRetroStyle st = {
-            .bg = active ? (Color){ 150, 46, 46, 255 } : (Color){ 38, 138, 76, 255 },
+            .bg = active ? (Color){ 150, 46, 46, 255 } : MODAL_ACCEPT,
             .icon_id = active ? "close" : "arrow-right",
             .label = label, .font_size = bfont, .enabled = true,
         };
@@ -1571,7 +1568,7 @@ static void draw_quest_detail(int slot, const char* code, float x, float w,
     }
 
     if (qm && META_CACHE_READY == qm->head.state) {
-        *y += text_wrap(qm->description, (int)ix, (int)*y, iw, mi_font_desc(), C_DESC_TEXT, false, true);
+        *y += text_wrap(qm->description, (int)ix, (int)*y, iw, mi_font_desc(), C_DESMODAL_TEXT, false, true);
         *y += 4;
         draw_quest_steps(qm, q, active, completed, acceptable, ix, y, iw,
                          mi_font_desc(), rfont);
@@ -1601,11 +1598,11 @@ static void draw_quest_detail(int slot, const char* code, float x, float w,
             DrawText("Current step", (int)ix, (int)*y, rfont, C_REW_LABEL);
             *y += rfont + 3;
             *y += text_wrap(q->active_step, (int)ix, (int)*y, iw,
-                            mi_font_desc(), C_STAT, false, true);
+                            mi_font_desc(), MODAL_POSITIVE, false, true);
             *y += draw_quest_step_objectives(NULL, q->objectives, (int)ix,
-                                             *y, iw, rfont, C_DESC_TEXT);
+                                             *y, iw, rfont, C_DESMODAL_TEXT);
         } else {
-            DrawText("Loading mission details...", (int)ix, (int)*y, mi_font_desc(), C_LABEL);
+            DrawText("Loading mission details...", (int)ix, (int)*y, mi_font_desc(), MODAL_LABEL);
             *y += mi_font_desc() + 2;
         }
     }
@@ -1637,7 +1634,7 @@ static void draw_quest_tab(Rectangle content, int mx, int my) {
     float y = content_y + 4.0f;
     ui_scroll_begin(&s_q_scroll);
     if (0 == s_q_count) {
-        DrawText("No missions available here.", (int)content.x, (int)y, mi_font_quest(), C_LABEL);
+        DrawText("No missions available here.", (int)content.x, (int)y, mi_font_quest(), MODAL_LABEL);
         s_q_content_height = y - content_y + mi_font_quest() + 4.0f;
         ui_scroll_end(&s_q_scroll);
         return;
@@ -1825,7 +1822,7 @@ static void draw_shop_card(Rectangle card, const ActionShopItem* item, int slot,
 
     ObjectLayer* ol_data = olm ? lookup_cached_layer(item->item_id) : NULL;
     draw_card_line(ol_data && ol_data->data.item.type[0] != '\0' ? ol_data->data.item.type : "item",
-                   text_x, (int)text_y, text_w, type_font, C_LABEL, false);
+                   text_x, (int)text_y, text_w, type_font, MODAL_LABEL, false);
     text_y += (float)text_line_height(type_font) + 2.0f;
 
     /* Price — the currency sprite and its count, both dropped on a soft shadow
@@ -1845,11 +1842,11 @@ static void draw_shop_card(Rectangle card, const ActionShopItem* item, int slot,
                       card.width - 2.0f * MI_CARD_PAD, mi_shop_buy_h() };
     s_shop_buy_btn[slot] = buy;
     UIButtonPixelRetroStyle buy_st = {
-        .bg = affordable ? (Color){ 38, 138, 76, 255 } : (Color){ 58, 62, 76, 255 },
+        .bg = affordable ? MODAL_ACCEPT : (Color){ 58, 62, 76, 255 },
         .icon_id = "wallet",
         .label = "Buy",
         .font_size = viewport_is_mobile() ? 13 : mi_font_btn(),
-        .text_color = affordable ? C_TEXT : C_TAB_DIM,
+        .text_color = affordable ? MODAL_TEXT : C_TAB_DIM,
         .enabled = affordable,
     };
     ui_button_pixel_retro_draw(buy, &buy_st, affordable && ui_button_hit(buy, mx, my));
@@ -1863,7 +1860,7 @@ static void draw_shop_tab(Rectangle content, int mx, int my) {
     float y = content_y + 4.0f;
     ui_scroll_begin(&s_shop_scroll);
     if (!am || 0 == am->shop_count) {
-        DrawText("Nothing for sale here.", (int)content.x, (int)y, mi_font_quest(), C_LABEL);
+        DrawText("Nothing for sale here.", (int)content.x, (int)y, mi_font_quest(), MODAL_LABEL);
         s_shop_content_height = y - content_y + mi_font_quest() + 4.0f;
         ui_scroll_end(&s_shop_scroll);
         return;
@@ -2041,11 +2038,11 @@ static void draw_craft_card(Rectangle card, const ActionCraftRecipe* recipe, int
                       card.width - 2.0f * MI_CARD_PAD, mi_shop_buy_h() };
     s_craft_btn[slot] = btn;
     UIButtonPixelRetroStyle btn_st = {
-        .bg = ready ? (Color){ 38, 138, 76, 255 } : (Color){ 58, 62, 76, 255 },
+        .bg = ready ? MODAL_ACCEPT : (Color){ 58, 62, 76, 255 },
         .icon_id = "engine",
         .label = "Assemble",
         .font_size = viewport_is_mobile() ? 13 : mi_font_btn(),
-        .text_color = ready ? C_TEXT : C_TAB_DIM,
+        .text_color = ready ? MODAL_TEXT : C_TAB_DIM,
         .enabled = ready,
     };
     ui_button_pixel_retro_draw(btn, &btn_st, ready && ui_button_hit(btn, mx, my));
@@ -2060,7 +2057,7 @@ static void draw_craft_tab(Rectangle content, int mx, int my) {
     ui_scroll_begin(&s_craft_scroll);
     if (!am || 0 == am->craft_count) {
         DrawText("This terminal has no schematics.", (int)content.x, (int)y,
-                 mi_font_quest(), C_LABEL);
+                 mi_font_quest(), MODAL_LABEL);
         s_craft_content_height = y - content_y + mi_font_quest() + 4.0f;
         ui_scroll_end(&s_craft_scroll);
         return;
@@ -2204,7 +2201,7 @@ static void draw_storage_tab(Rectangle content) {
     const ActionMetadataEntry* am = action_metadata();
     int capacity = am ? storage_capacity(am->storage_slots) : 0;
     if (capacity < 1) {
-        DrawText("No vault here.", (int)content.x, (int)content.y, mi_font_quest(), C_LABEL);
+        DrawText("No vault here.", (int)content.x, (int)content.y, mi_font_quest(), MODAL_LABEL);
         return;
     }
     if (capacity != s_storage_grid.capacity) item_slot_grid_init(&s_storage_grid, capacity);
@@ -2221,7 +2218,7 @@ static void draw_storage_tab(Rectangle content) {
     ui_scroll_set_scrollbar_bounds(&s_storage_scroll, scroll_lane);
     ui_scroll_begin(&s_storage_scroll);
     draw_card_line("Drag between the vault and your inventory bar",
-                   (int)grid.x, (int)top, (int)grid.width, font, C_LABEL, true);
+                   (int)grid.x, (int)top, (int)grid.width, font, MODAL_LABEL, true);
     /* Cells flow across the full width and wrap, so a large vault is taller
      * than the panel and the tab scrolls to reach its lower rows. */
     item_slot_grid_layout(&s_storage_grid,
@@ -2454,7 +2451,7 @@ static Rectangle integration_row_rect(Rectangle content, int index) {
 
 static void draw_integration_tab(Rectangle content) {
     if (0 == s_cached_layer_count) {
-        DrawText("No active layers.", (int)content.x, (int)content.y, MI_FONT_LABEL, C_LABEL);
+        DrawText("No active layers.", (int)content.x, (int)content.y, MI_FONT_LABEL, MODAL_LABEL);
         s_integration_content_height = (float)text_line_height(MI_FONT_LABEL);
         return;
     }
@@ -2473,7 +2470,7 @@ static void draw_integration_tab(Rectangle content) {
         int text_x = (int)(slot.x + slot.width + 6.0f);
         modal_draw_clipped_text(s_cached_layers[i].item_id, text_x,
                                 (int)(row.y + (row.height - (float)font) * 0.5f),
-                                (int)(row.x + row.width) - text_x, font, C_TEXT);
+                                (int)(row.x + row.width) - text_x, font, MODAL_TEXT);
     }
     float rows = (float)s_cached_layer_count * (MI_INTEGRATION_ROW_SZ + MI_TAB_GAP);
     s_integration_content_height = rows > preview ? rows : preview;
@@ -2528,7 +2525,7 @@ void modal_interact_draw(void) {
     Rectangle xr = close_rect(card);
     /* Title sits inside the card's own header strip. */
     modal_draw_title(s_display_name, card, mi_pad(), mi_header_h(),
-                     mi_font_name(), C_TEXT, xr.x);
+                     mi_font_name(), MODAL_TEXT, xr.x);
     UIButtonStyle close_btn = { .icon_id = "close-yellow", .no_fill = true };
     ui_button_draw(xr, &close_btn, ui_button_resolve_state(true, false, ui_button_hit(xr, mx, my)));
 
@@ -2560,7 +2557,7 @@ void modal_interact_draw(void) {
             .icon_id = MI_TAB_ICON[t],
             .label = MI_TAB_LABEL[t],
             .font_size = mi_font_label(),
-            .text_color = active ? C_TEXT : C_TAB_DIM,
+            .text_color = active ? MODAL_TEXT : C_TAB_DIM,
             .selected = active,
             .enabled = true,
         };
@@ -2605,7 +2602,7 @@ void modal_interact_draw(void) {
                         false, mx, my);
         /* Yellow border overlay for quest-talk active state. */
         if (pending_quest_talk)
-            DrawRectangleRoundedLinesEx(dialog, 0.18f, 6, 2.0f, (Color){ 230, 200, 60, 230 });
+            DrawRectangleRoundedLinesEx(dialog, 0.18f, 6, 2.0f, MODAL_QUEST_FRAME);
     }
 
     draw_bar_button(chat, "chat", "Chat", MI_TAB_CHAT == s_tab, mx, my);

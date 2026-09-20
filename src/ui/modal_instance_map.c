@@ -46,8 +46,6 @@ static const Color IMAP_NODE_FILL = { 14, 26, 44, 235 };
 static const Color IMAP_NODE_LINE = { 90, 210, 250, 220 };
 static const Color IMAP_SELECTED  = { 255, 210, 90, 255 };
 static const Color IMAP_PLAYER    = { 110, 255, 150, 255 };
-static const Color IMAP_QUEST     = { 250, 205, 70, 255 };
-static const Color IMAP_ACTION    = { 90, 230, 235, 255 };
 static const Color IMAP_TEXT      = { 205, 225, 245, 235 };
 static const Color IMAP_TEXT_DIM  = { 130, 150, 180, 190 };
 
@@ -621,7 +619,7 @@ static void draw_zoomed_capability_tab(Vector2 at, const char* status_icon,
     if (capabilities & IMAP_CAPABILITY_QUEST) {
         capability_icons[capability_count] =
             presentation_runtime_status_icon(STATUS_ICON_QUEST_PROVIDER);
-        capability_colors[capability_count++] = quest_active ? IMAP_QUEST : IMAP_TEXT_DIM;
+        capability_colors[capability_count++] = quest_active ? MODAL_QUEST : IMAP_TEXT_DIM;
     }
     char stats[16] = { 0 };
     if (show_stats) {
@@ -650,7 +648,7 @@ static void draw_zoomed_capability_tab(Vector2 at, const char* status_icon,
                       width + 10.0f, icon_size + 10.0f };
     draw_pixel_panel(tab, (Color){ 12, 18, 34, 238 }, icon_tint, false, fade);
     if (action_active || quest_active)
-        draw_pixel_active_pulse(tab, action_active ? IMAP_ACTION : IMAP_QUEST, fade, time);
+        draw_pixel_active_pulse(tab, action_active ? MODAL_ACTION : MODAL_QUEST, fade, time);
     else if (0 != pulse_accent.a)
         draw_pixel_active_pulse(tab, pulse_accent, fade, time);
 
@@ -880,8 +878,8 @@ static void draw_info_panel(float fade) {
     if (n->quest_provider_count > 0) {
         ui_icon_draw_ex("quest", (float)x + (float)icon_sz * 0.5f,
                         (float)y + (float)line_h * 0.5f, (float)icon_sz, 0.0f,
-                        fade_c(IMAP_QUEST, fade));
-        shadow_label(quest_buf, x + icon_sz + 6, y, stat_font, fade_c(IMAP_QUEST, fade));
+                        fade_c(MODAL_QUEST, fade));
+        shadow_label(quest_buf, x + icon_sz + 6, y, stat_font, fade_c(MODAL_QUEST, fade));
         y += line_h;
     }
 
@@ -891,9 +889,9 @@ static void draw_info_panel(float fade) {
         if (action_icon && '\0' != action_icon[0]) {
             ui_icon_draw_ex(action_icon, (float)x + (float)icon_sz * 0.5f,
                             (float)y + (float)line_h * 0.5f, (float)icon_sz, 0.0f,
-                            fade_c(IMAP_ACTION, fade));
+                            fade_c(MODAL_ACTION, fade));
         }
-        shadow_label(action_buf, x + icon_sz + 6, y, stat_font, fade_c(IMAP_ACTION, fade));
+        shadow_label(action_buf, x + icon_sz + 6, y, stat_font, fade_c(MODAL_ACTION, fade));
         y += line_h;
     }
 

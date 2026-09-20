@@ -27,6 +27,7 @@
 #include "notify_store.h"
 #include "inventory_bar.h"
 #include "inventory_modal.h"
+#include "modal.h"
 #include "modal_dialogue.h"
 #include "modal_instance_map.h"
 #include "ui_button.h"
@@ -492,8 +493,8 @@ void interaction_bubble_draw(void) {
         Color retro_pulse_color = { 0 };
         if (0 != provider) {
             retro_pulse_color = 0 != (provider & INTERACTION_FLAG_QUEST)
-                                ? (Color){ 250, 205, 70, 255 }
-                                : (Color){ 90, 230, 235, 255 };
+                                ? MODAL_QUEST
+                                : MODAL_ACTION;
             float pulse = 0.5f + 0.5f * sinf((float)GetTime() * 4.2f + (float)i * 0.9f);
             int pp_size = 6;
             int pp_count = 10;
@@ -558,7 +559,7 @@ void interaction_bubble_draw(void) {
             DrawText(slot->display_name, np_x + 1, np_y + 1, np_fs,
                      (Color){0, 0, 0, 180});
             DrawText(slot->display_name, np_x, np_y, np_fs,
-                     (Color){220, 220, 230, 240});
+                     MODAL_TEXT);
             /* Grow the slide reach to this label's overhang past the icon. */
             float reach = r.width + 4.0f +
                           (float)MeasureText(slot->display_name, np_fs) + 8.0f;

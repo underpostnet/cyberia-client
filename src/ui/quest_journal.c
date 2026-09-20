@@ -33,7 +33,6 @@
 /* Header and cards sit over the translucent HUD panel. */
 static const Color C_HEADER   = {   3,   7,  16, 148 };
 static const Color C_HEADER_TEXT = { 215, 230, 245, 235 };
-static const Color C_TEXT     = { 220, 220, 230, 240 };
 static const Color C_DIM      = { 140, 140, 160, 200 };
 static const Color C_CARD     = {  30,  34,  52, 210 };
 static const Color C_STEP     = { 120, 200, 140, 235 };
@@ -99,7 +98,7 @@ static int quest_card_layout(bool draw, const QuestProgressEntry* e, QuestStatus
     if (draw) {
         DrawCircle(x + QJ_CARD_PAD + 4, cy + QJ_FONT_NAME / 2, 4.0f, C_STATUS[sec]);
     }
-    cy += text_wrap(name, tx, cy, tw, QJ_FONT_NAME, C_TEXT, false, draw);
+    cy += text_wrap(name, tx, cy, tw, QJ_FONT_NAME, MODAL_TEXT, false, draw);
     cy += 2;
 
     if (QUEST_ACTIVE == sec) {
@@ -166,7 +165,7 @@ static float sections_walk(int mode, int mx, int my, float x, float y0, float w)
         char label[64];
         snprintf(label, sizeof(label), "%s (%d)", C_SECTION_LABEL[sec], count);
         float srow_h = ui_toggle_header(&s_section[sec], x, y, w, label, QJ_FONT_SECTION,
-                                        C_TEXT, JW_DRAW == mode);
+                                        MODAL_TEXT, JW_DRAW == mode);
         Rectangle srow = { x, y, w, srow_h };
         if (JW_CLICK == mode && ui_button_hit(srow, mx, my)) {
             s_section[sec].expanded = !s_section[sec].expanded;

@@ -1,4 +1,5 @@
 #include "chat_pane.h"
+#include "modal.h"
 #include "text.h"
 
 #include "domain/viewport.h"
@@ -29,7 +30,6 @@ static const char* CHAT_PRESETS[CHAT_PRESET_COUNT] = {
 
 static const Color C_MINE     = { 120, 180, 240, 255 };
 static const Color C_THEIRS   = { 200, 200, 220, 230 };
-static const Color C_TEXT     = { 220, 220, 230, 240 };
 static const Color C_HINT     = { 130, 140, 165, 200 };
 static const Color C_BTN      = {  24,  30,  48, 255 };
 static const Color C_SEND     = {  35,  80, 160, 255 };
@@ -174,7 +174,7 @@ void chat_pane_draw(Rectangle content, const char* entity_id, const char* entity
                  m->mine ? C_MINE : C_THEIRS);
         y += (float)text_line_height(font);
         y += (float)text_wrap(m->text, (int)l.list.x, (int)y, (int)l.list.width, font,
-                              C_TEXT, false, true) + CHAT_GAP;
+                              MODAL_TEXT, false, true) + CHAT_GAP;
     }
     s_content_h = y - top;
     ui_scroll_end(&s_scroll);
@@ -188,12 +188,12 @@ void chat_pane_draw(Rectangle content, const char* entity_id, const char* entity
     DrawRectangleRec(l.input, C_INPUT_BG);
 
     UIButtonPixelRetroStyle send = {
-        .bg = C_SEND, .label = "Send", .font_size = font, .text_color = C_TEXT, .enabled = true,
+        .bg = C_SEND, .label = "Send", .font_size = font, .text_color = MODAL_TEXT, .enabled = true,
     };
     ui_button_pixel_retro_draw(l.send, &send, ui_button_hit(l.send, mx, my));
     for (int i = 0; CHAT_PRESET_COUNT > i; i++) {
         UIButtonPixelRetroStyle preset = {
-            .bg = C_BTN, .label = CHAT_PRESETS[i], .font_size = font, .text_color = C_TEXT,
+            .bg = C_BTN, .label = CHAT_PRESETS[i], .font_size = font, .text_color = MODAL_TEXT,
             .enabled = true,
         };
         ui_button_pixel_retro_draw(l.presets[i], &preset, ui_button_hit(l.presets[i], mx, my));

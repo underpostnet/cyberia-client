@@ -1,4 +1,5 @@
 #include "hud_minimap_overlay.h"
+#include "modal.h"
 
 #include "hud_side_stack.h"
 #include "instance_map_data.h"
@@ -30,8 +31,6 @@ static const Color MINIMAP_TEXT         = { 215, 230, 245, 235 };
 static const Color MINIMAP_TEXT_DIM     = { 140, 165, 190, 205 };
 static const Color MINIMAP_PLAYER       = { 105, 255, 145, 255 };
 static const Color MINIMAP_OTHER_PLAYER = { 100, 205, 255, 245 };
-static const Color MINIMAP_QUEST        = { 250, 205, 70, 255 };
-static const Color MINIMAP_ACTION       = { 90, 230, 235, 255 };
 
 static bool s_visible = false;
 static int  s_zoom_level = MINIMAP_ZOOM_DEFAULT;
@@ -160,13 +159,13 @@ static void draw_static_pois(const ImapGraph* graph, int current_index, Rectangl
         float side = poi->node == current_index ? 8.0f : 6.0f;
         draw_square_marker(at, side, color);
         if (poi->action_active || poi->quest_active) {
-            Color active = poi->quest_active ? MINIMAP_QUEST : MINIMAP_ACTION;
+            Color active = poi->quest_active ? MODAL_QUEST : MODAL_ACTION;
             float pulse_side = 13.0f + 3.0f * sinf((float)time * 4.0f + (float)i);
             DrawRectangleLinesEx(centered_square(at, pulse_side), 1.0f, active);
         } else if (poi->capabilities & IMAP_CAPABILITY_QUEST) {
-            DrawRectangleLinesEx(centered_square(at, side + 4.0f), 1.0f, MINIMAP_QUEST);
+            DrawRectangleLinesEx(centered_square(at, side + 4.0f), 1.0f, MODAL_QUEST);
         } else if (poi->capabilities & IMAP_CAPABILITY_ACTION) {
-            DrawRectangleLinesEx(centered_square(at, side + 4.0f), 1.0f, MINIMAP_ACTION);
+            DrawRectangleLinesEx(centered_square(at, side + 4.0f), 1.0f, MODAL_ACTION);
         }
     }
 }

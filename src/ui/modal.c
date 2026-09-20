@@ -10,6 +10,14 @@ const Color MODAL_OVERLAY_BG   = {  0,  0,  0, 170 };
 const Color MODAL_PANEL_BG     = { 14, 14, 22, 245 };
 const Color MODAL_PANEL_BORDER = { 80, 80, 130, 220 };
 
+const Color MODAL_TEXT         = { 220, 220, 230, 240 };
+const Color MODAL_LABEL        = { 150, 160, 190, 220 };
+const Color MODAL_POSITIVE     = { 120, 220, 140, 255 };
+const Color MODAL_ACCEPT       = {  38, 138,  76, 255 };
+const Color MODAL_QUEST_FRAME  = { 230, 200,  60, 230 };
+const Color MODAL_QUEST        = { 250, 205,  70, 255 };
+const Color MODAL_ACTION       = {  90, 230, 235, 255 };
+
 float modal_pop_scale(float age) {
     if (age >= MODAL_POP_DURATION) return 1.0f;
     float t = age / MODAL_POP_DURATION;

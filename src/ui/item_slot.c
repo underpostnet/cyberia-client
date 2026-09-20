@@ -1,4 +1,5 @@
 #include "item_slot.h"
+#include "modal.h"
 #include "text.h"
 
 #include "domain/local_player.h"
@@ -117,7 +118,7 @@ void item_slot_draw_ex(Rectangle r, const ObjectLayerState* ols, ObjectLayersMan
                 /* Black outline around text chars for legibility */
                 text_draw_outlined(sum_str, sum_tx, sum_ty, stat_font,
                                    0 > sum ? (Color){ 200, 80, 80, 255 }
-                                           : (Color){ 120, 220, 140, 255 },
+                                           : MODAL_POSITIVE,
                                    BLACK, 1);
             }
         }
