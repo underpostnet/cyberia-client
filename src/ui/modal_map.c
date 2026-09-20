@@ -1,4 +1,5 @@
 #include "modal_map.h"
+#include "ease.h"
 #include "text.h"
 #include "toolbar.h"
 
@@ -71,7 +72,7 @@ void modal_map_set_expanded(bool expanded) {
 
 float modal_map_expand_progress(void) {
     float t = g_modal_map.expand_t;
-    return t * t * (3.0f - 2.0f * t); /* smoothstep */
+    return ease_smoothstep(t);
 }
 
 /* ── Draw helpers ─────────────────────────────────────────────────────── */

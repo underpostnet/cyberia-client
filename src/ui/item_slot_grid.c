@@ -1,4 +1,5 @@
 #include "ui/item_slot_grid.h"
+#include "ease.h"
 
 #include "item_slot.h"
 #include "ui_button.h"
@@ -251,10 +252,9 @@ bool item_slot_grid_is_dragging(const ItemSlotGrid* g) {
 static Rectangle settled_rect(const ItemSlotGrid* g, int index, Rectangle cell) {
     float t = g->settle_age[index] / GRID_SETTLE_DUR;
     if (t >= 1.0f) return cell;
-    float u = 1.0f - t;
-    float e = 1.0f - u * u * u; /* ease-out cubic */
-    return (Rectangle){ g->settle_from[index].x + (cell.x - g->settle_from[index].x) * e,
-                        g->settle_from[index].y + (cell.y - g->settle_from[index].y) * e,
+    float e = ease_out_cubic(t);
+    return (Rectangle){ ease_approach(g->settle_from[index].x, cell.x, e),
+                        ease_approach(g->settle_from[index].y, cell.y, e),
                         cell.width, cell.height };
 }
 

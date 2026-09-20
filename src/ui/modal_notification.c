@@ -398,15 +398,6 @@ static float notif_slot_size(void) {
     return fit < MN_SLOT ? fit : MN_SLOT;
 }
 
-/* Slide-in ease (decelerating) and slide-out ease (accelerating). */
-static float mn_ease_out_cubic(float t) {
-    float u = 1.0f - t;
-    return 1.0f - u * u * u;
-}
-static float mn_ease_in_cubic(float t) {
-    return t * t * t;
-}
-
 /* 0..1 progress of whichever slide is currently active. */
 static float mn_slide_progress(void) {
     float age = s_closing ? s_close_age : s_age;
@@ -419,15 +410,15 @@ static float mn_slide_progress(void) {
  * positive past the card's own width so it fully leaves the screen). */
 static float mn_slide_offset_x(float card_w) {
     float t = mn_slide_progress();
-    if (s_closing) return (card_w + 60.0f) * mn_ease_in_cubic(t);
-    return -(float)GetScreenWidth() * (1.0f - mn_ease_out_cubic(t));
+    if (s_closing) return (card_w + 60.0f) * ease_in_cubic(t);
+    return -(float)GetScreenWidth() * (1.0f - ease_out_cubic(t));
 }
 
 /* Fade paired with the slide: fades in while entering, fades out while
  * leaving — the card is never both fully opaque and off-screen. */
 static float mn_slide_alpha(void) {
     float t = mn_slide_progress();
-    return s_closing ? 1.0f - mn_ease_in_cubic(t) : mn_ease_out_cubic(t);
+    return s_closing ? 1.0f - ease_in_cubic(t) : ease_out_cubic(t);
 }
 
 /* Confirm-press pulse shape: grow (ease-out) to MN_OK_PULSE_PEAK_SCALE, then
@@ -439,11 +430,11 @@ static void mn_ok_pulse(float* out_scale, float* out_alpha) {
     if (t > 1.0f) t = 1.0f;
     if (t < MN_OK_PULSE_GROW_FRAC) {
         float g = t / MN_OK_PULSE_GROW_FRAC;
-        *out_scale = 1.0f + (MN_OK_PULSE_PEAK_SCALE - 1.0f) * mn_ease_out_cubic(g);
+        *out_scale = 1.0f + (MN_OK_PULSE_PEAK_SCALE - 1.0f) * ease_out_cubic(g);
         *out_alpha = 1.0f;
     } else {
         float s = (t - MN_OK_PULSE_GROW_FRAC) / (1.0f - MN_OK_PULSE_GROW_FRAC);
-        float e = mn_ease_out_cubic(s);
+        float e = ease_out_cubic(s);
         *out_scale = MN_OK_PULSE_PEAK_SCALE * (1.0f - e);
         *out_alpha = 1.0f - e;
     }

@@ -1,6 +1,6 @@
 #include "modal.h"
+#include "ease.h"
 #include "text.h"
-#include <math.h>
 #include <string.h>
 
 /* ── Shared panel chrome ──────────────────────────────────────────────── */
@@ -12,7 +12,7 @@ const Color MODAL_PANEL_BORDER = { 80, 80, 130, 220 };
 float modal_pop_scale(float age) {
     if (age >= MODAL_POP_DURATION) return 1.0f;
     float t = age / MODAL_POP_DURATION;
-    return 0.80f + 0.20f * (1.0f - powf(1.0f - t, 3.0f));
+    return 0.80f + 0.20f * ease_out_cubic(t);
 }
 
 float modal_pop_alpha(float age) {

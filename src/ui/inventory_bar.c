@@ -20,6 +20,7 @@
  */
 
 #include "inventory_bar.h"
+#include "ease.h"
 #include "text.h"
 
 #include "domain/viewport.h"
@@ -232,9 +233,8 @@ static int       s_reflow_count = 0;
 
 static float reflow_position(const InvReflow* e) {
     if (e->age >= INV_REFLOW_DUR) return e->to_si;
-    float u = 1.0f - e->age / INV_REFLOW_DUR;
-    float eased = 1.0f - u * u * u; /* ease-out cubic */
-    return e->from_si + (e->to_si - e->from_si) * eased;
+    float eased = ease_out_cubic(e->age / INV_REFLOW_DUR);
+    return ease_approach(e->from_si, e->to_si, eased);
 }
 
 static const InvReflow* reflow_find(const char* item_id) {

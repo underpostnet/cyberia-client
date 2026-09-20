@@ -1,4 +1,5 @@
 #include "ui_scroll.h"
+#include "ease.h"
 
 #include <math.h>
 #include <raymath.h>
@@ -168,8 +169,7 @@ void ui_scroll_update(UIScroll* s, Rectangle view, float content_h, float dt) {
             s->offset = s->nudge_to;
             s->nudge_active = false;
         } else {
-            float eased = t * t * (3.0f - 2.0f * t);
-            s->offset = s->nudge_from + (s->nudge_to - s->nudge_from) * eased;
+            s->offset = ease_approach(s->nudge_from, s->nudge_to, ease_smoothstep(t));
         }
         scroll_show_bar(s);
     }

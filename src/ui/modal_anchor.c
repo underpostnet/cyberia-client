@@ -1,4 +1,5 @@
 #include "modal_anchor.h"
+#include "ease.h"
 
 #include "domain/viewport.h"
 #include "game_render.h"
@@ -110,7 +111,7 @@ Rectangle modal_anchor_rect(const ModalAnchor* anchor, Vector2 size, Rectangle s
 
 static float modal_anchor_ease_height(float current, float target, float dt) {
     if (current < 0.0f) return target;
-    return current + (target - current) * (1.0f - expf(-MODAL_ANCHOR_RESIZE_LAMBDA * dt));
+    return ease_approach(current, target, ease_exp_factor(MODAL_ANCHOR_RESIZE_LAMBDA, dt));
 }
 
 void modal_anchor_layout_reset(ModalAnchorLayout* layout) {

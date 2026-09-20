@@ -10,6 +10,7 @@
  */
 
 #include "modal_dialogue.h"
+#include "ease.h"
 #include "text.h"
 
 #include "domain/local_player.h"
@@ -31,7 +32,6 @@
 #include "util/utils.h"
 
 #include <assert.h>
-#include <math.h>
 #include <raylib.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -386,7 +386,7 @@ void modal_dialogue_draw(void) {
     /* Pop-in animation */
     float pop = 0.12f;
     float t   = s_age < pop ? s_age / pop : 1.0f;
-    float ease = 1.0f - powf(1.0f - t, 3.0f);
+    float ease = ease_out_cubic(t);
     float fade = s_age / 0.18f;
     if (fade > 1.0f) fade = 1.0f;
     unsigned char oa = (unsigned char)(100.0f * fade);

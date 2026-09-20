@@ -1,4 +1,5 @@
 #include "toolbar.h"
+#include "ease.h"
 
 #include "audio/audio.h"
 #include "hud_minimap_overlay.h"
@@ -27,7 +28,7 @@ static float s_slide_t = 0.0f;
 
 static float slide_eased(void) {
     float t = s_slide_t;
-    return t * t * (3.0f - 2.0f * t); /* smoothstep */
+    return ease_smoothstep(t);
 }
 
 float toolbar_height(void)   { return TOOLBAR_H * (1.0f - slide_eased()); }

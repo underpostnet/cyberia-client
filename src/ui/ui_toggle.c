@@ -1,4 +1,5 @@
 #include "ui_toggle.h"
+#include "ease.h"
 #include "ui_button.h"
 #include "ui_icon.h"
 #include "text.h"
@@ -148,8 +149,8 @@ static void update_gesture(UIToggle* t, float dt) {
         if (fabsf(t->drag_offset.y) < 0.25f) t->drag_offset.y = 0.0f;
     }
     float scale_target = t->dragging ? UI_TOGGLE_DRAG_ICON_SCALE : 1.0f;
-    t->icon_scale += (scale_target - t->icon_scale) *
-                     (1.0f - expf(-UI_TOGGLE_ICON_SCALE_RATE * dt));
+    t->icon_scale = ease_approach(t->icon_scale, scale_target,
+                                  ease_exp_factor(UI_TOGGLE_ICON_SCALE_RATE, dt));
 }
 
 void ui_toggle_update(UIToggle* t, float dt) {

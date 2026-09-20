@@ -1,4 +1,5 @@
 #include "modal_instance_map.h"
+#include "ease.h"
 
 #include "instance_map_data.h"
 #include "inventory_modal.h"
@@ -157,7 +158,7 @@ static bool grid_rotation_animating(void) {
 static float grid_rotation_progress(void) {
     if (!grid_rotation_animating()) return 1.0f;
     float t = s_rotation_age / IMAP_ROTATE_DURATION;
-    return t * t * (3.0f - 2.0f * t);
+    return ease_smoothstep(t);
 }
 
 static float grid_rotation_angle(void) {
@@ -349,10 +350,10 @@ void modal_instance_map_update(float dt) {
     track_pointer();
 
     /* Smooth camera interpolation (frame-rate independent). */
-    float a = 1.0f - expf(-IMAP_CAM_LAMBDA * dt);
-    s_m.zoom  += (s_m.zoom_target - s_m.zoom) * a;
-    s_m.pan.x += (s_m.pan_target.x - s_m.pan.x) * a;
-    s_m.pan.y += (s_m.pan_target.y - s_m.pan.y) * a;
+    float a = ease_exp_factor(IMAP_CAM_LAMBDA, dt);
+    s_m.zoom  = ease_approach(s_m.zoom, s_m.zoom_target, a);
+    s_m.pan.x = ease_approach(s_m.pan.x, s_m.pan_target.x, a);
+    s_m.pan.y = ease_approach(s_m.pan.y, s_m.pan_target.y, a);
 }
 
 /* ── Input dispatch glue ────────────────────────────────────────────────── */
