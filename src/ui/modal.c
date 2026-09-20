@@ -1,6 +1,7 @@
 #include "modal.h"
 #include "ease.h"
 #include "text.h"
+#include "toolbar.h"
 #include <string.h>
 
 /* ── Shared panel chrome ──────────────────────────────────────────────── */
@@ -20,12 +21,6 @@ float modal_pop_alpha(float age) {
     if (t > 1.0f) t = 1.0f;
     if (t < 0.0f) t = 0.0f;
     return t;
-}
-
-void modal_draw_overlay(int screen_width, int screen_height, float age) {
-    Color c = MODAL_OVERLAY_BG;
-    c.a = (unsigned char)(c.a * modal_pop_alpha(age));
-    DrawRectangle(0, 0, screen_width, screen_height, c);
 }
 
 void modal_draw_float_shadow(Rectangle rect, float age) {
@@ -67,3 +62,31 @@ bool modal_wide_layout(void) {
     return (float)sw > (float)sh * 1.4f;
 }
 
+
+void modal_draw_card(Rectangle card, bool anchored, float age, float overlay_h,
+                     Color border, float header_h) {
+    float alpha = modal_pop_alpha(age);
+    if (anchored) {
+        modal_draw_float_shadow(card, age);
+    } else {
+        Color overlay = MODAL_OVERLAY_BG;
+        overlay.a = (unsigned char)(overlay.a * alpha);
+        DrawRectangle(0, 0, GetScreenWidth(), (int)overlay_h, overlay);
+    }
+    Color bg = MODAL_PANEL_BG;
+    bg.a = (unsigned char)((anchored ? MODAL_ANCHOR_PANEL_ALPHA : 150.0f) * alpha);
+    DrawRectangleRec(card, bg);
+    Color bc = border;
+    bc.a = (unsigned char)(bc.a * alpha);
+    DrawRectangleLinesEx(card, 1.0f, bc);
+    DrawRectangle((int)card.x, (int)card.y, (int)card.width, (int)header_h,
+                  (Color){ border.r, border.g, border.b, 40 });
+}
+
+void modal_draw_title(const char* text, Rectangle card, float pad, float header_h,
+                      int font, Color color, float close_x) {
+    float tx = card.x + pad;
+    if (tx < toolbar_toggle_right()) tx = toolbar_toggle_right();
+    modal_draw_clipped_text(text, (int)tx, (int)(card.y + (header_h - font) * 0.5f),
+                            (int)(close_x - MODAL_HEADER_TITLE_GAP - tx), font, color);
+}

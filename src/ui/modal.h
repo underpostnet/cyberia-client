@@ -25,14 +25,29 @@ float modal_pop_scale(float age);
  * alpha by this for a uniform fade-in. */
 float modal_pop_alpha(float age);
 
-/* Dim the whole screen behind a centred modal (alpha eased by age). */
-void modal_draw_overlay(int screen_width, int screen_height, float age);
-
 /* Soft drop shadow under a panel that floats over the live world with no
  * dimmed backdrop behind it — without it the card has no edge against a busy
  * scene. Draw before the panel fill. */
 #define MODAL_SHADOW_LAYERS 3
 void modal_draw_float_shadow(Rectangle rect, float age);
+
+/* Panel alpha for an anchored card: it floats over the live world with no
+ * dimmed backdrop, so it fills more opaquely than a centred card. */
+#define MODAL_ANCHOR_PANEL_ALPHA 236.0f
+
+/* Clearance the header title keeps from the close button. */
+#define MODAL_HEADER_TITLE_GAP 8.0f
+
+/* Standard card chrome, in draw order: the float shadow when `anchored`, else
+ * the dim overlay down to `overlay_h`; the panel fill; a 1 px `border`; and
+ * the header strip of `header_h`. Every alpha is eased by `age`. */
+void modal_draw_card(Rectangle card, bool anchored, float age, float overlay_h,
+                     Color border, float header_h);
+
+/* Header title, `pad` from the card's left edge but never left of the
+ * toolbar's pinned toggle, clipped before `close_x`. */
+void modal_draw_title(const char* text, Rectangle card, float pad, float header_h,
+                      int font, Color color, float close_x);
 
 /* Draw a single line at (x, y), truncated with an ellipsis to fit `max_w`
  * pixels. Used for panel header titles, which share their strip with a close

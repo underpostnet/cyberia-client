@@ -116,11 +116,6 @@ static ModalAnchorLayout s_layout = { .height = -1.0f };
  * opened it, sized to its content instead of to the viewport. */
 #define IM_ANCHOR_MIN_H       260.0f
 #define IM_ANCHOR_DEFAULT_H   420.0f
-/* Panel fill opacity with no dimmed backdrop behind the card (vs 150 for the
- * full-width layout, which sits on the overlay). */
-#define IM_ANCHOR_PANEL_ALPHA 236.0f
-/* Clearance the header title keeps from the close button. */
-#define IM_HEADER_TITLE_GAP     8.0f
 
 #define MODAL_SPRITE_FRAC  0.38f   /* sprite size as fraction of card width */
 #define MODAL_SPRITE_MIN   100
@@ -578,23 +573,9 @@ void inventory_modal_draw(void) {
      * shadow and an opaque fill to stay readable over a busy scene. */
     bool anchored = modal_anchor_active();
     Rectangle card = card_rect(screen_w, screen_h, modal_pop_scale(s_age));
-    float alpha = modal_pop_alpha(s_age);
-    if (anchored) {
-        modal_draw_float_shadow(card, s_age);
-    } else {
-        float dim_h = (float)screen_h - inventory_bar_visible_height();
-        Color overlay = MODAL_OVERLAY_BG;
-        overlay.a = (unsigned char)(overlay.a * alpha);
-        DrawRectangle(0, 0, screen_w, (int)dim_h, overlay);
-    }
-    Color card_bg = MODAL_PANEL_BG;
-    card_bg.a = (unsigned char)((anchored ? IM_ANCHOR_PANEL_ALPHA : 150) * alpha);
-    DrawRectangleRec(card, card_bg);
-    Color card_bc = MODAL_PANEL_BORDER;
-    card_bc.a = (unsigned char)(card_bc.a * alpha);
-    DrawRectangleLinesEx(card, 1.0f, card_bc);
-    DrawRectangle((int)card.x, (int)card.y, (int)card.width, (int)IM_HEADER_H,
-                  (Color){ MODAL_PANEL_BORDER.r, MODAL_PANEL_BORDER.g, MODAL_PANEL_BORDER.b, 40 });
+    modal_draw_card(card, anchored, s_age,
+                    (float)screen_h - inventory_bar_visible_height(),
+                    MODAL_PANEL_BORDER, IM_HEADER_H);
 
     bool lore_available = inventory_lore_available(ols);
     InventoryModalLayout layout = inventory_modal_layout(card);
@@ -940,14 +921,7 @@ void inventory_modal_draw(void) {
 
     /* Item name stays fixed in the card's own header while the main column
      * scrolls. The floor also clears the toolbar's pinned top-left toggle. */
-    {
-        int tfs = 18;
-        float tx = card.x + IM_CARD_PAD;
-        if (tx < toolbar_toggle_right()) tx = toolbar_toggle_right();
-        modal_draw_clipped_text(item_name, (int)tx,
-                                (int)(card.y + (IM_HEADER_H - tfs) * 0.5f),
-                                (int)(close_r.x - IM_HEADER_TITLE_GAP - tx), tfs, C_TITLE);
-    }
+    modal_draw_title(item_name, card, IM_CARD_PAD, IM_HEADER_H, 18, C_TITLE, close_r.x);
 
     /* ── Bottom-anchored buttons ────────────────────────────────────── */
 

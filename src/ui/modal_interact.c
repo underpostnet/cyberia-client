@@ -470,11 +470,6 @@ static void collapse_quest_detail(void) {
  * instead of a full-width band. */
 #define MI_ANCHOR_MIN_H      220.0f
 #define MI_ANCHOR_DEFAULT_H  360.0f
-/* Panel fill opacity with no dimmed backdrop behind the card (vs 150 for the
- * full-width layout, which sits on the overlay). */
-#define MI_ANCHOR_PANEL_ALPHA 236.0f
-/* Clearance the header title keeps from the close button. */
-#define MI_HEADER_TITLE_GAP    8.0f
 
 /* Desktop dialogue-collapse expansion: 0 = half-height (paired dialogue
  * below), 1 = the card owns the dialogue's space. Animated in update. */
@@ -2505,7 +2500,6 @@ static void handle_integration_click(int mx, int my) {
 
 void modal_interact_draw(void) {
     if (!s_open) return;
-    int sw = GetScreenWidth();
     int sh = GetScreenHeight();
     int mx = GetMouseX(), my = GetMouseY();
 
@@ -2514,30 +2508,11 @@ void modal_interact_draw(void) {
      * shadow and an opaque fill to stay readable over a busy scene. */
     bool anchored = modal_anchor_active();
     Rectangle card = ui_rect_scale(card_rect(), modal_pop_scale(s_age));
-    float a = modal_pop_alpha(s_age);
-    if (anchored) modal_draw_float_shadow(card, s_age);
-    else          modal_draw_overlay(sw, sh, s_age);
-    Color bg = MODAL_PANEL_BG;
-    bg.a = (unsigned char)((anchored ? MI_ANCHOR_PANEL_ALPHA : 150) * a);
-    DrawRectangleRec(card, bg);
-    Color bc = s_border;
-    bc.a = (unsigned char)(bc.a * a);
-    DrawRectangleLinesEx(card, 1.0f, bc);
-
-    /* Header */
-    DrawRectangle((int)card.x, (int)card.y, (int)card.width, (int)mi_header_h(),
-                  (Color){ s_border.r, s_border.g, s_border.b, 40 });
+    modal_draw_card(card, anchored, s_age, (float)sh, s_border, mi_header_h());
     Rectangle xr = close_rect(card);
-    if (s_display_name[0] != '\0') {
-        int name_font = mi_font_name();
-        /* Title sits inside the card's own header strip. The floor also clears
-         * the toolbar's pinned top-left toggle when the strip hides. */
-        float tx = card.x + mi_pad();
-        if (tx < toolbar_toggle_right()) tx = toolbar_toggle_right();
-        modal_draw_clipped_text(s_display_name, (int)tx,
-                                (int)(card.y + (mi_header_h() - name_font) * 0.5f),
-                                (int)(xr.x - MI_HEADER_TITLE_GAP - tx), name_font, C_TEXT);
-    }
+    /* Title sits inside the card's own header strip. */
+    modal_draw_title(s_display_name, card, mi_pad(), mi_header_h(),
+                     mi_font_name(), C_TEXT, xr.x);
     UIButtonStyle close_btn = { .icon_id = "close-yellow", .no_fill = true };
     ui_button_draw(xr, &close_btn, ui_button_resolve_state(true, false, ui_button_hit(xr, mx, my)));
 
