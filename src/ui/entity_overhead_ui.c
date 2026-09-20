@@ -94,24 +94,14 @@ static void draw_centered_label(const char *label, float cx, float top_y, int fs
 /* Gapless text outline: `rings` concentric 8-direction passes of `outline`
  * behind `fg`, at (x, y) top-left. Used where a label must stay legible over
  * any background (level, stats sum, death countdown). */
-static void draw_outlined_text(const char *text, int x, int y, int fs,
-                               Color fg, Color outline, int rings) {
-    for (int o = 1; o <= rings; o++)
-        for (int dy = -1; dy <= 1; dy++)
-            for (int dx = -1; dx <= 1; dx++)
-                if (dx || dy)
-                    DrawText(text, x + dx * o, y + dy * o, fs, outline);
-    DrawText(text, x, y, fs, fg);
-}
-
-/* Centre `label` with a gapless outline (see draw_outlined_text) vertically
+/* Centre `label` with a gapless outline (see text_draw_outlined) vertically
  * inside a row of height `row_h` whose top is top_y. */
 static void draw_centered_outlined_label(const char *label, float cx, float top_y, int fs,
                                          Color fg, Color outline, int rings, float row_h) {
     int tw = MeasureText(label, fs);
     int tx = (int)(cx - tw * 0.5f);
     int ty = (int)(top_y + (row_h - fs) * 0.5f);
-    draw_outlined_text(label, tx, ty, fs, fg, outline, rings);
+    text_draw_outlined(label, tx, ty, fs, fg, outline, rings);
 }
 
 /* ── Rows ────────────────────────────────────────────────────────────── */
@@ -172,7 +162,7 @@ static void draw_nameplate(const char *name, float cx, float top_y) {
 static float draw_capability_item(const char *icon, const char *text, float x, float row_cy, float phase) {
     ui_icon_draw(icon, x + EOHUD_CAP_ICON_SIZE * 0.5f, row_cy, EOHUD_CAP_ICON_SIZE, false, phase);
     float text_x = x + EOHUD_CAP_ICON_SIZE + EOHUD_ITEM_GAP;
-    draw_outlined_text(text, (int)text_x, (int)(row_cy - EOHUD_STATS_FONT_SIZE * 0.5f),
+    text_draw_outlined(text, (int)text_x, (int)(row_cy - EOHUD_STATS_FONT_SIZE * 0.5f),
                        EOHUD_STATS_FONT_SIZE, C_LABEL, C_STAT_SHADOW, EOHUD_STAT_OUTLINE_RINGS);
     return text_x - x + (float)MeasureText(text, EOHUD_STATS_FONT_SIZE);
 }

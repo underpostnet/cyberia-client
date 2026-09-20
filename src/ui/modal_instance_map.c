@@ -378,14 +378,7 @@ static Color fade_c(Color c, float f) {
 }
 
 static void shadow_label(const char* s, int x, int y, int fs, Color c) {
-    Color outline = { 0, 0, 0, c.a };
-    for (int dy = -1; dy <= 1; dy++) {
-        for (int dx = -1; dx <= 1; dx++) {
-            if (0 == dx && 0 == dy) continue;
-            DrawText(s, x + dx, y + dy, fs, outline);
-        }
-    }
-    DrawText(s, x, y, fs, c);
+    text_draw_outlined(s, x, y, fs, c, (Color){ 0, 0, 0, c.a }, 1);
 }
 
 static void draw_pixel_border(Rectangle bounds, Color accent, bool focused, float fade) {

@@ -1324,13 +1324,7 @@ static int quest_grid_title_width(float button_width) {
 static void draw_card_line(const char* line, int x, int y, int width, int font,
                            Color color, bool center) {
     int line_x = center ? x + (width - MeasureText(line, font)) / 2 : x;
-    for (int offset_y = -1; offset_y <= 1; offset_y++) {
-        for (int offset_x = -1; offset_x <= 1; offset_x++) {
-            if (0 == offset_x && 0 == offset_y) continue;
-            DrawText(line, line_x + offset_x, y + offset_y, font, BLACK);
-        }
-    }
-    DrawText(line, line_x, y, font, color);
+    text_draw_outlined(line, line_x, y, font, color, BLACK, 1);
 }
 
 static int card_title_wrap(const char* title, int x, int y, int width,

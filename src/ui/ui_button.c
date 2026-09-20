@@ -73,13 +73,6 @@ static Color state_text(const UIButtonStyle* s, UIButtonState st) {
 
 /* ── Pixel-retro helpers ─────────────────────────────────────────────── */
 
-static void draw_outlined(const char* text, int x, int y, int font, Color col) {
-    for (int oy = -1; oy <= 1; oy++)
-        for (int ox = -1; ox <= 1; ox++)
-            if (ox || oy) DrawText(text, x + ox, y + oy, font, BLACK);
-    DrawText(text, x, y, font, col);
-}
-
 static void draw_outlined_wrap(const char* text, int x, int y, int maxw, int font, Color col) {
     for (int oy = -1; oy <= 1; oy++)
         for (int ox = -1; ox <= 1; ox++)
@@ -154,8 +147,8 @@ void ui_button_pixel_retro_draw(Rectangle r, const UIButtonPixelRetroStyle* styl
         gx += icon_sz + gap;
     }
     if (has_label) {
-        draw_outlined(style->label, (int)gx, (int)(cy - style->font_size * 0.5f),
-                      style->font_size, text_col);
+        text_draw_outlined(style->label, (int)gx, (int)(cy - style->font_size * 0.5f),
+                           style->font_size, text_col, BLACK, 1);
     }
 }
 

@@ -151,3 +151,13 @@ int text_wrap(const char *text, int x, int y, int maxw, int size, Color col, boo
     }
     return cy - y;
 }
+
+void text_draw_outlined(const char* text, int x, int y, int size,
+                        Color fg, Color outline, int rings) {
+    for (int ring = 1; ring <= rings; ring++)
+        for (int dy = -1; dy <= 1; dy++)
+            for (int dx = -1; dx <= 1; dx++)
+                if (dx || dy)
+                    text_draw_compat(text, x + dx * ring, y + dy * ring, size, outline);
+    text_draw_compat(text, x, y, size, fg);
+}

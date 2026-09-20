@@ -34,6 +34,11 @@ int  text_line_height(int size);
  * consumed — the single source of truth for text-driven dynamic layout height. */
 int  text_wrap(const char *text, int x, int y, int maxw, int size, Color col, bool center, bool draw);
 
+/* Draws `text` with an outline of `rings` one-pixel offsets around it. One ring
+ * is the gapless outline the HUD and the cards use. */
+void text_draw_outlined(const char* text, int x, int y, int size,
+                        Color fg, Color outline, int rings);
+
 /* Moves `index` back to the start of a UTF-8 character. Truncate or overwrite
  * at the result, never at a raw byte offset: a cut inside a multi-byte
  * character leaves an orphan byte that raylib draws as a replacement glyph.

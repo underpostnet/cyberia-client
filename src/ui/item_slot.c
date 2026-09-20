@@ -115,14 +115,10 @@ void item_slot_draw_ex(Rectangle r, const ObjectLayerState* ols, ObjectLayersMan
                 ui_icon_draw("stack", si_cx, si_cy, stat_icon_sz, false, 0.0f);
 
                 /* Black outline around text chars for legibility */
-                for (int dy = -1; dy <= 1; dy++) {
-                    for (int dx = -1; dx <= 1; dx++) {
-                        if (dx == 0 && dy == 0) continue;
-                        DrawText(sum_str, sum_tx + dx, sum_ty + dy, stat_font, BLACK);
-                    }
-                }
-                DrawText(sum_str, sum_tx, sum_ty, stat_font,
-                         0 > sum ? (Color){ 200, 80, 80, 255 } : (Color){ 120, 220, 140, 255 });
+                text_draw_outlined(sum_str, sum_tx, sum_ty, stat_font,
+                                   0 > sum ? (Color){ 200, 80, 80, 255 }
+                                           : (Color){ 120, 220, 140, 255 },
+                                   BLACK, 1);
             }
         }
     }

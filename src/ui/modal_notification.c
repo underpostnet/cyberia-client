@@ -808,12 +808,8 @@ static void draw_progress_bar(Rectangle bar, float alpha) {
     int x = (int)(bar.x + (bar.width - (float)MeasureText(pct, fs)) * 0.5f);
     int y = (int)(bar.y + (bar.height - (float)text_line_height(fs)) * 0.5f);
     Color outline = { 0, 0, 0, (unsigned char)(240 * alpha) };
-    for (int dy = -1; dy <= 1; dy++) {
-        for (int dx = -1; dx <= 1; dx++) {
-            if (dx || dy) DrawText(pct, x + dx, y + dy, fs, outline);
-        }
-    }
-    DrawText(pct, x, y, fs, (Color){ 235, 245, 255, (unsigned char)(240 * alpha) });
+    text_draw_outlined(pct, x, y, fs,
+                       (Color){ 235, 245, 255, (unsigned char)(240 * alpha) }, outline, 1);
 }
 
 void modal_notification_draw(void) {
