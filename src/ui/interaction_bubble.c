@@ -223,15 +223,15 @@ static Rectangle slot_rect(int index, Rectangle view) {
     return (Rectangle){ x, y, (float)IBUBBLE_ICON_SIZE, (float)IBUBBLE_ICON_SIZE };
 }
 
-static void snapshot_layers(InteractionBubbleSlot* slot,
-                            const ObjectLayerState* layers, int count) {
-    slot->layer_count = 0;
-    for (int i = 0; i < count && slot->layer_count < IBUBBLE_MAX_LAYERS; i++) {
-        if (layers[i].active && layers[i].item_id[0] != '\0') {
-            slot->layers[slot->layer_count] = layers[i];
-            slot->layer_count++;
-        }
+/* Copies the active, non-empty layers of `layers` into `out`, at most
+ * IBUBBLE_MAX_LAYERS of them. Returns the count. */
+static int copy_active_layers(ObjectLayerState* out,
+                              const ObjectLayerState* layers, int count) {
+    int n = 0;
+    for (int i = 0; i < count && n < IBUBBLE_MAX_LAYERS; i++) {
+        if (layers[i].active && '\0' != layers[i].item_id[0]) out[n++] = layers[i];
     }
+    return n;
 }
 
 static InteractionBubbleSlot* find_slot(const char* entity_id) {
@@ -324,18 +324,15 @@ static void scan_entity(const char* entity_id, const EntityState* base,
     slot->fallback_color = presentation_runtime_entity_fallback_color(etype);
 
     /* Always snapshot current layers (dead or alive) into layers[]. */
-    snapshot_layers(slot, OBJ_LAYERS(base), base->layer_count);
+    slot->layer_count = copy_active_layers(slot->layers, OBJ_LAYERS(base),
+                                          base->layer_count);
 
     /* Cache alive layers: only update when entity is alive.
      * When dead, alive_layers[] retains the last alive snapshot. */
     if (!is_dead) {
-        slot->alive_layer_count = 0;
-        for (int i = 0; i < base->layer_count && slot->alive_layer_count < IBUBBLE_MAX_LAYERS; i++) {
-            if (OBJ_LAYERS(base)[i].active && OBJ_LAYERS(base)[i].item_id[0] != '\0') {
-                slot->alive_layers[slot->alive_layer_count] = OBJ_LAYERS(base)[i];
-                slot->alive_layer_count++;
-            }
-        }
+        slot->alive_layer_count = copy_active_layers(slot->alive_layers,
+                                                     OBJ_LAYERS(base),
+                                                     base->layer_count);
     }
 
     /* Dialogue item — prefer alive data, fall back to existing cache. */
