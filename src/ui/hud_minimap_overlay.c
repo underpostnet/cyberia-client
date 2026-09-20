@@ -4,6 +4,7 @@
 #include "instance_map_data.h"
 #include "text.h"
 #include "ui_button.h"
+#include "ui_rect.h"
 
 #include "domain/local_player.h"
 #include "game_state.h"
@@ -37,11 +38,6 @@ static int  s_zoom_level = MINIMAP_ZOOM_DEFAULT;
 
 static Rectangle overlay_bounds(void) {
     return hud_side_stack_map_slot();
-}
-
-static Vector2 overlay_center(Rectangle bounds) {
-    return (Vector2){ bounds.x + bounds.width * 0.5f,
-                      bounds.y + bounds.height * 0.5f };
 }
 
 static Rectangle header_button_bounds(Rectangle bounds, int index_from_right) {
@@ -97,7 +93,7 @@ static Rectangle node_rect(const ImapGraph* graph, int node_index,
                      g_game_state.player.base.dims.y * 0.5f;
     float player_fx = Clamp(player_x / grid_x, 0.0f, 1.0f);
     float player_fy = Clamp(player_y / grid_y, 0.0f, 1.0f);
-    Vector2 center = overlay_center(bounds);
+    Vector2 center = ui_rect_center(bounds);
     float side = node_side();
     float stride = side + MINIMAP_NODE_GAP;
     float x = center.x - player_fx * side +
@@ -243,7 +239,7 @@ static void draw_live_presence(const ImapGraph* graph, int current_index,
 }
 
 static void draw_player(Rectangle bounds) {
-    Vector2 center = overlay_center(bounds);
+    Vector2 center = ui_rect_center(bounds);
     float pulse_side = 15.0f + 3.0f * sinf((float)GetTime() * 4.5f);
     draw_square_marker(center, 7.0f, MINIMAP_PLAYER);
     DrawRectangleLinesEx(centered_square(center, pulse_side), 1.0f, MINIMAP_PLAYER);
