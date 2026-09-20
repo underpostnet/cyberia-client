@@ -17,7 +17,6 @@
 #include <raylib.h>
 
 #define TOOLBAR_SLIDE_DURATION 0.22f
-#define TOGGLE_EDGE_MARGIN     3.0f   /* minimal margin around the toggle icon */
 
 static const Color TB_BG   = { 8, 12, 24, 150 };
 static const Color TB_LINE = { 70, 190, 240, 60 };
@@ -64,18 +63,6 @@ static void draw_btn(Rectangle r, const char* icon, bool selected, Vector2 mouse
         DrawRectangleRoundedLinesEx(r, 0.18f, 6, 1.0f, WHITE);
 }
 
-/* Draw the main-logo toggle button — large icon with a subtle background. */
-static void draw_toggle_btn(Rectangle r, const char* icon, Vector2 mouse) {
-    /* Clean icon-only button: draw the icon directly with no background,
-     * no border, no shadow. White hover outline for the pixel-retro feel. */
-    float sz = r.width < r.height ? r.width : r.height;
-    float cx = r.x + r.width * 0.5f;
-    float cy = r.y + r.height * 0.5f;
-    ui_icon_draw(icon, cx, cy, (int)(sz * 0.65f), false, 0.0f);
-    if (CheckCollisionPointRec(mouse, r))
-        DrawRectangleRoundedLinesEx(r, 0.18f, 6, 1.0f, WHITE);
-}
-
 static bool interact_inventory_chain_is_open(void) {
     return modal_interact_is_open() || inventory_modal_is_open();
 }
@@ -90,10 +77,17 @@ static void close_interact_inventory_chain(void) {
 /* The minimap and the quest journal share the right-hand column and stay
  * open together. Any world-covering modal gives way to whichever is tapped;
  * a tap that only dismissed one leaves the panel it targets open. */
-static void toggle_minimap(void) {
+/* Closes whatever covers the world and reports whether anything was open.
+ * A tap that only dismissed a cover leaves the panel it targets open. */
+static bool dismiss_world_covers(void) {
     bool dismissed = interact_inventory_chain_is_open() || modal_instance_map_is_open();
     close_interact_inventory_chain();
     modal_instance_map_close();
+    return dismissed;
+}
+
+static void toggle_minimap(void) {
+    bool dismissed = dismiss_world_covers();
     if (dismissed || !hud_minimap_overlay_is_visible()) {
         if (!hud_minimap_overlay_is_visible()) hud_minimap_overlay_show();
         return;
@@ -102,9 +96,7 @@ static void toggle_minimap(void) {
 }
 
 static void toggle_quest_journal(void) {
-    bool dismissed = interact_inventory_chain_is_open() || modal_instance_map_is_open();
-    close_interact_inventory_chain();
-    modal_instance_map_close();
+    bool dismissed = dismiss_world_covers();
     if (dismissed || !quest_journal_is_visible()) {
         if (!quest_journal_is_visible()) quest_journal_toggle();
         return;
@@ -146,7 +138,7 @@ void toolbar_draw(int screen_width) {
         draw_btn(btn_rect(3), muted ? "audio-mute" : "audio", muted, mp);
     }
 
-    draw_toggle_btn(toggle_rect(), s_hidden ? "cyberia-white-0" : "cyberia-yellow-1", mp);
+    draw_btn(toggle_rect(), s_hidden ? "cyberia-white-0" : "cyberia-yellow-1", false, mp);
 }
 
 bool toolbar_handle_click(int mx, int my) {
