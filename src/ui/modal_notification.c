@@ -442,13 +442,20 @@ static void mn_ok_pulse(float* out_scale, float* out_alpha) {
 
 /* Card height derived from the wrapped content so text never overflows and the
  * card grows with longer messages (and the active font size / family). */
-static float notif_content_height(void) {
+/* Height of the title and message block, from the card top down to where
+ * the mode-specific blocks start stacking. */
+static float notif_head_height(void) {
     int iw = notif_inner_w();
     float h = MN_TOP;
     h += (float)text_wrap(s_title, 0, 0, iw, MN_FONT_TITLE, C_TITLE, true, false);
     if (s_message[0] != '\0') {
         h += MN_GAP + (float)text_wrap(s_message, 0, 0, iw, MN_FONT_BODY, C_BODY, true, false);
     }
+    return h;
+}
+
+static float notif_content_height(void) {
+    float h = notif_head_height();
     if (notif_is_assembling() && s_input_count > 0) h += MN_GAP + notif_slot_size();
     if (notif_is_assembling())                      h += MN_GAP + MN_BAR_H;
     if (s_item_count > 0)                           h += MN_GAP + notif_slot_size();
@@ -473,13 +480,7 @@ static Rectangle notif_card(void) {
 /* Content baseline under the title + message, where the mode-specific blocks
  * start stacking. */
 static float notif_body_top(Rectangle card) {
-    int iw = notif_inner_w();
-    float cy = card.y + MN_TOP;
-    cy += (float)text_wrap(s_title, 0, 0, iw, MN_FONT_TITLE, C_TITLE, true, false);
-    if (s_message[0] != '\0') {
-        cy += MN_GAP + (float)text_wrap(s_message, 0, 0, iw, MN_FONT_BODY, C_BODY, true, false);
-    }
-    return cy;
+    return card.y + notif_head_height();
 }
 
 /* Rect of slot `index` in a centred row of `count` slots whose top is at `top`. */
