@@ -40,6 +40,7 @@
 #include "stat_panel.h"
 #include "toolbar.h"
 #include "ui_button.h"
+#include "ui_rect.h"
 #include "ui_scroll.h"
 #include "ui_state.h"
 #include "world_types.h"
@@ -299,7 +300,7 @@ static Rectangle anchored_card_rect(void) {
 }
 
 static Rectangle card_rect(int sw, int sh, float scale) {
-    if (modal_anchor_active()) return modal_scale_rect(anchored_card_rect(), scale);
+    if (modal_anchor_active()) return ui_rect_scale(anchored_card_rect(), scale);
 
     /* Full-viewport card between the toolbar and the inventory bar —
      * mirrors the interact modal's container. */
@@ -307,7 +308,7 @@ static Rectangle card_rect(int sw, int sh, float scale) {
     float bottom = (float)sh - inventory_bar_visible_height() - IM_CARD_PAD;
     if (bottom < top + 160.0f) bottom = top + 160.0f;
     Rectangle r = { IM_CARD_PAD, top, (float)sw - 2.0f * IM_CARD_PAD, bottom - top };
-    return modal_scale_rect(r, scale);
+    return ui_rect_scale(r, scale);
 }
 
 /* `card_h` <= 0 means no height budget: the anchored card derives its height

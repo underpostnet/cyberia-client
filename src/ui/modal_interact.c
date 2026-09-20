@@ -37,6 +37,7 @@
 #include "ui_button.h"
 #include "ui_scroll.h"
 #include "ui_icon.h"
+#include "ui_rect.h"
 #include "util/log.h"
 #include "util/utils.h"
 
@@ -1434,8 +1435,7 @@ static void draw_quest_grid_action_button(Rectangle button, const char* label,
     Color fill = enabled ? color : (Color){ 58, 62, 76, 255 };
     Color light = hovered ? (Color){ 255, 255, 220, 255 } : (Color){ 220, 225, 235, 190 };
     Color shade = enabled ? (Color){ 10, 14, 24, 255 } : (Color){ 28, 30, 38, 255 };
-    Rectangle inner = { button.x + 2.0f, button.y + 2.0f,
-                        button.width - 4.0f, button.height - 4.0f };
+    Rectangle inner = ui_rect_inset(button, 2.0f);
 
     DrawRectangleRec(button, BLACK);
     DrawRectangleRec(inner, fill);
@@ -1455,8 +1455,7 @@ static void draw_quest_grid_button(Rectangle card, const QuestCardInfo* info,
     Color fill = hovered ? (Color){ 35, 48, 72, 255 } : (Color){ 24, 32, 50, 255 };
     Color highlight = hovered ? (Color){ 86, 112, 152, 255 } : (Color){ 58, 78, 110, 255 };
     Color shadow = (Color){ 8, 12, 22, 255 };
-    Rectangle inner = { card.x + 2.0f, card.y + 2.0f,
-                        card.width - 4.0f, card.height - 4.0f };
+    Rectangle inner = ui_rect_inset(card, 2.0f);
     float action_height = viewport_is_mobile() ? MI_CARD_ACTION_H_MOBILE
                                                 : MI_CARD_ACTION_H_DESKTOP;
     float action_y = card.y + card.height - MI_CARD_PAD - action_height;
@@ -1630,7 +1629,7 @@ static void draw_quest_tab(Rectangle content, int mx, int my) {
 
     Rectangle draw_content = content;
     if (0 <= s_q_expanded)
-        draw_content = modal_scale_rect(content, modal_pop_scale(s_q_expand_age));
+        draw_content = ui_rect_scale(content, modal_pop_scale(s_q_expand_age));
     float content_y = draw_content.y - ui_scroll_offset(&s_q_scroll);
     float y = content_y + 4.0f;
     ui_scroll_begin(&s_q_scroll);
@@ -1787,7 +1786,7 @@ static void draw_shop_card(Rectangle card, const ActionShopItem* item, int slot,
                            bool affordable, int font, int mx, int my) {
     ObjectLayersManager* olm = obj_layers_mgr_get();
     bool hovered = ui_button_hit(card, mx, my);
-    Rectangle inner = { card.x + 2.0f, card.y + 2.0f, card.width - 4.0f, card.height - 4.0f };
+    Rectangle inner = ui_rect_inset(card, 2.0f);
     Color accent = affordable ? (Color){ 120, 200, 140, 235 } : (Color){ 210, 120, 110, 230 };
 
     DrawRectangleRec(card, BLACK);
@@ -2014,7 +2013,7 @@ static void draw_craft_card(Rectangle card, const ActionCraftRecipe* recipe, int
                             bool ready, float flash, int mx, int my) {
     ObjectLayersManager* olm = obj_layers_mgr_get();
     bool hovered = ui_button_hit(card, mx, my);
-    Rectangle inner = { card.x + 2.0f, card.y + 2.0f, card.width - 4.0f, card.height - 4.0f };
+    Rectangle inner = ui_rect_inset(card, 2.0f);
     Color accent = ready ? (Color){ 120, 200, 140, 235 } : (Color){ 210, 120, 110, 230 };
     /* The synthesis pulse washes the whole card toward the accent, so the
      * confirmation reads before the item has left for the inventory. */
@@ -2530,7 +2529,7 @@ void modal_interact_draw(void) {
      * would hide the very entity the card points at), so it carries its own
      * shadow and an opaque fill to stay readable over a busy scene. */
     bool anchored = modal_anchor_active();
-    Rectangle card = modal_scale_rect(card_rect(), modal_pop_scale(s_age));
+    Rectangle card = ui_rect_scale(card_rect(), modal_pop_scale(s_age));
     float a = modal_pop_alpha(s_age);
     if (anchored) modal_draw_float_shadow(card, s_age);
     else          modal_draw_overlay(sw, sh, s_age);
@@ -2610,7 +2609,7 @@ void modal_interact_draw(void) {
      * panel centre and fades up, so switching reads as a swap rather than an
      * instant redraw. Hit rects are captured from this same animated frame;
      * taps stay suppressed until it settles (modal_interact_update). */
-    Rectangle tab_content = modal_scale_rect(content, modal_pop_scale(s_tab_age));
+    Rectangle tab_content = ui_rect_scale(content, modal_pop_scale(s_tab_age));
     if (s_tab == MI_TAB_STACK)       draw_stack_tab(tab_content);
     else if (s_tab == MI_TAB_STATS)  draw_stats_tab(tab_content);
     else if (s_tab == MI_TAB_QUEST)  draw_quest_tab(tab_content, mx, my);

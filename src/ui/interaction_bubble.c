@@ -36,6 +36,7 @@
 #include "object_layers_management.h"
 #include "ol_stack_ico.h"
 #include "ui_icon.h"
+#include "ui_rect.h"
 #include "util/log.h"
 #include "util/utils.h"
 
@@ -535,7 +536,7 @@ void interaction_bubble_draw(void) {
 
         float rrd = 0.15f;
         DrawRectangleRounded(r, rrd, 4, BLACK);
-        Rectangle slot_inner = { r.x + 2.0f, r.y + 2.0f, r.width - 4.0f, r.height - 4.0f };
+        Rectangle slot_inner = ui_rect_inset(r, 2.0f);
         DrawRectangleRounded(slot_inner, rrd, 4, slot_fill);
         DrawRectangle((int)(slot_inner.x + 4.0f), (int)slot_inner.y,
                       (int)(slot_inner.width - 8.0f), 2, slot_highlight);

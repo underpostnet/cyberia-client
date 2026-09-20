@@ -22,14 +22,6 @@ float modal_pop_alpha(float age) {
     return t;
 }
 
-Rectangle modal_scale_rect(Rectangle rect, float scale) {
-    float cx = rect.x + rect.width * 0.5f;
-    float cy = rect.y + rect.height * 0.5f;
-    float w  = rect.width * scale;
-    float h  = rect.height * scale;
-    return (Rectangle){ cx - w * 0.5f, cy - h * 0.5f, w, h };
-}
-
 void modal_draw_overlay(int screen_width, int screen_height, float age) {
     Color c = MODAL_OVERLAY_BG;
     c.a = (unsigned char)(c.a * modal_pop_alpha(age));

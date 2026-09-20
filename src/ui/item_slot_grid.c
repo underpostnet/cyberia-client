@@ -2,6 +2,7 @@
 
 #include "item_slot.h"
 #include "ui_button.h"
+#include "ui_rect.h"
 
 #include <math.h>
 #include <string.h>
@@ -270,8 +271,7 @@ void item_slot_grid_draw(const ItemSlotGrid* g, ObjectLayersManager* mgr) {
         if ('\0' == g->cells[i].item_id[0] || source || settling) {
             /* Draw a well while a cell is empty, lifted, or moving. */
             DrawRectangleRec(cell, BLACK);
-            Rectangle inner = { cell.x + 2.0f, cell.y + 2.0f,
-                                cell.width - 4.0f, cell.height - 4.0f };
+            Rectangle inner = ui_rect_inset(cell, 2.0f);
             DrawRectangleRec(inner, GRID_CELL_EMPTY);
             DrawRectangleLinesEx(inner, 1.0f, GRID_CELL_BORDER);
         } else {

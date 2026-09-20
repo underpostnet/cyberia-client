@@ -26,6 +26,7 @@
 #include "ol_stack_ico.h"
 #include "ui_button.h"
 #include "ui_icon.h"
+#include "ui_rect.h"
 #include "util/log.h"
 #include "util/utils.h"
 
@@ -406,7 +407,7 @@ void modal_dialogue_draw(void) {
     };
     /* Shared modal pop: the card scales in from its centre on open and when
      * the mobile reader opens. */
-    card = modal_scale_rect(card, modal_pop_scale(s_age));
+    card = ui_rect_scale(card, modal_pop_scale(s_age));
 
     /* Card background — translucent so the world reads through. Quest-talk
      * dialogues get a yellow frame to mark the mission context; the quest icon

@@ -42,6 +42,7 @@
 #include "fx/fx_reward.h"
 #include "ui_button.h"
 #include "ui_icon.h"
+#include "ui_rect.h"
 #include "util/utils.h"
 
 #include <raylib.h>
@@ -796,7 +797,7 @@ static void draw_progress_bar(Rectangle bar, float alpha) {
     if (t > 1.0f) t = 1.0f;
 
     DrawRectangleRec(bar, (Color){ 0, 0, 0, (unsigned char)(220 * alpha) });
-    Rectangle inner = { bar.x + 2.0f, bar.y + 2.0f, bar.width - 4.0f, bar.height - 4.0f };
+    Rectangle inner = ui_rect_inset(bar, 2.0f);
     DrawRectangleRec(inner, (Color){ 18, 26, 40, (unsigned char)(235 * alpha) });
 
     Rectangle fill = { inner.x, inner.y, inner.width * t, inner.height };

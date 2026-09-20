@@ -7,6 +7,7 @@
 #include "text.h"
 #include "toolbar.h"
 #include "ui_icon.h"
+#include "ui_rect.h"
 
 #include "domain/local_player.h"
 #include "domain/presentation_runtime.h"
@@ -145,11 +146,6 @@ void modal_instance_map_close(void) {
 
 /* ── Projection ─────────────────────────────────────────────────────────── */
 
-static Vector2 panel_center(void) {
-    return (Vector2){ s_m.panel.x + s_m.panel.width * 0.5f,
-                      s_m.panel.y + s_m.panel.height * 0.5f };
-}
-
 static float node_screen_side(void) {
     return IMAP_NODE_SIDE * s_m.zoom;
 }
@@ -184,7 +180,7 @@ static Vector2 node_grid_offset(const ImapNode* n, float angle) {
 }
 
 static Vector2 node_center(const ImapNode* n) {
-    Vector2 c = panel_center();
+    Vector2 c = ui_rect_center(s_m.panel);
     Vector2 offset = node_grid_offset(n, grid_rotation_angle());
     float side = node_screen_side();
     return (Vector2){
@@ -230,7 +226,7 @@ static float imap_zoom_max(void) {
 static void zoom_about(float factor, Vector2 anchor) {
     float nz = Clamp(s_m.zoom_target * factor, IMAP_ZOOM_MIN, imap_zoom_max());
     factor = nz / s_m.zoom_target;
-    Vector2 c = panel_center();
+    Vector2 c = ui_rect_center(s_m.panel);
     Vector2 rel = { anchor.x - c.x - s_m.pan_target.x,
                     anchor.y - c.y - s_m.pan_target.y };
     s_m.pan_target.x += rel.x * (1.0f - factor);
@@ -391,11 +387,6 @@ static void shadow_label(const char* s, int x, int y, int fs, Color c) {
     DrawText(s, x, y, fs, c);
 }
 
-static Rectangle pixel_inner(Rectangle bounds, float inset) {
-    return (Rectangle){ bounds.x + inset, bounds.y + inset,
-                        bounds.width - 2.0f * inset, bounds.height - 2.0f * inset };
-}
-
 static void draw_pixel_border(Rectangle bounds, Color accent, bool focused, float fade) {
     if (bounds.width < 8.0f || bounds.height < 8.0f) {
         DrawRectangleRec(bounds, fade_c(accent, fade));
@@ -429,7 +420,7 @@ static void draw_pixel_panel(Rectangle bounds, Color fill, Color accent, bool fo
         return;
     }
     DrawRectangleRec(bounds, fade_c(BLACK, fade));
-    Rectangle inner = pixel_inner(bounds, 2.0f);
+    Rectangle inner = ui_rect_inset(bounds, 2.0f);
     DrawRectangleRec(inner, fade_c(fill, fade));
     draw_pixel_border(bounds, accent, focused, fade);
 }
@@ -743,7 +734,7 @@ static void draw_node_card(int idx, float fade, double time) {
         Texture2D tex = fetch_texture(n->preview_url, 1, FETCH_P1, true);
         if (0 != tex.id) {
             Rectangle src  = { 0, 0, (float)tex.width, (float)tex.height };
-            Rectangle dest = pixel_inner(card, 4.0f);
+            Rectangle dest = ui_rect_inset(card, 4.0f);
             DrawTexturePro(tex, src, dest, (Vector2){ 0, 0 }, 0.0f,
                            Fade(WHITE, fade));
         }
@@ -1060,7 +1051,7 @@ void modal_instance_map_draw(int screen_width, int screen_height) {
             int w  = MeasureText(msg, fs);
             float blink = IMAP_DATA_ERROR == instance_map_data_state()
                               ? 1.0f : 0.6f + 0.4f * sinf((float)t * 3.0f);
-            Vector2 c = panel_center();
+            Vector2 c = ui_rect_center(s_m.panel);
             shadow_label(msg, (int)(c.x - w / 2.0f), (int)c.y, fs,
                          fade_c(IMAP_TEXT, content * blink));
         }

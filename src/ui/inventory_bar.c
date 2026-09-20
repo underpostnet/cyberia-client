@@ -30,6 +30,7 @@
 #include "object_layers_management.h"
 #include "ol_as_animated_ico.h"
 #include "ui_button.h"
+#include "ui_rect.h"
 #include "ui_toggle.h"
 
 #include <assert.h>
@@ -172,14 +173,6 @@ static int build_scroll_map(int coin_idx, int map[MAX_OBJECT_LAYERS], bool inclu
     return n;
 }
 
-/* scale_rect inflates `r` around its centre — the slot pulse transform. */
-static Rectangle scale_rect(Rectangle r, float s) {
-    if (1.0f == s) return r;
-    float w = r.width * s;
-    float h = r.height * s;
-    return (Rectangle){ r.x - (w - r.width) * 0.5f, r.y - (h - r.height) * 0.5f, w, h };
-}
-
 static int slot_pitch(void) { return bar_slot_size() + bar_slot_gap(); }
 
 /* The coin slot is pinned to the right edge, outside the scroll strip. */
@@ -317,7 +310,7 @@ static void draw_coin_slot(Rectangle r, int coin_idx, ObjectLayersManager* mgr) 
     /* Black outer border via rounded rect */
     DrawRectangleRec(r, BLACK);
     /* Inner fill */
-    Rectangle inner = { r.x + 2.0f, r.y + 2.0f, r.width - 4.0f, r.height - 4.0f };
+    Rectangle inner = ui_rect_inset(r, 2.0f);
     DrawRectangleRec(inner, gold_fill);
     /* Top highlight edge */
     DrawRectangle((int)(inner.x + 4.0f), (int)inner.y, (int)(inner.width - 8.0f), 2, gold_highlight);
@@ -491,7 +484,7 @@ void inventory_bar_draw(void) {
             /* Culled on the settled rect, drawn at the sliding one. */
             r = slot_rect_at(reflow_si(ol.item_id, si), current_bar_top);
             /* During the arrival pulse the sprite renders in full colour. */
-            item_slot_draw_ex(scale_rect(r, fx_inventory_bar_qty_slot_scale(ol.item_id)),
+            item_slot_draw_ex(ui_rect_scale(r, fx_inventory_bar_qty_slot_scale(ol.item_id)),
                               &ol, s_ol_manager, WHITE, 0.0f,
                               fx_inventory_bar_qty_slot_pulsing(ol.item_id));
             if (bar_slots_settled())
@@ -500,7 +493,7 @@ void inventory_bar_draw(void) {
 
         Rectangle cr = coin_slot_rect(screen_w, current_bar_top);
         const char* coin_key = (coin_idx >= 0) ? g_local_player.inventory[coin_idx].item_id : coin_item_key();
-        draw_coin_slot(scale_rect(cr, fx_inventory_bar_qty_slot_scale(coin_key)), coin_idx, s_ol_manager);
+        draw_coin_slot(ui_rect_scale(cr, fx_inventory_bar_qty_slot_scale(coin_key)), coin_idx, s_ol_manager);
         if (bar_slots_settled()) fx_inventory_bar_qty_draw(cr, coin_key);
 
         if (scroll_count > vis) {

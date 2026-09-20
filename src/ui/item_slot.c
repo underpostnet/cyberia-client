@@ -8,6 +8,7 @@
 #include "world_types.h"
 #include "ui_button.h"
 #include "ui_icon.h"
+#include "ui_rect.h"
 
 #include <raylib.h>
 #include <stdio.h>
@@ -55,7 +56,7 @@ void item_slot_draw_ex(Rectangle r, const ObjectLayerState* ols, ObjectLayersMan
     /* Black outer border */
     DrawRectangleRec(r, BLACK);
     /* Inner fill */
-    Rectangle inner = { r.x + 2.0f, r.y + 2.0f, r.width - 4.0f, r.height - 4.0f };
+    Rectangle inner = ui_rect_inset(r, 2.0f);
     DrawRectangleRec(inner, slot_bg);
     /* Top highlight edge */
     DrawRectangle((int)(inner.x + 4.0f), (int)inner.y, (int)(inner.width - 8.0f), 2, highlight_edge);

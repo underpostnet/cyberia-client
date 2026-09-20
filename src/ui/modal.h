@@ -25,9 +25,6 @@ float modal_pop_scale(float age);
  * alpha by this for a uniform fade-in. */
 float modal_pop_alpha(float age);
 
-/* Scale a rect about its centre — pairs with modal_pop_scale. */
-Rectangle modal_scale_rect(Rectangle rect, float scale);
-
 /* Dim the whole screen behind a centred modal (alpha eased by age). */
 void modal_draw_overlay(int screen_width, int screen_height, float age);
 

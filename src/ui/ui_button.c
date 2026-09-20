@@ -1,6 +1,7 @@
 #include "ui_button.h"
 #include "text.h"
 #include "ui_icon.h"
+#include "ui_rect.h"
 
 #include <stddef.h>
 
@@ -96,7 +97,7 @@ void ui_button_pixel_retro_draw(Rectangle r, const UIButtonPixelRetroStyle* styl
     Color shadow = ColorBrightness(base, -0.45f);
     Color text_col = style->text_color.a == 0 ? WHITE : style->text_color;
 
-    Rectangle inner = { r.x + 2.0f, r.y + 2.0f, r.width - 4.0f, r.height - 4.0f };
+    Rectangle inner = ui_rect_inset(r, 2.0f);
 
     DrawRectangleRounded(inner, 0.18f, 6, fill);
     DrawRectangle((int)(inner.x + 4.0f), (int)inner.y, (int)(inner.width - 8.0f), 2, highlight);
