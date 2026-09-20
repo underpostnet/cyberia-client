@@ -294,16 +294,37 @@ static Rectangle anchored_card_rect(void) {
                              safe);
 }
 
-static Rectangle card_rect(int sw, int sh, float scale) {
+/* True when the Activate / Deactivate button acts on `ols`. Fragmentation
+ * items equip only during the Fragmented State (dead). A type outside
+ * activeItemTypes never activates. An active skin cannot come off while
+ * requireSkin is set; fragments are exempt, because the server swaps in the
+ * hidden default dead skin. */
+static bool activate_enabled(const ObjectLayerState* ols) {
+    const ObjectLayer* data = lookup_cached_layer(ols->item_id);
+    if (data && !data->data.item.activable) return false;
+    bool is_fragment = game_state_is_dead_item(ols->item_id);
+    if (is_fragment && STATUS_ICON_DEAD != local_player_status_icon()) return false;
+    const char* item_type = data ? data->data.item.type : "";
+    if ('\0' == item_type[0]) return true;
+    if (!game_state_is_active_item_type(item_type)) return false;
+    if (ols->active && !is_fragment && 0 == strcmp(item_type, "skin") &&
+        g_game_state.equipment_rules.require_skin) return false;
+    return true;
+}
+
+/* Close button, right-aligned inside the header strip. */
+static Rectangle close_rect(Rectangle card) {
+    float size = im_close_size();
+    return (Rectangle){ card.x + card.width - size - 4.0f,
+                        card.y + (IM_HEADER_H - size) * 0.5f, size, size };
+}
+
+static Rectangle card_rect(float scale) {
     if (modal_anchor_active()) return ui_rect_scale(anchored_card_rect(), scale);
 
     /* Full-viewport card between the toolbar and the inventory bar —
      * mirrors the interact modal's container. */
-    float top    = toolbar_height() + IM_CARD_PAD;
-    float bottom = (float)sh - inventory_bar_visible_height() - IM_CARD_PAD;
-    if (bottom < top + 160.0f) bottom = top + 160.0f;
-    Rectangle r = { IM_CARD_PAD, top, (float)sw - 2.0f * IM_CARD_PAD, bottom - top };
-    return ui_rect_scale(r, scale);
+    return ui_rect_scale(modal_anchor_safe_area(IM_CARD_PAD, 160.0f), scale);
 }
 
 /* `card_h` <= 0 means no height budget: the anchored card derives its height
@@ -531,7 +552,7 @@ void inventory_modal_update(float dt) {
     bool lore_available = inventory_lore_available(ols);
     /* Resolve the card geometry before anything laid out against it. */
     update_anchor_layout(dt, lore_available);
-    Rectangle card = card_rect(GetScreenWidth(), GetScreenHeight(), 1.0f);
+    Rectangle card = card_rect(1.0f);
     InventoryModalLayout layout = inventory_modal_layout(card);
     Rectangle view = inventory_content_view(card, layout, lore_available);
     ui_scroll_update(&s_content_scroll, view, s_content_height, dt);
@@ -544,7 +565,7 @@ void inventory_modal_update(float dt) {
 bool inventory_modal_handle_wheel(float wheel_delta) {
     if (!s_open || s_age < MODAL_POP_DURATION) return false;
 
-    Rectangle card = card_rect(GetScreenWidth(), GetScreenHeight(), 1.0f);
+    Rectangle card = card_rect(1.0f);
     Vector2 pointer = GetMousePosition();
     if (!CheckCollisionPointRec(pointer, card)) return false;
 
@@ -562,7 +583,6 @@ void inventory_modal_draw(void) {
     const ObjectLayerState* ols = current_ols();
     if (!ols) { s_open = false; return; }
 
-    int screen_w = GetScreenWidth();
     int screen_h = GetScreenHeight();
 
     /* 2. Card — interact-style container: translucent panel, 1px border, and
@@ -572,7 +592,7 @@ void inventory_modal_draw(void) {
      * would hide the very entity the card points at), so it carries its own
      * shadow and an opaque fill to stay readable over a busy scene. */
     bool anchored = modal_anchor_active();
-    Rectangle card = card_rect(screen_w, screen_h, modal_pop_scale(s_age));
+    Rectangle card = card_rect(modal_pop_scale(s_age));
     modal_draw_card(card, anchored, s_age,
                     (float)screen_h - inventory_bar_visible_height(),
                     MODAL_PANEL_BORDER, IM_HEADER_H);
@@ -607,10 +627,7 @@ void inventory_modal_draw(void) {
     float lore_button_h = im_lore_button_h();
 
     /* 3. Close button — right-aligned inside the header strip. */
-    float close_size = im_close_size();
-    Rectangle close_r = { card.x + card.width - close_size - 4.0f,
-                           card.y + (IM_HEADER_H - close_size) * 0.5f,
-                           close_size, close_size };
+    Rectangle close_r = close_rect(card);
     {
         int mx = GetMouseX(), my = GetMouseY();
         UIButtonStyle close_btn = { .icon_id = "close-yellow", .no_fill = true };
@@ -727,7 +744,6 @@ void inventory_modal_draw(void) {
     const char* item_type = "";
     const char* item_desc = "";
     float item_stats[CYBERIA_STAT_COUNT] = {0};
-    bool activable = true;
 
     {
         ObjectLayer* ol_data = lookup_cached_layer(ols->item_id);
@@ -735,7 +751,6 @@ void inventory_modal_draw(void) {
             if (ol_data->data.item.id[0] != '\0') item_name = ol_data->data.item.id;
             item_type   = ol_data->data.item.type;
             item_desc   = ol_data->data.item.description;
-            activable   = ol_data->data.item.activable;
             int values[CYBERIA_STAT_COUNT];
             cyberia_stats_values(&ol_data->data.stats, values);
             for (int i = 0; CYBERIA_STAT_COUNT > i; i++) item_stats[i] = (float)values[i];
@@ -946,21 +961,7 @@ void inventory_modal_draw(void) {
         const char* btn_label  = currently_active ? "Deactivate" : "Activate";
         const char* btn_icon   = currently_active ? "unequip" : "equip";
 
-        /* Determine whether the button should be enabled. Fragmentation
-         * items equip only during the Fragmented State (dead). */
-        bool player_dead = (STATUS_ICON_DEAD == local_player_status_icon());
-        bool btn_enabled = activable && (!is_fragment || player_dead);
-        if (btn_enabled && item_type[0] != '\0') {
-            /* Item type must be in activeItemTypes to be activable */
-            if (!game_state_is_active_item_type(item_type))
-                btn_enabled = false;
-            /* Active skins cannot be deactivated when requireSkin is set.
-             * Fragments are exempt: the server swaps in the hidden default
-             * dead skin, so the rule is never violated. */
-            if (currently_active && !is_fragment && strcmp(item_type, "skin") == 0
-                && g_game_state.equipment_rules.require_skin)
-                btn_enabled = false;
-        }
+        bool btn_enabled = activate_enabled(ols);
 
         Color btn_color = !btn_enabled ? (Color){ 50, 50, 60, 200 }
                         : currently_active ? C_BTN_DEACT : C_BTN_ACTIVATE;
@@ -980,9 +981,7 @@ void inventory_modal_draw(void) {
 bool inventory_modal_handle_click(int mx, int my) {
     if (!s_open) return false;
 
-    int screen_w = GetScreenWidth();
-    int screen_h = GetScreenHeight();
-    Rectangle card = card_rect(screen_w, screen_h, 1.0f);
+    Rectangle card = card_rect(1.0f);
 
     if (s_age < 0.15f) return true; /* block during pop-in */
 
@@ -990,10 +989,7 @@ bool inventory_modal_handle_click(int mx, int my) {
     if (!inside) { inventory_modal_close(); return true; }
 
     /* Close button — right-aligned in the header strip */
-    float close_size = im_close_size();
-    Rectangle close_r = { card.x + card.width - close_size - 4.0f,
-                           card.y + (IM_HEADER_H - close_size) * 0.5f,
-                           close_size, close_size };
+    Rectangle close_r = close_rect(card);
     if (ui_button_hit(close_r, mx, my)) { inventory_modal_close(); return true; }
 
     /* Lore button */
@@ -1033,26 +1029,7 @@ bool inventory_modal_handle_click(int mx, int my) {
     /* Activate / Deactivate */
     if (s_inv_idx >= 0 && s_inv_idx < g_local_player.inventory_count) {
         const ObjectLayerState* ols = &g_local_player.inventory[s_inv_idx];
-        bool activable = true;
-        const char* item_type = "";
-        {
-            ObjectLayer* ol_data = lookup_cached_layer(ols->item_id);
-            if (ol_data) {
-                activable = ol_data->data.item.activable;
-                item_type = ol_data->data.item.type;
-            }
-        }
-        bool is_fragment = game_state_is_dead_item(ols->item_id);
-        bool btn_enabled = activable &&
-                           (!is_fragment || STATUS_ICON_DEAD == local_player_status_icon());
-        if (btn_enabled && item_type[0] != '\0') {
-            if (!game_state_is_active_item_type(item_type))
-                btn_enabled = false;
-            if (ols->active && !is_fragment && strcmp(item_type, "skin") == 0
-                && g_game_state.equipment_rules.require_skin)
-                btn_enabled = false;
-        }
-        if (btn_enabled) {
+        if (activate_enabled(ols)) {
             if (s_activate_btn_visible && ui_button_hit(s_activate_btn_rect, mx, my)) {
                 bool new_active = !ols->active;
                 send_activation(ols->item_id, new_active);
