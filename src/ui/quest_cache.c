@@ -61,11 +61,8 @@ int quest_active_step_index(const QuestMetadataEntry* metadata,
 static void ingest_quest_doc(void* entry, const cJSON* doc) {
     QuestMetadataEntry* e = entry;
 
-    const cJSON* title = cJSON_GetObjectItemCaseSensitive(doc, "title");
-    if (cJSON_IsString(title)) copy_str(e->title, QUEST_CACHE_TITLE_MAX, title->valuestring);
-
-    const cJSON* desc = cJSON_GetObjectItemCaseSensitive(doc, "description");
-    if (cJSON_IsString(desc)) copy_str(e->description, QUEST_CACHE_DESC_MAX, desc->valuestring);
+    copy_str(e->title, QUEST_CACHE_TITLE_MAX, json_str(doc, "title"));
+    copy_str(e->description, QUEST_CACHE_DESC_MAX, json_str(doc, "description"));
 
     e->step_count = 0;
     const cJSON* steps = cJSON_GetObjectItemCaseSensitive(doc, "steps");
@@ -75,10 +72,8 @@ static void ingest_quest_doc(void* entry, const cJSON* doc) {
             if (e->step_count >= QUEST_CACHE_STEP_MAX) break;
             QuestStepMeta* sm = &e->steps[e->step_count];
             memset(sm, 0, sizeof(*sm));
-            const cJSON* id = cJSON_GetObjectItemCaseSensitive(st, "id");
-            if (cJSON_IsString(id)) copy_str(sm->id, QUEST_CACHE_CODE_MAX, id->valuestring);
-            const cJSON* sdesc = cJSON_GetObjectItemCaseSensitive(st, "description");
-            if (cJSON_IsString(sdesc)) copy_str(sm->description, QUEST_CACHE_STEPDESC_MAX, sdesc->valuestring);
+            copy_str(sm->id, QUEST_CACHE_CODE_MAX, json_str(st, "id"));
+            copy_str(sm->description, QUEST_CACHE_STEPDESC_MAX, json_str(st, "description"));
 
             const cJSON* objs = cJSON_GetObjectItemCaseSensitive(st, "objectives");
             if (cJSON_IsArray(objs)) {
@@ -86,12 +81,9 @@ static void ingest_quest_doc(void* entry, const cJSON* doc) {
                 cJSON_ArrayForEach(o, objs) {
                     if (sm->objective_count >= QUEST_CACHE_OBJ_MAX) break;
                     QuestObjectiveMeta* om = &sm->objectives[sm->objective_count];
-                    const cJSON* type = cJSON_GetObjectItemCaseSensitive(o, "type");
-                    const cJSON* item = cJSON_GetObjectItemCaseSensitive(o, "itemId");
-                    const cJSON* qty = cJSON_GetObjectItemCaseSensitive(o, "quantity");
-                    if (cJSON_IsString(type)) copy_str(om->type, sizeof(om->type), type->valuestring);
-                    if (cJSON_IsString(item)) copy_str(om->item_id, QUEST_CACHE_ITEM_MAX, item->valuestring);
-                    om->quantity = cJSON_IsNumber(qty) ? qty->valueint : 1;
+                    copy_str(om->type, sizeof(om->type), json_str(o, "type"));
+                    copy_str(om->item_id, QUEST_CACHE_ITEM_MAX, json_str(o, "itemId"));
+                    om->quantity = json_int(o, "quantity", 1);
                     sm->objective_count++;
                 }
             }
@@ -105,12 +97,11 @@ static void ingest_quest_doc(void* entry, const cJSON* doc) {
         const cJSON* r = NULL;
         cJSON_ArrayForEach(r, rewards) {
             if (e->reward_count >= QUEST_CACHE_REWARD_MAX) break;
-            const cJSON* item_id = cJSON_GetObjectItemCaseSensitive(r, "itemId");
-            if (!cJSON_IsString(item_id)) continue;
-            const cJSON* qty = cJSON_GetObjectItemCaseSensitive(r, "quantity");
+            const char* item_id = json_str(r, "itemId");
+            if (NULL == item_id) continue;
             QuestRewardMeta* rm = &e->rewards[e->reward_count];
-            copy_str(rm->item_id, QUEST_CACHE_ITEM_MAX, item_id->valuestring);
-            rm->quantity = cJSON_IsNumber(qty) ? qty->valueint : 1;
+            copy_str(rm->item_id, QUEST_CACHE_ITEM_MAX, item_id);
+            rm->quantity = json_int(r, "quantity", 1);
             e->reward_count++;
         }
     }

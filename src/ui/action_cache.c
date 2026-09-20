@@ -40,11 +40,10 @@ static int ingest_craft_items(const cJSON* arr, ActionCraftItem* out) {
     const cJSON* row = NULL;
     cJSON_ArrayForEach(row, arr) {
         if (count >= ACTION_CACHE_CRAFT_ITEMS_MAX) break;
-        const cJSON* item = cJSON_GetObjectItemCaseSensitive(row, "itemId");
-        if (!cJSON_IsString(item)) continue;
-        const cJSON* qty = cJSON_GetObjectItemCaseSensitive(row, "qty");
-        copy_str(out[count].item_id, ACTION_CACHE_CODE_MAX, item->valuestring);
-        out[count].qty = cJSON_IsNumber(qty) ? qty->valueint : 1;
+        const char* item = json_str(row, "itemId");
+        if (NULL == item) continue;
+        copy_str(out[count].item_id, ACTION_CACHE_CODE_MAX, item);
+        out[count].qty = json_int(row, "qty", 1);
         count++;
     }
     return count;
@@ -53,8 +52,7 @@ static int ingest_craft_items(const cJSON* arr, ActionCraftItem* out) {
 static void ingest_doc(void* entry, const cJSON* doc) {
     ActionMetadataEntry* e = entry;
 
-    const cJSON* label = cJSON_GetObjectItemCaseSensitive(doc, "label");
-    if (cJSON_IsString(label)) copy_str(e->label, ACTION_CACHE_LABEL_MAX, label->valuestring);
+    copy_str(e->label, ACTION_CACHE_LABEL_MAX, json_str(doc, "label"));
 
     /* shopItems[] is the vendor catalog. A non-empty list is what makes the
      * entity a vendor — there is no action type flag. */
@@ -64,15 +62,14 @@ static void ingest_doc(void* entry, const cJSON* doc) {
         const cJSON* si = NULL;
         cJSON_ArrayForEach(si, sis) {
             if (e->shop_count >= ACTION_CACHE_SHOP_MAX) break;
-            const cJSON* item = cJSON_GetObjectItemCaseSensitive(si, "itemId");
-            if (!cJSON_IsString(item)) continue;
-            const cJSON* price_item = cJSON_GetObjectItemCaseSensitive(si, "priceItemId");
-            const cJSON* price_qty = cJSON_GetObjectItemCaseSensitive(si, "priceQty");
+            const char* item = json_str(si, "itemId");
+            if (NULL == item) continue;
+            const char* price_item = json_str(si, "priceItemId");
             ActionShopItem* slot = &e->shop_items[e->shop_count];
-            copy_str(slot->item_id, ACTION_CACHE_CODE_MAX, item->valuestring);
+            copy_str(slot->item_id, ACTION_CACHE_CODE_MAX, item);
             copy_str(slot->price_item_id, ACTION_CACHE_CODE_MAX,
-                     cJSON_IsString(price_item) ? price_item->valuestring : "coin");
-            slot->price_qty = cJSON_IsNumber(price_qty) ? price_qty->valueint : 1;
+                     price_item ? price_item : "coin");
+            slot->price_qty = json_int(si, "priceQty", 1);
             e->shop_count++;
         }
     }
@@ -90,8 +87,7 @@ static void ingest_doc(void* entry, const cJSON* doc) {
                                                     slot->outputs);
             slot->ingredient_count = ingest_craft_items(cJSON_GetObjectItemCaseSensitive(r, "ingredients"),
                                                         slot->ingredients);
-            const cJSON* ms = cJSON_GetObjectItemCaseSensitive(r, "craftTimeMs");
-            slot->craft_time_ms = cJSON_IsNumber(ms) ? ms->valueint : 0;
+            slot->craft_time_ms = json_int(r, "craftTimeMs", 0);
             /* A recipe with nothing to produce is not offerable. */
             if (slot->output_count > 0) e->craft_count++;
         }
@@ -99,6 +95,5 @@ static void ingest_doc(void* entry, const cJSON* doc) {
 
     /* storageSlots is the vault capacity; a positive value is what makes the
      * entity a storage terminal. */
-    const cJSON* storage = cJSON_GetObjectItemCaseSensitive(doc, "storageSlots");
-    e->storage_slots = cJSON_IsNumber(storage) ? storage->valueint : 0;
+    e->storage_slots = json_int(doc, "storageSlots", 0);
 }

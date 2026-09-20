@@ -3,6 +3,7 @@
 
 #include <raylib.h>
 #include <stdbool.h>
+#include <stddef.h>
 
 // The central request table owns icon textures.
 
@@ -11,6 +12,15 @@
 
 /* Bounce frequency in Hz. */
 #define UI_ICON_BOUNCE_FREQ     1.1f
+
+/* Bounce phase in radians, derived from `id` — two icons next to each other
+ * then bounce out of step. NULL or "" gives 0. */
+static inline float ui_icon_phase(const char* id) {
+    unsigned int h = 0;
+    if (NULL == id) return 0.0f;
+    for (const char* c = id; *c; c++) h = h * 31 + (unsigned char)*c;
+    return (float)(h % 1000) * 0.001f * 6.2832f;
+}
 
 /* Draw an icon centred on (cx, cy) in world pixels — call inside
  * BeginMode2D. `icon_id` is the file stem (e.g. "skull"); NULL or "" draws

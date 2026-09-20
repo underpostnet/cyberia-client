@@ -17,6 +17,10 @@ ObjectLayersManager* obj_layers_mgr_get(void);
 
 ObjectLayer* lookup_cached_layer(const char* item_id);
 
+/* Item id of the first active layer in `layers` whose item type is `type`,
+ * else NULL. */
+const char* active_layer_item_id(const ObjectLayerState* layers, int count, const char* type);
+
 /* Atlas data for an item key, fetched on a cache miss. NULL on failure. A
  * miss costs two requests and a PNG decode. */
 AtlasSpriteSheetData* get_or_fetch_atlas_data(const char* item_key, FetchPriority priority);

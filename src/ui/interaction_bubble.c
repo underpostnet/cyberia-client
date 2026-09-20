@@ -261,15 +261,6 @@ static InteractionBubbleSlot* upsert_slot(const char* entity_id) {
 
 /* Item id of the entity's active skin, or NULL. Talk dialogue is keyed to
  * the skin only — the displayed dialogue is the one associated with it. */
-static const char* active_skin_item_id(const ObjectLayerState* layers, int count) {
-    for (int i = 0; i < count; i++) {
-        if (!layers[i].active || '\0' == layers[i].item_id[0]) continue;
-        ObjectLayer* ol = lookup_cached_layer(layers[i].item_id);
-        if (ol && 0 == strcmp(ol->data.item.type, "skin")) return layers[i].item_id;
-    }
-    return NULL;
-}
-
 static void scan_entity(const char* entity_id, const EntityState* base,
                         bool is_player, const char* behavior,
                         uint8_t interaction_flags) {
@@ -307,7 +298,7 @@ static void scan_entity(const char* entity_id, const EntityState* base,
     }
 
     if (scan_layers) {
-        const char* skin = active_skin_item_id(scan_layers, scan_count);
+        const char* skin = active_layer_item_id(scan_layers, scan_count, "skin");
         if (skin) {
             dialogue_data_request(skin);
             if (dialogue_data_available(skin)) {
@@ -590,10 +581,7 @@ void interaction_bubble_draw(void) {
             status_ids[status_n++] = STATUS_ICON_QUEST_PROVIDER;
         if (status_n > 0) {
             int ico_sz = 16;
-            unsigned int h = 0;
-            for (const char* c = slot->entity_id; *c; c++)
-                h = h * 31 + (unsigned char)*c;
-            float phase = (float)(h % 1000) * 0.001f * 6.2832f;
+            float phase = ui_icon_phase(slot->entity_id);
             float iy = r.y + r.height - ico_sz * 0.5f - 2.0f;
             for (int k = 0; k < status_n; k++) {
                 const char* icon_id = presentation_runtime_status_icon(status_ids[k]);

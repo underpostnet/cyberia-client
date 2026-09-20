@@ -162,6 +162,17 @@ ObjectLayer* lookup_cached_layer(const char* item_id) {
     return (ObjectLayer*)hash_table_get(&g_olm_singleton->layers, item_id);
 }
 
+const char* active_layer_item_id(const ObjectLayerState* layers, int count, const char* type) {
+    assert(layers || 0 == count);
+    assert(type);
+    for (int i = 0; i < count; i++) {
+        if (!layers[i].active || '\0' == layers[i].item_id[0]) continue;
+        ObjectLayer* ol = lookup_cached_layer(layers[i].item_id);
+        if (ol && 0 == strcmp(ol->data.item.type, type)) return layers[i].item_id;
+    }
+    return NULL;
+}
+
 // ============================================================================
 // Public API
 // ============================================================================

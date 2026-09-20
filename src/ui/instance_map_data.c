@@ -25,16 +25,6 @@ static bool          s_poll_inflight = false;
  * a close (or across a reopen) are recognised as stale and dropped. */
 static int s_session = 0;
 
-static const char* json_str(const cJSON* obj, const char* key) {
-    const cJSON* v = cJSON_GetObjectItemCaseSensitive(obj, key);
-    return cJSON_IsString(v) ? v->valuestring : NULL;
-}
-
-static int json_int(const cJSON* obj, const char* key, int fallback) {
-    const cJSON* v = cJSON_GetObjectItemCaseSensitive(obj, key);
-    return cJSON_IsNumber(v) ? v->valueint : fallback;
-}
-
 int instance_map_data_find_node(const char* map_code) {
     if (!map_code) return -1;
     for (int i = 0; i < s_graph.node_count; ++i) {

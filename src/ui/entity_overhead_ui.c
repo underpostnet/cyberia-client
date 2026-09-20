@@ -232,12 +232,7 @@ void entity_overhead_ui_draw(
     /* Anchor above the entity; rows stack upward in fixed pixels. */
     float cursor_px = entity_top_px - EOHUD_GAP_ABOVE_ENTITY * cell_size;
 
-    float phase = 0.0f;
-    if (p->name) {
-        unsigned int h = 0;
-        for (const char* c = p->name; *c; c++) h = h * 31 + (unsigned char)*c;
-        phase = (float)(h % 1000) * 0.001f * 6.2832f;
-    }
+    float phase = ui_icon_phase(p->name);
 
     if (p->show_hp && p->max_life > 0.0f) {
         cursor_px -= EOHUD_XP_BAR_H;

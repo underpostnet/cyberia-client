@@ -383,17 +383,9 @@ static const char* resolve_summoned_item_id(const char* raw_id) {
     if (strcmp(raw_id, "$active_skin") != 0) return raw_id;
 
     /* Walk the player's full inventory to find the first active skin. */
-    for (int i = 0; i < g_local_player.inventory_count; i++) {
-        const ObjectLayerState* ol = &g_local_player.inventory[i];
-        if (!ol->active || ol->item_id[0] == '\0') continue;
-        ObjectLayer* data = lookup_cached_layer(ol->item_id);
-        if (data && strcmp(data->data.item.type, "skin") == 0) {
-            copy_str(s_resolved, MAX_ID_LENGTH, ol->item_id);
-            return s_resolved;
-        }
-    }
-    /* Fallback if no active skin found */
-    copy_str(s_resolved, MAX_ID_LENGTH, raw_id);
+    const char* skin = active_layer_item_id(g_local_player.inventory,
+                                            g_local_player.inventory_count, "skin");
+    copy_str(s_resolved, MAX_ID_LENGTH, skin ? skin : raw_id);
     return s_resolved;
 }
 

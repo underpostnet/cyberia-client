@@ -27,4 +27,16 @@ void* pool_take(void* base, size_t elem_size, int count,
  * else NULL. */
 const cJSON* envelope_success_doc(const cJSON* root);
 
+/* Reads one field of a JSON object. A missing field, or one of the wrong
+ * type, gives NULL / `fallback`. */
+static inline const char* json_str(const cJSON* obj, const char* key) {
+    const cJSON* v = cJSON_GetObjectItemCaseSensitive(obj, key);
+    return cJSON_IsString(v) ? v->valuestring : NULL;
+}
+
+static inline int json_int(const cJSON* obj, const char* key, int fallback) {
+    const cJSON* v = cJSON_GetObjectItemCaseSensitive(obj, key);
+    return cJSON_IsNumber(v) ? v->valueint : fallback;
+}
+
 #endif /* CYBERIA_UTIL_UTILS_H */
