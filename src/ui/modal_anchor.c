@@ -67,8 +67,8 @@ static Rectangle fit_into(Rectangle rect, Rectangle safe) {
 }
 
 static Rectangle place_above(Vector2 point, Vector2 size, float gap, Rectangle safe) {
-    if (size.x > safe.width)  size.x = safe.width;
-    if (size.y > safe.height) size.y = safe.height;
+    /* No size clamp here: fit_into shrinks an oversized card and then clamps
+     * it to the near edge, which gives the same rectangle. */
     Rectangle rect = { point.x - size.x * 0.5f, point.y - gap - size.y, size.x, size.y };
     return fit_into(rect, safe);
 }
