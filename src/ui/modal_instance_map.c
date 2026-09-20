@@ -358,16 +358,15 @@ void modal_instance_map_update(float dt) {
 
 /* ── Input dispatch glue ────────────────────────────────────────────────── */
 
-bool modal_instance_map_handle_click(int mx, int my) {
-    if (!s_m.open) return false;
-    /* Consume presses inside the panel; the gesture tracker resolves them.
-     * Presses outside fall through — the overlay is non-blocking. */
-    return CheckCollisionPointRec((Vector2){ (float)mx, (float)my }, s_m.panel);
-}
-
 bool modal_instance_map_covers_point(int mx, int my) {
     if (!s_m.open) return false;
     return CheckCollisionPointRec((Vector2){ (float)mx, (float)my }, s_m.panel);
+}
+
+bool modal_instance_map_handle_click(int mx, int my) {
+    /* Consume presses inside the panel; the gesture tracker resolves them.
+     * Presses outside fall through — the overlay is non-blocking. */
+    return modal_instance_map_covers_point(mx, my);
 }
 
 /* ── Drawing ────────────────────────────────────────────────────────────── */
