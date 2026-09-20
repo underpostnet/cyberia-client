@@ -1,6 +1,7 @@
 #ifndef CYBERIA_UI_INSTANCE_MAP_DATA_H
 #define CYBERIA_UI_INSTANCE_MAP_DATA_H
 
+#include <raylib.h>
 #include <stdbool.h>
 #include <stdint.h>
 
@@ -114,5 +115,14 @@ int instance_map_data_generation(void);
 /* Count of dynamically-active quest providers on one node. */
 int instance_map_data_node_active_quests(int node);
 int instance_map_data_node_active_actions(int node);
+
+/* Marker colour for a presence status. One table for both maps — the instance
+ * map and the minimap, POI markers and live markers alike. */
+Color instance_map_presence_color(ImapPresenceStatus status);
+
+/* Cell centre on a node card: `cell_x`/`cell_y` in the node's own grid space,
+ * mapped into `card`. A node with no grid gives the card centre. */
+Vector2 instance_map_cell_to_card(Rectangle card, const ImapNode* node,
+                                  float cell_x, float cell_y);
 
 #endif /* CYBERIA_UI_INSTANCE_MAP_DATA_H */

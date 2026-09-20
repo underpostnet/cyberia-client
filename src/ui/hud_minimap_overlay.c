@@ -103,26 +103,6 @@ static Rectangle node_rect(const ImapGraph* graph, int node_index,
     return (Rectangle){ x, y, side, side };
 }
 
-static Vector2 cell_position(const ImapNode* node, Rectangle rect,
-                             float cell_x, float cell_y) {
-    float fx = 0 < node->grid_x ? cell_x / (float)node->grid_x : 0.5f;
-    float fy = 0 < node->grid_y ? cell_y / (float)node->grid_y : 0.5f;
-    return (Vector2){ rect.x + Clamp(fx, 0.0f, 1.0f) * rect.width,
-                      rect.y + Clamp(fy, 0.0f, 1.0f) * rect.height };
-}
-
-static Color presence_color(ImapPresenceStatus status) {
-    switch (status) {
-        case IMAP_PRESENCE_HOSTILE:       return (Color){ 225, 75, 70, 245 };
-        case IMAP_PRESENCE_RESOURCE:      return (Color){ 105, 205, 105, 245 };
-        case IMAP_PRESENCE_PORTAL:        return (Color){ 70, 200, 255, 245 };
-        case IMAP_PRESENCE_PORTAL_RANDOM: return (Color){ 180, 110, 255, 245 };
-        case IMAP_PRESENCE_PASSIVE:       return (Color){ 215, 225, 235, 235 };
-        case IMAP_PRESENCE_NONE:
-        default:                          return MINIMAP_TEXT_DIM;
-    }
-}
-
 static void draw_node(Rectangle rect, const ImapNode* node, bool current) {
     Color line = current ? MINIMAP_PLAYER : MINIMAP_BORDER;
     line.a = current ? 190 : 105;
@@ -151,7 +131,7 @@ static Vector2 edge_endpoint(const ImapGraph* graph, int node_index,
     Rectangle rect = node_rect(graph, node_index, current_index, bounds);
     if (0 > cell_x || 0 > cell_y)
         return (Vector2){ rect.x + rect.width * 0.5f, rect.y + rect.height * 0.5f };
-    return cell_position(node, rect, (float)cell_x + 0.5f, (float)cell_y + 0.5f);
+    return instance_map_cell_to_card(rect, node, (float)cell_x + 0.5f, (float)cell_y + 0.5f);
 }
 
 static void draw_edges(const ImapGraph* graph, int current_index, Rectangle bounds) {
@@ -174,9 +154,9 @@ static void draw_static_pois(const ImapGraph* graph, int current_index, Rectangl
         if (0 > poi->node || graph->node_count <= poi->node) continue;
         const ImapNode* node = &graph->nodes[poi->node];
         Rectangle rect = node_rect(graph, poi->node, current_index, bounds);
-        Vector2 at = cell_position(node, rect, (float)poi->cell_x + 0.5f,
+        Vector2 at = instance_map_cell_to_card(rect, node, (float)poi->cell_x + 0.5f,
                                    (float)poi->cell_y + 0.5f);
-        Color color = presence_color(poi->presence_status);
+        Color color = instance_map_presence_color(poi->presence_status);
         float side = poi->node == current_index ? 8.0f : 6.0f;
         draw_square_marker(at, side, color);
         if (poi->action_active || poi->quest_active) {
@@ -198,7 +178,7 @@ static Rectangle current_map_rect(const ImapGraph* graph, int current_index,
 
 static Vector2 current_map_position(const ImapNode* node, Rectangle rect,
                                     Vector2 pos, Vector2 dims) {
-    return cell_position(node, rect, pos.x + dims.x * 0.5f, pos.y + dims.y * 0.5f);
+    return instance_map_cell_to_card(rect, node, pos.x + dims.x * 0.5f, pos.y + dims.y * 0.5f);
 }
 
 static void draw_current_portals(const ImapGraph* graph, int current_index,
@@ -225,16 +205,16 @@ static void draw_live_presence(const ImapGraph* graph, int current_index,
     for (int i = 0; i < g_game_state.bot_count; ++i) {
         const BotState* bot = &g_game_state.bots[i];
         Vector2 at = current_map_position(node, rect, bot->base.interp_pos, bot->base.dims);
-        Color color = STATUS_ICON_HOSTILE == bot->base.status_icon
-                          ? (Color){ 235, 75, 70, 245 }
-                          : (Color){ 220, 225, 235, 230 };
-        draw_square_marker(at, 5.0f, color);
+        draw_square_marker(at, 5.0f, instance_map_presence_color(
+            STATUS_ICON_HOSTILE == bot->base.status_icon ? IMAP_PRESENCE_HOSTILE
+                                                         : IMAP_PRESENCE_PASSIVE));
     }
     for (int i = 0; i < g_game_state.resource_count; ++i) {
         const BotState* resource = &g_game_state.resources[i];
         Vector2 at = current_map_position(node, rect, resource->base.interp_pos,
                                           resource->base.dims);
-        draw_square_marker(at, 5.0f, (Color){ 105, 205, 105, 235 });
+        draw_square_marker(at, 5.0f,
+                           instance_map_presence_color(IMAP_PRESENCE_RESOURCE));
     }
 }
 

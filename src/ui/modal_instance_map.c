@@ -483,8 +483,6 @@ static void draw_backdrop(float fade) {
 
 /* Forward decls — edge endpoints anchor to positions on the node cards. */
 static Rectangle node_rect(const ImapNode* n);
-static Vector2   cell_to_card(Rectangle card, const ImapNode* n, float cell_x, float cell_y);
-
 /* Resolve one edge endpoint on its node card: a known cell anchors to that
  * cell (the portal landmark); a random destination (-1) roams across the
  * whole card — the link keeps pointing at ever-changing spots of the map,
@@ -499,7 +497,7 @@ static Vector2 edge_endpoint(const ImapNode* n, int cell_x, int cell_y, double t
         fy = floorf(fy * 8.0f + 0.5f) / 8.0f;
         return (Vector2){ card.x + fx * card.width, card.y + fy * card.height };
     }
-    return cell_to_card(card, n, (float)cell_x + 0.5f, (float)cell_y + 0.5f);
+    return instance_map_cell_to_card(card, n, (float)cell_x + 0.5f, (float)cell_y + 0.5f);
 }
 
 static void draw_pixel_diagonal(Vector2 a, Vector2 b, Color color, float fade) {
@@ -570,14 +568,6 @@ static void draw_edge(const ImapEdge* e, int idx, float fade, double t) {
 /* Map cell → screen position inside the node card (the preview capture and
  * the gameplay grid share the same cell space, so POIs land where they are
  * on the real map). Cell centers use +0.5. */
-static Vector2 cell_to_card(Rectangle card, const ImapNode* n, float cell_x, float cell_y) {
-    float fx = n->grid_x > 0 ? cell_x / (float)n->grid_x : 0.5f;
-    float fy = n->grid_y > 0 ? cell_y / (float)n->grid_y : 0.5f;
-    fx = Clamp(fx, 0.0f, 1.0f);
-    fy = Clamp(fy, 0.0f, 1.0f);
-    return (Vector2){ card.x + fx * card.width, card.y + fy * card.height };
-}
-
 /* POI marker size: grows with the card so zooming in scales the landmarks. */
 static float poi_radius(float half_side) {
     float r = half_side * 0.14f;
@@ -593,18 +583,6 @@ static uint8_t presence_status_icon(ImapPresenceStatus presence) {
         case IMAP_PRESENCE_PORTAL_RANDOM: return STATUS_ICON_PORTAL_RANDOM;
         case IMAP_PRESENCE_NONE:
         default:                          return STATUS_ICON_NONE;
-    }
-}
-
-static Color presence_color(ImapPresenceStatus presence) {
-    switch (presence) {
-        case IMAP_PRESENCE_HOSTILE:       return (Color){ 220, 76, 70, 255 };
-        case IMAP_PRESENCE_RESOURCE:      return (Color){ 105, 200, 105, 255 };
-        case IMAP_PRESENCE_PORTAL:        return IMAP_EDGE;
-        case IMAP_PRESENCE_PORTAL_RANDOM: return IMAP_EDGE_INTRA;
-        case IMAP_PRESENCE_PASSIVE:       return IMAP_TEXT;
-        case IMAP_PRESENCE_NONE:
-        default:                          return IMAP_TEXT_DIM;
     }
 }
 
@@ -784,10 +762,10 @@ static void draw_node_overlay(int idx, float fade, double t) {
     for (int i = 0; i < gr->presence_poi_count; ++i) {
         const ImapPresencePoi* poi = &gr->presence_pois[i];
         if (poi->node != idx) continue;
-        Vector2 at = cell_to_card(card, n, poi->cell_x + 0.5f, poi->cell_y + 0.5f);
+        Vector2 at = instance_map_cell_to_card(card, n, poi->cell_x + 0.5f, poi->cell_y + 0.5f);
         uint8_t status = presence_status_icon(poi->presence_status);
         const char* icon = presentation_runtime_status_icon(status);
-        Color tint = presence_color(poi->presence_status);
+        Color tint = instance_map_presence_color(poi->presence_status);
         if (zoomed) {
             draw_zoomed_capability_tab(at, icon, poi->capabilities, poi->action_active,
                                        poi->quest_active, false, 0,
@@ -804,7 +782,7 @@ static void draw_node_overlay(int idx, float fade, double t) {
         float grow = 9.0f + 3.0f * sinf((float)t * 3.2f);
         Rectangle ring = { card.x - grow, card.y - grow, card.width + grow * 2.0f, card.height + grow * 2.0f };
         draw_pixel_outline(ring, 3, fade_c(IMAP_PLAYER, fade * 0.85f));
-        Vector2 mp = cell_to_card(card, n,
+        Vector2 mp = instance_map_cell_to_card(card, n,
                                   g_game_state.player.base.interp_pos.x,
                                   g_game_state.player.base.interp_pos.y);
         uint8_t self_status = 0 != g_game_state.player.base.status_icon

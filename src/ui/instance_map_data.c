@@ -8,6 +8,7 @@
 
 #include <cJSON.h>
 #include <math.h>
+#include <raymath.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -309,4 +310,26 @@ int instance_map_data_node_active_actions(int node) {
     for (int i = 0; i < s_graph.presence_poi_count; ++i)
         if (s_graph.presence_pois[i].node == node && s_graph.presence_pois[i].action_active) n++;
     return n;
+}
+
+/* One presence palette for both maps. The instance map values are the source;
+ * the minimap used to hold its own slightly different copies. */
+Color instance_map_presence_color(ImapPresenceStatus status) {
+    switch (status) {
+        case IMAP_PRESENCE_HOSTILE:       return (Color){ 220, 76, 70, 255 };
+        case IMAP_PRESENCE_RESOURCE:      return (Color){ 105, 200, 105, 255 };
+        case IMAP_PRESENCE_PORTAL:        return (Color){ 60, 200, 255, 255 };
+        case IMAP_PRESENCE_PORTAL_RANDOM: return (Color){ 170, 110, 255, 255 };
+        case IMAP_PRESENCE_PASSIVE:       return (Color){ 205, 225, 245, 235 };
+        case IMAP_PRESENCE_NONE:
+        default:                          return (Color){ 130, 150, 180, 190 };
+    }
+}
+
+Vector2 instance_map_cell_to_card(Rectangle card, const ImapNode* node,
+                                  float cell_x, float cell_y) {
+    float fx = 0 < node->grid_x ? cell_x / (float)node->grid_x : 0.5f;
+    float fy = 0 < node->grid_y ? cell_y / (float)node->grid_y : 0.5f;
+    return (Vector2){ card.x + Clamp(fx, 0.0f, 1.0f) * card.width,
+                      card.y + Clamp(fy, 0.0f, 1.0f) * card.height };
 }
