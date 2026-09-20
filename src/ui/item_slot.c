@@ -53,16 +53,7 @@ void item_slot_draw_ex(Rectangle r, const ObjectLayerState* ols, ObjectLayersMan
      * to briefly "color" a slot (e.g. a fresh reward settling in). */
     Color slot_bg = ColorLerp(fill, (Color){ highlight.r, highlight.g, highlight.b, fill.a }, highlight_t);
 
-    /* Black outer border */
-    DrawRectangleRec(r, BLACK);
-    /* Inner fill */
-    Rectangle inner = ui_rect_inset(r, 2.0f);
-    DrawRectangleRec(inner, slot_bg);
-    /* Top highlight edge */
-    DrawRectangle((int)(inner.x + 4.0f), (int)inner.y, (int)(inner.width - 8.0f), 2, highlight_edge);
-    /* Bottom shadow edge */
-    DrawRectangle((int)(inner.x + 4.0f), (int)(inner.y + inner.height - 2.0f),
-                  (int)(inner.width - 8.0f), 2, shadow_edge);
+    Rectangle inner = draw_pixel_bevel(r, 0.0f, 4.0f, slot_bg, highlight_edge, shadow_edge);
     /* White inner outline on hover or active+activable */
     if (hovered || (active && activable))
         DrawRectangleLinesEx(inner, 1.0f, (active && activable) ? C_ACTIVE_GLOW : WHITE);

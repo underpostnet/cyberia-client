@@ -535,13 +535,7 @@ void interaction_bubble_draw(void) {
         Color slot_shadow = ColorBrightness(slot_fill, -0.45f);
 
         float rrd = 0.15f;
-        DrawRectangleRounded(r, rrd, 4, BLACK);
-        Rectangle slot_inner = ui_rect_inset(r, 2.0f);
-        DrawRectangleRounded(slot_inner, rrd, 4, slot_fill);
-        DrawRectangle((int)(slot_inner.x + 4.0f), (int)slot_inner.y,
-                      (int)(slot_inner.width - 8.0f), 2, slot_highlight);
-        DrawRectangle((int)(slot_inner.x + 4.0f), (int)(slot_inner.y + slot_inner.height - 2.0f),
-                      (int)(slot_inner.width - 8.0f), 2, slot_shadow);
+        Rectangle slot_inner = draw_pixel_bevel(r, rrd, 4.0f, slot_fill, slot_highlight, slot_shadow);
         if (hovered)
             DrawRectangleRoundedLinesEx(slot_inner, rrd, 4, 1.0f, WHITE);
         /* Status border colour applied as overlay on the retro slot. */

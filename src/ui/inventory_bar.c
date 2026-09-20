@@ -307,16 +307,7 @@ static void draw_coin_slot(Rectangle r, int coin_idx, ObjectLayersManager* mgr) 
     Color gold_highlight = ColorBrightness(gold_fill, 0.45f);
     Color gold_shadow = ColorBrightness(gold_fill, -0.45f);
 
-    /* Black outer border via rounded rect */
-    DrawRectangleRec(r, BLACK);
-    /* Inner fill */
-    Rectangle inner = ui_rect_inset(r, 2.0f);
-    DrawRectangleRec(inner, gold_fill);
-    /* Top highlight edge */
-    DrawRectangle((int)(inner.x + 4.0f), (int)inner.y, (int)(inner.width - 8.0f), 2, gold_highlight);
-    /* Bottom shadow edge */
-    DrawRectangle((int)(inner.x + 4.0f), (int)(inner.y + inner.height - 2.0f),
-                  (int)(inner.width - 8.0f), 2, gold_shadow);
+    draw_pixel_bevel(r, 0.0f, 4.0f, gold_fill, gold_highlight, gold_shadow);
     /* Gold border overlay */
     DrawRectangleLinesEx(r, 2.0f, C_COIN_BORDER);
 

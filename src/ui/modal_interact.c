@@ -1435,13 +1435,8 @@ static void draw_quest_grid_action_button(Rectangle button, const char* label,
     Color fill = enabled ? color : (Color){ 58, 62, 76, 255 };
     Color light = hovered ? (Color){ 255, 255, 220, 255 } : (Color){ 220, 225, 235, 190 };
     Color shade = enabled ? (Color){ 10, 14, 24, 255 } : (Color){ 28, 30, 38, 255 };
-    Rectangle inner = ui_rect_inset(button, 2.0f);
 
-    DrawRectangleRec(button, BLACK);
-    DrawRectangleRec(inner, fill);
-    DrawRectangle((int)inner.x, (int)inner.y, (int)inner.width, 2, light);
-    DrawRectangle((int)inner.x, (int)(inner.y + inner.height - 2.0f),
-                  (int)inner.width, 2, shade);
+    Rectangle inner = draw_pixel_bevel(button, 0.0f, 0.0f, fill, light, shade);
     if (hovered) DrawRectangleLinesEx(inner, 1.0f, WHITE);
 
     int font = quest_grid_action_font(label, button.width);
@@ -1455,17 +1450,12 @@ static void draw_quest_grid_button(Rectangle card, const QuestCardInfo* info,
     Color fill = hovered ? (Color){ 35, 48, 72, 255 } : (Color){ 24, 32, 50, 255 };
     Color highlight = hovered ? (Color){ 86, 112, 152, 255 } : (Color){ 58, 78, 110, 255 };
     Color shadow = (Color){ 8, 12, 22, 255 };
-    Rectangle inner = ui_rect_inset(card, 2.0f);
     float action_height = viewport_is_mobile() ? MI_CARD_ACTION_H_MOBILE
                                                 : MI_CARD_ACTION_H_DESKTOP;
     float action_y = card.y + card.height - MI_CARD_PAD - action_height;
     float action_width = (card.width - 2.0f * MI_CARD_PAD - MI_CARD_ACTION_GAP) * 0.5f;
 
-    DrawRectangleRec(card, BLACK);
-    DrawRectangleRec(inner, fill);
-    DrawRectangle((int)inner.x, (int)inner.y, (int)inner.width, 2, highlight);
-    DrawRectangle((int)inner.x, (int)(inner.y + inner.height - 2.0f),
-                  (int)inner.width, 2, shadow);
+    Rectangle inner = draw_pixel_bevel(card, 0.0f, 0.0f, fill, highlight, shadow);
     DrawRectangle((int)inner.x, (int)(action_y - MI_CARD_ACTION_GAP * 0.5f),
                   (int)inner.width, 1, info->color);
     DrawRectangle((int)inner.x, (int)inner.y, 3, (int)inner.height, info->color);
@@ -1786,15 +1776,13 @@ static void draw_shop_card(Rectangle card, const ActionShopItem* item, int slot,
                            bool affordable, int font, int mx, int my) {
     ObjectLayersManager* olm = obj_layers_mgr_get();
     bool hovered = ui_button_hit(card, mx, my);
-    Rectangle inner = ui_rect_inset(card, 2.0f);
     Color accent = affordable ? (Color){ 120, 200, 140, 235 } : (Color){ 210, 120, 110, 230 };
 
-    DrawRectangleRec(card, BLACK);
-    DrawRectangleRec(inner, hovered ? (Color){ 35, 48, 72, 255 } : (Color){ 24, 32, 50, 255 });
-    DrawRectangle((int)inner.x, (int)inner.y, (int)inner.width, 2,
-                  hovered ? (Color){ 86, 112, 152, 255 } : (Color){ 58, 78, 110, 255 });
-    DrawRectangle((int)inner.x, (int)(inner.y + inner.height - 2.0f), (int)inner.width, 2,
-                  (Color){ 8, 12, 22, 255 });
+    Rectangle inner = draw_pixel_bevel(
+        card, 0.0f, 0.0f,
+        hovered ? (Color){ 35, 48, 72, 255 } : (Color){ 24, 32, 50, 255 },
+        hovered ? (Color){ 86, 112, 152, 255 } : (Color){ 58, 78, 110, 255 },
+        (Color){ 8, 12, 22, 255 });
     DrawRectangle((int)inner.x, (int)inner.y, 3, (int)inner.height, accent);
     if (hovered) DrawRectangleLinesEx(inner, 1.0f, WHITE);
 
@@ -2013,19 +2001,21 @@ static void draw_craft_card(Rectangle card, const ActionCraftRecipe* recipe, int
                             bool ready, float flash, int mx, int my) {
     ObjectLayersManager* olm = obj_layers_mgr_get();
     bool hovered = ui_button_hit(card, mx, my);
-    Rectangle inner = ui_rect_inset(card, 2.0f);
     Color accent = ready ? (Color){ 120, 200, 140, 235 } : (Color){ 210, 120, 110, 230 };
     /* The synthesis pulse washes the whole card toward the accent, so the
      * confirmation reads before the item has left for the inventory. */
     unsigned char glow = (unsigned char)(90.0f * flash);
 
-    DrawRectangleRec(card, BLACK);
-    DrawRectangleRec(inner, hovered ? (Color){ 35, 48, 72, 255 } : (Color){ 24, 32, 50, 255 });
-    if (flash > 0.0f) DrawRectangleRec(inner, (Color){ accent.r, accent.g, accent.b, glow });
-    DrawRectangle((int)inner.x, (int)inner.y, (int)inner.width, 2,
-                  hovered ? (Color){ 86, 112, 152, 255 } : (Color){ 58, 78, 110, 255 });
-    DrawRectangle((int)inner.x, (int)(inner.y + inner.height - 2.0f), (int)inner.width, 2,
-                  (Color){ 8, 12, 22, 255 });
+    Rectangle inner = draw_pixel_bevel(
+        card, 0.0f, 0.0f,
+        hovered ? (Color){ 35, 48, 72, 255 } : (Color){ 24, 32, 50, 255 },
+        hovered ? (Color){ 86, 112, 152, 255 } : (Color){ 58, 78, 110, 255 },
+        (Color){ 8, 12, 22, 255 });
+    /* The wash goes between the edges, which are opaque and cover the full
+     * inner width — the same pixels as a wash under them. */
+    if (flash > 0.0f)
+        DrawRectangleRec((Rectangle){ inner.x, inner.y + 2.0f, inner.width, inner.height - 4.0f },
+                         (Color){ accent.r, accent.g, accent.b, glow });
     DrawRectangle((int)inner.x, (int)inner.y, 3, (int)inner.height, accent);
     if (hovered || flash > 0.0f) DrawRectangleLinesEx(inner, 1.0f, WHITE);
 
