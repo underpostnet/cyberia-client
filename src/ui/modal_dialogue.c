@@ -152,6 +152,15 @@ void modal_dialogue_show_fullscreen(void) {
     s_age = 0.0f;
 }
 
+/* Start reading again from the first line. */
+static void restart_reading(void) {
+    s_current       = 0;
+    s_chars_visible = 0;
+    s_char_timer    = 0.0f;
+    s_line_complete = false;
+    s_ended         = false;
+}
+
 static Rectangle panel_rect(int sw, int sh) {
     if (dlg_fullscreen()) {
         /* Below the top toolbar so the reader never collides with it. */
@@ -267,7 +276,6 @@ void modal_dialogue_open(const char* entity_id, const char* item_id,
     if (n > 0) memcpy(s_lines, lines, sizeof(DialogueLine) * n);
 
     s_line_count = n;
-    s_current    = 0;
     s_render     = render;
     s_auto_dismiss = (MODAL_DIALOGUE_RENDER_ITEM == render);
 
@@ -275,11 +283,8 @@ void modal_dialogue_open(const char* entity_id, const char* item_id,
     copy_str(s_item_id, sizeof(s_item_id), item_id ? item_id : "");
     copy_str(s_dialog_code, sizeof(s_dialog_code), dialog_code ? dialog_code : "");
 
+    restart_reading();
     s_age           = 0.0f;
-    s_char_timer    = 0.0f;
-    s_chars_visible = 0;
-    s_line_complete = false;
-    s_ended         = false;
     s_fullscreen    = false;
     s_collapsed     = false;
     s_open          = true;
@@ -297,6 +302,20 @@ void modal_dialogue_open(const char* entity_id, const char* item_id,
 /* Finish the dialogue. `completed` true → all lines were read (dlg_complete,
  * the only path that can satisfy a quest-talk objective); false → dismissed
  * early (dlg_cancel, no progress). Both release the dialogue freeze. */
+/* Sends the closing dlg frame and hands the freeze back. The interact session
+ * keeps the player protected across the frame: re-bridging to "interact"
+ * first makes the reason-match check reject the dialogue thaw. */
+static void send_dlg_end(bool completed) {
+    if (!s_dlg_started) return;
+    s_dlg_started = false;
+    if (modal_interact_is_open())
+        local_player_request_freeze(true, "interact");
+    if (completed)
+        local_player_request_dialogue_complete(s_entity_id, s_item_id, s_dialog_code);
+    else
+        local_player_request_dialogue_cancel(s_entity_id, s_item_id);
+}
+
 static void modal_dialogue_finish(bool completed) {
     if (!s_open) return;
     s_open = false;
@@ -312,19 +331,8 @@ static void modal_dialogue_finish(bool completed) {
     s_on_close = NULL;
     if (cb) cb();
 
-    if (s_dlg_started) {
-        /* Interact session still open: re-bridge the freeze to "interact"
-         * before the dlg frame so the dialogue thaw is rejected and the
-         * player stays protected for the rest of the session. */
-        if (modal_interact_is_open())
-            local_player_request_freeze(true, "interact");
-        if (completed)
-            local_player_request_dialogue_complete(s_entity_id, s_item_id, s_dialog_code);
-        else
-            local_player_request_dialogue_cancel(s_entity_id, s_item_id);
-    }
+    send_dlg_end(completed);
 
-    s_dlg_started = false;
     s_line_count  = 0;
     s_current     = 0;
     s_quest_style = false;
@@ -339,13 +347,7 @@ void modal_dialogue_set_quest_style(bool on) {
 /* Emit dlg_complete (the server validates quest-talk objectives) WITHOUT
  * closing — the entity dialogue stays open so the player can repeat it. */
 static void emit_dlg_complete(void) {
-    if (!s_dlg_started) return;
-    s_dlg_started = false;
-    /* Same re-bridge as modal_dialogue_finish: the interact session keeps
-     * the freeze across the completion frame. */
-    if (modal_interact_is_open())
-        local_player_request_freeze(true, "interact");
-    local_player_request_dialogue_complete(s_entity_id, s_item_id, s_dialog_code);
+    send_dlg_end(true);
 }
 
 void modal_dialogue_close(void) {
@@ -636,21 +638,13 @@ bool modal_dialogue_handle_click(int mx, int my) {
          * Reading state resets so the footer opens a fresh visual read. */
         if (viewport_is_mobile() && s_fullscreen &&
             MODAL_DIALOGUE_RENDER_ENTITY == s_render) {
-            s_fullscreen    = false;
-            s_age           = 0.0f; /* replay the modal pop for the mode change */
-            s_current       = 0;
-            s_chars_visible = 0;
-            s_char_timer    = 0.0f;
-            s_line_complete = false;
-            s_ended         = false;
+            s_fullscreen = false;
+            s_age        = 0.0f; /* replay the modal pop for the mode change */
+            restart_reading();
         }
     } else {
         /* Repeat Dialog → re-read from the top (visual only). */
-        s_current       = 0;
-        s_chars_visible = 0;
-        s_char_timer    = 0.0f;
-        s_line_complete = false;
-        s_ended         = false;
+        restart_reading();
     }
 
     return true;
