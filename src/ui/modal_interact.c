@@ -1433,18 +1433,42 @@ static void draw_quest_grid_action_button(Rectangle button, const char* label,
     draw_card_line(label, (int)button.x, label_y, (int)button.width, font, WHITE, true);
 }
 
+/* One button of the fixed bottom bar. They share every style field but the
+ * icon, the label and the selected flag. */
+static void draw_bar_button(Rectangle r, const char* icon, const char* label,
+                            bool selected, int mx, int my) {
+    UIButtonPixelRetroStyle st = {
+        .bg = C_BTN,
+        .icon_id = icon,
+        .label = label,
+        .font_size = viewport_is_mobile() ? 12 : mi_font_btn(),
+        .text_color = C_TEXT,
+        .selected = selected,
+        .enabled = true,
+    };
+    ui_button_pixel_retro_draw(r, &st, ui_button_hit(r, mx, my));
+}
+
+/* Shared base of the quest, shop and craft cards: the pixel bevel with the
+ * card palette. Returns the inner rectangle; the caller draws its own wash,
+ * separator, accent stripe and hover line on top. */
+static Rectangle draw_card_base(Rectangle card, bool hovered) {
+    return draw_pixel_bevel(
+        card, 0.0f, 0.0f,
+        hovered ? (Color){ 35, 48, 72, 255 } : (Color){ 24, 32, 50, 255 },
+        hovered ? (Color){ 86, 112, 152, 255 } : (Color){ 58, 78, 110, 255 },
+        (Color){ 8, 12, 22, 255 });
+}
+
 static void draw_quest_grid_button(Rectangle card, const QuestCardInfo* info,
                                    int slot, int font, int mx, int my) {
     bool hovered = ui_button_hit(card, mx, my);
-    Color fill = hovered ? (Color){ 35, 48, 72, 255 } : (Color){ 24, 32, 50, 255 };
-    Color highlight = hovered ? (Color){ 86, 112, 152, 255 } : (Color){ 58, 78, 110, 255 };
-    Color shadow = (Color){ 8, 12, 22, 255 };
     float action_height = viewport_is_mobile() ? MI_CARD_ACTION_H_MOBILE
                                                 : MI_CARD_ACTION_H_DESKTOP;
     float action_y = card.y + card.height - MI_CARD_PAD - action_height;
     float action_width = (card.width - 2.0f * MI_CARD_PAD - MI_CARD_ACTION_GAP) * 0.5f;
 
-    Rectangle inner = draw_pixel_bevel(card, 0.0f, 0.0f, fill, highlight, shadow);
+    Rectangle inner = draw_card_base(card, hovered);
     DrawRectangle((int)inner.x, (int)(action_y - MI_CARD_ACTION_GAP * 0.5f),
                   (int)inner.width, 1, info->color);
     DrawRectangle((int)inner.x, (int)inner.y, 3, (int)inner.height, info->color);
@@ -1767,11 +1791,7 @@ static void draw_shop_card(Rectangle card, const ActionShopItem* item, int slot,
     bool hovered = ui_button_hit(card, mx, my);
     Color accent = affordable ? (Color){ 120, 200, 140, 235 } : (Color){ 210, 120, 110, 230 };
 
-    Rectangle inner = draw_pixel_bevel(
-        card, 0.0f, 0.0f,
-        hovered ? (Color){ 35, 48, 72, 255 } : (Color){ 24, 32, 50, 255 },
-        hovered ? (Color){ 86, 112, 152, 255 } : (Color){ 58, 78, 110, 255 },
-        (Color){ 8, 12, 22, 255 });
+    Rectangle inner = draw_card_base(card, hovered);
     DrawRectangle((int)inner.x, (int)inner.y, 3, (int)inner.height, accent);
     if (hovered) DrawRectangleLinesEx(inner, 1.0f, WHITE);
 
@@ -1995,11 +2015,7 @@ static void draw_craft_card(Rectangle card, const ActionCraftRecipe* recipe, int
      * confirmation reads before the item has left for the inventory. */
     unsigned char glow = (unsigned char)(90.0f * flash);
 
-    Rectangle inner = draw_pixel_bevel(
-        card, 0.0f, 0.0f,
-        hovered ? (Color){ 35, 48, 72, 255 } : (Color){ 24, 32, 50, 255 },
-        hovered ? (Color){ 86, 112, 152, 255 } : (Color){ 58, 78, 110, 255 },
-        (Color){ 8, 12, 22, 255 });
+    Rectangle inner = draw_card_base(card, hovered);
     /* The wash goes between the edges, which are opaque and cover the full
      * inner width — the same pixels as a wash under them. */
     if (flash > 0.0f)
@@ -2538,30 +2554,17 @@ void modal_interact_draw(void) {
     for (int k = 0; k < tabs_n; k++) {
         int t = tabs[k];
         Rectangle r = tab_rect(card, k, tabs_n);
-        bool hovered = ui_button_hit(r, mx, my);
-        if (t == s_tab) {
-            UIButtonPixelRetroStyle st = {
-                .bg = C_TAB_ACTIVE,
-                .icon_id = MI_TAB_ICON[t],
-                .label = MI_TAB_LABEL[t],
-                .font_size = mi_font_label(),
-                .text_color = C_TEXT,
-                .selected = true,
-                .enabled = true,
-            };
-            ui_button_pixel_retro_draw(r, &st, hovered);
-        } else {
-            UIButtonPixelRetroStyle st = {
-                .bg = (Color){ 24, 30, 48, 255 },
-                .icon_id = MI_TAB_ICON[t],
-                .label = MI_TAB_LABEL[t],
-                .font_size = mi_font_label(),
-                .text_color = C_TAB_DIM,
-                .selected = false,
-                .enabled = true,
-            };
-            ui_button_pixel_retro_draw(r, &st, hovered);
-        }
+        bool active = t == s_tab;
+        UIButtonPixelRetroStyle st = {
+            .bg = active ? C_TAB_ACTIVE : (Color){ 24, 30, 48, 255 },
+            .icon_id = MI_TAB_ICON[t],
+            .label = MI_TAB_LABEL[t],
+            .font_size = mi_font_label(),
+            .text_color = active ? C_TEXT : C_TAB_DIM,
+            .selected = active,
+            .enabled = true,
+        };
+        ui_button_pixel_retro_draw(r, &st, ui_button_hit(r, mx, my));
     }
 
     /* Tab-switch transition: the incoming tab's content pops in from the
@@ -2598,33 +2601,14 @@ void modal_interact_draw(void) {
         /* A pending quest-talk marks the Dialog button: quest icon + yellow
          * border so the mission entry stands out among Chat / Integration. */
         bool pending_quest_talk = modal_interact_quest_talk_count() > 0;
-        int dfont = viewport_is_mobile() ? 12 : mi_font_btn();
-        UIButtonPixelRetroStyle dialog_st = {
-            .bg = C_BTN,
-            .icon_id = pending_quest_talk ? "quest" : "chat",
-            .label = "Dialog",
-            .font_size = dfont,
-            .text_color = C_TEXT,
-            .selected = false,
-            .enabled = true,
-        };
-        ui_button_pixel_retro_draw(dialog, &dialog_st, ui_button_hit(dialog, mx, my));
+        draw_bar_button(dialog, pending_quest_talk ? "quest" : "chat", "Dialog",
+                        false, mx, my);
         /* Yellow border overlay for quest-talk active state. */
         if (pending_quest_talk)
             DrawRectangleRoundedLinesEx(dialog, 0.18f, 6, 2.0f, (Color){ 230, 200, 60, 230 });
     }
 
-    int cfont = viewport_is_mobile() ? 12 : mi_font_btn();
-    UIButtonPixelRetroStyle chat_st = {
-        .bg = C_BTN,
-        .icon_id = "chat",
-        .label = "Chat",
-        .font_size = cfont,
-        .text_color = C_TEXT,
-        .selected = MI_TAB_CHAT == s_tab,
-        .enabled = true,
-    };
-    ui_button_pixel_retro_draw(chat, &chat_st, ui_button_hit(chat, mx, my));
+    draw_bar_button(chat, "chat", "Chat", MI_TAB_CHAT == s_tab, mx, my);
 
     int unread = notification_count(NOTIF_CHAT, s_entity_id);
     if (unread > 0) {
@@ -2639,17 +2623,8 @@ void modal_interact_draw(void) {
     }
 
     if (integration_btn_visible()) {
-        int ifont = viewport_is_mobile() ? 12 : mi_font_btn();
-        UIButtonPixelRetroStyle integration_st = {
-            .bg = C_BTN,
-            .icon_id = "reload",
-            .label = "Integration",
-            .font_size = ifont,
-            .text_color = C_TEXT,
-            .selected = MI_TAB_INTEGRATION == s_tab,
-            .enabled = true,
-        };
-        ui_button_pixel_retro_draw(integration, &integration_st, ui_button_hit(integration, mx, my));
+        draw_bar_button(integration, "reload", "Integration",
+                        MI_TAB_INTEGRATION == s_tab, mx, my);
     }
 }
 
