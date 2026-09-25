@@ -382,7 +382,7 @@ void draw_entity_layers(
 
         has_associated_item_id = true;
 
-        // Fetch object layer metadata (for item type, ledger, render CIDs)
+        // The definition bound to the label: its item type and stats
         ObjectLayer* layer = lookup_cached_layer(state->item_id);
 
         // Fetch atlas sprite sheet data (for frame metadata + atlas texture reference)

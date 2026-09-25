@@ -29,6 +29,7 @@ static void atlas_metadata_url(const char* item_key, char* url, size_t size) {
     snprintf(url, size, "/api/atlas-sprite-sheet/metadata/%s", item_key);
 }
 
+/* The primary render decodes to one pixel per cell, the unit of the layout. */
 static Texture2D atlas_texture(const AtlasSpriteSheetData* atlas, FetchPriority priority, bool visible) {
     char url[512];
     snprintf(url, sizeof(url), "/api/atlas-sprite-sheet/blob/%s", atlas->item_key);
@@ -89,18 +90,28 @@ static void parse_render(cJSON* render_json, Render* render) {
     free(metadata_cid);
 }
 
+/* A definition arrives with no ledger object when it is unregistered. */
 static void parse_ledger(cJSON* ledger_json, Ledger* ledger) {
-    assert(ledger_json);
     assert(ledger);
+    memset(ledger, 0, sizeof(*ledger));
+    if (!ledger_json) return;
 
-    char* type_str = json_get_string_safe(ledger_json, "type", "OFF_CHAIN");
-    ledger->type = ledger_type_from_string(type_str);
-    free(type_str);
+    char* standard = json_get_string_safe(ledger_json, "standard", "");
+    ledger->standard = ledger_standard_from_string(standard);
+    free(standard);
+    if (LEDGER_UNREGISTERED == ledger->standard) return;
 
-    char* address = json_get_string_safe(ledger_json, "address", "");
-    strncpy(ledger->address, address, MAX_ADDRESS_LENGTH - 1);
-    ledger->address[MAX_ADDRESS_LENGTH - 1] = '\0';
-    free(address);
+    ledger->chain_id = (uint64_t)json_get_int_safe(ledger_json, "chainId", 0);
+
+    char* contract_address = json_get_string_safe(ledger_json, "contractAddress", "");
+    strncpy(ledger->contract_address, contract_address, MAX_ADDRESS_LENGTH - 1);
+    ledger->contract_address[MAX_ADDRESS_LENGTH - 1] = '\0';
+    free(contract_address);
+
+    char* token_id = json_get_string_safe(ledger_json, "tokenId", "");
+    strncpy(ledger->token_id, token_id, MAX_TOKEN_ID_LENGTH - 1);
+    ledger->token_id[MAX_TOKEN_ID_LENGTH - 1] = '\0';
+    free(token_id);
 }
 
 static void parse_item(cJSON* item_json, Item* item) {
@@ -132,7 +143,7 @@ static void parse_object_layer_data(cJSON* data_json, ObjectLayerData* data) {
 
 // --- Atlas Sprite Sheet JSON Parsing ---
 
-static void parse_direction_frame_data(cJSON* array_json, DirectionFrameData* dfd, int scale) {
+static void parse_direction_frame_data(cJSON* array_json, DirectionFrameData* dfd) {
     assert(dfd);
     assert(array_json);
     dfd->count = 0;
@@ -147,10 +158,10 @@ static void parse_direction_frame_data(cJSON* array_json, DirectionFrameData* df
         if (!frame_json) continue;
 
         FrameMetadata* fm = &dfd->frames[dfd->count];
-        fm->x = json_get_int_safe(frame_json, "x", 0) / scale;
-        fm->y = json_get_int_safe(frame_json, "y", 0) / scale;
-        fm->width = json_get_int_safe(frame_json, "width", 0) / scale;
-        fm->height = json_get_int_safe(frame_json, "height", 0) / scale;
+        fm->x = json_get_int_safe(frame_json, "x", 0);
+        fm->y = json_get_int_safe(frame_json, "y", 0);
+        fm->width = json_get_int_safe(frame_json, "width", 0);
+        fm->height = json_get_int_safe(frame_json, "height", 0);
         fm->frame_index = json_get_int_safe(frame_json, "frameIndex", i);
         dfd->count++;
     }
@@ -247,8 +258,6 @@ static void on_atlas_meta_fetched(const FetchResponse* r) {
         cJSON_Delete(root);
         return;
     }
-    atlas->atlas_width = (atlas->atlas_width + atlas->cell_pixel_dim - 1) / atlas->cell_pixel_dim;
-    atlas->atlas_height = (atlas->atlas_height + atlas->cell_pixel_dim - 1) / atlas->cell_pixel_dim;
     atlas->frame_duration = json_get_int_safe(rmeta, "frame_duration", 100);
     cJSON* frames = cJSON_GetObjectItem(rmeta, "frames");
     if (frames) parse_ws_direction_frames(frames, atlas);
@@ -293,9 +302,9 @@ void populate_object_layer_from_json(const char* item_id, const cJSON* ol_json) 
     ObjectLayer* layer = create_object_layer();
     if (!layer) return;
 
-    char* sha = json_get_string_safe((cJSON*)ol_json, "sha256", "");
-    strncpy(layer->sha256, sha, 64);
-    free(sha);
+    char* cid = json_get_string_safe((cJSON*)ol_json, "cid", "");
+    strncpy(layer->cid, cid, MAX_CID_LENGTH - 1);
+    free(cid);
 
     cJSON* data = cJSON_GetObjectItem((cJSON*)ol_json, "data");
     parse_object_layer_data(data, &layer->data);
@@ -310,22 +319,22 @@ void populate_object_layer_from_json(const char* item_id, const cJSON* ol_json) 
 static void parse_ws_direction_frames(cJSON* frames_json, AtlasSpriteSheetData* atlas) {
     assert(frames_json);
     assert(atlas);
-    parse_direction_frame_data(cJSON_GetObjectItem(frames_json, "up_idle"), &atlas->up_idle, atlas->cell_pixel_dim);
-    parse_direction_frame_data(cJSON_GetObjectItem(frames_json, "down_idle"), &atlas->down_idle, atlas->cell_pixel_dim);
-    parse_direction_frame_data(cJSON_GetObjectItem(frames_json, "right_idle"), &atlas->right_idle, atlas->cell_pixel_dim);
-    parse_direction_frame_data(cJSON_GetObjectItem(frames_json, "left_idle"), &atlas->left_idle, atlas->cell_pixel_dim);
-    parse_direction_frame_data(cJSON_GetObjectItem(frames_json, "up_right_idle"), &atlas->up_right_idle, atlas->cell_pixel_dim);
-    parse_direction_frame_data(cJSON_GetObjectItem(frames_json, "down_right_idle"), &atlas->down_right_idle, atlas->cell_pixel_dim);
-    parse_direction_frame_data(cJSON_GetObjectItem(frames_json, "up_left_idle"), &atlas->up_left_idle, atlas->cell_pixel_dim);
-    parse_direction_frame_data(cJSON_GetObjectItem(frames_json, "down_left_idle"), &atlas->down_left_idle, atlas->cell_pixel_dim);
-    parse_direction_frame_data(cJSON_GetObjectItem(frames_json, "default_idle"), &atlas->default_idle, atlas->cell_pixel_dim);
-    parse_direction_frame_data(cJSON_GetObjectItem(frames_json, "up_walking"), &atlas->up_walking, atlas->cell_pixel_dim);
-    parse_direction_frame_data(cJSON_GetObjectItem(frames_json, "down_walking"), &atlas->down_walking, atlas->cell_pixel_dim);
-    parse_direction_frame_data(cJSON_GetObjectItem(frames_json, "right_walking"), &atlas->right_walking, atlas->cell_pixel_dim);
-    parse_direction_frame_data(cJSON_GetObjectItem(frames_json, "left_walking"), &atlas->left_walking, atlas->cell_pixel_dim);
-    parse_direction_frame_data(cJSON_GetObjectItem(frames_json, "up_right_walking"), &atlas->up_right_walking, atlas->cell_pixel_dim);
-    parse_direction_frame_data(cJSON_GetObjectItem(frames_json, "down_right_walking"), &atlas->down_right_walking, atlas->cell_pixel_dim);
-    parse_direction_frame_data(cJSON_GetObjectItem(frames_json, "up_left_walking"), &atlas->up_left_walking, atlas->cell_pixel_dim);
-    parse_direction_frame_data(cJSON_GetObjectItem(frames_json, "down_left_walking"), &atlas->down_left_walking, atlas->cell_pixel_dim);
-    parse_direction_frame_data(cJSON_GetObjectItem(frames_json, "none_idle"), &atlas->none_idle, atlas->cell_pixel_dim);
+    parse_direction_frame_data(cJSON_GetObjectItem(frames_json, "up_idle"), &atlas->up_idle);
+    parse_direction_frame_data(cJSON_GetObjectItem(frames_json, "down_idle"), &atlas->down_idle);
+    parse_direction_frame_data(cJSON_GetObjectItem(frames_json, "right_idle"), &atlas->right_idle);
+    parse_direction_frame_data(cJSON_GetObjectItem(frames_json, "left_idle"), &atlas->left_idle);
+    parse_direction_frame_data(cJSON_GetObjectItem(frames_json, "up_right_idle"), &atlas->up_right_idle);
+    parse_direction_frame_data(cJSON_GetObjectItem(frames_json, "down_right_idle"), &atlas->down_right_idle);
+    parse_direction_frame_data(cJSON_GetObjectItem(frames_json, "up_left_idle"), &atlas->up_left_idle);
+    parse_direction_frame_data(cJSON_GetObjectItem(frames_json, "down_left_idle"), &atlas->down_left_idle);
+    parse_direction_frame_data(cJSON_GetObjectItem(frames_json, "default_idle"), &atlas->default_idle);
+    parse_direction_frame_data(cJSON_GetObjectItem(frames_json, "up_walking"), &atlas->up_walking);
+    parse_direction_frame_data(cJSON_GetObjectItem(frames_json, "down_walking"), &atlas->down_walking);
+    parse_direction_frame_data(cJSON_GetObjectItem(frames_json, "right_walking"), &atlas->right_walking);
+    parse_direction_frame_data(cJSON_GetObjectItem(frames_json, "left_walking"), &atlas->left_walking);
+    parse_direction_frame_data(cJSON_GetObjectItem(frames_json, "up_right_walking"), &atlas->up_right_walking);
+    parse_direction_frame_data(cJSON_GetObjectItem(frames_json, "down_right_walking"), &atlas->down_right_walking);
+    parse_direction_frame_data(cJSON_GetObjectItem(frames_json, "up_left_walking"), &atlas->up_left_walking);
+    parse_direction_frame_data(cJSON_GetObjectItem(frames_json, "down_left_walking"), &atlas->down_left_walking);
+    parse_direction_frame_data(cJSON_GetObjectItem(frames_json, "none_idle"), &atlas->none_idle);
 }

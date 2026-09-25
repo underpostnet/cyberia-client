@@ -30,8 +30,9 @@ AtlasSpriteSheetData* get_or_fetch_atlas_data(const char* item_key, FetchPriorit
 Texture2D get_atlas_texture(const char* item_key, FetchPriority priority);
 
 /* Parse and cache one ObjectLayer from the WS metadata message. The JSON has
- * the shape { "sha256": ..., "data": { "stats": ..., "item": ..., ... } };
- * the caller keeps ownership. */
+ * the shape { "cid": ..., "data": { "stats": ..., "item": ..., "render": ..., ... } };
+ * item_id is the label the world maps the definition under. The caller keeps
+ * ownership. */
 void populate_object_layer_from_json(const char* item_id, const cJSON* ol_json);
 
 void obj_layers_mgr_schedule_atlas_fetch(const char* item_key, FetchPriority priority);

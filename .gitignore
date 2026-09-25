@@ -28,6 +28,7 @@
 !deploy/**/*.sh
 !wasm-driver.py
 !tests/run.sh
+!tests/testdata/*.json
 
 build/
 bin/

@@ -3,14 +3,15 @@
 #include "domain/stat_contract_generated.h"
 
 #include <stdbool.h>
+#include <stdint.h>
 
 #define MAX_ITEM_ID_LENGTH 64
 #define MAX_TYPE_LENGTH 64
 #define MAX_DESCRIPTION_LENGTH 256
 #define MAX_FRAMES_PER_DIRECTION 64
-#define MAX_FILE_ID_LENGTH 128
 #define MAX_CID_LENGTH 128
 #define MAX_ADDRESS_LENGTH 128
+#define MAX_TOKEN_ID_LENGTH 80   /* uint256 in decimal is at most 78 digits */
 
 typedef enum {
     DIRECTION_UP = 0,
@@ -39,13 +40,11 @@ typedef enum {
     OBJECT_LAYER_TYPE_STATIC     = 10,
 } ObjectLayerType;
 
-/* Economic classification. Mirrors the engine enum ['ERC20', 'ERC721',
- * 'OFF_CHAIN']. */
+/* Token standard of an ItemLedger binding. */
 typedef enum {
-    LEDGER_TYPE_OFF_CHAIN = 0,
-    LEDGER_TYPE_ERC20 = 1,
-    LEDGER_TYPE_ERC721 = 2
-} LedgerType;
+    LEDGER_UNREGISTERED = 0,
+    LEDGER_ERC1155 = 1
+} LedgerStandard;
 
 typedef struct {
     char item_id[MAX_ITEM_ID_LENGTH];
@@ -55,8 +54,8 @@ typedef struct {
 
 
 
-/* Position and size of one frame inside the atlas PNG. The renderer clips
- * this sub-region out of the single atlas texture. */
+/* Position and size of one frame in the atlas, in cells. The atlas texture
+ * holds one pixel per cell, so the renderer clips this box out of it as is. */
 typedef struct {
     int x;
     int y;
@@ -71,15 +70,13 @@ typedef struct {
     int count;
 } DirectionFrameData;
 
-/* Atlas sprite sheet of one object-layer item. `file_id` points at the
- * consolidated atlas PNG in the File API; the per-direction arrays clip the
- * animation frames out of that one texture. */
+/* The render metadata of one item: the layout of its primary render. The
+ * per-direction arrays clip the animation frames out of that one texture. */
 typedef struct {
     char item_key[MAX_ITEM_ID_LENGTH];
-    char file_id[MAX_FILE_ID_LENGTH];   /* MongoDB ObjectId hex of the PNG */
-    int atlas_width;                    /* pixels */
-    int atlas_height;                   /* pixels */
-    int cell_pixel_dim;                 /* pixel size of one cell */
+    int atlas_width;                    /* cells */
+    int atlas_height;                   /* cells */
+    int cell_pixel_dim;                 /* pixels per cell of the primary render PNG */
     int frame_duration;                 /* ms per frame */
 
     DirectionFrameData up_idle;
@@ -102,18 +99,20 @@ typedef struct {
     DirectionFrameData none_idle;
 } AtlasSpriteSheetData;
 
-/* IPFS content identifiers of the atlas sprite sheet. Frame-level animation
- * data lives in AtlasSpriteSheetData, fetched at runtime. */
+/* The render contract of a definition. Both CIDs are empty when it names no
+ * render. The layout itself lives in AtlasSpriteSheetData, fetched at runtime. */
 typedef struct {
-    char cid[MAX_CID_LENGTH];           /* atlas PNG */
-    char metadata_cid[MAX_CID_LENGTH];  /* atlas metadata JSON */
+    char cid[MAX_CID_LENGTH];           /* canonical render CID: the primary render PNG */
+    char metadata_cid[MAX_CID_LENGTH];  /* canonical metadata CID: its layout */
 } Render;
 
-/* Blockchain metadata that binds the visual prefab to its economic reality.
- * `address` is empty for OFF_CHAIN. */
+/* ItemLedger binding of the definition: a projection of chain state. Empty
+ * (LEDGER_UNREGISTERED) when the definition is not registered. */
 typedef struct {
-    LedgerType type;
-    char address[MAX_ADDRESS_LENGTH];   /* Solidity contract address */
+    LedgerStandard standard;
+    uint64_t chain_id;
+    char contract_address[MAX_ADDRESS_LENGTH];
+    char token_id[MAX_TOKEN_ID_LENGTH];   /* uint256, decimal */
 } Ledger;
 
 /* Item.type is a string, to round-trip arbitrary engine-side categories;
@@ -133,10 +132,11 @@ typedef struct {
     Render render;
 } ObjectLayerData;
 
-/* The subset of the engine ObjectLayer document that the client needs. */
+/* One immutable Object Layer definition. `cid` is its canonical identity; the
+ * item label the world maps it under is data.item.id. */
 typedef struct {
     ObjectLayerData data;
-    char sha256[65];    /* 64 hex chars plus the terminator */
+    char cid[MAX_CID_LENGTH];
 } ObjectLayer;
 
 /* Both create functions return NULL on allocation failure. Both free
@@ -153,7 +153,7 @@ const DirectionFrameData* atlas_get_direction_frames(
     const char* dir_str
 );
 
-/* Parse "ERC20", "ERC721", or "OFF_CHAIN". Unknown values give OFF_CHAIN. */
-LedgerType ledger_type_from_string(const char* type_str);
+/* Parse "ERC1155". Any other value, the empty string included, is unregistered. */
+LedgerStandard ledger_standard_from_string(const char* standard_str);
 
 #endif // OBJECT_LAYER_H

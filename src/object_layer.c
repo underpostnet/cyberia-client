@@ -4,11 +4,7 @@
 #include <assert.h>
 
 ObjectLayer* create_object_layer(void) {
-    ObjectLayer* layer = (ObjectLayer*)calloc(1, sizeof(ObjectLayer));
-    if (layer) {
-        layer->data.ledger.type = LEDGER_TYPE_OFF_CHAIN;
-    }
-    return layer;
+    return (ObjectLayer*)calloc(1, sizeof(ObjectLayer));
 }
 
 void free_object_layer(ObjectLayer* layer) {
@@ -53,13 +49,10 @@ const DirectionFrameData* atlas_get_direction_frames(const AtlasSpriteSheetData*
     return NULL;
 }
 
-LedgerType ledger_type_from_string(const char* type_str) {
-    assert(type_str);
+LedgerStandard ledger_standard_from_string(const char* standard_str) {
+    assert(standard_str);
 
-    if (strcmp(type_str, "ERC20") == 0)      return LEDGER_TYPE_ERC20;
-    if (strcmp(type_str, "ERC721") == 0)     return LEDGER_TYPE_ERC721;
-    if (strcmp(type_str, "OFF_CHAIN") == 0)  return LEDGER_TYPE_OFF_CHAIN;
-
-    return LEDGER_TYPE_OFF_CHAIN;
+    if (strcmp(standard_str, "ERC1155") == 0) return LEDGER_ERC1155;
+    return LEDGER_UNREGISTERED;
 }
 
