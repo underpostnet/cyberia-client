@@ -6,7 +6,7 @@
  * sections).  Only AUTHORITATIVE data travels over AOI — code, status, and
  * progress counters.  Metadata (title, description, steps, rewards) is
  * fetched by quest_cache from the engine REST endpoint
- * GET /api/cyberia-quest/:code.
+ * GET /api/v1/cyberia-quest/:code.
  *
  * Cleared and repopulated on reconnect.
  */

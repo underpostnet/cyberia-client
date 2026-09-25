@@ -26,6 +26,11 @@ typedef struct {
 } FetchResponse;
 typedef void (*FetchCompletedCb)(const FetchResponse* response);
 
+/* Path of the engine's versioned REST contract. The engine's DOMAIN_API_VERSION
+ * (src/server/domain/api-contract.js) is the authority; its test suite checks
+ * this value. */
+#define ENGINE_API_BASE "/api/v1"
+
 #define FETCH_DEFAULT_MAX_CONCURRENT 8
 #define FETCH_QUEUE_CAP 512
 

@@ -537,7 +537,7 @@ static void json_unpack_drop_spawn(const cJSON* payload) {
  * Shared by init_data (initial snapshot) and dialog_ack (live updates).
  * The server only sends authoritative data (code, status, progress);
  * metadata (title, description, rewards) is fetched asynchronously from
- * the engine REST endpoint /api/cyberia-quest/:code via quest_cache. */
+ * the engine REST endpoint /api/v1/cyberia-quest/:code via quest_cache. */
 static void upsert_quest_array(const cJSON* quests_json) {
     if (!quests_json || !cJSON_IsArray(quests_json)) return;
     const cJSON* q = NULL;
@@ -572,7 +572,7 @@ static void json_unpack_init_data(const cJSON* payload) {
     // Parse grid configuration — gameplay only (simulation contract).
     // cellSize / interpolationMs / cameraZoom are NOT here; the cyberia-server
     // never sends presentation. They are hydrated by presentation_runtime
-    // once the /api/cyberia-client-hints fetch settles.
+    // once the /api/v1/cyberia-client-hints fetch settles.
     g_game_state.grid_w = serial_get_int_default(payload, "gridW", 100);
     g_game_state.grid_h = serial_get_int_default(payload, "gridH", 100);
     g_game_state.aoi_radius = serial_get_float_default(payload, "aoiRadius", 15.0f);

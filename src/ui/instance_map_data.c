@@ -249,7 +249,7 @@ static void start_dynamic_poll(void) {
     char asset_id[48];
     snprintf(asset_id, sizeof(asset_id), "imap-dyn-%d", s_session);
     char url[512];
-    snprintf(url, sizeof(url), "/api/cyberia-instance/instance-map/%s/dynamic?playerId=%s",
+    snprintf(url, sizeof(url), ENGINE_API_BASE "/cyberia-instance/instance-map/%s/dynamic?playerId=%s",
              g_game_state.instance_code, g_local_player.id);
     s_poll_inflight = true;
     fetch_request_start(asset_id, url, on_dynamic_fetched);
@@ -273,7 +273,7 @@ void instance_map_data_open(void) {
     char asset_id[48];
     snprintf(asset_id, sizeof(asset_id), "imap-static-%d", s_session);
     char url[256];
-    snprintf(url, sizeof(url), "/api/cyberia-instance/instance-map/%s/static",
+    snprintf(url, sizeof(url), ENGINE_API_BASE "/cyberia-instance/instance-map/%s/static",
              g_game_state.instance_code);
     fetch_request_start(asset_id, url, on_static_fetched);
 }

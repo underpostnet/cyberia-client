@@ -195,7 +195,7 @@ void presentation_runtime_start_fetch(const char* client_hints_code) {
     if (g_rt.started) return;
     if (!client_hints_code) return;
     char url[512];
-    int n = snprintf(url, sizeof(url), "/api/cyberia-client-hints/%s", client_hints_code);
+    int n = snprintf(url, sizeof(url), ENGINE_API_BASE "/cyberia-client-hints/%s", client_hints_code);
     if (n <= 0 || n >= (int)sizeof(url)) return;
     g_rt.started = true;
     fetch_request_start_at("cyberia-client-hints", url, on_hints_fetched, FETCH_P0);

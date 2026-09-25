@@ -4,7 +4,7 @@
  * The Go server transmits only AUTHORITATIVE quest data over AOI (code,
  * status, progress).  All presentation metadata (title, description, steps,
  * rewards) is fetched lazily from the engine REST endpoint
- * GET /api/cyberia-quest/:code.
+ * GET /api/v1/cyberia-quest/:code.
  */
 
 #ifndef QUEST_CACHE_H
@@ -53,7 +53,7 @@ typedef struct {
 /* Look up cached metadata by code. Returns NULL if not present. */
 const QuestMetadataEntry* quest_cache_get(const char* code);
 
-/* Schedule an async REST fetch (GET /api/cyberia-quest/code/:code) via
+/* Schedule an async REST fetch (GET /api/v1/cyberia-quest/code/:code) via
  * engine_client if not already cached/loading. Parses the
  * `{ status, data: <quest doc> }` envelope on completion. */
 void quest_cache_fetch(const char* code);

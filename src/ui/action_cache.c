@@ -5,6 +5,7 @@
 #include "action_cache.h"
 
 #include "meta_cache.h"
+#include "network/data/engine_client.h"
 #include "util/utils.h"
 
 #include <cJSON.h>
@@ -16,7 +17,7 @@ static MetaCache s_cache = {
     .entries    = s_entries,
     .elem_size  = sizeof(ActionMetadataEntry),
     .cap        = ACTION_CACHE_CAP,
-    .url_prefix = "/api/cyberia-action/code/",
+    .url_prefix = ENGINE_API_BASE "/cyberia-action/code/",
     .label      = "action",
     .ingest     = ingest_doc,
 };

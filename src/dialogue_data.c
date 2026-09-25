@@ -95,7 +95,7 @@ void dialogue_data_request(const char* item_id) {
     hash_table_put(&ht, item_id, d);
 
     char url[1024];
-    snprintf(url, sizeof(url), "/api/cyberia-dialogue/code/default-%s", item_id);
+    snprintf(url, sizeof(url), ENGINE_API_BASE "/cyberia-dialogue/code/default-%s", item_id);
     fetch_request_start(item_id, url, on_dialogue_fetched);
     LOG_INFO("[DIALOGUE_DATA] Fetch started for '%s'", item_id);
 }
@@ -113,7 +113,7 @@ void dialogue_data_request_code(const char* code) {
     hash_table_put(&ht, code, d);
 
     char url[1024];
-    snprintf(url, sizeof(url), "/api/cyberia-dialogue/code/%s", code);
+    snprintf(url, sizeof(url), ENGINE_API_BASE "/cyberia-dialogue/code/%s", code);
     fetch_request_start(code, url, on_dialogue_fetched);
     LOG_INFO("[DIALOGUE_DATA] Fetch started for code '%s'", code);
 }

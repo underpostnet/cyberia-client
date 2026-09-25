@@ -26,13 +26,13 @@ struct ObjectLayersManager {
 };
 
 static void atlas_metadata_url(const char* item_key, char* url, size_t size) {
-    snprintf(url, size, "/api/atlas-sprite-sheet/metadata/%s", item_key);
+    snprintf(url, size, ENGINE_API_BASE "/atlas-sprite-sheet/metadata/%s", item_key);
 }
 
 /* The primary render decodes to one pixel per cell, the unit of the layout. */
 static Texture2D atlas_texture(const AtlasSpriteSheetData* atlas, FetchPriority priority, bool visible) {
     char url[512];
-    snprintf(url, sizeof(url), "/api/atlas-sprite-sheet/blob/%s", atlas->item_key);
+    snprintf(url, sizeof(url), ENGINE_API_BASE "/atlas-sprite-sheet/blob/%s", atlas->item_key);
     return fetch_texture(url, atlas->cell_pixel_dim, priority, visible);
 }
 

@@ -123,7 +123,7 @@ static void fetch_match(const char* api, const char* field, const char* value,
     char* json = cJSON_PrintUnformatted(filter);
     assert(json);
     char url[2048];
-    int used = snprintf(url, sizeof(url), "/api/%s?limit=1&filterModel=", api);
+    int used = snprintf(url, sizeof(url), ENGINE_API_BASE "/%s?limit=1&filterModel=", api);
     assert(0 < used && sizeof(url) > (size_t)used);
     url_encode(url + used, sizeof(url) - (size_t)used, json);
     cJSON_free(json);
@@ -259,7 +259,7 @@ static void on_asset(const FetchResponse* response) {
         return;
     }
     char url[64];
-    snprintf(url, sizeof(url), "/api/file/blob/%s", file_id);
+    snprintf(url, sizeof(url), ENGINE_API_BASE "/file/blob/%s", file_id);
     fetch_request_start_limited(response->asset_id, url, on_wav, AUDIO_WAV_MAX, 10000,
                                 audio_request_priority(token));
 }

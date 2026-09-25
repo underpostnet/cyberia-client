@@ -4,7 +4,7 @@
  * The Go server transmits only AUTHORITATIVE quest data over AOI (code,
  * status, progress).  All presentation metadata (title, description, steps,
  * rewards) is fetched lazily from the engine REST endpoint
- * GET /api/cyberia-quest/code/:code and cached here so the quest journal and
+ * GET /api/v1/cyberia-quest/code/:code and cached here so the quest journal and
  * action tab can render rich details without blocking.  Metadata is immutable,
  * so each code is fetched at most once per session.
  */
@@ -13,6 +13,7 @@
 #include "quest_progress_store.h"
 
 #include "meta_cache.h"
+#include "network/data/engine_client.h"
 #include "util/utils.h"
 
 #include <cJSON.h>
@@ -25,7 +26,7 @@ static MetaCache s_cache = {
     .entries    = s_entries,
     .elem_size  = sizeof(QuestMetadataEntry),
     .cap        = QUEST_CACHE_CAP,
-    .url_prefix = "/api/cyberia-quest/code/",
+    .url_prefix = ENGINE_API_BASE "/cyberia-quest/code/",
     .label      = "quest",
     .ingest     = ingest_quest_doc,
 };

@@ -7,7 +7,7 @@
 
 /* Sole owner of the presentation surface. The client holds no compile-time
  * palette, status-icon table, or camera tuning: every value arrives from
- * GET /api/cyberia-client-hints/:CYBERIA_CLIENT_HINTS_CODE.
+ * GET /api/v1/cyberia-client-hints/:CYBERIA_CLIENT_HINTS_CODE.
  *
  * main() starts the async fetch once, after config_init(). The
  * engine_client callback parses the palette, the entity colour keys, the

@@ -10,8 +10,8 @@
  * Independent from the gameplay AOI stream: talks only to the engine-cyberia
  * Instance Map REST endpoints through network/engine_client.
  *
- *   open  → GET /api/cyberia-instance/instance-map/:code/static   (once)
- *   open  → GET /api/cyberia-instance/instance-map/:code/dynamic  (~1/s)
+ *   open  → GET /api/v1/cyberia-instance/instance-map/:code/static   (once)
+ *   open  → GET /api/v1/cyberia-instance/instance-map/:code/dynamic  (~1/s)
  *   close → polling stops immediately; late responses are discarded.
  *
  * Static POIs carry authored presence and

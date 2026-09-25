@@ -23,7 +23,7 @@
 static const int MAX_LAYER_CACHE_SIZE = 256;
 static const int MAX_ATLAS_CACHE_SIZE = 256;
 
-/* Lookup code for GET /api/cyberia-client-hints/:code — the only source of
+/* Lookup code for GET /api/v1/cyberia-client-hints/:code — the only source of
  * the presentation surface (palette, colour keys, status icons, camera and
  * cell tunings). A presentation override key only: the client carries no
  * instance, world, or server identifier. */

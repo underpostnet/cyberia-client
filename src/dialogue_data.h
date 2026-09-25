@@ -27,11 +27,11 @@ typedef struct {
 void dialogue_data_init(void);
 void dialogue_data_cleanup(void);
 
-/* Fetch GET /api/cyberia-dialogue/code/default-<item_id>. No-op when the
+/* Fetch GET /api/v1/cyberia-dialogue/code/default-<item_id>. No-op when the
  * item is already cached in any state. */
 void dialogue_data_request(const char* item_id);
 
-/* Fetch GET /api/cyberia-dialogue/code/<code> verbatim — no "default-"
+/* Fetch GET /api/v1/cyberia-dialogue/code/<code> verbatim — no "default-"
  * prefix. Cached under `code`; read it back with dialogue_data_get(code). */
 void dialogue_data_request_code(const char* code);
 

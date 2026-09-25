@@ -3,7 +3,7 @@
  *
  * The Go server sends only the bot's action CODE over AOI. The presentation
  * metadata — overhead label, the vendor catalog and the assembler recipe
- * book — is fetched lazily from GET /api/cyberia-action/code/:code and cached
+ * book — is fetched lazily from GET /api/v1/cyberia-action/code/:code and cached
  * here. Immutable, so each code is fetched at most once per session.
  *
  * Catalog and recipes are presentation input only: the simulation owns the same
