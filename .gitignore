@@ -12,6 +12,7 @@
 !*.md
 
 !.gitignore
+!.gitattributes
 
 !*.mk
 !Makefile
