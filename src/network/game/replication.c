@@ -42,13 +42,13 @@ void replication_prepare_input(input_queue_t in_queue) {
  * through the accessor functions in replication.h. */
 static struct {
     cyberia_tick_t       last_server_tick;
-    cyberia_input_seq_t  last_acked_input_sequence;
+    cyberia_input_seq_t  input_consumed_through; /* no reader until step 3 (replay) */
     cyberia_input_seq_t  last_movement_sequence;
     cyberia_input_seq_t  next_input_sequence;
     double               last_snapshot_wall_time; /* GetTime() when snapshot arrived */
 } g_sess = {0};
 
-void session_on_snapshot(uint32_t snapshot_tick, uint32_t last_acked_sequence,
+void session_on_snapshot(uint32_t snapshot_tick, uint32_t input_consumed_through,
                          uint32_t last_movement_sequence) {
     /* Monotonic by construction — drop out-of-order snapshots. The server
      * never decreases tick; UDP-like reordering could only matter on a
@@ -57,8 +57,8 @@ void session_on_snapshot(uint32_t snapshot_tick, uint32_t last_acked_sequence,
         g_sess.last_server_tick        = snapshot_tick;
         g_sess.last_snapshot_wall_time = GetTime();
     }
-    if (last_acked_sequence > g_sess.last_acked_input_sequence) {
-        g_sess.last_acked_input_sequence = last_acked_sequence;
+    if (input_consumed_through > g_sess.input_consumed_through) {
+        g_sess.input_consumed_through = input_consumed_through;
     }
     if (last_movement_sequence > g_sess.last_movement_sequence) {
         g_sess.last_movement_sequence = last_movement_sequence;
@@ -403,8 +403,8 @@ void prediction_reconcile(void) {
  * toward where the previous tap was heading — the backward step and the reverse
  * flicker, at their worst when the player changes direction rapidly.
  *
- * Acknowledgement is the wrong signal for that: the server acks a command on
- * arrival, including one a later tap in the same tick supersedes. moveAck is
+ * The consumed cursor is the wrong signal for that: the server consumes every
+ * command of a tick, including one a later tap in the same tick supersedes. moveAck is
  * the right one — it names the command the route was planned for. Until it
  * covers the newest command the snapshot still describes the previous walk, and
  * the optimistic start that makes a tap feel immediate has to stand.

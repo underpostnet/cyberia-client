@@ -424,7 +424,7 @@ static void json_unpack_snapshot(const cJSON* payload) {
     /* Feed the session bookkeeping so prediction and interpolation align to
      * the authoritative tick stream. */
     session_on_snapshot(serial_get_u32_default(payload, "tick", 0),
-                        serial_get_u32_default(payload, "ack", 0),
+                        serial_get_u32_default(payload, "inputConsumedThrough", 0),
                         serial_get_u32_default(payload, "moveAck", 0));
 
     /* Stamp the arrival time. The interpolator computes
