@@ -358,10 +358,6 @@ static void send_activation(const char* item_id, bool active) {
     network_send(json_pack_item_active(item_id, active));
 }
 
-static void send_freeze(bool start) {
-    local_player_request_freeze(start, "inventory");
-}
-
 /* draw_small_btn draws direction/mode buttons (icon, label, or both) using
  * pixel-retro style. */
 static void draw_small_btn(Rectangle r, const char* label, const char* icon_id,
@@ -450,10 +446,9 @@ void inventory_modal_open(int inv_idx) {
     if (inv_idx < 0 || inv_idx >= g_local_player.inventory_count) return;
     s_inv_idx     = inv_idx;
     s_is_external = false;
+    if (!s_open) modal_opened();
     s_open        = true;
     reset_view_state();
-    /* Notify server → FrozenInteractionState */
-    send_freeze(true);
 }
 
 void inventory_modal_switch_slot(int inv_idx) {
@@ -470,7 +465,6 @@ void inventory_modal_switch_slot(int inv_idx) {
     s_inv_idx     = inv_idx;
     s_is_external = false;
     reset_view_state();          /* replays the pop-in transition */
-    /* Already frozen under "inventory"; the slot swap keeps that context. */
 }
 
 void inventory_modal_open_external(const ObjectLayerState* ols) {
@@ -478,16 +472,11 @@ void inventory_modal_open_external(const ObjectLayerState* ols) {
     s_external    = *ols;
     s_is_external = true;
     s_inv_idx     = -1;
+    if (!s_open) modal_opened();
     s_open        = true;
     reset_view_state();
     /* Kick the sprite atlas fetch so the preview is ready promptly. */
     get_or_fetch_atlas_data(ols->item_id, FETCH_P1);
-    /* Read-only or not, this is a modal the player reads with the world still
-     * running, and inventory_modal_close always releases the matching freeze —
-     * so it has to take one. Openers reach here from another modal that just
-     * dropped its own freeze (a shop, assembler or stack slot), and both frames
-     * land in the same input drain, so no tick passes with the player exposed. */
-    send_freeze(true);
 }
 
 void inventory_modal_set_on_close(InventoryModalOnClose cb) {
@@ -495,18 +484,17 @@ void inventory_modal_set_on_close(InventoryModalOnClose cb) {
 }
 
 void inventory_modal_close(void) {
+    bool was_open = s_open;
     s_open    = false;
     s_inv_idx = -1;
 
-    /* Bridge-safe ordering: fire on_close before the thaw so a callback that
-     * reopens another modal (e.g. the interaction modal) can override the
-     * freeze reason first; the stale "inventory" thaw is then rejected. */
+    /* Fire on_close first: a callback that reopens another modal keeps the
+     * modal count above 0 across the hand-over. */
     InventoryModalOnClose cb = s_on_close;
     s_on_close = NULL;
     if (cb) cb();
 
-    /* Notify server → thaw */
-    send_freeze(false);
+    if (was_open) modal_closed();
 }
 
 bool inventory_modal_is_open(void) { return s_open; }
@@ -998,16 +986,10 @@ bool inventory_modal_handle_click(int mx, int my) {
             const ObjectLayerState* ols = &g_local_player.inventory[s_inv_idx];
             const DialogueDataSet* d = dialogue_data_get(ols->item_id);
             if (d && d->state == DLG_DATA_READY && d->line_count > 0) {
-                /* ── Bridge-safe transition: inventory → dialogue ──────
-                 * Close the inventory UI WITHOUT sending freeze_end.
-                 * modal_dialogue_open() will send freeze_start("dialogue")
-                 * which overrides the active reason on the server.
-                 * We then send the stale freeze_end("inventory") which the
-                 * server rejects (reason mismatch) — zero gap.
-                 */
-                int saved_idx = s_inv_idx;
-                s_open    = false;  /* close UI only — no WS message */
-                s_inv_idx = saved_idx;
+                /* Hand-over: open the dialogue before this modal drops its
+                 * count, so the count stays above 0. Keep s_inv_idx for the
+                 * reopen callback. */
+                s_open = false;
 
                 /* Open dialogue modal with return callback */
                 modal_dialogue_set_on_close(on_dialogue_close_reopen);
@@ -1018,9 +1000,7 @@ bool inventory_modal_handle_click(int mx, int my) {
                     MODAL_DIALOGUE_RENDER_ITEM,
                     d->lines, d->line_count);
 
-                /* Stale thaw — rejected by server's reason-match check */
-                // TODO: Investigate why how to stop the server from handling freeze
-                send_freeze(false);
+                modal_closed();
                 return true;
             }
         }

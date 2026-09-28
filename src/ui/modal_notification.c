@@ -651,14 +651,6 @@ static void start_closing(void) {
     s_close_age = 0.0f;
 }
 
-/* An assembly runs on top of an open interact session, so it participates in
- * the freeze chain the same way modal_dialogue does: hand the freeze back to
- * "interact" when the card is done, and never leave the player exposed between
- * the two. */
-static void assemble_release_freeze(void) {
-    if (modal_interact_is_open()) local_player_request_freeze(true, "interact");
-}
-
 /* The window the bar is actually charging. An assembly card outlives its charge — it stays up
  * through the grant delivery and the close slide — so "this card is an assembly" is the wrong
  * question for anything that follows the charge itself. */
@@ -669,7 +661,6 @@ static bool notif_is_charging(void) {
 void modal_notification_abort_assemble(void) {
     if (!s_open || !notif_is_assembling() || s_awaiting_grant || s_awaiting_delivery) return;
     s_on_cancel = NULL;
-    assemble_release_freeze();
     release_result_items();
     start_closing();
 }
@@ -755,7 +746,6 @@ void modal_notification_update(float dt) {
                                        slot.y + slot.height * 0.5f);
             }
             begin_result_delivery(card, NULL, 0);
-            assemble_release_freeze();
         }
         return;
     }
@@ -1079,7 +1069,6 @@ bool modal_notification_handle_click(int mx, int my) {
      * released with no change, so no popup fires. */
     if (cancel_r.width > 0.0f && ui_button_hit(cancel_r, mx, my)) {
         if (s_on_cancel) { s_on_cancel(); s_on_cancel = NULL; }
-        if (notif_is_assembling()) assemble_release_freeze();
         s_on_confirm = NULL;
         release_result_items();
         start_closing();

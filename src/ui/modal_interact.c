@@ -752,11 +752,11 @@ void modal_interact_set_quest_talk(int index) {
  * re-snapshotting from the AOI — the entity may have left the bubble. */
 static void modal_interact_reopen(void) {
     es_pop();
+    if (!s_open) modal_opened();
     s_open             = true;
     s_age              = 0.0f;
     s_dialogue_opened  = false;
     s_dialogue_open_requested = false;
-    local_player_request_freeze(true, "interact");
 
     /* The paired dialogue key was restored by es_pop. Text resolves async in
      * update; mobile renders it only after the footer opens the reader. */
@@ -769,8 +769,8 @@ static void modal_interact_reopen(void) {
 void modal_interact_stack_player_item(int inv_idx) {
     if (!s_open) return;
     es_push();
+    inventory_modal_open(inv_idx);   /* before the close: the modal count stays above 0 */
     modal_interact_close();
-    inventory_modal_open(inv_idx);
     inventory_modal_set_anchor_entity(s_entity_id);
     inventory_modal_set_on_close(modal_interact_reopen);
 }
@@ -781,8 +781,8 @@ void modal_interact_stack_player_item(int inv_idx) {
  * contents. Closing the item modal pops back here. */
 static void stack_item_inspect(const ObjectLayerState* ols) {
     es_push();
+    inventory_modal_open_external(ols);   /* before the close: the modal count stays above 0 */
     modal_interact_close();
-    inventory_modal_open_external(ols);
     inventory_modal_set_anchor_entity(s_entity_id);
     inventory_modal_set_on_close(modal_interact_reopen);
 }
@@ -854,6 +854,7 @@ void modal_interact_open(const char* entity_id, const char* display_name,
     s_age                = 0.0f;
     s_dialogue_opened    = false;
     s_dialogue_open_requested = false;
+    if (!s_open) modal_opened();
     s_open               = true;
     s_tab                = MI_TAB_STACK;
     s_tab_age            = MODAL_POP_DURATION;
@@ -903,29 +904,24 @@ void modal_interact_open(const char* entity_id, const char* display_name,
      * picks a tab themselves. */
     s_tab = leading_tab();
 
-    /* Interaction freeze for the whole modal session: the server blocks
-     * damage/targeting while the reason chain interact→dialogue→interact
-     * stays unbroken (dlg_start bridges it; dialogue teardown re-bridges). */
-    local_player_request_freeze(true, "interact");
-
     request_active_dialogue();
 
-    /* The dialogue modal owns the freeze lifecycle: it sends dlg_start on open
-     * and dlg_complete/cancel on finish. This modal sends no dlg_start, because
-     * a second one double-freezes the player, leaks the server-side
-     * ActiveDialogueEntityID and breaks quest-talk validation when the bot
-     * leaves the AOI. */
+    /* The dialogue modal sends dlg_start on open and dlg_complete/cancel on
+     * finish. This modal sends no dlg_start, because a second one leaks the
+     * server-side ActiveDialogueEntityID and breaks quest-talk validation
+     * when the bot leaves the AOI. */
     LOG_INFO("[MODAL_INTERACT] Open: entity=%s layers=%d quests=%d\n",
              s_entity_id, s_cached_layer_count, s_quest_code_count);
 }
 
 void modal_interact_close(void) {
+    bool was_open = s_open;
     s_open = false;
     s_dialogue_open_requested = false;
     chat_pane_hide();
     es_clear();
     if (modal_dialogue_is_open()) modal_dialogue_close();
-    local_player_request_freeze(false, "interact");
+    if (was_open) modal_closed();
 }
 
 bool modal_interact_is_open(void) { return s_open; }

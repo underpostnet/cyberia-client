@@ -2,8 +2,7 @@
 #include "ease.h"
 
 #include "instance_map_data.h"
-#include "inventory_modal.h"
-#include "modal_interact.h"
+#include "modal.h"
 #include "modal_map.h"
 #include "text.h"
 #include "toolbar.h"
@@ -124,9 +123,7 @@ void modal_instance_map_toggle(void) {
     instance_map_data_open();
     modal_map_set_expanded(true);      /* container morphs to full screen */
     input_gestures_set_blocked(true);  /* map owns pinch while expanded    */
-    /* Modal protection: the player cannot act while reading the map, so they
-     * must not be killable in it either. */
-    local_player_request_freeze(true, "instance-map");
+    modal_opened();
 }
 
 void modal_instance_map_close(void) {
@@ -135,12 +132,7 @@ void modal_instance_map_close(void) {
     instance_map_data_close();      /* stops dynamic polling immediately */
     modal_map_set_expanded(false);  /* container retracts to the readout */
     input_gestures_set_blocked(false);
-    /* Re-bridge instead of thawing when this opened over another modal that
-     * owns the freeze — the same handover modal_dialogue does — so returning
-     * to it never leaves the player briefly killable. */
-    if (modal_interact_is_open())        local_player_request_freeze(true, "interact");
-    else if (inventory_modal_is_open())  local_player_request_freeze(true, "inventory");
-    else                                 local_player_request_freeze(false, "instance-map");
+    modal_closed();
 }
 
 /* ── Projection ─────────────────────────────────────────────────────────── */

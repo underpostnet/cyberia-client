@@ -2,7 +2,37 @@
 #include "ease.h"
 #include "text.h"
 #include "toolbar.h"
+#include "domain/local_player.h"
+#include <assert.h>
 #include <string.h>
+
+/* ── Modal lifecycle ──────────────────────────────────────────────────── */
+
+/* The server holds provider sessions under "interact", so the counter uses
+ * the same reason and its release always matches. */
+#define MODAL_FREEZE_REASON "interact"
+
+static int s_open_count = 0;
+
+void modal_opened(void) {
+    if (0 == s_open_count++) {
+        local_player_request_freeze(true, MODAL_FREEZE_REASON);
+        local_player_set_frozen(true);
+    }
+}
+
+void modal_closed(void) {
+    assert(0 < s_open_count);
+    if (0 == --s_open_count) {
+        local_player_request_freeze(false, MODAL_FREEZE_REASON);
+        local_player_set_frozen(false);
+    }
+}
+
+void modal_reclaim_freeze(void) {
+    assert(0 < s_open_count);
+    local_player_request_freeze(true, MODAL_FREEZE_REASON);
+}
 
 /* ── Shared panel chrome ──────────────────────────────────────────────── */
 

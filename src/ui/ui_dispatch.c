@@ -213,9 +213,9 @@ void ui_on_tick(input_queue_t* input_queue, double dt) {
         if (inventory_modal_is_open())       inventory_modal_switch_slot(inv_tap);
         else if (modal_interact_is_open())   modal_interact_stack_player_item(inv_tap);
         else if (modal_dialogue_is_item_lore()) {
-            /* Open the new modal first so its "inventory" freeze bridges over
-             * the dialogue's before the dialogue's thaw fires; drop the
-             * dialogue's reopen callback so the old chain does not return. */
+            /* Open the new modal first so the modal count stays above 0;
+             * drop the dialogue's reopen callback so the old chain does not
+             * return. */
             modal_dialogue_set_on_close(NULL);
             inventory_modal_open(inv_tap);
             modal_dialogue_close();

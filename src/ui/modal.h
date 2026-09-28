@@ -69,5 +69,19 @@ void modal_draw_clipped_text(const char* text, int x, int y, int max_w,
  * modals prefer two-column layouts over vertical stacking. */
 bool modal_wide_layout(void);
 
+/* ── Modal lifecycle ──────────────────────────────────────────────────────
+ *
+ * One open counter for every modal that protects the player. Modals stack,
+ * so a hand-over that opens the next modal before it closes the last one
+ * never reaches 0 and sends nothing. Only the counter talks to local_player.
+ */
+
+void modal_opened(void);   /* 0 → 1 freezes the local player */
+void modal_closed(void);   /* 1 → 0 releases it */
+
+/* Send the freeze again while the count holds. A dlg frame moves the server
+ * freeze reason off the counter's reason; call this before each one. */
+void modal_reclaim_freeze(void);
+
 
 #endif // MODAL_H
