@@ -463,9 +463,6 @@ static void json_unpack_snapshot(const cJSON* payload) {
         else                                    unpack_passive(entity, type);
     }
 
-
-    /* The authoritative self position is fresh — reconcile prediction. */
-    prediction_reconcile();
     audio_context_snapshot();
 }
 

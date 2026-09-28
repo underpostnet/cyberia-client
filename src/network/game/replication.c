@@ -46,6 +46,7 @@ static struct {
     cyberia_input_seq_t  last_movement_sequence;
     cyberia_input_seq_t  next_input_sequence;
     double               last_snapshot_wall_time; /* GetTime() when snapshot arrived */
+    bool                 snapshot_unapplied;      /* set on arrival, cleared by prediction_reconcile */
 } g_sess = {0};
 
 void session_on_snapshot(uint32_t snapshot_tick, uint32_t input_consumed_through,
@@ -63,6 +64,7 @@ void session_on_snapshot(uint32_t snapshot_tick, uint32_t input_consumed_through
     if (last_movement_sequence > g_sess.last_movement_sequence) {
         g_sess.last_movement_sequence = last_movement_sequence;
     }
+    g_sess.snapshot_unapplied = true;
 }
 
 cyberia_tick_t session_last_server_tick(void) {
@@ -330,6 +332,7 @@ void prediction_reset(Vector2 authoritative_pos) {
     path_clear();
     history_clear(&g_pred.history);
     command_queue_clear();
+    g_sess.snapshot_unapplied = false;
 }
 
 void prediction_step(double tick_dt) {
@@ -365,8 +368,13 @@ static Vector2 sim_step_path(Vector2 pos, double dt);
  * error and drags the player backward on every snapshot. Instead, look up what
  * this client predicted for tick T and difference against that: what remains is
  * misprediction alone. Applying it to the whole trail keeps the lead intact and
- * leaves the walk moving forward. */
+ * leaves the walk moving forward.
+ *
+ * Phase 1 of the tick. It applies only the newest snapshot: a second one that
+ * lands in the same tick has already overwritten the first. */
 void prediction_reconcile(void) {
+    if (!g_sess.snapshot_unapplied) return;
+    g_sess.snapshot_unapplied = false;
     g_pred.authoritative_pos = g_game_state.player.base.pos_server;
     cyberia_tick_t snapshot_tick = session_last_server_tick();
 
