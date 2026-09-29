@@ -9,12 +9,8 @@
 #define WS_URL                "wss://server.cyberiaonline.com/ws"
 #endif
 
-/** Override with -DTICK_RATE_OVERRIDE=<hz>. */
-#if defined(TICK_RATE_OVERRIDE)
-#define TICK_RATE_HZ             TICK_RATE_OVERRIDE
-#else
+/** Must equal the server DefaultTickRate. Replay needs the same dt. */
 #define TICK_RATE_HZ             30
-#endif
 
 /** Utility 1/fps */
 #define TICK_DURATION_S       (1.0 / (double)TICK_RATE_HZ)
