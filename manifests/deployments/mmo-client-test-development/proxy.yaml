@@ -10,7 +10,7 @@ spec:
     fqdn: client.cyberiaonline.com
   routes:
     - conditions:
-        - prefix: /TEST
+        - prefix: /test
       
       enableWebsockets: true
       services:
