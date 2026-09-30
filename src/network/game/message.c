@@ -337,8 +337,8 @@ static WorldObject* passive_slot(const char* type) {
 }
 
 /* unpack_passive reads any non-acting entity: floors, obstacles, portals,
- * foregrounds and statics. Only portals use the target fields; the rest read
- * them as zero. */
+ * foregrounds and statics. Only portals use the target fields, and only
+ * foregrounds a behavior; the rest read them as zero. */
 static void unpack_passive(const cJSON* e, const char* type) {
     WorldObject* o = passive_slot(type);
     if (!o) return;
@@ -350,6 +350,9 @@ static void unpack_passive(const cJSON* e, const char* type) {
     serial_get_string(e, "targetMapCode", o->target_map_code, MAX_ID_LENGTH);
     o->target_cell_x = serial_get_int_default(e, "targetCellX", 0);
     o->target_cell_y = serial_get_int_default(e, "targetCellY", 0);
+    char behavior[MAX_BEHAVIOR_LENGTH] = {0};
+    serial_get_string(e, "behavior", behavior, sizeof(behavior));
+    o->overhead_occlusion = 0 == strcmp(behavior, "overhead-occlusion");
     o->layer_count = read_pooled_layers(e, "objectLayers", &o->layer_offset, FETCH_P2);
 }
 

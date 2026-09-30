@@ -2,6 +2,7 @@
 #define WORLD_TYPES_H
 
 #include <raylib.h>
+#include <stdbool.h>
 #include <stdint.h>
 
 #include "object_layer.h"
@@ -106,6 +107,8 @@ typedef struct WorldObject {
     int              target_cell_y;
     uint16_t         layer_offset;   /* index into g_layer_pool */
     uint8_t          layer_count;
+    /* Foreground-only: the bound behavior is "overhead-occlusion". */
+    bool             overhead_occlusion;
 } WorldObject;
 
 #endif /* WORLD_TYPES_H */
