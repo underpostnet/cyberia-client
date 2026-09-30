@@ -70,6 +70,11 @@ void     presentation_runtime_toggle_dev_ui(void);
 const char* presentation_runtime_font_family(void);
 float       presentation_runtime_font_factor_size(void);
 
+/* Overhead occlusion: the opacity a roof holds while the local player stands
+ * under it, in [0, 1], and the fade duration in milliseconds. */
+float presentation_runtime_overhead_occlusion_hidden_opacity(void);
+int   presentation_runtime_overhead_occlusion_fade_ms(void);
+
 #ifdef __cplusplus
 }
 #endif

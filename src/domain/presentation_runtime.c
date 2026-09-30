@@ -3,6 +3,7 @@
 #include "game_state.h"
 #include "util/log.h"
 #include <cJSON.h>
+#include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -65,6 +66,8 @@ static struct {
     bool             dev_ui;
     char             font_family[128];
     float            font_factor_size;
+    float            overhead_occlusion_hidden_opacity;
+    int              overhead_occlusion_fade_ms;
 } g_rt = {
     .cell_size          = CELL_SIZE_DEFAULT,
     .camera_zoom        = 1.0f,
@@ -75,6 +78,8 @@ static struct {
     .dev_ui             = false,
     .font_family        = "",
     .font_factor_size   = 1.0f,
+    .overhead_occlusion_hidden_opacity = 0.0f,
+    .overhead_occlusion_fade_ms        = 300,
 };
 
 /* ── JSON parsing helpers ──────────────────────────────────────────── */
@@ -173,6 +178,11 @@ static void parse_response(const char* body, int len) {
     }
     if ((n = cJSON_GetObjectItem(data, "fontFactorSize")) && cJSON_IsNumber(n))     g_rt.font_factor_size = (float)n->valuedouble;
 
+    if ((n = cJSON_GetObjectItem(data, "overheadOcclusionHiddenOpacity")) && cJSON_IsNumber(n))
+        g_rt.overhead_occlusion_hidden_opacity = (float)n->valuedouble;
+    if ((n = cJSON_GetObjectItem(data, "overheadOcclusionFadeMs")) && cJSON_IsNumber(n))
+        g_rt.overhead_occlusion_fade_ms = n->valueint;
+
     cJSON_Delete(root);
     LOG_INFO("[presentation_runtime] hydrated %d palette / %d entity-keys / %d status-icons; cellSize=%.1f interp=%dms",
            g_rt.palette_count, g_rt.entity_key_count, g_rt.status_count,
@@ -260,5 +270,10 @@ int world_interpolation_ms(void) {
 bool  presentation_runtime_dev_ui(void)            { return g_rt.dev_ui; }
 const char* presentation_runtime_font_family(void) { return g_rt.font_family; }
 float presentation_runtime_font_factor_size(void)  { return g_rt.font_factor_size; }
+
+float presentation_runtime_overhead_occlusion_hidden_opacity(void) {
+    return fminf(1.0f, fmaxf(0.0f, g_rt.overhead_occlusion_hidden_opacity));
+}
+int presentation_runtime_overhead_occlusion_fade_ms(void) { return g_rt.overhead_occlusion_fade_ms; }
 
 void  presentation_runtime_toggle_dev_ui(void)     { g_rt.dev_ui = !g_rt.dev_ui; }

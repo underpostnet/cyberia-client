@@ -5,6 +5,7 @@
 
 #include "dialogue_data.h"
 #include "domain/camera.h"
+#include "domain/overhead_occlusion.h"
 #include "game_render.h"
 #include "object_layers_management.h"
 #include "ui/dev_ui.h"
@@ -84,6 +85,7 @@ void render_on_tick(float delta_time) {
     int current_height = GetScreenHeight();
 
     camera_on_tick(delta_time);
+    overhead_occlusion_update(delta_time);
 
     fct_update(delta_time);
     loot_fx_update(delta_time);

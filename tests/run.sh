@@ -28,3 +28,6 @@ cc "${cc_flags[@]}" -o "$out/fx_death" tests/fx_death_test.c src/fx/fx_death.c -
 cc "${cc_flags[@]}" -o "$out/object_layer_metadata" tests/object_layer_metadata_test.c \
     src/object_layer.c src/util/hash_table.c libs/cJSON/cJSON.c -lm
 "$out/object_layer_metadata"
+
+cc "${cc_flags[@]}" -o "$out/overhead_occlusion" tests/overhead_occlusion_test.c src/domain/overhead_occlusion.c -lm
+"$out/overhead_occlusion"
