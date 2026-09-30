@@ -3,6 +3,7 @@
 #include "domain/camera.h"
 #include "domain/local_player.h"
 #include "domain/local_player_view.h"
+#include "domain/overhead_occlusion.h"
 
 #include "dialogue_data.h"
 #include "domain/presentation_runtime.h"
@@ -218,7 +219,8 @@ static void game_render_loot_fx(void) {
             "loot",
             false,
             cell_size,
-            (Color){ 255, 225, 130, 255 }
+            (Color){ 255, 225, 130, 255 },
+            WHITE
         );
     }
 }
@@ -347,7 +349,8 @@ void game_render_floors(void) {
                 "floor",
                 presentation_runtime_dev_ui(),
                 cell_size,
-                floor_color
+                floor_color,
+                WHITE
             );
         } else {
             Color fallback = presentation_runtime_palette("FLOOR_BACKGROUND");
@@ -390,7 +393,8 @@ void game_render_world_objects(void) {
                 "portal",
                 presentation_runtime_dev_ui(),
                 cell_size,
-                portal_color
+                portal_color,
+                WHITE
             );
         } else {
             Rectangle rect = {
@@ -420,13 +424,35 @@ void game_render_world_objects(void) {
     }
 }
 
+/* A lower bottom edge draws first. An equal depth orders by id, so the order holds from one
+ * snapshot to the next, whatever order the server lists the entities in. */
+#define ENTITY_DEPTH_EPSILON 0.001f
+
+static int compare_depth(float bottom_a, const char* id_a, float bottom_b, const char* id_b) {
+    const float depth_delta = bottom_a - bottom_b;
+    if (-ENTITY_DEPTH_EPSILON > depth_delta) return -1;
+    if (ENTITY_DEPTH_EPSILON < depth_delta) return 1;
+    return (NULL != id_a && NULL != id_b) ? strcmp(id_a, id_b) : 0;
+}
+
+static int compare_foregrounds_by_depth(const void* a, const void* b) {
+    const WorldObject* fa = *(WorldObject* const*)a;
+    const WorldObject* fb = *(WorldObject* const*)b;
+    return compare_depth(fa->pos.y + fa->dims.y, fa->id, fb->pos.y + fb->dims.y, fb->id);
+}
+
 void game_render_foregrounds(void) {
     const float cell_size = world_cell_size();
 
+    static WorldObject* sorted[MAX_OBJECTS];
+    for (int i = 0; i < g_game_state.foreground_count; i++) sorted[i] = &g_game_state.foregrounds[i];
+    qsort(sorted, (size_t)g_game_state.foreground_count, sizeof(sorted[0]), compare_foregrounds_by_depth);
+
     // Render foregrounds (always on top of entities)
     for (int i = 0; i < g_game_state.foreground_count; i++) {
-        WorldObject* fg = &g_game_state.foregrounds[i];
-        Color fg_color = presentation_runtime_palette("FOREGROUND");
+        WorldObject* fg = sorted[i];
+        const Color tint = Fade(WHITE, overhead_occlusion_opacity(fg));
+        const Color fg_color = ColorTint(presentation_runtime_palette("FOREGROUND"), tint);
 
         if (fg->layer_count > 0) {
             ObjectLayerState* layers[MAX_OBJECT_LAYERS];
@@ -448,7 +474,8 @@ void game_render_foregrounds(void) {
                 "foreground",
                 presentation_runtime_dev_ui(),
                 cell_size,
-                fg_color
+                fg_color,
+                tint
             );
         } else {
             Rectangle rect = {
@@ -481,20 +508,11 @@ typedef struct {
 } EntitySortEntry;
 
 // Comparison function for qsort - entities with lower Y render first (appear behind)
-#define ENTITY_DEPTH_EPSILON 0.001f
-
 static int compare_entities_by_depth(const void* a, const void* b) {
     const EntitySortEntry* ea = (const EntitySortEntry*)a;
     const EntitySortEntry* eb = (const EntitySortEntry*)b;
-    float depth_delta = ea->bottom_y - eb->bottom_y;
-
-    if (depth_delta < -ENTITY_DEPTH_EPSILON) return -1;
-    if (depth_delta > ENTITY_DEPTH_EPSILON) return 1;
-
-    if (ea->sort_id && eb->sort_id) {
-        int id_cmp = strcmp(ea->sort_id, eb->sort_id);
-        if (id_cmp != 0) return id_cmp;
-    }
+    const int depth_order = compare_depth(ea->bottom_y, ea->sort_id, eb->bottom_y, eb->sort_id);
+    if (0 != depth_order) return depth_order;
 
     if (ea->type != eb->type) {
         return (int)ea->type - (int)eb->type;
@@ -736,7 +754,8 @@ void game_render_entities(void) {
                     entity_type_str,
                     dev_ui,
                     cell_size,
-                    obstacle_color
+                    obstacle_color,
+                    WHITE
                 );
             }
 
@@ -834,7 +853,8 @@ void game_render_entities(void) {
                     entity_type_str,
                     dev_ui,
                     cell_size,
-                    entity_fallback_color
+                    entity_fallback_color,
+                    WHITE
                 );
             }
 

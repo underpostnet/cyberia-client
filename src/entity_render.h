@@ -34,7 +34,8 @@ void entity_render_gc(EntityRender* render);
  * 0; invalid inputs are skipped without an error. `entity_type` ("self",
  * "other", "bot", "floor") and `fallback_color` only tint the dev_ui boxes.
  * With `dev_ui` true the function draws the debug box and skips the layers;
- * with it false it draws the layers only. */
+ * with it false it draws the layers only. `tint` multiplies every layer
+ * texture; WHITE draws them as authored. */
 void draw_entity_layers(
     EntityRender* render,
     const char* entity_id,
@@ -49,7 +50,8 @@ void draw_entity_layers(
     const char* entity_type,
     bool dev_ui,
     float cell_size,
-    Color fallback_color
+    Color fallback_color,
+    Color tint
 );
 
 /* Draws a flat, squashed dark ellipse under an entity's feet — a ground

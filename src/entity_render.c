@@ -332,7 +332,8 @@ void draw_entity_layers(
     const char* entity_type,
     bool dev_ui,
     float cell_size,
-    Color fallback_color
+    Color fallback_color,
+    Color tint
 ) {
     assert(render && entity_id);
 
@@ -553,7 +554,7 @@ void draw_entity_layers(
                 dest_rec,
                 (Vector2){0.0f, 0.0f},
                 0.0f,
-                WHITE
+                tint
             );
         }
     }
