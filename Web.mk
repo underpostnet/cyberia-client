@@ -75,12 +75,12 @@ $(target_build_dir)/cJSON.o: $(CJSON_PATH)/cJSON.c
 # Raylib dep
 $(target_build_dir)/libraylib.web.a:
 	@mkdir -p $(target_build_dir)
+	make -C $(RAYLIB_PATH)/src clean
 	make -j 8 -C $(RAYLIB_PATH)/src raylib \
 		PLATFORM=PLATFORM_WEB \
-		RAYLIB_BUILD_MODE=$(BUILD_MODE) \
+		RAYLIB_BUILD_MODE=RELEASE \
 		RAYLIB_LIBTYPE=STATIC \
 		RAYLIB_RELEASE_PATH=$(CURDIR)/$(target_build_dir)
-	make -C $(RAYLIB_PATH)/src clean
 
 clean:
 	-rm -rf $(BUILD_DIR) $(OUTPUT_DIR)
