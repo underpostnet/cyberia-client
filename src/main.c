@@ -13,6 +13,7 @@
 #include "render.h"
 #include "network/game/game_client.h"
 #include "network/game/replication.h"
+#include "network/game/client_event.h"
 #include "config.h"
 
 #include <raylib.h>
@@ -134,7 +135,7 @@ static void gameloop(void) {
         while (input_pop(&bkp_queue, &bkp_evt)) { input_push(&frame_input, bkp_evt ); }
     }
 
-    replication_prepare_input(frame_input);
+    input_push_client_events(frame_input);
 
     // TODO: collapse this into a function, this is temporary to remove input.c dependency
     {
@@ -175,8 +176,11 @@ static void gameloop(void) {
     {
         // physics_update(frame_input, fixed_step); -> prev = curr; integrate(curr, curr_frame, fixed_step)
         prediction_step(fixed_step);
+        session_frame_advance();
         sim_acc -= fixed_step;
     }
+    /* One events message per pass: the UI pushes and the taps of this pass. */
+    client_event_flush();
     /* Presentation-only: advance the local player's visual state (spring
      * position, velocity-derived facing and walk/idle mode) toward the
      * predicted/reconciled simulation position. Facing and mode go in

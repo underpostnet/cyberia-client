@@ -5,6 +5,7 @@
 #include "message.h"
 #include "util/serial.h"
 #include "replication.h"
+#include "client_event.h"
 #include "domain/local_player.h"
 #include "ui/ui_state.h"
 #include "util/log.h"
@@ -38,6 +39,7 @@ static void client_reset_state(void) {
     ui_state_reset();
     message_reset_prev_snapshots();
     prediction_reset((Vector2){0.0f, 0.0f});
+    client_event_reset();
 }
 
 bool connection_open(void) {

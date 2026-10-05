@@ -17,8 +17,9 @@ static inline bool input_pointer_down(void) {
 }
 
 /* Raw per-frame input event ring. Captures OS events (tap, debug key, zoom)
- * and hands them to the UI dispatch and prediction/replication stages. The
- * typed wire command lives separately in input/input_command.h. */
+ * and hands them to the UI dispatch and prediction/replication stages. Raw
+ * input never leaves the client: input_push_client_events converts it into
+ * the client events of network/game/client_event.h. */
 
 typedef enum input_type {
     INPUT_NONE,
@@ -50,6 +51,11 @@ typedef struct input_event_queue {
 void input_queue_on_tick(input_queue_t* q, double dt);
 bool input_pop(input_queue_t* q, input_event_t* out);
 void input_push(input_queue_t* q, input_event_t e);
+
+/* Drain a (deep-copied) frame queue: each tap pushes one player_action client
+ * event and enters the prediction queue. Every other raw event pushes
+ * nothing. */
+void input_push_client_events(input_queue_t q);
 
 /* True if the event is consumed and must leave the queue. */
 typedef bool (*input_consume_fn)(const input_event_t* e);

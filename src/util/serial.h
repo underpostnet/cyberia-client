@@ -11,7 +11,7 @@
  * Every message uses the envelope {"type": <name>, "payload": { ... }},
  * both directions. The socket layer only moves the bytes.
  *
- *   cJSON* j = json_pack_player_action(x, y, tick, seq);
+ *   cJSON* j = json_pack_handshake("cyberia-mmo", "1.0.0");
  *   RawPack p = serial_pack(j);          // takes ownership of j
  *   socket_send(&ws, p.data, p.len);
  *   free(p.data);
@@ -34,12 +34,13 @@ cJSON* serial_unpack(const uint8_t* data, size_t len);
 
 cJSON* json_pack_handshake(const char* client_name, const char* version);
 
-/* json_pack_player_action — TAP event.
- *
- * tick + seq let the server echo back the applied sequence in every
- * snapshot, which the prediction module uses to drain its replay buffer. */
-cJSON* json_pack_player_action(float target_x, float target_y,
-                               uint32_t client_tick, uint32_t sequence);
+/* The one input message: a batch of client events. Takes ownership of the
+ * events array. Each entry is a {type, payload} envelope from a packer below,
+ * with seq, frame and timestamp added to its payload. */
+cJSON* json_pack_events(cJSON* events);
+
+/* Client event packers. Only client_event_flush calls them. */
+cJSON* json_pack_player_action(float target_x, float target_y);
 
 cJSON* json_pack_item_active(const char* item_id, bool active);
 cJSON* json_pack_freeze_start(const char* reason);

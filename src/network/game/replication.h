@@ -1,33 +1,19 @@
 #ifndef CYBERIA_NETWORK_REPLICATION_H
 #define CYBERIA_NETWORK_REPLICATION_H
 
-#include "input/input.h"
-#include "input/input_command.h"
+#include "network/game/client_event.h"
 
 #include <stdbool.h>
 #include <stdint.h>
 #include <raylib.h>
 
-/*
- * Client→server input replication.
- *
- * Drains the per-frame input event queue, builds typed input commands, applies
- * them to the prediction replay buffer, and ships them on the wire. This is the
- * single uplink path for player actions; it sits above the raw WebSocket I/O
- * owned by game_client and below the main loop that captures input.
- */
-
-/* Drain a (deep-copied) frame input queue: per tap, build the command, enqueue
- * it for prediction, send it to the server, and set the local on-tap target. */
-void replication_prepare_input(input_queue_t in_queue);
-
-
-// WIP
+/* A server tick. Only the session_* functions use it. */
+typedef uint32_t cyberia_tick_t;
 
 /* Prediction — predicted self position (sole writer); replay + reconcile. */
 void prediction_init(void);
 void prediction_reset(Vector2 authoritative_pos);
-void prediction_enqueue_input(const input_command_t* cmd);
+void prediction_enqueue_input(const client_event_t* cmd);
 void prediction_step(double tick_dt);
 void prediction_reconcile(void);
 Vector2 prediction_self_position(void);
@@ -56,7 +42,11 @@ cyberia_tick_t session_last_server_tick(void);
  * but plans only the newest. */
 cyberia_input_seq_t session_last_movement_sequence(void);
 cyberia_tick_t session_server_tick_estimate(void);
-cyberia_tick_t session_render_tick(void);
 cyberia_input_seq_t session_next_input_sequence(void);
+/* Completed fixed steps since the page loaded. Not the server tick: the loop
+ * drops steps that the server runs. session_frame_advance is its only writer,
+ * once per fixed step. */
+cyberia_frame_t session_frame(void);
+void            session_frame_advance(void);
 
 #endif /* CYBERIA_NETWORK_REPLICATION_H */

@@ -2,10 +2,6 @@
 
 #include "domain/presentation_runtime.h"
 #include "game_state.h"
-#include "util/serial.h"
-#include "input/input_command.h"
-#include "input/input.h"
-#include "network/game/game_client.h"
 #include "domain/local_player.h"
 #include "util/log.h"
 #include "config.h"
@@ -17,25 +13,6 @@
 #include <assert.h>
 #include <math.h>
 
-static bool send_event_tap(Vector2 grid, uint32_t client_tick, uint32_t sequence) {
-    return network_send(json_pack_player_action(grid.x, grid.y, client_tick, sequence));
-}
-
-void replication_prepare_input(input_queue_t in_queue) {
-    // in_queue is a deep copy, safe to drain.
-    input_event_t evt = { 0 };
-    while (input_pop(&in_queue, &evt)) {
-        if (INPUT_TAP == evt.type) {
-            float cell = world_cell_size();
-            float gx = evt.world_position.x / cell;
-            float gy = evt.world_position.y / cell;
-            input_command_t cmd = input_command_build_tap(gx, gy);
-            prediction_enqueue_input(&cmd);
-            send_event_tap((Vector2){gx, gy}, cmd.client_tick, cmd.sequence);
-        }
-    }
-}
-
 /* ── Session ───────────────────────────────────────────────────────────── */
 
 /* Singleton session state. Owned by this translation unit; readers go
@@ -45,7 +22,8 @@ static struct {
     cyberia_input_seq_t  input_consumed_through; /* no reader until step 3 (replay) */
     cyberia_input_seq_t  last_movement_sequence;
     cyberia_input_seq_t  next_input_sequence;
-    double               last_snapshot_wall_time; /* GetTime() when snapshot arrived */
+    cyberia_frame_t      frame;                   /* never reset; see session_frame */
+    double              last_snapshot_wall_time; /* GetTime() when snapshot arrived */
     bool                 snapshot_unapplied;      /* set on arrival, cleared by prediction_reconcile */
 } g_sess = {0};
 
@@ -86,6 +64,9 @@ cyberia_tick_t session_server_tick_estimate(void) {
 cyberia_input_seq_t session_next_input_sequence(void) {
     return ++g_sess.next_input_sequence;
 }
+
+cyberia_frame_t session_frame(void)   { return g_sess.frame; }
+void session_frame_advance(void)      { g_sess.frame++; }
 
 /* ── Prediction ────────────────────────────────────────────────────────── */
 
@@ -131,14 +112,14 @@ typedef struct {
 } pred_history_t;
 
 typedef struct {
-    input_command_t items[COMMAND_QUEUE_CAP];
+    client_event_t items[COMMAND_QUEUE_CAP];
     int head;
     int count;
 } command_queue_t;
 
 static command_queue_t s_cmd_q = {0};
 
-void prediction_enqueue_input(const input_command_t* cmd) {
+void prediction_enqueue_input(const client_event_t* cmd) {
     assert(cmd);
     if (s_cmd_q.count == COMMAND_QUEUE_CAP) {
         LOG_WARN("input command queue full, dropping oldest");
@@ -150,7 +131,7 @@ void prediction_enqueue_input(const input_command_t* cmd) {
     s_cmd_q.count++;
 }
 
-static bool command_queue_pop(input_command_t* out) {
+static bool command_queue_pop(client_event_t* out) {
     if (0 == s_cmd_q.count) { return false; }
     *out = s_cmd_q.items[s_cmd_q.head];
     s_cmd_q.head = (s_cmd_q.head + 1) % COMMAND_QUEUE_CAP;
@@ -176,7 +157,7 @@ static struct {
      * walking toward it long after it acknowledges the command, so prediction
      * must keep walking too. Dropping it on acknowledgement froze prediction
      * between snapshots and left the walk moving at the snapshot rate. */
-    input_command_t active;
+    client_event_t active;
     bool            has_active;
     /* The instant after which an `active` still unconfirmed by moveAck yields
      * to authority. */
@@ -213,7 +194,7 @@ static void path_clear(void) {
  * the player just abandoned, and following it one tick longer is the backward
  * step. Until the new route arrives, the straight line to the tap is the best
  * guess available, and it is the one that starts in the right direction. */
-static void retarget_walk(const input_command_t* cmd) {
+static void retarget_walk(const client_event_t* cmd) {
     g_pred.active                  = *cmd;
     g_pred.has_active              = true;
     g_pred.active_confirm_deadline = GetTime() + MOVE_CONFIRM_TIMEOUT_S;
@@ -282,10 +263,10 @@ static void history_prune(pred_history_t* h, cyberia_tick_t tick) {
  *
  * Both client and server use double-precision sqrt so identical inputs
  * produce byte-identical positions. */
-static Vector2 sim_step_one(Vector2 pos, const input_command_t* cmd, double dt) {
-    if (cmd->kind != INPUT_KIND_PLAYER_ACTION) return pos;
-    double dx = (double)cmd->target_x - (double)pos.x;
-    double dy = (double)cmd->target_y - (double)pos.y;
+static Vector2 sim_step_one(Vector2 pos, const client_event_t* cmd, double dt) {
+    if (cmd->kind != CLIENT_EVENT_PLAYER_ACTION) return pos;
+    double dx = (double)cmd->payload.target_x - (double)pos.x;
+    double dy = (double)cmd->payload.target_y - (double)pos.y;
     double dist = sqrt(dx * dx + dy * dy);
     if (dist < 1e-4) return pos;
     double speed = (double)local_player_move_speed();
@@ -341,9 +322,9 @@ void prediction_step(double tick_dt) {
      * via prediction_enqueue_input(). The newest destination wins outright, as
      * it does on the server: taps drained in one tick describe one instant, and
      * only the last of them says where the player wants to go. */
-    input_command_t cmd;
+    client_event_t cmd;
     while (command_queue_pop(&cmd)) {
-        if (INPUT_KIND_PLAYER_ACTION == cmd.kind) { retarget_walk(&cmd); }
+        if (CLIENT_EVENT_PLAYER_ACTION == cmd.kind) { retarget_walk(&cmd); }
     }
 
     /* Exactly one step per tick, on the same integrator the server runs. The
@@ -431,9 +412,9 @@ static void adopt_authoritative_target(void) {
         path_clear();
         return;
     }
-    g_pred.active.kind     = INPUT_KIND_PLAYER_ACTION;
-    g_pred.active.target_x = g_pred.route_target.x;
-    g_pred.active.target_y = g_pred.route_target.y;
+    g_pred.active.kind     = CLIENT_EVENT_PLAYER_ACTION;
+    g_pred.active.payload.target_x = g_pred.route_target.x;
+    g_pred.active.payload.target_y = g_pred.route_target.y;
     g_pred.active.sequence = session_last_movement_sequence();
     g_pred.has_active      = true;
 

@@ -1,5 +1,5 @@
-#include "input_command.h"
 #include "input.h"
+#include "network/game/client_event.h"
 #include "network/game/replication.h"
 #include "domain/camera.h"
 #include "domain/local_player.h"
@@ -227,19 +227,16 @@ void input_queue_on_tick(input_queue_t* q, double dt) {
     }
 }
 
-/* Helper — fills the common tick + sequence header. Allocating the
- * sequence in one place ensures it is monotonic regardless of which build
- * helper the caller invoked. */
-static void stamp_header(input_command_t* cmd, input_kind_t kind) {
-    cmd->kind         = kind;
-    cmd->client_tick  = session_server_tick_estimate();
-    cmd->sequence     = session_next_input_sequence();
-}
-
-input_command_t input_command_build_tap(float grid_x, float grid_y) {
-    input_command_t cmd = {0};
-    stamp_header(&cmd, INPUT_KIND_PLAYER_ACTION);
-    cmd.target_x = grid_x;
-    cmd.target_y = grid_y;
-    return cmd;
+void input_push_client_events(input_queue_t q) {
+    input_event_t evt = { 0 };
+    while (input_pop(&q, &evt)) {
+        if (INPUT_TAP != evt.type) continue;
+        float cell = world_cell_size();
+        client_event_payload_t p = {
+            .target_x = evt.world_position.x / cell,
+            .target_y = evt.world_position.y / cell,
+        };
+        client_event_t e = client_event_push(CLIENT_EVENT_PLAYER_ACTION, p);
+        prediction_enqueue_input(&e);
+    }
 }

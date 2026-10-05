@@ -43,14 +43,19 @@ cJSON* json_pack_handshake(const char* client_name, const char* version) {
     return root;
 }
 
-cJSON* json_pack_player_action(float target_x, float target_y,
-                               uint32_t client_tick, uint32_t sequence) {
+cJSON* json_pack_events(cJSON* events) {
+    assert(events);
+    cJSON* p;
+    cJSON* root = new_message("events", &p);
+    cJSON_AddItemToObject(p, "events", events);
+    return root;
+}
+
+cJSON* json_pack_player_action(float target_x, float target_y) {
     cJSON* p;
     cJSON* root = new_message("player_action", &p);
     cJSON_AddNumberToObject(p, "x", target_x);
     cJSON_AddNumberToObject(p, "y", target_y);
-    cJSON_AddNumberToObject(p, "tick", client_tick);
-    cJSON_AddNumberToObject(p, "seq", sequence);
     return root;
 }
 
