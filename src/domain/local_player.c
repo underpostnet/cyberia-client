@@ -3,9 +3,9 @@
 #include <raylib.h>
 #include <string.h>
 
-#include "network/game/game_client.h"
-#include "util/serial.h"
+#include "network/game/client_event.h"
 #include "util/log.h"
+#include "util/utils.h"
 
 #define LOCAL_PLAYER_DEFAULT_MOVE_SPEED 3.0f
 /* Mirrors entityBaseActionCooldownMs, the instance default. Only in force
@@ -33,10 +33,11 @@ static struct {
 };
 
 static void send_freeze_frame(bool start, const char* reason) {
-    bool rc = network_send(start ? json_pack_freeze_start(reason)
-                                 : json_pack_freeze_end(reason));
-    LOG_INFO("[LOCAL_PLAYER] WS -> freeze_%s (reason=%s) rc=%d",
-             start ? "start" : "end", reason ? reason : "", rc);
+    client_event_payload_t p = {0};
+    copy_str(p.code, sizeof p.code, reason);
+    client_event_push(start ? CLIENT_EVENT_FREEZE_START : CLIENT_EVENT_FREEZE_END, p);
+    LOG_INFO("[LOCAL_PLAYER] push freeze_%s (reason=%s)",
+             start ? "start" : "end", reason ? reason : "");
 }
 
 LocalPlayer g_local_player = {0};
@@ -82,8 +83,17 @@ static void arm_freeze_watchdog(const char* reason) {
     g_local.freeze_deadline = GetTime() + LOCAL_FREEZE_TIMEOUT_S;
 }
 
+/* Push one event that names an entity and an item. */
+static void push_entity_item(client_event_kind_t kind, const char* entity_id,
+                             const char* item_id) {
+    client_event_payload_t p = {0};
+    copy_str(p.entity_id, sizeof p.entity_id, entity_id);
+    copy_str(p.item_id, sizeof p.item_id, item_id);
+    client_event_push(kind, p);
+}
+
 void local_player_request_dialogue_start(const char* entity_id, const char* item_id) {
-    network_send(json_pack_dialog_start(entity_id, item_id));
+    push_entity_item(CLIENT_EVENT_DIALOG_START, entity_id, item_id);
     arm_freeze_watchdog("dialogue");
 }
 
@@ -98,56 +108,73 @@ static void release_dialogue_watchdog(void) {
 
 void local_player_request_dialogue_complete(const char* entity_id, const char* item_id,
                                             const char* dialog_code) {
-    network_send(json_pack_dialog_complete(entity_id, item_id, dialog_code));
+    client_event_payload_t p = {0};
+    copy_str(p.entity_id, sizeof p.entity_id, entity_id);
+    copy_str(p.item_id, sizeof p.item_id, item_id);
+    copy_str(p.code, sizeof p.code, dialog_code);
+    client_event_push(CLIENT_EVENT_DIALOG_COMPLETE, p);
     release_dialogue_watchdog();
 }
 
 void local_player_request_dialogue_cancel(const char* entity_id, const char* item_id) {
-    network_send(json_pack_dialog_cancel(entity_id, item_id));
+    push_entity_item(CLIENT_EVENT_DIALOG_CANCEL, entity_id, item_id);
     release_dialogue_watchdog();
 }
 
 void local_player_request_quest_abandon(const char* quest_code) {
-    network_send(json_pack_quest_abandon(quest_code));
+    push_entity_item(CLIENT_EVENT_QUEST_ABANDON, NULL, quest_code);
 }
 
 void local_player_request_quest_accept(const char* entity_id, const char* quest_code) {
-    network_send(json_pack_quest_accept(entity_id, quest_code));
+    push_entity_item(CLIENT_EVENT_QUEST_ACCEPT, entity_id, quest_code);
 }
 
 void local_player_request_shop_buy(const char* entity_id, const char* item_id,
                                    int quantity) {
     if (quantity < 1) quantity = 1;
     if (quantity > 255) quantity = 255;
-    network_send(json_pack_shop_buy(entity_id, item_id, quantity));
+    client_event_payload_t p = { .quantity = quantity };
+    copy_str(p.entity_id, sizeof p.entity_id, entity_id);
+    copy_str(p.item_id, sizeof p.item_id, item_id);
+    client_event_push(CLIENT_EVENT_SHOP_BUY, p);
 }
 
 void local_player_request_craft(const char* entity_id, int recipe_index) {
-    network_send(json_pack_craft_item(entity_id, recipe_index));
+    client_event_payload_t p = { .recipe_index = recipe_index };
+    copy_str(p.entity_id, sizeof p.entity_id, entity_id);
+    client_event_push(CLIENT_EVENT_CRAFT_ITEM, p);
 }
 
 void local_player_request_craft_cancel(void) {
-    network_send(json_pack_craft_cancel());
+    client_event_push(CLIENT_EVENT_CRAFT_CANCEL, (client_event_payload_t){0});
 }
 
 void local_player_request_storage_open(const char* entity_id) {
-    network_send(json_pack_storage_open(entity_id));
+    push_entity_item(CLIENT_EVENT_STORAGE_OPEN, entity_id, NULL);
 }
 
 void local_player_request_storage_move(const char* entity_id, int from_index, int to_index,
                                        int quantity) {
-    network_send(json_pack_storage_move(entity_id, from_index, to_index, quantity));
+    client_event_payload_t p = { .from_index = from_index, .to_index = to_index,
+                                 .quantity = quantity };
+    copy_str(p.entity_id, sizeof p.entity_id, entity_id);
+    client_event_push(CLIENT_EVENT_STORAGE_MOVE, p);
 }
 
 void local_player_request_storage_swap(const char* entity_id, int from_index, int to_index) {
-    network_send(json_pack_storage_swap(entity_id, from_index, to_index));
+    client_event_payload_t p = { .from_index = from_index, .to_index = to_index };
+    copy_str(p.entity_id, sizeof p.entity_id, entity_id);
+    client_event_push(CLIENT_EVENT_STORAGE_SWAP, p);
 }
 
 void local_player_request_storage_transfer(const char* entity_id, const char* item_id,
                                            int quantity, bool deposit,
                                            int from_index, int to_index) {
-    network_send(json_pack_storage_transfer(entity_id, item_id, quantity, deposit,
-                                            from_index, to_index));
+    client_event_payload_t p = { .quantity = quantity, .deposit = deposit,
+                                 .from_index = from_index, .to_index = to_index };
+    copy_str(p.entity_id, sizeof p.entity_id, entity_id);
+    copy_str(p.item_id, sizeof p.item_id, item_id);
+    client_event_push(CLIENT_EVENT_STORAGE_TRANSFER, p);
 }
 
 void local_player_on_tick(void) {

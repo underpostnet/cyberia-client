@@ -71,9 +71,14 @@ conn_stats connection_get_stats(void) {
 
 static bool s_loading_confirmed = false;
 
+static void push_loading_done(void) {
+    client_event_payload_t p = { .code = "loading" };
+    client_event_push(CLIENT_EVENT_FREEZE_END, p);
+}
+
 void client_confirm_loading_done(void) {
     s_loading_confirmed = true;
-    network_send(json_pack_freeze_end("loading"));
+    push_loading_done();
 }
 
 void client_on_init_received(void) {
@@ -82,9 +87,7 @@ void client_on_init_received(void) {
      * On a reconnect the client is already loaded and playing, so release the
      * new session immediately; the first join instead waits for the player's
      * explicit Tap-to-Start (client_confirm_loading_done). */
-    if (s_loading_confirmed) {
-        network_send(json_pack_freeze_end("loading"));
-    }
+    if (s_loading_confirmed) push_loading_done();
 }
 
 void game_client_on_tick(void) {
@@ -118,12 +121,6 @@ bool network_send(cJSON* msg) {
     g_client.stats.bytes_up += ok ? pack.len : 0;
     free(pack.data);
     return ok;
-}
-
-bool network_send_chat(const char* to_id, const char* text) {
-    assert(to_id);
-    assert(text);
-    return network_send(json_pack_chat(to_id, text));
 }
 
 /* ── Socket callbacks ────────────────────────────────────────────────── */

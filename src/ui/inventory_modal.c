@@ -7,10 +7,9 @@
  *   - The modal is purely a UI layer: it reads game state and sends intents.
  *   - Item metadata (description, stats) is fetched lazily via
  *     lookup_cached_layer() which caches results in the OL manager.
- *   - Activation intent is sent via network_send() as a JSON string
- *     matching the server's existing "item_activation" handler in
- *     handlers.go.  The server validates, swaps if needed, and pushes
- *     the updated state back in the next AOI frame.
+ *   - Activation intent is an item_active client event. The server
+ *     validates, swaps if needed, and pushes the updated state back in
+ *     the next AOI frame.
  *   - The sprite preview uses ol_as_animated_ico so it plays the live
  *     animation for the selected direction/mode pair.
  *   - Direction (up/down/left/right) and mode (idle/walking) buttons let
@@ -23,7 +22,7 @@
 
 #include "domain/local_player.h"
 #include "domain/viewport.h"
-#include "network/game/game_client.h"
+#include "network/game/client_event.h"
 #include "dialogue_data.h"
 #include "game_state.h"
 #include "interaction_bubble.h"
@@ -35,7 +34,6 @@
 #include "object_layer.h"
 #include "object_layers_management.h"
 #include "ol_as_animated_ico.h"
-#include "util/serial.h"
 #include "util/utils.h"
 #include "stat_panel.h"
 #include "toolbar.h"
@@ -355,7 +353,9 @@ static void update_anchor_layout(float dt, bool lore_available) {
 }
 
 static void send_activation(const char* item_id, bool active) {
-    network_send(json_pack_item_active(item_id, active));
+    client_event_payload_t p = { .active = active };
+    copy_str(p.item_id, sizeof p.item_id, item_id);
+    client_event_push(CLIENT_EVENT_ITEM_ACTIVE, p);
 }
 
 /* draw_small_btn draws direction/mode buttons (icon, label, or both) using

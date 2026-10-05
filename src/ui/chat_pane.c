@@ -4,7 +4,7 @@
 
 #include "domain/viewport.h"
 #include "js/text_input_bridge.h"
-#include "network/game/game_client.h"
+#include "network/game/client_event.h"
 #include "notification.h"
 #include "notify_store.h"
 #include "ui_button.h"
@@ -18,7 +18,6 @@
 #include <string.h>
 
 #define CHAT_TEXT_MAX     128
-#define CHAT_LINE_BYTES   512
 #define CHAT_DRAW_MAX     50
 #define CHAT_GAP          6.0f
 #define CHAT_SEND_W       76.0f
@@ -83,7 +82,8 @@ static ChatLayout chat_layout(Rectangle content) {
     return l;
 }
 
-/* Trim and send one line. The history keeps only lines the socket accepted. */
+/* Trim and push one line. The history shows it at once (R4). A line pushed
+ * while the socket is down still shows, and the socket close drops the event. */
 static void send_line(const char* entity_id, const char* text) {
     char line[CHAT_LINE_BYTES];
     copy_str(line, sizeof(line), text);
@@ -92,7 +92,11 @@ static void send_line(const char* entity_id, const char* text) {
     size_t length = strlen(start);
     while (0 < length && isspace((unsigned char)start[length - 1])) start[--length] = '\0';
     if (0 == length) return;
-    if (network_send_chat(entity_id, start)) notify_store_push(entity_id, "You", start, true);
+    client_event_payload_t p = {0};
+    copy_str(p.item_id, sizeof(p.item_id), entity_id);
+    copy_str(p.text, sizeof(p.text), start);
+    client_event_push(CLIENT_EVENT_CHAT, p);
+    notify_store_push(entity_id, "You", start, true);
 }
 
 static void send_input(const char* entity_id) {
