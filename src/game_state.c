@@ -1,4 +1,5 @@
 #include "game_state.h"
+#include "util/log.h"
 
 #include <assert.h>
 #include <math.h>
@@ -22,7 +23,11 @@ void game_state_layer_pool_reset(void) {
 }
 
 int game_state_layer_alloc(int count) {
-    assert(0 <= count);
+    if (!(0 <= count)) {
+        assert(false && "negative entity count");
+        LOG_ERROR("negative entity count");
+        abort();
+    }
     if (LAYER_POOL_SIZE - s_layer_pool_head < count) return -1;
     int offset = s_layer_pool_head;
     s_layer_pool_head += count;

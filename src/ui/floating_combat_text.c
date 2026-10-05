@@ -39,12 +39,14 @@
 #include "domain/local_player.h"
 #include "domain/presentation_runtime.h"
 #include "game_state.h"
+#include "util/log.h"
 #include "util/utils.h"
 #include "world_types.h"
 
 #include <assert.h>
 #include <math.h>
 #include <raylib.h>
+#include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
 
@@ -141,7 +143,11 @@ void fct_spawn(float world_x, float world_y, uint32_t value, FCTType type) {
     /* Free slot, else the oldest entry — a spawn never fails, it recycles. */
     FCTEntry* slot = pool_take(s_pool, sizeof(*s_pool), FCT_MAX_ENTRIES, fct_rank);
 
-    assert(type >= 0 && type < FCT_TYPE_COUNT);
+    if (!(type >= 0 && type < FCT_TYPE_COUNT)) {
+        assert(false && "FCT type out of range");
+        LOG_ERROR("FCT type out of range");
+        abort();
+    }
     const FCTTuning* tune = &FCT_TUNING[type];
     snprintf(slot->text, sizeof(slot->text), tune->format, value);
 

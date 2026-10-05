@@ -188,7 +188,11 @@ static void raw_insert(HashTable* t, char* key_owned, void* value) {
 }
 
 static void resize(HashTable* t, size_t new_capacity) {
-    assert(new_capacity > t->count);
+    if (!(new_capacity > t->count)) {
+        assert(false && "hash table resize below count");
+        LOG_ERROR("hash table resize below count");
+        abort();
+    }
 
     HashSlot* old_slots    = t->slots;
     size_t    old_capacity = t->capacity;

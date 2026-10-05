@@ -2,6 +2,7 @@
 #include "audio_events.h"
 #include "audio_internal.h"
 #include "network/data/engine_client.h"
+#include "util/log.h"
 #include "util/serial.h"
 #include "util/utils.h"
 
@@ -124,7 +125,11 @@ static void fetch_match(const char* api, const char* field, const char* value,
     assert(json);
     char url[2048];
     int used = snprintf(url, sizeof(url), ENGINE_API_BASE "/%s?limit=1&filterModel=", api);
-    assert(0 < used && sizeof(url) > (size_t)used);
+    if (!(0 < used && sizeof(url) > (size_t)used)) {
+        assert(false && "audio URL truncated");
+        LOG_ERROR("audio URL truncated");
+        abort();
+    }
     url_encode(url + used, sizeof(url) - (size_t)used, json);
     cJSON_free(json);
     cJSON_Delete(filter);

@@ -3,7 +3,9 @@
 #include "text.h"
 #include "toolbar.h"
 #include "domain/local_player.h"
+#include "util/log.h"
 #include <assert.h>
+#include <stdlib.h>
 #include <string.h>
 
 /* ── Modal lifecycle ──────────────────────────────────────────────────── */
@@ -22,7 +24,11 @@ void modal_opened(void) {
 }
 
 void modal_closed(void) {
-    assert(0 < s_open_count);
+    if (!(0 < s_open_count)) {
+        assert(false && "modal closed more often than opened");
+        LOG_ERROR("modal closed more often than opened");
+        abort();
+    }
     if (0 == --s_open_count) {
         local_player_request_freeze(false, MODAL_FREEZE_REASON);
         local_player_set_frozen(false);

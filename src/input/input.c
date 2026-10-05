@@ -5,14 +5,20 @@
 #include "domain/local_player.h"
 #include "domain/presentation_runtime.h"
 #include "game_state.h"
+#include "util/log.h"
 
 #include <assert.h>
 #include <raylib.h>
 #include <raymath.h>
+#include <stdlib.h>
 
 void input_push(input_queue_t* q, input_event_t e) {
     assert(q);
-    assert(q->count < Q_CAP);
+    if (!(q->count < Q_CAP)) {
+        assert(false && "input queue full");
+        LOG_ERROR("input queue full");
+        abort();
+    }
     q->evt[(q->head + q->count) % Q_CAP] = e;
     q->count++;
 }
