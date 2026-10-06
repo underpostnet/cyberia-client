@@ -910,10 +910,6 @@ void modal_interact_open(const char* entity_id, const char* display_name,
 
     request_active_dialogue();
 
-    /* The dialogue modal sends dlg_start on open and dlg_complete/cancel on
-     * finish. This modal sends no dlg_start, because a second one leaks the
-     * server-side ActiveDialogueEntityID and breaks quest-talk validation
-     * when the bot leaves the AOI. */
     LOG_INFO("[MODAL_INTERACT] Open: entity=%s layers=%d quests=%d\n",
              s_entity_id, s_cached_layer_count, s_quest_code_count);
 }

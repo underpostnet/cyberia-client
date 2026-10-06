@@ -4,8 +4,7 @@
  *
  * Architecture:
  *   - Manages its own state for line progression and typewriter effect.
- *   - Sends "dialogue_start" / "dialogue_end" JSON messages to the Go
- *     server so it can grant / revoke damage immunity.
+ *   - Pushes "talk_done" when the player reads every line. Paging is local.
  *   - Left column renders the entity's full alive OL stack via ol_stack_ico.
  */
 
@@ -15,6 +14,7 @@
 
 #include "domain/local_player.h"
 #include "domain/viewport.h"
+#include "network/game/client_event.h"
 #include "game_state.h"
 #include "interaction_bubble.h"
 #include "inventory_bar.h"
@@ -53,8 +53,8 @@ static char s_item_id[128]    = {0};
 static char s_dialog_code[96] = {0};
 static ModalDialogueRender s_render = MODAL_DIALOGUE_RENDER_ITEM;
 /* ITEM (inventory lore) owns its own dismissal; ENTITY is paired with
- * modal_interact, which owns dismissal. dlg_* server frames are sent only
- * when the dialogue actually has lines. */
+ * modal_interact, which owns dismissal. Only a dialogue with lines can push
+ * talk_done. */
 static bool s_auto_dismiss = true;
 static bool s_dlg_started  = false;
 static bool s_quest_style  = false;
@@ -291,25 +291,26 @@ void modal_dialogue_open(const char* entity_id, const char* item_id,
     LOG_INFO("[MODAL_DIALOGUE] Open: entity=%s item=%s code=%s lines=%d\n",
              s_entity_id, s_item_id, s_dialog_code, s_line_count);
 
-    /* Only a dialogue with lines holds a modal count and takes part in the
-     * dlg_* / quest-talk handshake. Render-only stays passive. */
+    /* Only a dialogue with lines holds a modal count and can report talk_done.
+     * Render-only stays passive. */
     bool held = s_dlg_started;
     s_dlg_started = (s_line_count > 0);
-    if (s_dlg_started) local_player_request_dialogue_start(s_entity_id, s_item_id);
     if (s_dlg_started && !held) modal_opened();
     else if (held && !s_dlg_started) modal_closed();
 }
 
-/* Sends the closing dlg frame and drops this dialogue's modal count.
- * `completed` true → all lines were read (dlg_complete, the only path that
- * can satisfy a quest-talk objective); false → dismissed early (dlg_cancel). */
+/* Drops this dialogue's modal count. `completed` true → all lines were read:
+ * push talk_done, the only path that can satisfy a quest-talk objective. A
+ * dismissed dialogue pushes nothing. */
 static void send_dlg_end(bool completed) {
     if (!s_dlg_started) return;
     s_dlg_started = false;
-    if (completed)
-        local_player_request_dialogue_complete(s_entity_id, s_item_id, s_dialog_code);
-    else
-        local_player_request_dialogue_cancel(s_entity_id, s_item_id);
+    if (completed) {
+        client_event_payload_t p = {0};
+        copy_str(p.entity_id, sizeof p.entity_id, s_entity_id);
+        copy_str(p.code, sizeof p.code, s_dialog_code);
+        client_event_push(CLIENT_EVENT_TALK_DONE, p);
+    }
     modal_closed();
 }
 
@@ -339,7 +340,7 @@ void modal_dialogue_set_quest_style(bool on) {
     s_quest_style = on;
 }
 
-/* Emit dlg_complete (the server validates quest-talk objectives) WITHOUT
+/* Push talk_done (the server validates quest-talk objectives) WITHOUT
  * closing — the entity dialogue stays open so the player can repeat it. */
 static void emit_dlg_complete(void) {
     send_dlg_end(true);
@@ -625,7 +626,7 @@ bool modal_dialogue_handle_click(int mx, int my) {
         /* Inventory lore: read-through closes the modal. */
         modal_dialogue_finish(true);
     } else if (!s_ended) {
-        /* Entity dialogue: first full read emits the dlg_complete the server
+        /* Entity dialogue: first full read pushes the talk_done the server
          * validates for quest-talk, then stays open showing "Repeat Dialog". */
         s_ended = true;
         emit_dlg_complete();

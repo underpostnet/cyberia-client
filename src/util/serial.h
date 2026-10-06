@@ -46,13 +46,9 @@ cJSON* json_pack_item_active(const char* item_id, bool active);
 cJSON* json_pack_player_stasis(bool stasis);
 cJSON* json_pack_chat(const char* to_id, const char* text);
 
-/* Dialogue messages. The server resolves the bound action and quest from its
- * own cache; the client only reports which entity it talked to and (on
- * complete) which dialogue group it finished reading. */
-cJSON* json_pack_dialog_start(const char* entity_id, const char* item_id);
-cJSON* json_pack_dialog_complete(const char* entity_id, const char* item_id,
-                                 const char* dialog_code);
-cJSON* json_pack_dialog_cancel(const char* entity_id, const char* item_id);
+/* The player read dialogue group `dialog_code` with the entity to the end. The
+ * server resolves the bound action and quest from its own cache. */
+cJSON* json_pack_talk_done(const char* entity_id, const char* dialog_code);
 
 /* Abandon an active quest by code — the server moves it to the failed section. */
 cJSON* json_pack_quest_abandon(const char* quest_code);

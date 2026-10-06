@@ -3,11 +3,10 @@
 
 #include <stdbool.h>
 
-/* Dialogue modal for an NPC-type entity (bot or other player). Opening sends
- * "dialogue_start". Each tap advances
- * one line; the last line, a tap outside, or ESC closes and sends
- * "dialogue_end". Draws the text box with modal.c and the entity sprite with
- * ol_stack_ico. */
+/* Dialogue modal for an NPC-type entity (bot or other player). Each tap
+ * advances one line; the last line, a tap outside, or ESC closes it. A full
+ * read pushes "talk_done". Draws the text box with modal.c and the entity
+ * sprite with ol_stack_ico. */
 
 #define DIALOGUE_MAX_LINES 32
 #define DIALOGUE_MAX_TEXT  256
@@ -18,7 +17,7 @@ typedef struct {
     char text[DIALOGUE_MAX_TEXT];
 } DialogueLine;
 
-/* Fires after the modal closes and the "dialogue_end" message goes out. The
+/* Fires after the modal closes. The
  * inventory modal uses it to take focus back after a preview. */
 typedef void (*ModalDialogueOnClose)(void);
 
@@ -39,7 +38,7 @@ void modal_dialogue_open(const char* entity_id, const char* item_id,
                          const char* dialog_code, ModalDialogueRender render,
                          const DialogueLine* lines, int line_count);
 
-/* Sends "dialogue_end", then fires the on-close callback if one is set. */
+/* Dismiss without talk_done, then fire the on-close callback if one is set. */
 void modal_dialogue_close(void);
 
 /* Mark the next/current dialogue as a quest-talk so it renders the quest icon

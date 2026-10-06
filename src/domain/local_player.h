@@ -85,14 +85,6 @@ void  local_player_reset(void);
 void  local_player_set_stasis(bool stasis);
 bool  local_player_in_stasis(void);
 
-/* Dialogue interaction frames. The server resolves the bound action and
- * advances quest progress on dlg_complete — the client only reports the
- * entity and the dialogue group it finished reading. */
-void  local_player_request_dialogue_start(const char* entity_id, const char* item_id);
-void  local_player_request_dialogue_complete(const char* entity_id, const char* item_id,
-                                             const char* dialog_code);
-void  local_player_request_dialogue_cancel(const char* entity_id, const char* item_id);
-
 /* Abandon an active quest by code — server moves it to the failed section. */
 void  local_player_request_quest_abandon(const char* quest_code);
 

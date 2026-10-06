@@ -51,23 +51,6 @@ static void push_entity_item(client_event_kind_t kind, const char* entity_id,
     client_event_push(kind, p);
 }
 
-void local_player_request_dialogue_start(const char* entity_id, const char* item_id) {
-    push_entity_item(CLIENT_EVENT_DIALOG_START, entity_id, item_id);
-}
-
-void local_player_request_dialogue_complete(const char* entity_id, const char* item_id,
-                                            const char* dialog_code) {
-    client_event_payload_t p = {0};
-    copy_str(p.entity_id, sizeof p.entity_id, entity_id);
-    copy_str(p.item_id, sizeof p.item_id, item_id);
-    copy_str(p.code, sizeof p.code, dialog_code);
-    client_event_push(CLIENT_EVENT_DIALOG_COMPLETE, p);
-}
-
-void local_player_request_dialogue_cancel(const char* entity_id, const char* item_id) {
-    push_entity_item(CLIENT_EVENT_DIALOG_CANCEL, entity_id, item_id);
-}
-
 void local_player_request_quest_abandon(const char* quest_code) {
     push_entity_item(CLIENT_EVENT_QUEST_ABANDON, NULL, quest_code);
 }

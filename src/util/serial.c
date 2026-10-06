@@ -83,29 +83,11 @@ cJSON* json_pack_chat(const char* to_id, const char* text) {
     return root;
 }
 
-cJSON* json_pack_dialog_start(const char* entity_id, const char* item_id) {
+cJSON* json_pack_talk_done(const char* entity_id, const char* dialog_code) {
     cJSON* p;
-    cJSON* root = new_message("dialog_start", &p);
+    cJSON* root = new_message("talk_done", &p);
     cJSON_AddStringToObject(p, "entityId", entity_id ? entity_id : "");
-    cJSON_AddStringToObject(p, "itemId", item_id ? item_id : "");
-    return root;
-}
-
-cJSON* json_pack_dialog_complete(const char* entity_id, const char* item_id,
-                                 const char* dialog_code) {
-    cJSON* p;
-    cJSON* root = new_message("dialog_complete", &p);
-    cJSON_AddStringToObject(p, "entityId", entity_id ? entity_id : "");
-    cJSON_AddStringToObject(p, "itemId", item_id ? item_id : "");
     cJSON_AddStringToObject(p, "dialogCode", dialog_code ? dialog_code : "");
-    return root;
-}
-
-cJSON* json_pack_dialog_cancel(const char* entity_id, const char* item_id) {
-    cJSON* p;
-    cJSON* root = new_message("dialog_cancel", &p);
-    cJSON_AddStringToObject(p, "entityId", entity_id ? entity_id : "");
-    cJSON_AddStringToObject(p, "itemId", item_id ? item_id : "");
     return root;
 }
 
