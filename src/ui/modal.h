@@ -73,15 +73,15 @@ bool modal_wide_layout(void);
  *
  * One open counter for every modal that protects the player. Modals stack,
  * so a hand-over that opens the next modal before it closes the last one
- * never reaches 0 and sends nothing. Only the counter talks to local_player.
+ * never reaches 0 and sends nothing. Only the counter sets the stasis flag.
  */
 
-void modal_opened(void);   /* 0 → 1 freezes the local player */
+void modal_opened(void);   /* 0 → 1 puts the local player in stasis */
 void modal_closed(void);   /* 1 → 0 releases it */
 
-/* Send the freeze again while the count holds. A dlg frame moves the server
- * freeze reason off the counter's reason; call this before each one. */
-void modal_reclaim_freeze(void);
+/* Push player_stasis { count > 0 } and set the local flag to match. Call on
+ * every init_data, so a reconnect resends the flag. */
+void modal_push_stasis(void);
 
 
 #endif // MODAL_H

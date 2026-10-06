@@ -317,9 +317,6 @@ static void track_pointer(void) {
 void modal_instance_map_update(float dt) {
     if (!s_m.open) return;
 
-    /* Keep the freeze watchdog from expiring under a player who lingers. */
-    local_player_keep_freeze();
-
     instance_map_data_update(dt);
 
     if (grid_rotation_animating()) {

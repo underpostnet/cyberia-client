@@ -68,15 +68,12 @@ cJSON* json_pack_item_active(const char* item_id, bool active) {
     return root;
 }
 
-static cJSON* pack_freeze(const char* type, const char* reason) {
+cJSON* json_pack_player_stasis(bool stasis) {
     cJSON* p;
-    cJSON* root = new_message(type, &p);
-    cJSON_AddStringToObject(p, "reason", reason ? reason : "");
+    cJSON* root = new_message("player_stasis", &p);
+    cJSON_AddBoolToObject(p, "stasis", stasis);
     return root;
 }
-
-cJSON* json_pack_freeze_start(const char* reason) { return pack_freeze("freeze_start", reason); }
-cJSON* json_pack_freeze_end(const char* reason)   { return pack_freeze("freeze_end", reason); }
 
 cJSON* json_pack_chat(const char* to_id, const char* text) {
     cJSON* p;

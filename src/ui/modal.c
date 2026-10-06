@@ -3,6 +3,7 @@
 #include "text.h"
 #include "toolbar.h"
 #include "domain/local_player.h"
+#include "network/game/client_event.h"
 #include "util/log.h"
 #include <assert.h>
 #include <stdlib.h>
@@ -10,17 +11,18 @@
 
 /* ── Modal lifecycle ──────────────────────────────────────────────────── */
 
-/* The server holds provider sessions under "interact", so the counter uses
- * the same reason and its release always matches. */
-#define MODAL_FREEZE_REASON "interact"
+/* The loading overlay is the first open modal: every join starts in stasis.
+ * Tap-to-Start closes it. */
+static int s_open_count = 1;
 
-static int s_open_count = 0;
+void modal_push_stasis(void) {
+    bool stasis = 0 < s_open_count;
+    client_event_push(CLIENT_EVENT_PLAYER_STASIS, (client_event_payload_t){ .active = stasis });
+    local_player_set_stasis(stasis);
+}
 
 void modal_opened(void) {
-    if (0 == s_open_count++) {
-        local_player_request_freeze(true, MODAL_FREEZE_REASON);
-        local_player_set_frozen(true);
-    }
+    if (0 == s_open_count++) modal_push_stasis();
 }
 
 void modal_closed(void) {
@@ -29,15 +31,7 @@ void modal_closed(void) {
         LOG_ERROR("modal closed more often than opened");
         abort();
     }
-    if (0 == --s_open_count) {
-        local_player_request_freeze(false, MODAL_FREEZE_REASON);
-        local_player_set_frozen(false);
-    }
-}
-
-void modal_reclaim_freeze(void) {
-    assert(0 < s_open_count);
-    local_player_request_freeze(true, MODAL_FREEZE_REASON);
+    if (0 == --s_open_count) modal_push_stasis();
 }
 
 /* ── Shared panel chrome ──────────────────────────────────────────────── */

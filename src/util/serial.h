@@ -43,8 +43,7 @@ cJSON* json_pack_events(cJSON* events);
 cJSON* json_pack_player_action(float target_x, float target_y);
 
 cJSON* json_pack_item_active(const char* item_id, bool active);
-cJSON* json_pack_freeze_start(const char* reason);
-cJSON* json_pack_freeze_end(const char* reason);
+cJSON* json_pack_player_stasis(bool stasis);
 cJSON* json_pack_chat(const char* to_id, const char* text);
 
 /* Dialogue messages. The server resolves the bound action and quest from its

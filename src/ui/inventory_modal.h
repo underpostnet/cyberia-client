@@ -27,7 +27,7 @@ void inventory_modal_switch_slot(int inv_idx);
 
 /* Read-only inspection of an item the player does not hold (another entity's
  * layer, a shop row, an assembler recipe line). No activate or lore control,
- * but it takes the same modal freeze as any other open — the player is reading
+ * but it takes the same modal stasis as any other open — the player is reading
  * a panel with the world still running. */
 void inventory_modal_open_external(const ObjectLayerState* ols);
 

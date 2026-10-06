@@ -1,21 +1,17 @@
 #include "local_player.h"
 
-#include <raylib.h>
 #include <string.h>
 
 #include "network/game/client_event.h"
-#include "util/log.h"
 #include "util/utils.h"
 
 #define LOCAL_PLAYER_DEFAULT_MOVE_SPEED 3.0f
 /* Mirrors entityBaseActionCooldownMs, the instance default. Only in force
  * until the first snapshot carries the player's own, Utility-reduced value. */
 #define LOCAL_PLAYER_DEFAULT_ACTION_COOLDOWN_S 0.5f
-#define LOCAL_FREEZE_TIMEOUT_S          30.0
-#define LOCAL_FREEZE_REASON_MAX         32
 
 static struct {
-    bool          frozen;
+    bool          stasis;
     uint8_t       status_icon;
     float         move_speed;
     float         action_cooldown_s;
@@ -23,65 +19,26 @@ static struct {
     float         portal_hold_progress;
     LocalFctEvent fct[LOCAL_FCT_PENDING_MAX];
     int           fct_count;
-
-    bool          freeze_pending;
-    double        freeze_deadline;
-    char          freeze_reason[LOCAL_FREEZE_REASON_MAX];
 } g_local = {
     .move_speed        = LOCAL_PLAYER_DEFAULT_MOVE_SPEED,
     .action_cooldown_s = LOCAL_PLAYER_DEFAULT_ACTION_COOLDOWN_S,
 };
 
-static void send_freeze_frame(bool start, const char* reason) {
-    client_event_payload_t p = {0};
-    copy_str(p.code, sizeof p.code, reason);
-    client_event_push(start ? CLIENT_EVENT_FREEZE_START : CLIENT_EVENT_FREEZE_END, p);
-    LOG_INFO("[LOCAL_PLAYER] push freeze_%s (reason=%s)",
-             start ? "start" : "end", reason ? reason : "");
-}
-
 LocalPlayer g_local_player = {0};
 
 void local_player_reset(void) {
     memset(&g_local_player, 0, sizeof(g_local_player));
-    g_local.frozen               = false;
+    g_local.stasis               = false;
     g_local.status_icon          = 0;
     g_local.move_speed           = LOCAL_PLAYER_DEFAULT_MOVE_SPEED;
     g_local.action_cooldown_s    = LOCAL_PLAYER_DEFAULT_ACTION_COOLDOWN_S;
     g_local.on_portal            = false;
     g_local.portal_hold_progress = 0.0f;
     g_local.fct_count            = 0;
-    g_local.freeze_pending  = false;
-    g_local.freeze_deadline = 0.0;
-    g_local.freeze_reason[0] = '\0';
 }
 
-void local_player_set_frozen(bool frozen) { g_local.frozen = frozen; }
-bool local_player_is_frozen(void)         { return g_local.frozen; }
-
-void local_player_request_freeze(bool start, const char* reason) {
-    send_freeze_frame(start, reason);
-    if (start) {
-        strncpy(g_local.freeze_reason, reason ? reason : "", LOCAL_FREEZE_REASON_MAX - 1);
-        g_local.freeze_reason[LOCAL_FREEZE_REASON_MAX - 1] = '\0';
-        g_local.freeze_pending  = true;
-        g_local.freeze_deadline = GetTime() + LOCAL_FREEZE_TIMEOUT_S;
-    } else {
-        g_local.freeze_pending = false;
-    }
-}
-
-void local_player_keep_freeze(void) {
-    if (!g_local.freeze_pending) return;
-    g_local.freeze_deadline = GetTime() + LOCAL_FREEZE_TIMEOUT_S;
-}
-
-static void arm_freeze_watchdog(const char* reason) {
-    strncpy(g_local.freeze_reason, reason ? reason : "", LOCAL_FREEZE_REASON_MAX - 1);
-    g_local.freeze_reason[LOCAL_FREEZE_REASON_MAX - 1] = '\0';
-    g_local.freeze_pending  = true;
-    g_local.freeze_deadline = GetTime() + LOCAL_FREEZE_TIMEOUT_S;
-}
+void local_player_set_stasis(bool stasis) { g_local.stasis = stasis; }
+bool local_player_in_stasis(void)         { return g_local.stasis; }
 
 /* Push one event that names an entity and an item. */
 static void push_entity_item(client_event_kind_t kind, const char* entity_id,
@@ -94,16 +51,6 @@ static void push_entity_item(client_event_kind_t kind, const char* entity_id,
 
 void local_player_request_dialogue_start(const char* entity_id, const char* item_id) {
     push_entity_item(CLIENT_EVENT_DIALOG_START, entity_id, item_id);
-    arm_freeze_watchdog("dialogue");
-}
-
-/* Disarm the watchdog only while it still belongs to the dialogue. A caller
- * that re-bridged to another modal a moment earlier (modal_dialogue hands the
- * freeze back to "interact" before emitting the dlg frame) owns the watchdog
- * now, and clearing it here would silently disable local_player_keep_freeze
- * for the rest of that session. */
-static void release_dialogue_watchdog(void) {
-    if (0 == strcmp(g_local.freeze_reason, "dialogue")) g_local.freeze_pending = false;
 }
 
 void local_player_request_dialogue_complete(const char* entity_id, const char* item_id,
@@ -113,12 +60,10 @@ void local_player_request_dialogue_complete(const char* entity_id, const char* i
     copy_str(p.item_id, sizeof p.item_id, item_id);
     copy_str(p.code, sizeof p.code, dialog_code);
     client_event_push(CLIENT_EVENT_DIALOG_COMPLETE, p);
-    release_dialogue_watchdog();
 }
 
 void local_player_request_dialogue_cancel(const char* entity_id, const char* item_id) {
     push_entity_item(CLIENT_EVENT_DIALOG_CANCEL, entity_id, item_id);
-    release_dialogue_watchdog();
 }
 
 void local_player_request_quest_abandon(const char* quest_code) {
@@ -175,15 +120,6 @@ void local_player_request_storage_transfer(const char* entity_id, const char* it
     copy_str(p.entity_id, sizeof p.entity_id, entity_id);
     copy_str(p.item_id, sizeof p.item_id, item_id);
     client_event_push(CLIENT_EVENT_STORAGE_TRANSFER, p);
-}
-
-void local_player_on_tick(void) {
-    if (!g_local.freeze_pending) { return; }
-    if (GetTime() < g_local.freeze_deadline) { return; }
-    LOG_WARN("[LOCAL_PLAYER] freeze watchdog fired (reason=%s) — auto freeze_end",
-             g_local.freeze_reason);
-    send_freeze_frame(false, g_local.freeze_reason);
-    g_local.freeze_pending = false;
 }
 
 void    local_player_set_status_icon(uint8_t id) { g_local.status_icon = id; }

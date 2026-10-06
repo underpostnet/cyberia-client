@@ -31,6 +31,7 @@
 #include "fx/fx_tap.h"
 #include "ui/interaction_bubble.h"
 #include "ui/text.h"
+#include "ui/modal.h"
 #include "domain/local_player.h"
 #include "domain/local_player_view.h"
 
@@ -103,7 +104,6 @@ static void gameloop(void) {
     fetch_frame_begin((double)frame_dt * 1000, !player_render_ready() || !immediate_scene_ready() || local_player_on_portal());
     text_font_sync();
     game_client_on_tick();
-    local_player_on_tick();
     audio_context_update(frame_dt);
     audio_update(frame_dt);
 
@@ -120,8 +120,8 @@ static void gameloop(void) {
         while (input_pop(&frame_input, &evt)) {
             bool consumed = false;
             if(!consumed && INPUT_TAP == evt.type) {
-                /* FrozenInteractionState — server says we're frozen, drop the tap. */
-                if (local_player_is_frozen()) { consumed = true; }
+                /* A player in stasis does not act: drop the tap. */
+                if (local_player_in_stasis()) { consumed = true; }
                 if (g_game_state.player.base.respawn_in > 0.0f) { consumed = true; }
             }
             // unconsumed event back to the queue
@@ -240,7 +240,7 @@ static void preloading_loop(void) {
         fetch_event("gameplay_start", s_trace_map, 0, 0);
         audio_start();
         loading_bridge_hide();
-        client_confirm_loading_done(); /* release the server "loading" freeze */
+        modal_closed(); /* the loading overlay is the first open modal */
         emscripten_cancel_main_loop();
         emscripten_set_main_loop(gameloop, 0, 1);
     }

@@ -8,7 +8,7 @@
 
 #include <raylib.h>
 
-/* Authoritative world-state mirror. Camera, dev-UI, frozen flag, and
+/* Authoritative world-state mirror. Camera, dev-UI, stasis flag, and
  * per-frame UI bookkeeping have been moved to their owning modules; what
  * remains here is strictly gameplay/world data. */
 GameState g_game_state = {0};

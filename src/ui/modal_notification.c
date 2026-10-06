@@ -734,7 +734,6 @@ void modal_notification_update(float dt) {
         }
         hold_result_items();
         fx_assemble_show(card);
-        local_player_keep_freeze();
         s_craft_age += dt;
         if (s_craft_age >= s_craft_total) {
             /* The inputs are spent: spray each out of its own card slot, the

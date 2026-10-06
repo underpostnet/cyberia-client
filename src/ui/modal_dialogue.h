@@ -4,7 +4,7 @@
 #include <stdbool.h>
 
 /* Dialogue modal for an NPC-type entity (bot or other player). Opening sends
- * "dialogue_start", which freezes the player server-side. Each tap advances
+ * "dialogue_start". Each tap advances
  * one line; the last line, a tap outside, or ESC closes and sends
  * "dialogue_end". Draws the text box with modal.c and the entity sprite with
  * ol_stack_ico. */

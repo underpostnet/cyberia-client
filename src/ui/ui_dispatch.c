@@ -157,8 +157,8 @@ static bool ui_dispatch_escape(void) {
 static bool ui_consume_event(const input_event_t* e) {
     bool consumed = false;
     /* A synthetic tap has no pointer on its target pixel, so HUD chrome
-     * must not absorb it. Modals still block it: they freeze the local
-     * player, and main drops taps while frozen. */
+     * must not absorb it. Modals still block it: they put the local player
+     * in stasis, and main drops taps in stasis. */
     if(!consumed && INPUT_TAP == e->type && !e->synthetic) {
         int mx = (int)e->screen_position.x;
         int my = (int)e->screen_position.y;

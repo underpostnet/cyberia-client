@@ -20,7 +20,7 @@
  *   - domain/camera.h                Camera2D and follow smoothing
  *   - domain/presentation_runtime.h  palette, status icon visuals, dev_ui
  *   - domain/local_player.h          identity, map code, coins, inventory,
- *                                    frozen flag, FCT queue, self status
+ *                                    stasis flag, FCT queue, self status
  *                                    icon, authoritative move speed
  *   - ui/ui_state.h                  skill_map
  */

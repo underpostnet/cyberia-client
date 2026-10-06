@@ -27,8 +27,7 @@ typedef uint32_t cyberia_input_seq_t;
 typedef enum {
     CLIENT_EVENT_PLAYER_ACTION,
     CLIENT_EVENT_ITEM_ACTIVE,
-    CLIENT_EVENT_FREEZE_START,
-    CLIENT_EVENT_FREEZE_END,
+    CLIENT_EVENT_PLAYER_STASIS,
     CLIENT_EVENT_CHAT,
     CLIENT_EVENT_DIALOG_START,
     CLIENT_EVENT_DIALOG_COMPLETE,
@@ -50,10 +49,10 @@ typedef struct {
     float  target_x, target_y;                 /* player_action */
     char   entity_id[CLIENT_EVENT_ID_BYTES];
     char   item_id[CLIENT_EVENT_ID_BYTES];     /* also chat to_id, quest_code */
-    char   code[CLIENT_EVENT_ID_BYTES];        /* reason, dialog_code */
+    char   code[CLIENT_EVENT_ID_BYTES];        /* dialog_code */
     char   text[CHAT_LINE_BYTES];              /* chat */
     int    quantity, recipe_index, from_index, to_index;
-    bool   active, deposit;
+    bool   active, deposit;                    /* active: also player_stasis */
 } client_event_payload_t;
 
 typedef struct {

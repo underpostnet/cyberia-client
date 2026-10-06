@@ -24,10 +24,6 @@ void game_client_on_tick(void);
  * graduates from AWAITING_INIT to RUNNING. */
 void client_on_init_received(void);
 
-/* The player tapped Start on the loading screen: release the server's
- * "loading" freeze. Reconnect joins re-release automatically. */
-void client_confirm_loading_done(void);
-
 /** Pack a message and send it. Takes ownership of msg. Only the handshake
  * and client_event_flush call it; every input goes through client_event. */
 bool network_send(cJSON* msg);

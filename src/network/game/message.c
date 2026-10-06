@@ -395,7 +395,7 @@ static void unpack_self(const cJSON* e) {
     g_local_player.inventory_count = read_layers(e, "inventory", g_local_player.inventory,
                                                  MAX_OBJECT_LAYERS, FETCH_P1);
 
-    local_player_set_frozen(serial_get_bool_default(e, "frozen", false));
+    local_player_set_stasis(serial_get_bool_default(e, "frozen", false));
     local_player_set_status_icon(p->base.status_icon);
 
     /* Authoritative move speed — grid units per second. The server pushes it

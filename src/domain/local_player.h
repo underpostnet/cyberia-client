@@ -15,7 +15,7 @@
  *
  *   - identity, map code, coin balance, progression and the full inventory
  *     (g_local_player)
- *   - frozen flag (FrozenInteractionState)
+ *   - stasis flag (modal protection)
  *   - status icon ID (overhead UI hint)
  *   - authoritative move speed (cells/second) for the prediction integrator
  *   - per-frame FCT event queue drained by the floating combat text module
@@ -81,29 +81,13 @@ typedef struct {
 /* Reset all local-player flags to their post-disconnect defaults. */
 void  local_player_reset(void);
 
-/* Frozen flag — authoritative server signal. */
-void  local_player_set_frozen(bool frozen);
-bool  local_player_is_frozen(void);
+/* Stasis flag. The modal counter predicts it; the snapshot replaces it. */
+void  local_player_set_stasis(bool stasis);
+bool  local_player_in_stasis(void);
 
-/* Request the server to freeze/unfreeze the local player for an interaction
- * (dialogue, inventory, ...). Owns the freeze_start/freeze_end dispatch so UI
- * modules never drive the wire directly. A freeze_start arms a client-side
- * watchdog that auto-sends freeze_end if the matching end never arrives
- * (e.g. the UI closed via a path that skipped it, or a crash interrupted it). */
-void  local_player_request_freeze(bool start, const char* reason);
-
-/* Renew the freeze watchdog without touching the wire. A modal that owns the
- * freeze calls this every frame it stays open, so a player who lingers past
- * LOCAL_FREEZE_TIMEOUT_S is not auto-thawed — and killed — while still inside
- * it. The server freeze has no timeout of its own; only the matching
- * freeze_end (or this watchdog) releases it. */
-void  local_player_keep_freeze(void);
-
-/* Dialogue interaction frames. dlg_start freezes the player server-side
- * (modal protection) and arms the same watchdog as a freeze with reason
- * "dialogue"; dlg_complete / dlg_cancel release it. The server resolves the
- * bound action and advances quest progress on dlg_complete — the client
- * only reports the entity and the dialogue group it finished reading. */
+/* Dialogue interaction frames. The server resolves the bound action and
+ * advances quest progress on dlg_complete — the client only reports the
+ * entity and the dialogue group it finished reading. */
 void  local_player_request_dialogue_start(const char* entity_id, const char* item_id);
 void  local_player_request_dialogue_complete(const char* entity_id, const char* item_id,
                                              const char* dialog_code);
@@ -137,9 +121,6 @@ void  local_player_request_storage_swap(const char* entity_id, int from_index, i
 void  local_player_request_storage_transfer(const char* entity_id, const char* item_id,
                                             int quantity, bool deposit,
                                             int from_index, int to_index);
-
-/* Advance the freeze watchdog; call once per render frame. */
-void  local_player_on_tick(void);
 
 /* Status icon ID (mirrors entity status indicator for self). */
 void     local_player_set_status_icon(uint8_t id);

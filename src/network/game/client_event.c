@@ -36,8 +36,7 @@ static cJSON* pack_event(const client_event_t* e) {
     switch (e->kind) {
     case CLIENT_EVENT_PLAYER_ACTION:   return json_pack_player_action(p->target_x, p->target_y);
     case CLIENT_EVENT_ITEM_ACTIVE:     return json_pack_item_active(p->item_id, p->active);
-    case CLIENT_EVENT_FREEZE_START:    return json_pack_freeze_start(p->code);
-    case CLIENT_EVENT_FREEZE_END:      return json_pack_freeze_end(p->code);
+    case CLIENT_EVENT_PLAYER_STASIS:   return json_pack_player_stasis(p->active);
     case CLIENT_EVENT_CHAT:            return json_pack_chat(p->item_id, p->text);
     case CLIENT_EVENT_DIALOG_START:    return json_pack_dialog_start(p->entity_id, p->item_id);
     case CLIENT_EVENT_DIALOG_COMPLETE: return json_pack_dialog_complete(p->entity_id, p->item_id, p->code);

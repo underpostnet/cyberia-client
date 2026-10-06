@@ -974,9 +974,6 @@ bool modal_interact_handle_wheel(float wheel_delta) {
 
 void modal_interact_update(float dt) {
     if (!s_open) return;
-    /* Keep the freeze watchdog from expiring under a player who lingers — a
-     * shop session easily outlasts it, and a thawed player is a killable one. */
-    local_player_keep_freeze();
     s_age += dt;
 
     /* Resolve the card geometry before anything that lays out against it —

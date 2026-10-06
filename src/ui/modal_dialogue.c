@@ -300,16 +300,12 @@ void modal_dialogue_open(const char* entity_id, const char* item_id,
     else if (held && !s_dlg_started) modal_closed();
 }
 
-/* Finish the dialogue. `completed` true → all lines were read (dlg_complete,
- * the only path that can satisfy a quest-talk objective); false → dismissed
- * early (dlg_cancel, no progress). Both release the dialogue freeze. */
-/* Sends the closing dlg frame and drops this dialogue's modal count. The
- * reclaim first makes the server reject the dialogue thaw, so only the
- * counter releases the freeze. */
+/* Sends the closing dlg frame and drops this dialogue's modal count.
+ * `completed` true → all lines were read (dlg_complete, the only path that
+ * can satisfy a quest-talk objective); false → dismissed early (dlg_cancel). */
 static void send_dlg_end(bool completed) {
     if (!s_dlg_started) return;
     s_dlg_started = false;
-    modal_reclaim_freeze();
     if (completed)
         local_player_request_dialogue_complete(s_entity_id, s_item_id, s_dialog_code);
     else
