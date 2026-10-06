@@ -2,6 +2,7 @@
 
 #include <string.h>
 
+#include "domain/vault_ops.h"
 #include "network/game/client_event.h"
 #include "util/utils.h"
 
@@ -35,6 +36,7 @@ void local_player_reset(void) {
     g_local.on_portal            = false;
     g_local.portal_hold_progress = 0.0f;
     g_local.fct_count            = 0;
+    vault_ops_clear();
 }
 
 void local_player_set_stasis(bool stasis) { g_local.stasis = stasis; }
@@ -96,30 +98,6 @@ void local_player_request_craft_cancel(void) {
 
 void local_player_request_storage_open(const char* entity_id) {
     push_entity_item(CLIENT_EVENT_STORAGE_OPEN, entity_id, NULL);
-}
-
-void local_player_request_storage_move(const char* entity_id, int from_index, int to_index,
-                                       int quantity) {
-    client_event_payload_t p = { .from_index = from_index, .to_index = to_index,
-                                 .quantity = quantity };
-    copy_str(p.entity_id, sizeof p.entity_id, entity_id);
-    client_event_push(CLIENT_EVENT_STORAGE_MOVE, p);
-}
-
-void local_player_request_storage_swap(const char* entity_id, int from_index, int to_index) {
-    client_event_payload_t p = { .from_index = from_index, .to_index = to_index };
-    copy_str(p.entity_id, sizeof p.entity_id, entity_id);
-    client_event_push(CLIENT_EVENT_STORAGE_SWAP, p);
-}
-
-void local_player_request_storage_transfer(const char* entity_id, const char* item_id,
-                                           int quantity, bool deposit,
-                                           int from_index, int to_index) {
-    client_event_payload_t p = { .quantity = quantity, .deposit = deposit,
-                                 .from_index = from_index, .to_index = to_index };
-    copy_str(p.entity_id, sizeof p.entity_id, entity_id);
-    copy_str(p.item_id, sizeof p.item_id, item_id);
-    client_event_push(CLIENT_EVENT_STORAGE_TRANSFER, p);
 }
 
 void    local_player_set_status_icon(uint8_t id) { g_local.status_icon = id; }

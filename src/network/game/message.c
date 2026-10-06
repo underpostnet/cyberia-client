@@ -13,6 +13,7 @@
 #include "domain/local_player.h"
 #include "domain/presentation_runtime.h"
 #include "domain/audio_context.h"
+#include "domain/vault_ops.h"
 #include "audio/audio.h"
 #include "audio/audio_events.h"
 #include "replication.h"
@@ -394,6 +395,8 @@ static void unpack_self(const cJSON* e) {
      * inventory bottom bar. */
     g_local_player.inventory_count = read_layers(e, "inventory", g_local_player.inventory,
                                                  MAX_OBJECT_LAYERS, FETCH_P1);
+    /* The open vault's pending ops stay on top of the server's inventory. */
+    vault_ops_apply_to_inventory();
 
     local_player_set_stasis(serial_get_bool_default(e, "frozen", false));
     local_player_set_status_icon(p->base.status_icon);
@@ -789,16 +792,13 @@ static void json_unpack_shop_ack(const cJSON* payload) {
                             (Color){ 210, 120, 110, 255 });
 }
 
-/* storage_state is the authoritative vault, pushed after open and after every
- * mutation. The client adopts it wholesale over its optimistic view, so a
- * rejected drag self-heals without a bespoke error path. */
+/* storage_state is the vault, sent once per open. It seeds the grid. */
 static void json_unpack_storage_state(const cJSON* payload) {
     char entity_id[64] = {0};
     serial_get_string(payload, "entityId", entity_id, sizeof(entity_id));
     int capacity = serial_get_int_default(payload, "capacity", 0);
 
     ObjectLayerState slots[ITEM_SLOT_GRID_MAX_SLOTS];
-    int indices[ITEM_SLOT_GRID_MAX_SLOTS];
     int count = 0;
 
     cJSON* arr = serial_get_array(payload, "slots");
@@ -810,11 +810,10 @@ static void json_unpack_storage_state(const cJSON* payload) {
             if (0 != serial_get_string(row, "itemId", slots[count].item_id,
                                        sizeof(slots[count].item_id))) continue;
             slots[count].quantity = serial_get_int_default(row, "qty", 0);
-            indices[count] = serial_get_int_default(row, "index", 0);
             count++;
         }
     }
-    modal_interact_storage_state(entity_id, capacity, slots, indices, count);
+    modal_interact_storage_state(entity_id, capacity, slots, count);
 }
 
 /* craft_ack answers the start of an assembly. Accepted: the assembly modal

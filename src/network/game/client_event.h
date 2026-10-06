@@ -4,6 +4,8 @@
 #include <stdbool.h>
 #include <stdint.h>
 
+#include "object_layer.h"
+
 /* Client events: the one uplink of input to the server.
  *
  * Any module pushes an action here and touches no stamp, no sequence and no
@@ -38,10 +40,18 @@ typedef enum {
     CLIENT_EVENT_CRAFT_ITEM,
     CLIENT_EVENT_CRAFT_CANCEL,
     CLIENT_EVENT_STORAGE_OPEN,
-    CLIENT_EVENT_STORAGE_MOVE,
-    CLIENT_EVENT_STORAGE_SWAP,
-    CLIENT_EVENT_STORAGE_TRANSFER,
+    CLIENT_EVENT_ITEM_OPS,
 } client_event_kind_t;
+
+/* Matches the server cap on one item_ops list (storageMaxSlots). */
+#define CLIENT_EVENT_ITEM_OPS_MAX 64
+
+/* One vault op: qty of item_id into the vault when to_vault, else out of it. */
+typedef struct {
+    char item_id[MAX_ITEM_ID_LENGTH];
+    int  qty;
+    bool to_vault;
+} client_event_item_op_t;
 
 /* One flat payload, the same shape as the server inputPayload. Each kind
  * reads only its own fields. */
@@ -51,8 +61,12 @@ typedef struct {
     char   item_id[CLIENT_EVENT_ID_BYTES];     /* also chat to_id, quest_code */
     char   code[CLIENT_EVENT_ID_BYTES];        /* dialog_code */
     char   text[CHAT_LINE_BYTES];              /* chat */
-    int    quantity, recipe_index, from_index, to_index;
-    bool   active, deposit;                    /* active: also player_stasis */
+    int    quantity, recipe_index;
+    bool   active;                             /* also player_stasis */
+    /* ponytail: inline list, ~4.6 KB in every queue slot (~2.4 MB BSS).
+     * Move it to a side pool keyed by sequence if memory matters. */
+    int    op_count;                           /* item_ops */
+    client_event_item_op_t ops[CLIENT_EVENT_ITEM_OPS_MAX];
 } client_event_payload_t;
 
 typedef struct {

@@ -111,16 +111,8 @@ void  local_player_request_craft(const char* entity_id, int recipe_index);
 /* Abort the running assembly — the server refunds its ingredients. */
 void  local_player_request_craft_cancel(void);
 
-/* Storage vault mutations, addressing slots by linear index. The server answers
- * each with the authoritative vault, so the client applies its drop
- * optimistically and reconciles from that. */
+/* Bind a storage vault. The server answers once with storage_state. */
 void  local_player_request_storage_open(const char* entity_id);
-void  local_player_request_storage_move(const char* entity_id, int from_index, int to_index,
-                                        int quantity);
-void  local_player_request_storage_swap(const char* entity_id, int from_index, int to_index);
-void  local_player_request_storage_transfer(const char* entity_id, const char* item_id,
-                                            int quantity, bool deposit,
-                                            int from_index, int to_index);
 
 /* Status icon ID (mirrors entity status indicator for self). */
 void     local_player_set_status_icon(uint8_t id);

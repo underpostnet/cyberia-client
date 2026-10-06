@@ -12,6 +12,7 @@
 #include "fx/fx_item_transfer.h"
 #include "domain/local_player.h"
 #include "domain/presentation_runtime.h"
+#include "domain/vault_ops.h"
 #include "domain/viewport.h"
 #include "game_state.h"
 #include "world_types.h"
@@ -445,6 +446,8 @@ static int leading_tab(void) {
 /* Switch tabs, replaying the content pop-in. */
 static void set_tab(int tab) {
     if (tab == s_tab) return;
+    /* Report the vault work before a shop, craft or item event can follow it. */
+    vault_ops_send(s_entity_id);
     s_tab = tab;
     s_tab_age = 0.0f;
 }
@@ -832,6 +835,7 @@ void modal_interact_open(const char* entity_id, const char* display_name,
      * Reopening the same entity (e.g. returning from item inspection) keeps
      * it, so the modal still renders even if the entity left the AOI. */
     bool same_entity = (0 == strcmp(s_entity_id, entity_id ? entity_id : ""));
+    vault_ops_send(s_entity_id);
     if (!same_entity) {
         s_cached_layer_count = 0;
         es_clear();
@@ -915,6 +919,7 @@ void modal_interact_open(const char* entity_id, const char* display_name,
 }
 
 void modal_interact_close(void) {
+    vault_ops_send(s_entity_id);
     bool was_open = s_open;
     s_open = false;
     s_dialogue_open_requested = false;
@@ -2179,13 +2184,12 @@ static Rectangle storage_scroll_lane(Rectangle content) {
 }
 
 void modal_interact_storage_state(const char* entity_id, int capacity,
-                                  const ObjectLayerState* slots, const int* indices,
-                                  int count) {
+                                  const ObjectLayerState* slots, int count) {
     if (!s_open || 0 != strcmp(s_entity_id, entity_id ? entity_id : "")) return;
     if (capacity != s_storage_grid.capacity) item_slot_grid_init(&s_storage_grid, capacity);
     item_slot_grid_clear(&s_storage_grid);
     for (int i = 0; i < count; i++) {
-        item_slot_grid_set(&s_storage_grid, indices[i], &slots[i]);
+        item_slot_grid_set(&s_storage_grid, i, &slots[i]);
     }
     s_storage_bound = true;
 }
@@ -2231,8 +2235,7 @@ static void draw_storage_tab(Rectangle content) {
     }
 }
 
-/* Apply a drop locally so the grid answers the pointer immediately; the
- * storage_state that follows replaces it with the authoritative layout.
+/* Move a stack inside the grid. Cell order is presentation, so nothing is sent.
  * A `qty` below the stack splits it, leaving the remainder behind, and landing
  * on the same item merges into it. */
 static void storage_apply_local_move(int from, int to, int qty) {
@@ -2257,7 +2260,7 @@ static void storage_apply_local_swap(int from, int to) {
     item_slot_grid_animate_move(&s_storage_grid, to, from);
 }
 
-/* Predict the slot where the server will merge or append the withdrawn item. */
+/* The bar slot where the withdrawn item merges or appends. */
 static Rectangle storage_bar_slot_rect(const char* item_id) {
     Rectangle slot;
     if (inventory_bar_predicted_item_slot_rect(item_id, &slot)) return slot;
@@ -2279,12 +2282,15 @@ static void storage_drop_out(const ItemSlotGridEvent* ev, int qty) {
      * thing that says where the stack went. */
     fx_item_transfer_spawn_to_inventory(&taken, from,
                                         storage_bar_slot_rect(taken.item_id));
-    local_player_request_storage_transfer(s_entity_id, taken.item_id, qty, false,
-                                          ev->from_index, 0);
+    vault_ops_push(taken.item_id, qty, false);
 }
 
 /* Carry out a resolved vault move at `qty` units. */
 static void storage_commit(const ItemSlotGridEvent* ev, int qty) {
+    /* A full op list refuses the drop, so the stack snaps back. */
+    bool crosses = ITEM_SLOT_GRID_EVENT_DROP_OUT == ev->type ||
+                   ITEM_SLOT_GRID_EVENT_DROP_IN == ev->type;
+    if (crosses && vault_ops_full()) return;
     /* Every vault mutation passes through here — deposit, withdraw, a move inside the grid, a
      * swap of two cells — so one cue covers them all. A tap only inspects and stays silent. */
     switch (ev->type) {
@@ -2300,12 +2306,9 @@ static void storage_commit(const ItemSlotGridEvent* ev, int qty) {
     switch (ev->type) {
         case ITEM_SLOT_GRID_EVENT_MOVE:
             storage_apply_local_move(ev->from_index, ev->to_index, qty);
-            local_player_request_storage_move(s_entity_id, ev->from_index,
-                                              ev->to_index, qty);
             return;
         case ITEM_SLOT_GRID_EVENT_SWAP:
             storage_apply_local_swap(ev->from_index, ev->to_index);
-            local_player_request_storage_swap(s_entity_id, ev->from_index, ev->to_index);
             return;
         case ITEM_SLOT_GRID_EVENT_DROP_OUT:
             storage_drop_out(ev, qty);
@@ -2324,8 +2327,7 @@ static void storage_commit(const ItemSlotGridEvent* ev, int qty) {
                 &s_storage_grid, ev->to_index,
                 (Vector2){ ev->point.x - half, ev->point.y - half });
             fx_inventory_bar_qty_suppress(ev->payload.item_id);
-            local_player_request_storage_transfer(s_entity_id, ev->payload.item_id,
-                                                  qty, true, 0, ev->to_index);
+            vault_ops_push(ev->payload.item_id, qty, true);
             return;
         }
         case ITEM_SLOT_GRID_EVENT_TAP:

@@ -73,20 +73,12 @@ cJSON* json_pack_craft_item(const char* entity_id, int recipe_index);
 /* Abort the running assembly. The server refunds its ingredients. */
 cJSON* json_pack_craft_cancel(void);
 
-/* Storage vault. The server owns the contents; the client names slots by their
- * linear index — how they wrap into rows is presentation — and reconciles from
- * the storage_state it sends back after every mutation.
- *   open     — bind the vault and read its contents
- *   move     — relocate `quantity` of a slot onto a free index, or onto one
- *              holding the same item, which merges the two stacks
- *   swap     — exchange two occupied slots
- *   transfer — deposit a stack from the inventory, or withdraw one into it */
+/* Storage vault. open binds the vault and reads its contents. item_ops reports
+ * the deposits and withdrawals of one session; the server replays them in
+ * order. json_pack_item_ops takes ownership of the ops array. */
 cJSON* json_pack_storage_open(const char* entity_id);
-cJSON* json_pack_storage_move(const char* entity_id, int from_index, int to_index,
-                              int quantity);
-cJSON* json_pack_storage_swap(const char* entity_id, int from_index, int to_index);
-cJSON* json_pack_storage_transfer(const char* entity_id, const char* item_id, int quantity,
-                                  bool deposit, int from_index, int to_index);
+cJSON* json_pack_item_op(const char* item_id, int qty, bool to_vault);
+cJSON* json_pack_item_ops(const char* entity_id, cJSON* ops);
 
 /* ── Read helpers ───────────────────────────────────────────────────── */
 

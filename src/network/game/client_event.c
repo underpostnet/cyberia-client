@@ -47,13 +47,15 @@ static cJSON* pack_event(const client_event_t* e) {
     case CLIENT_EVENT_CRAFT_ITEM:      return json_pack_craft_item(p->entity_id, p->recipe_index);
     case CLIENT_EVENT_CRAFT_CANCEL:    return json_pack_craft_cancel();
     case CLIENT_EVENT_STORAGE_OPEN:    return json_pack_storage_open(p->entity_id);
-    case CLIENT_EVENT_STORAGE_MOVE:
-        return json_pack_storage_move(p->entity_id, p->from_index, p->to_index, p->quantity);
-    case CLIENT_EVENT_STORAGE_SWAP:
-        return json_pack_storage_swap(p->entity_id, p->from_index, p->to_index);
-    case CLIENT_EVENT_STORAGE_TRANSFER:
-        return json_pack_storage_transfer(p->entity_id, p->item_id, p->quantity, p->deposit,
-                                          p->from_index, p->to_index);
+    case CLIENT_EVENT_ITEM_OPS: {
+        cJSON* ops = cJSON_CreateArray();
+        assert(ops);
+        for (int i = 0; i < p->op_count; i++) {
+            cJSON_AddItemToArray(ops, json_pack_item_op(p->ops[i].item_id, p->ops[i].qty,
+                                                        p->ops[i].to_vault));
+        }
+        return json_pack_item_ops(p->entity_id, ops);
+    }
     }
     assert(false && "unknown client event kind");
     return NULL;
