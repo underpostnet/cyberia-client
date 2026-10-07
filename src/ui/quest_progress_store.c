@@ -1,5 +1,8 @@
 #include "quest_progress_store.h"
+#include "quest_cache.h"
 
+#include "audio/audio.h"
+#include "audio/audio_events.h"
 #include "util/utils.h"
 
 #include <string.h>
@@ -26,25 +29,65 @@ static QuestProgressEntry* find_by_code(const char* code) {
     return NULL;
 }
 
-bool quest_progress_store_upsert(const char* code, const char* title, const char* description,
-                        const char* status_str, const char* active_step,
-                        const char* objectives) {
-    if (!code || '\0' == code[0]) return false;
+static QuestProgressEntry* upsert(const char* code, const char* status_str,
+                                  const char* active_step, const char* objectives) {
+    if (!code || '\0' == code[0]) return NULL;
 
-    bool        added = false;
-    QuestProgressEntry* e     = find_by_code(code);
+    QuestProgressEntry* e = find_by_code(code);
     if (NULL == e) {
-        if (s_count >= QUEST_PROGRESS_STORE_CAP) return false;
+        if (s_count >= QUEST_PROGRESS_STORE_CAP) return NULL;
         e = &s_entries[s_count++];
+        memset(e, 0, sizeof(*e));
         copy_str(e->code, META_CACHE_CODE_MAX, code);
-        added = true;
+        /* A miss fetches; quest_cache sets the title through set_meta. */
+        const QuestMetadataEntry* qm = quest_cache_get(code);
+        if (qm) {
+            copy_str(e->title, QUEST_TITLE_MAX, qm->title);
+            copy_str(e->description, QUEST_DESC_MAX, qm->description);
+        }
     }
-    if (title) copy_str(e->title, QUEST_TITLE_MAX, title);
-    if (description) copy_str(e->description, QUEST_DESC_MAX, description);
     copy_str(e->active_step, QUEST_STEP_MAX, active_step);
     copy_str(e->objectives,  QUEST_OBJECTIVES_MAX, objectives);
     e->status = quest_progress_store_parse_status(status_str);
-    return added;
+    return e;
+}
+
+void quest_progress_store_upsert(const char* code, const char* status_str,
+                                 const char* active_step, const char* objectives) {
+    upsert(code, status_str, active_step, objectives);
+}
+
+void quest_progress_store_apply(const char* code, const char* status_str,
+                                const char* active_step, const char* objectives,
+                                bool granted) {
+    const QuestProgressEntry* prev = code ? find_by_code(code) : NULL;
+    QuestStatus status = quest_progress_store_parse_status(status_str);
+
+    QuestChange change = QUEST_CHANGE_NONE;
+    if (QUEST_COMPLETED == status && !(prev && QUEST_COMPLETED == prev->status)) {
+        change = QUEST_CHANGE_COMPLETED;
+    } else if (granted) {
+        change = QUEST_CHANGE_ACCEPTED;
+    } else if (QUEST_ACTIVE == status && prev && QUEST_ACTIVE == prev->status &&
+               '\0' != prev->active_step[0] && 0 != strcmp(prev->active_step, active_step)) {
+        /* The step text changes exactly when the previous step finished. */
+        change = QUEST_CHANGE_STEP_DONE;
+    }
+
+    QuestProgressEntry* e = upsert(code, status_str, active_step, objectives);
+    if (NULL == e || QUEST_CHANGE_NONE == change) return;
+    e->change = change;
+    if (QUEST_CHANGE_COMPLETED == change) audio_event(AUDIO_EVENT_VICTORY);
+}
+
+const QuestProgressEntry* quest_progress_store_take_change(QuestChange* change) {
+    for (int i = 0; i < s_count; ++i) {
+        if (QUEST_CHANGE_NONE == s_entries[i].change) continue;
+        *change = s_entries[i].change;
+        s_entries[i].change = QUEST_CHANGE_NONE;
+        return &s_entries[i];
+    }
+    return NULL;
 }
 
 int quest_progress_store_count(QuestStatus status) {

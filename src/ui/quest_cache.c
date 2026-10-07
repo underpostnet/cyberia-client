@@ -31,16 +31,13 @@ static MetaCache s_cache = {
     .ingest     = ingest_quest_doc,
 };
 
-const QuestMetadataEntry* quest_cache_get(const char* code) {
-    return meta_cache_find(&s_cache, code);
-}
-
 static void on_quest_fetched(const FetchResponse* r) {
     meta_cache_on_fetched(&s_cache, r);
 }
 
-void quest_cache_fetch(const char* code) {
+const QuestMetadataEntry* quest_cache_get(const char* code) {
     meta_cache_fetch(&s_cache, code, on_quest_fetched);
+    return meta_cache_find(&s_cache, code);
 }
 
 int quest_active_step_index(const QuestMetadataEntry* metadata,

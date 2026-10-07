@@ -271,18 +271,6 @@ void quest_journal_update(float dt) {
         sections_walk(JW_CLICK, cx, cy, panel.x,
                       panel.y + s_header_h - ui_scroll_offset(&s_scroll), panel.width);
     }
-
-    /* Ensure every tracked quest has its metadata — the store seeds from the
-     * authoritative snapshot (codes + progress only), so titles/descriptions
-     * for quests we never opened (e.g. seeded on reconnect, completed, failed)
-     * would otherwise render blank. The cache no-ops once a code is resolved. */
-    for (int sec = 0; sec < QUEST_STATUS_COUNT; ++sec) {
-        int n = quest_progress_store_count((QuestStatus)sec);
-        for (int i = 0; i < n; ++i) {
-            const QuestProgressEntry* e = quest_progress_store_get((QuestStatus)sec, i);
-            if (e && e->title[0] == '\0') quest_cache_fetch(e->code);
-        }
-    }
 }
 
 void quest_journal_draw(void) {

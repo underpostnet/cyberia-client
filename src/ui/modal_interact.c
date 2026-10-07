@@ -393,7 +393,6 @@ static bool refresh_bot_snapshot(void) {
     s_talk_count = 0;
     for (int i = 0; i < bot->quest_code_count && i < BOT_QUEST_CODES_MAX; i++) {
         copy_str(s_quest_codes[s_quest_code_count], 64, bot->quest_codes[i]);
-        quest_cache_fetch(s_quest_codes[s_quest_code_count]);
         s_quest_code_count++;
 
         /* Parallel entry: non-empty only for a quest with a pending talk. */
@@ -1260,7 +1259,6 @@ typedef struct {
 } QuestCardInfo;
 
 static QuestCardInfo quest_card_info(const char* code) {
-    quest_cache_fetch(code);
     QuestCardInfo in = { 0 };
     in.q  = quest_progress_store_find(code);
     in.qm = quest_cache_get(code);

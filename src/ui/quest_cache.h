@@ -50,13 +50,10 @@ typedef struct {
     int     prerequisite_count;
 } QuestMetadataEntry;
 
-/* Look up cached metadata by code. Returns NULL if not present. */
+/* Look up cached metadata by code. A miss starts the async REST fetch
+ * (GET /api/v1/cyberia-quest/code/:code); the entry is NULL or has an empty
+ * title until it lands. */
 const QuestMetadataEntry* quest_cache_get(const char* code);
-
-/* Schedule an async REST fetch (GET /api/v1/cyberia-quest/code/:code) via
- * engine_client if not already cached/loading. Parses the
- * `{ status, data: <quest doc> }` envelope on completion. */
-void quest_cache_fetch(const char* code);
 
 /* Index of the step the progress entry is on. The server puts the step
  * description into `active_step`, so match the description as well as the id.

@@ -39,6 +39,8 @@
 #include "object_layer.h"
 #include "object_layers_management.h"
 #include "ol_as_animated_ico.h"
+#include "quest_cache.h"
+#include "quest_progress_store.h"
 #include "fx/fx_reward.h"
 #include "ui_button.h"
 #include "ui_icon.h"
@@ -667,12 +669,49 @@ void modal_notification_abort_assemble(void) {
 
 /* ── Update ───────────────────────────────────────────────────────────── */
 
+/* The quest card for one change the quest store reports. Title and reward come
+ * from quest_cache; the server sends only codes and progress. */
+static void show_quest_card(QuestChange change, const QuestProgressEntry* q) {
+    const QuestMetadataEntry* qm = quest_cache_get(q->code);
+    const char* disp = (qm && qm->title[0]) ? qm->title : q->code;
+    const char* step = q->active_step[0] ? q->active_step : disp;
+
+    switch (change) {
+    case QUEST_CHANGE_COMPLETED:
+        if (qm && qm->reward_count > 0) {
+            char body[160];
+            snprintf(body, sizeof(body), "Reward: %dx %s",
+                     qm->rewards[0].quantity, qm->rewards[0].item_id);
+            modal_notification_show_reward(disp, body, (Color){ 90, 200, 110, 255 },
+                                           qm->rewards[0].item_id, qm->rewards[0].quantity);
+        } else {
+            modal_notification_show("Quest Complete", disp, (Color){ 90, 200, 110, 255 });
+        }
+        break;
+    case QUEST_CHANGE_ACCEPTED:
+        modal_notification_show("Quest Accepted", step, (Color){ 220, 190, 60, 255 });
+        break;
+    case QUEST_CHANGE_STEP_DONE: {
+        char body[200];
+        snprintf(body, sizeof(body), "Next: %s", step);
+        modal_notification_show("Step Complete", body, (Color){ 90, 170, 220, 255 });
+        break;
+    }
+    case QUEST_CHANGE_NONE:
+        break;
+    }
+}
+
 void modal_notification_update(float dt) {
     /* Tick down the close cooldown even while the modal is closed. */
     if (s_close_cooldown > 0.0f) {
         s_close_cooldown -= dt;
         if (s_close_cooldown < 0.0f) s_close_cooldown = 0.0f;
     }
+
+    QuestChange change;
+    const QuestProgressEntry* q;
+    while (NULL != (q = quest_progress_store_take_change(&change))) show_quest_card(change, q);
 
     if (!s_open) return;
 

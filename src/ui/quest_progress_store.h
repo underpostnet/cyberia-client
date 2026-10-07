@@ -30,6 +30,14 @@ typedef enum {
     QUEST_STATUS_COUNT,
 } QuestStatus;
 
+/* What a live update did to a quest. The quest card shows it once. */
+typedef enum {
+    QUEST_CHANGE_NONE = 0,
+    QUEST_CHANGE_ACCEPTED,
+    QUEST_CHANGE_STEP_DONE,
+    QUEST_CHANGE_COMPLETED,
+} QuestChange;
+
 typedef struct {
     char        code[META_CACHE_CODE_MAX];
     char        title[QUEST_TITLE_MAX];
@@ -37,15 +45,25 @@ typedef struct {
     char        active_step[QUEST_STEP_MAX];
     char        objectives[QUEST_OBJECTIVES_MAX];
     QuestStatus status;
+    QuestChange change;     /* not yet shown; see quest_progress_store_take_change */
 } QuestProgressEntry;
 
 void quest_progress_store_reset(void);
 
-/* Insert or update by code. `status_str` is "active" | "completed" | "failed";
- * unknown values default to active. Returns true if a new entry was added. */
-bool quest_progress_store_upsert(const char* code, const char* title, const char* description,
-                        const char* status_str, const char* active_step,
-                        const char* objectives);
+/* Insert or update by code, from init_data. `status_str` is "active" |
+ * "completed" | "failed"; unknown values default to active. A new entry takes
+ * its title and description from quest_cache. Records no change. */
+void quest_progress_store_upsert(const char* code, const char* status_str,
+                                 const char* active_step, const char* objectives);
+
+/* Upsert from dialog_ack, and record the change against the prior state.
+ * `granted` is true for the quest the server just granted. */
+void quest_progress_store_apply(const char* code, const char* status_str,
+                                const char* active_step, const char* objectives,
+                                bool granted);
+
+/* Entry with an unshown change, which is cleared. NULL when none is left. */
+const QuestProgressEntry* quest_progress_store_take_change(QuestChange* change);
 
 /* Number of entries currently in a given section. */
 int quest_progress_store_count(QuestStatus status);
