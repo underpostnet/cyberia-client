@@ -409,6 +409,11 @@ void interaction_bubble_update(void) {
         const BotState* bot = &g_game_state.bots[i];
         if (bot->caster_id[0] != '\0') continue;
         scan_entity(bot->base.id, &bot->base, false, bot->behavior, bot->interaction_flags);
+        /* R12: every quest-talk is cached before its dialogue opens. scan_entity
+         * already requests the greeting. */
+        for (int q = 0; q < BOT_QUEST_CODES_MAX; q++)
+            if ('\0' != bot->quest_talk_dialog_codes[q][0])
+                dialogue_data_request_code(bot->quest_talk_dialog_codes[q]);
     }
 
     double now = GetTime();
