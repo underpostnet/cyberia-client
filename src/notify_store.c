@@ -4,6 +4,7 @@
  */
 
 #include "notify_store.h"
+#include "notification.h"
 
 #include "util/log.h"
 
@@ -59,6 +60,8 @@ void notify_store_push(const char* entity_id, const char* sender, const char* te
     strncpy(m->text,   text   ? text   : "",  NS_TEXT_LEN   - 1);
     m->ts_ms = GetTime() * 1000.0;
     m->mine  = mine;
+
+    if (!mine) notification_push(NOTIF_CHAT, entity_id);
 }
 
 const NotifyEntry* notify_store_get(const char* entity_id) {

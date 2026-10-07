@@ -27,6 +27,7 @@ typedef struct {
     int           count;
 } NotifyEntry;
 
+/* A line that is not `mine` also counts as unread (notification.h). */
 void notify_store_push(const char* entity_id, const char* sender, const char* text, bool mine);
 
 /* NULL when the entity has no messages. */
