@@ -10,6 +10,7 @@
 #include "entity_render.h"
 #include "game_state.h"
 #include "network/game/replication.h"
+#include "domain/self_motion.h"
 #include "ui/toolbar.h"
 #include "object_layers_management.h"
 #include "ol_as_animated_ico.h"
@@ -939,12 +940,13 @@ void game_render_entities(void) {
 
 void game_render_player_path(void) {
     const float cell_size = world_cell_size();
-    int route_count = 0;
-    const Vector2* route = prediction_route(&route_count);
-    const Vector2 target = prediction_route_target();
+    const self_motion_t* self = prediction_self();
+    const int route_count = self->path_count;
+    const Vector2* route = self->path;
 
     // Render target position
-    if (target.x >= 0 && target.y >= 0) {
+    if (0 < route_count) {
+        const Vector2 target = route[route_count - 1];
         Rectangle target_rect = {
             target.x * cell_size,
             target.y * cell_size,

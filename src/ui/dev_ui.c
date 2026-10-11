@@ -3,6 +3,7 @@
 
 #include "network/game/game_client.h"
 #include "network/game/replication.h"
+#include "domain/self_motion.h"
 #include "game_render.h"
 #include "domain/local_player.h"
 #include "game_state.h"
@@ -212,7 +213,8 @@ void dev_ui_draw(int screen_width, int screen_height) {
     const char* mode_str = mode_to_string(local_player_view_mode());
     const char* dir_str = direction_to_string(local_player_view_direction());
     Vector2 player_pos = g_game_state.player.base.interp_pos;
-    Vector2 target_pos = prediction_route_target();
+    const self_motion_t* self = prediction_self();
+    Vector2 target_pos = 0 < self->path_count ? self->path[self->path_count - 1] : self->pos;
 
     // Get active stats and item count
     int effective_stats_sum = dev_ui_get_effective_stats_sum(player_id);

@@ -152,22 +152,18 @@ No authentication; presentation hints are not secret. The Go authoritative serve
 
 ### Session
 
-`network/session.{c,h}` tracks per-connection tick state:
+`network/game/replication.{c,h}` holds the per-connection counters. A reconnect resets them.
 
-- `last_server_tick` — highest snapshot tick observed.
-- `last_acked_input_sequence` — highest sequence the server has applied for this client; echoed in every snapshot header.
-- `next_input_sequence` — monotonic counter for outgoing input commands.
-- `server_tick_estimate` — extrapolation of last server tick by elapsed wall time, used to stamp outgoing input commands and to compute `renderTick`.
+- `session_frame()` — completed fixed steps in this session. Every client event carries it.
+- `session_next_input_sequence()` — monotonic counter for outgoing client events.
 
 ### Prediction
 
-`prediction/prediction.{c,h}` owns the predicted self position. It is the only writer of the predicted state. Internally it tracks **two** positions: the discrete per-tick `predicted_pos` (where the simulation says the player is) and the continuous render-frame `display_pos` (what the renderer reads). The renderer never sees the discrete value.
+`network/game/replication.{c,h}` predicts the own player only. One motion function, `self_motion_step` (`domain/self_motion.c`), moves it in the live step and in the replay. It mirrors the server `stepAlongPath`.
 
-- `prediction_apply(cmd)` — optimistic local apply of an input command + push onto replay buffer.
-- `prediction_step(dt)` — fixed-timestep advance, called by the accumulator. Mutates `predicted_pos` only.
-- `prediction_reconcile()` — on snapshot arrival: drop acknowledged inputs, rewind self to authoritative position, replay unacked inputs. Mutates `predicted_pos` only.
-- `prediction_display_step(frame_dt)` — per-render-frame exponential lerp of `display_pos` toward `predicted_pos`. This is the layer that absorbs reconcile snaps and sim-tick stepping so the visible main player moves continuously.
-- `prediction_self_position()` — render-time accessor; returns the smoothed `display_pos`.
+- `prediction_step(s)` — one fixed step: applies the events that take effect in step `s`, then steps.
+- `prediction_reconcile()` — phase 1 of each tick: replaces the own state with the newest snapshot, drops the events up to `inputConsumedThrough`, and replays the rest from the snapshot `frame`.
+- `prediction_prev()` / `prediction_self()` — the last two fixed steps. `domain/local_player_view.c` draws a lerp between them.
 
 ### Interpolation
 

@@ -39,7 +39,8 @@ static void client_reset_state(void) {
     local_player_reset();
     ui_state_reset();
     message_reset_prev_snapshots();
-    prediction_reset((Vector2){0.0f, 0.0f});
+    session_reset();
+    prediction_reset();
     client_event_reset();
 }
 

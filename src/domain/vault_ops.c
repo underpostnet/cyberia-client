@@ -65,9 +65,12 @@ void vault_ops_push(const char* item_id, int qty, bool to_vault) {
 
 bool vault_ops_full(void) { return VAULT_OPS_MAX <= s_vault.count; }
 
-void vault_ops_apply_to_inventory(void) {
-    for (int i = 0; i < s_vault.count; i++) apply_op(&s_vault.ops[i]);
+void vault_ops_apply(const client_event_item_op_t* ops, int count) {
+    assert(ops || 0 == count);
+    for (int i = 0; i < count; i++) apply_op(&ops[i]);
 }
+
+void vault_ops_apply_to_inventory(void) { vault_ops_apply(s_vault.ops, s_vault.count); }
 
 void vault_ops_send(const char* entity_id) {
     if (0 == s_vault.count) return;

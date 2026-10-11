@@ -19,7 +19,7 @@ const char* active_layer_item_id(const ObjectLayerState* layers, int count, cons
     assert(layers == g_local_player.inventory && 0 == strcmp("skin", type));
     return s_skin;
 }
-client_event_t client_event_push(client_event_kind_t kind, client_event_payload_t p) { return (client_event_t){ 0 }; }
+void client_event_push(client_event_kind_t kind, client_event_payload_t p) {}
 void vault_ops_clear(void) {}
 
 static void push_skill_held(const char* trigger, const char* logic, const char* summon, bool held) {

@@ -123,7 +123,7 @@ static int axis_dir(int low_key, int low_alt, int high_key, int high_alt) {
 /* World-pixel target for a heading. A zero heading gives the current cell,
  * which is the stop command. */
 static Vector2 steer_world_target(int dir_x, int dir_y) {
-    Vector2 self = prediction_self_position();
+    Vector2 self = prediction_self()->pos;
     float   cell = world_cell_size();
 
     if (0 == dir_x && 0 == dir_y) {
@@ -244,7 +244,6 @@ void input_push_client_events(input_queue_t q) {
             .target_x = evt.world_position.x / cell,
             .target_y = evt.world_position.y / cell,
         };
-        client_event_t e = client_event_push(CLIENT_EVENT_PLAYER_ACTION, p);
-        prediction_enqueue_input(&e);
+        client_event_push(CLIENT_EVENT_PLAYER_ACTION, p);
     }
 }

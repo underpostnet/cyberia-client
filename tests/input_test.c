@@ -1,6 +1,7 @@
 #include "input/input.h"
 #include "input/pointer_gesture.h"
 #include "network/game/client_event.h"
+#include "network/game/replication.h"
 
 #include <assert.h>
 #include <math.h>
@@ -41,16 +42,16 @@ Vector2 GetScreenToWorld2D(Vector2 position, Camera2D camera) { return position;
 Vector2 GetWorldToScreen2D(Vector2 position, Camera2D camera) { return position; }
 Camera2D camera_get(void) { return (Camera2D){ 0 }; }
 void camera_zoom_by(float factor) { s_zoom *= factor; }
-Vector2 prediction_self_position(void) { return (Vector2){ 10.0f, 10.0f }; }
+const self_motion_t* prediction_self(void) {
+    static const self_motion_t self = { .pos = { 10.0f, 10.0f } };
+    return &self;
+}
 float world_cell_size(void) { return 32.0f; }
 float local_player_move_speed(void) { return 2.0f; }
 float local_player_action_cooldown(void) { return 0.5f; }
-client_event_t client_event_push(client_event_kind_t kind, client_event_payload_t p) {
-    return (client_event_t){ .kind = kind, .payload = p };
-}
-void prediction_enqueue_input(const client_event_t* cmd) {
+void client_event_push(client_event_kind_t kind, client_event_payload_t p) {
     s_actions++;
-    s_action = *cmd;
+    s_action = (client_event_t){ .kind = kind, .payload = p };
 }
 
 static bool ui_covers(int x, int y) {

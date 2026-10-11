@@ -9,9 +9,10 @@
 /* Client events: the one uplink of input to the server.
  *
  * Any module pushes an action here and touches no stamp, no sequence and no
- * socket. push stamps the frame, the sequence and the time. flush packs every
- * queued event into one "events" message, once per main-loop pass. The struct
- * is the event; JSON is only its transport form, built in flush.
+ * socket. push stamps the frame, the sequence and the time. The list keeps
+ * each event until a snapshot says the server consumed it, so the reconcile
+ * can replay it. flush sends each event once. The struct is the event; JSON
+ * is only its transport form, built in flush.
  *
  * Raw input (input_event_t) never leaves the client. Its producer converts a
  * raw event into a client event, or into nothing. */
@@ -75,14 +76,20 @@ typedef struct {
     client_event_payload_t  payload;
 } client_event_t;
 
-/* Stamp and queue one event. Returns the stamped event. */
-client_event_t client_event_push(client_event_kind_t kind, client_event_payload_t p);
+/* Stamp and append one event. Push order is replay order. */
+void client_event_push(client_event_kind_t kind, client_event_payload_t p);
 
-/* Send every queued event as one "events" message. An empty queue sends
- * nothing. A failed send keeps the events for the next flush. */
+/* Send the events not sent yet as one "events" message. A failed send keeps
+ * them for the next flush. */
 void client_event_flush(void);
 
-/* Drop every queued event. Call on socket close. */
+/* Drop the events at the front with sequence <= consumed. */
+void client_event_trim(cyberia_input_seq_t consumed);
+
+/* The unconsumed events, oldest first. Read-only. */
+const client_event_t* client_event_list(int* count);
+
+/* Drop every event. Call on socket close. */
 void client_event_reset(void);
 
 #endif /* CYBERIA_NETWORK_CLIENT_EVENT_H */

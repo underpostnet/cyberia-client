@@ -8,27 +8,27 @@
 #include <assert.h>
 #include <raylib.h>
 #include <stdlib.h>
+#include <string.h>
 
 static struct {
     client_event_t items[CLIENT_EVENT_CAP];
     int            count;
+    int            sent;   /* the events at the front that are already sent */
 } s_q;
 
-client_event_t client_event_push(client_event_kind_t kind, client_event_payload_t p) {
+void client_event_push(client_event_kind_t kind, client_event_payload_t p) {
     if (!(s_q.count < CLIENT_EVENT_CAP)) {
-        assert(false && "client event queue full");
-        LOG_ERROR("client event queue full");
+        assert(false && "client event list full");
+        LOG_ERROR("client event list full");
         abort();
     }
-    client_event_t e = {
+    s_q.items[s_q.count++] = (client_event_t){
         .kind      = kind,
         .frame     = session_frame(),
         .sequence  = session_next_input_sequence(),
         .timestamp = GetTime(),
         .payload   = p,
     };
-    s_q.items[s_q.count++] = e;
-    return e;
 }
 
 static cJSON* pack_event(const client_event_t* e) {
@@ -60,10 +60,10 @@ static cJSON* pack_event(const client_event_t* e) {
 }
 
 void client_event_flush(void) {
-    if (0 == s_q.count) return;
+    if (s_q.sent == s_q.count) return;
     cJSON* events = cJSON_CreateArray();
     assert(events);
-    for (int i = 0; i < s_q.count; i++) {
+    for (int i = s_q.sent; i < s_q.count; i++) {
         const client_event_t* e = &s_q.items[i];
         cJSON* msg = pack_event(e);
         cJSON* p   = cJSON_GetObjectItemCaseSensitive(msg, "payload");
@@ -73,9 +73,25 @@ void client_event_flush(void) {
         cJSON_AddItemToArray(events, msg);
     }
     /* The JSON is gone either way; only the structs persist. */
-    if (network_send(json_pack_events(events))) s_q.count = 0;
+    if (network_send(json_pack_events(events))) s_q.sent = s_q.count;
+}
+
+void client_event_trim(cyberia_input_seq_t consumed) {
+    int n = 0;
+    while (n < s_q.count && consumed >= s_q.items[n].sequence) n++;
+    if (0 == n) return;
+    memmove(s_q.items, s_q.items + n, (size_t)(s_q.count - n) * sizeof s_q.items[0]);
+    s_q.count -= n;
+    s_q.sent  -= n < s_q.sent ? n : s_q.sent;
+}
+
+const client_event_t* client_event_list(int* count) {
+    assert(count);
+    *count = s_q.count;
+    return s_q.items;
 }
 
 void client_event_reset(void) {
     s_q.count = 0;
+    s_q.sent  = 0;
 }

@@ -172,27 +172,19 @@ static void gameloop(void) {
     }
 
     // fixed step simulation
+    bool stepped = false;
     while (sim_acc >= fixed_step)
     {
-        // physics_update(frame_input, fixed_step); -> prev = curr; integrate(curr, curr_frame, fixed_step)
-        prediction_step(fixed_step);
         session_frame_advance();
+        prediction_step(session_frame());
         sim_acc -= fixed_step;
+        stepped = true;
     }
-    /* One events message per pass: the UI pushes and the taps of this pass. */
-    client_event_flush();
-    /* Presentation-only: advance the local player's visual state (spring
-     * position, velocity-derived facing and walk/idle mode) toward the
-     * predicted/reconciled simulation position. Facing and mode go in
-     * authoritative and come out smoothed; the smoothed pair stays in the view
-     * module, so what the renderer draws never becomes what the smoother reads
-     * next frame. interp_pos is the presentation position of every entity, and
-     * for the local player the view owns it. */
-    local_player_view_update(prediction_self_position(),
-                             prediction_consume_correction(),
-                             g_game_state.player.base.direction,
-                             g_game_state.player.base.mode,
-                             frame_dt);
+    /* One events message per pass that ran a step. */
+    if (stepped) client_event_flush();
+    /* interp_pos is the presentation position of every entity; for the local
+     * player the view owns it. */
+    local_player_view_update(prediction_prev(), prediction_self(), (float)(sim_acc / fixed_step));
     g_game_state.player.base.interp_pos = local_player_view_position();
 
     /* Remote-entity render-time interpolation. */
@@ -263,7 +255,6 @@ int main(int argc, char** argv) {
     // Connects to Game Server
     connection_open();
 
-    prediction_init(); // Note: this is just data, should be replaced by GameState
     render_init(vp_w, vp_h); // NOTE: if render is the window, then combine with it
     text_font_init(); // main UI font (loaded async once client-hints name a fontFamily)
 

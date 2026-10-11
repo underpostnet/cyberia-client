@@ -1,8 +1,11 @@
 #include "network/game/replication.h"
 
+#include "network/game/client_event.h"
 #include "domain/presentation_runtime.h"
-#include "game_state.h"
+#include "domain/self_motion.h"
 #include "domain/local_player.h"
+#include "domain/vault_ops.h"
+#include "game_state.h"
 #include "util/log.h"
 #include "config.h"
 
@@ -11,461 +14,118 @@
 #include <stdint.h>
 #include <stdbool.h>
 #include <assert.h>
-#include <math.h>
+#include <string.h>
+
+/* A replay that ends further than this from the live prediction logs. */
+#define REPLAY_EPS 0.01f
 
 /* ── Session ───────────────────────────────────────────────────────────── */
 
-/* Singleton session state. Owned by this translation unit; readers go
- * through the accessor functions in replication.h. */
 static struct {
-    cyberia_tick_t       last_server_tick;
-    cyberia_input_seq_t  input_consumed_through; /* no reader until step 3 (replay) */
-    cyberia_input_seq_t  last_movement_sequence;
-    cyberia_input_seq_t  next_input_sequence;
-    cyberia_frame_t      frame;                   /* never reset; see session_frame */
-    double              last_snapshot_wall_time; /* GetTime() when snapshot arrived */
-    bool                 snapshot_unapplied;      /* set on arrival, cleared by prediction_reconcile */
-} g_sess = {0};
+    cyberia_frame_t     frame;          /* completed fixed steps in this session */
+    cyberia_input_seq_t next_sequence;
+} s_sess;
 
-void session_on_snapshot(uint32_t snapshot_tick, uint32_t input_consumed_through,
-                         uint32_t last_movement_sequence) {
-    /* Monotonic by construction — drop out-of-order snapshots. The server
-     * never decreases tick; UDP-like reordering could only matter on a
-     * WebRTC fork. For WebSocket we still defend against bugs. */
-    if (snapshot_tick >= g_sess.last_server_tick) {
-        g_sess.last_server_tick        = snapshot_tick;
-        g_sess.last_snapshot_wall_time = GetTime();
-    }
-    if (input_consumed_through > g_sess.input_consumed_through) {
-        g_sess.input_consumed_through = input_consumed_through;
-    }
-    if (last_movement_sequence > g_sess.last_movement_sequence) {
-        g_sess.last_movement_sequence = last_movement_sequence;
-    }
-    g_sess.snapshot_unapplied = true;
+void session_reset(void) {
+    s_sess.frame         = 0;
+    s_sess.next_sequence = 0;
 }
 
-cyberia_tick_t session_last_server_tick(void) {
-    return g_sess.last_server_tick;
-}
-
-cyberia_input_seq_t session_last_movement_sequence(void) {
-    return g_sess.last_movement_sequence;
-}
-
-cyberia_tick_t session_server_tick_estimate(void) {
-    if (g_sess.last_server_tick == 0) return 0;
-    double elapsed = GetTime() - g_sess.last_snapshot_wall_time;
-    if (elapsed < 0.0) elapsed = 0.0;
-    uint32_t ticks_since = (uint32_t)(elapsed / TICK_DURATION_S);
-    return g_sess.last_server_tick + ticks_since;
-}
-
-cyberia_input_seq_t session_next_input_sequence(void) {
-    return ++g_sess.next_input_sequence;
-}
-
-cyberia_frame_t session_frame(void)   { return g_sess.frame; }
-void session_frame_advance(void)      { g_sess.frame++; }
+cyberia_input_seq_t session_next_input_sequence(void) { return ++s_sess.next_sequence; }
+cyberia_frame_t session_frame(void)                   { return s_sess.frame; }
+void session_frame_advance(void)                      { s_sess.frame++; }
 
 /* ── Prediction ────────────────────────────────────────────────────────── */
 
-/* Client-side prediction & reconciliation.
- *
- * Determinism with the Go server is preserved by using double-precision
- * arithmetic everywhere (the Go integrator in cyberia-server/game/server.go
- * runs on float64) and by reading the authoritative move speed pushed in
- * every AOI self-player block via local_player_set_move_speed().
- */
-
-/* Trail of predicted positions, one per sim tick, each stamped with the server
- * tick the client believed was current. Reconciliation reads it to compare the
- * authoritative position against what this client predicted for that same tick.
- * 128 ticks is >2 s at the tick rate — beyond any playable latency. */
-#define PREDICTION_HISTORY_CAP 128
-
-/* Producer→consumer hand-off queue: replication enqueues commands as they are
- * built each render frame; prediction_step drains them. Sized for high-latency
- * play (>1 s RTT at the tick rate leaves many commands in flight). */
-#define COMMAND_QUEUE_CAP 256
-
-/* How long an unconfirmed command holds off authority.
- *
- * Prediction re-targets on every tap, and the server re-plans on the next tick,
- * so a command is normally confirmed by moveAck within one round trip. Until it
- * is, the snapshot still describes the previous walk and adopting its route
- * would undo the turn the player just asked for. Past this bound the command
- * was superseded rather than delayed — another tap in the same tick outran it —
- * and authority wins, so prediction can never strand itself on a target the
- * server never planned. Sized for a round trip far worse than playable. */
-#define MOVE_CONFIRM_TIMEOUT_S 1.0
-
-typedef struct {
-    cyberia_tick_t tick;
-    Vector2        pos;
-} pred_sample_t;
-
-typedef struct {
-    pred_sample_t items[PREDICTION_HISTORY_CAP];
-    int head;
-    int count;
-} pred_history_t;
-
-typedef struct {
-    client_event_t items[COMMAND_QUEUE_CAP];
-    int head;
-    int count;
-} command_queue_t;
-
-static command_queue_t s_cmd_q = {0};
-
-void prediction_enqueue_input(const client_event_t* cmd) {
-    assert(cmd);
-    if (s_cmd_q.count == COMMAND_QUEUE_CAP) {
-        LOG_WARN("input command queue full, dropping oldest");
-        s_cmd_q.head = (s_cmd_q.head + 1) % COMMAND_QUEUE_CAP;
-        s_cmd_q.count--;
-    }
-    int idx = (s_cmd_q.head + s_cmd_q.count) % COMMAND_QUEUE_CAP;
-    s_cmd_q.items[idx] = *cmd;
-    s_cmd_q.count++;
-}
-
-static bool command_queue_pop(client_event_t* out) {
-    if (0 == s_cmd_q.count) { return false; }
-    *out = s_cmd_q.items[s_cmd_q.head];
-    s_cmd_q.head = (s_cmd_q.head + 1) % COMMAND_QUEUE_CAP;
-    s_cmd_q.count--;
-    return true;
-}
-
-static void command_queue_clear(void) {
-    s_cmd_q.head  = 0;
-    s_cmd_q.count = 0;
-}
-
 static struct {
-    Vector2       predicted_pos;
-    Vector2       authoritative_pos;
-    /* Net displacement reconciliation applied to predicted_pos since the last
-     * prediction_consume_correction() — read once per render frame by the
-     * presentation layer so it can absorb corrections without breaking the
-     * visual trajectory. Presentation-only; never read by the simulation. */
-    Vector2       correction_accum;
-    /* The destination the walk is heading for: the newest movement command
-     * sent. A tap is a destination, not a one-tick impulse — the server keeps
-     * walking toward it long after it acknowledges the command, so prediction
-     * must keep walking too. Dropping it on acknowledgement froze prediction
-     * between snapshots and left the walk moving at the snapshot rate. */
-    client_event_t active;
-    bool            has_active;
-    /* The instant after which an `active` still unconfirmed by moveAck yields
-     * to authority. */
-    double          active_confirm_deadline;
-    /* The authoritative route. The server does not walk straight at the tap: it
-     * follows an A* polyline cell by cell. Predicting a straight line cuts every
-     * corner the route takes, and each snapshot drags the player back onto it —
-     * the residual reverse flicker. Following the same waypoints removes the
-     * divergence at its source. Empty until the first snapshot of a walk, where
-     * the straight line to the tap is still the best guess available. */
-    Vector2         path[MAX_PATH_POINTS];
-    int             path_count;
-    int             path_index;
-    /* The route as the snapshot delivered it, before adoption trims the
-     * waypoints already behind this client. */
-    Vector2         route[MAX_PATH_POINTS];
-    int             route_count;
-    Vector2         route_target;
-    pred_history_t  history;
-    bool            initialised;
-} g_pred = {0};
+    self_motion_t       prev, curr;     /* the last two fixed steps; the view draws between them */
+    self_motion_t       state;          /* the newest server state; the decoder writes it */
+    cyberia_frame_t     state_frame;    /* the client step the state stands for; 0 = not known yet */
+    cyberia_input_seq_t state_consumed; /* inputConsumedThrough of the state */
+    bool                state_new;      /* set by the decoder, cleared by the reconcile */
+} s_pred;
 
-static void path_clear(void) {
-    g_pred.path_count = 0;
-    g_pred.path_index = 0;
+void prediction_reset(void) {
+    memset(&s_pred, 0, sizeof s_pred);
 }
 
-/* Adopt `cmd` as the walk target. The newest destination always wins and always
- * takes effect at once — the server re-plans on the next tick, so there is no
- * cadence for the client to wait for. Sole writer of the walk target from a
- * client command; the authoritative route replaces it once moveAck confirms it.
- *
- * Dropping the authoritative path is the point: it belongs to the destination
- * the player just abandoned, and following it one tick longer is the backward
- * step. Until the new route arrives, the straight line to the tap is the best
- * guess available, and it is the one that starts in the right direction. */
-static void retarget_walk(const client_event_t* cmd) {
-    g_pred.active                  = *cmd;
-    g_pred.has_active              = true;
-    g_pred.active_confirm_deadline = GetTime() + MOVE_CONFIRM_TIMEOUT_S;
-    path_clear();
+void prediction_on_snapshot(const self_motion_t* state, cyberia_frame_t frame,
+                            cyberia_input_seq_t consumed) {
+    assert(state);
+    s_pred.state          = *state;
+    s_pred.state_frame    = frame;
+    s_pred.state_consumed = consumed;
+    s_pred.state_new      = true;
 }
 
-static void history_clear(pred_history_t* h) {
-    h->head = 0;
-    h->count = 0;
-}
-
-/* One sample per tick. A repeated tick overwrites, so a tick estimate that
- * stalls cannot flood the trail with duplicates of the same instant. */
-static void history_push(pred_history_t* h, cyberia_tick_t tick, Vector2 pos) {
-    if (0 < h->count) {
-        int last = (h->head + h->count - 1) % PREDICTION_HISTORY_CAP;
-        if (h->items[last].tick == tick) {
-            h->items[last].pos = pos;
-            return;
+/* Apply the motion of the events that take effect in steps from..to. An
+ * event pushed in frame F takes effect in step F + 1. */
+static void apply_motion(cyberia_frame_t from, cyberia_frame_t to) {
+    int count = 0;
+    const client_event_t* list = client_event_list(&count);
+    for (int i = 0; i < count; i++) {
+        const client_event_t* e = &list[i];
+        uint64_t step = (uint64_t)e->frame + 1;
+        if (from > step || to < step) continue;
+        if (CLIENT_EVENT_PLAYER_ACTION == e->kind) {
+            /* The server refuses a tap in stasis or as a ghost. */
+            if (local_player_in_stasis() || 0.0f < g_game_state.player.base.respawn_in) continue;
+            self_motion_tap(&s_pred.curr, (Vector2){ e->payload.target_x, e->payload.target_y });
+        } else if (CLIENT_EVENT_PLAYER_STASIS == e->kind && e->payload.active) {
+            self_motion_stop(&s_pred.curr);
         }
     }
-    if (PREDICTION_HISTORY_CAP == h->count) {
-        h->head = (h->head + 1) % PREDICTION_HISTORY_CAP;
-        h->count--;
-    }
-    int idx = (h->head + h->count) % PREDICTION_HISTORY_CAP;
-    h->items[idx] = (pred_sample_t){ .tick = tick, .pos = pos };
-    h->count++;
 }
 
-/* Newest sample at or before `tick`, or NULL when the trail does not reach
- * back that far. Samples are pushed in tick order, so this scans forward. */
-static const pred_sample_t* history_at(const pred_history_t* h, cyberia_tick_t tick) {
-    const pred_sample_t* found = NULL;
-    for (int i = 0; i < h->count; i++) {
-        int idx = (h->head + i) % PREDICTION_HISTORY_CAP;
-        if (h->items[idx].tick > tick) { break; }
-        found = &h->items[idx];
-    }
-    return found;
-}
-
-/* Learning the error at one tick revises the whole trail: every later sample
- * was built on the same wrong belief and carries the same offset. */
-static void history_shift(pred_history_t* h, Vector2 delta) {
-    for (int i = 0; i < h->count; i++) {
-        int idx = (h->head + i) % PREDICTION_HISTORY_CAP;
-        h->items[idx].pos.x += delta.x;
-        h->items[idx].pos.y += delta.y;
+/* The facts of the unconsumed events, on top of the server copy that the
+ * decoder has just written. */
+static void apply_facts(void) {
+    int count = 0;
+    const client_event_t* list = client_event_list(&count);
+    for (int i = 0; i < count; i++) {
+        const client_event_t* e = &list[i];
+        if (CLIENT_EVENT_PLAYER_STASIS == e->kind) {
+            local_player_set_stasis(e->payload.active);
+        } else if (CLIENT_EVENT_ITEM_OPS == e->kind) {
+            vault_ops_apply(e->payload.ops, e->payload.op_count);
+        }
     }
 }
 
-/* Samples older than the newest authoritative tick can never be compared
- * again. */
-static void history_prune(pred_history_t* h, cyberia_tick_t tick) {
-    while (0 < h->count && h->items[h->head].tick < tick) {
-        h->head = (h->head + 1) % PREDICTION_HISTORY_CAP;
-        h->count--;
-    }
+void prediction_step(cyberia_frame_t s) {
+    s_pred.prev = s_pred.curr;
+    apply_motion(s, s);
+    self_motion_step(&s_pred.curr, local_player_move_speed(), TICK_DURATION_S);
 }
 
-/* Step one tick toward the command target. Mirrors server's phaseMovement:
- *
- *   step = move_speed * tickDuration            (cells per tick)
- *   if dist < step: snap; else: walk along direction
- *
- * Both client and server use double-precision sqrt so identical inputs
- * produce byte-identical positions. */
-static Vector2 sim_step_one(Vector2 pos, const client_event_t* cmd, double dt) {
-    if (cmd->kind != CLIENT_EVENT_PLAYER_ACTION) return pos;
-    double dx = (double)cmd->payload.target_x - (double)pos.x;
-    double dy = (double)cmd->payload.target_y - (double)pos.y;
-    double dist = sqrt(dx * dx + dy * dy);
-    if (dist < 1e-4) return pos;
-    double speed = (double)local_player_move_speed();
-    double step  = speed * dt;
-    if (step > dist) step = dist;
-    pos.x = (float)((double)pos.x + (dx / dist) * step);
-    pos.y = (float)((double)pos.y + (dy / dist) * step);
-    return pos;
-}
-
-/* One tick along the authoritative route. Mirrors updatePlayerPosition in
- * cyberia-server/game/server.go, including the part that looks wasteful: on
- * reaching a waypoint the server snaps to it and spends the rest of the tick
- * there rather than carrying the remaining budget into the next segment.
- * Prediction copies that, because matching the server matters more here than
- * covering the extra fraction of a cell. */
-static Vector2 sim_step_path(Vector2 pos, double dt) {
-    Vector2 node = g_pred.path[g_pred.path_index];
-    double dx = (double)node.x - (double)pos.x;
-    double dy = (double)node.y - (double)pos.y;
-    double dist = sqrt(dx * dx + dy * dy);
-    double step = (double)local_player_move_speed() * dt;
-    if (dist < step) {
-        g_pred.path_index++;
-        return node;
-    }
-    pos.x = (float)((double)pos.x + (dx / dist) * step);
-    pos.y = (float)((double)pos.y + (dy / dist) * step);
-    return pos;
-}
-
-void prediction_init(void) {
-    if (g_pred.initialised) return;
-    history_clear(&g_pred.history);
-    g_pred.initialised = true;
-}
-
-void prediction_reset(Vector2 authoritative_pos) {
-    g_pred.authoritative_pos = authoritative_pos;
-    g_pred.predicted_pos     = authoritative_pos;
-    g_pred.correction_accum  = (Vector2){ 0.0f, 0.0f };
-    g_pred.has_active        = false;
-    g_pred.active_confirm_deadline = 0.0;
-    path_clear();
-    history_clear(&g_pred.history);
-    command_queue_clear();
-    g_sess.snapshot_unapplied = false;
-}
-
-void prediction_step(double tick_dt) {
-    /* Drain newly produced input commands. This is the single point where the
-     * prediction module consumes input; the replication layer is the producer
-     * via prediction_enqueue_input(). The newest destination wins outright, as
-     * it does on the server: taps drained in one tick describe one instant, and
-     * only the last of them says where the player wants to go. */
-    client_event_t cmd;
-    while (command_queue_pop(&cmd)) {
-        if (CLIENT_EVENT_PLAYER_ACTION == cmd.kind) { retarget_walk(&cmd); }
-    }
-
-    /* Exactly one step per tick, on the same integrator the server runs. The
-     * authoritative route wins once it is known; before the first snapshot of a
-     * walk the straight line to the tap keeps the start responsive. */
-    if (g_pred.path_index < g_pred.path_count) {
-        g_pred.predicted_pos = sim_step_path(g_pred.predicted_pos, tick_dt);
-    } else if (g_pred.has_active) {
-        g_pred.predicted_pos = sim_step_one(g_pred.predicted_pos, &g_pred.active, tick_dt);
-    }
-    history_push(&g_pred.history, session_server_tick_estimate(), g_pred.predicted_pos);
-}
-
-static void adopt_authoritative_target(void);
-static Vector2 sim_step_path(Vector2 pos, double dt);
-
-/* Reconciliation compares like with like.
- *
- * A snapshot describes tick T, which is already in the past by one network
- * trip, and the client is deliberately ahead of it. Measuring the authoritative
- * position against the CURRENT predicted position therefore reads that lead as
- * error and drags the player backward on every snapshot. Instead, look up what
- * this client predicted for tick T and difference against that: what remains is
- * misprediction alone. Applying it to the whole trail keeps the lead intact and
- * leaves the walk moving forward.
- *
- * Phase 1 of the tick. It applies only the newest snapshot: a second one that
- * lands in the same tick has already overwritten the first. */
 void prediction_reconcile(void) {
-    if (!g_sess.snapshot_unapplied) return;
-    g_sess.snapshot_unapplied = false;
-    g_pred.authoritative_pos = g_game_state.player.base.pos_server;
-    cyberia_tick_t snapshot_tick = session_last_server_tick();
+    if (!s_pred.state_new) return;
+    s_pred.state_new = false;
+    Vector2 predicted = s_pred.curr.pos;
 
-    const pred_sample_t* predicted_then = history_at(&g_pred.history, snapshot_tick);
-    if (!predicted_then) {
-        /* No prediction covers that tick — a fresh session, a stall, or a
-         * world rebuild. Authority wins outright. */
-        Vector2 before = g_pred.predicted_pos;
-        g_pred.predicted_pos = g_pred.authoritative_pos;
-        g_pred.correction_accum.x += g_pred.predicted_pos.x - before.x;
-        g_pred.correction_accum.y += g_pred.predicted_pos.y - before.y;
-        history_clear(&g_pred.history);
-        return;
-    }
+    s_pred.curr = s_pred.state;                  /* 1. replace */
+    client_event_trim(s_pred.state_consumed);    /* 2. drop what the state holds */
+    apply_facts();                               /* 3. stasis flag, item ops */
+    vault_ops_apply_to_inventory();              /*    the open vault's pending list */
 
-    Vector2 error = { g_pred.authoritative_pos.x - predicted_then->pos.x,
-                      g_pred.authoritative_pos.y - predicted_then->pos.y };
-    if (0.0f != error.x || 0.0f != error.y) {
-        g_pred.predicted_pos.x += error.x;
-        g_pred.predicted_pos.y += error.y;
-        history_shift(&g_pred.history, error);
-        g_pred.correction_accum.x += error.x;
-        g_pred.correction_accum.y += error.y;
+    if (0 == s_pred.state_frame) {               /* 4. no offset yet: apply, do not step */
+        apply_motion(0, UINT32_MAX);
+    } else {
+        apply_motion(0, s_pred.state_frame);     /* 5. in flight, dated before the state */
+        for (cyberia_frame_t s = s_pred.state_frame + 1; s <= session_frame(); s++) {
+            apply_motion(s, s);                  /* 6. replay to now */
+            self_motion_step(&s_pred.curr, local_player_move_speed(), TICK_DURATION_S);
+        }
+        float error = Vector2Distance(predicted, s_pred.curr.pos);
+        if (s_pred.state_frame <= session_frame() && REPLAY_EPS < error) {
+            LOG_DEBUG("[REPLAY] frame=%u error=%.3f", session_frame(), error);
+        }
     }
-    history_prune(&g_pred.history, snapshot_tick);
-    adopt_authoritative_target();
+    if (MODE_TELEPORTING == g_game_state.player.base.mode) s_pred.prev = s_pred.curr;
 }
 
-/* Take the destination the server is actually walking to.
- *
- * The server re-plans one tick after the tap arrives, and it re-routes a blocked
- * target to the nearest walkable cell. Its route therefore trails the newest
- * command by a round trip, and adopting it too early walks the player back
- * toward where the previous tap was heading — the backward step and the reverse
- * flicker, at their worst when the player changes direction rapidly.
- *
- * The consumed cursor is the wrong signal for that: the server consumes every
- * command of a tick, including one a later tap in the same tick supersedes. moveAck is
- * the right one — it names the command the route was planned for. Until it
- * covers the newest command the snapshot still describes the previous walk, and
- * the optimistic start that makes a tap feel immediate has to stand.
- *
- * The wait is bounded. A superseded command is never confirmed, so past the
- * deadline authority wins and the adopted target takes the sequence it was
- * planned for, which settles the state. */
-static void adopt_authoritative_target(void) {
-    if (g_pred.has_active &&
-        session_last_movement_sequence() < g_pred.active.sequence &&
-        GetTime() < g_pred.active_confirm_deadline) {
-        return;
-    }
-    if (MODE_WALKING != g_game_state.player.base.mode) {
-        g_pred.has_active = false; /* authority says the walk is over */
-        path_clear();
-        return;
-    }
-    g_pred.active.kind     = CLIENT_EVENT_PLAYER_ACTION;
-    g_pred.active.payload.target_x = g_pred.route_target.x;
-    g_pred.active.payload.target_y = g_pred.route_target.y;
-    g_pred.active.sequence = session_last_movement_sequence();
-    g_pred.has_active      = true;
-
-    for (int i = 0; i < g_pred.route_count; i++) { g_pred.path[i] = g_pred.route[i]; }
-    g_pred.path_count = g_pred.route_count;
-    g_pred.path_index = 0;
-
-    /* The route starts where the server stood at the snapshot tick, and this
-     * client is already further along it. Drop the waypoints behind by
-     * projection, not by distance: a waypoint is behind when the step to it
-     * opposes the segment it belongs to. Picking the merely nearest waypoint
-     * can select one the player has passed, and walking back to it is itself a
-     * reversal. */
-    while (g_pred.path_index + 1 < g_pred.path_count) {
-        Vector2 head = g_pred.path[g_pred.path_index];
-        Vector2 next = g_pred.path[g_pred.path_index + 1];
-        float seg_x = next.x - head.x, seg_y = next.y - head.y;
-        float to_head_x = head.x - g_pred.predicted_pos.x;
-        float to_head_y = head.y - g_pred.predicted_pos.y;
-        if (0.0f <= to_head_x * seg_x + to_head_y * seg_y) { break; }
-        g_pred.path_index++;
-    }
-}
-
-/* Raw predicted simulation position. Discrete at sim-tick granularity by
- * design — visual smoothing is the presentation layer's job
- * (domain/local_player_view). */
-Vector2 prediction_self_position(void) { return g_pred.predicted_pos; }
-
-void prediction_set_route(const Vector2* points, int count, Vector2 target) {
-    assert(points || 0 == count);
-    if (0 > count) { count = 0; }
-    if (MAX_PATH_POINTS < count) { count = MAX_PATH_POINTS; }
-    for (int i = 0; i < count; i++) { g_pred.route[i] = points[i]; }
-    g_pred.route_count  = count;
-    g_pred.route_target = target;
-}
-
-const Vector2* prediction_route(int* count) {
-    assert(count);
-    *count = g_pred.route_count;
-    return g_pred.route;
-}
-
-Vector2 prediction_route_target(void) { return g_pred.route_target; }
-
-Vector2 prediction_consume_correction(void) {
-    Vector2 c = g_pred.correction_accum;
-    g_pred.correction_accum = (Vector2){ 0.0f, 0.0f };
-    return c;
-}
+const self_motion_t* prediction_prev(void) { return &s_pred.prev; }
+const self_motion_t* prediction_self(void) { return &s_pred.curr; }
 
 /* ── Interpolation ─────────────────────────────────────────────────────── */
 

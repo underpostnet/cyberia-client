@@ -3,6 +3,8 @@
 
 #include <stdbool.h>
 
+#include "network/game/client_event.h"
+
 /* The pending op list of the open vault: what the player deposited and
  * withdrew since the last item_ops event. The list is applied to the local
  * inventory on push and again after each snapshot, so a snapshot does not
@@ -15,6 +17,9 @@ void vault_ops_push(const char* item_id, int qty, bool to_vault);
 
 /* True when the list has no room for one more op. */
 bool vault_ops_full(void);
+
+/* Apply ops to g_local_player.inventory, in order. */
+void vault_ops_apply(const client_event_item_op_t* ops, int count);
 
 /* Apply every pending op to g_local_player.inventory, in order. */
 void vault_ops_apply_to_inventory(void);

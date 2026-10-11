@@ -16,7 +16,7 @@
 #include "domain/local_player.h"
 #include "domain/presentation_runtime.h"
 #include "domain/audio_context.h"
-#include "domain/vault_ops.h"
+#include "domain/self_motion.h"
 #include "audio/audio.h"
 #include "audio/audio_events.h"
 #include "replication.h"
@@ -365,7 +365,7 @@ static void unpack_passive(const cJSON* e, const char* type) {
     o->layer_count = read_pooled_layers(e, "objectLayers", &o->layer_offset, FETCH_P2);
 }
 
-static void unpack_self(const cJSON* e) {
+static void unpack_self(const cJSON* e, cyberia_frame_t frame, cyberia_input_seq_t consumed) {
     GameState* gs = &g_game_state;
     PlayerState* p = &gs->player;
 
@@ -386,25 +386,20 @@ static void unpack_self(const cJSON* e) {
 
     serial_get_string(e, "mapCode", g_local_player.map_code, MAX_ID_LENGTH);
 
-    Vector2 route[MAX_PATH_POINTS];
-    int route_count = 0;
+    /* The server keeps no path once the walk ends. */
+    self_motion_t state = { .pos = p->base.pos_server, .direction = p->base.direction };
     const cJSON* point = NULL;
     cJSON_ArrayForEach(point, serial_get_array(e, "path")) {
-        if (route_count >= MAX_PATH_POINTS) break;
-        route[route_count].x = serial_get_float_default(point, "x", 0.0f);
-        route[route_count].y = serial_get_float_default(point, "y", 0.0f);
-        route_count++;
+        if (MODE_WALKING != p->base.mode || MAX_PATH_POINTS <= state.path_count) break;
+        state.path[state.path_count++] = (Vector2){ serial_get_float_default(point, "x", 0.0f),
+                                                    serial_get_float_default(point, "y", 0.0f) };
     }
-    prediction_set_route(route, route_count,
-                         (Vector2){ (float)serial_get_int_default(e, "targetPosX", 0),
-                                    (float)serial_get_int_default(e, "targetPosY", 0) });
+    prediction_on_snapshot(&state, frame, consumed);
 
     /* Full inventory — every visible layer, active and inactive. Powers the
      * inventory bottom bar. */
     g_local_player.inventory_count = read_layers(e, "inventory", g_local_player.inventory,
                                                  MAX_OBJECT_LAYERS, FETCH_P1);
-    /* The open vault's pending ops stay on top of the server's inventory. */
-    vault_ops_apply_to_inventory();
 
     local_player_set_stasis(serial_get_bool_default(e, "frozen", false));
     local_player_set_status_icon(p->base.status_icon);
@@ -434,12 +429,6 @@ static void json_unpack_snapshot(const cJSON* payload) {
     }
     GameState* gs = &g_game_state;
 
-    /* Feed the session bookkeeping so prediction and interpolation align to
-     * the authoritative tick stream. */
-    session_on_snapshot(serial_get_u32_default(payload, "tick", 0),
-                        serial_get_u32_default(payload, "inputConsumedThrough", 0),
-                        serial_get_u32_default(payload, "moveAck", 0));
-
     /* Stamp the arrival time. The interpolator computes
      * t = (now - snapshot_time) * 1000 / interpolation_ms; without this write
      * t stays at 1.0 and entities teleport between snapshots. */
@@ -465,7 +454,8 @@ static void json_unpack_snapshot(const cJSON* payload) {
     gs->floor_count = 0;
 
     const cJSON* self = serial_get_object(payload, "self");
-    if (NULL != self) unpack_self(self);
+    if (NULL != self) unpack_self(self, serial_get_u32_default(payload, "frame", 0),
+                                  serial_get_u32_default(payload, "inputConsumedThrough", 0));
     const cJSON* entity = NULL;
     cJSON_ArrayForEach(entity, serial_get_array(payload, "entities")) {
         char type[16] = {0};

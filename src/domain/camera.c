@@ -43,7 +43,7 @@ static void camera_sync_mobile_zoom(void) {
 }
 
 void camera_init(int screen_width, int screen_height) {
-    Vector2 self = prediction_self_position();
+    Vector2 self = prediction_self()->pos;
     float cell = world_cell_size();
     float cx = (self.x + g_game_state.player.base.dims.x / 2.0f) * cell;
     float cy = (self.y + g_game_state.player.base.dims.y / 2.0f) * cell;

@@ -8,7 +8,7 @@
  * Owns the Camera2D state and the smoothing logic that follows the local
  * player. Strictly client-side presentation — the simulation never reads or
  * writes camera fields. The local player's predicted position is fetched
- * via prediction_self_position().
+ * via prediction_self().
  */
 
 void     camera_init(int screen_width, int screen_height);
