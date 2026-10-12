@@ -154,8 +154,14 @@ struct PlayerState {
 
 struct BotState {
     EntityState base;
+};
+
+/* What one bot in the AOI offers the local player. The self block carries one
+ * row per bot that offers something. */
+typedef struct {
+    EntityID id;
     /* Per-player interaction capability bitmask (INTERACTION_FLAG_*). */
-    uint8_t interaction_flags;
+    uint8_t flags;
     /* Authoritative quest codes this NPC provides to the local player; metadata
      * is fetched by code only when not already cached. */
     char quest_codes[BOT_QUEST_CODES_MAX][MAX_ID_LENGTH];
@@ -164,7 +170,7 @@ struct BotState {
      * that quest has no talk objective to advance here. The interact modal
      * offers one quest-talk button per non-empty entry. */
     char quest_talk_dialog_codes[BOT_QUEST_CODES_MAX][MAX_ID_LENGTH];
-};
+} Interaction;
 
 
 #endif /* WORLD_TYPES_H */

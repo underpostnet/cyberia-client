@@ -758,12 +758,11 @@ void game_render_entities(void) {
             float draw_x = interp_pos.x;
             float draw_y = interp_pos.y;
             if (entry->type == ENTITY_TYPE_BOT && strcmp(entity_type_str, "loot") == 0) {
-                /* Per-viewer loot eligibility (AOI bot flag) picks the drop's
-                 * particle tint: gold = collectable by us, gray = another
-                 * player's loot. */
-                const BotState* drop_bot = game_state_find_bot(entity_id);
-                bool loot_eligible = (NULL != drop_bot)
-                    && 0 != (drop_bot->interaction_flags & INTERACTION_FLAG_LOOT_ELIGIBLE);
+                /* Per-viewer loot eligibility (self interaction flag) picks the
+                 * drop's particle tint: gold = collectable by us, gray =
+                 * another player's loot. */
+                bool loot_eligible = 0 != (local_player_interaction_flags(entity_id)
+                                           & INTERACTION_FLAG_LOOT_ELIGIBLE);
                 if (!loot_fx_drop_render_pos(entity_id,
                                              interp_pos.x,
                                              interp_pos.y,
@@ -878,7 +877,7 @@ void game_render_entities(void) {
                 if (!np_is_player) {
                     const BotState* np_bot = game_state_find_bot(entity_base->id);
                     if (np_bot) {
-                        np_flags = np_bot->interaction_flags;
+                        np_flags = local_player_interaction_flags(np_bot->base.id);
                         np_is_provider = (0 == strcmp(game_state_agent(np_bot->base.id)->behavior, "provider"))
                                          || (0 == strcmp(game_state_agent(np_bot->base.id)->behavior, "provider-static"));
                         if (game_state_agent(np_bot->base.id)->action_code[0] != '\0') {

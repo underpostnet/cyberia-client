@@ -29,6 +29,7 @@
 #include "ui/quest_progress_store.h"
 #include "ui/ui_state.h"
 #include "util/log.h"
+#include "util/utils.h"
 
 #include <cJSON.h>
 #include <raylib.h>
@@ -261,29 +262,29 @@ static void unpack_bot(const cJSON* e) {
     agent->caster_id = serial_get_u32_default(e, "casterId", 0);
     serial_get_string(e, "actionCode", agent->action_code, MAX_ID_LENGTH);
     gs->mask[slot] |= COMP_AGENT;
-    b->interaction_flags = (uint8_t)serial_get_int_default(e, "interactionFlags", 0);
+}
 
-    b->quest_code_count = 0;
+/* One row of the self `interaction` list. */
+static void unpack_interaction(const cJSON* row, Interaction* in) {
+    memset(in, 0, sizeof *in);
+    in->id    = serial_get_u32_default(row, "id", 0);
+    in->flags = (uint8_t)serial_get_int_default(row, "flags", 0);
+
     const cJSON* code = NULL;
-    cJSON_ArrayForEach(code, serial_get_array(e, "questCodes")) {
-        if (b->quest_code_count >= BOT_QUEST_CODES_MAX) break;
+    cJSON_ArrayForEach(code, serial_get_array(row, "questCodes")) {
+        if (in->quest_code_count >= BOT_QUEST_CODES_MAX) break;
         if (!cJSON_IsString(code)) continue;
-        strncpy(b->quest_codes[b->quest_code_count], cJSON_GetStringValue(code), MAX_ID_LENGTH - 1);
-        b->quest_codes[b->quest_code_count][MAX_ID_LENGTH - 1] = '\0';
-        b->quest_code_count++;
+        copy_str(in->quest_codes[in->quest_code_count++], MAX_ID_LENGTH, cJSON_GetStringValue(code));
     }
 
     /* Parallel to quest_codes: entry i is non-empty when quest_codes[i] has an
      * open talk objective this NPC answers. */
-    for (int i = 0; i < BOT_QUEST_CODES_MAX; i++) b->quest_talk_dialog_codes[i][0] = '\0';
     int t = 0;
     const cJSON* talk = NULL;
-    cJSON_ArrayForEach(talk, serial_get_array(e, "questTalkDialogCodes")) {
+    cJSON_ArrayForEach(talk, serial_get_array(row, "questTalkDialogCodes")) {
         if (t >= BOT_QUEST_CODES_MAX) break;
-        if (cJSON_IsString(talk)) {
-            strncpy(b->quest_talk_dialog_codes[t], cJSON_GetStringValue(talk), MAX_ID_LENGTH - 1);
-            b->quest_talk_dialog_codes[t][MAX_ID_LENGTH - 1] = '\0';
-        }
+        if (cJSON_IsString(talk))
+            copy_str(in->quest_talk_dialog_codes[t], MAX_ID_LENGTH, cJSON_GetStringValue(talk));
         t++;
     }
 }
@@ -400,6 +401,13 @@ static void unpack_self(const cJSON* e, cyberia_frame_t frame, cyberia_input_seq
     /* The running assembly; the bar ends when the server's timer ends. */
     const cJSON* craft = serial_get_object(e, "craft");
     g_local_player.crafting = NULL != craft;
+
+    g_local_player.interaction_count = 0;
+    const cJSON* row = NULL;
+    cJSON_ArrayForEach(row, serial_get_array(e, "interaction")) {
+        if (INTERACTIONS_MAX <= g_local_player.interaction_count) break;
+        unpack_interaction(row, &g_local_player.interactions[g_local_player.interaction_count++]);
+    }
     if (craft)
         modal_notification_set_assemble_remaining(
             (float)serial_get_int_default(craft, "remainingMs", 0) / 1000.0f);

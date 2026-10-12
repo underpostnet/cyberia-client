@@ -34,6 +34,7 @@
 /* Matches the server storageMaxSlots and ITEM_SLOT_GRID_MAX_SLOTS. */
 #define VAULT_SLOTS_MAX 64
 #define VAULTS_MAX       8
+#define INTERACTIONS_MAX 64
 
 /* One vault of the player, keyed by the action code of its terminal. */
 typedef struct {
@@ -58,10 +59,20 @@ typedef struct {
     Vault            vaults[VAULTS_MAX];   /* the server copy, with the unconsumed ops on top */
     int              vault_count;
     bool             crafting;             /* the server runs an assembly */
+    Interaction      interactions[INTERACTIONS_MAX];
+    int              interaction_count;
 } LocalPlayer;
 
 /* The vault the player has at `action_code`, or NULL when it is still empty. */
 Vault* local_player_vault(const char* action_code);
+
+/* What the bot `id` offers the player, or NULL when it offers nothing. */
+const Interaction* local_player_interaction(EntityID id);
+
+static inline uint8_t local_player_interaction_flags(EntityID id) {
+    const Interaction* in = local_player_interaction(id);
+    return in ? in->flags : 0;
+}
 
 extern LocalPlayer g_local_player;
 

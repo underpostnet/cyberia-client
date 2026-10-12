@@ -390,14 +390,15 @@ static bool refresh_bot_snapshot(void) {
     action_cache_fetch(s_action_code);
     s_quest_code_count = 0;
     s_talk_count = 0;
-    for (int i = 0; i < bot->quest_code_count && i < BOT_QUEST_CODES_MAX; i++) {
-        copy_str(s_quest_codes[s_quest_code_count], 64, bot->quest_codes[i]);
+    const Interaction* in = local_player_interaction(s_entity_id);
+    for (int i = 0; in && i < in->quest_code_count && i < BOT_QUEST_CODES_MAX; i++) {
+        copy_str(s_quest_codes[s_quest_code_count], 64, in->quest_codes[i]);
         s_quest_code_count++;
 
         /* Parallel entry: non-empty only for a quest with a pending talk. */
-        if ('\0' == bot->quest_talk_dialog_codes[i][0] || s_talk_count >= BOT_QUEST_CODES_MAX) continue;
-        copy_str(s_talk_quest_codes[s_talk_count], 64, bot->quest_codes[i]);
-        copy_str(s_talk_dialog_codes[s_talk_count], 64, bot->quest_talk_dialog_codes[i]);
+        if ('\0' == in->quest_talk_dialog_codes[i][0] || s_talk_count >= BOT_QUEST_CODES_MAX) continue;
+        copy_str(s_talk_quest_codes[s_talk_count], 64, in->quest_codes[i]);
+        copy_str(s_talk_dialog_codes[s_talk_count], 64, in->quest_talk_dialog_codes[i]);
         s_talk_count++;
     }
 

@@ -46,6 +46,13 @@ Vault* local_player_vault(const char* action_code) {
     return NULL;
 }
 
+const Interaction* local_player_interaction(EntityID id) {
+    for (int i = 0; i < g_local_player.interaction_count; i++) {
+        if (g_local_player.interactions[i].id == id) return &g_local_player.interactions[i];
+    }
+    return NULL;
+}
+
 void local_player_set_stasis(bool stasis) { g_local.stasis = stasis; }
 bool local_player_in_stasis(void)         { return g_local.stasis; }
 
