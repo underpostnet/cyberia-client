@@ -5,11 +5,20 @@
 const Color FX_SPARK_GOLD = { 255, 226, 20, 255 };
 const Color FX_SPARK_GRAY = { 168, 168, 168, 255 };
 const Color FX_SPARK_RED  = { 220,  40,  40, 255 };
+const Color FX_SPARK_GREEN = {  70, 220, 100, 255 };
 
 void fx_shape_bar(float x, float y, float w, float h, float border, Color body) {
     DrawRectangle((int)(x - border), (int)(y - border),
                   (int)(w + border * 2.0f), (int)(h + border * 2.0f), BLACK);
     DrawRectangle((int)x, (int)y, (int)w, (int)h, body);
+}
+
+void fx_shape_cooldown_bar(Rectangle r, float charge) {
+    static const Color bg    = {  24,  26,  38, 230 };
+    static const Color fill  = { 100, 200, 255, 230 };
+    static const Color ready = { 120, 230, 150, 240 };
+    fx_shape_bar(r.x, r.y, r.width, r.height, 1.0f, bg);
+    DrawRectangle((int)r.x, (int)r.y, (int)(r.width * charge), (int)r.height, 1.0f <= charge ? ready : fill);
 }
 
 void fx_shape_spark(float cx, float cy, float size_px, Color body, float alpha) {
@@ -57,4 +66,20 @@ void fx_shape_spark_shaded(float cx, float cy, float size_px, Color body) {
     DrawRectangle(x, y, band, s, light);
     DrawRectangle(x, y + s - band, s, band, shade);
     DrawRectangle(x + s - band, y, band, s, shade);
+}
+
+void fx_shape_plus(float cx, float cy, float size_px, Color body) {
+    int s = (int)(size_px + 0.5f);
+    int arm = s / 3 < 1 ? 1 : s / 3;
+    int b = arm / 2 < 1 ? 1 : arm / 2;
+    int mid = (s - arm) / 2;
+    int x = (int)(cx - size_px * 0.5f + 0.5f);
+    int y = (int)(cy - size_px * 0.5f + 0.5f);
+    body.a = 255;
+
+    /* Both borders first, so neither arm's border cuts across the other's body. */
+    DrawRectangle(x - b, y + mid - b, s + b * 2, arm + b * 2, BLACK);
+    DrawRectangle(x + mid - b, y - b, arm + b * 2, s + b * 2, BLACK);
+    DrawRectangle(x, y + mid, s, arm, body);
+    DrawRectangle(x + mid, y, arm, s, body);
 }
