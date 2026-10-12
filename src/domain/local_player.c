@@ -43,35 +43,32 @@ void local_player_set_stasis(bool stasis) { g_local.stasis = stasis; }
 bool local_player_in_stasis(void)         { return g_local.stasis; }
 
 /* Push one event that names an entity and an item. */
-static void push_entity_item(client_event_kind_t kind, const char* entity_id,
+static void push_entity_item(client_event_kind_t kind, EntityID entity_id,
                              const char* item_id) {
-    client_event_payload_t p = {0};
-    copy_str(p.entity_id, sizeof p.entity_id, entity_id);
+    client_event_payload_t p = { .entity_id = entity_id };
     copy_str(p.item_id, sizeof p.item_id, item_id);
     client_event_push(kind, p);
 }
 
 void local_player_request_quest_abandon(const char* quest_code) {
-    push_entity_item(CLIENT_EVENT_QUEST_ABANDON, NULL, quest_code);
+    push_entity_item(CLIENT_EVENT_QUEST_ABANDON, 0, quest_code);
 }
 
-void local_player_request_quest_accept(const char* entity_id, const char* quest_code) {
+void local_player_request_quest_accept(EntityID entity_id, const char* quest_code) {
     push_entity_item(CLIENT_EVENT_QUEST_ACCEPT, entity_id, quest_code);
 }
 
-void local_player_request_shop_buy(const char* entity_id, const char* item_id,
+void local_player_request_shop_buy(EntityID entity_id, const char* item_id,
                                    int quantity) {
     if (quantity < 1) quantity = 1;
     if (quantity > 255) quantity = 255;
-    client_event_payload_t p = { .quantity = quantity };
-    copy_str(p.entity_id, sizeof p.entity_id, entity_id);
+    client_event_payload_t p = { .entity_id = entity_id, .quantity = quantity };
     copy_str(p.item_id, sizeof p.item_id, item_id);
     client_event_push(CLIENT_EVENT_SHOP_BUY, p);
 }
 
-void local_player_request_craft(const char* entity_id, int recipe_index) {
-    client_event_payload_t p = { .recipe_index = recipe_index };
-    copy_str(p.entity_id, sizeof p.entity_id, entity_id);
+void local_player_request_craft(EntityID entity_id, int recipe_index) {
+    client_event_payload_t p = { .entity_id = entity_id, .recipe_index = recipe_index };
     client_event_push(CLIENT_EVENT_CRAFT_ITEM, p);
 }
 
@@ -79,7 +76,7 @@ void local_player_request_craft_cancel(void) {
     client_event_push(CLIENT_EVENT_CRAFT_CANCEL, (client_event_payload_t){0});
 }
 
-void local_player_request_storage_open(const char* entity_id) {
+void local_player_request_storage_open(EntityID entity_id) {
     push_entity_item(CLIENT_EVENT_STORAGE_OPEN, entity_id, NULL);
 }
 

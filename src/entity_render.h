@@ -3,6 +3,7 @@
 
 #include "object_layers_management.h"
 #include "object_layer.h"
+#include "world_types.h"
 #include <stdbool.h>
 
 /* Entity renderer — animates and draws the object-layer stack of one entity.
@@ -38,7 +39,7 @@ void entity_render_gc(EntityRender* render);
  * texture; WHITE draws them as authored. */
 void draw_entity_layers(
     EntityRender* render,
-    const char* entity_id,
+    EntityID entity_id,
     float pos_x,
     float pos_y,
     float width,

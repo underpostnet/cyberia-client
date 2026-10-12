@@ -43,7 +43,7 @@ Direction local_player_view_direction(void) { return DIRECTION_DOWN; }
 ObjectLayerMode local_player_view_mode(void) { return MODE_IDLE; }
 
 int main(void) {
-    strcpy(g_game_state.player.base.id, "player");
+    g_game_state.player.base.id = 1;
     g_game_state.player.base.layer_count = 2;
     for (int i = 0; 4 > i; i++) {
         g_layer_pool[i].active = true;

@@ -35,7 +35,7 @@ static void draw(void) {
 
 int main(void) {
     WorldObject* obstacle = &g_game_state.obstacles[0];
-    strcpy(obstacle->id, "rock-z");
+    obstacle->id = 26;
     obstacle->pos = (Vector2){ 10.0f, 10.0f };
     obstacle->dims = (Vector2){ 2.0f, 2.0f };
     obstacle->max_life = obstacle->life = 10.0f;
@@ -101,12 +101,12 @@ int main(void) {
     /* Snapshot order cannot change obstacle identity. */
     fx_obstacle_burst_reset();
     g_game_state.obstacle_count = 3;
-    const char* ids[] = { "rock-z", "rock-a", "rock-m" };
+    const EntityID ids[] = { 26, 1, 13 };
     for (int i = 0; 3 > i; i++) {
         WorldObject* rock = &g_game_state.obstacles[i];
         *rock = (WorldObject){ .pos = { 10.0f, 10.0f }, .dims = { 2.0f, 2.0f },
                               .max_life = 10.0f, .life = 10.0f };
-        strcpy(rock->id, ids[i]);
+        rock->id = ids[i];
     }
     fx_obstacle_burst_snapshot();
     WorldObject swap = g_game_state.obstacles[0];
@@ -126,7 +126,7 @@ int main(void) {
     for (int i = 0; 20 > i; i++) {
         WorldObject* rock = &g_game_state.obstacles[i];
         *rock = (WorldObject){ .dims = { 2.0f, 2.0f }, .max_life = 10.0f, .life = 10.0f };
-        snprintf(rock->id, sizeof rock->id, "rock-%d", i);
+        rock->id = (EntityID)i + 1;
     }
     fx_obstacle_burst_snapshot();
     for (int i = 0; 20 > i; i++) g_game_state.obstacles[i].life = 0.0f;

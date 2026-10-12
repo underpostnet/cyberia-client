@@ -212,7 +212,7 @@ static void preloading_loop(void) {
     if (!s_load_ready) {
         const char* label = NULL;
         if (!connection_is_open()) label = "Connecting to Cyberia...";
-        else if (!g_game_state.init_received || '\0' == g_game_state.player.base.id[0]) label = "Entering the world...";
+        else if (!g_game_state.init_received || 0 == g_game_state.player.base.id) label = "Entering the world...";
         else if (!presentation_runtime_is_ready()) label = "Preparing the view...";
         else if (!player_render_ready()) label = "Loading your character...";
         else if (!immediate_scene_ready()) label = "Preparing your location...";

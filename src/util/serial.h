@@ -44,27 +44,27 @@ cJSON* json_pack_player_action(float target_x, float target_y);
 
 cJSON* json_pack_item_active(const char* item_id, bool active);
 cJSON* json_pack_player_stasis(bool stasis);
-cJSON* json_pack_chat(const char* to_id, const char* text);
+cJSON* json_pack_chat(uint32_t to_id, const char* text);
 
 /* The player read dialogue group `dialog_code` with the entity to the end. The
  * server resolves the bound action and quest from its own cache. */
-cJSON* json_pack_talk_done(const char* entity_id, const char* dialog_code);
+cJSON* json_pack_talk_done(uint32_t entity_id, const char* dialog_code);
 
 /* Abandon an active quest by code — the server moves it to the failed section. */
 cJSON* json_pack_quest_abandon(const char* quest_code);
 
 /* Accept the quest the entity offers — the only path to start a mission. */
-cJSON* json_pack_quest_accept(const char* entity_id, const char* quest_code);
+cJSON* json_pack_quest_accept(uint32_t entity_id, const char* quest_code);
 
 /* Buy `quantity` units of a vendor's catalog item. The server owns the price,
  * the balance check, and the quantity clamp. */
-cJSON* json_pack_shop_buy(const char* entity_id, const char* item_id,
+cJSON* json_pack_shop_buy(uint32_t entity_id, const char* item_id,
                           int quantity);
 
 /* Assemble the assembler recipe at `recipe_index`. The server owns the recipe
  * book and the ingredient check; the client only names the terminal and which
  * of its recipes the player triggered. */
-cJSON* json_pack_craft_item(const char* entity_id, int recipe_index);
+cJSON* json_pack_craft_item(uint32_t entity_id, int recipe_index);
 
 /* Abort the running assembly. The server refunds its ingredients. */
 cJSON* json_pack_craft_cancel(void);
@@ -72,9 +72,9 @@ cJSON* json_pack_craft_cancel(void);
 /* Storage vault. open binds the vault and reads its contents. item_ops reports
  * the deposits and withdrawals of one session; the server replays them in
  * order. json_pack_item_ops takes ownership of the ops array. */
-cJSON* json_pack_storage_open(const char* entity_id);
+cJSON* json_pack_storage_open(uint32_t entity_id);
 cJSON* json_pack_item_op(const char* item_id, int qty, bool to_vault);
-cJSON* json_pack_item_ops(const char* entity_id, cJSON* ops);
+cJSON* json_pack_item_ops(uint32_t entity_id, cJSON* ops);
 
 /* ── Read helpers ───────────────────────────────────────────────────── */
 

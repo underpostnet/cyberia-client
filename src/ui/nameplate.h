@@ -3,20 +3,20 @@
 
 #include "object_layer.h"
 #include "object_layers_management.h"
+#include "world_types.h"
 
 #include <stdbool.h>
 
 /* One display name for each entity, so the overhead HUD, the interaction
  * bubble, and the JS overlay header always agree.
  *
- *   Players — "Anon-" plus the first 8 characters of the websocket ID.
+ *   Players — "Anon-" plus the entity id.
  *   Bots    — active skin item_id, first letter capital, plus "-" and the
- *             first 8 characters of the entity ID. Falls back to the first
- *             active layer, then to the raw ID. */
+ *             entity id. Falls back to the first active layer, then to the
+ *             raw id. */
 
-/* `entity_id` is the websocket session ID for a player, the server UUID for
- * a bot. `layers` may be NULL. `out_size` counts the terminator. */
-void nameplate_resolve(const char *entity_id,
+/* `layers` may be NULL. `out_size` counts the terminator. */
+void nameplate_resolve(EntityID entity_id,
                        bool is_player,
                        const ObjectLayerState *layers,
                        int layer_count,

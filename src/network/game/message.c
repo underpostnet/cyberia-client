@@ -53,7 +53,7 @@ void message_set_init_handler(MessageInitHandler handler) {
  * position for a smooth lerp.
  */
 
-typedef struct { char id[MAX_ID_LENGTH]; Vector2 pos_server; int level; bool alive; } PrevPos;
+typedef struct { EntityID id; Vector2 pos_server; int level; bool alive; } PrevPos;
 
 static PrevPos s_prev_bots[MAX_ENTITIES];
 static int     s_prev_bot_count = 0;
@@ -68,10 +68,10 @@ static bool entity_alive(const EntityState* e) {
 }
 
 /* The prior snapshot's record of `id` across every entity table, or NULL. */
-static const PrevPos* find_prev(const char* id) {
-    for (int i = 0; s_prev_player_count > i; i++) if (0 == strcmp(s_prev_players[i].id, id)) return &s_prev_players[i];
-    for (int i = 0; s_prev_bot_count > i; i++) if (0 == strcmp(s_prev_bots[i].id, id)) return &s_prev_bots[i];
-    for (int i = 0; s_prev_resource_count > i; i++) if (0 == strcmp(s_prev_resources[i].id, id)) return &s_prev_resources[i];
+static const PrevPos* find_prev(EntityID id) {
+    for (int i = 0; s_prev_player_count > i; i++) if (id == s_prev_players[i].id) return &s_prev_players[i];
+    for (int i = 0; s_prev_bot_count > i; i++) if (id == s_prev_bots[i].id) return &s_prev_bots[i];
+    for (int i = 0; s_prev_resource_count > i; i++) if (id == s_prev_resources[i].id) return &s_prev_resources[i];
     return NULL;
 }
 
@@ -79,7 +79,7 @@ static void remember_prev(PrevPos* out, int* count, const BotState* bots, const 
     *count = n;
     for (int i = 0; n > i; i++) {
         const EntityState* base = NULL != bots ? &bots[i].base : &players[i].base;
-        memcpy(out[i].id, base->id, MAX_ID_LENGTH);
+        out[i].id = base->id;
         out[i].pos_server = base->pos_server;
         out[i].level = base->level;
         out[i].alive = entity_alive(base);
@@ -90,11 +90,30 @@ static void remember_prev(PrevPos* out, int* count, const BotState* bots, const 
  * appeared in the prior snapshot, else `fallback` — so a first appearance or a
  * post-reconnect entity keeps pos_prev == pos_server and does not jump. */
 static Vector2 lookup_prev_server_pos(const PrevPos* arr, int n,
-                                      const char* id, Vector2 fallback) {
+                                      EntityID id, Vector2 fallback) {
     for (int k = 0; k < n; k++) {
-        if (0 == strcmp(arr[k].id, id)) return arr[k].pos_server;
+        if (id == arr[k].id) return arr[k].pos_server;
     }
     return fallback;
+}
+
+/* The snapshot stamp of each slot. A live slot the newest snapshot did not
+ * stamp has left the area of interest, and loses its slot (Q3). */
+static uint32_t s_slot_stamp[ENTITY_CAP];
+static uint32_t s_stamp = 0;
+
+/* Give `id` its slot and mark it present in this snapshot. */
+static void claim_slot(EntityID id) {
+    int slot = game_state_spawn(id);
+    if (0 > slot) { LOG_WARN("entity table full, id %u has no slot", id); return; }
+    s_slot_stamp[slot] = s_stamp;
+}
+
+static void free_absent_slots(void) {
+    for (int i = 0; ENTITY_CAP > i; i++) {
+        if (0 != g_game_state.ids[i] && s_stamp != s_slot_stamp[i])
+            game_state_despawn(g_game_state.ids[i]);
+    }
 }
 
 void message_reset_prev_snapshots(void) {
@@ -220,18 +239,18 @@ static void read_entity_state(const cJSON* e, EntityState* base, FetchPriority p
 
 static void unpack_player(const cJSON* e) {
     GameState* gs = &g_game_state;
-    char id[MAX_ID_LENGTH] = {0};
-    serial_get_string(e, "id", id, sizeof(id));
+    EntityID id = serial_get_u32_default(e, "id", 0);
+    claim_slot(id);
 
     int idx = -1;
     for (int i = 0; i < gs->other_player_count; i++) {
-        if (0 == strcmp(gs->other_players[i].base.id, id)) { idx = i; break; }
+        if (id == gs->other_players[i].base.id) { idx = i; break; }
     }
     if (idx < 0) {
         if (gs->other_player_count >= MAX_ENTITIES) { warn_overflow(OVF_PLAYERS); return; }
         idx = gs->other_player_count++;
         memset(&gs->other_players[idx], 0, sizeof(PlayerState));
-        strncpy(gs->other_players[idx].base.id, id, MAX_ID_LENGTH - 1);
+        gs->other_players[idx].base.id = id;
     }
 
     PlayerState* p = &gs->other_players[idx];
@@ -247,18 +266,18 @@ static void unpack_player(const cJSON* e) {
 
 static void unpack_bot(const cJSON* e) {
     GameState* gs = &g_game_state;
-    char id[MAX_ID_LENGTH] = {0};
-    serial_get_string(e, "id", id, sizeof(id));
+    EntityID id = serial_get_u32_default(e, "id", 0);
+    claim_slot(id);
 
     int idx = -1;
     for (int i = 0; i < gs->bot_count; i++) {
-        if (0 == strcmp(gs->bots[i].base.id, id)) { idx = i; break; }
+        if (id == gs->bots[i].base.id) { idx = i; break; }
     }
     if (idx < 0) {
         if (gs->bot_count >= MAX_ENTITIES) { warn_overflow(OVF_BOTS); return; }
         idx = gs->bot_count++;
         memset(&gs->bots[idx], 0, sizeof(BotState));
-        strncpy(gs->bots[idx].base.id, id, MAX_ID_LENGTH - 1);
+        gs->bots[idx].base.id = id;
     }
 
     BotState* b = &gs->bots[idx];
@@ -270,7 +289,7 @@ static void unpack_bot(const cJSON* e) {
     b->base.pos_server = incoming;
 
     serial_get_string(e, "behavior", b->behavior, MAX_BEHAVIOR_LENGTH);
-    serial_get_string(e, "casterId", b->caster_id, MAX_ID_LENGTH);
+    b->caster_id = serial_get_u32_default(e, "casterId", 0);
     serial_get_string(e, "actionCode", b->action_code, MAX_ID_LENGTH);
     b->interaction_flags = (uint8_t)serial_get_int_default(e, "interactionFlags", 0);
 
@@ -304,7 +323,8 @@ static void unpack_resource(const cJSON* e) {
     if (gs->resource_count >= MAX_ENTITIES) { warn_overflow(OVF_RESOURCES); return; }
     BotState* res = &gs->resources[gs->resource_count++];
     memset(res, 0, sizeof(BotState));
-    serial_get_string(e, "id", res->base.id, MAX_ID_LENGTH);
+    res->base.id = serial_get_u32_default(e, "id", 0);
+    claim_slot(res->base.id);
 
     read_entity_state(e, &res->base, FETCH_P2, false);
     res->base.pos_server = read_pos(e);
@@ -349,7 +369,8 @@ static WorldObject* passive_slot(const char* type) {
 static void unpack_passive(const cJSON* e, const char* type) {
     WorldObject* o = passive_slot(type);
     if (!o) return;
-    serial_get_string(e, "id", o->id, MAX_ID_LENGTH);
+    o->id = serial_get_u32_default(e, "id", 0);
+    claim_slot(o->id);
     o->pos  = read_pos(e);
     o->dims = (Vector2){ serial_get_float_default(e, "dimW", 0.0f),
                          serial_get_float_default(e, "dimH", 0.0f) };
@@ -369,8 +390,9 @@ static void unpack_self(const cJSON* e, cyberia_frame_t frame, cyberia_input_seq
     GameState* gs = &g_game_state;
     PlayerState* p = &gs->player;
 
-    serial_get_string(e, "id", p->base.id, MAX_ID_LENGTH);
-    strncpy(g_local_player.id, p->base.id, MAX_ID_LENGTH - 1);
+    p->base.id = serial_get_u32_default(e, "id", 0);
+    g_local_player.id = p->base.id;
+    claim_slot(p->base.id);
 
     read_entity_state(e, &p->base, FETCH_P0, true);
     p->base.pos_prev   = p->base.pos_server;
@@ -443,6 +465,7 @@ static void json_unpack_snapshot(const cJSON* payload) {
     /* Each snapshot re-lists everything in the area of interest. */
 
     s_overflow_warned = 0;
+    s_stamp++;
     game_state_layer_pool_reset();
     gs->other_player_count = 0;
     gs->bot_count = 0;
@@ -465,6 +488,7 @@ static void json_unpack_snapshot(const cJSON* payload) {
         else if (0 == strcmp(type, "resource")) unpack_resource(entity);
         else                                    unpack_passive(entity, type);
     }
+    free_absent_slots();
 
     fx_obstacle_burst_snapshot();
     audio_context_snapshot();
@@ -507,11 +531,9 @@ static void json_unpack_combat_text(const cJSON* payload) {
 }
 
 static void json_unpack_drop_collect(const cJSON* payload) {
-    char drop_id[MAX_ID_LENGTH] = {0};
-    char collector_id[MAX_ID_LENGTH] = {0};
+    EntityID drop_id      = serial_get_u32_default(payload, "dropId", 0);
+    EntityID collector_id = serial_get_u32_default(payload, "collectorId", 0);
     char item_id[MAX_ITEM_ID_LENGTH] = {0};
-    serial_get_string(payload, "dropId", drop_id, sizeof(drop_id));
-    serial_get_string(payload, "collectorId", collector_id, sizeof(collector_id));
     serial_get_string(payload, "itemId", item_id, sizeof(item_id));
     loot_fx_push(drop_id, collector_id, item_id,
                  serial_get_float_default(payload, "worldX", 0.0f),
@@ -520,19 +542,17 @@ static void json_unpack_drop_collect(const cJSON* payload) {
 }
 
 static void json_unpack_item_consume(const cJSON* payload) {
-    char entity_id[MAX_ID_LENGTH] = {0};
+    EntityID entity_id = serial_get_u32_default(payload, "entityId", 0);
     char behavior[MAX_BEHAVIOR_LENGTH] = {0};
-    serial_get_string(payload, "entityId", entity_id, sizeof(entity_id));
     serial_get_string(payload, "behavior", behavior, sizeof(behavior));
-    /* An empty id would resolve to the local player. */
-    if ('\0' != entity_id[0]) fx_heal_aura_observe(behavior, game_state_find_entity(entity_id));
+    /* Id 0 would resolve to the local player. */
+    if (0 != entity_id) fx_heal_aura_observe(behavior, game_state_find_entity(entity_id));
 }
 
 static void json_unpack_drop_spawn(const cJSON* payload) {
     audio_event(AUDIO_EVENT_DROP);
-    char drop_id[MAX_ID_LENGTH] = {0};
+    EntityID drop_id = serial_get_u32_default(payload, "dropId", 0);
     char item_id[MAX_ITEM_ID_LENGTH] = {0};
-    serial_get_string(payload, "dropId", drop_id, sizeof(drop_id));
     serial_get_string(payload, "itemId", item_id, sizeof(item_id));
     loot_fx_note_spawn(drop_id,
                        serial_get_float_default(payload, "originX", 0.0f),
@@ -583,6 +603,7 @@ static void json_unpack_init_data(const cJSON* payload) {
     // cellSize / interpolationMs / cameraZoom are NOT here; the cyberia-server
     // never sends presentation. They are hydrated by presentation_runtime
     // once the /api/v1/cyberia-client-hints fetch settles.
+    serial_get_string(payload, "engineId", g_local_player.engine_id, sizeof g_local_player.engine_id);
     g_game_state.grid_w = serial_get_int_default(payload, "gridW", 100);
     g_game_state.grid_h = serial_get_int_default(payload, "gridH", 100);
     g_game_state.aoi_radius = serial_get_float_default(payload, "aoiRadius", 15.0f);
@@ -775,11 +796,13 @@ static void json_unpack_metadata(const cJSON* payload) {
 }
 
 static void json_unpack_chat(const cJSON* payload) {
-    char from_id[64] = {0};
+    EntityID from_id = serial_get_u32_default(payload, "from", 0);
     char text[256] = {0};
-    serial_get_string(payload, "from", from_id, sizeof(from_id));
     serial_get_string(payload, "text", text, sizeof(text));
-    if (from_id[0] && text[0]) notify_store_push(from_id, from_id, text, false);
+    /* TODO: show the sender name. The client holds no player names yet. */
+    char sender[16];
+    snprintf(sender, sizeof sender, "%u", from_id);
+    if (0 != from_id && text[0]) notify_store_push(from_id, sender, text, false);
 }
 
 /* shop_ack is the server verdict on a shop purchase. An accepted purchase needs
@@ -800,8 +823,7 @@ static void json_unpack_shop_ack(const cJSON* payload) {
 
 /* storage_state is the vault, sent once per open. It seeds the grid. */
 static void json_unpack_storage_state(const cJSON* payload) {
-    char entity_id[64] = {0};
-    serial_get_string(payload, "entityId", entity_id, sizeof(entity_id));
+    EntityID entity_id = serial_get_u32_default(payload, "entityId", 0);
     int capacity = serial_get_int_default(payload, "capacity", 0);
 
     ObjectLayerState slots[ITEM_SLOT_GRID_MAX_SLOTS];

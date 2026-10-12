@@ -12,7 +12,7 @@ static float rightmost_spark_x;
 static EntityState entity;
 
 float world_cell_size(void) { return 32.0f; }
-const EntityState* game_state_find_entity(const char* id) { return 0 == strcmp(id, entity.id) ? &entity : NULL; }
+const EntityState* game_state_find_entity(EntityID id) { return id == entity.id ? &entity : NULL; }
 void fx_shape_spark_shaded(float cx, float cy, float size_px, Color body) {
     assert(3.0f <= size_px && 220 == body.r && 255 == body.a);
     if (cx < leftmost_spark_x) leftmost_spark_x = cx;
@@ -33,7 +33,7 @@ static void reset_probe(void) {
 }
 
 int main(void) {
-    strcpy(entity.id, "e");
+    entity.id = 1;
     entity.interp_pos = (Vector2){ 2.0f, 3.0f };
     entity.dims = (Vector2){ 1.0f, 1.0f };
 
@@ -58,16 +58,16 @@ int main(void) {
     assert(leftmost_spark_x > 8.0f * 32.0f && rightmost_spark_x < 13.0f * 32.0f);
 
     /* One shot: gone after its duration. */
-    assert(true == fx_death_active("e"));
+    assert(true == fx_death_active(1));
     fx_death_update(2.5f);
     reset_probe();
     fx_death_draw();
-    assert(0 == sparks && 0 == skulls && false == fx_death_active("e"));
+    assert(0 == sparks && 0 == skulls && false == fx_death_active(1));
 
     assert(true == fx_death_observe(true, true, &entity));
     reset_probe();
     fx_death_draw();
-    assert(0 < sparks && true == fx_death_active("e"));
+    assert(0 < sparks && true == fx_death_active(1));
     fx_death_reset();
     reset_probe();
     fx_death_draw();

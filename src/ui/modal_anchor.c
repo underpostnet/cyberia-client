@@ -26,11 +26,11 @@ Rectangle modal_anchor_safe_area(float pad, float min_h) {
 }
 
 /* Screen point to hang a card from: the top-centre of `entity_id`'s bounding
- * box, converted from world space through the gameplay camera. NULL or an empty
- * id resolves to the local player. False when the id names no entity in the
+ * box, converted from world space through the gameplay camera. Id 0 resolves
+ * to the local player. False when the id names no entity in the
  * world mirror (it left the AOI) or the camera has yet to produce a finite
  * projection — the capture then falls back to a centred placement. */
-static bool entity_point(const char* entity_id, Vector2* out_point) {
+static bool entity_point(EntityID entity_id, Vector2* out_point) {
     if (NULL == out_point) return false;
     const EntityState* entity = game_state_find_entity(entity_id);
     if (NULL == entity) return false;
@@ -84,7 +84,7 @@ static Rectangle place_center(Vector2 size, Rectangle safe) {
     };
 }
 
-static void modal_anchor_capture(ModalAnchor* anchor, const char* entity_id,
+static void modal_anchor_capture(ModalAnchor* anchor, EntityID entity_id,
                           Vector2 size, float gap, Rectangle safe) {
     if (NULL == anchor) return;
 
@@ -129,7 +129,7 @@ Vector2 modal_anchor_card_size(const ModalAnchorLayout* layout, Rectangle safe,
     };
 }
 
-void modal_anchor_layout_update(ModalAnchorLayout* layout, const char* entity_id,
+void modal_anchor_layout_update(ModalAnchorLayout* layout, EntityID entity_id,
                                 Rectangle safe, float content_h, float default_h,
                                 float min_h, bool entrance_done, float dt) {
     if (NULL == layout) return;

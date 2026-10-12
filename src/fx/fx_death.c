@@ -27,7 +27,7 @@
 #define FX_DEATH_BURST_S    1.8f   /* a spark's flight, burst to gone */
 
 typedef struct {
-    char    entity_id[MAX_ID_LENGTH];
+    EntityID entity_id;
     Vector2 pos;      /* last known top-left, grid units */
     Vector2 dims;     /* last known footprint, grid units */
     float   age;
@@ -49,15 +49,15 @@ static float exit_scale(float age) {
 }
 
 bool fx_death_observe(bool prior_alive, bool dead, const EntityState* entity) {
-    if (!prior_alive || !dead || NULL == entity || '\0' == entity->id[0]) return false;
+    if (!prior_alive || !dead || NULL == entity || 0 == entity->id) return false;
     FxDeathEntry* slot = &s_entries[0];
     for (int i = 0; FX_DEATH_CAPACITY > i; i++) {
-        if (0 == strcmp(s_entries[i].entity_id, entity->id)) { slot = &s_entries[i]; break; }
+        if (entity->id == s_entries[i].entity_id) { slot = &s_entries[i]; break; }
         if (!s_entries[i].active) { slot = &s_entries[i]; break; }
         if (s_entries[i].age > slot->age) slot = &s_entries[i];
     }
-    *slot = (FxDeathEntry){ .pos = entity->interp_pos, .dims = entity->dims, .active = true };
-    strncpy(slot->entity_id, entity->id, MAX_ID_LENGTH - 1);
+    *slot = (FxDeathEntry){ .entity_id = entity->id, .pos = entity->interp_pos,
+                            .dims = entity->dims, .active = true };
     return true;
 }
 
@@ -117,9 +117,9 @@ void fx_death_reset(void) {
     memset(s_entries, 0, sizeof(s_entries));
 }
 
-bool fx_death_active(const char* entity_id) {
+bool fx_death_active(EntityID entity_id) {
     for (int i = 0; FX_DEATH_CAPACITY > i; i++) {
-        if (s_entries[i].active && 0 == strcmp(s_entries[i].entity_id, entity_id)) return true;
+        if (s_entries[i].active && entity_id == s_entries[i].entity_id) return true;
     }
     return false;
 }

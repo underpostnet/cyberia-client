@@ -33,7 +33,7 @@
 #define FX_HEAL_AURA_PLUS_GAP_S 0.35f  /* between two plus marks */
 
 typedef struct {
-    char    entity_id[MAX_ID_LENGTH];
+    EntityID entity_id;
     Vector2 pos;      /* last known top-left, grid units */
     Vector2 dims;     /* last known footprint, grid units */
     float   age;
@@ -61,15 +61,15 @@ static float exit_scale(float age) {
 
 bool fx_heal_aura_observe(const char* behavior, const EntityState* entity) {
     if (NULL == behavior || 0 != strcmp(behavior, FX_HEAL_AURA_BEHAVIOR)) return false;
-    if (NULL == entity || '\0' == entity->id[0]) return false;
+    if (NULL == entity || 0 == entity->id) return false;
     FxHealAuraEntry* slot = &s_entries[0];
     for (int i = 0; FX_HEAL_AURA_CAPACITY > i; i++) {
-        if (0 == strcmp(s_entries[i].entity_id, entity->id)) { slot = &s_entries[i]; break; }
+        if (s_entries[i].entity_id == entity->id) { slot = &s_entries[i]; break; }
         if (!s_entries[i].active) { slot = &s_entries[i]; break; }
         if (s_entries[i].age > slot->age) slot = &s_entries[i];
     }
-    *slot = (FxHealAuraEntry){ .pos = entity->interp_pos, .dims = entity->dims, .active = true };
-    strncpy(slot->entity_id, entity->id, MAX_ID_LENGTH - 1);
+    *slot = (FxHealAuraEntry){ .entity_id = entity->id, .pos = entity->interp_pos,
+                               .dims = entity->dims, .active = true };
     return true;
 }
 

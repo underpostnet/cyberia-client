@@ -28,7 +28,7 @@
 #define FX_LEVEL_UP_RISE_S      1.3f   /* one spark's climb, feet to above the head */
 
 typedef struct {
-    char    entity_id[MAX_ID_LENGTH];
+    EntityID entity_id;
     Vector2 pos;      /* last known top-left, grid units */
     Vector2 dims;     /* last known footprint, grid units */
     float   age;
@@ -55,15 +55,15 @@ static float exit_scale(float age) {
 }
 
 bool fx_level_up_observe(int previous, int current, const EntityState* entity) {
-    if (0 >= previous || current <= previous || NULL == entity || '\0' == entity->id[0]) return false;
+    if (0 >= previous || current <= previous || NULL == entity || 0 == entity->id) return false;
     FxLevelUpEntry* slot = &s_entries[0];
     for (int i = 0; FX_LEVEL_UP_CAPACITY > i; i++) {
-        if (0 == strcmp(s_entries[i].entity_id, entity->id)) { slot = &s_entries[i]; break; }
+        if (entity->id == s_entries[i].entity_id) { slot = &s_entries[i]; break; }
         if (!s_entries[i].active) { slot = &s_entries[i]; break; }
         if (s_entries[i].age > slot->age) slot = &s_entries[i];
     }
-    *slot = (FxLevelUpEntry){ .pos = entity->interp_pos, .dims = entity->dims, .active = true };
-    strncpy(slot->entity_id, entity->id, MAX_ID_LENGTH - 1);
+    *slot = (FxLevelUpEntry){ .entity_id = entity->id, .pos = entity->interp_pos,
+                              .dims = entity->dims, .active = true };
     return true;
 }
 
@@ -132,9 +132,9 @@ void fx_level_up_reset(void) {
     memset(s_entries, 0, sizeof(s_entries));
 }
 
-bool fx_level_up_active(const char* entity_id) {
+bool fx_level_up_active(EntityID entity_id) {
     for (int i = 0; FX_LEVEL_UP_CAPACITY > i; i++) {
-        if (s_entries[i].active && 0 == strcmp(s_entries[i].entity_id, entity_id)) return true;
+        if (s_entries[i].active && entity_id == s_entries[i].entity_id) return true;
     }
     return false;
 }

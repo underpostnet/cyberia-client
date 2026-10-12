@@ -37,7 +37,7 @@ static cJSON* pack_event(const client_event_t* e) {
     case CLIENT_EVENT_PLAYER_ACTION:   return json_pack_player_action(p->target_x, p->target_y);
     case CLIENT_EVENT_ITEM_ACTIVE:     return json_pack_item_active(p->item_id, p->active);
     case CLIENT_EVENT_PLAYER_STASIS:   return json_pack_player_stasis(p->active);
-    case CLIENT_EVENT_CHAT:            return json_pack_chat(p->item_id, p->text);
+    case CLIENT_EVENT_CHAT:            return json_pack_chat(p->entity_id, p->text);
     case CLIENT_EVENT_TALK_DONE:       return json_pack_talk_done(p->entity_id, p->code);
     case CLIENT_EVENT_QUEST_ABANDON:   return json_pack_quest_abandon(p->item_id);
     case CLIENT_EVENT_QUEST_ACCEPT:    return json_pack_quest_accept(p->entity_id, p->item_id);

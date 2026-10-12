@@ -4,6 +4,8 @@
 #include <raylib.h>
 #include <stdbool.h>
 
+#include "world_types.h"
+
 /* Large-screen placement for the entity panel modals (interact, inventory
  * item detail).
  *
@@ -85,7 +87,7 @@ Vector2 modal_anchor_card_size(const ModalAnchorLayout* layout, Rectangle safe,
  * corner from the entity, so it lands at the real size in the right place. The
  * corner freezes on the first settled measurement. After that the card ignores
  * the entity and a content change extends it downward from the same top edge. */
-void modal_anchor_layout_update(ModalAnchorLayout* layout, const char* entity_id,
+void modal_anchor_layout_update(ModalAnchorLayout* layout, EntityID entity_id,
                                 Rectangle safe, float content_h, float default_h,
                                 float min_h, bool entrance_done, float dt);
 

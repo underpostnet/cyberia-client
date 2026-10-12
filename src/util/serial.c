@@ -75,18 +75,18 @@ cJSON* json_pack_player_stasis(bool stasis) {
     return root;
 }
 
-cJSON* json_pack_chat(const char* to_id, const char* text) {
+cJSON* json_pack_chat(uint32_t to_id, const char* text) {
     cJSON* p;
     cJSON* root = new_message("chat", &p);
-    cJSON_AddStringToObject(p, "toId", to_id ? to_id : "");
+    cJSON_AddNumberToObject(p, "toId", to_id);
     cJSON_AddStringToObject(p, "text", text ? text : "");
     return root;
 }
 
-cJSON* json_pack_talk_done(const char* entity_id, const char* dialog_code) {
+cJSON* json_pack_talk_done(uint32_t entity_id, const char* dialog_code) {
     cJSON* p;
     cJSON* root = new_message("talk_done", &p);
-    cJSON_AddStringToObject(p, "entityId", entity_id ? entity_id : "");
+    cJSON_AddNumberToObject(p, "entityId", entity_id);
     cJSON_AddStringToObject(p, "dialogCode", dialog_code ? dialog_code : "");
     return root;
 }
@@ -98,27 +98,27 @@ cJSON* json_pack_quest_abandon(const char* quest_code) {
     return root;
 }
 
-cJSON* json_pack_quest_accept(const char* entity_id, const char* quest_code) {
+cJSON* json_pack_quest_accept(uint32_t entity_id, const char* quest_code) {
     cJSON* p;
     cJSON* root = new_message("quest_accept", &p);
-    cJSON_AddStringToObject(p, "entityId", entity_id ? entity_id : "");
+    cJSON_AddNumberToObject(p, "entityId", entity_id);
     cJSON_AddStringToObject(p, "questCode", quest_code ? quest_code : "");
     return root;
 }
 
-cJSON* json_pack_shop_buy(const char* entity_id, const char* item_id, int quantity) {
+cJSON* json_pack_shop_buy(uint32_t entity_id, const char* item_id, int quantity) {
     cJSON* p;
     cJSON* root = new_message("shop_buy", &p);
-    cJSON_AddStringToObject(p, "entityId", entity_id ? entity_id : "");
+    cJSON_AddNumberToObject(p, "entityId", entity_id);
     cJSON_AddStringToObject(p, "itemId", item_id ? item_id : "");
     cJSON_AddNumberToObject(p, "quantity", quantity);
     return root;
 }
 
-cJSON* json_pack_craft_item(const char* entity_id, int recipe_index) {
+cJSON* json_pack_craft_item(uint32_t entity_id, int recipe_index) {
     cJSON* p;
     cJSON* root = new_message("craft_item", &p);
-    cJSON_AddStringToObject(p, "entityId", entity_id ? entity_id : "");
+    cJSON_AddNumberToObject(p, "entityId", entity_id);
     cJSON_AddNumberToObject(p, "recipeIndex", recipe_index);
     return root;
 }
@@ -128,10 +128,10 @@ cJSON* json_pack_craft_cancel(void) {
     return new_message("craft_cancel", &p);
 }
 
-cJSON* json_pack_storage_open(const char* entity_id) {
+cJSON* json_pack_storage_open(uint32_t entity_id) {
     cJSON* p;
     cJSON* root = new_message("storage_open", &p);
-    cJSON_AddStringToObject(p, "entityId", entity_id ? entity_id : "");
+    cJSON_AddNumberToObject(p, "entityId", entity_id);
     return root;
 }
 
@@ -144,11 +144,11 @@ cJSON* json_pack_item_op(const char* item_id, int qty, bool to_vault) {
     return op;
 }
 
-cJSON* json_pack_item_ops(const char* entity_id, cJSON* ops) {
+cJSON* json_pack_item_ops(uint32_t entity_id, cJSON* ops) {
     assert(ops);
     cJSON* p;
     cJSON* root = new_message("item_ops", &p);
-    cJSON_AddStringToObject(p, "entityId", entity_id ? entity_id : "");
+    cJSON_AddNumberToObject(p, "entityId", entity_id);
     cJSON_AddItemToObject(p, "ops", ops);
     return root;
 }

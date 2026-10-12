@@ -16,7 +16,7 @@ static float rightmost_spark_x;
 static EntityState entity;
 
 float world_cell_size(void) { return 32.0f; }
-const EntityState* game_state_find_entity(const char* id) { return 0 == strcmp(id, entity.id) ? &entity : NULL; }
+const EntityState* game_state_find_entity(EntityID id) { return id == entity.id ? &entity : NULL; }
 void text_draw_compat(const char* text, int x, int y, int size, Color color) {
     assert(0 == strcmp("LEVEL UP", text));
     if (255 == color.r) labels++;
@@ -45,7 +45,7 @@ static void reset_probe(void) {
 }
 
 int main(void) {
-    strcpy(entity.id, "e");
+    entity.id = 1;
     entity.interp_pos = (Vector2){ 2.0f, 3.0f };
     entity.dims = (Vector2){ 1.0f, 1.0f };
 
@@ -73,7 +73,7 @@ int main(void) {
     assert(leftmost_spark_x >= 10.0f * 32.0f - 4.0f && rightmost_spark_x <= 11.0f * 32.0f + 4.0f);
 
     /* Still looping past two seconds, and gone after the whole duration. */
-    assert(true == fx_level_up_active("e"));
+    assert(true == fx_level_up_active(1));
     fx_level_up_update(1.2f);
     reset_probe();
     fx_level_up_draw();
@@ -81,7 +81,7 @@ int main(void) {
     fx_level_up_update(2.0f);
     reset_probe();
     fx_level_up_draw();
-    assert(0 == sparks && false == fx_level_up_active("e"));
+    assert(0 == sparks && false == fx_level_up_active(1));
 
     /* A second level-up on the same entity reuses its slot. */
     assert(true == fx_level_up_observe(5, 6, &entity));

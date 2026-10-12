@@ -15,7 +15,7 @@ static float highest_y;
 static EntityState entity;
 
 float world_cell_size(void) { return 32.0f; }
-const EntityState* game_state_find_entity(const char* id) { return 0 == strcmp(id, entity.id) ? &entity : NULL; }
+const EntityState* game_state_find_entity(EntityID id) { return id == entity.id ? &entity : NULL; }
 const Color FX_SPARK_GREEN = { 70, 220, 100, 255 };
 
 static void probe(float cx, float cy, Color body) {
@@ -48,7 +48,7 @@ static void draw(void) {
 }
 
 int main(void) {
-    strcpy(entity.id, "e");
+    entity.id = 1;
     entity.interp_pos = (Vector2){ 2.0f, 3.0f };
     entity.dims = (Vector2){ 1.0f, 1.0f };
     fx_heal_aura_reset();

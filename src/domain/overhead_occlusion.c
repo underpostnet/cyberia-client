@@ -14,16 +14,16 @@
 #define MAX_FADING_ROOFS 32
 
 typedef struct {
-    char  id[MAX_ID_LENGTH];
+    EntityID id;
     float progress;   /* 0 = shown, 1 = hidden */
 } FadingRoof;
 
 static FadingRoof s_roofs[MAX_FADING_ROOFS];
 static int        s_roof_count;
 
-static const FadingRoof* find_roof(const char* id) {
+static const FadingRoof* find_roof(EntityID id) {
     for (int i = 0; i < s_roof_count; i++) {
-        if (0 == strcmp(s_roofs[i].id, id)) return &s_roofs[i];
+        if (id == s_roofs[i].id) return &s_roofs[i];
     }
     return NULL;
 }
@@ -48,7 +48,7 @@ void overhead_occlusion_update(float dt) {
         const float progress = under ? fminf(1.0f, current + step) : fmaxf(0.0f, current - step);
         if (0.0f == progress) continue;
 
-        memcpy(next[next_count].id, fg->id, sizeof(next[next_count].id));
+        next[next_count].id = fg->id;
         next[next_count].progress = progress;
         next_count++;
     }

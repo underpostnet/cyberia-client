@@ -113,9 +113,9 @@
 /* ── State ──────────────────────────────────────────────────────────────── */
 
 typedef struct {
-    char  item_id[MAX_ITEM_ID_LENGTH];
-    char  collector_id[MAX_ID_LENGTH];
-    bool  granted;               /* the item enters the collector's inventory */
+    char     item_id[MAX_ITEM_ID_LENGTH];
+    EntityID collector_id;
+    bool     granted;            /* the item enters the collector's inventory */
     float start_x, start_y;
     float last_target_x, last_target_y;
     bool  have_target;
@@ -125,7 +125,7 @@ typedef struct {
 } VacFlight;
 
 typedef struct {
-    char   drop_id[MAX_ID_LENGTH];
+    EntityID drop_id;
     float  origin_x, origin_y;   /* launch start (corpse center)              */
     float  landing_x, landing_y; /* launch end / idle anchor                  */
     double launch_start;         /* s_clock at launch                          */
@@ -194,10 +194,9 @@ static float lcg_f01(void) {
 static float lcg_range(float lo, float hi) { return lo + lcg_f01() * (hi - lo); }
 
 /* Stable sine phase from a drop id so neighbouring drops bounce out of sync. */
-static float id_phase(const char* id) {
-    uint32_t h = 2166136261u;
-    for (const char* p = id; *p; p++) { h ^= (uint8_t)*p; h *= 16777619u; }
-    return (float)(h & 0xFFFFu) / 65535.0f * 6.2831853f;
+static float id_phase(EntityID id) {
+    uint32_t h = id * 2654435761u;
+    return (float)(h >> 16) / 65535.0f * 6.2831853f;
 }
 
 static void spawn_ambient(float wx, float wy, uint8_t tint);
@@ -216,9 +215,9 @@ void loot_fx_reset(void) {
 
 /* ── Drop animation registry (stages 1–2) ──────────────────────────────── */
 
-static DropAnim* drop_find(const char* drop_id) {
+static DropAnim* drop_find(EntityID drop_id) {
     for (int i = 0; i < LOOT_DROP_MAX; i++) {
-        if (s_drops[i].active && 0 == strcmp(s_drops[i].drop_id, drop_id))
+        if (s_drops[i].active && drop_id == s_drops[i].drop_id)
             return &s_drops[i];
     }
     return NULL;
@@ -229,19 +228,19 @@ static float drop_rank(const void* elem) {
     return d->active ? (float)-d->last_seen : INFINITY;
 }
 
-static DropAnim* drop_alloc(const char* drop_id) {
+static DropAnim* drop_alloc(EntityID drop_id) {
     DropAnim* slot = pool_take(s_drops, sizeof(*s_drops), LOOT_DROP_MAX, drop_rank);
-    copy_str(slot->drop_id, MAX_ID_LENGTH, drop_id);
+    slot->drop_id   = drop_id;
     slot->phase     = id_phase(drop_id);
     slot->last_seen = s_clock;
     slot->active    = true;
     return slot;
 }
 
-void loot_fx_note_spawn(const char* drop_id, float origin_x, float origin_y,
+void loot_fx_note_spawn(EntityID drop_id, float origin_x, float origin_y,
                         float landing_x, float landing_y, const char* item_id,
                         uint16_t launch_ms) {
-    if (!drop_id || drop_id[0] == '\0') return;
+    if (0 == drop_id) return;
 
     DropAnim* a = drop_find(drop_id);
     if (!a) a = drop_alloc(drop_id);
@@ -258,7 +257,7 @@ void loot_fx_note_spawn(const char* drop_id, float origin_x, float origin_y,
     (void)item_id; /* item texture comes from the AOI drop bot itself */
 }
 
-bool loot_fx_drop_render_pos(const char* drop_id,
+bool loot_fx_drop_render_pos(EntityID drop_id,
                              float land_topx, float land_topy,
                              float dims_w, float dims_h,
                              bool loot_eligible,
@@ -451,7 +450,7 @@ static void spawn_slot_delivery(float from_x, float from_y, float to_x, float to
  * avatar's world position to screen, resolve the item's slot, and launch the
  * delivery stream. No-op for remote collectors (no local inventory shown). */
 static void trigger_slot_delivery(const VacFlight* f) {
-    if (!f->granted || 0 != strcmp(f->collector_id, g_local_player.id)) return;
+    if (!f->granted || g_local_player.id != f->collector_id) return;
 
     /* Sounded here, where the parabola lands on the avatar, because that is the moment the player
      * takes the item. The stream into the bar and its counter flourish are what happens next; a
@@ -533,7 +532,7 @@ void loot_fx_slot_expend(const char* item_id) {
 
 /* ── Vacuum flight (stage 3) ───────────────────────────────────────────── */
 
-void loot_fx_push(const char* drop_id, const char* collector_id,
+void loot_fx_push(EntityID drop_id, EntityID collector_id,
                   const char* item_id, float world_x, float world_y,
                   bool granted) {
     if (!item_id || item_id[0] == '\0') return;
@@ -542,11 +541,10 @@ void loot_fx_push(const char* drop_id, const char* collector_id,
      * this drop (contributed damage — the server only lets contributors
      * collect, so a self-collect is always gold), gray when another player
      * collects loot that was never ours. */
-    bool eligible = (NULL != collector_id)
-        && (0 == strcmp(collector_id, g_local_player.id));
+    bool eligible = 0 != collector_id && g_local_player.id == collector_id;
 
     /* Stop the in-world idle render for this token. */
-    if (drop_id && drop_id[0] != '\0') {
+    if (0 != drop_id) {
         DropAnim* a = drop_find(drop_id);
         if (a) {
             a->collected = true;
@@ -570,7 +568,7 @@ void loot_fx_push(const char* drop_id, const char* collector_id,
 
     memset(slot, 0, sizeof(*slot));
     strncpy(slot->item_id, item_id, MAX_ITEM_ID_LENGTH - 1);
-    if (collector_id) strncpy(slot->collector_id, collector_id, MAX_ID_LENGTH - 1);
+    slot->collector_id = collector_id;
     slot->granted = granted;
     slot->start_x = world_x;
     slot->start_y = world_y;
@@ -586,7 +584,7 @@ bool loot_fx_inbound_to_inventory(const char* item_id) {
     for (int i = 0; i < LOOT_FX_MAX; i++) {
         const VacFlight* f = &s_flights[i];
         if (f->active && f->granted && 0 == strcmp(f->item_id, item_id) &&
-            0 == strcmp(f->collector_id, g_local_player.id)) {
+            g_local_player.id == f->collector_id) {
             return true;
         }
     }
@@ -598,17 +596,17 @@ bool loot_fx_inbound_to_inventory(const char* item_id) {
     return false;
 }
 
-static bool resolve_collector_center(const char* collector_id, float* cx, float* cy) {
+static bool resolve_collector_center(EntityID collector_id, float* cx, float* cy) {
     const GameState* gs = &g_game_state;
 
-    if (collector_id[0] != '\0' && 0 == strcmp(collector_id, g_local_player.id)) {
+    if (0 != collector_id && g_local_player.id == collector_id) {
         *cx = gs->player.base.interp_pos.x + gs->player.base.dims.x * 0.5f;
         *cy = gs->player.base.interp_pos.y + gs->player.base.dims.y * 0.5f;
         return true;
     }
     for (int i = 0; i < gs->other_player_count; i++) {
         const PlayerState* p = &gs->other_players[i];
-        if (0 == strcmp(p->base.id, collector_id)) {
+        if (collector_id == p->base.id) {
             *cx = p->base.interp_pos.x + p->base.dims.x * 0.5f;
             *cy = p->base.interp_pos.y + p->base.dims.y * 0.5f;
             return true;

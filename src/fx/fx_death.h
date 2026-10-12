@@ -20,6 +20,6 @@ void fx_death_update(float dt);
 void fx_death_draw(void);
 void fx_death_reset(void);
 /* Whether the entity's cue is running; the overhead HUD yields the space. */
-bool fx_death_active(const char* entity_id);
+bool fx_death_active(EntityID entity_id);
 
 #endif /* CYBERIA_FX_FX_DEATH_H */

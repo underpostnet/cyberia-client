@@ -49,7 +49,7 @@
 #define FX_STEP_RUN_EXTRA_PUFFS   1
 
 typedef struct {
-    char    entity_id[MAX_ID_LENGTH];
+    EntityID entity_id;
     Vector2 last_pos;      /* grid units, entity top-left */
     float   stride_accum;  /* grid units travelled since the last burst */
     bool    primed;        /* last_pos holds a real sample to measure against */
@@ -71,19 +71,19 @@ void fx_footsteps_reset(void) {
 
 /* Existing tracker for `id`, or a free slot claimed for it. NULL when the
  * table is full — that entity raises no dust until a slot frees up. */
-static FxStepTracker* tracker_for(const char* id) {
+static FxStepTracker* tracker_for(EntityID id) {
     FxStepTracker* free_slot = NULL;
     for (int i = 0; i < FX_FOOTSTEPS_MAX_TRACKED; i++) {
         FxStepTracker* t = &s_trackers[i];
         if (t->used) {
-            if (0 == strcmp(t->entity_id, id)) return t;
+            if (id == t->entity_id) return t;
         } else if (!free_slot) {
             free_slot = t;
         }
     }
     if (!free_slot) return NULL;
     memset(free_slot, 0, sizeof(*free_slot));
-    strncpy(free_slot->entity_id, id, sizeof(free_slot->entity_id) - 1);
+    free_slot->entity_id = id;
     free_slot->used = true;
     return free_slot;
 }
@@ -135,7 +135,7 @@ static void emit_step(const EntityState* e, Vector2 heading, bool running) {
 
 /* Advance one entity's stride and emit whatever steps it crossed this frame. */
 static void track_entity(const EntityState* e, ObjectLayerMode mode, float dt) {
-    if (!e || '\0' == e->id[0]) return;
+    if (!e || 0 == e->id) return;
 
     FxStepTracker* t = tracker_for(e->id);
     if (!t) return;
@@ -180,7 +180,7 @@ void fx_footsteps_update(float dt) {
 
     for (int i = 0; i < FX_FOOTSTEPS_MAX_TRACKED; i++) s_trackers[i].seen = false;
 
-    if ('\0' != g_local_player.id[0]) {
+    if (0 != g_local_player.id) {
         track_entity(&g_game_state.player.base, local_player_view_mode(), dt);
     }
     for (int i = 0; i < g_game_state.other_player_count; i++) {

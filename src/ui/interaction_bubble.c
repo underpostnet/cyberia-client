@@ -60,7 +60,7 @@
  * icon always shows the living appearance even for a dead or ghost entity;
  * `layers` tracks whatever the server currently sends. */
 typedef struct {
-    char entity_id[MAX_ID_LENGTH];
+    EntityID entity_id;
     char display_name[MAX_ID_LENGTH];
     ObjectLayerState layers[IBUBBLE_MAX_LAYERS];
     int layer_count;
@@ -207,7 +207,7 @@ static Color status_border_color(const InteractionBubbleSlot* slot, bool is_self
     if (is_self) return presentation_runtime_palette("SELF_BORDER");
     Color c = presentation_runtime_status_border(slot->status_icon);
     if (s_border_color_dbg < 12) {
-        LOG_INFO("[BORDER] entity=%s status_icon=%d border=(%d,%d,%d,%d)\n",
+        LOG_INFO("[BORDER] entity=%u status_icon=%d border=(%d,%d,%d,%d)\n",
                slot->entity_id, slot->status_icon, c.r, c.g, c.b, c.a);
         s_border_color_dbg++;
     }
@@ -235,15 +235,15 @@ static int copy_active_layers(ObjectLayerState* out,
     return n;
 }
 
-static InteractionBubbleSlot* find_slot(const char* entity_id) {
+static InteractionBubbleSlot* find_slot(EntityID entity_id) {
     for (int i = 0; i < s_slot_count; i++) {
-        if (strcmp(s_slots[i].entity_id, entity_id) == 0)
+        if (entity_id == s_slots[i].entity_id)
             return &s_slots[i];
     }
     return NULL;
 }
 
-static InteractionBubbleSlot* upsert_slot(const char* entity_id) {
+static InteractionBubbleSlot* upsert_slot(EntityID entity_id) {
     InteractionBubbleSlot* slot = find_slot(entity_id);
     if (slot) {
         slot->active = true;
@@ -253,7 +253,7 @@ static InteractionBubbleSlot* upsert_slot(const char* entity_id) {
 
     slot = &s_slots[s_slot_count];
     memset(slot, 0, sizeof(InteractionBubbleSlot));
-    strncpy(slot->entity_id, entity_id, sizeof(slot->entity_id) - 1);
+    slot->entity_id = entity_id;
     slot->active = true;
     slot->appeared_at = GetTime();
     s_slot_count++;
@@ -262,10 +262,10 @@ static InteractionBubbleSlot* upsert_slot(const char* entity_id) {
 
 /* Item id of the entity's active skin, or NULL. Talk dialogue is keyed to
  * the skin only — the displayed dialogue is the one associated with it. */
-static void scan_entity(const char* entity_id, const EntityState* base,
+static void scan_entity(EntityID entity_id, const EntityState* base,
                         bool is_player, const char* behavior,
                         uint8_t interaction_flags) {
-    if (!base || !entity_id || entity_id[0] == '\0') return;
+    if (!base || 0 == entity_id) return;
 
     if (behavior) {
         if (strcmp(behavior, "skill") == 0) return;
@@ -392,7 +392,7 @@ void interaction_bubble_update(void) {
         s_slots[i].active = false;
 
     /* Self-player is always scanned first → occupies slot 0. */
-    if (g_local_player.id[0] != '\0') {
+    if (0 != g_local_player.id) {
         scan_entity(g_local_player.id,
                     &g_game_state.player.base, true, NULL, 0);
     }
@@ -407,7 +407,7 @@ void interaction_bubble_update(void) {
 
     for (int i = 0; i < g_game_state.bot_count; i++) {
         const BotState* bot = &g_game_state.bots[i];
-        if (bot->caster_id[0] != '\0') continue;
+        if (0 != bot->caster_id) continue;
         scan_entity(bot->base.id, &bot->base, false, bot->behavior, bot->interaction_flags);
         /* R12: every quest-talk is cached before its dialogue opens. scan_entity
          * already requests the greeting. */
@@ -488,7 +488,7 @@ void interaction_bubble_draw(void) {
         InteractionBubbleSlot* slot = &s_slots[i];
         Rectangle r = slot_rect(i, view);
         bool hovered = ui_button_hit(r, mx, my);
-        bool is_self = (strcmp(slot->entity_id, g_local_player.id) == 0);
+        bool is_self = g_local_player.id == slot->entity_id;
 
         /* Pixel-retro quest/action provider effect: animated pixel particles
          * that orbit the slot in a retro pattern. Gold for quest providers,
@@ -584,7 +584,9 @@ void interaction_bubble_draw(void) {
             status_ids[status_n++] = STATUS_ICON_QUEST_PROVIDER;
         if (status_n > 0) {
             int ico_sz = 16;
-            float phase = ui_icon_phase(slot->entity_id);
+            char phase_key[12];
+            snprintf(phase_key, sizeof phase_key, "%u", slot->entity_id);
+            float phase = ui_icon_phase(phase_key);
             float iy = r.y + r.height - ico_sz * 0.5f - 2.0f;
             for (int k = 0; k < status_n; k++) {
                 const char* icon_id = presentation_runtime_status_icon(status_ids[k]);
@@ -664,11 +666,11 @@ static bool open_slot_at(int mx, int my) {
         Rectangle r = slot_rect(i, view);
         if (ui_button_hit(r, mx, my)) {
             InteractionBubbleSlot* slot = &s_slots[i];
-            LOG_INFO("[INTERACTION_BUBBLE] Slot %d clicked: entity=%s dialogue=%d\n",
+            LOG_INFO("[INTERACTION_BUBBLE] Slot %d clicked: entity=%u dialogue=%d\n",
                    i, slot->entity_id, (int)slot->has_dialogue);
 
             /* Bubble tap opens modal_interact. */
-            bool is_self      = (strcmp(slot->entity_id, g_local_player.id) == 0);
+            bool is_self      = g_local_player.id == slot->entity_id;
             bool has_dialogue = slot->has_dialogue && slot->dialogue_item_id[0] != '\0';
             Color bc = status_border_color(slot, is_self);
             modal_interact_open(slot->entity_id, slot->display_name,
@@ -717,7 +719,7 @@ void interaction_bubble_dead_equip(const char* item_id, bool active) {
     if (s_slot_count <= 0) return;
     /* Self-player is always slot 0. */
     InteractionBubbleSlot* slot = &s_slots[0];
-    if (strcmp(slot->entity_id, g_local_player.id) != 0) return;
+    if (g_local_player.id != slot->entity_id) return;
 
     if (active) {
         /* Activate: mark matching item active, apply one-per-type rule. */
@@ -770,9 +772,9 @@ void interaction_bubble_dead_equip(const char* item_id, bool active) {
 }
 
 const ObjectLayerState* interaction_bubble_get_alive_layers(
-    const char *entity_id, int *out_count) {
+    EntityID entity_id, int *out_count) {
     if (out_count) *out_count = 0;
-    if (!entity_id || entity_id[0] == '\0') return NULL;
+    if (0 == entity_id) return NULL;
     InteractionBubbleSlot* slot = find_slot(entity_id);
     if (!slot || slot->alive_layer_count <= 0) return NULL;
     if (out_count) *out_count = slot->alive_layer_count;

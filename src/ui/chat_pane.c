@@ -15,6 +15,7 @@
 #include <ctype.h>
 #include <raylib.h>
 #include <stdbool.h>
+#include <stdio.h>
 #include <string.h>
 
 #define CHAT_TEXT_MAX     128
@@ -41,7 +42,7 @@ typedef struct {
     Rectangle presets[CHAT_PRESET_COUNT];
 } ChatLayout;
 
-static char      s_entity_id[64];
+static EntityID  s_entity_id;
 static UIScroll  s_scroll;
 static float     s_content_h;
 static int       s_seen_count;
@@ -84,7 +85,7 @@ static ChatLayout chat_layout(Rectangle content) {
 
 /* Trim and push one line. The history shows it at once (R4). A line pushed
  * while the socket is down still shows, and the socket close drops the event. */
-static void send_line(const char* entity_id, const char* text) {
+static void send_line(EntityID entity_id, const char* text) {
     char line[CHAT_LINE_BYTES];
     copy_str(line, sizeof(line), text);
     char* start = line;
@@ -92,14 +93,13 @@ static void send_line(const char* entity_id, const char* text) {
     size_t length = strlen(start);
     while (0 < length && isspace((unsigned char)start[length - 1])) start[--length] = '\0';
     if (0 == length) return;
-    client_event_payload_t p = {0};
-    copy_str(p.item_id, sizeof(p.item_id), entity_id);
+    client_event_payload_t p = { .entity_id = entity_id };
     copy_str(p.text, sizeof(p.text), start);
     client_event_push(CLIENT_EVENT_CHAT, p);
     notify_store_push(entity_id, "You", start, true);
 }
 
-static void send_input(const char* entity_id) {
+static void send_input(EntityID entity_id) {
     char text[CHAT_LINE_BYTES];
     text_input_bridge_take(text, sizeof(text));
     send_line(entity_id, text);
@@ -110,15 +110,14 @@ static bool same_pixels(Rectangle a, Rectangle b) {
            (int)a.width == (int)b.width && (int)a.height == (int)b.height;
 }
 
-void chat_pane_update(Rectangle content, const char* entity_id, bool input_visible, float dt) {
-    assert(entity_id);
+void chat_pane_update(Rectangle content, EntityID entity_id, bool input_visible, float dt) {
     ChatLayout l = chat_layout(content);
 
-    if (0 != strcmp(s_entity_id, entity_id)) {
+    if (entity_id != s_entity_id) {
         /* A draft belongs to the entity it was typed for. */
         char draft[CHAT_LINE_BYTES];
         text_input_bridge_take(draft, sizeof(draft));
-        copy_str(s_entity_id, sizeof(s_entity_id), entity_id);
+        s_entity_id = entity_id;
         ui_scroll_reset(&s_scroll);
         s_content_h  = 0.0f;
         s_seen_count = -1;
@@ -152,13 +151,15 @@ void chat_pane_update(Rectangle content, const char* entity_id, bool input_visib
     if (text_input_bridge_submitted()) send_input(entity_id);
 }
 
-void chat_pane_draw(Rectangle content, const char* entity_id, const char* entity_name) {
-    assert(entity_id && entity_name);
+void chat_pane_draw(Rectangle content, EntityID entity_id, const char* entity_name) {
+    assert(entity_name);
     ChatLayout l = chat_layout(content);
     int font = chat_font();
     int mx = GetMouseX();
     int my = GetMouseY();
-    const char* their_label = '\0' != entity_name[0] ? entity_name : entity_id;
+    char id_label[16];
+    snprintf(id_label, sizeof id_label, "%u", entity_id);
+    const char* their_label = '\0' != entity_name[0] ? entity_name : id_label;
 
     const NotifyEntry* entry = notify_store_get(entity_id);
     int count = NULL != entry ? entry->count : 0;
@@ -204,8 +205,7 @@ void chat_pane_draw(Rectangle content, const char* entity_id, const char* entity
     }
 }
 
-void chat_pane_press(Rectangle content, const char* entity_id, int mx, int my) {
-    assert(entity_id);
+void chat_pane_press(Rectangle content, EntityID entity_id, int mx, int my) {
     ChatLayout l = chat_layout(content);
     if (ui_button_hit(l.send, mx, my)) {
         send_input(entity_id);

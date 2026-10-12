@@ -145,24 +145,20 @@ static void dev_ui_update_network_stats(size_t download_bytes, size_t upload_byt
     g_dev_ui.last_network_update = current_time;
 }
 
-static int dev_ui_get_effective_stats_sum(const char* player_id) {
-    assert(player_id);
-
+static int dev_ui_get_effective_stats_sum(EntityID player_id) {
     // The snapshot carries the effective stat sum.
-    if (strcmp(g_local_player.id, player_id) == 0) {
+    if (player_id == g_local_player.id) {
         return g_game_state.player.base.stats_sum;
     }
 
     return 0;
 }
 
-static int dev_ui_get_active_item_count(const char* player_id) {
-    assert(player_id);
-
+static int dev_ui_get_active_item_count(EntityID player_id) {
     int active_count = 0;
 
     // Check if it's the main player
-    if (strcmp(g_local_player.id, player_id) == 0) {
+    if (player_id == g_local_player.id) {
         EntityState* entity = &g_game_state.player.base;
 
         // Count active object layers
@@ -208,7 +204,7 @@ void dev_ui_draw(int screen_width, int screen_height) {
     y_offset += font_size_title + 10;
 
     // Get player information
-    const char* player_id = g_local_player.id[0] != '\0' ? g_local_player.id : "N/A";
+    EntityID player_id = g_local_player.id;
     const char* map_code = g_local_player.map_code[0] != '\0' ? g_local_player.map_code : "--";
     const char* mode_str = mode_to_string(local_player_view_mode());
     const char* dir_str = direction_to_string(local_player_view_direction());
@@ -224,7 +220,7 @@ void dev_ui_draw(int screen_width, int screen_height) {
     char text_lines[9][128];
     int line_count = 0;
 
-    snprintf(text_lines[line_count++], 128, "Player ID: %s", player_id);
+    snprintf(text_lines[line_count++], 128, "Player ID: %u", player_id);
     snprintf(text_lines[line_count++], 128, "Map: %s", map_code);
     snprintf(text_lines[line_count++], 128, "Mode: %s | Direction: %s", mode_str, dir_str);
     snprintf(text_lines[line_count++], 128, "Pos: (%.2f, %.2f)", player_pos.x, player_pos.y);

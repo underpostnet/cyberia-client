@@ -99,7 +99,7 @@ static float    s_content_height = 0.0f;
 /* Entity the card is anchored over on large screens — the vendor, assembler or
  * NPC whose panel opened this item. Empty means the local player, who owns the
  * inventory the modal reads. */
-static char  s_anchor_entity[MAX_ID_LENGTH] = {0};
+static EntityID s_anchor_entity = 0;
 /* Anchored card geometry: height, frozen corner, and the settled flag. */
 static ModalAnchorLayout s_layout = { .height = -1.0f };
 
@@ -428,14 +428,13 @@ static void reset_view_state(void) {
     s_activate_btn_visible = false;
     ui_scroll_reset(&s_content_scroll);
     s_content_height = 0.0f;
-    s_anchor_entity[0] = '\0';
+    s_anchor_entity = 0;
     /* A fresh session re-resolves both the height and the frozen corner. */
     modal_anchor_layout_reset(&s_layout);
 }
 
-void inventory_modal_set_anchor_entity(const char* entity_id) {
-    if (NULL == entity_id) { s_anchor_entity[0] = '\0'; return; }
-    copy_str(s_anchor_entity, sizeof(s_anchor_entity), entity_id);
+void inventory_modal_set_anchor_entity(EntityID entity_id) {
+    s_anchor_entity = entity_id;
 }
 
 void inventory_modal_open(int inv_idx) {

@@ -310,8 +310,7 @@ void entity_overhead_ui_draw_obstacle(const WorldObject *o, float cell_size) {
     assert(o);
     if (!(0.0f < o->max_life && 0.0f < o->life)) return;
     EntityOverheadParams p = {
-        .name     = o->id,
-        .life     = o->life,
+        .life    = o->life,
         .max_life = o->max_life,
         .show_hp  = true,
     };

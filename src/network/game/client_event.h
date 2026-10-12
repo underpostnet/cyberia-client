@@ -5,6 +5,7 @@
 #include <stdint.h>
 
 #include "object_layer.h"
+#include "world_types.h"
 
 /* Client events: the one uplink of input to the server.
  *
@@ -56,8 +57,8 @@ typedef struct {
  * reads only its own fields. */
 typedef struct {
     float  target_x, target_y;                 /* player_action */
-    char   entity_id[CLIENT_EVENT_ID_BYTES];
-    char   item_id[CLIENT_EVENT_ID_BYTES];     /* also chat to_id, quest_code */
+    EntityID entity_id;                        /* also chat to_id */
+    char   item_id[CLIENT_EVENT_ID_BYTES];     /* also quest_code */
     char   code[CLIENT_EVENT_ID_BYTES];        /* dialog_code */
     char   text[CHAT_LINE_BYTES];              /* chat */
     int    quantity, recipe_index;

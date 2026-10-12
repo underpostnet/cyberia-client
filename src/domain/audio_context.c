@@ -28,7 +28,7 @@ static const float LIFE_MILESTONES[] = { 0.0f, 0.25f, 0.5f, 0.75f };
 
 /* What the audio layer remembers about one entity between snapshots. */
 typedef struct {
-    char id[MAX_ID_LENGTH];
+    EntityID id;
     float fraction;        /* life / max_life at the last snapshot */
     bool walking;          /* on feet and moving at the last snapshot */
     float step_remaining;  /* seconds until this entity's next footfall */
@@ -43,7 +43,7 @@ typedef struct {
 
 static char s_map[MAX_ID_LENGTH];
 static char s_destination[MAX_ID_LENGTH];
-static char s_skills[SEEN_SKILLS_CAP][MAX_ID_LENGTH];
+static EntityID s_skills[SEEN_SKILLS_CAP];
 static int s_skill_count;
 static TrackedEntity s_tracked[TRACKED_LIVES_CAP];
 static int s_tracked_count;
@@ -63,10 +63,9 @@ static bool crossed_milestone(float before, float after) {
 
 /* A stable fraction of the cadence, derived from the entity id: two entities that start walking
  * on the same frame still land their feet apart. */
-static float step_phase(const char* id) {
-    unsigned hash = 2166136261u;
-    for (const char* c = id; '\0' != *c; c++) hash = (hash ^ (unsigned char)*c) * 16777619u;
-    return FOOTSTEP_CADENCE_SECONDS * (float)(hash % 1000u) / 1000.0f;
+static float step_phase(EntityID id) {
+    unsigned hash = id * 2654435761u;
+    return FOOTSTEP_CADENCE_SECONDS * (float)((hash >> 16) % 1000u) / 1000.0f;
 }
 
 /* Carries one entity across the snapshot: its life fraction, whether it is walking, and the
@@ -79,13 +78,13 @@ static void scan_entity(EntityScan* scan, const EntityState* entity, bool on_fee
     if (0.0f >= entity->max_life || TRACKED_LIVES_CAP <= scan->count) return;
     const float fraction = entity->life / entity->max_life;
     TrackedEntity* out = &scan->entries[scan->count];
-    copy_str(out->id, MAX_ID_LENGTH, entity->id);
+    out->id = entity->id;
     out->fraction = fraction;
     out->walking = on_feet && MODE_WALKING == entity->mode;
     out->step_remaining = step_phase(entity->id);
     if (!reset) {
         for (int i = 0; s_tracked_count > i; i++) {
-            if (0 != strcmp(s_tracked[i].id, entity->id)) continue;
+            if (entity->id != s_tracked[i].id) continue;
             if (crossed_milestone(s_tracked[i].fraction, fraction)) scan->healed = true;
             // A walk already under way keeps its timer; one just beginning steps immediately.
             if (s_tracked[i].walking && out->walking) out->step_remaining = s_tracked[i].step_remaining;
@@ -219,19 +218,19 @@ void audio_context_snapshot(void) {
         audio_prefetch_map(s_destination);
     }
 
-    char current[SEEN_SKILLS_CAP][MAX_ID_LENGTH];
+    EntityID current[SEEN_SKILLS_CAP];
     int count = 0;
     for (int i = 0; g_game_state.bot_count > i && SEEN_SKILLS_CAP > count; i++) {
         const BotState* bot = &g_game_state.bots[i];
-        if (0 != strcmp(bot->behavior, "skill") || 0 != strcmp(bot->caster_id, player->base.id)) continue;
+        if (0 != strcmp(bot->behavior, "skill") || player->base.id != bot->caster_id) continue;
         bool seen = changed;
         for (int j = 0; s_skill_count > j; j++) {
-            if (0 == strcmp(s_skills[j], bot->base.id)) seen = true;
+            if (bot->base.id == s_skills[j]) seen = true;
         }
         if (!seen) audio_event(AUDIO_EVENT_PROJECTILE);
-        copy_str(current[count++], MAX_ID_LENGTH, bot->base.id);
+        current[count++] = bot->base.id;
     }
-    memcpy(s_skills, current, (size_t)count * MAX_ID_LENGTH);
+    memcpy(s_skills, current, (size_t)count * sizeof current[0]);
     s_skill_count = count;
 }
 

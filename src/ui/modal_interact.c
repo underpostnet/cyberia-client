@@ -72,7 +72,7 @@ static float s_tab_age = MODAL_POP_DURATION;
  * metadata fetch lands. */
 static bool  s_tab_picked = false;
 
-static char  s_entity_id[64]    = {0};
+static EntityID s_entity_id     = 0;
 static char  s_display_name[64] = {0};
 static char  s_dlg_item[128]    = {0};
 static bool  s_has_dialogue = false;
@@ -202,7 +202,7 @@ static float        s_storage_content_height = 0.0f;
  * current state so that popping restores it.  This lets us navigate to the
  * inventory inspector and back without the AOI leaving the entity. */
 typedef struct {
-    char  entity_id[64];
+    EntityID entity_id;
     char  display_name[64];
     char  dlg_item[128];
     char  action_code[64];
@@ -223,7 +223,7 @@ static int             s_es_depth = 0;
 static void es_push(void) {
     if (s_es_depth >= ES_MAX_DEPTH) return;
     EpsSessionFrame* f = &s_es_stack[s_es_depth];
-    strncpy(f->entity_id, s_entity_id, sizeof(f->entity_id) - 1);
+    f->entity_id = s_entity_id;
     strncpy(f->display_name, s_display_name, sizeof(f->display_name) - 1);
     strncpy(f->dlg_item, s_dlg_item, sizeof(f->dlg_item) - 1);
     strncpy(f->action_code, s_action_code, sizeof(f->action_code) - 1);
@@ -244,7 +244,7 @@ static void es_pop(void) {
     if (s_es_depth <= 0) return;
     s_es_depth--;
     const EpsSessionFrame* f = &s_es_stack[s_es_depth];
-    strncpy(s_entity_id, f->entity_id, sizeof(s_entity_id) - 1);
+    s_entity_id = f->entity_id;
     strncpy(s_display_name, f->display_name, sizeof(s_display_name) - 1);
     strncpy(s_dlg_item, f->dlg_item, sizeof(s_dlg_item) - 1);
     strncpy(s_action_code, f->action_code, sizeof(s_action_code) - 1);
@@ -764,7 +764,7 @@ static void modal_interact_reopen(void) {
      * update; mobile renders it only after the footer opens the reader. */
     request_active_dialogue();
 
-    LOG_INFO("[MODAL_INTERACT] Reopen from ephemeral session: entity=%s layers=%d\n",
+    LOG_INFO("[MODAL_INTERACT] Reopen from ephemeral session: entity=%u layers=%d\n",
              s_entity_id, s_cached_layer_count);
 }
 
@@ -827,13 +827,13 @@ void modal_interact_init(void) {
     es_clear();
 }
 
-void modal_interact_open(const char* entity_id, const char* display_name,
+void modal_interact_open(EntityID entity_id, const char* display_name,
                          const char* dialogue_item_id, bool has_dialogue,
                          Color border) {
     /* A different entity starts a fresh session → drop the prior snapshot.
      * Reopening the same entity (e.g. returning from item inspection) keeps
      * it, so the modal still renders even if the entity left the AOI. */
-    bool same_entity = (0 == strcmp(s_entity_id, entity_id ? entity_id : ""));
+    bool same_entity = entity_id == s_entity_id;
     vault_ops_send(s_entity_id);
     if (!same_entity) {
         s_cached_layer_count = 0;
@@ -848,7 +848,7 @@ void modal_interact_open(const char* entity_id, const char* display_name,
         es_clear();
     }
 
-    copy_str(s_entity_id, sizeof(s_entity_id), entity_id ? entity_id : "");
+    s_entity_id = entity_id;
     copy_str(s_display_name, sizeof(s_display_name), display_name ? display_name : "");
     copy_str(s_dlg_item, sizeof(s_dlg_item), dialogue_item_id ? dialogue_item_id : "");
 
@@ -909,7 +909,7 @@ void modal_interact_open(const char* entity_id, const char* display_name,
 
     request_active_dialogue();
 
-    LOG_INFO("[MODAL_INTERACT] Open: entity=%s layers=%d quests=%d\n",
+    LOG_INFO("[MODAL_INTERACT] Open: entity=%u layers=%d quests=%d\n",
              s_entity_id, s_cached_layer_count, s_quest_code_count);
 }
 
@@ -2177,9 +2177,9 @@ static Rectangle storage_scroll_lane(Rectangle content) {
                         width, content.height };
 }
 
-void modal_interact_storage_state(const char* entity_id, int capacity,
+void modal_interact_storage_state(EntityID entity_id, int capacity,
                                   const ObjectLayerState* slots, int count) {
-    if (!s_open || 0 != strcmp(s_entity_id, entity_id ? entity_id : "")) return;
+    if (!s_open || entity_id != s_entity_id) return;
     if (capacity != s_storage_grid.capacity) item_slot_grid_init(&s_storage_grid, capacity);
     item_slot_grid_clear(&s_storage_grid);
     for (int i = 0; i < count; i++) {

@@ -17,12 +17,15 @@
 #define MAX_ID_LENGTH       64
 #define MAX_BEHAVIOR_LENGTH 32
 
+/* The id of an entity on the server, on the wire and here. 0 is no entity. */
+typedef uint32_t EntityID;
+
 typedef struct EntityState EntityState;
 typedef struct PlayerState PlayerState;
 typedef struct BotState BotState;
 
 struct EntityState {
-    char id[MAX_ID_LENGTH];
+    EntityID id;
     Vector2 pos_server;
     Vector2 pos_prev;
     Vector2 interp_pos;
@@ -79,7 +82,7 @@ struct PlayerState {
 struct BotState {
     EntityState base;
     char behavior[MAX_BEHAVIOR_LENGTH];
-    char caster_id[MAX_ID_LENGTH];
+    EntityID caster_id;
     /* Bound cyberia-action code; "" for ordinary bots. The client fetches the
      * action metadata (label, dialogue map) by this code via REST.
      * Position-independent, so a wandering NPC keeps it. */
@@ -97,7 +100,7 @@ struct BotState {
 };
 
 typedef struct WorldObject {
-    char             id[MAX_ID_LENGTH];
+    EntityID         id;
     Vector2          pos;
     Vector2          dims;
     char             type[MAX_TYPE_LENGTH];

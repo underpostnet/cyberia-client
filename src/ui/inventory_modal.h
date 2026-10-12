@@ -3,6 +3,7 @@
 
 #include "object_layer.h"
 #include "object_layers_management.h"
+#include "world_types.h"
 
 #include <raylib.h>
 #include <stdbool.h>
@@ -33,9 +34,9 @@ void inventory_modal_switch_slot(int inv_idx);
 void inventory_modal_open_external(const ObjectLayerState* ols);
 
 /* Entity the card is anchored over on large screens (see modal_anchor.h).
- * NULL or an empty id anchors over the local player, which is the default
- * every open resets to — set it right after opening. */
-void inventory_modal_set_anchor_entity(const char* entity_id);
+ * Id 0 anchors over the local player, which is the default every open resets
+ * to — set it right after opening. */
+void inventory_modal_set_anchor_entity(EntityID entity_id);
 
 /* One-shot callback fired when the modal closes — lets the opener restore
  * its own context (e.g. the interaction modal reopening itself). Cleared

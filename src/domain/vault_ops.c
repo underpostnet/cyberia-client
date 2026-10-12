@@ -72,10 +72,9 @@ void vault_ops_apply(const client_event_item_op_t* ops, int count) {
 
 void vault_ops_apply_to_inventory(void) { vault_ops_apply(s_vault.ops, s_vault.count); }
 
-void vault_ops_send(const char* entity_id) {
+void vault_ops_send(EntityID entity_id) {
     if (0 == s_vault.count) return;
-    client_event_payload_t p = { .op_count = s_vault.count };
-    copy_str(p.entity_id, sizeof p.entity_id, entity_id);
+    client_event_payload_t p = { .entity_id = entity_id, .op_count = s_vault.count };
     memcpy(p.ops, s_vault.ops, (size_t)s_vault.count * sizeof p.ops[0]);
     client_event_push(CLIENT_EVENT_ITEM_OPS, p);
     s_vault.count = 0;

@@ -34,9 +34,7 @@ cc "${cc_flags[@]}" -o "$out/fx_portal_aura" tests/fx_portal_aura_test.c src/fx/
 cc "${cc_flags[@]}" -o "$out/fx_hit_burst" tests/fx_hit_burst_test.c src/fx/fx_hit_burst.c -lm
 "$out/fx_hit_burst"
 
-cc "${cc_flags[@]}" -ffunction-sections -fdata-sections -Wl,--gc-sections \
-    -o "$out/fx_obstacle_burst" tests/fx_obstacle_burst_test.c src/fx/fx_obstacle_burst.c \
-    src/util/utils.c -lm
+cc "${cc_flags[@]}" -o "$out/fx_obstacle_burst" tests/fx_obstacle_burst_test.c src/fx/fx_obstacle_burst.c -lm
 "$out/fx_obstacle_burst"
 
 cc "${cc_flags[@]}" -o "$out/object_layer_metadata" tests/object_layer_metadata_test.c \

@@ -36,7 +36,7 @@ void interaction_bubble_dead_equip(const char* item_id, bool active);
 /* Cached alive stack for an entity. Returns NULL and sets *out_count to 0
  * when the entity has no bubble slot or no alive cache. */
 const ObjectLayerState* interaction_bubble_get_alive_layers(
-    const char *entity_id, int *out_count);
+    EntityID entity_id, int *out_count);
 
 /* True when the bubble column UI covers the point. The toggle tab always
  * counts; the bubble band counts only while the column is expanded, so a

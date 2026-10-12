@@ -31,7 +31,8 @@
  * g_game_state.player, where every entity keeps it. The snapshot decoder is
  * the sole writer. */
 typedef struct {
-    char             id[MAX_ID_LENGTH];
+    EntityID         id;
+    char             engine_id[MAX_ID_LENGTH]; /* the own id for engine REST calls */
     char             map_code[MAX_ID_LENGTH];
     int              coins;
     double           xp;             /* total XP */
@@ -89,22 +90,22 @@ bool  local_player_in_stasis(void);
 void  local_player_request_quest_abandon(const char* quest_code);
 
 /* Accept the quest the entity offers — the only path to start a mission. */
-void  local_player_request_quest_accept(const char* entity_id, const char* quest_code);
+void  local_player_request_quest_accept(EntityID entity_id, const char* quest_code);
 
 /* Buy `quantity` units of a vendor entity's catalog item. The server validates
  * the total price against the player's balance and replies with a shop_ack. */
-void  local_player_request_shop_buy(const char* entity_id, const char* item_id,
+void  local_player_request_shop_buy(EntityID entity_id, const char* item_id,
                                     int quantity);
 
 /* Assemble an assembler entity's recipe. The server validates the ingredients
  * against the player's inventory and replies with a craft_ack. */
-void  local_player_request_craft(const char* entity_id, int recipe_index);
+void  local_player_request_craft(EntityID entity_id, int recipe_index);
 
 /* Abort the running assembly — the server refunds its ingredients. */
 void  local_player_request_craft_cancel(void);
 
 /* Bind a storage vault. The server answers once with storage_state. */
-void  local_player_request_storage_open(const char* entity_id);
+void  local_player_request_storage_open(EntityID entity_id);
 
 /* Status icon ID (mirrors entity status indicator for self). */
 void     local_player_set_status_icon(uint8_t id);

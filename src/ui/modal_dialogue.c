@@ -48,7 +48,7 @@ static int          s_line_count  = 0;
 static int          s_current     = 0;   /* index of the line being displayed */
 
 /* Entity / item context */
-static char s_entity_id[64]   = {0};
+static EntityID s_entity_id   = 0;
 static char s_item_id[128]    = {0};
 static char s_dialog_code[96] = {0};
 static ModalDialogueRender s_render = MODAL_DIALOGUE_RENDER_ITEM;
@@ -267,7 +267,7 @@ void modal_dialogue_init(void) {
     s_on_close   = NULL;
 }
 
-void modal_dialogue_open(const char* entity_id, const char* item_id,
+void modal_dialogue_open(EntityID entity_id, const char* item_id,
                          const char* dialog_code, ModalDialogueRender render,
                          const DialogueLine* lines, int line_count) {
     int n = (lines && line_count > 0) ? line_count : 0;
@@ -278,7 +278,7 @@ void modal_dialogue_open(const char* entity_id, const char* item_id,
     s_render     = render;
     s_auto_dismiss = (MODAL_DIALOGUE_RENDER_ITEM == render);
 
-    copy_str(s_entity_id, sizeof(s_entity_id), entity_id ? entity_id : "");
+    s_entity_id = entity_id;
     copy_str(s_item_id, sizeof(s_item_id), item_id ? item_id : "");
     copy_str(s_dialog_code, sizeof(s_dialog_code), dialog_code ? dialog_code : "");
 
@@ -288,7 +288,7 @@ void modal_dialogue_open(const char* entity_id, const char* item_id,
     s_collapsed     = false;
     s_open          = true;
 
-    LOG_INFO("[MODAL_DIALOGUE] Open: entity=%s item=%s code=%s lines=%d\n",
+    LOG_INFO("[MODAL_DIALOGUE] Open: entity=%u item=%s code=%s lines=%d\n",
              s_entity_id, s_item_id, s_dialog_code, s_line_count);
 
     /* Only a dialogue with lines holds a modal count and can report talk_done.
@@ -306,8 +306,7 @@ static void send_dlg_end(bool completed) {
     if (!s_dlg_started) return;
     s_dlg_started = false;
     if (completed) {
-        client_event_payload_t p = {0};
-        copy_str(p.entity_id, sizeof p.entity_id, s_entity_id);
+        client_event_payload_t p = { .entity_id = s_entity_id };
         copy_str(p.code, sizeof p.code, s_dialog_code);
         client_event_push(CLIENT_EVENT_TALK_DONE, p);
     }
@@ -318,7 +317,7 @@ static void modal_dialogue_finish(bool completed) {
     if (!s_open) return;
     s_open = false;
 
-    LOG_INFO("[MODAL_DIALOGUE] %s: entity=%s item=%s\n",
+    LOG_INFO("[MODAL_DIALOGUE] %s: entity=%u item=%s\n",
              completed ? "Complete" : "Cancel", s_entity_id, s_item_id);
 
     /* Fire on_close first: a callback that opens another modal keeps the

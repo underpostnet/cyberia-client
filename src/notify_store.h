@@ -8,9 +8,10 @@
 #include <stdbool.h>
 #include <stddef.h>
 
+#include "world_types.h"
+
 #define NS_MAX_ENTITIES        64
 #define NS_MAX_MESSAGES        100
-#define NS_ENTITY_ID_LEN       64
 #define NS_SENDER_LEN          64
 #define NS_TEXT_LEN            256
 
@@ -22,15 +23,15 @@ typedef struct {
 } NotifyMessage;
 
 typedef struct {
-    char          entity_id[NS_ENTITY_ID_LEN];
+    EntityID      entity_id;
     NotifyMessage messages[NS_MAX_MESSAGES];
     int           count;
 } NotifyEntry;
 
 /* A line that is not `mine` also counts as unread (notification.h). */
-void notify_store_push(const char* entity_id, const char* sender, const char* text, bool mine);
+void notify_store_push(EntityID entity_id, const char* sender, const char* text, bool mine);
 
 /* NULL when the entity has no messages. */
-const NotifyEntry* notify_store_get(const char* entity_id);
+const NotifyEntry* notify_store_get(EntityID entity_id);
 
 #endif /* NOTIFY_STORE_H */

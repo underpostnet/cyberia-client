@@ -27,6 +27,8 @@
 
 #define MAX_ENTITIES 1000
 #define MAX_OBJECTS 5000
+/* Slots in the entity table. One slot per entity in the area of interest. */
+#define ENTITY_CAP 8192
 #define MAX_ENTITY_TYPES     16
 #define MAX_DEFAULT_ITEM_IDS  8
 #define MAX_ACTIVE_ITEM_TYPES 8
@@ -113,6 +115,11 @@ struct GameState {
 
     bool init_received;
     double last_update_time;       /* wall-clock arrival of the latest snapshot */
+
+    /* The entity table. ids[i] is the entity at slot i, 0 = free slot. mask[i]
+     * is the only answer to "does slot i have component X". */
+    EntityID ids[ENTITY_CAP];
+    uint64_t mask[ENTITY_CAP];
 };
 
 extern GameState g_game_state;
@@ -130,12 +137,23 @@ void         game_state_layer_pool_reset(void);
  * The decoder is a bump allocator — there is no free. */
 int          game_state_layer_alloc(int count);
 
-PlayerState* game_state_find_player(const char* id);
-BotState*    game_state_find_bot(const char* id);
+/* The slot of `id`, given one if it has none. -1 when the table is full. Only
+ * the snapshot decoder calls it. No code may keep a slot across a tick. */
+int          game_state_spawn(EntityID id);
+
+/* Free the slot of `id`. Its component values stay, but the clear mask makes
+ * them unreadable. */
+void         game_state_despawn(EntityID id);
+
+/* The slot of `id`, or -1. */
+int          game_state_slot(EntityID id);
+
+PlayerState* game_state_find_player(EntityID id);
+BotState*    game_state_find_bot(EntityID id);
 
 /* Any entity a modal can target: the local player, other players, bots and
- * resources. NULL or "" resolves to the local player. */
-const EntityState* game_state_find_entity(const char* id);
+ * resources. 0 resolves to the local player. */
+const EntityState* game_state_find_entity(EntityID id);
 
 static inline const EntityTypeDefault* game_state_get_entity_default(const char* entity_type) {
     for (int i = 0; i < g_game_state.entity_defaults_count; i++) {
@@ -159,7 +177,7 @@ static inline bool game_state_is_dead_item(const char* item_id) {
  * skill projectiles, coins and drops carry no feet. These are the bots that walk, raise dust and
  * cast the ground shadow, so the rule is stated once and read by everything that needs it. */
 static inline bool game_state_bot_has_feet(const BotState* bot) {
-    if (!bot || '\0' != bot->caster_id[0]) return false;
+    if (!bot || 0 != bot->caster_id) return false;
     return 0 != strcmp(bot->behavior, "skill") &&
            0 != strcmp(bot->behavior, "coin") &&
            0 != strcmp(bot->behavior, "drop");

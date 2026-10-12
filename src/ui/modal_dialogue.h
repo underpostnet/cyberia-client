@@ -3,6 +3,8 @@
 
 #include <stdbool.h>
 
+#include "world_types.h"
+
 /* Dialogue modal for an NPC-type entity (bot or other player). Each tap
  * advances one line; the last line, a tap outside, or ESC closes it. A full
  * read pushes "talk_done". Draws the text box with modal.c and the entity
@@ -34,7 +36,7 @@ typedef enum {
 } ModalDialogueRender;
 
 /* `lines` is copied. */
-void modal_dialogue_open(const char* entity_id, const char* item_id,
+void modal_dialogue_open(EntityID entity_id, const char* item_id,
                          const char* dialog_code, ModalDialogueRender render,
                          const DialogueLine* lines, int line_count);
 

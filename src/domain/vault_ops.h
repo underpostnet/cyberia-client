@@ -26,7 +26,7 @@ void vault_ops_apply_to_inventory(void);
 
 /* Push one item_ops event for the vault on entity_id, then clear the list.
  * An empty list pushes nothing. */
-void vault_ops_send(const char* entity_id);
+void vault_ops_send(EntityID entity_id);
 
 /* Drop the list without a send. */
 void vault_ops_clear(void);

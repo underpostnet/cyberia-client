@@ -35,7 +35,7 @@ static void draw(const WorldObject* o) {
 
 int main(void) {
     WorldObject o = { .pos = { 4.0f, 4.0f }, .dims = { 2.0f, 2.0f } };
-    strcpy(o.id, "crystal");
+    o.id = 1;
 
     /* An ordinary obstacle carries no life and draws no bar. */
     draw(&o);

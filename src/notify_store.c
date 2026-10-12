@@ -20,31 +20,31 @@ static int         s_count = 0;
 
 /* ── Helpers ──────────────────────────────────────────────────────────── */
 
-static NotifyEntry* find_or_create(const char* entity_id) {
-    if (!entity_id || entity_id[0] == '\0') return NULL;
+static NotifyEntry* find_or_create(EntityID entity_id) {
+    if (0 == entity_id) return NULL;
 
     /* Look for existing entry */
     for (int i = 0; i < s_count; i++) {
-        if (strncmp(s_entries[i].entity_id, entity_id, NS_ENTITY_ID_LEN - 1) == 0) {
+        if (entity_id == s_entries[i].entity_id) {
             return &s_entries[i];
         }
     }
 
     /* Create new entry if space available */
     if (s_count >= NS_MAX_ENTITIES) {
-        LOG_ERROR("[NOTIFY_STORE] Max entity slots reached, dropping entry for %s", entity_id);
+        LOG_ERROR("[NOTIFY_STORE] Max entity slots reached, dropping entry for %u", entity_id);
         return NULL;
     }
 
     NotifyEntry* e = &s_entries[s_count++];
     memset(e, 0, sizeof(*e));
-    strncpy(e->entity_id, entity_id, NS_ENTITY_ID_LEN - 1);
+    e->entity_id = entity_id;
     return e;
 }
 
 /* ── Public API ───────────────────────────────────────────────────────── */
 
-void notify_store_push(const char* entity_id, const char* sender, const char* text, bool mine) {
+void notify_store_push(EntityID entity_id, const char* sender, const char* text, bool mine) {
     NotifyEntry* e = find_or_create(entity_id);
     if (!e) return;
 
@@ -64,10 +64,9 @@ void notify_store_push(const char* entity_id, const char* sender, const char* te
     if (!mine) notification_push(NOTIF_CHAT, entity_id);
 }
 
-const NotifyEntry* notify_store_get(const char* entity_id) {
-    if (!entity_id) return NULL;
+const NotifyEntry* notify_store_get(EntityID entity_id) {
     for (int i = 0; i < s_count; i++) {
-        if (strncmp(s_entries[i].entity_id, entity_id, NS_ENTITY_ID_LEN - 1) == 0) {
+        if (entity_id == s_entries[i].entity_id) {
             return &s_entries[i];
         }
     }

@@ -28,9 +28,9 @@ int main(void) {
     g_game_state.player.base.dims = (Vector2){ 2.0f, 2.0f };
     g_game_state.foreground_count = 2;
     WorldObject* roof = &g_game_state.foregrounds[0];
-    *roof = (WorldObject){ .id = "roof", .pos = { 10, 10 }, .dims = { 6, 4 }, .overhead_occlusion = true };
+    *roof = (WorldObject){ .id = 1, .pos = { 10, 10 }, .dims = { 6, 4 }, .overhead_occlusion = true };
     WorldObject* canopy = &g_game_state.foregrounds[1];
-    *canopy = (WorldObject){ .id = "canopy", .pos = { 10, 10 }, .dims = { 6, 4 } };
+    *canopy = (WorldObject){ .id = 2, .pos = { 10, 10 }, .dims = { 6, 4 } };
 
     /* Outside: shown. */
     stand_at(5.0f, 5.0f);

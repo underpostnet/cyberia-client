@@ -53,7 +53,7 @@ void loot_fx_reset(void);
 
 /* MsgTypeDropSpawn: register a corpse→cell launch for an in-world drop token.
  * origin/landing are grid-unit centers; launch_ms is the settle duration. */
-void loot_fx_note_spawn(const char* drop_id, float origin_x, float origin_y,
+void loot_fx_note_spawn(EntityID drop_id, float origin_x, float origin_y,
                         float landing_x, float landing_y, const char* item_id,
                         uint16_t launch_ms);
 
@@ -61,7 +61,7 @@ void loot_fx_note_spawn(const char* drop_id, float origin_x, float origin_y,
  * render for this token. world_x / world_y are the token's ground center.
  * `granted` is false when the collection applied an effect and gave no item:
  * the flight then ends on the collector, with no inventory delivery. */
-void loot_fx_push(const char* drop_id, const char* collector_id,
+void loot_fx_push(EntityID drop_id, EntityID collector_id,
                   const char* item_id, float world_x, float world_y,
                   bool granted);
 
@@ -74,7 +74,7 @@ void loot_fx_update(float dt);
  * (INTERACTION_FLAG_LOOT_ELIGIBLE) selecting the particle tint. Returns false
  * when the token has been collected and its in-world render must yield to the
  * detached vacuum flight. */
-bool loot_fx_drop_render_pos(const char* drop_id,
+bool loot_fx_drop_render_pos(EntityID drop_id,
                              float land_topx, float land_topy,
                              float dims_w, float dims_h,
                              bool loot_eligible,

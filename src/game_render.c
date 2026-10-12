@@ -182,7 +182,7 @@ static void game_render_loot_fx(void) {
 
         draw_entity_layers(
             g_entity_render,
-            fx.item_id,            /* per-item animation key */
+            0,                     /* no entity: the animation keys on the item */
             fx.x - half,
             fx.y - half,
             fx.size,
@@ -404,10 +404,10 @@ void game_render_world_objects(void) {
 }
 
 /* Equal depths sort by ID across snapshots. */
-static int compare_depth(float depth_a, const char* id_a, float depth_b, const char* id_b) {
+static int compare_depth(float depth_a, EntityID id_a, float depth_b, EntityID id_b) {
     if (depth_b > depth_a) return -1;
     if (depth_b < depth_a) return 1;
-    return (NULL != id_a && NULL != id_b) ? strcmp(id_a, id_b) : 0;
+    return (id_a > id_b) - (id_a < id_b);
 }
 
 static int compare_foregrounds_by_depth(const void* a, const void* b) {
@@ -472,7 +472,7 @@ void game_render_foregrounds(void) {
 typedef struct {
     enum { ENTITY_TYPE_OBSTACLE, ENTITY_TYPE_STATIC, ENTITY_TYPE_PLAYER, ENTITY_TYPE_OTHER_PLAYER, ENTITY_TYPE_BOT, ENTITY_TYPE_RESOURCE } type;
     float depth_y;
-    const char* sort_id;
+    EntityID sort_id;
     int source_order;
     union {
         WorldObject* object;
@@ -638,7 +638,7 @@ void game_render_entities(void) {
         EntitySortEntry* entry = &sort_entries[i];
 
         const char* entity_type_str = NULL;
-        const char* entity_id = NULL;
+        EntityID entity_id = 0;
         EntityState* entity_base = NULL;
         WorldObject* obstacle = NULL;
         int layers_count = 0;

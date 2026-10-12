@@ -112,11 +112,11 @@ static void free_anim_state(void* p) {
     anim_pool_free((AnimationState*)p);
 }
 
-static AnimationState* get_animation_state(EntityRender* render, const char* entity_id, const char* item_id) {
-    assert(render && entity_id && item_id);
+static AnimationState* get_animation_state(EntityRender* render, EntityID entity_id, const char* item_id) {
+    assert(render && item_id);
 
     char key[256];
-    snprintf(key, sizeof(key), "%s_%s", entity_id, item_id);
+    snprintf(key, sizeof(key), "%u_%s", entity_id, item_id);
 
     AnimationState* anim = (AnimationState*)hash_table_get(&render->animations, key);
     if (anim) {
@@ -255,7 +255,7 @@ static bool layers_render_ready(const ObjectLayerState* layers, int count, Direc
 
 bool player_render_ready(void) {
     const EntityState* player = &g_game_state.player.base;
-    if ('\0' == player->id[0] || 0 == player->layer_count) return false;
+    if (0 == player->id || 0 == player->layer_count) return false;
     bool active = false;
     for (int i = 0; player->layer_count > i; i++) {
         const ObjectLayerState* layer = &OBJ_LAYERS(player)[i];
@@ -320,7 +320,7 @@ void entity_render_gc(EntityRender* render) {
 
 void draw_entity_layers(
     EntityRender* render,
-    const char* entity_id,
+    EntityID entity_id,
     float pos_x,
     float pos_y,
     float width,
@@ -335,7 +335,7 @@ void draw_entity_layers(
     Color fallback_color,
     Color tint
 ) {
-    assert(render && entity_id);
+    assert(render);
 
     if (cell_size <= 0.0f) cell_size = 12.0f;
 

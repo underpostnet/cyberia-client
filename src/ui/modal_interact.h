@@ -18,6 +18,7 @@
 #define MODAL_INTERACT_H
 
 #include "object_layer.h"
+#include "world_types.h"
 #include <raylib.h>
 #include <stdbool.h>
 #include <stdint.h>
@@ -27,7 +28,7 @@ void modal_interact_init(void);
 /* dialogue_item_id is the entity's active skin; has_dialogue is true when that
  * skin has a default dialogue. border tints the header to match the entity's
  * status indicator. */
-void modal_interact_open(const char* entity_id, const char* display_name,
+void modal_interact_open(EntityID entity_id, const char* display_name,
                          const char* dialogue_item_id, bool has_dialogue,
                          Color border);
 
@@ -60,7 +61,7 @@ void modal_interact_discard_stack(void);
 const ObjectLayerState* modal_interact_get_cached_layers(int* out_count);
 
 /* Vault contents for the open storage session. The stacks fill the first cells. */
-void modal_interact_storage_state(const char* entity_id, int capacity,
+void modal_interact_storage_state(EntityID entity_id, int capacity,
                                   const ObjectLayerState* slots, int count);
 
 /* True while the Storage tab is showing and can adopt a drag from the

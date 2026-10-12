@@ -21,6 +21,6 @@ void fx_level_up_update(float dt);
 void fx_level_up_draw(void);
 void fx_level_up_reset(void);
 /* Whether the entity's aura is running; the overhead HUD yields the space. */
-bool fx_level_up_active(const char* entity_id);
+bool fx_level_up_active(EntityID entity_id);
 
 #endif /* CYBERIA_FX_FX_LEVEL_UP_H */
