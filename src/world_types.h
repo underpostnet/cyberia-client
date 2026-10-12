@@ -64,6 +64,14 @@ typedef struct {
     uint8_t  layer_count;
 } Appearance;
 
+/* The vitals component, in whole numbers. The server rounds up, so 0.4 life
+ * reads alive. respawn_in is whole seconds, 0 while alive. */
+typedef struct {
+    int life;
+    int max_life;
+    int respawn_in;
+} Vitals;
+
 /* Client-only render interpolation, beside the components. snapshot_time is
  * the arrival of the snapshot that wrote transform.pos; the lerp runs from
  * pos_prev to transform.pos per entity. */
@@ -81,9 +89,6 @@ struct EntityState {
     EntityID id;
     Direction direction;
     ObjectLayerMode mode;
-    float life;
-    float max_life;
-    float respawn_in;
     int stats_sum;
     int level;
     float effective_stats[CYBERIA_STAT_COUNT];

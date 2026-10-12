@@ -45,14 +45,14 @@ void message_set_init_handler(MessageInitHandler handler) {
 }
 
 /* ============================================================================
- * Previous level and life — the fx cues compare them with the new snapshot
+ * Previous level — the level-up cue compares it with the new snapshot
  * ============================================================================
  *
  * json_unpack_snapshot copies gs->bots / gs->other_players into these buffers
  * BEFORE it resets the counters.
  */
 
-typedef struct { EntityID id; int level; bool alive; } PrevPos;
+typedef struct { EntityID id; int level; } PrevPos;
 
 static PrevPos s_prev_bots[MAX_ENTITIES];
 static int     s_prev_bot_count = 0;
@@ -62,8 +62,8 @@ static PrevPos s_prev_resources[MAX_ENTITIES];
 static int     s_prev_resource_count = 0;
 
 /* A living thing: it has life and is not waiting to respawn. */
-static bool entity_alive(const EntityState* e) {
-    return 0.0f < e->max_life && 0.0f < e->life && 0.0f >= e->respawn_in;
+static bool entity_alive(const Vitals* v) {
+    return 0 < v->max_life && 0 < v->life && 0 >= v->respawn_in;
 }
 
 /* The prior snapshot's record of `id` across every entity table, or NULL. */
@@ -80,7 +80,6 @@ static void remember_prev(PrevPos* out, int* count, const BotState* bots, const 
         const EntityState* base = NULL != bots ? &bots[i].base : &players[i].base;
         out[i].id = base->id;
         out[i].level = base->level;
-        out[i].alive = entity_alive(base);
     }
 }
 
@@ -208,30 +207,34 @@ static void read_stats(const cJSON* owner, const char* key, float values[CYBERIA
 
 /* `death_cue` is false for what is extracted rather than slain: a resource
  * goes straight to its extracted state with no death cue. */
-static void read_entity_state(const cJSON* e, EntityState* base, FetchPriority priority, bool death_cue) {
+static void read_entity_state(int slot, const cJSON* e, EntityState* base, FetchPriority priority, bool death_cue) {
     base->direction   = (Direction)serial_get_int_default(e, "direction", 0);
     base->mode        = (ObjectLayerMode)serial_get_int_default(e, "mode", 0);
-    /* The local player's record persists; everyone else's prior state is in
-     * the tables the last snapshot left. */
+    /* The local player's record persists; everyone else's prior level is in
+     * the tables the last snapshot left. The slot keeps the prior vitals. */
     int prior_level = 0;
-    bool prior_alive = false;
     if (FETCH_P0 == priority) {
         prior_level = base->level;
-        prior_alive = entity_alive(base);
     } else {
         const PrevPos* prev = find_prev(base->id);
-        if (NULL != prev) { prior_level = prev->level; prior_alive = prev->alive; }
+        if (NULL != prev) prior_level = prev->level;
     }
-    base->life        = serial_get_float_default(e, "life", 0.0f);
-    base->max_life    = serial_get_float_default(e, "maxLife", 0.0f);
-    base->respawn_in  = serial_get_float_default(e, "respawnIn", 0.0f);
+    GameState* gs = &g_game_state;
+    Vitals* v = &gs->vitals[slot];
+    const bool prior_alive = 0 != (gs->mask[slot] & COMP_VITALS) && entity_alive(v);
+    *v = (Vitals){
+        .life       = serial_get_int_default(e, "life", 0),
+        .max_life   = serial_get_int_default(e, "maxLife", 0),
+        .respawn_in = serial_get_int_default(e, "respawnIn", 0),
+    };
+    gs->mask[slot] |= COMP_VITALS;
     base->stats_sum   = serial_get_int_default(e, "statsSum", 0);
     base->level = serial_get_int_default(e, "level", 0);
     read_stats(e, "effectiveStats", base->effective_stats);
     /* Snapshots own typed death cues. The server owns level-up audio. */
     fx_level_up_observe(prior_level, base->level, base);
     if (death_cue &&
-        fx_death_observe(prior_alive, 0.0f < base->max_life && !entity_alive(base), base)) {
+        fx_death_observe(prior_alive, 0 < v->max_life && !entity_alive(v), base)) {
         audio_event(AUDIO_EVENT_DEATH);
     }
     base->on_portal   = serial_get_bool_default(e, "onPortal", false);
@@ -275,7 +278,7 @@ static void unpack_player(const cJSON* e) {
     write_data(slot, e, ENTITY_KIND_PLAYER);
     write_transform(slot, e, teleported(e));
     write_appearance(slot, e, FETCH_P2);
-    read_entity_state(e, &gs->other_players[idx].base, FETCH_P2, true);
+    read_entity_state(slot, e, &gs->other_players[idx].base, FETCH_P2, true);
 }
 
 static void unpack_bot(const cJSON* e) {
@@ -299,7 +302,7 @@ static void unpack_bot(const cJSON* e) {
     write_data(slot, e, ENTITY_KIND_BOT);
     write_transform(slot, e, teleported(e));
     write_appearance(slot, e, FETCH_P2);
-    read_entity_state(e, &b->base, FETCH_P2, true);
+    read_entity_state(slot, e, &b->base, FETCH_P2, true);
 
     serial_get_string(e, "behavior", b->behavior, MAX_BEHAVIOR_LENGTH);
     b->caster_id = serial_get_u32_default(e, "casterId", 0);
@@ -344,7 +347,7 @@ static void unpack_resource(const cJSON* e) {
     write_data(slot, e, ENTITY_KIND_RESOURCE);
     write_transform(slot, e, true); /* static — no interpolation */
     write_appearance(slot, e, FETCH_P2);
-    read_entity_state(e, &res->base, FETCH_P2, false);
+    read_entity_state(slot, e, &res->base, FETCH_P2, false);
     strncpy(res->behavior, "resource", MAX_BEHAVIOR_LENGTH - 1);
 }
 
@@ -392,7 +395,7 @@ static void unpack_self(const cJSON* e, cyberia_frame_t frame, cyberia_input_seq
     write_data(slot, e, ENTITY_KIND_PLAYER);
     write_transform(slot, e, false);
     write_appearance(slot, e, FETCH_P0);
-    read_entity_state(e, &p->base, FETCH_P0, true);
+    read_entity_state(slot, e, &p->base, FETCH_P0, true);
 
     g_local_player.xp = serial_get_double_default(e, "xp", 0.0);
     g_local_player.level_xp = serial_get_double_default(e, "levelXp", 0.0);

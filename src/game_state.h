@@ -114,6 +114,7 @@ struct GameState {
     EntityData      data[ENTITY_CAP];
     EntityTransform transform[ENTITY_CAP];
     Appearance      appearance[ENTITY_CAP];
+    Vitals          vitals[ENTITY_CAP];
     RenderState     render[ENTITY_CAP];   /* client only */
 };
 
@@ -121,6 +122,7 @@ struct GameState {
 #define COMP_DATA       ((uint64_t)1 << 0)
 #define COMP_TRANSFORM  ((uint64_t)1 << 1)
 #define COMP_APPEARANCE ((uint64_t)1 << 2)
+#define COMP_VITALS     ((uint64_t)1 << 3)
 
 extern GameState g_game_state;
 
@@ -165,6 +167,12 @@ static inline Appearance* game_state_appearance(EntityID id) {
     int slot = game_state_slot(id);
     assert(0 <= slot && 0 != (g_game_state.mask[slot] & COMP_APPEARANCE));
     return &g_game_state.appearance[slot];
+}
+
+static inline Vitals* game_state_vitals(EntityID id) {
+    int slot = game_state_slot(id);
+    assert(0 <= slot && 0 != (g_game_state.mask[slot] & COMP_VITALS));
+    return &g_game_state.vitals[slot];
 }
 
 static inline RenderState* game_state_render(EntityID id) {

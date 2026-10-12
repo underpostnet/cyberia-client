@@ -894,29 +894,29 @@ void game_render_entities(void) {
                 /* A running level-up or death cue takes the whole overhead
                  * space: every row and the presence icon yield to it. */
                 bool cue = fx_level_up_active(entity_base->id) || fx_death_active(entity_base->id);
+                const Vitals* v = game_state_vitals(entity_id);
                 EntityOverheadParams ohp = {
                     .name              = np_buf,
                     .stats_sum         = entity_base->stats_sum,
                     .level             = entity_base->level,
-                    .life              = entity_base->life,
-                    .max_life          = entity_base->max_life,
+                    .life              = (float)v->life,
+                    .max_life          = (float)v->max_life,
                     .xp_ratio          = entry->is_main_player ? local_player_xp_ratio() : 0.0f,
                     .xp                = entry->is_main_player ? g_local_player.xp : 0.0,
                     .xp_next           = entry->is_main_player ? g_local_player.next_level_xp : 0.0,
                     .show_name         = !cue,
-                    .show_stats        = !cue && entity_base->respawn_in <= 0.0f
+                    .show_stats        = !cue && 0 >= v->respawn_in
                                          && (!np_is_provider || np_flags != 0),
                     .show_stats_value  = !np_is_provider,
-                    .show_hp           = !cue && !np_is_provider && entity_base->max_life > 0.0f
-                                         && entity_base->respawn_in <= 0.0f,
+                    .show_hp           = !cue && !np_is_provider && 0 < v->max_life
+                                         && 0 >= v->respawn_in,
                     .status_icon       = cue ? 0 : game_state_data(entity_id)->status_icon,
                     .interaction_flags = np_flags,
                     .on_portal         = !cue && entity_base->on_portal,
                     .portal_hold       = entity_base->portal_hold,
                     /* Respawn countdown is local-player-only: a remote client
                      * must never see another player's countdown. */
-                    .respawn_seconds   = (!cue && entry->is_main_player && entity_base->respawn_in > 0.0f)
-                                         ? (int)(entity_base->respawn_in + 0.5f) : 0,
+                    .respawn_seconds   = (!cue && entry->is_main_player) ? v->respawn_in : 0,
                 };
                 entity_overhead_ui_draw(
                     &ohp,

@@ -152,7 +152,7 @@ static void track_entity(const EntityState* e, ObjectLayerMode mode, float dt) {
 
     /* Dead entities, snapped ones, and the first frame of a tracker have no
      * gait to read — restart the stride from here. */
-    if (fresh || moved > FX_STEP_TELEPORT_CELLS || e->respawn_in > 0.0f) {
+    if (fresh || moved > FX_STEP_TELEPORT_CELLS || 0 < game_state_vitals(e->id)->respawn_in) {
         t->stride_accum = 0.0f;
         return;
     }

@@ -75,8 +75,9 @@ static float step_phase(EntityID id) {
  *
  * `on_feet` is false for what travels without walking: skill projectiles, coins and drops. */
 static void scan_entity(EntityScan* scan, const EntityState* entity, bool on_feet, bool reset) {
-    if (0.0f >= entity->max_life || TRACKED_LIVES_CAP <= scan->count) return;
-    const float fraction = entity->life / entity->max_life;
+    const Vitals* v = game_state_vitals(entity->id);
+    if (0 >= v->max_life || TRACKED_LIVES_CAP <= scan->count) return;
+    const float fraction = (float)v->life / (float)v->max_life;
     TrackedEntity* out = &scan->entries[scan->count];
     out->id = entity->id;
     out->fraction = fraction;
@@ -177,8 +178,8 @@ void audio_context_reset(void) {
 }
 
 void audio_context_snapshot(void) {
-    const PlayerState* player = &g_game_state.player;
     if ('\0' == g_local_player.map_code[0]) return;
+    const Vitals* own = game_state_vitals(g_game_state.player.base.id);
     bool changed = 0 != strcmp(s_map, g_local_player.map_code);
     portal_snapshot(changed);
     craft_snapshot(changed);
@@ -191,13 +192,13 @@ void audio_context_snapshot(void) {
     } else {
         // Impact itself is sounded by the server's damage events (see message.c), which cover
         // every entity. Own damage only decides whether combat music takes over.
-        if (s_life > player->base.life && 0.0f < player->base.max_life) {
+        if (s_life > own->life && 0 < own->max_life) {
             if (0.0f >= s_combat_remaining) audio_event(AUDIO_EVENT_COMBAT);
             s_combat_remaining = 8;
         }
         if (s_coins != local_player_coins()) audio_event(AUDIO_EVENT_COIN);
     }
-    s_life = player->base.life;
+    s_life = (float)own->life;
     s_coins = local_player_coins();
 
     const WorldObject* closest = NULL;
@@ -223,7 +224,7 @@ void audio_context_snapshot(void) {
     int count = 0;
     for (int i = 0; g_game_state.bot_count > i && SEEN_SKILLS_CAP > count; i++) {
         const BotState* bot = &g_game_state.bots[i];
-        if (0 != strcmp(bot->behavior, "skill") || player->base.id != bot->caster_id) continue;
+        if (0 != strcmp(bot->behavior, "skill") || g_game_state.player.base.id != bot->caster_id) continue;
         bool seen = changed;
         for (int j = 0; s_skill_count > j; j++) {
             if (bot->base.id == s_skills[j]) seen = true;

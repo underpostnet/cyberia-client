@@ -124,7 +124,7 @@ static void gameloop(void) {
             if(!consumed && INPUT_TAP == evt.type) {
                 /* A player in stasis does not act: drop the tap. */
                 if (local_player_in_stasis()) { consumed = true; }
-                if (g_game_state.player.base.respawn_in > 0.0f) { consumed = true; }
+                if (0 < game_state_vitals(g_game_state.player.base.id)->respawn_in) { consumed = true; }
             }
             // unconsumed event back to the queue
             if(!consumed) {

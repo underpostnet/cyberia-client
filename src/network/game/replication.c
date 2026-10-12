@@ -69,7 +69,7 @@ static void apply_motion(cyberia_frame_t from, cyberia_frame_t to) {
         if (from > step || to < step) continue;
         if (CLIENT_EVENT_PLAYER_ACTION == e->kind) {
             /* The server refuses a tap in stasis or as a ghost. */
-            if (local_player_in_stasis() || 0.0f < g_game_state.player.base.respawn_in) continue;
+            if (local_player_in_stasis() || 0 < game_state_vitals(g_game_state.player.base.id)->respawn_in) continue;
             self_motion_tap(&s_pred.curr, (Vector2){ e->payload.target_x, e->payload.target_y });
         } else if (CLIENT_EVENT_PLAYER_STASIS == e->kind && e->payload.active) {
             self_motion_stop(&s_pred.curr);

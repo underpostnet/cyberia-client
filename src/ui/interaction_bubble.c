@@ -273,7 +273,7 @@ static void scan_entity(EntityID entity_id, const EntityState* base,
         if (strcmp(behavior, "drop")  == 0) return; /* loot tokens are not interactable */
     }
 
-    bool is_dead = (base->respawn_in > 0.0f);
+    bool is_dead = 0 < game_state_vitals(entity_id)->respawn_in;
     const Appearance* ap = game_state_appearance(entity_id);
 
     /* Determine interaction capabilities from the ALIVE layers.
