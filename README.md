@@ -196,6 +196,34 @@ uplink send             WebSocket binary frame
 
 `InputCommand.Sequence` is allocated by `session_next_input_sequence`. Monotonic, never reused. The server echoes the highest applied sequence in every snapshot header; the prediction module drops acked commands from its replay buffer on reconciliation.
 
+### Pointer controls
+
+One pointer, a finger or the mouse, moves the player in two ways: tap or click a point, or drag a floating joystick. The joystick works on every platform and at every viewport size. `input/pointer_gesture.c` sorts each press. `ui/hud_joystick.c` draws the joystick.
+
+| Gesture                      | Result                                                                                                      |
+| ---------------------------- | ----------------------------------------------------------------------------------------------------------- |
+| Tap or click on the world    | The player walks to the point. The tap goes out on release.                                                 |
+| Drag on the world past 14 px | A joystick shows at the press position. The pointer sets one of eight headings, the same as the arrow keys. |
+| Thumb in the inner 15 %      | No heading. The player stops.                                                                               |
+| Release after a drag         | The joystick hides and the player stops. The drag sends no tap.                                             |
+| Second finger                | Pinch zoom. It cancels a pending tap and stops the joystick.                                                |
+| Finger on the UI             | The UI owns the touch. The tap goes out after a 120 ms pinch window. A drag never starts the joystick.      |
+| Click on the UI              | The UI owns the click. The tap goes out on the press. A drag never starts the joystick.                     |
+
+The joystick adds no wire message. It sends the same synthetic steering taps as the keyboard: the same reach, the same refresh at the action cooldown, the same stop. While it steers, the arrow keys wait. The base stays where the drag started.
+
+To check a change, use a phone or a browser with touch emulation, and a desktop browser. A pinch needs a real device.
+
+1. Tap the ground. The player walks there. No joystick shows.
+2. Hold one finger still for a second, then lift it. The player walks to that point.
+3. Drag from any point of the ground. The joystick shows under the first contact. The player walks in the drag direction, in eight headings.
+4. Move the thumb back to the base. The player stops. Lift the finger. The joystick hides.
+5. Drag, then put a second finger down and pinch. The camera zooms, the player stops, and no tap moves the player.
+6. Drag the Quest Journal list and the inventory bar. They scroll. No joystick shows.
+7. Open the Instance Map. Drag and pinch it. No joystick shows.
+8. On a desktop, click the ground: the player walks there on release. Drag the mouse on the ground: the joystick shows and steers. Release: the player stops.
+9. On a desktop, click toolbar buttons and drag the inventory bar. They respond on the press, as before. Steer with WASD and zoom with the wheel.
+
 ---
 
 ## Binary AOI snapshot format
@@ -279,9 +307,13 @@ At normal zoom, POIs render only their authored presence-status icon. At inspect
 
 Every living entity's overhead HUD shows `[stats] lv.<level>` and `[stack] <stats sum>` above its nameplate, and a gold XP bar under its HP bar. The local player's bar fills with its progress through the current level and carries an `XP n / m` label in a smaller font; entities whose XP the client cannot read show an empty, unlabeled bar.
 
+A destructible obstacle shows only the HP bar, filled from the `life` and `maxLife` of its snapshot, and only while it stands. An ordinary obstacle sends `maxLife` 0 and shows none. A depleted obstacle draws its dead items, or nothing when it has none.
+
 The Stats tab of the interact modal draws one shared stat panel per block: the stats icon, the signed sum, and a two-column grid with one icon per stat. Every entity gets its effective stats. The local player also gets the OL modifiers, base stats, and temporary modifiers from the self snapshot. The inventory modal draws the same panel for one item.
 
 An XP award floats as gold `+N XP` combat text over the earner only. A server level increment triggers a `LEVEL UP` aura: shaded gold sparks stream from the entity's feet up past its head for 3 s under a spinning star and a label, and the whole effect follows the entity as it moves, for any entity in view. First sight, repeated snapshots, and lower levels do not trigger it.
+
+An `item_consume` event whose `behavior` is `consume-on-pickup-heal` triggers the heal aura on the consumer: shaded green sparks turn on a ring around its feet while more sparks and pixel plus marks rise through its body for 1.8 s, following the entity. It plays for a world loot pickup and for an inventory use alike, for any entity in view. Any other behavior triggers nothing.
 
 A defeat of a player or bot triggers the death cue: shaded red sparks burst out of the body and fall while a `skull` icon rises over it for 2.6 s, following the body. It fires once, when an entity seen alive in the prior snapshot is dead in this one. An entity first seen dead, or still dead, triggers nothing. A resource is extracted, not slain: it goes straight to its extracted state with no cue.
 
@@ -290,6 +322,10 @@ While either cue runs, the entity's whole overhead stack, presence icon included
 The cues are visual only. Their sounds arrive as `audio_event` messages the server broadcasts to every player whose area of interest covers the event, so a defeat, an extraction, or a level gained sounds the same for everyone in reach. The client plays the id through the map's audio bindings.
 
 Item slots badge an object layer with the `stack` icon and its signed stat sum, red when negative.
+
+An active inventory slot whose item triggers skills shows, above the slot, the entity each skill summons. The init_data skill map names the entity (`summonedEntityItemId`; `$active_skin` is the player's active skin), and the preview draws it as the stack the server spawns, through the same stack icon renderer as the rest of the UI. The slot keeps the trigger item's own icon. Distinct entities share one row, up to three. One bar under the row shows the shared action cooldown from `self.actionReadyInMs`: it fills while the cooldown runs and turns green when the next tap fires skills. A green bar does not promise a summon: the server still rolls each skill's chance. The row takes no input and hides while the player is in stasis.
+
+A consumable shows **Use** in the inventory modal where other items show Activate. The button names what blocks a use — "Life is full", "Using..." while the request waits for `item_use_ack` — and draws the item-use cooldown from `self.itemReadyInMs` along its base. Above a consumable slot in the bar, the row an active slot gives its skills holds a quick-use button: one unit of the item and the same cooldown bar under it. A press spends one unit, and the button dims while a use would be refused. A press on the slot itself still opens the modal. The modal follows its stack by item id, so it closes when the last unit is spent. The client changes no state: the snapshot brings the spent unit and the restored life, and only a rejected use shows a toast.
 
 The server sends six values in canonical order. The client displays these values and uses the supplied movement speed.
 
