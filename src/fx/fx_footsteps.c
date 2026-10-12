@@ -187,11 +187,11 @@ void fx_footsteps_update(float dt) {
     }
     for (int i = 0; i < g_game_state.other_player_count; i++) {
         track_entity(&g_game_state.other_players[i].base,
-                     g_game_state.other_players[i].base.mode, dt);
+                     game_state_motion(g_game_state.other_players[i].base.id)->mode, dt);
     }
     for (int i = 0; i < g_game_state.bot_count; i++) {
         if (game_state_bot_has_feet(&g_game_state.bots[i])) {
-            track_entity(&g_game_state.bots[i].base, g_game_state.bots[i].base.mode, dt);
+            track_entity(&g_game_state.bots[i].base, game_state_motion(g_game_state.bots[i].base.id)->mode, dt);
         }
     }
 

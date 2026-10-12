@@ -162,8 +162,11 @@ static void read_stats(const cJSON* owner, const char* key, int values[CYBERIA_S
 /* `death_cue` is false for what is extracted rather than slain: a resource
  * goes straight to its extracted state with no death cue. */
 static void read_entity_state(int slot, const cJSON* e, EntityState* base, FetchPriority priority, bool death_cue) {
-    base->direction   = (Direction)serial_get_int_default(e, "direction", 0);
-    base->mode        = (ObjectLayerMode)serial_get_int_default(e, "mode", 0);
+    g_game_state.motion[slot] = (Motion){
+        .direction = (Direction)serial_get_int_default(e, "direction", 0),
+        .mode      = (ObjectLayerMode)serial_get_int_default(e, "mode", 0),
+    };
+    g_game_state.mask[slot] |= COMP_MOTION;
     /* The slot keeps the prior vitals and level; a new slot has none. */
     GameState* gs = &g_game_state;
     Vitals* v = &gs->vitals[slot];
@@ -359,10 +362,10 @@ static void unpack_self(const cJSON* e, cyberia_frame_t frame, cyberia_input_seq
     serial_get_string(e, "mapCode", g_local_player.map_code, MAX_ID_LENGTH);
 
     /* The server keeps no path once the walk ends. */
-    self_motion_t state = { .pos = gs->transform[slot].pos, .direction = p->base.direction };
+    self_motion_t state = { .pos = gs->transform[slot].pos, .direction = gs->motion[slot].direction };
     const cJSON* point = NULL;
     cJSON_ArrayForEach(point, serial_get_array(e, "path")) {
-        if (MODE_WALKING != p->base.mode || MAX_PATH_POINTS <= state.path_count) break;
+        if (MODE_WALKING != gs->motion[slot].mode || MAX_PATH_POINTS <= state.path_count) break;
         state.path[state.path_count++] = (Vector2){ serial_get_float_default(point, "x", 0.0f),
                                                     serial_get_float_default(point, "y", 0.0f) };
     }

@@ -116,6 +116,7 @@ struct GameState {
     Appearance      appearance[ENTITY_CAP];
     Vitals          vitals[ENTITY_CAP];
     Progress        progress[ENTITY_CAP];
+    Motion          motion[ENTITY_CAP];
     RenderState     render[ENTITY_CAP];   /* client only */
 };
 
@@ -125,6 +126,7 @@ struct GameState {
 #define COMP_APPEARANCE ((uint64_t)1 << 2)
 #define COMP_VITALS     ((uint64_t)1 << 3)
 #define COMP_PROGRESS   ((uint64_t)1 << 4)
+#define COMP_MOTION     ((uint64_t)1 << 5)
 
 extern GameState g_game_state;
 
@@ -181,6 +183,12 @@ static inline Progress* game_state_progress(EntityID id) {
     int slot = game_state_slot(id);
     assert(0 <= slot && 0 != (g_game_state.mask[slot] & COMP_PROGRESS));
     return &g_game_state.progress[slot];
+}
+
+static inline Motion* game_state_motion(EntityID id) {
+    int slot = game_state_slot(id);
+    assert(0 <= slot && 0 != (g_game_state.mask[slot] & COMP_MOTION));
+    return &g_game_state.motion[slot];
 }
 
 static inline RenderState* game_state_render(EntityID id) {

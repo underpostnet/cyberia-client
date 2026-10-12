@@ -75,6 +75,12 @@ typedef struct {
     int stats_sum;
 } Progress;
 
+/* The motion component: the facing and the walk mode. */
+typedef struct {
+    Direction       direction;
+    ObjectLayerMode mode;
+} Motion;
+
 /* Client-only render interpolation, beside the components. snapshot_time is
  * the arrival of the snapshot that wrote transform.pos; the lerp runs from
  * pos_prev to transform.pos per entity. */
@@ -90,8 +96,6 @@ typedef struct BotState BotState;
 
 struct EntityState {
     EntityID id;
-    Direction direction;
-    ObjectLayerMode mode;
     bool on_portal;     /* a player standing on a portal */
     float portal_hold;  /* its teleport charge, 0..1 */
 };

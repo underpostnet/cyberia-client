@@ -121,7 +121,7 @@ void prediction_reconcile(void) {
             LOG_DEBUG("[REPLAY] frame=%u error=%.3f", session_frame(), error);
         }
     }
-    if (MODE_TELEPORTING == g_game_state.player.base.mode) s_pred.prev = s_pred.curr;
+    if (MODE_TELEPORTING == game_state_motion(g_game_state.player.base.id)->mode) s_pred.prev = s_pred.curr;
 }
 
 const self_motion_t* prediction_prev(void) { return &s_pred.prev; }

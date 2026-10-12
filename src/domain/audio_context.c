@@ -81,7 +81,7 @@ static void scan_entity(EntityScan* scan, const EntityState* entity, bool on_fee
     TrackedEntity* out = &scan->entries[scan->count];
     out->id = entity->id;
     out->fraction = fraction;
-    out->walking = on_feet && MODE_WALKING == entity->mode;
+    out->walking = on_feet && MODE_WALKING == game_state_motion(entity->id)->mode;
     out->step_remaining = step_phase(entity->id);
     if (!reset) {
         for (int i = 0; s_tracked_count > i; i++) {
@@ -157,7 +157,7 @@ static void portal_snapshot(bool map_changed) {
     /* The hold ends either way; only a teleport sounds. TELEPORTING is the direct
      * signal, but it survives a single snapshot, so a changed map or a charge that
      * reached full still counts the jump if that one snapshot was coalesced away. */
-    const bool teleported = map_changed || MODE_TELEPORTING == g_game_state.player.base.mode ||
+    const bool teleported = map_changed || MODE_TELEPORTING == game_state_motion(g_game_state.player.base.id)->mode ||
                             0.98f <= s_portal_progress;
     s_portal_progress = 0.0f;
     if (teleported) audio_event(AUDIO_EVENT_PORTAL);

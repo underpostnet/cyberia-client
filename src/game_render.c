@@ -820,9 +820,9 @@ void game_render_entities(void) {
                     render_width,
                     render_height,
                     entry->is_main_player ? local_player_view_direction()
-                                          : entity_base->direction,
+                                          : game_state_motion(entity_id)->direction,
                     entry->is_main_player ? local_player_view_mode()
-                                          : entity_base->mode,
+                                          : game_state_motion(entity_id)->mode,
                     temp_layers,
                     layers_count,
                     entity_type_str,
