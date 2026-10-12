@@ -109,7 +109,7 @@ static void gameloop(void) {
 
     // input capture in realtime
     input_queue_t frame_input = {0};
-    input_queue_on_tick(&frame_input, frame_dt);
+    input_queue_on_tick(&frame_input, frame_dt, ui_dispatch_covers_point);
 
     ui_on_tick(&frame_input, frame_dt);
 
@@ -144,8 +144,8 @@ static void gameloop(void) {
         input_event_t evt = { 0 };
         while (input_pop(&frame_input, &evt)) {
             bool consumed = false;
-            /* Keyboard steering repeats at the screen edge; it draws no tap
-             * effect and opens no bubble. Both belong to a real pointer. */
+            /* Steering repeats at the screen edge; it draws no tap effect
+             * and opens no bubble. Both belong to a real pointer. */
             if(!consumed && INPUT_TAP == evt.type && !evt.synthetic) {
                 FxTapParams fx = fx_tap_default_params();
                 fx.scale = 1.15f;

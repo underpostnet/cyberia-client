@@ -20,6 +20,7 @@ void quest_journal_init(void);
 void quest_journal_update(float dt);
 void quest_journal_draw(void);
 bool quest_journal_handle_click(int mx, int my);
+bool quest_journal_covers_point(int mx, int my);
 
 /* Wheel scroll while the pointer hovers the section list. Returns true when
  * consumed so the world zoom behind the panel is suppressed. */

@@ -91,9 +91,10 @@ static void arm_gesture(UIToggle* t, Vector2 press) {
 }
 
 /* Resolve the armed gesture. A touch press reaches ui_toggle_handle_click up to
- * one confirmation window late (input.c holds it to disambiguate a pinch), so
- * the pointer may already have travelled — or lifted — by the first pass here;
- * both are read from the recorded press position, never assumed fresh. */
+ * one confirmation window late (pointer_gesture.c holds it to disambiguate a
+ * pinch), so the pointer may already have travelled — or lifted — by the first
+ * pass here; both are read from the recorded press position, never assumed
+ * fresh. */
 static void update_gesture(UIToggle* t, float dt) {
     Vector2 p    = input_pointer_position();
     bool    down = input_pointer_down();

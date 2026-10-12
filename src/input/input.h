@@ -5,6 +5,8 @@
 #include <stdbool.h>
 #include <stdint.h>
 
+#include "pointer_gesture.h"
+
 /* The single pointer the UI tracks: the first touch point when one exists,
  * else the mouse. */
 static inline Vector2 input_pointer_position(void) {
@@ -35,9 +37,9 @@ typedef struct input_event {
     bool zoom_in;            /* For INPUT_ZOOM */
     float wheel_delta;       /* For INPUT_ZOOM */
     Vector2 world_position;  /* For INPUT_TAP */
-    /* For INPUT_TAP: keyboard steering made this tap. No pointer is on the
-     * target pixel, so the UI layer does no hit test on it and the
-     * presentation layer draws no tap effect for it. */
+    /* For INPUT_TAP: steering (keys or joystick) made this tap. No
+     * pointer is on the target pixel, so the UI layer does no hit test on it
+     * and the presentation layer draws no tap effect for it. */
     bool synthetic;
 } input_event_t;
 
@@ -48,7 +50,12 @@ typedef struct input_event_queue {
     uint32_t count;
 } input_queue_t;
 
-void input_queue_on_tick(input_queue_t* q, double dt);
+/* True when the UI covers the screen pixel. */
+typedef bool (*input_hit_fn)(int screen_x, int screen_y);
+
+/* Capture one frame of raw input. A pointer press that `ui_covers` accepts
+ * stays with the UI; any other pointer press can start the joystick. */
+void input_queue_on_tick(input_queue_t* q, double dt, input_hit_fn ui_covers);
 bool input_pop(input_queue_t* q, input_event_t* out);
 void input_push(input_queue_t* q, input_event_t e);
 
@@ -64,10 +71,13 @@ typedef bool (*input_consume_fn)(const input_event_t* e);
  * rest in their original order. */
 void input_queue_filter(input_queue_t* q, input_consume_fn consume);
 
-/* While blocked, the capture layer runs no gameplay pinch zoom — a
- * full-screen UI surface (the Instance Map) owns touch gestures instead.
- * Pointer taps, wheel, and debug-key events still flow; keyboard steering
+/* While blocked, the capture layer runs no gameplay pinch zoom and starts no
+ * joystick — a full-screen UI surface (the Instance Map) owns touch gestures
+ * instead. Pointer taps, wheel, and debug-key events still flow; steering
  * does not. */
 void input_gestures_set_blocked(bool blocked);
+
+/* The touch gesture of this frame, for the joystick HUD. */
+const pointer_gesture_t* input_pointer_gesture(void);
 
 #endif /* CYBERIA_INPUT_H */

@@ -1,10 +1,12 @@
 #include "input.h"
+#include "pointer_gesture.h"
 #include "network/game/client_event.h"
 #include "network/game/replication.h"
 #include "domain/camera.h"
 #include "domain/local_player.h"
 #include "domain/presentation_runtime.h"
 #include "game_state.h"
+#include "js/pointer_bridge.h"
 #include "util/log.h"
 
 #include <assert.h>
@@ -44,29 +46,25 @@ void input_queue_filter(input_queue_t* q, input_consume_fn consume) {
     while (input_pop(&keep, &evt)) { input_push(q, evt); }
 }
 
-/* ── Touch gestures ──────────────────────────────────────────────────────
- * Two-finger pinch drives the gameplay camera zoom (mirrors the Instance
- * Map's gesture; desktop keeps the wheel). Because raylib maps the first
- * touch onto the mouse, a pinch would otherwise begin with a press-tap that
- * moves the player. Touch presses are therefore held for a short window
- * (or until release) before the tap is emitted; a second finger inside the
- * window converts the gesture into a pinch and no tap ever fires. Mouse
- * presses (zero touch points) keep the immediate press-tap path, and the
- * emitted INPUT_TAP is identical either way — the wire command is built
+/* ── Pointer gestures ────────────────────────────────────────────────────
+ * pointer_gesture.c turns each press of a finger or the mouse into a tap, a
+ * joystick drag or a pinch. Two-finger pinch drives the gameplay camera zoom
+ * (mirrors the Instance Map's gesture; desktop keeps the wheel). The emitted
+ * INPUT_TAP is identical for both pointers — the wire command is built
  * downstream from the same screen/world pair. */
-#define TAP_CONFIRM_WINDOW_S 0.12
+/* A browser touch identifier is never negative. */
+#define MOUSE_POINTER_ID (-1)
 
-static bool    s_gestures_blocked = false;
-static bool    s_tap_pending      = false;
-static double  s_tap_pending_age  = 0.0;
-static Vector2 s_tap_pending_pos  = {0};
-static bool    s_pinch_active     = false;   /* also latches until all fingers lift */
-static float   s_pinch_prev_dist  = 0.0f;
+static bool              s_gestures_blocked = false;
+static pointer_gesture_t s_pointer          = { 0 };
+static float             s_pinch_prev_dist  = 0.0f;
+static int               s_pointer_presses  = 0;
 
-/* ── Keyboard steering ───────────────────────────────────────────────────
- * A held direction key (arrows or WASD) sends a synthetic INPUT_TAP a short
- * distance ahead of the player. One held key gives a cardinal heading, two
- * give a true 45° diagonal; opposite keys on one axis cancel. Release stops
+/* ── Steering ────────────────────────────────────────────────────────────
+ * A held direction key (arrows or WASD) or the joystick sends a
+ * synthetic INPUT_TAP a short distance ahead of the player. One held key
+ * gives a cardinal heading, two give a true 45° diagonal; opposite keys on
+ * one axis cancel. The joystick gives the same eight headings. Release stops
  * the walk, because a zero heading targets the cell the player stands on.
  *
  * Two calibrations keep the walk fluid:
@@ -84,9 +82,9 @@ static float   s_pinch_prev_dist  = 0.0f;
  * instead of 45°. Reach stays near one refresh of travel: far enough that
  * the walk never stalls between commands, short enough that the server A*
  * returns a near-straight path instead of routing around distant terrain. */
-#define KEY_STEER_REACH_FACTOR    1.75f
-#define KEY_STEER_REACH_MIN_CELLS 3.0f
-#define KEY_STEER_DIAGONAL_NORM   0.70710678f
+#define STEER_REACH_FACTOR    1.75f
+#define STEER_REACH_MIN_CELLS 3.0f
+#define STEER_DIAGONAL_NORM   0.70710678f
 
 static int    s_steer_x   = 0;
 static int    s_steer_y   = 0;
@@ -94,6 +92,10 @@ static double s_steer_age = 0.0;
 
 void input_gestures_set_blocked(bool blocked) {
     s_gestures_blocked = blocked;
+}
+
+const pointer_gesture_t* input_pointer_gesture(void) {
+    return &s_pointer;
 }
 
 static void push_tap(input_queue_t* q, Vector2 screen_pos, Vector2 world_pos,
@@ -129,9 +131,9 @@ static Vector2 steer_world_target(int dir_x, int dir_y) {
     }
 
     float reach = local_player_move_speed() * local_player_action_cooldown() *
-                  KEY_STEER_REACH_FACTOR;
-    if (reach < KEY_STEER_REACH_MIN_CELLS) { reach = KEY_STEER_REACH_MIN_CELLS; }
-    if (0 != dir_x && 0 != dir_y) { reach *= KEY_STEER_DIAGONAL_NORM; }
+                  STEER_REACH_FACTOR;
+    if (reach < STEER_REACH_MIN_CELLS) { reach = STEER_REACH_MIN_CELLS; }
+    if (0 != dir_x && 0 != dir_y) { reach *= STEER_DIAGONAL_NORM; }
 
     return (Vector2){
         (self.x + (float)dir_x * reach) * cell,
@@ -139,9 +141,13 @@ static Vector2 steer_world_target(int dir_x, int dir_y) {
     };
 }
 
+/* Send one steering tap and record its heading. */
 static void emit_steer_tap(input_queue_t* q, int dir_x, int dir_y) {
     Vector2 world_pos = steer_world_target(dir_x, dir_y);
     push_tap(q, GetWorldToScreen2D(world_pos, camera_get()), world_pos, true);
+    s_steer_x   = dir_x;
+    s_steer_y   = dir_y;
+    s_steer_age = 0.0;
 }
 
 static void pinch_zoom_on_tick(void) {
@@ -154,59 +160,61 @@ static void pinch_zoom_on_tick(void) {
     s_pinch_prev_dist = d;
 }
 
-void input_queue_on_tick(input_queue_t* q, double dt) {
+void input_queue_on_tick(input_queue_t* q, double dt, input_hit_fn ui_covers) {
     assert(q);
+    assert(ui_covers);
 
     int touches = GetTouchPointCount();
 
     if (touches >= 2) {
-        /* Pinch: cancel any held tap so the gesture never moves the player. */
-        s_tap_pending  = false;
-        s_pinch_active = true;
         pinch_zoom_on_tick();
     } else {
         s_pinch_prev_dist = 0.0f;
-        if (0 == touches) s_pinch_active = false;
     }
 
+    int  presses     = pointer_bridge_press_count();
+    bool pressed     = presses != s_pointer_presses;
     bool pointer_tap = false;
+    s_pointer_presses = presses;
 
-    if (IsMouseButtonPressed(MOUSE_BUTTON_LEFT) && !s_pinch_active) {
-        if (touches > 0) {
-            /* Touch press: hold for the confirmation window. */
-            s_tap_pending     = true;
-            s_tap_pending_age = 0.0;
-            s_tap_pending_pos = GetMousePosition();
-        } else {
-            emit_tap(q, GetMousePosition());
-        }
-        pointer_tap = true;
+    pointer_sample_t pointer = { .count = touches, .pressed = pressed, .touch = 0 < touches };
+    if (pointer.touch) {
+        pointer.id       = GetTouchPointId(0);
+        pointer.position = GetTouchPosition(0);
+    } else {
+        pointer.count    = IsMouseButtonDown(MOUSE_BUTTON_LEFT) ? 1 : 0;
+        pointer.id       = MOUSE_POINTER_ID;
+        pointer.position = GetMousePosition();
+    }
+    pointer.ui_owned = pressed && (s_gestures_blocked ||
+                       ui_covers((int)pointer.position.x, (int)pointer.position.y));
+    switch (pointer_gesture_update(&s_pointer, pointer, dt)) {
+        case POINTER_TAP:
+            emit_tap(q, s_pointer.tap);
+            pointer_tap = true;
+            break;
+        case POINTER_STEER_END:
+            /* The joystick owes one stop, also when a pinch ends it. */
+            if (0 != s_steer_x || 0 != s_steer_y) { emit_steer_tap(q, 0, 0); }
+            break;
+        case POINTER_NONE: break;
     }
 
-    if (s_tap_pending) {
-        s_tap_pending_age += dt;
-        bool released = !IsMouseButtonDown(MOUSE_BUTTON_LEFT) && 0 == GetTouchPointCount();
-        if (released || TAP_CONFIRM_WINDOW_S <= s_tap_pending_age) {
-            s_tap_pending = false;
-            emit_tap(q, s_tap_pending_pos);
-        }
-        pointer_tap = true;
-    }
-
-    int steer_x = axis_dir(KEY_LEFT, KEY_A, KEY_RIGHT, KEY_D);
-    int steer_y = axis_dir(KEY_UP,   KEY_W, KEY_DOWN,  KEY_S);
+    /* The joystick steers while it is active; the keys steer otherwise. */
+    bool joystick = POINTER_JOYSTICK == s_pointer.state;
+    int steer_x = joystick ? s_pointer.dir_x : axis_dir(KEY_LEFT, KEY_A, KEY_RIGHT, KEY_D);
+    int steer_y = joystick ? s_pointer.dir_y : axis_dir(KEY_UP,   KEY_W, KEY_DOWN,  KEY_S);
     bool turned = steer_x != s_steer_x || steer_y != s_steer_y;
     /* A heading that turned to zero still owes one stop command. */
     bool refresh = (0 != steer_x || 0 != steer_y) &&
                    s_steer_age >= (double)local_player_action_cooldown();
+    /* A pending tap or a pinch holds the steering. */
+    bool gesture_held = POINTER_IDLE != s_pointer.state && !joystick;
 
     s_steer_age += dt;
     if ((turned || refresh) &&
-        !pointer_tap && !s_gestures_blocked && !s_pinch_active) {
+        !pointer_tap && !s_gestures_blocked && !gesture_held) {
         emit_steer_tap(q, steer_x, steer_y);
-        s_steer_x   = steer_x;
-        s_steer_y   = steer_y;
-        s_steer_age = 0.0;
     }
 
     switch (GetKeyPressed()) {

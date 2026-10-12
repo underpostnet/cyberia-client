@@ -307,14 +307,18 @@ void quest_journal_draw(void) {
     }
 }
 
-bool quest_journal_handle_click(int mx, int my) {
+bool quest_journal_covers_point(int mx, int my) {
     if (!s_visible) return false;
     Rectangle panel = panel_rect();
-    Rectangle bounds = { panel.x, panel.y, panel.width, s_panel_h };
-    if (!ui_button_hit(bounds, mx, my)) return false;
+    return ui_button_hit((Rectangle){ panel.x, panel.y, panel.width, s_panel_h }, mx, my);
+}
+
+bool quest_journal_handle_click(int mx, int my) {
+    if (!quest_journal_covers_point(mx, my)) return false;
 
     /* The header is fixed and handled immediately; taps in the section area
      * arm the scroll gesture, with activation deferred to a clean release. */
+    Rectangle panel = panel_rect();
     Rectangle header = { panel.x, panel.y, panel.width, s_header_h };
     if (ui_button_hit(header, mx, my)) {
         header_walk(JW_CLICK, mx, my, panel.x, panel.y, panel.width);
