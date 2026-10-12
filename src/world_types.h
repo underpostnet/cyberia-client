@@ -109,6 +109,10 @@ typedef struct WorldObject {
     uint8_t          layer_count;
     /* Foreground-only: the bound behavior is "overhead-occlusion". */
     bool             overhead_occlusion;
+    /* Obstacle-only: authoritative life of a destructible obstacle. An
+     * ordinary obstacle has max_life 0; a depleted one has life 0. */
+    float            life;
+    float            max_life;
 } WorldObject;
 
 #endif /* WORLD_TYPES_H */

@@ -26,6 +26,7 @@
 #include "ui_icon.h"
 #include "world_types.h"
 
+#include <assert.h>
 #include <raylib.h>
 #include <stdio.h>
 
@@ -277,4 +278,16 @@ void entity_overhead_ui_draw(
                          EOHUD_PRESENCE_SIZE, true, phase);
         }
     }
+}
+
+void entity_overhead_ui_draw_obstacle(const WorldObject *o, float cell_size) {
+    assert(o);
+    if (!(0.0f < o->max_life && 0.0f < o->life)) return;
+    EntityOverheadParams p = {
+        .name     = o->id,
+        .life     = o->life,
+        .max_life = o->max_life,
+        .show_hp  = true,
+    };
+    entity_overhead_ui_draw(&p, o->pos.x, o->pos.y, o->dims.x, cell_size);
 }

@@ -165,6 +165,11 @@ static inline bool game_state_bot_has_feet(const BotState* bot) {
            0 != strcmp(bot->behavior, "drop");
 }
 
+/* Ordinary obstacles have zero maximum life and cannot deplete. */
+static inline bool game_state_obstacle_depleted(const WorldObject* o) {
+    return 0.0f < o->max_life && 0.0f >= o->life;
+}
+
 static inline bool game_state_is_active_item_type(const char* item_type) {
     if (!item_type || item_type[0] == '\0') return false;
     for (int i = 0; i < g_game_state.equipment_rules.active_item_type_count; i++) {

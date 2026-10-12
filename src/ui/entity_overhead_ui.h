@@ -5,6 +5,8 @@
 #include <stdbool.h>
 #include <stdint.h>
 
+#include "world_types.h"
+
 /* World-space overhead UI above one entity. Draws bottom to top: XP bar,
  * HP bar, nameplate, capability bar (level, stats sum, capability icons),
  * presence status icon. Read-only — the module never changes game state. */
@@ -94,5 +96,9 @@ void entity_overhead_ui_draw(
     float world_w,
     float cell_size
 );
+
+/* The HP bar of a destructible obstacle while it stands. An ordinary obstacle
+ * and a depleted one draw nothing. */
+void entity_overhead_ui_draw_obstacle(const WorldObject *o, float cell_size);
 
 #endif /* ENTITY_OVERHEAD_UI_H */
