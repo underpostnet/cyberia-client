@@ -14,7 +14,8 @@
  * position of the local player is set. */
 void  overhead_occlusion_update(float dt);
 
-/* Draw opacity of `fg`, in [hidden opacity, 1]. */
-float overhead_occlusion_opacity(const WorldObject* fg);
+/* Draw opacity of foreground `id`, in [hidden opacity, 1]. Only a roof with
+ * ENTITY_FLAG_OVERHEAD_OCCLUSION ever fades. */
+float overhead_occlusion_opacity(EntityID id);
 
 #endif /* CYBERIA_DOMAIN_OVERHEAD_OCCLUSION_H */

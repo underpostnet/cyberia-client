@@ -86,26 +86,16 @@ struct GameState {
     BotState bots[MAX_ENTITIES];
     int bot_count;
 
-    WorldObject obstacles[MAX_OBJECTS];
-    int obstacle_count;
-
-    WorldObject foregrounds[MAX_OBJECTS];
-    int foreground_count;
-
-    /* Static decorators — non-moving, passable; depth-sorted with entities.
-     * AOI-bounded like bots/resources, so sized MAX_ENTITIES (not MAX_OBJECTS,
-     * which is reserved for full-map-tiling objects like floors). */
-    WorldObject statics[MAX_ENTITIES];
-    int static_count;
+    /* Scenery ids in wire order. The server sends floors sorted, and the floor
+     * pass draws them in this order. */
+    EntityID scenery[MAX_OBJECTS];
+    int scenery_count;
 
     BotState resources[MAX_ENTITIES];
     int resource_count;
 
     WorldObject portals[MAX_OBJECTS];
     int portal_count;
-
-    WorldObject floors[MAX_OBJECTS];
-    int floor_count;
 
     EquipmentRules equipment_rules;
 
@@ -119,14 +109,16 @@ struct GameState {
 
     /* The entity table. ids[i] is the entity at slot i, 0 = free slot. mask[i]
      * is the only answer to "does slot i have component X". */
-    EntityID    ids[ENTITY_CAP];
-    uint64_t    mask[ENTITY_CAP];
+    EntityID        ids[ENTITY_CAP];
+    uint64_t        mask[ENTITY_CAP];
+    EntityData      data[ENTITY_CAP];
     EntityTransform transform[ENTITY_CAP];
-    Appearance  appearance[ENTITY_CAP];
-    RenderState render[ENTITY_CAP];   /* client only */
+    Appearance      appearance[ENTITY_CAP];
+    RenderState     render[ENTITY_CAP];   /* client only */
 };
 
 /* Component bits of mask[], in the §4 order. */
+#define COMP_DATA       ((uint64_t)1 << 0)
 #define COMP_TRANSFORM  ((uint64_t)1 << 1)
 #define COMP_APPEARANCE ((uint64_t)1 << 2)
 
@@ -157,6 +149,12 @@ void         game_state_despawn(EntityID id);
 int          game_state_slot(EntityID id);
 
 /* The transform and the render state of `id`. The id must have a transform. */
+static inline EntityData* game_state_data(EntityID id) {
+    int slot = game_state_slot(id);
+    assert(0 <= slot && 0 != (g_game_state.mask[slot] & COMP_DATA));
+    return &g_game_state.data[slot];
+}
+
 static inline EntityTransform* game_state_transform(EntityID id) {
     int slot = game_state_slot(id);
     assert(0 <= slot && 0 != (g_game_state.mask[slot] & COMP_TRANSFORM));
@@ -216,8 +214,8 @@ static inline bool game_state_bot_has_feet(const BotState* bot) {
 }
 
 /* Ordinary obstacles have zero maximum life and cannot deplete. */
-static inline bool game_state_obstacle_depleted(const WorldObject* o) {
-    return 0.0f < o->max_life && 0.0f >= o->life;
+static inline bool game_state_obstacle_depleted(const EntityData* d) {
+    return 0.0f < d->max_life && 0.0f >= d->life;
 }
 
 static inline bool game_state_is_active_item_type(const char* item_type) {

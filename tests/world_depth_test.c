@@ -7,7 +7,7 @@
 #include <string.h>
 
 int main(void) {
-    WorldObject obstacle = { .max_life = 10.0f, .life = 0.0f };
+    EntityData obstacle = { .max_life = 10.0f, .life = 0.0f };
     assert(game_state_obstacle_depleted(&obstacle));
     obstacle.life = 1.0f;
     assert(!game_state_obstacle_depleted(&obstacle));

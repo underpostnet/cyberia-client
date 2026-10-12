@@ -14,8 +14,11 @@ static int sparks;
 static float min_x, max_x, min_y, max_y, largest;
 
 float world_cell_size(void) { return 32.0f; }
-/* Every obstacle shares slot 0: one 2x2 footprint at (10, 10). */
-int game_state_slot(EntityID id) { return 0; }
+int game_state_slot(EntityID id) {
+    for (int i = 0; ENTITY_CAP > i; i++)
+        if (0 != id && id == g_game_state.ids[i]) return i;
+    return -1;
+}
 void fx_shape_spark_shaded(float x, float y, float size, Color body) {
     assert(3.0f <= size && 255 == body.a);
     assert(body.r == body.g && body.g == body.b && 128 > body.r);
@@ -35,13 +38,20 @@ static void draw(void) {
     fx_obstacle_burst_draw();
 }
 
+/* Put a standing destructible obstacle `id` in `slot`, listed at that index of
+ * the scenery: one 2x2 footprint at (10, 10). */
+static EntityData* place(int slot, EntityID id) {
+    g_game_state.ids[slot] = id;
+    g_game_state.mask[slot] = COMP_DATA | COMP_TRANSFORM;
+    g_game_state.transform[slot] = (EntityTransform){ .pos = { 10.0f, 10.0f }, .size = { 2.0f, 2.0f } };
+    g_game_state.data[slot] = (EntityData){ .kind = ENTITY_KIND_SCENERY, .max_life = 10.0f, .life = 10.0f };
+    g_game_state.scenery[slot] = id;
+    return &g_game_state.data[slot];
+}
+
 int main(void) {
-    WorldObject* obstacle = &g_game_state.obstacles[0];
-    obstacle->id = 26;
-    g_game_state.transform[0] = (EntityTransform){ .pos = { 10.0f, 10.0f }, .size = { 2.0f, 2.0f } };
-    g_game_state.mask[0] = COMP_TRANSFORM;
-    obstacle->max_life = obstacle->life = 10.0f;
-    g_game_state.obstacle_count = 1;
+    EntityData* obstacle = place(0, 26);
+    g_game_state.scenery_count = 1;
 
     fx_obstacle_burst_reset();
     fx_obstacle_burst_snapshot();
@@ -76,9 +86,9 @@ int main(void) {
     assert(0 == sparks);
 
     /* An obstacle entering the area of interest starts no burst. */
-    g_game_state.obstacle_count = 0;
+    g_game_state.scenery_count = 0;
     fx_obstacle_burst_snapshot();
-    g_game_state.obstacle_count = 1;
+    g_game_state.scenery_count = 1;
     obstacle->life = 0.0f;
     fx_obstacle_burst_snapshot();
     draw();
@@ -102,18 +112,13 @@ int main(void) {
 
     /* Snapshot order cannot change obstacle identity. */
     fx_obstacle_burst_reset();
-    g_game_state.obstacle_count = 3;
+    g_game_state.scenery_count = 3;
     const EntityID ids[] = { 26, 1, 13 };
-    for (int i = 0; 3 > i; i++) {
-        WorldObject* rock = &g_game_state.obstacles[i];
-        *rock = (WorldObject){ .max_life = 10.0f, .life = 10.0f };
-        rock->id = ids[i];
-    }
+    for (int i = 0; 3 > i; i++) place(i, ids[i]);
     fx_obstacle_burst_snapshot();
-    WorldObject swap = g_game_state.obstacles[0];
-    g_game_state.obstacles[0] = g_game_state.obstacles[2];
-    g_game_state.obstacles[2] = swap;
-    g_game_state.obstacles[0].life = 0.0f;
+    g_game_state.scenery[0] = 13;
+    g_game_state.scenery[2] = 26;
+    g_game_state.data[2].life = 0.0f;
     fx_obstacle_burst_snapshot();
     draw();
     assert(24 == sparks);
@@ -123,14 +128,10 @@ int main(void) {
 
     /* Simultaneous bursts use a fixed pool. */
     fx_obstacle_burst_reset();
-    g_game_state.obstacle_count = 20;
-    for (int i = 0; 20 > i; i++) {
-        WorldObject* rock = &g_game_state.obstacles[i];
-        *rock = (WorldObject){ .max_life = 10.0f, .life = 10.0f };
-        rock->id = (EntityID)i + 1;
-    }
+    g_game_state.scenery_count = 20;
+    for (int i = 0; 20 > i; i++) place(i, (EntityID)i + 1);
     fx_obstacle_burst_snapshot();
-    for (int i = 0; 20 > i; i++) g_game_state.obstacles[i].life = 0.0f;
+    for (int i = 0; 20 > i; i++) g_game_state.data[i].life = 0.0f;
     fx_obstacle_burst_snapshot();
     draw();
     assert(16 * 24 == sparks);

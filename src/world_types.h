@@ -20,6 +20,36 @@
 /* The id of an entity on the server, on the wire and here. 0 is no entity. */
 typedef uint32_t EntityID;
 
+/* Entity kinds, from the wire word `kind`. */
+typedef enum {
+    ENTITY_KIND_PLAYER,
+    ENTITY_KIND_BOT,
+    ENTITY_KIND_RESOURCE,
+    ENTITY_KIND_PORTAL,
+    ENTITY_KIND_SCENERY,
+} EntityKind;
+
+/* Draw passes: depth-sorted with the entities, under all, over all. */
+#define DRAW_SORTED     0
+#define DRAW_FLOOR      1
+#define DRAW_FOREGROUND 2
+
+/* EntityData.flags. */
+#define ENTITY_FLAG_BLOCKS             (1u << 0)
+#define ENTITY_FLAG_OVERHEAD_OCCLUSION (1u << 1)
+
+/* The data component: the kind and the small flags. */
+typedef struct {
+    uint8_t kind;          /* EntityKind */
+    uint8_t draw_order;    /* DRAW_* */
+    uint8_t flags;         /* ENTITY_FLAG_* */
+    uint8_t status_icon;   /* STATUS_ICON_* */
+    /* Scenery only: the life of a destructible obstacle. An ordinary
+     * obstacle has max_life 0; a depleted one has life 0. */
+    float   life;
+    float   max_life;
+} EntityData;
+
 /* The transform component: the top-left and the size of an entity, in grid
  * units, as the newest snapshot gives them. raylib owns the name Transform. */
 typedef struct {
@@ -57,7 +87,6 @@ struct EntityState {
     int stats_sum;
     int level;
     float effective_stats[CYBERIA_STAT_COUNT];
-    uint8_t status_icon;
     bool on_portal;     /* a player standing on a portal */
     float portal_hold;  /* its teleport charge, 0..1 */
 };
@@ -113,21 +142,13 @@ struct BotState {
     char quest_talk_dialog_codes[BOT_QUEST_CODES_MAX][MAX_ID_LENGTH];
 };
 
+/* A portal: the teleport destination, for the "<targetMapCode> <x>,<y>"
+ * overhead nameplate. */
 typedef struct WorldObject {
     EntityID         id;
-    char             type[MAX_TYPE_LENGTH];
-    /* Portal-only: presence status icon (ESI 10) + teleport destination, used to
-     * build the "<targetMapCode> <x>,<y>" overhead nameplate. Zero for non-portals. */
-    uint8_t          status_icon;
     char             target_map_code[MAX_ID_LENGTH];
     int              target_cell_x;
     int              target_cell_y;
-    /* Foreground-only: the bound behavior is "overhead-occlusion". */
-    bool             overhead_occlusion;
-    /* Obstacle-only: authoritative life of a destructible obstacle. An
-     * ordinary obstacle has max_life 0; a depleted one has life 0. */
-    float            life;
-    float            max_life;
 } WorldObject;
 
 #endif /* WORLD_TYPES_H */

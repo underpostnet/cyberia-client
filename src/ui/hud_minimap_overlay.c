@@ -210,7 +210,7 @@ static void draw_live_presence(const ImapGraph* graph, int current_index,
         const BotState* bot = &g_game_state.bots[i];
         Vector2 at = drawn_map_position(node, rect, bot->base.id);
         draw_square_marker(at, 5.0f, instance_map_presence_color(
-            STATUS_ICON_HOSTILE == bot->base.status_icon ? IMAP_PRESENCE_HOSTILE
+            STATUS_ICON_HOSTILE == game_state_data(bot->base.id)->status_icon ? IMAP_PRESENCE_HOSTILE
                                                          : IMAP_PRESENCE_PASSIVE));
     }
     for (int i = 0; i < g_game_state.resource_count; ++i) {

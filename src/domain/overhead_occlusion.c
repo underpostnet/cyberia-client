@@ -38,18 +38,18 @@ void overhead_occlusion_update(float dt) {
     /* Rebuilt from the snapshot each frame, so a roof that leaves the AOI loses its entry. */
     FadingRoof next[MAX_FADING_ROOFS];
     int next_count = 0;
-    for (int i = 0; i < g_game_state.foreground_count && MAX_FADING_ROOFS > next_count; i++) {
-        const WorldObject* fg = &g_game_state.foregrounds[i];
-        if (!fg->overhead_occlusion) continue;
+    for (int i = 0; i < g_game_state.scenery_count && MAX_FADING_ROOFS > next_count; i++) {
+        const EntityID id = g_game_state.scenery[i];
+        if (0 == (game_state_data(id)->flags & ENTITY_FLAG_OVERHEAD_OCCLUSION)) continue;
 
-        const EntityTransform* tf = game_state_transform(fg->id);
+        const EntityTransform* tf = game_state_transform(id);
         const bool under = CheckCollisionPointRec(centre, (Rectangle){ tf->pos.x, tf->pos.y, tf->size.x, tf->size.y });
-        const FadingRoof* roof = find_roof(fg->id);
+        const FadingRoof* roof = find_roof(id);
         const float current = NULL != roof ? roof->progress : 0.0f;
         const float progress = under ? fminf(1.0f, current + step) : fmaxf(0.0f, current - step);
         if (0.0f == progress) continue;
 
-        next[next_count].id = fg->id;
+        next[next_count].id = id;
         next[next_count].progress = progress;
         next_count++;
     }
@@ -57,9 +57,8 @@ void overhead_occlusion_update(float dt) {
     s_roof_count = next_count;
 }
 
-float overhead_occlusion_opacity(const WorldObject* fg) {
-    if (!fg->overhead_occlusion) return 1.0f;
-    const FadingRoof* roof = find_roof(fg->id);
+float overhead_occlusion_opacity(EntityID id) {
+    const FadingRoof* roof = find_roof(id);
     if (NULL == roof) return 1.0f;
     const float hidden = presentation_runtime_overhead_occlusion_hidden_opacity();
     return 1.0f + (hidden - 1.0f) * ease_smoothstep(roof->progress);

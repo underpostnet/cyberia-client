@@ -306,7 +306,7 @@ void entity_overhead_ui_draw(
     }
 }
 
-void entity_overhead_ui_draw_obstacle(const WorldObject *o, const EntityTransform *t, float cell_size) {
+void entity_overhead_ui_draw_obstacle(const EntityData *o, const EntityTransform *t, float cell_size) {
     assert(o && t);
     if (!(0.0f < o->max_life && 0.0f < o->life)) return;
     EntityOverheadParams p = {

@@ -114,11 +114,8 @@ void game_state_reset(void) {
     g_game_state.other_player_count   = 0;
     g_game_state.bot_count            = 0;
     g_game_state.resource_count       = 0;
-    g_game_state.obstacle_count       = 0;
-    g_game_state.foreground_count     = 0;
-    g_game_state.static_count         = 0;
+    g_game_state.scenery_count        = 0;
     g_game_state.portal_count         = 0;
-    g_game_state.floor_count          = 0;
     g_game_state.dead_item_id_count   = 0;
     game_state_layer_pool_reset();
 }

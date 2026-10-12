@@ -271,11 +271,12 @@ bool immediate_scene_ready(void) {
     const float x = player->pos.x + player->size.x * 0.5f;
     const float y = player->pos.y + player->size.y * 0.5f;
     bool ready = true;
-    for (int i = 0; g_game_state.floor_count > i; i++) {
-        const WorldObject* floor = &g_game_state.floors[i];
-        const EntityTransform* f = game_state_transform(floor->id);
+    for (int i = 0; g_game_state.scenery_count > i; i++) {
+        const EntityID id = g_game_state.scenery[i];
+        if (DRAW_FLOOR != game_state_data(id)->draw_order) continue;
+        const EntityTransform* f = game_state_transform(id);
         if (f->pos.x > x || f->pos.y > y || f->pos.x + f->size.x <= x || f->pos.y + f->size.y <= y) continue;
-        const Appearance* ap = game_state_appearance(floor->id);
+        const Appearance* ap = game_state_appearance(id);
         if (!layers_render_ready(OBJ_LAYERS(ap), ap->layer_count, DIRECTION_NONE, MODE_IDLE)) ready = false;
     }
     return ready;

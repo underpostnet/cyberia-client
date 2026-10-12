@@ -293,21 +293,14 @@ void game_render_grid(void) {
 
 void game_render_floors(void) {
     const float cell_size = world_cell_size();
+    bool any_floor = false;
 
-    // If we have no floors, draw a default background to prevent black screen
-    if (g_game_state.floor_count == 0) {
-        // Draw a subtle grid background as fallback
-        if (presentation_runtime_dev_ui()) {
-            // In dev mode, show that floors are missing with a darker background
-            DrawRectangle(0, 0, g_renderer.screen_width * 2, g_renderer.screen_height * 2,
-                         (Color){20, 20, 20, 255});
-        }
-    }
-
-    for (int i = 0; i < g_game_state.floor_count; i++) {
-        WorldObject* floor = &g_game_state.floors[i];
-        const EntityTransform* tf = game_state_transform(floor->id);
-        const Appearance* ap = game_state_appearance(floor->id);
+    for (int i = 0; i < g_game_state.scenery_count; i++) {
+        const EntityID id = g_game_state.scenery[i];
+        if (DRAW_FLOOR != game_state_data(id)->draw_order) continue;
+        any_floor = true;
+        const EntityTransform* tf = game_state_transform(id);
+        const Appearance* ap = game_state_appearance(id);
         Color floor_color = presentation_runtime_palette("FLOOR");
 
         if (ap->layer_count > 0) {
@@ -318,7 +311,7 @@ void game_render_floors(void) {
 
             draw_entity_layers(
                 g_entity_render,
-                floor->id,
+                id,
                 tf->pos.x,
                 tf->pos.y,
                 tf->size.x,
@@ -343,6 +336,12 @@ void game_render_floors(void) {
             };
             DrawRectangleRec(rect, fallback);
         }
+    }
+
+    // In dev mode, show that floors are missing with a dark background
+    if (!any_floor && presentation_runtime_dev_ui()) {
+        DrawRectangle(0, 0, g_renderer.screen_width * 2, g_renderer.screen_height * 2,
+                      (Color){20, 20, 20, 255});
     }
 }
 
@@ -399,7 +398,7 @@ void game_render_world_objects(void) {
             .show_name         = portal_name[0] != '\0',
             .show_stats        = false,
             .show_hp           = false,
-            .status_icon       = portal->status_icon,
+            .status_icon       = game_state_data(portal->id)->status_icon,
             .interaction_flags = 0,
         };
         entity_overhead_ui_draw(&ohp, tf->pos.x, tf->pos.y,
@@ -415,26 +414,30 @@ static int compare_depth(float depth_a, EntityID id_a, float depth_b, EntityID i
 }
 
 static int compare_foregrounds_by_depth(const void* a, const void* b) {
-    const WorldObject* fa = *(WorldObject* const*)a;
-    const WorldObject* fb = *(WorldObject* const*)b;
-    const EntityTransform* ta = game_state_transform(fa->id);
-    const EntityTransform* tb = game_state_transform(fb->id);
-    return compare_depth(ta->pos.y + ta->size.y, fa->id, tb->pos.y + tb->size.y, fb->id);
+    const EntityID ia = *(const EntityID*)a;
+    const EntityID ib = *(const EntityID*)b;
+    const EntityTransform* ta = game_state_transform(ia);
+    const EntityTransform* tb = game_state_transform(ib);
+    return compare_depth(ta->pos.y + ta->size.y, ia, tb->pos.y + tb->size.y, ib);
 }
 
 void game_render_foregrounds(void) {
     const float cell_size = world_cell_size();
 
-    static WorldObject* sorted[MAX_OBJECTS];
-    for (int i = 0; i < g_game_state.foreground_count; i++) sorted[i] = &g_game_state.foregrounds[i];
-    qsort(sorted, (size_t)g_game_state.foreground_count, sizeof(sorted[0]), compare_foregrounds_by_depth);
+    static EntityID sorted[MAX_OBJECTS];
+    int count = 0;
+    for (int i = 0; i < g_game_state.scenery_count; i++) {
+        const EntityID id = g_game_state.scenery[i];
+        if (DRAW_FOREGROUND == game_state_data(id)->draw_order) sorted[count++] = id;
+    }
+    qsort(sorted, (size_t)count, sizeof(sorted[0]), compare_foregrounds_by_depth);
 
     // Render foregrounds (always on top of entities)
-    for (int i = 0; i < g_game_state.foreground_count; i++) {
-        WorldObject* fg = sorted[i];
-        const EntityTransform* tf = game_state_transform(fg->id);
-        const Appearance* ap = game_state_appearance(fg->id);
-        const Color tint = Fade(WHITE, overhead_occlusion_opacity(fg));
+    for (int i = 0; i < count; i++) {
+        const EntityID id = sorted[i];
+        const EntityTransform* tf = game_state_transform(id);
+        const Appearance* ap = game_state_appearance(id);
+        const Color tint = Fade(WHITE, overhead_occlusion_opacity(id));
         const Color fg_color = ColorTint(presentation_runtime_palette("FOREGROUND"), tint);
 
         if (ap->layer_count > 0) {
@@ -445,7 +448,7 @@ void game_render_foregrounds(void) {
 
             draw_entity_layers(
                 g_entity_render,
-                fg->id,
+                id,
                 tf->pos.x,
                 tf->pos.y,
                 tf->size.x,
@@ -483,10 +486,9 @@ typedef struct {
     EntityID sort_id;
     int source_order;
     union {
-        WorldObject* object;
         PlayerState* player;
         BotState* bot;
-    } data;
+    } data;   /* unset for scenery */
     bool is_main_player;
 } EntitySortEntry;
 
@@ -547,33 +549,20 @@ void game_render_entities(void) {
     static EntitySortEntry sort_entries[MAX_DEPTH_SORT_ENTRIES];
     int entry_count = 0;
 
-    // Add obstacles to sort list so they share the same depth rules as entities.
-    for (int i = 0; i < g_game_state.obstacle_count; i++) {
-        WorldObject* obj = &g_game_state.obstacles[i];
+    // Add depth-sorted scenery, blocking or passable, so the player can pass
+    // behind or in front of it by the same depth rules as entities.
+    for (int i = 0; i < g_game_state.scenery_count; i++) {
+        const EntityID id = g_game_state.scenery[i];
+        const EntityData* data = game_state_data(id);
+        if (DRAW_SORTED != data->draw_order) continue;
+
+        sort_entries[entry_count].type = (data->flags & ENTITY_FLAG_BLOCKS) ? ENTITY_TYPE_OBSTACLE
+                                                                            : ENTITY_TYPE_STATIC;
         /* Depleted obstacles draw below entities on their cells. */
-        float depth_y = game_state_obstacle_depleted(obj) ? game_state_render(obj->id)->interp_pos.y
-                                                          : drawn_bottom(obj->id);
-
-        sort_entries[entry_count].type = ENTITY_TYPE_OBSTACLE;
-        sort_entries[entry_count].depth_y = depth_y;
-        sort_entries[entry_count].sort_id = obj->id;
+        sort_entries[entry_count].depth_y = game_state_obstacle_depleted(data)
+                                            ? game_state_render(id)->interp_pos.y : drawn_bottom(id);
+        sort_entries[entry_count].sort_id = id;
         sort_entries[entry_count].source_order = entry_count;
-        sort_entries[entry_count].data.object = obj;
-        sort_entries[entry_count].is_main_player = false;
-        entry_count++;
-    }
-
-    // Add static decorators to sort list — passable, but share the same depth
-    // rules as entities so the player can pass behind / in front of them.
-    for (int i = 0; i < g_game_state.static_count; i++) {
-        WorldObject* st = &g_game_state.statics[i];
-        float bottom_y = drawn_bottom(st->id);
-
-        sort_entries[entry_count].type = ENTITY_TYPE_STATIC;
-        sort_entries[entry_count].depth_y = bottom_y;
-        sort_entries[entry_count].sort_id = st->id;
-        sort_entries[entry_count].source_order = entry_count;
-        sort_entries[entry_count].data.object = st;
         sort_entries[entry_count].is_main_player = false;
         entry_count++;
     }
@@ -646,19 +635,19 @@ void game_render_entities(void) {
         const char* entity_type_str = NULL;
         EntityID entity_id = 0;
         EntityState* entity_base = NULL;
-        WorldObject* obstacle = NULL;
+        bool scenery = false;
 
         switch (entry->type) {
             case ENTITY_TYPE_OBSTACLE:
-                obstacle = entry->data.object;
+                scenery = true;
                 entity_type_str = "obstacle";
-                entity_id = obstacle->id;
+                entity_id = entry->sort_id;
                 break;
 
             case ENTITY_TYPE_STATIC:
-                obstacle = entry->data.object;
+                scenery = true;
                 entity_type_str = "static";
-                entity_id = obstacle->id;
+                entity_id = entry->sort_id;
                 break;
 
             case ENTITY_TYPE_PLAYER:
@@ -699,9 +688,10 @@ void game_render_entities(void) {
         const Appearance* ap = game_state_appearance(entity_id);
         const int layers_count = ap->layer_count;
 
-        if (obstacle && entity_id) {
+        if (scenery) {
+            const EntityData* data = game_state_data(entity_id);
             /* A depleted obstacle with no dead items is gone. */
-            if (game_state_obstacle_depleted(obstacle) && 0 == layers_count) continue;
+            if (game_state_obstacle_depleted(data) && 0 == layers_count) continue;
 
             // entity_type_str is "obstacle" or "static"; resolve the solid-colour
             // fallback from the entity-colour table so each renders its own palette
@@ -740,7 +730,7 @@ void game_render_entities(void) {
                     WHITE
                 );
             }
-            entity_overhead_ui_draw_obstacle(obstacle, tf, cell_size);
+            entity_overhead_ui_draw_obstacle(data, tf, cell_size);
 
             continue;
         }
@@ -919,7 +909,7 @@ void game_render_entities(void) {
                     .show_stats_value  = !np_is_provider,
                     .show_hp           = !cue && !np_is_provider && entity_base->max_life > 0.0f
                                          && entity_base->respawn_in <= 0.0f,
-                    .status_icon       = cue ? 0 : entity_base->status_icon,
+                    .status_icon       = cue ? 0 : game_state_data(entity_id)->status_icon,
                     .interaction_flags = np_flags,
                     .on_portal         = !cue && entity_base->on_portal,
                     .portal_hold       = entity_base->portal_hold,

@@ -29,14 +29,14 @@ void ui_icon_draw(const char* icon_id, float cx, float cy, int size, bool bounce
 
 static const EntityTransform s_transform = { .pos = { 4.0f, 4.0f }, .size = { 2.0f, 2.0f } };
 
-static void draw(const WorldObject* o) {
+static void draw(const EntityData* o) {
     s_rounded = 0;
     s_fill_w = 0.0f;
     entity_overhead_ui_draw_obstacle(o, &s_transform, 32.0f);
 }
 
 int main(void) {
-    WorldObject o = { .id = 1 };
+    EntityData o = { 0 };
 
     /* An ordinary obstacle carries no life and draws no bar. */
     draw(&o);

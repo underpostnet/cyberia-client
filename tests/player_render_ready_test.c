@@ -75,12 +75,13 @@ int main(void) {
     assert(!player_render_ready());
     g_layer_pool[0].active = true;
 
-    g_game_state.floor_count = 2;
-    g_game_state.floors[0] = (WorldObject){.id = 2};
-    g_game_state.floors[1] = (WorldObject){.id = 3};
+    g_game_state.scenery_count = 2;
+    g_game_state.scenery[0] = 2;
+    g_game_state.scenery[1] = 3;
+    g_game_state.data[1] = g_game_state.data[2] = (EntityData){.kind = ENTITY_KIND_SCENERY, .draw_order = DRAW_FLOOR};
     g_game_state.appearance[1] = (Appearance){.layer_offset = 2, .layer_count = 1};
     g_game_state.appearance[2] = (Appearance){.layer_offset = 3, .layer_count = 1};
-    for (int i = 0; 3 > i; i++) g_game_state.mask[i] = COMP_TRANSFORM | COMP_APPEARANCE;
+    for (int i = 0; 3 > i; i++) g_game_state.mask[i] = COMP_DATA | COMP_TRANSFORM | COMP_APPEARANCE;
     g_game_state.transform[1] = (EntityTransform){.size = {10, 10}};
     g_game_state.transform[2] = (EntityTransform){.pos = {20, 20}, .size = {10, 10}};
     assert(!immediate_scene_ready());

@@ -316,7 +316,7 @@ static void scan_entity(EntityID entity_id, const EntityState* base,
     if (!slot) return;
 
     slot->has_dialogue = has_dialogue;
-    slot->status_icon = base->status_icon;
+    slot->status_icon = game_state_data(entity_id)->status_icon;
     slot->interaction_flags = interaction_flags;
     slot->is_player = is_player;
 

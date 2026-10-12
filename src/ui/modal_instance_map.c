@@ -771,8 +771,8 @@ static void draw_node_overlay(int idx, float fade, double t) {
         Vector2 mp = instance_map_cell_to_card(card, n,
                                   game_state_own_render()->interp_pos.x,
                                   game_state_own_render()->interp_pos.y);
-        uint8_t self_status = 0 != g_game_state.player.base.status_icon
-            ? g_game_state.player.base.status_icon : STATUS_ICON_PLAYER;
+        uint8_t self_status = 0 != local_player_status_icon()
+            ? local_player_status_icon() : STATUS_ICON_PLAYER;
         const char* self_ic = presentation_runtime_status_icon(self_status);
         if (zoomed) {
             draw_zoomed_capability_tab(mp, self_ic, 0, false, false, true,

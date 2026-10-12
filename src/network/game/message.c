@@ -147,12 +147,10 @@ void message_reset_prev_snapshots(void) {
 
 /* A full array drops the rest of its kind for that snapshot. Log it once per
  * array per snapshot, not once per dropped entity. */
-enum { OVF_PLAYERS, OVF_BOTS, OVF_RESOURCES, OVF_FLOORS, OVF_OBSTACLES,
-       OVF_PORTALS, OVF_FOREGROUNDS, OVF_STATICS, OVF_LAYERS, OVF_COUNT };
+enum { OVF_PLAYERS, OVF_BOTS, OVF_RESOURCES, OVF_SCENERY, OVF_PORTALS, OVF_LAYERS, OVF_COUNT };
 
 static const char* const OVF_NAME[OVF_COUNT] = {
-    "players", "bots", "resources", "floors", "obstacles",
-    "portals", "foregrounds", "statics", "layer pool"
+    "players", "bots", "resources", "scenery", "portals", "layer pool"
 };
 
 static uint16_t s_overflow_warned = 0;
@@ -236,9 +234,19 @@ static void read_entity_state(const cJSON* e, EntityState* base, FetchPriority p
         fx_death_observe(prior_alive, 0.0f < base->max_life && !entity_alive(base), base)) {
         audio_event(AUDIO_EVENT_DEATH);
     }
-    base->status_icon = (uint8_t)serial_get_int_default(e, "statusIcon", 0);
     base->on_portal   = serial_get_bool_default(e, "onPortal", false);
     base->portal_hold = serial_get_float_default(e, "portalHoldProgress", 0.0f);
+}
+
+/* Write the data of `slot`. The decoder knows the kind from its dispatch. */
+static void write_data(int slot, const cJSON* e, EntityKind kind) {
+    g_game_state.data[slot] = (EntityData){
+        .kind        = (uint8_t)kind,
+        .draw_order  = (uint8_t)serial_get_int_default(e, "drawOrder", DRAW_SORTED),
+        .flags       = (uint8_t)serial_get_int_default(e, "flags", 0),
+        .status_icon = (uint8_t)serial_get_int_default(e, "statusIcon", 0),
+    };
+    g_game_state.mask[slot] |= COMP_DATA;
 }
 
 /* TELEPORTING is a one-snapshot signal that the entity jumped (portal), so a
@@ -264,6 +272,7 @@ static void unpack_player(const cJSON* e) {
         gs->other_players[idx].base.id = id;
     }
 
+    write_data(slot, e, ENTITY_KIND_PLAYER);
     write_transform(slot, e, teleported(e));
     write_appearance(slot, e, FETCH_P2);
     read_entity_state(e, &gs->other_players[idx].base, FETCH_P2, true);
@@ -287,6 +296,7 @@ static void unpack_bot(const cJSON* e) {
     }
 
     BotState* b = &gs->bots[idx];
+    write_data(slot, e, ENTITY_KIND_BOT);
     write_transform(slot, e, teleported(e));
     write_appearance(slot, e, FETCH_P2);
     read_entity_state(e, &b->base, FETCH_P2, true);
@@ -331,63 +341,43 @@ static void unpack_resource(const cJSON* e) {
     memset(res, 0, sizeof(BotState));
     res->base.id = id;
 
+    write_data(slot, e, ENTITY_KIND_RESOURCE);
     write_transform(slot, e, true); /* static — no interpolation */
     write_appearance(slot, e, FETCH_P2);
     read_entity_state(e, &res->base, FETCH_P2, false);
     strncpy(res->behavior, "resource", MAX_BEHAVIOR_LENGTH - 1);
 }
 
-/* passive_slot claims the next free slot for a passive world object.
- * Returns NULL when that array is full. */
-static WorldObject* passive_slot(const char* type) {
+/* Scenery never acts: data, transform and appearance are the whole entity.
+ * A destructible obstacle adds its life to the data. */
+static void unpack_scenery(const cJSON* e) {
     GameState* gs = &g_game_state;
-    WorldObject* o = NULL;
-
-    if (0 == strcmp(type, "floor")) {
-        if (gs->floor_count >= MAX_OBJECTS) { warn_overflow(OVF_FLOORS); return NULL; }
-        o = &gs->floors[gs->floor_count++];
-    } else if (0 == strcmp(type, "obstacle")) {
-        if (gs->obstacle_count >= MAX_OBJECTS) { warn_overflow(OVF_OBSTACLES); return NULL; }
-        o = &gs->obstacles[gs->obstacle_count++];
-    } else if (0 == strcmp(type, "portal")) {
-        if (gs->portal_count >= MAX_OBJECTS) { warn_overflow(OVF_PORTALS); return NULL; }
-        o = &gs->portals[gs->portal_count++];
-    } else if (0 == strcmp(type, "foreground")) {
-        if (gs->foreground_count >= MAX_OBJECTS) { warn_overflow(OVF_FOREGROUNDS); return NULL; }
-        o = &gs->foregrounds[gs->foreground_count++];
-    } else if (0 == strcmp(type, "static")) {
-        if (gs->static_count >= MAX_ENTITIES) { warn_overflow(OVF_STATICS); return NULL; }
-        o = &gs->statics[gs->static_count++];
-    } else {
-        return NULL;
-    }
-
-    memset(o, 0, sizeof(WorldObject));
-    strncpy(o->type, type, MAX_TYPE_LENGTH - 1);
-    return o;
-}
-
-/* unpack_passive reads any non-acting entity: floors, obstacles, portals,
- * foregrounds and statics. Only portals use the target fields, and only
- * foregrounds a behavior; the rest read them as zero. */
-static void unpack_passive(const cJSON* e, const char* type) {
+    if (MAX_OBJECTS <= gs->scenery_count) { warn_overflow(OVF_SCENERY); return; }
     EntityID id = serial_get_u32_default(e, "id", 0);
     int slot = claim_slot(id);
     if (0 > slot) return;
-    WorldObject* o = passive_slot(type);
-    if (!o) return;
-    o->id = id;
+    gs->scenery[gs->scenery_count++] = id;
+    write_data(slot, e, ENTITY_KIND_SCENERY);
+    gs->data[slot].life     = serial_get_float_default(e, "life", 0.0f);
+    gs->data[slot].max_life = serial_get_float_default(e, "maxLife", 0.0f);
     write_transform(slot, e, true);
     write_appearance(slot, e, FETCH_P2);
-    o->status_icon = (uint8_t)serial_get_int_default(e, "statusIcon", 0);
-    o->life        = serial_get_float_default(e, "life", 0.0f);
-    o->max_life    = serial_get_float_default(e, "maxLife", 0.0f);
+}
+
+static void unpack_portal(const cJSON* e) {
+    GameState* gs = &g_game_state;
+    if (MAX_OBJECTS <= gs->portal_count) { warn_overflow(OVF_PORTALS); return; }
+    EntityID id = serial_get_u32_default(e, "id", 0);
+    int slot = claim_slot(id);
+    if (0 > slot) return;
+    WorldObject* o = &gs->portals[gs->portal_count++];
+    *o = (WorldObject){ .id = id };
+    write_data(slot, e, ENTITY_KIND_PORTAL);
+    write_transform(slot, e, true);
+    write_appearance(slot, e, FETCH_P2);
     serial_get_string(e, "targetMapCode", o->target_map_code, MAX_ID_LENGTH);
     o->target_cell_x = serial_get_int_default(e, "targetCellX", 0);
     o->target_cell_y = serial_get_int_default(e, "targetCellY", 0);
-    char behavior[MAX_BEHAVIOR_LENGTH] = {0};
-    serial_get_string(e, "behavior", behavior, sizeof(behavior));
-    o->overhead_occlusion = 0 == strcmp(behavior, "overhead-occlusion");
 }
 
 static void unpack_self(const cJSON* e, cyberia_frame_t frame, cyberia_input_seq_t consumed) {
@@ -399,6 +389,7 @@ static void unpack_self(const cJSON* e, cyberia_frame_t frame, cyberia_input_seq
     int slot = claim_slot(p->base.id);
     assert(0 <= slot);
 
+    write_data(slot, e, ENTITY_KIND_PLAYER);
     write_transform(slot, e, false);
     write_appearance(slot, e, FETCH_P0);
     read_entity_state(e, &p->base, FETCH_P0, true);
@@ -429,7 +420,7 @@ static void unpack_self(const cJSON* e, cyberia_frame_t frame, cyberia_input_seq
                                                  MAX_OBJECT_LAYERS, FETCH_P1);
 
     local_player_set_stasis(serial_get_bool_default(e, "frozen", false));
-    local_player_set_status_icon(p->base.status_icon);
+    local_player_set_status_icon(gs->data[slot].status_icon);
 
     /* Authoritative move speed — grid units per second. The server pushes it
      * every snapshot so prediction stays in lock-step with phaseMovement. */
@@ -475,23 +466,21 @@ static void json_unpack_snapshot(const cJSON* payload) {
     gs->other_player_count = 0;
     gs->bot_count = 0;
     gs->resource_count = 0;
-    gs->obstacle_count = 0;
-    gs->foreground_count = 0;
-    gs->static_count = 0;
+    gs->scenery_count = 0;
     gs->portal_count = 0;
-    gs->floor_count = 0;
 
     const cJSON* self = serial_get_object(payload, "self");
     if (NULL != self) unpack_self(self, serial_get_u32_default(payload, "frame", 0),
                                   serial_get_u32_default(payload, "inputConsumedThrough", 0));
     const cJSON* entity = NULL;
     cJSON_ArrayForEach(entity, serial_get_array(payload, "entities")) {
-        char type[16] = {0};
-        if (0 != serial_get_string(entity, "type", type, sizeof(type))) continue;
-        if      (0 == strcmp(type, "player"))   unpack_player(entity);
-        else if (0 == strcmp(type, "bot"))      unpack_bot(entity);
-        else if (0 == strcmp(type, "resource")) unpack_resource(entity);
-        else                                    unpack_passive(entity, type);
+        char kind[16] = {0};
+        if (0 != serial_get_string(entity, "kind", kind, sizeof(kind))) continue;
+        if      (0 == strcmp(kind, "player"))   unpack_player(entity);
+        else if (0 == strcmp(kind, "bot"))      unpack_bot(entity);
+        else if (0 == strcmp(kind, "resource")) unpack_resource(entity);
+        else if (0 == strcmp(kind, "scenery"))  unpack_scenery(entity);
+        else if (0 == strcmp(kind, "portal"))   unpack_portal(entity);
     }
     free_absent_slots();
 

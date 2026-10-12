@@ -32,13 +32,15 @@ static void stand_at(float x, float y) {
 }
 
 int main(void) {
-    g_game_state.foreground_count = 2;
-    WorldObject* roof = &g_game_state.foregrounds[0];
-    *roof = (WorldObject){ .id = 1, .overhead_occlusion = true };
-    WorldObject* canopy = &g_game_state.foregrounds[1];
-    *canopy = (WorldObject){ .id = 2 };
+    g_game_state.scenery_count = 2;
+    const EntityID roof = 1, canopy = 2;
+    g_game_state.scenery[0] = roof;
+    g_game_state.scenery[1] = canopy;
+    g_game_state.data[0] = (EntityData){ .kind = ENTITY_KIND_SCENERY, .draw_order = DRAW_FOREGROUND,
+                                         .flags = ENTITY_FLAG_OVERHEAD_OCCLUSION };
+    g_game_state.data[1] = (EntityData){ .kind = ENTITY_KIND_SCENERY, .draw_order = DRAW_FOREGROUND };
     for (int i = 0; 2 > i; i++) {
-        g_game_state.mask[i] = COMP_TRANSFORM;
+        g_game_state.mask[i] = COMP_DATA | COMP_TRANSFORM;
         g_game_state.transform[i] = (EntityTransform){ .pos = { 10, 10 }, .size = { 6, 4 } };
     }
 
@@ -77,9 +79,9 @@ int main(void) {
     /* A roof that leaves the snapshot loses its fade. */
     stand_at(12.0f, 12.0f);
     overhead_occlusion_update(0.2f);
-    g_game_state.foreground_count = 0;
+    g_game_state.scenery_count = 0;
     overhead_occlusion_update(0.0f);
-    g_game_state.foreground_count = 2;
+    g_game_state.scenery_count = 2;
     assert(near(1.0f, overhead_occlusion_opacity(roof)));
 
     /* No fade time: the roof hides at once. */

@@ -41,10 +41,11 @@ static int compare_obstacles(const void* a, const void* b) {
 }
 
 void fx_obstacle_burst_snapshot(void) {
-    for (int i = 0; g_game_state.obstacle_count > i; i++) {
-        const WorldObject* obstacle = &g_game_state.obstacles[i];
+    for (int i = 0; g_game_state.scenery_count > i; i++) {
+        const EntityID id = g_game_state.scenery[i];
+        const EntityData* obstacle = game_state_data(id);
         if (0.0f >= obstacle->max_life) continue;
-        ObstacleState key = { .id = obstacle->id, .depleted = game_state_obstacle_depleted(obstacle) };
+        ObstacleState key = { .id = id, .depleted = game_state_obstacle_depleted(obstacle) };
         const ObstacleState* prior = bsearch(&key, s_seen, (size_t)s_seen_count,
                                             sizeof s_seen[0], compare_obstacles);
         if (NULL == prior || prior->depleted == key.depleted) continue;
@@ -54,18 +55,19 @@ void fx_obstacle_burst_snapshot(void) {
             if (!s_bursts[j].active) { slot = &s_bursts[j]; break; }
             if (slot->age < s_bursts[j].age) slot = &s_bursts[j];
         }
-        const EntityTransform* t = game_state_transform(obstacle->id);
+        const EntityTransform* t = game_state_transform(id);
         *slot = (ObstacleBurst){ .pos = t->pos, .dims = t->size,
-                                .seed = (hash_t)obstacle->id * 2654435761u, .active = true };
+                                .seed = (hash_t)id * 2654435761u, .active = true };
     }
 
     /* Only the last snapshot can start a transition burst. */
     s_seen_count = 0;
-    for (int i = 0; g_game_state.obstacle_count > i; i++) {
-        const WorldObject* obstacle = &g_game_state.obstacles[i];
+    for (int i = 0; g_game_state.scenery_count > i; i++) {
+        const EntityID id = g_game_state.scenery[i];
+        const EntityData* obstacle = game_state_data(id);
         if (0.0f >= obstacle->max_life) continue;
         ObstacleState* state = &s_seen[s_seen_count++];
-        state->id = obstacle->id;
+        state->id = id;
         state->depleted = game_state_obstacle_depleted(obstacle);
     }
     qsort(s_seen, (size_t)s_seen_count, sizeof s_seen[0], compare_obstacles);
