@@ -115,6 +115,7 @@
 typedef struct {
     char  item_id[MAX_ITEM_ID_LENGTH];
     char  collector_id[MAX_ID_LENGTH];
+    bool  granted;               /* the item enters the collector's inventory */
     float start_x, start_y;
     float last_target_x, last_target_y;
     bool  have_target;
@@ -450,7 +451,7 @@ static void spawn_slot_delivery(float from_x, float from_y, float to_x, float to
  * avatar's world position to screen, resolve the item's slot, and launch the
  * delivery stream. No-op for remote collectors (no local inventory shown). */
 static void trigger_slot_delivery(const VacFlight* f) {
-    if (0 != strcmp(f->collector_id, g_local_player.id)) return;
+    if (!f->granted || 0 != strcmp(f->collector_id, g_local_player.id)) return;
 
     /* Sounded here, where the parabola lands on the avatar, because that is the moment the player
      * takes the item. The stream into the bar and its counter flourish are what happens next; a
@@ -533,7 +534,8 @@ void loot_fx_slot_expend(const char* item_id) {
 /* ── Vacuum flight (stage 3) ───────────────────────────────────────────── */
 
 void loot_fx_push(const char* drop_id, const char* collector_id,
-                  const char* item_id, float world_x, float world_y) {
+                  const char* item_id, float world_x, float world_y,
+                  bool granted) {
     if (!item_id || item_id[0] == '\0') return;
 
     /* Burst tint is personal: gold when the local player was eligible for
@@ -569,6 +571,7 @@ void loot_fx_push(const char* drop_id, const char* collector_id,
     memset(slot, 0, sizeof(*slot));
     strncpy(slot->item_id, item_id, MAX_ITEM_ID_LENGTH - 1);
     if (collector_id) strncpy(slot->collector_id, collector_id, MAX_ID_LENGTH - 1);
+    slot->granted = granted;
     slot->start_x = world_x;
     slot->start_y = world_y;
     slot->cur_x   = world_x;
@@ -582,7 +585,7 @@ bool loot_fx_inbound_to_inventory(const char* item_id) {
     if (!item_id || item_id[0] == '\0') return false;
     for (int i = 0; i < LOOT_FX_MAX; i++) {
         const VacFlight* f = &s_flights[i];
-        if (f->active && 0 == strcmp(f->item_id, item_id) &&
+        if (f->active && f->granted && 0 == strcmp(f->item_id, item_id) &&
             0 == strcmp(f->collector_id, g_local_player.id)) {
             return true;
         }

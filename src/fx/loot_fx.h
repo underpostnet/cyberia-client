@@ -58,9 +58,12 @@ void loot_fx_note_spawn(const char* drop_id, float origin_x, float origin_y,
                         uint16_t launch_ms);
 
 /* MsgTypeDropCollect: fire the burst + vacuum flight and stop the in-world idle
- * render for this token. world_x / world_y are the token's ground center. */
+ * render for this token. world_x / world_y are the token's ground center.
+ * `granted` is false when the collection applied an effect and gave no item:
+ * the flight then ends on the collector, with no inventory delivery. */
 void loot_fx_push(const char* drop_id, const char* collector_id,
-                  const char* item_id, float world_x, float world_y);
+                  const char* item_id, float world_x, float world_y,
+                  bool granted);
 
 /* Advance every flight, drop animation, and particle by dt seconds. */
 void loot_fx_update(float dt);
