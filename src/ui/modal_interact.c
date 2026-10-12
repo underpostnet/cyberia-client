@@ -387,7 +387,7 @@ static bool refresh_bot_snapshot(void) {
     char prev_dialogs[BOT_QUEST_CODES_MAX][64];
     memcpy(prev_dialogs, s_talk_dialog_codes, sizeof(prev_dialogs));
 
-    copy_str(s_action_code, sizeof(s_action_code), bot->action_code);
+    copy_str(s_action_code, sizeof(s_action_code), game_state_agent(bot->base.id)->action_code);
     action_cache_fetch(s_action_code);
     s_quest_code_count = 0;
     s_talk_count = 0;

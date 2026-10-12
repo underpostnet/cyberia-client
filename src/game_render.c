@@ -668,11 +668,11 @@ void game_render_entities(void) {
                 // Skills, coins and loot tokens are spawned as bots server-side; their
                 // behavior distinguishes them so the correct color / item defaults apply.
                 // A loot token travels with the behavior "drop".
-                if (strcmp(entry->data.bot->behavior, "skill") == 0)
+                if (strcmp(game_state_agent(entry->data.bot->base.id)->behavior, "skill") == 0)
                     entity_type_str = "skill";
-                else if (strcmp(entry->data.bot->behavior, "coin") == 0)
+                else if (strcmp(game_state_agent(entry->data.bot->base.id)->behavior, "coin") == 0)
                     entity_type_str = "coin";
-                else if (strcmp(entry->data.bot->behavior, "drop") == 0)
+                else if (strcmp(game_state_agent(entry->data.bot->base.id)->behavior, "drop") == 0)
                     entity_type_str = "loot";
                 else
                     entity_type_str = "bot";
@@ -879,11 +879,11 @@ void game_render_entities(void) {
                     const BotState* np_bot = game_state_find_bot(entity_base->id);
                     if (np_bot) {
                         np_flags = np_bot->interaction_flags;
-                        np_is_provider = (0 == strcmp(np_bot->behavior, "provider"))
-                                         || (0 == strcmp(np_bot->behavior, "provider-static"));
-                        if (np_bot->action_code[0] != '\0') {
-                            action_cache_fetch(np_bot->action_code);
-                            const ActionMetadataEntry* am = action_cache_get(np_bot->action_code);
+                        np_is_provider = (0 == strcmp(game_state_agent(np_bot->base.id)->behavior, "provider"))
+                                         || (0 == strcmp(game_state_agent(np_bot->base.id)->behavior, "provider-static"));
+                        if (game_state_agent(np_bot->base.id)->action_code[0] != '\0') {
+                            action_cache_fetch(game_state_agent(np_bot->base.id)->action_code);
+                            const ActionMetadataEntry* am = action_cache_get(game_state_agent(np_bot->base.id)->action_code);
                             if (am && META_CACHE_READY == am->head.state && am->label[0] != '\0') {
                                 strncpy(np_buf, am->label, sizeof(np_buf) - 1);
                                 np_buf[sizeof(np_buf) - 1] = '\0';

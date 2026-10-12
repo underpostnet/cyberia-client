@@ -224,7 +224,7 @@ void audio_context_snapshot(void) {
     int count = 0;
     for (int i = 0; g_game_state.bot_count > i && SEEN_SKILLS_CAP > count; i++) {
         const BotState* bot = &g_game_state.bots[i];
-        if (0 != strcmp(bot->behavior, "skill") || g_game_state.player.base.id != bot->caster_id) continue;
+        if (0 != strcmp(game_state_agent(bot->base.id)->behavior, "skill") || g_game_state.player.base.id != game_state_agent(bot->base.id)->caster_id) continue;
         bool seen = changed;
         for (int j = 0; s_skill_count > j; j++) {
             if (bot->base.id == s_skills[j]) seen = true;

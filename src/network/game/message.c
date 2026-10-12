@@ -255,9 +255,11 @@ static void unpack_bot(const cJSON* e) {
     write_appearance(slot, e, FETCH_P2);
     read_entity_state(slot, e, &b->base, FETCH_P2, true);
 
-    serial_get_string(e, "behavior", b->behavior, MAX_BEHAVIOR_LENGTH);
-    b->caster_id = serial_get_u32_default(e, "casterId", 0);
-    serial_get_string(e, "actionCode", b->action_code, MAX_ID_LENGTH);
+    Agent* agent = &gs->agent[slot];
+    serial_get_string(e, "behavior", agent->behavior, MAX_BEHAVIOR_LENGTH);
+    agent->caster_id = serial_get_u32_default(e, "casterId", 0);
+    serial_get_string(e, "actionCode", agent->action_code, MAX_ID_LENGTH);
+    gs->mask[slot] |= COMP_AGENT;
     b->interaction_flags = (uint8_t)serial_get_int_default(e, "interactionFlags", 0);
 
     b->quest_code_count = 0;
@@ -299,7 +301,6 @@ static void unpack_resource(const cJSON* e) {
     write_transform(slot, e, true); /* static — no interpolation */
     write_appearance(slot, e, FETCH_P2);
     read_entity_state(slot, e, &res->base, FETCH_P2, false);
-    strncpy(res->behavior, "resource", MAX_BEHAVIOR_LENGTH - 1);
 }
 
 /* Scenery never acts: data, transform, appearance and vitals are the whole

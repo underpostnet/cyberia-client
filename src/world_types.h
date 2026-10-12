@@ -81,6 +81,14 @@ typedef struct {
     ObjectLayerMode mode;
 } Motion;
 
+/* The agent component of a bot. action_code is the bound cyberia-action, ""
+ * for ordinary bots; the client fetches its metadata by this code via REST. */
+typedef struct {
+    char     behavior[MAX_BEHAVIOR_LENGTH];
+    EntityID caster_id;   /* the player or bot that made this bot; 0 for none */
+    char     action_code[MAX_ID_LENGTH];
+} Agent;
+
 /* Client-only render interpolation, beside the components. snapshot_time is
  * the arrival of the snapshot that wrote transform.pos; the lerp runs from
  * pos_prev to transform.pos per entity. */
@@ -133,12 +141,6 @@ struct PlayerState {
 
 struct BotState {
     EntityState base;
-    char behavior[MAX_BEHAVIOR_LENGTH];
-    EntityID caster_id;
-    /* Bound cyberia-action code; "" for ordinary bots. The client fetches the
-     * action metadata (label, dialogue map) by this code via REST.
-     * Position-independent, so a wandering NPC keeps it. */
-    char action_code[MAX_ID_LENGTH];
     /* Per-player interaction capability bitmask (INTERACTION_FLAG_*). */
     uint8_t interaction_flags;
     /* Authoritative quest codes this NPC provides to the local player; metadata

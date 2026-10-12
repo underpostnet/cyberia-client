@@ -117,6 +117,7 @@ struct GameState {
     Vitals          vitals[ENTITY_CAP];
     Progress        progress[ENTITY_CAP];
     Motion          motion[ENTITY_CAP];
+    Agent           agent[ENTITY_CAP];
     RenderState     render[ENTITY_CAP];   /* client only */
 };
 
@@ -127,6 +128,7 @@ struct GameState {
 #define COMP_VITALS     ((uint64_t)1 << 3)
 #define COMP_PROGRESS   ((uint64_t)1 << 4)
 #define COMP_MOTION     ((uint64_t)1 << 5)
+#define COMP_AGENT      ((uint64_t)1 << 6)
 
 extern GameState g_game_state;
 
@@ -191,6 +193,12 @@ static inline Motion* game_state_motion(EntityID id) {
     return &g_game_state.motion[slot];
 }
 
+static inline Agent* game_state_agent(EntityID id) {
+    int slot = game_state_slot(id);
+    assert(0 <= slot && 0 != (g_game_state.mask[slot] & COMP_AGENT));
+    return &g_game_state.agent[slot];
+}
+
 static inline RenderState* game_state_render(EntityID id) {
     int slot = game_state_slot(id);
     assert(0 <= slot && 0 != (g_game_state.mask[slot] & COMP_TRANSFORM));
@@ -231,10 +239,12 @@ static inline bool game_state_is_dead_item(const char* item_id) {
  * skill projectiles, coins and drops carry no feet. These are the bots that walk, raise dust and
  * cast the ground shadow, so the rule is stated once and read by everything that needs it. */
 static inline bool game_state_bot_has_feet(const BotState* bot) {
-    if (!bot || 0 != bot->caster_id) return false;
-    return 0 != strcmp(bot->behavior, "skill") &&
-           0 != strcmp(bot->behavior, "coin") &&
-           0 != strcmp(bot->behavior, "drop");
+    if (!bot) return false;
+    const Agent* agent = game_state_agent(bot->base.id);
+    if (0 != agent->caster_id) return false;
+    return 0 != strcmp(agent->behavior, "skill") &&
+           0 != strcmp(agent->behavior, "coin") &&
+           0 != strcmp(agent->behavior, "drop");
 }
 
 /* Ordinary obstacles have zero maximum life and cannot deplete. */

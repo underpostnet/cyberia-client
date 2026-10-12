@@ -408,8 +408,8 @@ void interaction_bubble_update(void) {
 
     for (int i = 0; i < g_game_state.bot_count; i++) {
         const BotState* bot = &g_game_state.bots[i];
-        if (0 != bot->caster_id) continue;
-        scan_entity(bot->base.id, &bot->base, false, bot->behavior, bot->interaction_flags);
+        if (0 != game_state_agent(bot->base.id)->caster_id) continue;
+        scan_entity(bot->base.id, &bot->base, false, game_state_agent(bot->base.id)->behavior, bot->interaction_flags);
         /* R12: every quest-talk is cached before its dialogue opens. scan_entity
          * already requests the greeting. */
         for (int q = 0; q < BOT_QUEST_CODES_MAX; q++)

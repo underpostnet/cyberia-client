@@ -44,7 +44,7 @@ static bool tap_hits_provider(Vector2 world_pos) {
     float cell = world_cell_size();
     for (int i = 0; i < g_game_state.bot_count; i++) {
         const BotState* bot = &g_game_state.bots[i];
-        if ('\0' == bot->action_code[0] && 0 == bot->quest_code_count) continue;
+        if ('\0' == game_state_agent(bot->base.id)->action_code[0] && 0 == bot->quest_code_count) continue;
         Vector2 size = game_state_transform(bot->base.id)->size;
         Vector2 at   = game_state_render(bot->base.id)->interp_pos;
         float half_w = size.x * 0.5f;
