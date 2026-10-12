@@ -90,13 +90,9 @@ typedef struct {
 
 void modal_notification_show_assemble(const ModalNotificationAssemble* assemble);
 
-/* Adopt the server's authoritative assembly duration once craft_ack lands.
- * Ignored when no assembly is running. */
-void modal_notification_set_assemble_duration(float craft_seconds);
-
-/* Abort a running assembly from outside (a rejected craft_ack). Closes the card
- * without calling the cancel callback — the server already knows. */
-void modal_notification_abort_assemble(void);
+/* Set the time left on the running assembly from the snapshot, so the bar
+ * ends when the server's timer ends. Ignored when no assembly is charging. */
+void modal_notification_set_assemble_remaining(float seconds);
 
 void modal_notification_update(float dt);
 void modal_notification_draw(void);

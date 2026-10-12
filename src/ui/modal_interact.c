@@ -1957,9 +1957,12 @@ static float craft_card_height(const ActionCraftRecipe* recipe, float card_width
            MI_CARD_ACTION_GAP + mi_shop_buy_h() + MI_CARD_PAD;
 }
 
-/* Every ingredient present in the required amount. Mirrors the server's
- * all-or-nothing check; the simulation remains the authority. */
+/* No assembly running, the assembler in the AOI, and every ingredient present
+ * in the required amount. The server makes the same checks; a refusal there
+ * is a desync. */
 static bool craft_recipe_ready(const ActionCraftRecipe* recipe) {
+    if (g_local_player.crafting || recipe->output_count <= 0) return false;
+    if (0 > game_state_slot(s_entity_id)) return false;
     for (int i = 0; i < recipe->ingredient_count; i++) {
         const ActionCraftItem* in = &recipe->ingredients[i];
         if (in->qty > 0 && local_player_item_quantity(in->item_id) < in->qty) return false;

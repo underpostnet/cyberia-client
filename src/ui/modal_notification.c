@@ -380,12 +380,6 @@ void modal_notification_show_assemble(const ModalNotificationAssemble* a) {
     present();
 }
 
-void modal_notification_set_assemble_duration(float craft_seconds) {
-    if (!notif_is_assembling() || craft_seconds <= 0.0f) return;
-    s_craft_total = craft_seconds;
-    if (s_craft_age > s_craft_total) s_craft_age = s_craft_total;
-}
-
 /* ── Geometry ─────────────────────────────────────────────────────────── */
 
 /* Inner content width available for wrapped title / message text. */
@@ -660,11 +654,9 @@ static bool notif_is_charging(void) {
     return s_open && notif_is_assembling() && !s_awaiting_grant && !s_awaiting_delivery && !s_closing;
 }
 
-void modal_notification_abort_assemble(void) {
-    if (!s_open || !notif_is_assembling() || s_awaiting_grant || s_awaiting_delivery) return;
-    s_on_cancel = NULL;
-    release_result_items();
-    start_closing();
+void modal_notification_set_assemble_remaining(float seconds) {
+    if (!notif_is_charging() || seconds <= 0.0f) return;
+    s_craft_total = s_craft_age + seconds;
 }
 
 /* ── Update ───────────────────────────────────────────────────────────── */

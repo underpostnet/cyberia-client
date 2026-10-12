@@ -57,6 +57,7 @@ typedef struct {
     int              inventory_count;
     Vault            vaults[VAULTS_MAX];   /* the server copy, with the unconsumed ops on top */
     int              vault_count;
+    bool             crafting;             /* the server runs an assembly */
 } LocalPlayer;
 
 /* The vault the player has at `action_code`, or NULL when it is still empty. */
@@ -114,8 +115,8 @@ void  local_player_request_quest_accept(EntityID entity_id, const char* quest_co
 void  local_player_request_shop_buy(EntityID entity_id, const char* item_id,
                                     int quantity);
 
-/* Assemble an assembler entity's recipe. The server validates the ingredients
- * against the player's inventory and replies with a craft_ack. */
+/* Assemble an assembler entity's recipe. The caller checks the ingredients
+ * first; the snapshot self block then carries the running assembly. */
 void  local_player_request_craft(EntityID entity_id, int recipe_index);
 
 /* Abort the running assembly — the server refunds its ingredients. */
