@@ -6,7 +6,13 @@
 #include "util/serial.h"
 #include "replication.h"
 #include "client_event.h"
+#include "domain/audio_context.h"
 #include "domain/local_player.h"
+#include "fx/fx_death.h"
+#include "fx/fx_heal_aura.h"
+#include "fx/fx_hit_burst.h"
+#include "fx/fx_level_up.h"
+#include "fx/fx_obstacle_burst.h"
 #include "ui/modal.h"
 #include "ui/ui_state.h"
 #include "util/log.h"
@@ -38,7 +44,12 @@ static void client_reset_state(void) {
     game_state_reset();
     local_player_reset();
     ui_state_reset();
-    message_reset_prev_snapshots();
+    audio_context_reset();
+    fx_level_up_reset();
+    fx_heal_aura_reset();
+    fx_hit_burst_reset();
+    fx_death_reset();
+    fx_obstacle_burst_reset();
     session_reset();
     prediction_reset();
     client_event_reset();

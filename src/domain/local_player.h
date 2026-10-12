@@ -38,9 +38,9 @@ typedef struct {
     double           xp;             /* total XP */
     double           level_xp;       /* threshold of the current level */
     double           next_level_xp;  /* threshold of the next level */
-    float            base_stats[CYBERIA_STAT_COUNT];
-    float            layer_stats[CYBERIA_STAT_COUNT];
-    float            temporary_stats[CYBERIA_STAT_COUNT];
+    int              base_stats[CYBERIA_STAT_COUNT];
+    int              layer_stats[CYBERIA_STAT_COUNT];
+    int              temporary_stats[CYBERIA_STAT_COUNT];
     ObjectLayerState inventory[MAX_OBJECT_LAYERS];
     int              inventory_count;
 } LocalPlayer;

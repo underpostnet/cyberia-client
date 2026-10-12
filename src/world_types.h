@@ -44,10 +44,6 @@ typedef struct {
     uint8_t draw_order;    /* DRAW_* */
     uint8_t flags;         /* ENTITY_FLAG_* */
     uint8_t status_icon;   /* STATUS_ICON_* */
-    /* Scenery only: the life of a destructible obstacle. An ordinary
-     * obstacle has max_life 0; a depleted one has life 0. */
-    float   life;
-    float   max_life;
 } EntityData;
 
 /* The transform component: the top-left and the size of an entity, in grid
@@ -72,6 +68,13 @@ typedef struct {
     int respawn_in;
 } Vitals;
 
+/* The progress component. */
+typedef struct {
+    int level;
+    int stats[CYBERIA_STAT_COUNT];
+    int stats_sum;
+} Progress;
+
 /* Client-only render interpolation, beside the components. snapshot_time is
  * the arrival of the snapshot that wrote transform.pos; the lerp runs from
  * pos_prev to transform.pos per entity. */
@@ -89,9 +92,6 @@ struct EntityState {
     EntityID id;
     Direction direction;
     ObjectLayerMode mode;
-    int stats_sum;
-    int level;
-    float effective_stats[CYBERIA_STAT_COUNT];
     bool on_portal;     /* a player standing on a portal */
     float portal_hold;  /* its teleport charge, 0..1 */
 };

@@ -40,17 +40,17 @@ static void draw(void) {
 
 /* Put a standing destructible obstacle `id` in `slot`, listed at that index of
  * the scenery: one 2x2 footprint at (10, 10). */
-static EntityData* place(int slot, EntityID id) {
+static Vitals* place(int slot, EntityID id) {
     g_game_state.ids[slot] = id;
-    g_game_state.mask[slot] = COMP_DATA | COMP_TRANSFORM;
+    g_game_state.mask[slot] = COMP_TRANSFORM | COMP_VITALS;
     g_game_state.transform[slot] = (EntityTransform){ .pos = { 10.0f, 10.0f }, .size = { 2.0f, 2.0f } };
-    g_game_state.data[slot] = (EntityData){ .kind = ENTITY_KIND_SCENERY, .max_life = 10.0f, .life = 10.0f };
+    g_game_state.vitals[slot] = (Vitals){ .life = 10, .max_life = 10 };
     g_game_state.scenery[slot] = id;
-    return &g_game_state.data[slot];
+    return &g_game_state.vitals[slot];
 }
 
 int main(void) {
-    EntityData* obstacle = place(0, 26);
+    Vitals* obstacle = place(0, 26);
     g_game_state.scenery_count = 1;
 
     fx_obstacle_burst_reset();
@@ -58,7 +58,7 @@ int main(void) {
     draw();
     assert(0 == sparks);
 
-    obstacle->life = 0.0f;
+    obstacle->life = 0;
     fx_obstacle_burst_snapshot();
     draw();
     assert(24 == sparks);
@@ -89,7 +89,7 @@ int main(void) {
     g_game_state.scenery_count = 0;
     fx_obstacle_burst_snapshot();
     g_game_state.scenery_count = 1;
-    obstacle->life = 0.0f;
+    obstacle->life = 0;
     fx_obstacle_burst_snapshot();
     draw();
     assert(0 == sparks);
@@ -103,9 +103,9 @@ int main(void) {
     assert(0 == sparks);
 
     /* Ordinary obstacles cannot start a burst. */
-    obstacle->max_life = 0.0f;
+    obstacle->max_life = 0;
     fx_obstacle_burst_snapshot();
-    obstacle->life = 0.0f;
+    obstacle->life = 0;
     fx_obstacle_burst_snapshot();
     draw();
     assert(0 == sparks);
@@ -118,7 +118,7 @@ int main(void) {
     fx_obstacle_burst_snapshot();
     g_game_state.scenery[0] = 13;
     g_game_state.scenery[2] = 26;
-    g_game_state.data[2].life = 0.0f;
+    g_game_state.vitals[2].life = 0;
     fx_obstacle_burst_snapshot();
     draw();
     assert(24 == sparks);
@@ -131,7 +131,7 @@ int main(void) {
     g_game_state.scenery_count = 20;
     for (int i = 0; 20 > i; i++) place(i, (EntityID)i + 1);
     fx_obstacle_burst_snapshot();
-    for (int i = 0; 20 > i; i++) g_game_state.data[i].life = 0.0f;
+    for (int i = 0; 20 > i; i++) g_game_state.vitals[i].life = 0;
     fx_obstacle_burst_snapshot();
     draw();
     assert(16 * 24 == sparks);

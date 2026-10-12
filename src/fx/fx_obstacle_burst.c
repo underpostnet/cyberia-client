@@ -43,8 +43,8 @@ static int compare_obstacles(const void* a, const void* b) {
 void fx_obstacle_burst_snapshot(void) {
     for (int i = 0; g_game_state.scenery_count > i; i++) {
         const EntityID id = g_game_state.scenery[i];
-        const EntityData* obstacle = game_state_data(id);
-        if (0.0f >= obstacle->max_life) continue;
+        const Vitals* obstacle = game_state_vitals(id);
+        if (0 >= obstacle->max_life) continue;
         ObstacleState key = { .id = id, .depleted = game_state_obstacle_depleted(obstacle) };
         const ObstacleState* prior = bsearch(&key, s_seen, (size_t)s_seen_count,
                                             sizeof s_seen[0], compare_obstacles);
@@ -64,8 +64,8 @@ void fx_obstacle_burst_snapshot(void) {
     s_seen_count = 0;
     for (int i = 0; g_game_state.scenery_count > i; i++) {
         const EntityID id = g_game_state.scenery[i];
-        const EntityData* obstacle = game_state_data(id);
-        if (0.0f >= obstacle->max_life) continue;
+        const Vitals* obstacle = game_state_vitals(id);
+        if (0 >= obstacle->max_life) continue;
         ObstacleState* state = &s_seen[s_seen_count++];
         state->id = id;
         state->depleted = game_state_obstacle_depleted(obstacle);

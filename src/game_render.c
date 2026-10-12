@@ -559,7 +559,7 @@ void game_render_entities(void) {
         sort_entries[entry_count].type = (data->flags & ENTITY_FLAG_BLOCKS) ? ENTITY_TYPE_OBSTACLE
                                                                             : ENTITY_TYPE_STATIC;
         /* Depleted obstacles draw below entities on their cells. */
-        sort_entries[entry_count].depth_y = game_state_obstacle_depleted(data)
+        sort_entries[entry_count].depth_y = game_state_obstacle_depleted(game_state_vitals(id))
                                             ? game_state_render(id)->interp_pos.y : drawn_bottom(id);
         sort_entries[entry_count].sort_id = id;
         sort_entries[entry_count].source_order = entry_count;
@@ -689,9 +689,9 @@ void game_render_entities(void) {
         const int layers_count = ap->layer_count;
 
         if (scenery) {
-            const EntityData* data = game_state_data(entity_id);
+            const Vitals* v = game_state_vitals(entity_id);
             /* A depleted obstacle with no dead items is gone. */
-            if (game_state_obstacle_depleted(data) && 0 == layers_count) continue;
+            if (game_state_obstacle_depleted(v) && 0 == layers_count) continue;
 
             // entity_type_str is "obstacle" or "static"; resolve the solid-colour
             // fallback from the entity-colour table so each renders its own palette
@@ -730,7 +730,7 @@ void game_render_entities(void) {
                     WHITE
                 );
             }
-            entity_overhead_ui_draw_obstacle(data, tf, cell_size);
+            entity_overhead_ui_draw_obstacle(v, tf, cell_size);
 
             continue;
         }
@@ -897,8 +897,8 @@ void game_render_entities(void) {
                 const Vitals* v = game_state_vitals(entity_id);
                 EntityOverheadParams ohp = {
                     .name              = np_buf,
-                    .stats_sum         = entity_base->stats_sum,
-                    .level             = entity_base->level,
+                    .stats_sum         = game_state_progress(entity_id)->stats_sum,
+                    .level             = game_state_progress(entity_id)->level,
                     .life              = (float)v->life,
                     .max_life          = (float)v->max_life,
                     .xp_ratio          = entry->is_main_player ? local_player_xp_ratio() : 0.0f,

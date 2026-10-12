@@ -725,7 +725,7 @@ void inventory_modal_draw(void) {
     const char* item_name = ols->item_id;
     const char* item_type = "";
     const char* item_desc = "";
-    float item_stats[CYBERIA_STAT_COUNT] = {0};
+    int item_stats[CYBERIA_STAT_COUNT] = {0};
 
     {
         ObjectLayer* ol_data = lookup_cached_layer(ols->item_id);
@@ -733,9 +733,7 @@ void inventory_modal_draw(void) {
             if (ol_data->data.item.id[0] != '\0') item_name = ol_data->data.item.id;
             item_type   = ol_data->data.item.type;
             item_desc   = ol_data->data.item.description;
-            int values[CYBERIA_STAT_COUNT];
-            cyberia_stats_values(&ol_data->data.stats, values);
-            for (int i = 0; CYBERIA_STAT_COUNT > i; i++) item_stats[i] = (float)values[i];
+            cyberia_stats_values(&ol_data->data.stats, item_stats);
         }
     }
 

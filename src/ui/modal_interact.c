@@ -1164,15 +1164,16 @@ static void draw_stats_tab(Rectangle content) {
         y += MI_FONT_LABEL + pad;
     } else {
         bool self = entity == &g_game_state.player.base;
+        const Progress* pr = game_state_progress(entity->id);
         int icon_sz = MI_FONT_LABEL * 2;
         ui_icon_draw("stats", content.x + icon_sz * 0.5f, y + icon_sz * 0.5f, icon_sz, false, 0.0f);
         char heading[64];
         if (self) snprintf(heading, sizeof(heading), "Level %d   XP %.0f / %.0f",
-                           entity->level, g_local_player.xp, g_local_player.next_level_xp);
-        else snprintf(heading, sizeof(heading), "Level %d", entity->level);
+                           pr->level, g_local_player.xp, g_local_player.next_level_xp);
+        else snprintf(heading, sizeof(heading), "Level %d", pr->level);
         DrawText(heading, (int)(content.x + icon_sz + 4.0f), (int)(y + (icon_sz - MI_FONT_LABEL) * 0.5f), MI_FONT_LABEL, GOLD);
         y += icon_sz + pad;
-        y += stat_panel_draw(content.x, y, content.width, pad, MI_FONT_STAT, entity->effective_stats, "Effective stats") + pad;
+        y += stat_panel_draw(content.x, y, content.width, pad, MI_FONT_STAT, pr->stats, "Effective stats") + pad;
         if (self) {
             y += stat_panel_draw(content.x, y, content.width, pad, MI_FONT_STAT, g_local_player.layer_stats, "OL modifiers") + pad;
             y += stat_panel_draw(content.x, y, content.width, pad, MI_FONT_STAT, g_local_player.base_stats, "Base stats") + pad;

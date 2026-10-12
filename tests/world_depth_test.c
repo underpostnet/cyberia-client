@@ -7,12 +7,12 @@
 #include <string.h>
 
 int main(void) {
-    EntityData obstacle = { .max_life = 10.0f, .life = 0.0f };
+    Vitals obstacle = { .max_life = 10, .life = 0 };
     assert(game_state_obstacle_depleted(&obstacle));
-    obstacle.life = 1.0f;
+    obstacle.life = 1;
     assert(!game_state_obstacle_depleted(&obstacle));
-    obstacle.life = 0.0f;
-    obstacle.max_life = 0.0f;
+    obstacle.life = 0;
+    obstacle.max_life = 0;
     assert(!game_state_obstacle_depleted(&obstacle));
 
     assert(0 > compare_depth(10.0f, 26, 11.0f, 1));

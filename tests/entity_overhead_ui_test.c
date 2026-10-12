@@ -29,32 +29,32 @@ void ui_icon_draw(const char* icon_id, float cx, float cy, int size, bool bounce
 
 static const EntityTransform s_transform = { .pos = { 4.0f, 4.0f }, .size = { 2.0f, 2.0f } };
 
-static void draw(const EntityData* o) {
+static void draw(const Vitals* o) {
     s_rounded = 0;
     s_fill_w = 0.0f;
     entity_overhead_ui_draw_obstacle(o, &s_transform, 32.0f);
 }
 
 int main(void) {
-    EntityData o = { 0 };
+    Vitals o = { 0 };
 
     /* An ordinary obstacle carries no life and draws no bar. */
     draw(&o);
     assert(0 == s_rounded);
 
     /* A standing destructible obstacle shows the shared HP bar, filled by its life. */
-    o.max_life = 12.0f;
-    o.life = 6.0f;
+    o.max_life = 12;
+    o.life = 6;
     draw(&o);
     assert(0 < s_rounded && (float)EOHUD_HP_BAR_W * 0.5f == s_fill_w);
 
     /* The next snapshot moves the fill. */
-    o.life = 3.0f;
+    o.life = 3;
     draw(&o);
     assert((float)EOHUD_HP_BAR_W * 0.25f == s_fill_w);
 
     /* Depleted, it draws no bar. */
-    o.life = 0.0f;
+    o.life = 0;
     draw(&o);
     assert(0 == s_rounded);
 

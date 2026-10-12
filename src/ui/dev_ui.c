@@ -147,8 +147,8 @@ static void dev_ui_update_network_stats(size_t download_bytes, size_t upload_byt
 
 static int dev_ui_get_effective_stats_sum(EntityID player_id) {
     // The snapshot carries the effective stat sum.
-    if (player_id == g_local_player.id) {
-        return g_game_state.player.base.stats_sum;
+    if (0 != player_id && player_id == g_local_player.id) {
+        return game_state_progress(player_id)->stats_sum;
     }
 
     return 0;

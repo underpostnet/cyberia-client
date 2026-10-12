@@ -306,12 +306,12 @@ void entity_overhead_ui_draw(
     }
 }
 
-void entity_overhead_ui_draw_obstacle(const EntityData *o, const EntityTransform *t, float cell_size) {
+void entity_overhead_ui_draw_obstacle(const Vitals *o, const EntityTransform *t, float cell_size) {
     assert(o && t);
-    if (!(0.0f < o->max_life && 0.0f < o->life)) return;
+    if (!(0 < o->max_life && 0 < o->life)) return;
     EntityOverheadParams p = {
-        .life     = o->life,
-        .max_life = o->max_life,
+        .life     = (float)o->life,
+        .max_life = (float)o->max_life,
         .show_hp  = true,
     };
     entity_overhead_ui_draw(&p, t->pos.x, t->pos.y, t->size.x, cell_size);

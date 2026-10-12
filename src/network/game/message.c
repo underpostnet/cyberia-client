@@ -44,43 +44,9 @@ void message_set_init_handler(MessageInitHandler handler) {
     s_init_handler = handler;
 }
 
-/* ============================================================================
- * Previous level — the level-up cue compares it with the new snapshot
- * ============================================================================
- *
- * json_unpack_snapshot copies gs->bots / gs->other_players into these buffers
- * BEFORE it resets the counters.
- */
-
-typedef struct { EntityID id; int level; } PrevPos;
-
-static PrevPos s_prev_bots[MAX_ENTITIES];
-static int     s_prev_bot_count = 0;
-static PrevPos s_prev_players[MAX_ENTITIES];
-static int     s_prev_player_count = 0;
-static PrevPos s_prev_resources[MAX_ENTITIES];
-static int     s_prev_resource_count = 0;
-
 /* A living thing: it has life and is not waiting to respawn. */
 static bool entity_alive(const Vitals* v) {
     return 0 < v->max_life && 0 < v->life && 0 >= v->respawn_in;
-}
-
-/* The prior snapshot's record of `id` across every entity table, or NULL. */
-static const PrevPos* find_prev(EntityID id) {
-    for (int i = 0; s_prev_player_count > i; i++) if (id == s_prev_players[i].id) return &s_prev_players[i];
-    for (int i = 0; s_prev_bot_count > i; i++) if (id == s_prev_bots[i].id) return &s_prev_bots[i];
-    for (int i = 0; s_prev_resource_count > i; i++) if (id == s_prev_resources[i].id) return &s_prev_resources[i];
-    return NULL;
-}
-
-static void remember_prev(PrevPos* out, int* count, const BotState* bots, const PlayerState* players, int n) {
-    *count = n;
-    for (int i = 0; n > i; i++) {
-        const EntityState* base = NULL != bots ? &bots[i].base : &players[i].base;
-        out[i].id = base->id;
-        out[i].level = base->level;
-    }
 }
 
 /* The snapshot stamp of each slot. A live slot the newest snapshot did not
@@ -126,18 +92,6 @@ static void free_absent_slots(void) {
         if (0 != g_game_state.ids[i] && s_stamp != s_slot_stamp[i])
             game_state_despawn(g_game_state.ids[i]);
     }
-}
-
-void message_reset_prev_snapshots(void) {
-    audio_context_reset();
-    fx_level_up_reset();
-    fx_heal_aura_reset();
-    fx_hit_burst_reset();
-    fx_death_reset();
-    fx_obstacle_burst_reset();
-    s_prev_bot_count = 0;
-    s_prev_player_count = 0;
-    s_prev_resource_count = 0;
 }
 
 /* ============================================================================
@@ -197,11 +151,11 @@ static void write_appearance(int slot, const cJSON* e, FetchPriority priority) {
     ap->layer_count  = (uint8_t)read_layers(e, "layers", &g_layer_pool[pool_offset], n, priority);
 }
 
-static void read_stats(const cJSON* owner, const char* key, float values[CYBERIA_STAT_COUNT]) {
+static void read_stats(const cJSON* owner, const char* key, int values[CYBERIA_STAT_COUNT]) {
     const cJSON* array = serial_get_array(owner, key);
     for (int i = 0; CYBERIA_STAT_COUNT > i; i++) {
         const cJSON* item = cJSON_GetArrayItem(array, i);
-        values[i] = cJSON_IsNumber(item) ? (float)item->valuedouble : 0.0f;
+        values[i] = cJSON_IsNumber(item) ? item->valueint : 0;
     }
 }
 
@@ -210,29 +164,23 @@ static void read_stats(const cJSON* owner, const char* key, float values[CYBERIA
 static void read_entity_state(int slot, const cJSON* e, EntityState* base, FetchPriority priority, bool death_cue) {
     base->direction   = (Direction)serial_get_int_default(e, "direction", 0);
     base->mode        = (ObjectLayerMode)serial_get_int_default(e, "mode", 0);
-    /* The local player's record persists; everyone else's prior level is in
-     * the tables the last snapshot left. The slot keeps the prior vitals. */
-    int prior_level = 0;
-    if (FETCH_P0 == priority) {
-        prior_level = base->level;
-    } else {
-        const PrevPos* prev = find_prev(base->id);
-        if (NULL != prev) prior_level = prev->level;
-    }
+    /* The slot keeps the prior vitals and level; a new slot has none. */
     GameState* gs = &g_game_state;
     Vitals* v = &gs->vitals[slot];
+    Progress* pr = &gs->progress[slot];
     const bool prior_alive = 0 != (gs->mask[slot] & COMP_VITALS) && entity_alive(v);
+    const int prior_level = 0 != (gs->mask[slot] & COMP_PROGRESS) ? pr->level : 0;
     *v = (Vitals){
         .life       = serial_get_int_default(e, "life", 0),
         .max_life   = serial_get_int_default(e, "maxLife", 0),
         .respawn_in = serial_get_int_default(e, "respawnIn", 0),
     };
-    gs->mask[slot] |= COMP_VITALS;
-    base->stats_sum   = serial_get_int_default(e, "statsSum", 0);
-    base->level = serial_get_int_default(e, "level", 0);
-    read_stats(e, "effectiveStats", base->effective_stats);
+    pr->level     = serial_get_int_default(e, "level", 0);
+    pr->stats_sum = serial_get_int_default(e, "statsSum", 0);
+    read_stats(e, "stats", pr->stats);
+    gs->mask[slot] |= COMP_VITALS | COMP_PROGRESS;
     /* Snapshots own typed death cues. The server owns level-up audio. */
-    fx_level_up_observe(prior_level, base->level, base);
+    fx_level_up_observe(prior_level, pr->level, base);
     if (death_cue &&
         fx_death_observe(prior_alive, 0 < v->max_life && !entity_alive(v), base)) {
         audio_event(AUDIO_EVENT_DEATH);
@@ -351,8 +299,8 @@ static void unpack_resource(const cJSON* e) {
     strncpy(res->behavior, "resource", MAX_BEHAVIOR_LENGTH - 1);
 }
 
-/* Scenery never acts: data, transform and appearance are the whole entity.
- * A destructible obstacle adds its life to the data. */
+/* Scenery never acts: data, transform, appearance and vitals are the whole
+ * entity. Only a destructible obstacle has a max life. */
 static void unpack_scenery(const cJSON* e) {
     GameState* gs = &g_game_state;
     if (MAX_OBJECTS <= gs->scenery_count) { warn_overflow(OVF_SCENERY); return; }
@@ -361,8 +309,11 @@ static void unpack_scenery(const cJSON* e) {
     if (0 > slot) return;
     gs->scenery[gs->scenery_count++] = id;
     write_data(slot, e, ENTITY_KIND_SCENERY);
-    gs->data[slot].life     = serial_get_float_default(e, "life", 0.0f);
-    gs->data[slot].max_life = serial_get_float_default(e, "maxLife", 0.0f);
+    gs->vitals[slot] = (Vitals){
+        .life     = serial_get_int_default(e, "life", 0),
+        .max_life = serial_get_int_default(e, "maxLife", 0),
+    };
+    gs->mask[slot] |= COMP_VITALS;
     write_transform(slot, e, true);
     write_appearance(slot, e, FETCH_P2);
 }
@@ -454,12 +405,6 @@ static void json_unpack_snapshot(const cJSON* payload) {
      * t = (now - snapshot_time) * 1000 / interpolation_ms; without this write
      * t stays at 1.0 and entities teleport between snapshots. */
     gs->last_update_time = GetTime();
-
-    /* Keep the current state so the readers can recover pos_prev and see
-     * what changed. */
-    remember_prev(s_prev_bots, &s_prev_bot_count, gs->bots, NULL, gs->bot_count);
-    remember_prev(s_prev_players, &s_prev_player_count, NULL, gs->other_players, gs->other_player_count);
-    remember_prev(s_prev_resources, &s_prev_resource_count, gs->resources, NULL, gs->resource_count);
 
     /* Each snapshot re-lists everything in the area of interest. */
 
@@ -590,11 +535,6 @@ static void store_quest_array(const cJSON* quests_json, const char* granted) {
 
 static void json_unpack_init_data(const cJSON* payload) {
     LOG_INFO("[INIT_DATA] parsing payload\n");
-
-    /* New session boundary — drop any stale prev-position snapshot from a
-     * prior server lifetime so post-restart UUIDs don't interpolate from
-     * origin. Cheap; safe to call on every init_data. */
-    message_reset_prev_snapshots();
 
     // Parse grid configuration — gameplay only (simulation contract).
     // cellSize / interpolationMs / cameraZoom are NOT here; the cyberia-server

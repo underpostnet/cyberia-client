@@ -15,9 +15,4 @@ void message_receive(const uint8_t* data, size_t len);
 typedef void (*MessageInitHandler)(void);
 void message_set_init_handler(MessageInitHandler handler);
 
-/* Drop the previous-position snapshot that interpolation uses. A new session
- * must not resolve fresh UUIDs against the positions of the old one, which
- * would interpolate every entity from (0,0). */
-void message_reset_prev_snapshots(void);
-
 #endif // CYBERIA_NETWORK_MESSAGE_H

@@ -115,6 +115,7 @@ struct GameState {
     EntityTransform transform[ENTITY_CAP];
     Appearance      appearance[ENTITY_CAP];
     Vitals          vitals[ENTITY_CAP];
+    Progress        progress[ENTITY_CAP];
     RenderState     render[ENTITY_CAP];   /* client only */
 };
 
@@ -123,6 +124,7 @@ struct GameState {
 #define COMP_TRANSFORM  ((uint64_t)1 << 1)
 #define COMP_APPEARANCE ((uint64_t)1 << 2)
 #define COMP_VITALS     ((uint64_t)1 << 3)
+#define COMP_PROGRESS   ((uint64_t)1 << 4)
 
 extern GameState g_game_state;
 
@@ -175,6 +177,12 @@ static inline Vitals* game_state_vitals(EntityID id) {
     return &g_game_state.vitals[slot];
 }
 
+static inline Progress* game_state_progress(EntityID id) {
+    int slot = game_state_slot(id);
+    assert(0 <= slot && 0 != (g_game_state.mask[slot] & COMP_PROGRESS));
+    return &g_game_state.progress[slot];
+}
+
 static inline RenderState* game_state_render(EntityID id) {
     int slot = game_state_slot(id);
     assert(0 <= slot && 0 != (g_game_state.mask[slot] & COMP_TRANSFORM));
@@ -222,8 +230,8 @@ static inline bool game_state_bot_has_feet(const BotState* bot) {
 }
 
 /* Ordinary obstacles have zero maximum life and cannot deplete. */
-static inline bool game_state_obstacle_depleted(const EntityData* d) {
-    return 0.0f < d->max_life && 0.0f >= d->life;
+static inline bool game_state_obstacle_depleted(const Vitals* v) {
+    return 0 < v->max_life && 0 >= v->life;
 }
 
 static inline bool game_state_is_active_item_type(const char* item_type) {

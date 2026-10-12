@@ -9,14 +9,14 @@
 
 /* Header row: the stats icon, the signed sum of `values`, and `label`. */
 float stat_panel_sum_draw(float x, float y, float width, float pad,
-                          const float values[CYBERIA_STAT_COUNT], const char* label);
+                          const int values[CYBERIA_STAT_COUNT], const char* label);
 
 /* Two-column grid: one icon, name and signed value per stat, at `font`. */
 float stat_panel_grid_draw(float x, float y, float width, float pad, int font,
-                           const float values[CYBERIA_STAT_COUNT]);
+                           const int values[CYBERIA_STAT_COUNT]);
 
 /* Header row followed by the grid. */
 float stat_panel_draw(float x, float y, float width, float pad, int font,
-                      const float values[CYBERIA_STAT_COUNT], const char* label);
+                      const int values[CYBERIA_STAT_COUNT], const char* label);
 
 #endif
