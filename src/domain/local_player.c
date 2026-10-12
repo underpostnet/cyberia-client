@@ -39,6 +39,13 @@ void local_player_reset(void) {
     vault_ops_clear();
 }
 
+Vault* local_player_vault(const char* action_code) {
+    for (int i = 0; i < g_local_player.vault_count; i++) {
+        if (0 == strcmp(g_local_player.vaults[i].action_code, action_code)) return &g_local_player.vaults[i];
+    }
+    return NULL;
+}
+
 void local_player_set_stasis(bool stasis) { g_local.stasis = stasis; }
 bool local_player_in_stasis(void)         { return g_local.stasis; }
 
@@ -74,10 +81,6 @@ void local_player_request_craft(EntityID entity_id, int recipe_index) {
 
 void local_player_request_craft_cancel(void) {
     client_event_push(CLIENT_EVENT_CRAFT_CANCEL, (client_event_payload_t){0});
-}
-
-void local_player_request_storage_open(EntityID entity_id) {
-    push_entity_item(CLIENT_EVENT_STORAGE_OPEN, entity_id, NULL);
 }
 
 void    local_player_set_status_icon(uint8_t id) { g_local.status_icon = id; }

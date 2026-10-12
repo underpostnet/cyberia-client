@@ -179,9 +179,8 @@ static bool storage_tab_visible(void);
 static void draw_storage_tab(Rectangle content);
 static void handle_storage_event(const ItemSlotGridEvent* ev);
 
-/* The vault grid is authoritative-backed: a drop is applied locally so the item
- * follows the pointer without a round trip, and the storage_state the server
- * answers with replaces the whole grid. */
+/* The vault grid is seeded from the vault store on open; a drop is applied
+ * locally so the item follows the pointer without a round trip. */
 static ItemSlotGrid s_storage_grid;
 static bool         s_storage_bound = false;
 static UIScroll     s_storage_scroll;
@@ -2178,13 +2177,14 @@ static Rectangle storage_scroll_lane(Rectangle content) {
                         width, content.height };
 }
 
-void modal_interact_storage_state(EntityID entity_id, int capacity,
-                                  const ObjectLayerState* slots, int count) {
-    if (!s_open || entity_id != s_entity_id) return;
-    if (capacity != s_storage_grid.capacity) item_slot_grid_init(&s_storage_grid, capacity);
-    item_slot_grid_clear(&s_storage_grid);
-    for (int i = 0; i < count; i++) {
-        item_slot_grid_set(&s_storage_grid, i, &slots[i]);
+/* Seed the grid from the vault store, which already holds the pending ops.
+ * The stacks fill the first cells; cell order is presentation from here on. */
+static void storage_seed(int capacity) {
+    vault_ops_bind(s_action_code);
+    item_slot_grid_init(&s_storage_grid, capacity);
+    const Vault* vault = local_player_vault(s_action_code);
+    for (int i = 0; NULL != vault && i < vault->count && i < capacity; i++) {
+        item_slot_grid_set(&s_storage_grid, i, &vault->items[i]);
     }
     s_storage_bound = true;
 }
@@ -2196,9 +2196,7 @@ static void draw_storage_tab(Rectangle content) {
         DrawText("No vault here.", (int)content.x, (int)content.y, mi_font_quest(), MODAL_LABEL);
         return;
     }
-    if (capacity != s_storage_grid.capacity) item_slot_grid_init(&s_storage_grid, capacity);
-    /* Bind on first draw: the server answers with the vault's contents. */
-    if (!s_storage_bound) local_player_request_storage_open(s_entity_id);
+    if (!s_storage_bound || capacity != s_storage_grid.capacity) storage_seed(capacity);
 
     int   font = quest_grid_status_font(quest_grid_font());
     float head = (float)text_line_height(font) + 4.0f;

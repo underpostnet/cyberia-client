@@ -44,7 +44,6 @@ static cJSON* pack_event(const client_event_t* e) {
     case CLIENT_EVENT_SHOP_BUY:        return json_pack_shop_buy(p->entity_id, p->item_id, p->quantity);
     case CLIENT_EVENT_CRAFT_ITEM:      return json_pack_craft_item(p->entity_id, p->recipe_index);
     case CLIENT_EVENT_CRAFT_CANCEL:    return json_pack_craft_cancel();
-    case CLIENT_EVENT_STORAGE_OPEN:    return json_pack_storage_open(p->entity_id);
     case CLIENT_EVENT_ITEM_OPS: {
         cJSON* ops = cJSON_CreateArray();
         assert(ops);

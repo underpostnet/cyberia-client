@@ -87,7 +87,7 @@ static void apply_facts(void) {
         if (CLIENT_EVENT_PLAYER_STASIS == e->kind) {
             local_player_set_stasis(e->payload.active);
         } else if (CLIENT_EVENT_ITEM_OPS == e->kind) {
-            vault_ops_apply(e->payload.ops, e->payload.op_count);
+            vault_ops_apply(e->payload.entity_id, e->payload.ops, e->payload.op_count);
         }
     }
 }
@@ -106,7 +106,7 @@ void prediction_reconcile(void) {
     s_pred.curr = s_pred.state;                  /* 1. replace */
     client_event_trim(s_pred.state_consumed);    /* 2. drop what the state holds */
     apply_facts();                               /* 3. stasis flag, item ops */
-    vault_ops_apply_to_inventory();              /*    the open vault's pending list */
+    vault_ops_apply_pending();                   /*    the open vault's pending list */
 
     if (0 == s_pred.state_frame) {               /* 4. no offset yet: apply, do not step */
         apply_motion(0, UINT32_MAX);

@@ -60,10 +60,6 @@ void modal_interact_discard_stack(void);
 /* Returns the cached alive layer snapshot (persists across AOI changes). */
 const ObjectLayerState* modal_interact_get_cached_layers(int* out_count);
 
-/* Vault contents for the open storage session. The stacks fill the first cells. */
-void modal_interact_storage_state(EntityID entity_id, int capacity,
-                                  const ObjectLayerState* slots, int count);
-
 /* True while the Storage tab is showing and can adopt a drag from the
  * inventory bar. */
 bool modal_interact_storage_accepts_drag(void);

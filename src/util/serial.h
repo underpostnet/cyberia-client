@@ -69,10 +69,9 @@ cJSON* json_pack_craft_item(uint32_t entity_id, int recipe_index);
 /* Abort the running assembly. The server refunds its ingredients. */
 cJSON* json_pack_craft_cancel(void);
 
-/* Storage vault. open binds the vault and reads its contents. item_ops reports
- * the deposits and withdrawals of one session; the server replays them in
- * order. json_pack_item_ops takes ownership of the ops array. */
-cJSON* json_pack_storage_open(uint32_t entity_id);
+/* Storage vault. item_ops reports the deposits and withdrawals of one session;
+ * the server replays them in order. json_pack_item_ops takes ownership of the
+ * ops array. */
 cJSON* json_pack_item_op(const char* item_id, int qty, bool to_vault);
 cJSON* json_pack_item_ops(uint32_t entity_id, cJSON* ops);
 

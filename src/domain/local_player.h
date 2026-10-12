@@ -30,6 +30,18 @@
  * inventory. World-mirror data — position, layers, life — stays on
  * g_game_state.player, where every entity keeps it. The snapshot decoder is
  * the sole writer. */
+
+/* Matches the server storageMaxSlots and ITEM_SLOT_GRID_MAX_SLOTS. */
+#define VAULT_SLOTS_MAX 64
+#define VAULTS_MAX       8
+
+/* One vault of the player, keyed by the action code of its terminal. */
+typedef struct {
+    char             action_code[MAX_ID_LENGTH];
+    ObjectLayerState items[VAULT_SLOTS_MAX];
+    int              count;
+} Vault;
+
 typedef struct {
     EntityID         id;
     char             engine_id[MAX_ID_LENGTH]; /* the own id for engine REST calls */
@@ -43,7 +55,12 @@ typedef struct {
     int              temporary_stats[CYBERIA_STAT_COUNT];
     ObjectLayerState inventory[MAX_OBJECT_LAYERS];
     int              inventory_count;
+    Vault            vaults[VAULTS_MAX];   /* the server copy, with the unconsumed ops on top */
+    int              vault_count;
 } LocalPlayer;
+
+/* The vault the player has at `action_code`, or NULL when it is still empty. */
+Vault* local_player_vault(const char* action_code);
 
 extern LocalPlayer g_local_player;
 
@@ -103,9 +120,6 @@ void  local_player_request_craft(EntityID entity_id, int recipe_index);
 
 /* Abort the running assembly — the server refunds its ingredients. */
 void  local_player_request_craft_cancel(void);
-
-/* Bind a storage vault. The server answers once with storage_state. */
-void  local_player_request_storage_open(EntityID entity_id);
 
 /* Status icon ID (mirrors entity status indicator for self). */
 void     local_player_set_status_icon(uint8_t id);

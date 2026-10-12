@@ -5,6 +5,7 @@
 #include <string.h>
 
 #include "domain/local_player.h"
+#include "game_state.h"
 #include "network/game/client_event.h"
 #include "object_layer.h"
 #include "world_types.h"
@@ -14,40 +15,64 @@
 _Static_assert(VAULT_OPS_MAX == CLIENT_EVENT_ITEM_OPS_MAX, "one vault session fits one item_ops event");
 
 static struct {
+    char                   action_code[MAX_ID_LENGTH];   /* the vault of this session */
     client_event_item_op_t ops[VAULT_OPS_MAX];
     int                    count;
 } s_vault;
 
-/* Deposit takes from the stack and drops it at 0; withdraw adds to the stack
- * or appends a new one, as the server does. */
-static void apply_op(const client_event_item_op_t* op) {
-    LocalPlayer* lp = &g_local_player;
+/* Take qty of item_id from the stacks, dropping the stack at 0, or add it,
+ * appending a new stack, as the server does. */
+static void move_stack(ObjectLayerState* stacks, int* count, int cap,
+                       const char* item_id, int qty, bool take) {
     int at = -1;
-    for (int i = 0; i < lp->inventory_count; i++) {
-        if (0 == strcmp(lp->inventory[i].item_id, op->item_id)) { at = i; break; }
+    for (int i = 0; i < *count; i++) {
+        if (0 == strcmp(stacks[i].item_id, item_id)) { at = i; break; }
     }
-    if (op->to_vault) {
+    if (take) {
         if (0 > at) return;
-        lp->inventory[at].quantity -= op->qty;
-        if (0 < lp->inventory[at].quantity) return;
-        memmove(&lp->inventory[at], &lp->inventory[at + 1],
-                (size_t)(lp->inventory_count - at - 1) * sizeof lp->inventory[0]);
-        lp->inventory_count--;
+        stacks[at].quantity -= qty;
+        if (0 < stacks[at].quantity) return;
+        memmove(&stacks[at], &stacks[at + 1], (size_t)(*count - at - 1) * sizeof stacks[0]);
+        (*count)--;
         return;
     }
     if (0 <= at) {
-        lp->inventory[at].quantity += op->qty;
+        stacks[at].quantity += qty;
         return;
     }
-    if (!(lp->inventory_count < MAX_OBJECT_LAYERS)) {
-        assert(false && "inventory full");
-        LOG_ERROR("inventory full");
+    if (!(*count < cap)) {
+        assert(false && "stack list full");
+        LOG_ERROR("stack list full");
         abort();
     }
-    ObjectLayerState* ols = &lp->inventory[lp->inventory_count++];
+    ObjectLayerState* ols = &stacks[(*count)++];
     memset(ols, 0, sizeof *ols);
-    copy_str(ols->item_id, sizeof ols->item_id, op->item_id);
-    ols->quantity = op->qty;
+    copy_str(ols->item_id, sizeof ols->item_id, item_id);
+    ols->quantity = qty;
+}
+
+/* The vault store entry of action_code, made empty on first use. NULL when
+ * the code is empty or the store is full. */
+static Vault* vault_for(const char* action_code) {
+    if (NULL == action_code || '\0' == action_code[0]) return NULL;
+    Vault* vault = local_player_vault(action_code);
+    if (NULL != vault || VAULTS_MAX <= g_local_player.vault_count) return vault;
+    vault = &g_local_player.vaults[g_local_player.vault_count++];
+    memset(vault, 0, sizeof *vault);
+    copy_str(vault->action_code, sizeof vault->action_code, action_code);
+    return vault;
+}
+
+/* Apply one op to the inventory and to the vault of action_code. */
+static void apply_op(const client_event_item_op_t* op, const char* action_code) {
+    LocalPlayer* lp = &g_local_player;
+    move_stack(lp->inventory, &lp->inventory_count, MAX_OBJECT_LAYERS, op->item_id, op->qty, op->to_vault);
+    Vault* vault = vault_for(action_code);
+    if (NULL != vault) move_stack(vault->items, &vault->count, VAULT_SLOTS_MAX, op->item_id, op->qty, !op->to_vault);
+}
+
+void vault_ops_bind(const char* action_code) {
+    copy_str(s_vault.action_code, sizeof s_vault.action_code, action_code);
 }
 
 void vault_ops_push(const char* item_id, int qty, bool to_vault) {
@@ -60,17 +85,23 @@ void vault_ops_push(const char* item_id, int qty, bool to_vault) {
     copy_str(op->item_id, sizeof op->item_id, item_id);
     op->qty      = qty;
     op->to_vault = to_vault;
-    apply_op(op);
+    apply_op(op, s_vault.action_code);
 }
 
 bool vault_ops_full(void) { return VAULT_OPS_MAX <= s_vault.count; }
 
-void vault_ops_apply(const client_event_item_op_t* ops, int count) {
+void vault_ops_apply(EntityID entity_id, const client_event_item_op_t* ops, int count) {
     assert(ops || 0 == count);
-    for (int i = 0; i < count; i++) apply_op(&ops[i]);
+    /* The terminal names the vault; one out of view leaves the vault as sent. */
+    int slot = game_state_slot(entity_id);
+    const char* code = 0 <= slot && 0 != (g_game_state.mask[slot] & COMP_AGENT)
+                     ? g_game_state.agent[slot].action_code : NULL;
+    for (int i = 0; i < count; i++) apply_op(&ops[i], code);
 }
 
-void vault_ops_apply_to_inventory(void) { vault_ops_apply(s_vault.ops, s_vault.count); }
+void vault_ops_apply_pending(void) {
+    for (int i = 0; i < s_vault.count; i++) apply_op(&s_vault.ops[i], s_vault.action_code);
+}
 
 void vault_ops_send(EntityID entity_id) {
     if (0 == s_vault.count) return;

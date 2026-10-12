@@ -128,12 +128,6 @@ cJSON* json_pack_craft_cancel(void) {
     return new_message("craft_cancel", &p);
 }
 
-cJSON* json_pack_storage_open(uint32_t entity_id) {
-    cJSON* p;
-    cJSON* root = new_message("storage_open", &p);
-    cJSON_AddNumberToObject(p, "entityId", entity_id);
-    return root;
-}
 
 cJSON* json_pack_item_op(const char* item_id, int qty, bool to_vault) {
     cJSON* op = cJSON_CreateObject();

@@ -380,6 +380,23 @@ static void unpack_self(const cJSON* e, cyberia_frame_t frame, cyberia_input_seq
     g_local_player.inventory_count = read_layers(e, "inventory", g_local_player.inventory,
                                                  MAX_OBJECT_LAYERS, FETCH_P1);
 
+    /* Every vault of the player: the server copy the reconcile builds on. */
+    g_local_player.vault_count = 0;
+    const cJSON* vault_json = NULL;
+    cJSON_ArrayForEach(vault_json, serial_get_array(e, "vaults")) {
+        if (VAULTS_MAX <= g_local_player.vault_count) break;
+        Vault* vault = &g_local_player.vaults[g_local_player.vault_count++];
+        memset(vault, 0, sizeof *vault);
+        serial_get_string(vault_json, "actionCode", vault->action_code, sizeof vault->action_code);
+        const cJSON* item = NULL;
+        cJSON_ArrayForEach(item, serial_get_array(vault_json, "items")) {
+            if (VAULT_SLOTS_MAX <= vault->count) break;
+            ObjectLayerState* stack = &vault->items[vault->count++];
+            serial_get_string(item, "itemId", stack->item_id, sizeof stack->item_id);
+            stack->quantity = serial_get_int_default(item, "qty", 0);
+        }
+    }
+
     local_player_set_stasis(serial_get_bool_default(e, "frozen", false));
     local_player_set_status_icon(gs->data[slot].status_icon);
 
@@ -765,29 +782,6 @@ static void json_unpack_shop_ack(const cJSON* payload) {
                             (Color){ 210, 120, 110, 255 });
 }
 
-/* storage_state is the vault, sent once per open. It seeds the grid. */
-static void json_unpack_storage_state(const cJSON* payload) {
-    EntityID entity_id = serial_get_u32_default(payload, "entityId", 0);
-    int capacity = serial_get_int_default(payload, "capacity", 0);
-
-    ObjectLayerState slots[ITEM_SLOT_GRID_MAX_SLOTS];
-    int count = 0;
-
-    cJSON* arr = serial_get_array(payload, "slots");
-    if (arr) {
-        const cJSON* row = NULL;
-        cJSON_ArrayForEach(row, arr) {
-            if (count >= ITEM_SLOT_GRID_MAX_SLOTS) break;
-            memset(&slots[count], 0, sizeof(slots[count]));
-            if (0 != serial_get_string(row, "itemId", slots[count].item_id,
-                                       sizeof(slots[count].item_id))) continue;
-            slots[count].quantity = serial_get_int_default(row, "qty", 0);
-            count++;
-        }
-    }
-    modal_interact_storage_state(entity_id, capacity, slots, count);
-}
-
 /* craft_ack answers the start of an assembly. Accepted: the assembly modal
  * adopts the server's authoritative duration so its progress bar tracks the
  * real timer rather than the cached recipe. Rejected: the modal is torn down
@@ -856,7 +850,6 @@ void message_receive(const uint8_t* data, size_t len) {
     else if (0 == strcmp(type, "dialog_ack"))      json_unpack_dialog_ack(payload);
     else if (0 == strcmp(type, "shop_ack"))        json_unpack_shop_ack(payload);
     else if (0 == strcmp(type, "craft_ack"))       json_unpack_craft_ack(payload);
-    else if (0 == strcmp(type, "storage_state"))   json_unpack_storage_state(payload);
     else LOG_ERROR("[MESSAGE] unknown type '%s'\n", type);
 
     cJSON_Delete(root);
