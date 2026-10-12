@@ -849,8 +849,7 @@ void game_render_entities(void) {
             if (!is_non_combat_bot) {
                 /* Every entity carries a stats_sum (server sum of its
                  * active stats) used by the overhead capability bar.  */
-                bool np_is_player = (entry->type == ENTITY_TYPE_PLAYER
-                                  || entry->type == ENTITY_TYPE_OTHER_PLAYER);
+                bool np_is_player = game_state_is_player(entity_id);
                 char np_buf[80];
                 /* For bots, prefer the alive-layer cache so the nameplate
                  * always reflects the living skin (even when dead/ghost). */

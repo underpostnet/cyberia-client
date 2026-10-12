@@ -131,6 +131,7 @@ struct GameState {
 #define COMP_MOTION     ((uint64_t)1 << 5)
 #define COMP_AGENT      ((uint64_t)1 << 6)
 #define COMP_PORTAL     ((uint64_t)1 << 7)
+#define COMP_PLAYER     ((uint64_t)1 << 8)   /* a client controls the entity; no array yet */
 
 extern GameState g_game_state;
 
@@ -205,6 +206,12 @@ static inline Portal* game_state_portal(EntityID id) {
     int slot = game_state_slot(id);
     assert(0 <= slot && 0 != (g_game_state.mask[slot] & COMP_PORTAL));
     return &g_game_state.portal[slot];
+}
+
+/* True when a client controls `id`. */
+static inline bool game_state_is_player(EntityID id) {
+    int slot = game_state_slot(id);
+    return 0 <= slot && 0 != (g_game_state.mask[slot] & COMP_PLAYER);
 }
 
 static inline RenderState* game_state_render(EntityID id) {

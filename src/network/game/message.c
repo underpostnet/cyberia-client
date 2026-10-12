@@ -201,6 +201,7 @@ static void write_data(int slot, const cJSON* e, EntityKind kind) {
         .status_icon = (uint8_t)serial_get_int_default(e, "statusIcon", 0),
     };
     g_game_state.mask[slot] |= COMP_DATA;
+    if (ENTITY_KIND_PLAYER == kind) g_game_state.mask[slot] |= COMP_PLAYER;
 }
 
 /* TELEPORTING is a one-snapshot signal that the entity jumped (portal), so a

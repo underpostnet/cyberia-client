@@ -263,9 +263,10 @@ static InteractionBubbleSlot* upsert_slot(EntityID entity_id) {
 /* Item id of the entity's active skin, or NULL. Talk dialogue is keyed to
  * the skin only — the displayed dialogue is the one associated with it. */
 static void scan_entity(EntityID entity_id, const EntityState* base,
-                        bool is_player, const char* behavior,
+                        const char* behavior,
                         uint8_t interaction_flags) {
     if (!base || 0 == entity_id) return;
+    const bool is_player = game_state_is_player(entity_id);
 
     if (behavior) {
         if (strcmp(behavior, "skill") == 0) return;
@@ -395,21 +396,21 @@ void interaction_bubble_update(void) {
     /* Self-player is always scanned first → occupies slot 0. */
     if (0 != g_local_player.id) {
         scan_entity(g_local_player.id,
-                    &g_game_state.player.base, true, NULL, 0);
+                    &g_game_state.player.base, NULL, 0);
     }
 
     for (int i = 0; i < g_game_state.other_player_count; i++) {
         scan_entity(
             g_game_state.other_players[i].base.id,
             &g_game_state.other_players[i].base,
-            true, NULL, 0
+            NULL, 0
         );
     }
 
     for (int i = 0; i < g_game_state.bot_count; i++) {
         const BotState* bot = &g_game_state.bots[i];
         if (0 != game_state_agent(bot->base.id)->caster_id) continue;
-        scan_entity(bot->base.id, &bot->base, false, game_state_agent(bot->base.id)->behavior, bot->interaction_flags);
+        scan_entity(bot->base.id, &bot->base, game_state_agent(bot->base.id)->behavior, bot->interaction_flags);
         /* R12: every quest-talk is cached before its dialogue opens. scan_entity
          * already requests the greeting. */
         for (int q = 0; q < BOT_QUEST_CODES_MAX; q++)
