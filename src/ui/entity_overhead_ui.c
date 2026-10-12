@@ -306,13 +306,13 @@ void entity_overhead_ui_draw(
     }
 }
 
-void entity_overhead_ui_draw_obstacle(const WorldObject *o, float cell_size) {
-    assert(o);
+void entity_overhead_ui_draw_obstacle(const WorldObject *o, const EntityTransform *t, float cell_size) {
+    assert(o && t);
     if (!(0.0f < o->max_life && 0.0f < o->life)) return;
     EntityOverheadParams p = {
-        .life    = o->life,
+        .life     = o->life,
         .max_life = o->max_life,
         .show_hp  = true,
     };
-    entity_overhead_ui_draw(&p, o->pos.x, o->pos.y, o->dims.x, cell_size);
+    entity_overhead_ui_draw(&p, t->pos.x, t->pos.y, t->size.x, cell_size);
 }

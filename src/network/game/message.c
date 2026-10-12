@@ -45,15 +45,14 @@ void message_set_init_handler(MessageInitHandler handler) {
 }
 
 /* ============================================================================
- * Previous-position snapshot — keeps interpolation across snapshot resets
+ * Previous level and life — the fx cues compare them with the new snapshot
  * ============================================================================
  *
  * json_unpack_snapshot copies gs->bots / gs->other_players into these buffers
- * BEFORE it resets the counters, so each entity can recover its prior server
- * position for a smooth lerp.
+ * BEFORE it resets the counters.
  */
 
-typedef struct { EntityID id; Vector2 pos_server; int level; bool alive; } PrevPos;
+typedef struct { EntityID id; int level; bool alive; } PrevPos;
 
 static PrevPos s_prev_bots[MAX_ENTITIES];
 static int     s_prev_bot_count = 0;
@@ -80,21 +79,9 @@ static void remember_prev(PrevPos* out, int* count, const BotState* bots, const 
     for (int i = 0; n > i; i++) {
         const EntityState* base = NULL != bots ? &bots[i].base : &players[i].base;
         out[i].id = base->id;
-        out[i].pos_server = base->pos_server;
         out[i].level = base->level;
         out[i].alive = entity_alive(base);
     }
-}
-
-/* lookup_prev_server_pos returns the previous server position for `id` if it
- * appeared in the prior snapshot, else `fallback` — so a first appearance or a
- * post-reconnect entity keeps pos_prev == pos_server and does not jump. */
-static Vector2 lookup_prev_server_pos(const PrevPos* arr, int n,
-                                      EntityID id, Vector2 fallback) {
-    for (int k = 0; k < n; k++) {
-        if (id == arr[k].id) return arr[k].pos_server;
-    }
-    return fallback;
 }
 
 /* The snapshot stamp of each slot. A live slot the newest snapshot did not
@@ -102,11 +89,37 @@ static Vector2 lookup_prev_server_pos(const PrevPos* arr, int n,
 static uint32_t s_slot_stamp[ENTITY_CAP];
 static uint32_t s_stamp = 0;
 
-/* Give `id` its slot and mark it present in this snapshot. */
-static void claim_slot(EntityID id) {
+/* Give `id` its slot and mark it present in this snapshot. -1 when the table
+ * is full: the decoder then skips the entity. */
+static int claim_slot(EntityID id) {
     int slot = game_state_spawn(id);
-    if (0 > slot) { LOG_WARN("entity table full, id %u has no slot", id); return; }
+    if (0 > slot) { LOG_WARN("entity table full, id %u has no slot", id); return -1; }
     s_slot_stamp[slot] = s_stamp;
+    return slot;
+}
+
+/* Write the transform of `slot` from `e`. The slot keeps the previous
+ * position for the lerp; a new slot, or a `snap`, starts at the new one. */
+static Vector2 read_vec2(const cJSON* owner, const char* key) {
+    const cJSON* v = serial_get_object(owner, key);
+    if (NULL == v) return (Vector2){ 0 };
+    return (Vector2){ serial_get_float_default(v, "x", 0.0f), serial_get_float_default(v, "y", 0.0f) };
+}
+
+static void write_transform(int slot, const cJSON* e, bool snap) {
+    GameState* gs = &g_game_state;
+    Vector2 pos  = read_vec2(e, "pos");
+    Vector2 size = read_vec2(e, "size");
+    RenderState* r = &gs->render[slot];
+    if (snap || 0 == (gs->mask[slot] & COMP_TRANSFORM)) {
+        r->pos_prev   = pos;
+        r->interp_pos = pos;
+    } else {
+        r->pos_prev = gs->transform[slot].pos;
+    }
+    r->snapshot_time = gs->last_update_time;
+    gs->transform[slot] = (EntityTransform){ .pos = pos, .size = size };
+    gs->mask[slot] |= COMP_TRANSFORM;
 }
 
 static void free_absent_slots(void) {
@@ -186,11 +199,6 @@ static uint8_t read_pooled_layers(const cJSON* owner, const char* key, uint16_t*
     return (uint8_t)read_layers(owner, key, &g_layer_pool[pool_offset], n, priority);
 }
 
-static Vector2 read_pos(const cJSON* e) {
-    return (Vector2){ serial_get_float_default(e, "posX", 0.0f),
-                      serial_get_float_default(e, "posY", 0.0f) };
-}
-
 static void read_stats(const cJSON* owner, const char* key, float values[CYBERIA_STAT_COUNT]) {
     const cJSON* array = serial_get_array(owner, key);
     for (int i = 0; CYBERIA_STAT_COUNT > i; i++) {
@@ -202,9 +210,6 @@ static void read_stats(const cJSON* owner, const char* key, float values[CYBERIA
 /* `death_cue` is false for what is extracted rather than slain: a resource
  * goes straight to its extracted state with no death cue. */
 static void read_entity_state(const cJSON* e, EntityState* base, FetchPriority priority, bool death_cue) {
-    GameState* gs = &g_game_state;
-    base->dims = (Vector2){ serial_get_float_default(e, "dimW", 0.0f),
-                            serial_get_float_default(e, "dimH", 0.0f) };
     base->direction   = (Direction)serial_get_int_default(e, "direction", 0);
     base->mode        = (ObjectLayerMode)serial_get_int_default(e, "mode", 0);
     /* The local player's record persists; everyone else's prior state is in
@@ -234,13 +239,19 @@ static void read_entity_state(const cJSON* e, EntityState* base, FetchPriority p
     base->on_portal   = serial_get_bool_default(e, "onPortal", false);
     base->portal_hold = serial_get_float_default(e, "portalHoldProgress", 0.0f);
     base->layer_count = read_pooled_layers(e, "objectLayers", &base->layer_offset, priority);
-    base->snapshot_time = gs->last_update_time;
+}
+
+/* TELEPORTING is a one-snapshot signal that the entity jumped (portal), so a
+ * lerp from the old position would sweep across the map. */
+static bool teleported(const cJSON* e) {
+    return MODE_TELEPORTING == serial_get_int_default(e, "mode", 0);
 }
 
 static void unpack_player(const cJSON* e) {
     GameState* gs = &g_game_state;
     EntityID id = serial_get_u32_default(e, "id", 0);
-    claim_slot(id);
+    int slot = claim_slot(id);
+    if (0 > slot) return;
 
     int idx = -1;
     for (int i = 0; i < gs->other_player_count; i++) {
@@ -253,21 +264,15 @@ static void unpack_player(const cJSON* e) {
         gs->other_players[idx].base.id = id;
     }
 
-    PlayerState* p = &gs->other_players[idx];
-    read_entity_state(e, &p->base, FETCH_P2, true);
-    Vector2 incoming = read_pos(e);
-    /* TELEPORTING is a one-snapshot signal that the entity jumped (portal), so
-     * a lerp from the old position would sweep across the map. */
-    p->base.pos_prev = (MODE_TELEPORTING == p->base.mode)
-        ? incoming
-        : lookup_prev_server_pos(s_prev_players, s_prev_player_count, id, incoming);
-    p->base.pos_server = incoming;
+    write_transform(slot, e, teleported(e));
+    read_entity_state(e, &gs->other_players[idx].base, FETCH_P2, true);
 }
 
 static void unpack_bot(const cJSON* e) {
     GameState* gs = &g_game_state;
     EntityID id = serial_get_u32_default(e, "id", 0);
-    claim_slot(id);
+    int slot = claim_slot(id);
+    if (0 > slot) return;
 
     int idx = -1;
     for (int i = 0; i < gs->bot_count; i++) {
@@ -281,12 +286,8 @@ static void unpack_bot(const cJSON* e) {
     }
 
     BotState* b = &gs->bots[idx];
+    write_transform(slot, e, teleported(e));
     read_entity_state(e, &b->base, FETCH_P2, true);
-    Vector2 incoming = read_pos(e);
-    b->base.pos_prev = (MODE_TELEPORTING == b->base.mode)
-        ? incoming
-        : lookup_prev_server_pos(s_prev_bots, s_prev_bot_count, id, incoming);
-    b->base.pos_server = incoming;
 
     serial_get_string(e, "behavior", b->behavior, MAX_BEHAVIOR_LENGTH);
     b->caster_id = serial_get_u32_default(e, "casterId", 0);
@@ -321,15 +322,15 @@ static void unpack_bot(const cJSON* e) {
 static void unpack_resource(const cJSON* e) {
     GameState* gs = &g_game_state;
     if (gs->resource_count >= MAX_ENTITIES) { warn_overflow(OVF_RESOURCES); return; }
+    EntityID id = serial_get_u32_default(e, "id", 0);
+    int slot = claim_slot(id);
+    if (0 > slot) return;
     BotState* res = &gs->resources[gs->resource_count++];
     memset(res, 0, sizeof(BotState));
-    res->base.id = serial_get_u32_default(e, "id", 0);
-    claim_slot(res->base.id);
+    res->base.id = id;
 
+    write_transform(slot, e, true); /* static — no interpolation */
     read_entity_state(e, &res->base, FETCH_P2, false);
-    res->base.pos_server = read_pos(e);
-    res->base.pos_prev   = res->base.pos_server;
-    res->base.interp_pos = res->base.pos_server; /* static — no interpolation */
     strncpy(res->behavior, "resource", MAX_BEHAVIOR_LENGTH - 1);
 }
 
@@ -367,13 +368,13 @@ static WorldObject* passive_slot(const char* type) {
  * foregrounds and statics. Only portals use the target fields, and only
  * foregrounds a behavior; the rest read them as zero. */
 static void unpack_passive(const cJSON* e, const char* type) {
+    EntityID id = serial_get_u32_default(e, "id", 0);
+    int slot = claim_slot(id);
+    if (0 > slot) return;
     WorldObject* o = passive_slot(type);
     if (!o) return;
-    o->id = serial_get_u32_default(e, "id", 0);
-    claim_slot(o->id);
-    o->pos  = read_pos(e);
-    o->dims = (Vector2){ serial_get_float_default(e, "dimW", 0.0f),
-                         serial_get_float_default(e, "dimH", 0.0f) };
+    o->id = id;
+    write_transform(slot, e, true);
     o->status_icon = (uint8_t)serial_get_int_default(e, "statusIcon", 0);
     o->life        = serial_get_float_default(e, "life", 0.0f);
     o->max_life    = serial_get_float_default(e, "maxLife", 0.0f);
@@ -392,11 +393,11 @@ static void unpack_self(const cJSON* e, cyberia_frame_t frame, cyberia_input_seq
 
     p->base.id = serial_get_u32_default(e, "id", 0);
     g_local_player.id = p->base.id;
-    claim_slot(p->base.id);
+    int slot = claim_slot(p->base.id);
+    assert(0 <= slot);
 
+    write_transform(slot, e, false);
     read_entity_state(e, &p->base, FETCH_P0, true);
-    p->base.pos_prev   = p->base.pos_server;
-    p->base.pos_server = read_pos(e);
 
     g_local_player.xp = serial_get_double_default(e, "xp", 0.0);
     g_local_player.level_xp = serial_get_double_default(e, "levelXp", 0.0);
@@ -409,7 +410,7 @@ static void unpack_self(const cJSON* e, cyberia_frame_t frame, cyberia_input_seq
     serial_get_string(e, "mapCode", g_local_player.map_code, MAX_ID_LENGTH);
 
     /* The server keeps no path once the walk ends. */
-    self_motion_t state = { .pos = p->base.pos_server, .direction = p->base.direction };
+    self_motion_t state = { .pos = gs->transform[slot].pos, .direction = p->base.direction };
     const cJSON* point = NULL;
     cJSON_ArrayForEach(point, serial_get_array(e, "path")) {
         if (MODE_WALKING != p->base.mode || MAX_PATH_POINTS <= state.path_count) break;

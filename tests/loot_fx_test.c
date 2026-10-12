@@ -23,6 +23,7 @@ bool inventory_bar_item_slot_center(const char* item_id, Vector2* out) {
     return true;
 }
 Vector2 game_render_world_to_screen(Vector2 world_pos) { return world_pos; }
+int game_state_slot(EntityID id) { return 0; }
 void fx_inventory_bar_qty_notify_arrival(const char* item_id) {}
 int GetScreenWidth(void) { return 800; }
 int GetScreenHeight(void) { return 600; }
@@ -49,6 +50,7 @@ static void collect(EntityID drop_id, bool granted) {
 
 int main(void) {
     g_local_player.id = 7;
+    g_game_state.mask[0] = COMP_TRANSFORM;
     loot_fx_reset();
 
     /* A world token arrives by replication only: it idles on its own cell. */

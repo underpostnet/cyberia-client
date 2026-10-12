@@ -599,20 +599,15 @@ bool loot_fx_inbound_to_inventory(const char* item_id) {
 static bool resolve_collector_center(EntityID collector_id, float* cx, float* cy) {
     const GameState* gs = &g_game_state;
 
-    if (0 != collector_id && g_local_player.id == collector_id) {
-        *cx = gs->player.base.interp_pos.x + gs->player.base.dims.x * 0.5f;
-        *cy = gs->player.base.interp_pos.y + gs->player.base.dims.y * 0.5f;
-        return true;
-    }
-    for (int i = 0; i < gs->other_player_count; i++) {
-        const PlayerState* p = &gs->other_players[i];
-        if (collector_id == p->base.id) {
-            *cx = p->base.interp_pos.x + p->base.dims.x * 0.5f;
-            *cy = p->base.interp_pos.y + p->base.dims.y * 0.5f;
-            return true;
-        }
-    }
-    return false;
+    bool player = 0 != collector_id && g_local_player.id == collector_id;
+    for (int i = 0; !player && i < gs->other_player_count; i++)
+        player = collector_id == gs->other_players[i].base.id;
+    if (!player) return false;
+    const Vector2 at   = game_state_render(collector_id)->interp_pos;
+    const Vector2 size = game_state_transform(collector_id)->size;
+    *cx = at.x + size.x * 0.5f;
+    *cy = at.y + size.y * 0.5f;
+    return true;
 }
 
 /* ── Per-frame integration ─────────────────────────────────────────────── */

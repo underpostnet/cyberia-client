@@ -1,4 +1,5 @@
 #include "fx/fx_death.h"
+#include "game_state.h"
 
 #include <assert.h>
 #include <raylib.h>
@@ -12,7 +13,8 @@ static float rightmost_spark_x;
 static EntityState entity;
 
 float world_cell_size(void) { return 32.0f; }
-const EntityState* game_state_find_entity(EntityID id) { return id == entity.id ? &entity : NULL; }
+GameState g_game_state;
+int game_state_slot(EntityID id) { return id == entity.id ? 0 : -1; }
 void fx_shape_spark_shaded(float cx, float cy, float size_px, Color body) {
     assert(3.0f <= size_px && 220 == body.r && 255 == body.a);
     if (cx < leftmost_spark_x) leftmost_spark_x = cx;
@@ -34,8 +36,9 @@ static void reset_probe(void) {
 
 int main(void) {
     entity.id = 1;
-    entity.interp_pos = (Vector2){ 2.0f, 3.0f };
-    entity.dims = (Vector2){ 1.0f, 1.0f };
+    g_game_state.render[0].interp_pos = (Vector2){ 2.0f, 3.0f };
+    g_game_state.transform[0].size = (Vector2){ 1.0f, 1.0f };
+    g_game_state.mask[0] = COMP_TRANSFORM;
 
     fx_death_reset();
     assert(false == fx_death_observe(false, true, &entity));  /* first seen dead */
@@ -50,7 +53,7 @@ int main(void) {
     assert(0 < sparks);
 
     /* The cue follows the body: after it is moved, the sparks sit near the new spot. */
-    entity.interp_pos = (Vector2){ 10.0f, 3.0f };
+    g_game_state.render[0].interp_pos = (Vector2){ 10.0f, 3.0f };
     fx_death_update(0.3f);
     reset_probe();
     fx_death_draw();

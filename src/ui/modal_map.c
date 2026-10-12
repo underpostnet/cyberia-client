@@ -87,8 +87,8 @@ static void shadow_text(const char* text, int x, int y, int fs, Color c) {
 
 void modal_map_draw(void) {
     const char* map = g_local_player.map_code;
-    float px        = g_game_state.player.base.interp_pos.x;
-    float py        = g_game_state.player.base.interp_pos.y;
+    float px        = game_state_own_render()->interp_pos.x;
+    float py        = game_state_own_render()->interp_pos.y;
     int   fps       = (int)roundf(g_modal_map.cached_fps);
     bool  init      = g_game_state.init_received;
 

@@ -39,6 +39,7 @@ Texture2D get_atlas_texture(const char* id, FetchPriority priority) {
     return (Texture2D){.id = textures[index] ? 1 : 0, .width = 25, .height = 25};
 }
 ObjectLayer* lookup_cached_layer(const char* id) { return documents[id[0] - '0'] ? &object_layer : NULL; }
+int game_state_slot(EntityID id) { return 0 < id ? (int)id - 1 : -1; }
 Direction local_player_view_direction(void) { return DIRECTION_DOWN; }
 ObjectLayerMode local_player_view_mode(void) { return MODE_IDLE; }
 
@@ -74,8 +75,11 @@ int main(void) {
     g_layer_pool[0].active = true;
 
     g_game_state.floor_count = 2;
-    g_game_state.floors[0] = (WorldObject){.layer_offset = 2, .layer_count = 1, .dims = {10, 10}};
-    g_game_state.floors[1] = (WorldObject){.layer_offset = 3, .layer_count = 1, .pos = {20, 20}, .dims = {10, 10}};
+    g_game_state.floors[0] = (WorldObject){.id = 2, .layer_offset = 2, .layer_count = 1};
+    g_game_state.floors[1] = (WorldObject){.id = 3, .layer_offset = 3, .layer_count = 1};
+    for (int i = 0; 3 > i; i++) g_game_state.mask[i] = COMP_TRANSFORM;
+    g_game_state.transform[1] = (EntityTransform){.size = {10, 10}};
+    g_game_state.transform[2] = (EntityTransform){.pos = {20, 20}, .size = {10, 10}};
     assert(!immediate_scene_ready());
     assert(requested[2] && !requested[3]);
     metadata[2] = textures[2] = documents[2] = true;

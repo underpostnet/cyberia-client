@@ -118,9 +118,10 @@ static float lcg_f01(void) {
 /* Whether a broadcast FCT event lies inside the local player's footprint —
  * gates the personal screen vignettes on viewer-shared (abstract) events. */
 static bool fct_event_on_self(float wx, float wy) {
-    const EntityState* self = &g_game_state.player.base;
-    return wx >= self->interp_pos.x && wx <= self->interp_pos.x + self->dims.x
-        && wy >= self->interp_pos.y && wy <= self->interp_pos.y + self->dims.y;
+    const Vector2 at   = game_state_own_render()->interp_pos;
+    const Vector2 size = game_state_own_transform()->size;
+    return wx >= at.x && wx <= at.x + size.x
+        && wy >= at.y && wy <= at.y + size.y;
 }
 
 static float fct_rank(const void* elem) {

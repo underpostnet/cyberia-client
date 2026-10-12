@@ -123,8 +123,10 @@ static bool step_is_visible(Vector2 world_px) {
  * dust trails the character instead of sitting under the sprite. */
 static void emit_step(const EntityState* e, Vector2 heading, bool running) {
     float cs = cell_size();
-    float feet_x = (e->interp_pos.x + e->dims.x * 0.5f) * cs;
-    float feet_y = (e->interp_pos.y + e->dims.y) * cs;
+    const Vector2 pos  = game_state_render(e->id)->interp_pos;
+    const Vector2 size = game_state_transform(e->id)->size;
+    float feet_x = (pos.x + size.x * 0.5f) * cs;
+    float feet_y = (pos.y + size.y) * cs;
     Vector2 at = { feet_x - heading.x * FX_STEP_BEHIND_CELLS * cs,
                    feet_y - heading.y * FX_STEP_BEHIND_CELLS * cs };
     if (!step_is_visible(at)) return;
@@ -141,7 +143,7 @@ static void track_entity(const EntityState* e, ObjectLayerMode mode, float dt) {
     if (!t) return;
     t->seen = true;
 
-    Vector2 pos = e->interp_pos;
+    Vector2 pos = game_state_render(e->id)->interp_pos;
     Vector2 delta = { pos.x - t->last_pos.x, pos.y - t->last_pos.y };
     float moved = sqrtf(delta.x * delta.x + delta.y * delta.y);
     bool  fresh = !t->primed;

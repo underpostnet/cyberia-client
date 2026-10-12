@@ -105,6 +105,6 @@ void entity_overhead_ui_draw(
 
 /* The HP bar of a destructible obstacle while it stands. An ordinary obstacle
  * and a depleted one draw nothing. */
-void entity_overhead_ui_draw_obstacle(const WorldObject *o, float cell_size);
+void entity_overhead_ui_draw_obstacle(const WorldObject *o, const EntityTransform *t, float cell_size);
 
 #endif /* ENTITY_OVERHEAD_UI_H */

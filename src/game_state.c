@@ -90,11 +90,25 @@ void game_state_despawn(EntityID id) {
     }
 }
 
+const EntityTransform* game_state_own_transform(void) {
+    static const EntityTransform none = {0};
+    int slot = game_state_slot(g_game_state.player.base.id);
+    return 0 <= slot ? &g_game_state.transform[slot] : &none;
+}
+
+const RenderState* game_state_own_render(void) {
+    static const RenderState none = {0};
+    int slot = game_state_slot(g_game_state.player.base.id);
+    return 0 <= slot ? &g_game_state.render[slot] : &none;
+}
+
 void game_state_reset(void) {
-    memset(g_game_state.ids, 0, sizeof g_game_state.ids);
-    memset(g_game_state.mask, 0, sizeof g_game_state.mask);
-    memset(s_index, 0, sizeof s_index);
-    s_cursor = 0;
+    /* The own player keeps its slot, so it still draws until the next session
+     * sends a new own id; that snapshot frees the old slot. */
+    for (int i = 0; ENTITY_CAP > i; i++) {
+        if (0 != g_game_state.ids[i] && g_game_state.player.base.id != g_game_state.ids[i])
+            game_state_despawn(g_game_state.ids[i]);
+    }
     g_game_state.init_received        = false;
     g_game_state.instance_code[0]     = '\0';
     g_game_state.other_player_count   = 0;

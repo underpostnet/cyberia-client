@@ -1,4 +1,5 @@
 #include "fx/fx_heal_aura.h"
+#include "game_state.h"
 
 #include <assert.h>
 #include <raylib.h>
@@ -15,7 +16,8 @@ static float highest_y;
 static EntityState entity;
 
 float world_cell_size(void) { return 32.0f; }
-const EntityState* game_state_find_entity(EntityID id) { return id == entity.id ? &entity : NULL; }
+GameState g_game_state;
+int game_state_slot(EntityID id) { return id == entity.id ? 0 : -1; }
 const Color FX_SPARK_GREEN = { 70, 220, 100, 255 };
 
 static void probe(float cx, float cy, Color body) {
@@ -49,8 +51,9 @@ static void draw(void) {
 
 int main(void) {
     entity.id = 1;
-    entity.interp_pos = (Vector2){ 2.0f, 3.0f };
-    entity.dims = (Vector2){ 1.0f, 1.0f };
+    g_game_state.render[0].interp_pos = (Vector2){ 2.0f, 3.0f };
+    g_game_state.transform[0].size = (Vector2){ 1.0f, 1.0f };
+    g_game_state.mask[0] = COMP_TRANSFORM;
     fx_heal_aura_reset();
 
     /* Only the loot behavior that heals starts an aura, and only on an entity in view. */
@@ -73,7 +76,7 @@ int main(void) {
     assert(0 < pluses);
 
     /* The aura follows the entity: after it walks, every shape sits around the new footprint. */
-    entity.interp_pos = (Vector2){ 10.0f, 3.0f };
+    g_game_state.render[0].interp_pos = (Vector2){ 10.0f, 3.0f };
     fx_heal_aura_update(0.4f);
     draw();
     assert(0 < sparks);

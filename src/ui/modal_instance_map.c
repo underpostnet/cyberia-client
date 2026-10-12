@@ -769,8 +769,8 @@ static void draw_node_overlay(int idx, float fade, double t) {
         Rectangle ring = { card.x - grow, card.y - grow, card.width + grow * 2.0f, card.height + grow * 2.0f };
         draw_pixel_outline(ring, 3, fade_c(IMAP_PLAYER, fade * 0.85f));
         Vector2 mp = instance_map_cell_to_card(card, n,
-                                  g_game_state.player.base.interp_pos.x,
-                                  g_game_state.player.base.interp_pos.y);
+                                  game_state_own_render()->interp_pos.x,
+                                  game_state_own_render()->interp_pos.y);
         uint8_t self_status = 0 != g_game_state.player.base.status_icon
             ? g_game_state.player.base.status_icon : STATUS_ICON_PLAYER;
         const char* self_ic = presentation_runtime_status_icon(self_status);

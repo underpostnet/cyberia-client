@@ -20,16 +20,28 @@
 /* The id of an entity on the server, on the wire and here. 0 is no entity. */
 typedef uint32_t EntityID;
 
+/* The transform component: the top-left and the size of an entity, in grid
+ * units, as the newest snapshot gives them. raylib owns the name Transform. */
+typedef struct {
+    Vector2 pos;
+    Vector2 size;
+} EntityTransform;
+
+/* Client-only render interpolation, beside the components. snapshot_time is
+ * the arrival of the snapshot that wrote transform.pos; the lerp runs from
+ * pos_prev to transform.pos per entity. */
+typedef struct {
+    Vector2 pos_prev;
+    Vector2 interp_pos;
+    double  snapshot_time;
+} RenderState;
+
 typedef struct EntityState EntityState;
 typedef struct PlayerState PlayerState;
 typedef struct BotState BotState;
 
 struct EntityState {
     EntityID id;
-    Vector2 pos_server;
-    Vector2 pos_prev;
-    Vector2 interp_pos;
-    Vector2 dims;
     Direction direction;
     ObjectLayerMode mode;
     uint16_t layer_offset;   /* index into g_layer_pool */
@@ -37,9 +49,6 @@ struct EntityState {
     float life;
     float max_life;
     float respawn_in;
-    double snapshot_time;   /* wall-clock time of the snapshot that produced
-                             * pos_server. Used by interpolation to compute
-                             * a per-entity alpha instead of a global one. */
     int stats_sum;
     int level;
     float effective_stats[CYBERIA_STAT_COUNT];
@@ -101,8 +110,6 @@ struct BotState {
 
 typedef struct WorldObject {
     EntityID         id;
-    Vector2          pos;
-    Vector2          dims;
     char             type[MAX_TYPE_LENGTH];
     /* Portal-only: presence status icon (ESI 10) + teleport destination, used to
      * build the "<targetMapCode> <x>,<y>" overhead nameplate. Zero for non-portals. */

@@ -45,10 +45,12 @@ static bool tap_hits_provider(Vector2 world_pos) {
     for (int i = 0; i < g_game_state.bot_count; i++) {
         const BotState* bot = &g_game_state.bots[i];
         if ('\0' == bot->action_code[0] && 0 == bot->quest_code_count) continue;
-        float half_w = bot->base.dims.x * 0.5f;
-        float half_h = bot->base.dims.y * 0.5f;
-        float cx = (bot->base.interp_pos.x + half_w) * cell;
-        float cy = (bot->base.interp_pos.y + half_h) * cell;
+        Vector2 size = game_state_transform(bot->base.id)->size;
+        Vector2 at   = game_state_render(bot->base.id)->interp_pos;
+        float half_w = size.x * 0.5f;
+        float half_h = size.y * 0.5f;
+        float cx = (at.x + half_w) * cell;
+        float cy = (at.y + half_h) * cell;
         float reach = cell * (0.9f + (half_w > half_h ? half_w : half_h));
         float dx = world_pos.x - cx, dy = world_pos.y - cy;
         if (dx * dx + dy * dy <= reach * reach) return true;
@@ -64,13 +66,13 @@ static bool s_destination;
 static Vector2 s_trace_position;
 
 static void observe_scene(bool gameplay) {
-    const EntityState* player = &g_game_state.player.base;
     if ('\0' == g_local_player.map_code[0]) return;
+    const Vector2 pos = game_state_transform(g_game_state.player.base.id)->pos;
     if (0 != strcmp(s_trace_map, g_local_player.map_code)) {
         s_destination = '\0' != s_trace_map[0];
         copy_str(s_trace_map, sizeof(s_trace_map), g_local_player.map_code);
         s_trace_player = s_trace_frame = s_trace_movement = s_trace_scene = false;
-        s_trace_position = player->pos_server;
+        s_trace_position = pos;
     }
     if (!s_trace_player && player_render_ready()) {
         s_trace_player = true;
@@ -85,7 +87,7 @@ static void observe_scene(bool gameplay) {
         fetch_event(s_destination ? "first_destination_frame" : "first_frame", s_trace_map, 0, 0);
     }
     if (gameplay && !s_trace_movement &&
-        (s_trace_position.x != player->pos_server.x || s_trace_position.y != player->pos_server.y)) {
+        (s_trace_position.x != pos.x || s_trace_position.y != pos.y)) {
         s_trace_movement = true;
         fetch_event(s_destination ? "first_destination_movement" : "first_movement", s_trace_map, 0, 0);
     }
@@ -185,7 +187,8 @@ static void gameloop(void) {
     /* interp_pos is the presentation position of every entity; for the local
      * player the view owns it. */
     local_player_view_update(prediction_prev(), prediction_self(), (float)(sim_acc / fixed_step));
-    g_game_state.player.base.interp_pos = local_player_view_position();
+    if (0 != g_game_state.player.base.id)
+        game_state_render(g_game_state.player.base.id)->interp_pos = local_player_view_position();
 
     /* Remote-entity render-time interpolation. */
     interpolation_compute_view();

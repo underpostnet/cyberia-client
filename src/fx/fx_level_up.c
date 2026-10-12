@@ -62,8 +62,9 @@ bool fx_level_up_observe(int previous, int current, const EntityState* entity) {
         if (!s_entries[i].active) { slot = &s_entries[i]; break; }
         if (s_entries[i].age > slot->age) slot = &s_entries[i];
     }
-    *slot = (FxLevelUpEntry){ .entity_id = entity->id, .pos = entity->interp_pos,
-                              .dims = entity->dims, .active = true };
+    *slot = (FxLevelUpEntry){ .entity_id = entity->id,
+                              .pos = game_state_render(entity->id)->interp_pos,
+                              .dims = game_state_transform(entity->id)->size, .active = true };
     return true;
 }
 
@@ -75,8 +76,8 @@ void fx_level_up_update(float dt) {
         if (entry->age >= FX_LEVEL_UP_DURATION) { entry->active = false; continue; }
         /* Follow the entity while it is in view; keep the last footprint
          * when it leaves so the aura finishes where it was last seen. */
-        const EntityState* entity = game_state_find_entity(entry->entity_id);
-        if (NULL != entity) { entry->pos = entity->interp_pos; entry->dims = entity->dims; }
+        int s = game_state_slot(entry->entity_id);
+        if (0 <= s) { entry->pos = g_game_state.render[s].interp_pos; entry->dims = g_game_state.transform[s].size; }
     }
 }
 

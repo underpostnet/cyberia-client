@@ -1,6 +1,7 @@
 #ifndef GAME_STATE_H
 #define GAME_STATE_H
 
+#include <assert.h>
 #include <raylib.h>
 #include <stdbool.h>
 #include <stdint.h>
@@ -118,9 +119,14 @@ struct GameState {
 
     /* The entity table. ids[i] is the entity at slot i, 0 = free slot. mask[i]
      * is the only answer to "does slot i have component X". */
-    EntityID ids[ENTITY_CAP];
-    uint64_t mask[ENTITY_CAP];
+    EntityID    ids[ENTITY_CAP];
+    uint64_t    mask[ENTITY_CAP];
+    EntityTransform transform[ENTITY_CAP];
+    RenderState render[ENTITY_CAP];   /* client only */
 };
+
+/* Component bits of mask[], in the §4 order. */
+#define COMP_TRANSFORM ((uint64_t)1 << 1)
 
 extern GameState g_game_state;
 
@@ -147,6 +153,24 @@ void         game_state_despawn(EntityID id);
 
 /* The slot of `id`, or -1. */
 int          game_state_slot(EntityID id);
+
+/* The transform and the render state of `id`. The id must have a transform. */
+static inline EntityTransform* game_state_transform(EntityID id) {
+    int slot = game_state_slot(id);
+    assert(0 <= slot && 0 != (g_game_state.mask[slot] & COMP_TRANSFORM));
+    return &g_game_state.transform[slot];
+}
+
+static inline RenderState* game_state_render(EntityID id) {
+    int slot = game_state_slot(id);
+    assert(0 <= slot && 0 != (g_game_state.mask[slot] & COMP_TRANSFORM));
+    return &g_game_state.render[slot];
+}
+
+/* The own player's transform and render state. Before the first snapshot the
+ * own player has no slot, and both read as zero. */
+const EntityTransform* game_state_own_transform(void);
+const RenderState*     game_state_own_render(void);
 
 PlayerState* game_state_find_player(EntityID id);
 BotState*    game_state_find_bot(EntityID id);

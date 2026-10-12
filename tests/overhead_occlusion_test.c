@@ -19,18 +19,28 @@ bool CheckCollisionPointRec(Vector2 point, Rectangle rec) {
 
 static bool near(float a, float b) { return 1e-4f > fabsf(a - b); }
 
+/* Slot i holds id i + 1: the roof, the canopy, then the local player. */
+int game_state_slot(EntityID id) { return 0 < id ? (int)id - 1 : -1; }
+static RenderState own_render;
+static const EntityTransform own_transform = { .size = { 2.0f, 2.0f } };
+const RenderState* game_state_own_render(void) { return &own_render; }
+const EntityTransform* game_state_own_transform(void) { return &own_transform; }
+
 /* Puts the centre of the 2x2 local player on (x, y). */
 static void stand_at(float x, float y) {
-    g_game_state.player.base.interp_pos = (Vector2){ x - 1.0f, y - 1.0f };
+    own_render.interp_pos = (Vector2){ x - 1.0f, y - 1.0f };
 }
 
 int main(void) {
-    g_game_state.player.base.dims = (Vector2){ 2.0f, 2.0f };
     g_game_state.foreground_count = 2;
     WorldObject* roof = &g_game_state.foregrounds[0];
-    *roof = (WorldObject){ .id = 1, .pos = { 10, 10 }, .dims = { 6, 4 }, .overhead_occlusion = true };
+    *roof = (WorldObject){ .id = 1, .overhead_occlusion = true };
     WorldObject* canopy = &g_game_state.foregrounds[1];
-    *canopy = (WorldObject){ .id = 2, .pos = { 10, 10 }, .dims = { 6, 4 } };
+    *canopy = (WorldObject){ .id = 2 };
+    for (int i = 0; 2 > i; i++) {
+        g_game_state.mask[i] = COMP_TRANSFORM;
+        g_game_state.transform[i] = (EntityTransform){ .pos = { 10, 10 }, .size = { 6, 4 } };
+    }
 
     /* Outside: shown. */
     stand_at(5.0f, 5.0f);

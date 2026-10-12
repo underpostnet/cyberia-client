@@ -54,8 +54,9 @@ void fx_obstacle_burst_snapshot(void) {
             if (!s_bursts[j].active) { slot = &s_bursts[j]; break; }
             if (slot->age < s_bursts[j].age) slot = &s_bursts[j];
         }
-        *slot = (ObstacleBurst){ .pos = obstacle->pos, .dims = obstacle->dims,
-                                .seed = (hash_t)obstacle->id * 2654435761u,.active = true };
+        const EntityTransform* t = game_state_transform(obstacle->id);
+        *slot = (ObstacleBurst){ .pos = t->pos, .dims = t->size,
+                                .seed = (hash_t)obstacle->id * 2654435761u, .active = true };
     }
 
     /* Only the last snapshot can start a transition burst. */

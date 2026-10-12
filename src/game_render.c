@@ -306,6 +306,7 @@ void game_render_floors(void) {
 
     for (int i = 0; i < g_game_state.floor_count; i++) {
         WorldObject* floor = &g_game_state.floors[i];
+        const EntityTransform* tf = game_state_transform(floor->id);
         Color floor_color = presentation_runtime_palette("FLOOR");
 
         if (floor->layer_count > 0) {
@@ -317,10 +318,10 @@ void game_render_floors(void) {
             draw_entity_layers(
                 g_entity_render,
                 floor->id,
-                floor->pos.x,
-                floor->pos.y,
-                floor->dims.x,
-                floor->dims.y,
+                tf->pos.x,
+                tf->pos.y,
+                tf->size.x,
+                tf->size.y,
                 DIRECTION_NONE,
                 MODE_IDLE,
                 layers,
@@ -334,10 +335,10 @@ void game_render_floors(void) {
         } else {
             Color fallback = presentation_runtime_palette("FLOOR_BACKGROUND");
             Rectangle rect = {
-                floor->pos.x * cell_size,
-                floor->pos.y * cell_size,
-                floor->dims.x * cell_size,
-                floor->dims.y * cell_size
+                tf->pos.x * cell_size,
+                tf->pos.y * cell_size,
+                tf->size.x * cell_size,
+                tf->size.y * cell_size
             };
             DrawRectangleRec(rect, fallback);
         }
@@ -350,6 +351,7 @@ void game_render_world_objects(void) {
     // Render portals
     for (int i = 0; i < g_game_state.portal_count; i++) {
         WorldObject* portal = &g_game_state.portals[i];
+        const EntityTransform* tf = game_state_transform(portal->id);
         Color portal_color = presentation_runtime_palette("PORTAL");
 
         if (portal->layer_count > 0) {
@@ -361,10 +363,10 @@ void game_render_world_objects(void) {
             draw_entity_layers(
                 g_entity_render,
                 portal->id,
-                portal->pos.x,
-                portal->pos.y,
-                portal->dims.x,
-                portal->dims.y,
+                tf->pos.x,
+                tf->pos.y,
+                tf->size.x,
+                tf->size.y,
                 DIRECTION_NONE,
                 MODE_IDLE,
                 layers,
@@ -377,10 +379,10 @@ void game_render_world_objects(void) {
             );
         } else {
             Rectangle rect = {
-                portal->pos.x * cell_size,
-                portal->pos.y * cell_size,
-                portal->dims.x * cell_size,
-                portal->dims.y * cell_size
+                tf->pos.x * cell_size,
+                tf->pos.y * cell_size,
+                tf->size.x * cell_size,
+                tf->size.y * cell_size
             };
             DrawRectangleRec(rect, portal_color);
         }
@@ -398,8 +400,8 @@ void game_render_world_objects(void) {
             .status_icon       = portal->status_icon,
             .interaction_flags = 0,
         };
-        entity_overhead_ui_draw(&ohp, portal->pos.x, portal->pos.y,
-                                portal->dims.x, cell_size);
+        entity_overhead_ui_draw(&ohp, tf->pos.x, tf->pos.y,
+                                tf->size.x, cell_size);
     }
 }
 
@@ -413,7 +415,9 @@ static int compare_depth(float depth_a, EntityID id_a, float depth_b, EntityID i
 static int compare_foregrounds_by_depth(const void* a, const void* b) {
     const WorldObject* fa = *(WorldObject* const*)a;
     const WorldObject* fb = *(WorldObject* const*)b;
-    return compare_depth(fa->pos.y + fa->dims.y, fa->id, fb->pos.y + fb->dims.y, fb->id);
+    const EntityTransform* ta = game_state_transform(fa->id);
+    const EntityTransform* tb = game_state_transform(fb->id);
+    return compare_depth(ta->pos.y + ta->size.y, fa->id, tb->pos.y + tb->size.y, fb->id);
 }
 
 void game_render_foregrounds(void) {
@@ -426,6 +430,7 @@ void game_render_foregrounds(void) {
     // Render foregrounds (always on top of entities)
     for (int i = 0; i < g_game_state.foreground_count; i++) {
         WorldObject* fg = sorted[i];
+        const EntityTransform* tf = game_state_transform(fg->id);
         const Color tint = Fade(WHITE, overhead_occlusion_opacity(fg));
         const Color fg_color = ColorTint(presentation_runtime_palette("FOREGROUND"), tint);
 
@@ -438,10 +443,10 @@ void game_render_foregrounds(void) {
             draw_entity_layers(
                 g_entity_render,
                 fg->id,
-                fg->pos.x,
-                fg->pos.y,
-                fg->dims.x,
-                fg->dims.y,
+                tf->pos.x,
+                tf->pos.y,
+                tf->size.x,
+                tf->size.y,
                 DIRECTION_NONE,
                 MODE_IDLE,
                 layers,
@@ -454,10 +459,10 @@ void game_render_foregrounds(void) {
             );
         } else {
             Rectangle rect = {
-                fg->pos.x * cell_size,
-                fg->pos.y * cell_size,
-                fg->dims.x * cell_size,
-                fg->dims.y * cell_size
+                tf->pos.x * cell_size,
+                tf->pos.y * cell_size,
+                tf->size.x * cell_size,
+                tf->size.y * cell_size
             };
             DrawRectangleRec(rect, fg_color);
         }
@@ -496,6 +501,18 @@ static int compare_entities_by_depth(const void* a, const void* b) {
     return ea->source_order - eb->source_order;
 }
 
+/* The bottom edge of an entity as drawn, in grid units: the depth sort key. */
+static float drawn_bottom(EntityID id) {
+    return game_state_render(id)->interp_pos.y + game_state_transform(id)->size.y;
+}
+
+/* The drawn box of an entity at its interpolated position, in world pixels. */
+static Rectangle entity_screen_rect(EntityID id, float cell_size) {
+    const Vector2 at   = game_state_render(id)->interp_pos;
+    const Vector2 size = game_state_transform(id)->size;
+    return (Rectangle){ at.x * cell_size, at.y * cell_size, size.x * cell_size, size.y * cell_size };
+}
+
 void game_render_entities(void) {
     // Safety check - ensure entity render system is initialized
     if (!g_entity_render) {
@@ -503,36 +520,19 @@ void game_render_entities(void) {
         const float cell_size = world_cell_size();
 
         // Draw simple rectangles as fallback to ensure entities are visible
-        Rectangle rect ={
-            .x = g_game_state.player.base.interp_pos.x * cell_size,
-            .y = g_game_state.player.base.interp_pos.y * cell_size,
-            .width = g_game_state.player.base.dims.x * cell_size,
-            .height = g_game_state.player.base.dims.y * cell_size
-        };
-        DrawRectangleRec(rect, presentation_runtime_palette("PLAYER"));
+        DrawRectangleRec(entity_screen_rect(g_game_state.player.base.id, cell_size),
+                         presentation_runtime_palette("PLAYER"));
 
         // Also draw other players as rectangles
         for (int i = 0; i < g_game_state.other_player_count; i++) {
-            PlayerState* player = &g_game_state.other_players[i];
-            Rectangle other_rect = {
-                player->base.interp_pos.x * cell_size,
-                player->base.interp_pos.y * cell_size,
-                player->base.dims.x * cell_size,
-                player->base.dims.y * cell_size
-            };
-            DrawRectangleRec(other_rect, presentation_runtime_palette("OTHER_PLAYER"));
+            DrawRectangleRec(entity_screen_rect(g_game_state.other_players[i].base.id, cell_size),
+                             presentation_runtime_palette("OTHER_PLAYER"));
         }
 
         // Draw bots as rectangles
         for (int i = 0; i < g_game_state.bot_count; i++) {
-            BotState* bot = &g_game_state.bots[i];
-            Rectangle bot_rect = {
-                bot->base.interp_pos.x * cell_size,
-                bot->base.interp_pos.y * cell_size,
-                bot->base.dims.x * cell_size,
-                bot->base.dims.y * cell_size
-            };
-            DrawRectangleRec(bot_rect, (Color){100, 200, 100, 200});
+            DrawRectangleRec(entity_screen_rect(g_game_state.bots[i].base.id, cell_size),
+                             (Color){100, 200, 100, 200});
         }
         return;
     }
@@ -548,7 +548,8 @@ void game_render_entities(void) {
     for (int i = 0; i < g_game_state.obstacle_count; i++) {
         WorldObject* obj = &g_game_state.obstacles[i];
         /* Depleted obstacles draw below entities on their cells. */
-        float depth_y = obj->pos.y + (game_state_obstacle_depleted(obj) ? 0.0f : obj->dims.y);
+        float depth_y = game_state_obstacle_depleted(obj) ? game_state_render(obj->id)->interp_pos.y
+                                                          : drawn_bottom(obj->id);
 
         sort_entries[entry_count].type = ENTITY_TYPE_OBSTACLE;
         sort_entries[entry_count].depth_y = depth_y;
@@ -563,7 +564,7 @@ void game_render_entities(void) {
     // rules as entities so the player can pass behind / in front of them.
     for (int i = 0; i < g_game_state.static_count; i++) {
         WorldObject* st = &g_game_state.statics[i];
-        float bottom_y = st->pos.y + st->dims.y;
+        float bottom_y = drawn_bottom(st->id);
 
         sort_entries[entry_count].type = ENTITY_TYPE_STATIC;
         sort_entries[entry_count].depth_y = bottom_y;
@@ -575,7 +576,7 @@ void game_render_entities(void) {
     }
 
     // Add main player to sort list
-    float player_bottom_y = g_game_state.player.base.interp_pos.y + g_game_state.player.base.dims.y;
+    float player_bottom_y = drawn_bottom(g_game_state.player.base.id);
     sort_entries[entry_count].type = ENTITY_TYPE_PLAYER;
     sort_entries[entry_count].depth_y = player_bottom_y;
     sort_entries[entry_count].sort_id = g_game_state.player.base.id;
@@ -587,7 +588,7 @@ void game_render_entities(void) {
     // Add other players to sort list
     for (int i = 0; i < g_game_state.other_player_count; i++) {
         PlayerState* player = &g_game_state.other_players[i];
-        float bottom_y = player->base.interp_pos.y + player->base.dims.y;
+        float bottom_y = drawn_bottom(player->base.id);
 
         sort_entries[entry_count].type = ENTITY_TYPE_OTHER_PLAYER;
         sort_entries[entry_count].depth_y = bottom_y;
@@ -601,7 +602,7 @@ void game_render_entities(void) {
     // Add bots to sort list
     for (int i = 0; i < g_game_state.bot_count; i++) {
         BotState* bot = &g_game_state.bots[i];
-        float bottom_y = bot->base.interp_pos.y + bot->base.dims.y;
+        float bottom_y = drawn_bottom(bot->base.id);
 
         sort_entries[entry_count].type = ENTITY_TYPE_BOT;
         sort_entries[entry_count].depth_y = bottom_y;
@@ -615,7 +616,7 @@ void game_render_entities(void) {
     // Add resources to sort list
     for (int i = 0; i < g_game_state.resource_count; i++) {
         BotState* res = &g_game_state.resources[i];
-        float bottom_y = res->base.interp_pos.y + res->base.dims.y;
+        float bottom_y = drawn_bottom(res->base.id);
 
         sort_entries[entry_count].type = ENTITY_TYPE_RESOURCE;
         sort_entries[entry_count].depth_y = bottom_y;
@@ -706,13 +707,14 @@ void game_render_entities(void) {
             // fallback from the entity-colour table so each renders its own palette
             // key when no object-layer texture is present.
             Color obstacle_color = presentation_runtime_entity_fallback_color(entity_type_str);
+            const EntityTransform* tf = game_state_transform(entity_id);
 
             if (layers_count == 0) {
                 Rectangle rect = {
-                    obstacle->pos.x * cell_size,
-                    obstacle->pos.y * cell_size,
-                    obstacle->dims.x * cell_size,
-                    obstacle->dims.y * cell_size
+                    tf->pos.x * cell_size,
+                    tf->pos.y * cell_size,
+                    tf->size.x * cell_size,
+                    tf->size.y * cell_size
                 };
                 DrawRectangleRec(rect, obstacle_color);
             } else {
@@ -723,10 +725,10 @@ void game_render_entities(void) {
                 draw_entity_layers(
                     g_entity_render,
                     entity_id,
-                    obstacle->pos.x,
-                    obstacle->pos.y,
-                    obstacle->dims.x,
-                    obstacle->dims.y,
+                    tf->pos.x,
+                    tf->pos.y,
+                    tf->size.x,
+                    tf->size.y,
                     DIRECTION_NONE,
                     MODE_IDLE,
                     temp_layers,
@@ -738,7 +740,7 @@ void game_render_entities(void) {
                     WHITE
                 );
             }
-            entity_overhead_ui_draw_obstacle(obstacle, cell_size);
+            entity_overhead_ui_draw_obstacle(obstacle, tf, cell_size);
 
             continue;
         }
@@ -760,8 +762,10 @@ void game_render_entities(void) {
             /* Draw position — authoritative interpolation, except loot drops,
              * whose top-left is driven by the launch/idle-float FX timeline.
              * A collected drop yields entirely to its detached vacuum flight. */
-            float draw_x = entity_base->interp_pos.x;
-            float draw_y = entity_base->interp_pos.y;
+            const Vector2 interp_pos = game_state_render(entity_id)->interp_pos;
+            const Vector2 size       = game_state_transform(entity_id)->size;
+            float draw_x = interp_pos.x;
+            float draw_y = interp_pos.y;
             if (entry->type == ENTITY_TYPE_BOT && strcmp(entity_type_str, "loot") == 0) {
                 /* Per-viewer loot eligibility (AOI bot flag) picks the drop's
                  * particle tint: gold = collectable by us, gray = another
@@ -770,18 +774,18 @@ void game_render_entities(void) {
                 bool loot_eligible = (NULL != drop_bot)
                     && 0 != (drop_bot->interaction_flags & INTERACTION_FLAG_LOOT_ELIGIBLE);
                 if (!loot_fx_drop_render_pos(entity_id,
-                                             entity_base->interp_pos.x,
-                                             entity_base->interp_pos.y,
-                                             entity_base->dims.x,
-                                             entity_base->dims.y,
+                                             interp_pos.x,
+                                             interp_pos.y,
+                                             size.x,
+                                             size.y,
                                              loot_eligible,
                                              &draw_x, &draw_y)) {
                     continue;
                 }
             }
 
-            float render_width = entity_base->dims.x;
-            float render_height = entity_base->dims.y;
+            float render_width = size.x;
+            float render_height = size.y;
 
             /* Ground shadow, shared by every living entity (drawn before the
              * sprite so it sits beneath it). Overhead UI below keeps using
@@ -843,7 +847,7 @@ void game_render_entities(void) {
             if (entry->type == ENTITY_TYPE_BOT && strcmp(entity_type_str, "loot") == 0
                 && entity_base->layer_count > 0
                 && OBJ_LAYERS(entity_base)[0].quantity > 1) {
-                draw_drop_count(draw_x, draw_y, entity_base->dims.x, cell_size,
+                draw_drop_count(draw_x, draw_y, size.x, cell_size,
                                 OBJ_LAYERS(entity_base)[0].quantity);
             }
 
@@ -926,9 +930,9 @@ void game_render_entities(void) {
                 };
                 entity_overhead_ui_draw(
                     &ohp,
-                    entity_base->interp_pos.x,
-                    entity_base->interp_pos.y,
-                    entity_base->dims.x,
+                    interp_pos.x,
+                    interp_pos.y,
+                    size.x,
                     cell_size
                 );
             }
@@ -978,10 +982,8 @@ void game_render_aoi_circle(void) {
     float cell_size = world_cell_size();
     float aoi_radius = g_game_state.aoi_radius * cell_size;
 
-    Vector2 center = {
-        (g_game_state.player.base.interp_pos.x + g_game_state.player.base.dims.x / 2.0f) * cell_size,
-        (g_game_state.player.base.interp_pos.y + g_game_state.player.base.dims.y / 2.0f) * cell_size
-    };
+    const Rectangle box = entity_screen_rect(g_game_state.player.base.id, cell_size);
+    Vector2 center = { box.x + box.width / 2.0f, box.y + box.height / 2.0f };
 
     /* AOI ring is a debug overlay; fixed constant. */
     DrawCircleLines(center.x, center.y, aoi_radius, (Color){ 180, 180, 255, 120 });

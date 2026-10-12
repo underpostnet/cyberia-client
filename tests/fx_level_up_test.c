@@ -1,4 +1,5 @@
 #include "fx/fx_level_up.h"
+#include "game_state.h"
 #include "ui/text.h"
 
 #include <assert.h>
@@ -16,7 +17,8 @@ static float rightmost_spark_x;
 static EntityState entity;
 
 float world_cell_size(void) { return 32.0f; }
-const EntityState* game_state_find_entity(EntityID id) { return id == entity.id ? &entity : NULL; }
+GameState g_game_state;
+int game_state_slot(EntityID id) { return id == entity.id ? 0 : -1; }
 void text_draw_compat(const char* text, int x, int y, int size, Color color) {
     assert(0 == strcmp("LEVEL UP", text));
     if (255 == color.r) labels++;
@@ -46,8 +48,9 @@ static void reset_probe(void) {
 
 int main(void) {
     entity.id = 1;
-    entity.interp_pos = (Vector2){ 2.0f, 3.0f };
-    entity.dims = (Vector2){ 1.0f, 1.0f };
+    g_game_state.render[0].interp_pos = (Vector2){ 2.0f, 3.0f };
+    g_game_state.transform[0].size = (Vector2){ 1.0f, 1.0f };
+    g_game_state.mask[0] = COMP_TRANSFORM;
 
     fx_level_up_reset();
     assert(false == fx_level_up_observe(0, 10, &entity));
@@ -65,7 +68,7 @@ int main(void) {
     assert(lowest_spark_y <= 4.0f * 32.0f && highest_spark_y >= 2.0f * 32.0f);
 
     /* The aura follows the entity: after it walks, every spark sits over the new footprint. */
-    entity.interp_pos = (Vector2){ 10.0f, 3.0f };
+    g_game_state.render[0].interp_pos = (Vector2){ 10.0f, 3.0f };
     fx_level_up_update(1.0f);
     reset_probe();
     fx_level_up_draw();

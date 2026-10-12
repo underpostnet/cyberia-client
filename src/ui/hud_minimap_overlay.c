@@ -86,10 +86,10 @@ static Rectangle node_rect(const ImapGraph* graph, int node_index,
     const ImapNode* current = &graph->nodes[current_index];
     float grid_x = 0 < current->grid_x ? (float)current->grid_x : 1.0f;
     float grid_y = 0 < current->grid_y ? (float)current->grid_y : 1.0f;
-    float player_x = g_game_state.player.base.interp_pos.x +
-                     g_game_state.player.base.dims.x * 0.5f;
-    float player_y = g_game_state.player.base.interp_pos.y +
-                     g_game_state.player.base.dims.y * 0.5f;
+    const Vector2 own_at   = game_state_own_render()->interp_pos;
+    const Vector2 own_size = game_state_own_transform()->size;
+    float player_x = own_at.x + own_size.x * 0.5f;
+    float player_y = own_at.y + own_size.y * 0.5f;
     float player_fx = Clamp(player_x / grid_x, 0.0f, 1.0f);
     float player_fy = Clamp(player_y / grid_y, 0.0f, 1.0f);
     Vector2 center = ui_rect_center(bounds);
@@ -185,10 +185,16 @@ static void draw_current_portals(const ImapGraph* graph, int current_index,
     const ImapNode* node = &graph->nodes[current_index];
     Rectangle rect = current_map_rect(graph, current_index, bounds);
     for (int i = 0; i < g_game_state.portal_count; ++i) {
-        const WorldObject* portal = &g_game_state.portals[i];
-        Vector2 at = current_map_position(node, rect, portal->pos, portal->dims);
+        const EntityTransform* tf = game_state_transform(g_game_state.portals[i].id);
+        Vector2 at = current_map_position(node, rect, tf->pos, tf->size);
         draw_square_marker(at, 7.0f, (Color){ 175, 110, 255, 240 });
     }
+}
+
+/* An entity at its drawn position on the current map card. */
+static Vector2 drawn_map_position(const ImapNode* node, Rectangle rect, EntityID id) {
+    return current_map_position(node, rect, game_state_render(id)->interp_pos,
+                                game_state_transform(id)->size);
 }
 
 static void draw_live_presence(const ImapGraph* graph, int current_index,
@@ -197,21 +203,18 @@ static void draw_live_presence(const ImapGraph* graph, int current_index,
     Rectangle rect = current_map_rect(graph, current_index, bounds);
 
     for (int i = 0; i < g_game_state.other_player_count; ++i) {
-        const PlayerState* player = &g_game_state.other_players[i];
-        Vector2 at = current_map_position(node, rect, player->base.interp_pos, player->base.dims);
+        Vector2 at = drawn_map_position(node, rect, g_game_state.other_players[i].base.id);
         draw_square_marker(at, 7.0f, MINIMAP_OTHER_PLAYER);
     }
     for (int i = 0; i < g_game_state.bot_count; ++i) {
         const BotState* bot = &g_game_state.bots[i];
-        Vector2 at = current_map_position(node, rect, bot->base.interp_pos, bot->base.dims);
+        Vector2 at = drawn_map_position(node, rect, bot->base.id);
         draw_square_marker(at, 5.0f, instance_map_presence_color(
             STATUS_ICON_HOSTILE == bot->base.status_icon ? IMAP_PRESENCE_HOSTILE
                                                          : IMAP_PRESENCE_PASSIVE));
     }
     for (int i = 0; i < g_game_state.resource_count; ++i) {
-        const BotState* resource = &g_game_state.resources[i];
-        Vector2 at = current_map_position(node, rect, resource->base.interp_pos,
-                                          resource->base.dims);
+        Vector2 at = drawn_map_position(node, rect, g_game_state.resources[i].base.id);
         draw_square_marker(at, 5.0f,
                            instance_map_presence_color(IMAP_PRESENCE_RESOURCE));
     }
@@ -250,8 +253,8 @@ static void draw_chrome(Rectangle bounds, const char* map_name) {
 
     char coords[40];
     snprintf(coords, sizeof(coords), "%.0f, %.0f",
-             g_game_state.player.base.interp_pos.x,
-             g_game_state.player.base.interp_pos.y);
+             game_state_own_render()->interp_pos.x,
+             game_state_own_render()->interp_pos.y);
     int width = MeasureText(coords, 10);
     DrawRectangle((int)(bounds.x + bounds.width - width - 10),
                   (int)(bounds.y + bounds.height - 16), width + 8, 14,

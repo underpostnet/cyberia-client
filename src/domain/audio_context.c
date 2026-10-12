@@ -205,8 +205,9 @@ void audio_context_snapshot(void) {
     for (int i = 0; g_game_state.portal_count > i; i++) {
         const WorldObject* portal = &g_game_state.portals[i];
         if ('\0' == portal->target_map_code[0]) continue;
-        const float dx = player->base.pos_server.x - portal->pos.x;
-        const float dy = player->base.pos_server.y - portal->pos.y;
+        const Vector2 at = game_state_transform(portal->id)->pos;
+        const float dx = game_state_own_transform()->pos.x - at.x;
+        const float dy = game_state_own_transform()->pos.y - at.y;
         const float squared = dx * dx + dy * dy;
         if (distance < squared) continue;
         distance = squared;

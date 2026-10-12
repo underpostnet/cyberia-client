@@ -266,13 +266,14 @@ bool player_render_ready(void) {
 }
 
 bool immediate_scene_ready(void) {
-    const EntityState* player = &g_game_state.player.base;
-    const float x = player->pos_server.x + player->dims.x * 0.5f;
-    const float y = player->pos_server.y + player->dims.y * 0.5f;
+    const EntityTransform* player = game_state_transform(g_game_state.player.base.id);
+    const float x = player->pos.x + player->size.x * 0.5f;
+    const float y = player->pos.y + player->size.y * 0.5f;
     bool ready = true;
     for (int i = 0; g_game_state.floor_count > i; i++) {
         const WorldObject* floor = &g_game_state.floors[i];
-        if (floor->pos.x > x || floor->pos.y > y || floor->pos.x + floor->dims.x <= x || floor->pos.y + floor->dims.y <= y) continue;
+        const EntityTransform* f = game_state_transform(floor->id);
+        if (f->pos.x > x || f->pos.y > y || f->pos.x + f->size.x <= x || f->pos.y + f->size.y <= y) continue;
         if (!layers_render_ready(OBJ_LAYERS(floor), floor->layer_count, DIRECTION_NONE, MODE_IDLE)) ready = false;
     }
     return ready;

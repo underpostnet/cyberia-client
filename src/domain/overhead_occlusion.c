@@ -31,9 +31,9 @@ static const FadingRoof* find_roof(EntityID id) {
 void overhead_occlusion_update(float dt) {
     const int   fade_ms = presentation_runtime_overhead_occlusion_fade_ms();
     const float step    = 0 < fade_ms ? dt * 1000.0f / (float)fade_ms : 1.0f;
-    const EntityState* player = &g_game_state.player.base;
-    const Vector2 centre = { player->interp_pos.x + player->dims.x / 2.0f,
-                             player->interp_pos.y + player->dims.y / 2.0f };
+    const Vector2 at   = game_state_own_render()->interp_pos;
+    const Vector2 size = game_state_own_transform()->size;
+    const Vector2 centre = { at.x + size.x / 2.0f, at.y + size.y / 2.0f };
 
     /* Rebuilt from the snapshot each frame, so a roof that leaves the AOI loses its entry. */
     FadingRoof next[MAX_FADING_ROOFS];
@@ -42,7 +42,8 @@ void overhead_occlusion_update(float dt) {
         const WorldObject* fg = &g_game_state.foregrounds[i];
         if (!fg->overhead_occlusion) continue;
 
-        const bool under = CheckCollisionPointRec(centre, (Rectangle){ fg->pos.x, fg->pos.y, fg->dims.x, fg->dims.y });
+        const EntityTransform* tf = game_state_transform(fg->id);
+        const bool under = CheckCollisionPointRec(centre, (Rectangle){ tf->pos.x, tf->pos.y, tf->size.x, tf->size.y });
         const FadingRoof* roof = find_roof(fg->id);
         const float current = NULL != roof ? roof->progress : 0.0f;
         const float progress = under ? fminf(1.0f, current + step) : fmaxf(0.0f, current - step);

@@ -208,7 +208,7 @@ void dev_ui_draw(int screen_width, int screen_height) {
     const char* map_code = g_local_player.map_code[0] != '\0' ? g_local_player.map_code : "--";
     const char* mode_str = mode_to_string(local_player_view_mode());
     const char* dir_str = direction_to_string(local_player_view_direction());
-    Vector2 player_pos = g_game_state.player.base.interp_pos;
+    Vector2 player_pos = game_state_own_render()->interp_pos;
     const self_motion_t* self = prediction_self();
     Vector2 target_pos = 0 < self->path_count ? self->path[self->path_count - 1] : self->pos;
 

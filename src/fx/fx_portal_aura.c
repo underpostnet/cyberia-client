@@ -34,10 +34,12 @@ void fx_portal_aura_update(float dt) {
 
 static void draw_entity(const EntityState* e, float cell) {
     float charge = fminf(fmaxf(e->portal_hold, 0.0f), 1.0f);
-    float width = e->dims.x * cell;
-    float height = e->dims.y * cell;
-    float feet = (e->interp_pos.y + e->dims.y) * cell;
-    float cx = e->interp_pos.x * cell + width * 0.5f;
+    Vector2 pos = game_state_render(e->id)->interp_pos;
+    Vector2 size = game_state_transform(e->id)->size;
+    float width = size.x * cell;
+    float height = size.y * cell;
+    float feet = (pos.y + size.y) * cell;
+    float cx = pos.x * cell + width * 0.5f;
     float rx = width * 0.5f + cell * 0.35f;
     float ry = rx * 0.35f;
     float turn = s_clock / FX_PORTAL_AURA_TURN_S * FX_PORTAL_AURA_TAU;

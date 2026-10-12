@@ -56,8 +56,9 @@ bool fx_death_observe(bool prior_alive, bool dead, const EntityState* entity) {
         if (!s_entries[i].active) { slot = &s_entries[i]; break; }
         if (s_entries[i].age > slot->age) slot = &s_entries[i];
     }
-    *slot = (FxDeathEntry){ .entity_id = entity->id, .pos = entity->interp_pos,
-                            .dims = entity->dims, .active = true };
+    *slot = (FxDeathEntry){ .entity_id = entity->id,
+                            .pos = game_state_render(entity->id)->interp_pos,
+                            .dims = game_state_transform(entity->id)->size, .active = true };
     return true;
 }
 
@@ -67,8 +68,8 @@ void fx_death_update(float dt) {
         if (!entry->active) continue;
         entry->age += dt;
         if (entry->age >= FX_DEATH_DURATION) { entry->active = false; continue; }
-        const EntityState* entity = game_state_find_entity(entry->entity_id);
-        if (NULL != entity) { entry->pos = entity->interp_pos; entry->dims = entity->dims; }
+        int s = game_state_slot(entry->entity_id);
+        if (0 <= s) { entry->pos = g_game_state.render[s].interp_pos; entry->dims = g_game_state.transform[s].size; }
     }
 }
 

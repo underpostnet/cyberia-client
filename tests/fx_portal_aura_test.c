@@ -7,6 +7,7 @@
 #include <string.h>
 
 GameState g_game_state;
+int game_state_slot(EntityID id) { return (int)id - 1; }
 
 static int sparks;
 static bool blue;
@@ -36,8 +37,10 @@ static void draw(void) {
 
 int main(void) {
     EntityState* self = &g_game_state.player.base;
-    self->interp_pos = (Vector2){ 2.0f, 3.0f };
-    self->dims = (Vector2){ 1.0f, 1.0f };
+    self->id = 1;
+    g_game_state.mask[0] = COMP_TRANSFORM;
+    g_game_state.render[0].interp_pos = (Vector2){ 2.0f, 3.0f };
+    g_game_state.transform[0].size = (Vector2){ 1.0f, 1.0f };
     fx_portal_aura_update(0.3f);
 
     /* Off a portal, no aura. */
@@ -62,8 +65,10 @@ int main(void) {
     self->on_portal = false;
     g_game_state.other_player_count = 1;
     EntityState* other = &g_game_state.other_players[0].base;
-    other->interp_pos = (Vector2){ 10.0f, 3.0f };
-    other->dims = (Vector2){ 1.0f, 1.0f };
+    other->id = 2;
+    g_game_state.mask[1] = COMP_TRANSFORM;
+    g_game_state.render[1].interp_pos = (Vector2){ 10.0f, 3.0f };
+    g_game_state.transform[1].size = (Vector2){ 1.0f, 1.0f };
     other->on_portal = true;
     draw();
     assert(0 < sparks && leftmost_x >= 9.0f * 32.0f && rightmost_x <= 12.0f * 32.0f);

@@ -152,18 +152,18 @@ static inline float compute_alpha_for(double now, double snapshot_time, int wind
     return (float)t;
 }
 
+static void lerp_entity(EntityID id, double now, int window_ms) {
+    RenderState* r = game_state_render(id);
+    float t = compute_alpha_for(now, r->snapshot_time, window_ms);
+    r->interp_pos = Vector2Lerp(r->pos_prev, game_state_transform(id)->pos, t);
+}
+
 void interpolation_compute_view(void) {
     const double now = GetTime();
     const int window_ms = world_interpolation_ms();
 
-    for (int i = 0; i < g_game_state.other_player_count; i++) {
-        PlayerState* p = &g_game_state.other_players[i];
-        float t = compute_alpha_for(now, p->base.snapshot_time, window_ms);
-        p->base.interp_pos = Vector2Lerp(p->base.pos_prev, p->base.pos_server, t);
-    }
-    for (int i = 0; i < g_game_state.bot_count; i++) {
-        BotState* b = &g_game_state.bots[i];
-        float t = compute_alpha_for(now, b->base.snapshot_time, window_ms);
-        b->base.interp_pos = Vector2Lerp(b->base.pos_prev, b->base.pos_server, t);
-    }
+    for (int i = 0; i < g_game_state.other_player_count; i++)
+        lerp_entity(g_game_state.other_players[i].base.id, now, window_ms);
+    for (int i = 0; i < g_game_state.bot_count; i++)
+        lerp_entity(g_game_state.bots[i].base.id, now, window_ms);
 }

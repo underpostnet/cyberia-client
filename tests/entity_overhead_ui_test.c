@@ -27,15 +27,16 @@ int text_measure_compat(const char* text, int size) { return 10; }
 void text_draw_outlined(const char* text, int x, int y, int size, Color fg, Color outline, int rings) {}
 void ui_icon_draw(const char* icon_id, float cx, float cy, int size, bool bounce, float phase) {}
 
+static const EntityTransform s_transform = { .pos = { 4.0f, 4.0f }, .size = { 2.0f, 2.0f } };
+
 static void draw(const WorldObject* o) {
     s_rounded = 0;
     s_fill_w = 0.0f;
-    entity_overhead_ui_draw_obstacle(o, 32.0f);
+    entity_overhead_ui_draw_obstacle(o, &s_transform, 32.0f);
 }
 
 int main(void) {
-    WorldObject o = { .pos = { 4.0f, 4.0f }, .dims = { 2.0f, 2.0f } };
-    o.id = 1;
+    WorldObject o = { .id = 1 };
 
     /* An ordinary obstacle carries no life and draws no bar. */
     draw(&o);
