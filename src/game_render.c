@@ -307,12 +307,13 @@ void game_render_floors(void) {
     for (int i = 0; i < g_game_state.floor_count; i++) {
         WorldObject* floor = &g_game_state.floors[i];
         const EntityTransform* tf = game_state_transform(floor->id);
+        const Appearance* ap = game_state_appearance(floor->id);
         Color floor_color = presentation_runtime_palette("FLOOR");
 
-        if (floor->layer_count > 0) {
+        if (ap->layer_count > 0) {
             ObjectLayerState* layers[MAX_OBJECT_LAYERS];
-            for (int j = 0; j < floor->layer_count; j++) {
-                layers[j] = &OBJ_LAYERS(floor)[j];
+            for (int j = 0; j < ap->layer_count; j++) {
+                layers[j] = &OBJ_LAYERS(ap)[j];
             }
 
             draw_entity_layers(
@@ -325,7 +326,7 @@ void game_render_floors(void) {
                 DIRECTION_NONE,
                 MODE_IDLE,
                 layers,
-                floor->layer_count,
+                ap->layer_count,
                 "floor",
                 presentation_runtime_dev_ui(),
                 cell_size,
@@ -352,12 +353,13 @@ void game_render_world_objects(void) {
     for (int i = 0; i < g_game_state.portal_count; i++) {
         WorldObject* portal = &g_game_state.portals[i];
         const EntityTransform* tf = game_state_transform(portal->id);
+        const Appearance* ap = game_state_appearance(portal->id);
         Color portal_color = presentation_runtime_palette("PORTAL");
 
-        if (portal->layer_count > 0) {
+        if (ap->layer_count > 0) {
             ObjectLayerState* layers[MAX_OBJECT_LAYERS];
-            for (int j = 0; j < portal->layer_count; j++) {
-                layers[j] = &OBJ_LAYERS(portal)[j];
+            for (int j = 0; j < ap->layer_count; j++) {
+                layers[j] = &OBJ_LAYERS(ap)[j];
             }
 
             draw_entity_layers(
@@ -370,7 +372,7 @@ void game_render_world_objects(void) {
                 DIRECTION_NONE,
                 MODE_IDLE,
                 layers,
-                portal->layer_count,
+                ap->layer_count,
                 "portal",
                 presentation_runtime_dev_ui(),
                 cell_size,
@@ -431,13 +433,14 @@ void game_render_foregrounds(void) {
     for (int i = 0; i < g_game_state.foreground_count; i++) {
         WorldObject* fg = sorted[i];
         const EntityTransform* tf = game_state_transform(fg->id);
+        const Appearance* ap = game_state_appearance(fg->id);
         const Color tint = Fade(WHITE, overhead_occlusion_opacity(fg));
         const Color fg_color = ColorTint(presentation_runtime_palette("FOREGROUND"), tint);
 
-        if (fg->layer_count > 0) {
+        if (ap->layer_count > 0) {
             ObjectLayerState* layers[MAX_OBJECT_LAYERS];
-            for (int j = 0; j < fg->layer_count; j++) {
-                layers[j] = &OBJ_LAYERS(fg)[j];
+            for (int j = 0; j < ap->layer_count; j++) {
+                layers[j] = &OBJ_LAYERS(ap)[j];
             }
 
             draw_entity_layers(
@@ -450,7 +453,7 @@ void game_render_foregrounds(void) {
                 DIRECTION_NONE,
                 MODE_IDLE,
                 layers,
-                fg->layer_count,
+                ap->layer_count,
                 "foreground",
                 presentation_runtime_dev_ui(),
                 cell_size,
@@ -644,35 +647,30 @@ void game_render_entities(void) {
         EntityID entity_id = 0;
         EntityState* entity_base = NULL;
         WorldObject* obstacle = NULL;
-        int layers_count = 0;
 
         switch (entry->type) {
             case ENTITY_TYPE_OBSTACLE:
                 obstacle = entry->data.object;
                 entity_type_str = "obstacle";
                 entity_id = obstacle->id;
-                layers_count = obstacle->layer_count;
                 break;
 
             case ENTITY_TYPE_STATIC:
                 obstacle = entry->data.object;
                 entity_type_str = "static";
                 entity_id = obstacle->id;
-                layers_count = obstacle->layer_count;
                 break;
 
             case ENTITY_TYPE_PLAYER:
                 entity_base = &entry->data.player->base;
                 entity_type_str = entry->is_main_player ? "self" : "other";
                 entity_id = entity_base->id;
-                layers_count = entity_base->layer_count;
                 break;
 
             case ENTITY_TYPE_OTHER_PLAYER:
                 entity_base = &entry->data.player->base;
                 entity_type_str = "other";
                 entity_id = entity_base->id;
-                layers_count = entity_base->layer_count;
                 break;
 
             case ENTITY_TYPE_BOT:
@@ -690,16 +688,16 @@ void game_render_entities(void) {
                 else
                     entity_type_str = "bot";
                 entity_id = entity_base->id;
-                layers_count = entity_base->layer_count;
                 break;
 
             case ENTITY_TYPE_RESOURCE:
                 entity_base = &entry->data.bot->base;
                 entity_type_str = "resource";
                 entity_id = entity_base->id;
-                layers_count = entity_base->layer_count;
                 break;
         }
+        const Appearance* ap = game_state_appearance(entity_id);
+        const int layers_count = ap->layer_count;
 
         if (obstacle && entity_id) {
             /* A depleted obstacle with no dead items is gone. */
@@ -721,7 +719,7 @@ void game_render_entities(void) {
                 DrawRectangleRec(rect, obstacle_color);
             } else {
                 for (int j = 0; j < layers_count && j < MAX_OBJECT_LAYERS; j++) {
-                    temp_layers[j] = &OBJ_LAYERS(obstacle)[j];
+                    temp_layers[j] = &OBJ_LAYERS(ap)[j];
                 }
 
                 draw_entity_layers(
@@ -819,7 +817,7 @@ void game_render_entities(void) {
             } else {
                 // Convert object layers to pointer array
                 for (int j = 0; j < layers_count && j < MAX_OBJECT_LAYERS; j++) {
-                    temp_layers[j] = &OBJ_LAYERS(entity_base)[j];
+                    temp_layers[j] = &OBJ_LAYERS(ap)[j];
                 }
 
                 // Use EntityRender system to draw entity with object layers
@@ -847,10 +845,10 @@ void game_render_entities(void) {
 
             /* On-grid quantity counter above a stacked drop (coins, bundles). */
             if (entry->type == ENTITY_TYPE_BOT && strcmp(entity_type_str, "loot") == 0
-                && entity_base->layer_count > 0
-                && OBJ_LAYERS(entity_base)[0].quantity > 1) {
+                && ap->layer_count > 0
+                && OBJ_LAYERS(ap)[0].quantity > 1) {
                 draw_drop_count(draw_x, draw_y, size.x, cell_size,
-                                OBJ_LAYERS(entity_base)[0].quantity);
+                                OBJ_LAYERS(ap)[0].quantity);
             }
 
             /* ── Overhead UI — nameplate, capacity bar, HP bar ─────────── */
@@ -865,8 +863,8 @@ void game_render_entities(void) {
                 char np_buf[80];
                 /* For bots, prefer the alive-layer cache so the nameplate
                  * always reflects the living skin (even when dead/ghost). */
-                const ObjectLayerState *np_layers = OBJ_LAYERS(entity_base);
-                int np_lc = entity_base->layer_count;
+                const ObjectLayerState *np_layers = OBJ_LAYERS(ap);
+                int np_lc = ap->layer_count;
                 if (!np_is_player) {
                     int alive_lc = 0;
                     const ObjectLayerState *alive = interaction_bubble_get_alive_layers(

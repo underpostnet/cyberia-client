@@ -27,6 +27,13 @@ typedef struct {
     Vector2 size;
 } EntityTransform;
 
+/* The appearance component: the active layers of an entity, a range of
+ * g_layer_pool. */
+typedef struct {
+    uint16_t layer_offset;
+    uint8_t  layer_count;
+} Appearance;
+
 /* Client-only render interpolation, beside the components. snapshot_time is
  * the arrival of the snapshot that wrote transform.pos; the lerp runs from
  * pos_prev to transform.pos per entity. */
@@ -44,8 +51,6 @@ struct EntityState {
     EntityID id;
     Direction direction;
     ObjectLayerMode mode;
-    uint16_t layer_offset;   /* index into g_layer_pool */
-    uint8_t  layer_count;
     float life;
     float max_life;
     float respawn_in;
@@ -117,8 +122,6 @@ typedef struct WorldObject {
     char             target_map_code[MAX_ID_LENGTH];
     int              target_cell_x;
     int              target_cell_y;
-    uint16_t         layer_offset;   /* index into g_layer_pool */
-    uint8_t          layer_count;
     /* Foreground-only: the bound behavior is "overhead-occlusion". */
     bool             overhead_occlusion;
     /* Obstacle-only: authoritative life of a destructible obstacle. An

@@ -183,20 +183,21 @@ static int read_layers(const cJSON* owner, const char* key,
     return n;
 }
 
-/* Same, into the layer pool. Returns the count and writes the pool offset. A
- * full pool costs the owner its layers, so warn and leave it empty. */
-static uint8_t read_pooled_layers(const cJSON* owner, const char* key, uint16_t* offset,
-                                  FetchPriority priority) {
-    int n = cJSON_GetArraySize(serial_get_array(owner, key));
+/* Write the appearance of `slot`: its layers, into the layer pool. A full pool
+ * costs the entity its layers, so warn and leave it empty. */
+static void write_appearance(int slot, const cJSON* e, FetchPriority priority) {
+    Appearance* ap = &g_game_state.appearance[slot];
+    g_game_state.mask[slot] |= COMP_APPEARANCE;
+    int n = cJSON_GetArraySize(serial_get_array(e, "layers"));
     if (MAX_OBJECT_LAYERS < n) n = MAX_OBJECT_LAYERS;
     int pool_offset = game_state_layer_alloc(n);
     if (0 > pool_offset) {
         warn_overflow(OVF_LAYERS);
-        *offset = 0;
-        return 0;
+        *ap = (Appearance){ 0 };
+        return;
     }
-    *offset = (uint16_t)pool_offset;
-    return (uint8_t)read_layers(owner, key, &g_layer_pool[pool_offset], n, priority);
+    ap->layer_offset = (uint16_t)pool_offset;
+    ap->layer_count  = (uint8_t)read_layers(e, "layers", &g_layer_pool[pool_offset], n, priority);
 }
 
 static void read_stats(const cJSON* owner, const char* key, float values[CYBERIA_STAT_COUNT]) {
@@ -238,7 +239,6 @@ static void read_entity_state(const cJSON* e, EntityState* base, FetchPriority p
     base->status_icon = (uint8_t)serial_get_int_default(e, "statusIcon", 0);
     base->on_portal   = serial_get_bool_default(e, "onPortal", false);
     base->portal_hold = serial_get_float_default(e, "portalHoldProgress", 0.0f);
-    base->layer_count = read_pooled_layers(e, "objectLayers", &base->layer_offset, priority);
 }
 
 /* TELEPORTING is a one-snapshot signal that the entity jumped (portal), so a
@@ -265,6 +265,7 @@ static void unpack_player(const cJSON* e) {
     }
 
     write_transform(slot, e, teleported(e));
+    write_appearance(slot, e, FETCH_P2);
     read_entity_state(e, &gs->other_players[idx].base, FETCH_P2, true);
 }
 
@@ -287,6 +288,7 @@ static void unpack_bot(const cJSON* e) {
 
     BotState* b = &gs->bots[idx];
     write_transform(slot, e, teleported(e));
+    write_appearance(slot, e, FETCH_P2);
     read_entity_state(e, &b->base, FETCH_P2, true);
 
     serial_get_string(e, "behavior", b->behavior, MAX_BEHAVIOR_LENGTH);
@@ -330,6 +332,7 @@ static void unpack_resource(const cJSON* e) {
     res->base.id = id;
 
     write_transform(slot, e, true); /* static — no interpolation */
+    write_appearance(slot, e, FETCH_P2);
     read_entity_state(e, &res->base, FETCH_P2, false);
     strncpy(res->behavior, "resource", MAX_BEHAVIOR_LENGTH - 1);
 }
@@ -375,6 +378,7 @@ static void unpack_passive(const cJSON* e, const char* type) {
     if (!o) return;
     o->id = id;
     write_transform(slot, e, true);
+    write_appearance(slot, e, FETCH_P2);
     o->status_icon = (uint8_t)serial_get_int_default(e, "statusIcon", 0);
     o->life        = serial_get_float_default(e, "life", 0.0f);
     o->max_life    = serial_get_float_default(e, "maxLife", 0.0f);
@@ -384,7 +388,6 @@ static void unpack_passive(const cJSON* e, const char* type) {
     char behavior[MAX_BEHAVIOR_LENGTH] = {0};
     serial_get_string(e, "behavior", behavior, sizeof(behavior));
     o->overhead_occlusion = 0 == strcmp(behavior, "overhead-occlusion");
-    o->layer_count = read_pooled_layers(e, "objectLayers", &o->layer_offset, FETCH_P2);
 }
 
 static void unpack_self(const cJSON* e, cyberia_frame_t frame, cyberia_input_seq_t consumed) {
@@ -397,6 +400,7 @@ static void unpack_self(const cJSON* e, cyberia_frame_t frame, cyberia_input_seq
     assert(0 <= slot);
 
     write_transform(slot, e, false);
+    write_appearance(slot, e, FETCH_P0);
     read_entity_state(e, &p->base, FETCH_P0, true);
 
     g_local_player.xp = serial_get_double_default(e, "xp", 0.0);

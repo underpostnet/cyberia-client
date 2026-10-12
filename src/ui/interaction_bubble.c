@@ -274,6 +274,7 @@ static void scan_entity(EntityID entity_id, const EntityState* base,
     }
 
     bool is_dead = (base->respawn_in > 0.0f);
+    const Appearance* ap = game_state_appearance(entity_id);
 
     /* Determine interaction capabilities from the ALIVE layers.
      * When dead the server sends ghost OLs — we still want to know
@@ -291,8 +292,8 @@ static void scan_entity(EntityID entity_id, const EntityState* base,
     const ObjectLayerState* scan_layers = NULL;
     int scan_count = 0;
     if (!is_dead) {
-        scan_layers = OBJ_LAYERS(base);
-        scan_count  = base->layer_count;
+        scan_layers = OBJ_LAYERS(ap);
+        scan_count  = ap->layer_count;
     } else if (existing && existing->alive_layer_count > 0) {
         scan_layers = existing->alive_layers;
         scan_count  = existing->alive_layer_count;
@@ -325,15 +326,15 @@ static void scan_entity(EntityID entity_id, const EntityState* base,
     slot->fallback_color = presentation_runtime_entity_fallback_color(etype);
 
     /* Always snapshot current layers (dead or alive) into layers[]. */
-    slot->layer_count = copy_active_layers(slot->layers, OBJ_LAYERS(base),
-                                          base->layer_count);
+    slot->layer_count = copy_active_layers(slot->layers, OBJ_LAYERS(ap),
+                                          ap->layer_count);
 
     /* Cache alive layers: only update when entity is alive.
      * When dead, alive_layers[] retains the last alive snapshot. */
     if (!is_dead) {
         slot->alive_layer_count = copy_active_layers(slot->alive_layers,
-                                                     OBJ_LAYERS(base),
-                                                     base->layer_count);
+                                                     OBJ_LAYERS(ap),
+                                                     ap->layer_count);
     }
 
     /* Dialogue item — prefer alive data, fall back to existing cache. */
@@ -348,9 +349,9 @@ static void scan_entity(EntityID entity_id, const EntityState* base,
      * Bots    → skin/body item_id. */
     {
         const ObjectLayerState* np_layers = slot->alive_layer_count > 0
-            ? slot->alive_layers : OBJ_LAYERS(base);
+            ? slot->alive_layers : OBJ_LAYERS(ap);
         int np_lc = slot->alive_layer_count > 0
-            ? slot->alive_layer_count : base->layer_count;
+            ? slot->alive_layer_count : ap->layer_count;
         nameplate_resolve(entity_id, is_player,
                           np_layers, np_lc,
                           slot->display_name,

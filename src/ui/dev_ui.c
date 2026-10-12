@@ -157,13 +157,13 @@ static int dev_ui_get_effective_stats_sum(EntityID player_id) {
 static int dev_ui_get_active_item_count(EntityID player_id) {
     int active_count = 0;
 
-    // Check if it's the main player
-    if (player_id == g_local_player.id) {
-        EntityState* entity = &g_game_state.player.base;
+    // Check if it's the main player, once it has a slot
+    if (0 != player_id && player_id == g_local_player.id) {
+        const Appearance* ap = game_state_appearance(player_id);
 
         // Count active object layers
-        for (int i = 0; i < entity->layer_count; i++) {
-            if (OBJ_LAYERS(entity)[i].active) {
+        for (int i = 0; i < ap->layer_count; i++) {
+            if (OBJ_LAYERS(ap)[i].active) {
                 active_count++;
             }
         }

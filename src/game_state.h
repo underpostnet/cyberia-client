@@ -38,16 +38,16 @@
 /* EntityState / PlayerState / BotState / WorldObject + their MAX_* sizing
  * macros live in world_types.h. */
 
-/* Object-layer pool. Every entity and object holds an offset and a count into
- * it instead of an embedded [MAX_OBJECT_LAYERS] array, of which the server
- * fills one to four slots. Sized for the worst realistic AOI, not for the
- * array caps: the server ships only active layers. */
+/* Object-layer pool. Every appearance holds an offset and a count into it
+ * instead of an embedded [MAX_OBJECT_LAYERS] array, of which the server fills
+ * one to four slots. Sized for the worst realistic AOI, not for the array
+ * caps: the server ships only active layers. */
 #define LAYER_POOL_SIZE 4096
 
 extern ObjectLayerState g_layer_pool[LAYER_POOL_SIZE];
 
-/* Layers of one entity or object. Both carry layer_offset. */
-#define OBJ_LAYERS(x) (&g_layer_pool[(x)->layer_offset])
+/* The layers of an Appearance. */
+#define OBJ_LAYERS(ap) (&g_layer_pool[(ap)->layer_offset])
 
 typedef struct GameState GameState;
 
@@ -122,11 +122,13 @@ struct GameState {
     EntityID    ids[ENTITY_CAP];
     uint64_t    mask[ENTITY_CAP];
     EntityTransform transform[ENTITY_CAP];
+    Appearance  appearance[ENTITY_CAP];
     RenderState render[ENTITY_CAP];   /* client only */
 };
 
 /* Component bits of mask[], in the §4 order. */
-#define COMP_TRANSFORM ((uint64_t)1 << 1)
+#define COMP_TRANSFORM  ((uint64_t)1 << 1)
+#define COMP_APPEARANCE ((uint64_t)1 << 2)
 
 extern GameState g_game_state;
 
@@ -159,6 +161,12 @@ static inline EntityTransform* game_state_transform(EntityID id) {
     int slot = game_state_slot(id);
     assert(0 <= slot && 0 != (g_game_state.mask[slot] & COMP_TRANSFORM));
     return &g_game_state.transform[slot];
+}
+
+static inline Appearance* game_state_appearance(EntityID id) {
+    int slot = game_state_slot(id);
+    assert(0 <= slot && 0 != (g_game_state.mask[slot] & COMP_APPEARANCE));
+    return &g_game_state.appearance[slot];
 }
 
 static inline RenderState* game_state_render(EntityID id) {

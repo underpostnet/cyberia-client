@@ -254,14 +254,15 @@ static bool layers_render_ready(const ObjectLayerState* layers, int count, Direc
 }
 
 bool player_render_ready(void) {
-    const EntityState* player = &g_game_state.player.base;
-    if (0 == player->id || 0 == player->layer_count) return false;
+    const EntityID id = g_game_state.player.base.id;
+    if (0 == id || 0 == game_state_appearance(id)->layer_count) return false;
+    const Appearance* ap = game_state_appearance(id);
     bool active = false;
-    for (int i = 0; player->layer_count > i; i++) {
-        const ObjectLayerState* layer = &OBJ_LAYERS(player)[i];
+    for (int i = 0; ap->layer_count > i; i++) {
+        const ObjectLayerState* layer = &OBJ_LAYERS(ap)[i];
         if (layer->active && '\0' != layer->item_id[0]) active = true;
     }
-    return layers_render_ready(OBJ_LAYERS(player), player->layer_count,
+    return layers_render_ready(OBJ_LAYERS(ap), ap->layer_count,
                                local_player_view_direction(), local_player_view_mode()) && active;
 }
 
@@ -274,7 +275,8 @@ bool immediate_scene_ready(void) {
         const WorldObject* floor = &g_game_state.floors[i];
         const EntityTransform* f = game_state_transform(floor->id);
         if (f->pos.x > x || f->pos.y > y || f->pos.x + f->size.x <= x || f->pos.y + f->size.y <= y) continue;
-        if (!layers_render_ready(OBJ_LAYERS(floor), floor->layer_count, DIRECTION_NONE, MODE_IDLE)) ready = false;
+        const Appearance* ap = game_state_appearance(floor->id);
+        if (!layers_render_ready(OBJ_LAYERS(ap), ap->layer_count, DIRECTION_NONE, MODE_IDLE)) ready = false;
     }
     return ready;
 }
