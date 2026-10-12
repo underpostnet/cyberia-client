@@ -39,6 +39,7 @@ typedef enum {
     CLIENT_EVENT_CRAFT_CANCEL,
     CLIENT_EVENT_STORAGE_OPEN,
     CLIENT_EVENT_ITEM_OPS,
+    CLIENT_EVENT_ITEM_USE,
 } client_event_kind_t;
 
 /* Matches the server cap on one item_ops list (storageMaxSlots). */
@@ -56,7 +57,7 @@ typedef struct {
 typedef struct {
     float  target_x, target_y;                 /* player_action */
     char   entity_id[CLIENT_EVENT_ID_BYTES];
-    char   item_id[CLIENT_EVENT_ID_BYTES];     /* also chat to_id, quest_code */
+    char   item_id[CLIENT_EVENT_ID_BYTES];     /* also item_use, chat to_id, quest_code */
     char   code[CLIENT_EVENT_ID_BYTES];        /* dialog_code */
     char   text[CHAT_LINE_BYTES];              /* chat */
     int    quantity, recipe_index;

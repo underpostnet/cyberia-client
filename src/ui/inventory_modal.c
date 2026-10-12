@@ -10,6 +10,8 @@
  *   - Activation intent is an item_active client event. The server
  *     validates, swaps if needed, and pushes the updated state back in
  *     the next AOI frame.
+ *   - A consumable shows Use instead: an item_use client event. The modal
+ *     stays on the stack, follows it by item id, and closes once it is gone.
  *   - The sprite preview uses ol_as_animated_ico so it plays the live
  *     animation for the selected direction/mode pair.
  *   - Direction (up/down/left/right) and mode (idle/walking) buttons let
@@ -20,10 +22,12 @@
 #include "inventory_modal.h"
 #include "text.h"
 
+#include "domain/item_use.h"
 #include "domain/local_player.h"
 #include "domain/viewport.h"
 #include "network/game/client_event.h"
 #include "dialogue_data.h"
+#include "fx/fx_shapes.h"
 #include "game_state.h"
 #include "interaction_bubble.h"
 #include "inventory_bar.h"
@@ -35,6 +39,7 @@
 #include "object_layers_management.h"
 #include "ol_as_animated_ico.h"
 #include "util/utils.h"
+#include "skill_preview.h"
 #include "stat_panel.h"
 #include "toolbar.h"
 #include "ui_button.h"
@@ -54,8 +59,9 @@
 
 static ObjectLayersManager* s_ol_manager = NULL;
 static bool  s_open       = false;
-static int   s_inv_idx    = -1;
 static float s_age        = 0.0f;
+/* The player stack shown, by item id: its inventory index moves as stacks come and go. */
+static char  s_item_id[MAX_ITEM_ID_LENGTH] = {0};
 
 /* External item: a read-only detail view for an item the player does not own
  * (e.g. another entity's active layer). When set, the modal renders from
@@ -140,6 +146,9 @@ static const Color C_TITLE         = { 220, 220, 255, 255 };
 static const Color C_BODY          = { 180, 180, 200, 220 };
 static const Color C_BTN_ACTIVATE  = {  30, 120,  60, 240 };
 static const Color C_BTN_DEACT     = { 120,  40,  40, 240 };
+static const Color C_BTN_USE       = {  30, 110, 120, 240 };
+static const Color C_BTN_DISABLED  = {  50,  50,  60, 200 };
+static const Color C_TEXT_DISABLED = { 100, 100, 110, 160 };
 static const Color C_BTN_TEXT      = { 230, 230, 230, 255 };
 static const Color C_QTY           = { 255, 215,   0, 255 };
 static const Color C_DIR_BTN_SEL   = {  50,  80, 160, 240 };   /* selected dir */
@@ -262,11 +271,18 @@ static Rectangle inventory_content_view(Rectangle card, InventoryModalLayout lay
 
 static void inventory_modal_handle_content_click(int mx, int my);
 
-/* Callback for dialogue modal → re-opens the inventory modal at the same slot. */
+/* Index of the shown player stack in g_local_player.inventory; -1 once it is gone. */
+static int shown_inv_idx(void) {
+    if (s_is_external || '\0' == s_item_id[0]) return -1;
+    for (int i = 0; i < g_local_player.inventory_count; i++)
+        if (0 == strcmp(g_local_player.inventory[i].item_id, s_item_id)) return i;
+    return -1;
+}
+
+/* Callback for dialogue modal → re-opens the inventory modal on the same stack. */
 static void on_dialogue_close_reopen(void) {
-    if (s_inv_idx >= 0 && s_inv_idx < g_local_player.inventory_count) {
-        inventory_modal_open(s_inv_idx);
-    }
+    int inv_idx = shown_inv_idx();
+    if (0 <= inv_idx) inventory_modal_open(inv_idx);
 }
 
 static void rebuild_dir_str(void) {
@@ -352,6 +368,24 @@ static void update_anchor_layout(float dt, bool lore_available) {
                                s_age >= MODAL_POP_DURATION, dt);
 }
 
+/* Use button of a consumable: enabled while the server would accept the use,
+ * else it names what blocks it; the item-use cooldown runs along its base. */
+static void draw_use_button(Rectangle r, const char* item_id, int font_size) {
+    double now = GetTime();
+    item_use_state_e state = item_use_state(item_id, now);
+    bool ready   = ITEM_USE_READY == state;
+    bool cooling = ITEM_USE_COOLDOWN == state;
+    UIButtonPixelRetroStyle st = { .label = ready || cooling ? "Use" : item_use_state_text(state),
+                                   .icon_id = "hand", .font_size = font_size,
+                                   .bg = ready ? C_BTN_USE : C_BTN_DISABLED,
+                                   .text_color = ready ? C_BTN_TEXT : C_TEXT_DISABLED,
+                                   .enabled = ready };
+    ui_button_pixel_retro_draw(r, &st, ready && ui_button_hit(r, GetMouseX(), GetMouseY()));
+    if (cooling)
+        fx_shape_cooldown_bar((Rectangle){ r.x + 6.0f, r.y + r.height - 6.0f, r.width - 12.0f, 3.0f },
+                              item_use_charge(now));
+}
+
 static void send_activation(const char* item_id, bool active) {
     client_event_payload_t p = { .active = active };
     copy_str(p.item_id, sizeof p.item_id, item_id);
@@ -386,27 +420,12 @@ static bool dir_has_frames(AtlasSpriteSheetData* atlas,
     return (dfd && dfd->count > 0);
 }
 
-/* resolve_summoned_item_id resolves the summonedEntityItemId for display.
- * "$active_skin" is replaced by the player's currently active skin item ID,
- * since doppelganger clones inherit the caster's appearance.
- * Returns a pointer to a static or existing buffer — do NOT free. */
-static const char* resolve_summoned_item_id(const char* raw_id) {
-    static char s_resolved[MAX_ID_LENGTH];
-    if (strcmp(raw_id, "$active_skin") != 0) return raw_id;
-
-    /* Walk the player's full inventory to find the first active skin. */
-    const char* skin = active_layer_item_id(g_local_player.inventory,
-                                            g_local_player.inventory_count, "skin");
-    copy_str(s_resolved, MAX_ID_LENGTH, skin ? skin : raw_id);
-    return s_resolved;
-}
-
 /* ── Public API ──────────────────────────────────────────────────────── */
 
 void inventory_modal_init(ObjectLayersManager* ol_manager) {
     s_ol_manager = ol_manager;
     s_open       = false;
-    s_inv_idx    = -1;
+    s_item_id[0] = '\0';
     s_age        = 0.0f;
     ui_scroll_reset(&s_content_scroll);
     s_content_height = 0.0f;
@@ -415,9 +434,8 @@ void inventory_modal_init(ObjectLayersManager* ol_manager) {
 /* The item currently shown: an external read-only item, or a player slot. */
 static const ObjectLayerState* current_ols(void) {
     if (s_is_external) return &s_external;
-    if (s_inv_idx >= 0 && s_inv_idx < g_local_player.inventory_count)
-        return &g_local_player.inventory[s_inv_idx];
-    return NULL;
+    int inv_idx = shown_inv_idx();
+    return 0 <= inv_idx ? &g_local_player.inventory[inv_idx] : NULL;
 }
 
 static void reset_view_state(void) {
@@ -444,7 +462,7 @@ void inventory_modal_set_anchor_entity(const char* entity_id) {
 
 void inventory_modal_open(int inv_idx) {
     if (inv_idx < 0 || inv_idx >= g_local_player.inventory_count) return;
-    s_inv_idx     = inv_idx;
+    copy_str(s_item_id, sizeof s_item_id, g_local_player.inventory[inv_idx].item_id);
     s_is_external = false;
     if (!s_open) modal_opened();
     s_open        = true;
@@ -454,7 +472,8 @@ void inventory_modal_open(int inv_idx) {
 void inventory_modal_switch_slot(int inv_idx) {
     if (!s_open) return;
     if (inv_idx < 0 || inv_idx >= g_local_player.inventory_count) return;
-    if (!s_is_external && inv_idx == s_inv_idx) return; /* already showing it */
+    const char* item_id = g_local_player.inventory[inv_idx].item_id;
+    if (!s_is_external && 0 == strcmp(item_id, s_item_id)) return; /* already showing it */
 
     /* Switching straight to a bar slot closes the opener chain rather than
      * returning to it: drop the on-close callback and discard any pending
@@ -462,7 +481,7 @@ void inventory_modal_switch_slot(int inv_idx) {
     s_on_close = NULL;
     modal_interact_discard_stack();
 
-    s_inv_idx     = inv_idx;
+    copy_str(s_item_id, sizeof s_item_id, item_id);
     s_is_external = false;
     reset_view_state();          /* replays the pop-in transition */
 }
@@ -471,7 +490,7 @@ void inventory_modal_open_external(const ObjectLayerState* ols) {
     if (!ols || '\0' == ols->item_id[0]) return;
     s_external    = *ols;
     s_is_external = true;
-    s_inv_idx     = -1;
+    s_item_id[0]  = '\0';
     if (!s_open) modal_opened();
     s_open        = true;
     reset_view_state();
@@ -485,8 +504,8 @@ void inventory_modal_set_on_close(InventoryModalOnClose cb) {
 
 void inventory_modal_close(void) {
     bool was_open = s_open;
-    s_open    = false;
-    s_inv_idx = -1;
+    s_open       = false;
+    s_item_id[0] = '\0';
 
     /* Fire on_close first: a callback that reopens another modal keeps the
      * modal count above 0 across the hand-over. */
@@ -534,7 +553,7 @@ void inventory_modal_update(float dt) {
     s_age += dt;
 
     const ObjectLayerState* ols = current_ols();
-    if (NULL == ols) return;
+    if (NULL == ols) { inventory_modal_close(); return; }
     bool lore_available = inventory_lore_available(ols);
     /* Resolve the card geometry before anything laid out against it. */
     update_anchor_layout(dt, lore_available);
@@ -820,7 +839,8 @@ void inventory_modal_draw(void) {
             if (s_skill_page < 0) s_skill_page = 0;
 
             const UiSkillEntry* se = ui_state_skill_at(match_indices[s_skill_page]);
-            const char* resolved_summon = resolve_summoned_item_id(se->summoned_entity_item_id);
+            const char* summon_id = skill_preview_summon_id(se);
+            const char* summon_label = summon_id ? summon_id : se->summoned_entity_item_id;
 
             /* Separator line */
             DrawLine((int)(info_x + pad), (int)y_cursor,
@@ -884,8 +904,8 @@ void inventory_modal_draw(void) {
             float ico_y = y_cursor;
 
             /* Animated sprite of the summoned entity */
-            if (s_ol_manager && resolved_summon[0] != '\0' && resolved_summon[0] != '$') {
-                ol_as_ico_draw(s_ol_manager, resolved_summon,
+            if (s_ol_manager && summon_id) {
+                ol_as_ico_draw(s_ol_manager, summon_id,
                                (int)ico_x, (int)ico_y, ico_sz,
                                "down_idle", 0, WHITE);
             }
@@ -895,7 +915,7 @@ void inventory_modal_draw(void) {
 
             /* Summoned item name right of sprite */
             float text_x = ico_x + ico_sz + 8;
-            DrawText(resolved_summon,
+            DrawText(summon_label,
                      (int)text_x, (int)ico_y,
                      stat_font, (Color){ 200, 220, 255, 240 });
 
@@ -940,18 +960,23 @@ void inventory_modal_draw(void) {
         ui_button_pixel_retro_draw(s_lore_btn_rect, &lore_btn, ui_button_hit(s_lore_btn_rect, mx, my));
     }
 
-    /* 12. Activate / Deactivate button — only for the player's own items. */
+    /* 12. Primary action — only for the player's own items: Use for a
+     * consumable, Activate / Deactivate for the rest. */
     s_activate_btn_visible = false;
-    if (!s_is_external) {
+    if (!s_is_external && item_use_is_consumable(ols->item_id)) {
+        s_activate_btn_rect = inventory_activate_button_rect(card, layout, button_w, button_h);
+        s_activate_btn_visible = true;
+        draw_use_button(s_activate_btn_rect, ols->item_id, body_font + 2);
+    } else if (!s_is_external) {
         bool currently_active = ols->active;
         const char* btn_label  = currently_active ? "Deactivate" : "Activate";
         const char* btn_icon   = currently_active ? "unequip" : "equip";
 
         bool btn_enabled = activate_enabled(ols);
 
-        Color btn_color = !btn_enabled ? (Color){ 50, 50, 60, 200 }
+        Color btn_color = !btn_enabled ? C_BTN_DISABLED
                         : currently_active ? C_BTN_DEACT : C_BTN_ACTIVATE;
-        Color txt_color = !btn_enabled ? (Color){ 100, 100, 110, 160 } : C_BTN_TEXT;
+        Color txt_color = !btn_enabled ? C_TEXT_DISABLED : C_BTN_TEXT;
 
         Rectangle btn_r = inventory_activate_button_rect(card, layout, button_w, button_h);
         s_activate_btn_rect = btn_r;
@@ -978,14 +1003,16 @@ bool inventory_modal_handle_click(int mx, int my) {
     Rectangle close_r = close_rect(card);
     if (ui_button_hit(close_r, mx, my)) { inventory_modal_close(); return true; }
 
+    /* The player's own stack: NULL for an external item. */
+    const ObjectLayerState* own = s_is_external ? NULL : current_ols();
+
     /* Lore button */
     if (s_lore_btn_visible && ui_button_hit(s_lore_btn_rect, mx, my)) {
-        if (s_inv_idx >= 0 && s_inv_idx < g_local_player.inventory_count) {
-            const ObjectLayerState* ols = &g_local_player.inventory[s_inv_idx];
-            const DialogueDataSet* d = dialogue_data_get(ols->item_id);
+        if (NULL != own) {
+            const DialogueDataSet* d = dialogue_data_get(own->item_id);
             if (d && d->state == DLG_DATA_READY && d->line_count > 0) {
                 /* Hand-over: open the dialogue before this modal drops its
-                 * count, so the count stays above 0. Keep s_inv_idx for the
+                 * count, so the count stays above 0. Keep s_item_id for the
                  * reopen callback. */
                 s_open = false;
 
@@ -993,7 +1020,7 @@ bool inventory_modal_handle_click(int mx, int my) {
                 modal_dialogue_set_on_close(on_dialogue_close_reopen);
                 modal_dialogue_open(
                     g_local_player.id,  /* self as entity context */
-                    ols->item_id,
+                    own->item_id,
                     "",                      /* lore preview — not a quest dialogue */
                     MODAL_DIALOGUE_RENDER_ITEM,
                     d->lines, d->line_count);
@@ -1004,19 +1031,24 @@ bool inventory_modal_handle_click(int mx, int my) {
         }
     }
 
-    /* Activate / Deactivate */
-    if (s_inv_idx >= 0 && s_inv_idx < g_local_player.inventory_count) {
-        const ObjectLayerState* ols = &g_local_player.inventory[s_inv_idx];
-        if (activate_enabled(ols)) {
+    /* Use: the request stays pending until item_use_ack, and the next
+     * snapshot carries the spent unit. */
+    if (NULL != own && item_use_is_consumable(own->item_id)) {
+        if (s_activate_btn_visible && ui_button_hit(s_activate_btn_rect, mx, my)) {
+            item_use_request(own->item_id, GetTime());
+            return true;
+        }
+    } else if (NULL != own) {
+        if (activate_enabled(own)) {
             if (s_activate_btn_visible && ui_button_hit(s_activate_btn_rect, mx, my)) {
-                bool new_active = !ols->active;
-                send_activation(ols->item_id, new_active);
+                bool new_active = !own->active;
+                send_activation(own->item_id, new_active);
 
                 /* Dead-equip: optimistically update the self-player bubble
                  * so it reflects what will render on revive (the server
                  * only mutates PreRespawnObjectLayers, never sent to us). */
                 if (STATUS_ICON_DEAD == local_player_status_icon())
-                    interaction_bubble_dead_equip(ols->item_id, new_active);
+                    interaction_bubble_dead_equip(own->item_id, new_active);
 
                 inventory_modal_close();
                 return true;

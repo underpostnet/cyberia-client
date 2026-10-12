@@ -17,6 +17,11 @@
  * All item sprites are rendered as looping animated icons via ol_as_animated_ico
  * (down_idle by default) so the bar shows "live" sprites consistently with the
  * in-world entity render.
+ *
+ * Above an active slot whose skills summon entities, a row shows each summoned
+ * entity's stack and one bar for the shared action cooldown. Above a consumable
+ * slot, the same row is a quick-use button: a press spends one unit, and the bar
+ * shows the item-use cooldown.
  */
 
 #include "inventory_bar.h"
@@ -24,16 +29,22 @@
 #include "ease.h"
 #include "text.h"
 
+#include "domain/item_use.h"
 #include "domain/viewport.h"
 #include "fx/fx_inventory_bar_qty.h"
+#include "fx/fx_shapes.h"
 #include "domain/local_player.h"
 #include "game_state.h"
 #include "item_slot.h"
+#include "object_layer.h"
 #include "object_layers_management.h"
 #include "ol_as_animated_ico.h"
+#include "ol_stack_ico.h"
+#include "skill_preview.h"
 #include "ui_button.h"
 #include "ui_rect.h"
 #include "ui_toggle.h"
+#include "util/utils.h"
 
 #include <assert.h>
 #include <math.h>
@@ -69,6 +80,16 @@ static float s_last_x  = 0.0f;
 static bool  s_tap_pending = false;      /* clean release awaiting activation */
 static int   s_tap_x = 0;
 static int   s_tap_y = 0;
+/* The consumable a quick-use button press asks to use. */
+static char  s_use_item[MAX_ITEM_ID_LENGTH] = {0};
+
+/* Quick-use buttons drawn this frame; the next press hit-tests them. */
+typedef struct {
+    Rectangle rect;
+    char      item_id[MAX_ITEM_ID_LENGTH];
+} UseButton;
+static UseButton s_use_buttons[MAX_OBJECT_LAYERS];
+static int       s_use_button_count = 0;
 
 /* Pointer travel that turns a press into a scroll instead of a tap. */
 #define INV_DRAG_SLOP_PX 6.0f
@@ -80,6 +101,9 @@ static int   s_tap_y = 0;
 static const Color C_BAR_BG        = {  10,  10,  20, INV_BAR_ALPHA };
 static const Color C_COIN_BORDER   = { 230, 190,  60, 200 };  /* gold border for coin slot */
 static const Color C_COIN_QTY_TEXT = { 255, 215,   0, 255 };
+static const Color C_PREVIEW_BG    = {  18,  20,  32, 210 };
+static const Color C_USE_BG        = {  30,  96, 104, 230 };
+static const Color C_USE_DIMMED    = { 120, 120, 130, 170 };
 
 /* ── Internal helpers ─────────────────────────────────────────────────── */
 
@@ -347,6 +371,62 @@ static void draw_coin_slot(Rectangle r, int coin_idx, ObjectLayersManager* mgr) 
     DrawText("-", (int)r.x + 3, (int)r.y + 2, lfs, (Color){255, 165, 0, 200});
 }
 
+/* The entities the skills of `ols` summon, in a row above its slot, and the
+ * shared action cooldown under them. The row takes no input. */
+static void draw_skill_previews(Rectangle slot, const ObjectLayerState* ols, float floor_y, float charge) {
+    const char* summons[SKILL_PREVIEW_MAX];
+    int n = skill_preview_summons(ols, summons);
+    if (0 == n) return;
+
+    Rectangle icons[SKILL_PREVIEW_MAX];
+    Rectangle bar;
+    skill_preview_layout(slot, floor_y, s_bar_toggle.anchor, n, icons, &bar);
+    for (int i = 0; n > i; i++) {
+        Rectangle inner = draw_pixel_bevel(icons[i], 0.0f, 2.0f, C_PREVIEW_BG,
+                                           ColorBrightness(C_PREVIEW_BG, 0.45f),
+                                           ColorBrightness(C_PREVIEW_BG, -0.45f));
+        Rectangle art = ui_rect_inset(inner, 1.0f);
+        ObjectLayerState stack = { .active = true, .quantity = 1 };
+        copy_str(stack.item_id, sizeof stack.item_id, summons[i]);
+        ol_stack_ico_draw(s_ol_manager, &stack, 1, (int)art.x, (int)art.y, (int)art.width,
+                          OL_ICO_DEFAULT_DIR, 0, WHITE);
+    }
+    fx_shape_cooldown_bar(bar, charge);
+}
+
+/* The quick-use button of a consumable slot, in the row skill previews use: one
+ * unit of the item, and the item-use cooldown under it. Dimmed while the server
+ * would refuse a use. */
+static void draw_use_button(Rectangle slot, const ObjectLayerState* ols, float floor_y, double now) {
+    Rectangle icons[SKILL_PREVIEW_MAX];
+    Rectangle bar;
+    skill_preview_layout(slot, floor_y, s_bar_toggle.anchor, 1, icons, &bar);
+    Rectangle hit = { icons[0].x, icons[0].y, icons[0].width, bar.y + bar.height - icons[0].y };
+    bool ready = ITEM_USE_READY == item_use_state(ols->item_id, now);
+    Color bg = ready ? C_USE_BG : C_PREVIEW_BG;
+    if (ready && ui_button_hit(hit, GetMouseX(), GetMouseY())) bg = ColorBrightness(bg, 0.25f);
+    Rectangle inner = draw_pixel_bevel(icons[0], 0.0f, 2.0f, bg, ColorBrightness(bg, 0.45f),
+                                       ColorBrightness(bg, -0.45f));
+    Rectangle art = ui_rect_inset(inner, 1.0f);
+    ObjectLayerState unit = { .active = true, .quantity = 1 };
+    copy_str(unit.item_id, sizeof unit.item_id, ols->item_id);
+    ol_stack_ico_draw(s_ol_manager, &unit, 1, (int)art.x, (int)art.y, (int)art.width,
+                      OL_ICO_DEFAULT_DIR, 0, ready ? WHITE : C_USE_DIMMED);
+    fx_shape_cooldown_bar(bar, item_use_charge(now));
+    if (MAX_OBJECT_LAYERS > s_use_button_count) {
+        UseButton* button = &s_use_buttons[s_use_button_count++];
+        button->rect = hit;
+        copy_str(button->item_id, sizeof button->item_id, ols->item_id);
+    }
+}
+
+/* The quick-use button under the screen point, or NULL. */
+static const UseButton* use_button_at(int mx, int my) {
+    for (int i = 0; s_use_button_count > i; i++)
+        if (ui_button_hit(s_use_buttons[i].rect, mx, my)) return &s_use_buttons[i];
+    return NULL;
+}
+
 /* Track the press-drag gesture and the inertial glide that follows it. */
 static void update_drag(float dt) {
     if (!bar_slots_settled()) {
@@ -402,6 +482,8 @@ void inventory_bar_init(ObjectLayersManager* ol_manager) {
     s_dragging      = false;
     s_pointer_was_down = false;
     s_tap_pending   = false;
+    s_use_item[0]   = '\0';
+    s_use_button_count = 0;
     s_reflow_count  = 0;
     s_bar_toggle_init = false;
     ensure_bar_toggle();
@@ -442,29 +524,37 @@ void inventory_bar_draw(void) {
     int screen_w = GetScreenWidth();
     int screen_h = GetScreenHeight();
     float current_bar_top = bar_top(screen_h);
+    /* Skill previews follow the bar top to the screen edge. */
+    bool  shown    = 0.0f < s_bar_toggle.anim_t;
+    /* Stasis hides skill previews over modals. */
+    bool  previews = !local_player_in_stasis();
+    double now     = GetTime();
+    float charge   = local_player_action_charge(now);
+    s_use_button_count = 0;
 
-    if (s_bar_toggle.anim_t > 0.0f) {
+    if (shown) {
         DrawRectangle(0, (int)current_bar_top, screen_w, bar_height(), C_BAR_BG);
         DrawLine(0, (int)current_bar_top, screen_w, (int)current_bar_top,
                  (Color){80, 80, 120, 160});
+    }
 
-        int coin_idx = find_coin_slot();
-        int vis      = visible_slot_count(screen_w);
-        int scroll_map[MAX_OBJECT_LAYERS];
-        int scroll_count = build_scroll_map(coin_idx, scroll_map, false);
-        float left  = strip_left();
-        float right = strip_right(screen_w);
+    int coin_idx = find_coin_slot();
+    int scroll_map[MAX_OBJECT_LAYERS];
+    int scroll_count = build_scroll_map(coin_idx, scroll_map, false);
+    float left  = strip_left();
+    float right = strip_right(screen_w);
 
-        for (int si = 0; si < scroll_count; si++) {
-            Rectangle r = slot_rect(si, current_bar_top);
-            if (r.x + r.width <= left) continue;
-            if (r.x >= right)          break;
+    for (int si = 0; si < scroll_count; si++) {
+        Rectangle r = slot_rect(si, current_bar_top);
+        if (left >= r.x + r.width) continue;
+        if (right <= r.x)          break;
 
-            int inv_idx = scroll_map[si];
-            ObjectLayerState ol = g_local_player.inventory[inv_idx];
+        int inv_idx = scroll_map[si];
+        ObjectLayerState ol = g_local_player.inventory[inv_idx];
+        /* Culled on the settled rect, drawn at the sliding one. */
+        r = slot_rect_at(reflow_si(ol.item_id, si), current_bar_top);
+        if (shown) {
             ol.quantity = fx_inventory_bar_qty_display(ol.item_id, ol.quantity);
-            /* Culled on the settled rect, drawn at the sliding one. */
-            r = slot_rect_at(reflow_si(ol.item_id, si), current_bar_top);
             /* During the arrival pulse the sprite renders in full colour. */
             item_slot_draw_ex(ui_rect_scale(r, fx_inventory_bar_qty_slot_scale(ol.item_id)),
                               &ol, s_ol_manager, WHITE, 0.0f,
@@ -472,12 +562,17 @@ void inventory_bar_draw(void) {
             if (bar_slots_settled())
                 fx_inventory_bar_qty_draw(r, g_local_player.inventory[inv_idx].item_id);
         }
+        if (previews) draw_skill_previews(r, &ol, current_bar_top, charge);
+        if (previews && item_use_is_consumable(ol.item_id)) draw_use_button(r, &ol, current_bar_top, now);
+    }
 
+    if (shown) {
         Rectangle cr = coin_slot_rect(screen_w, current_bar_top);
         const char* coin_key = (coin_idx >= 0) ? g_local_player.inventory[coin_idx].item_id : coin_item_key();
         draw_coin_slot(ui_rect_scale(cr, fx_inventory_bar_qty_slot_scale(coin_key)), coin_idx, s_ol_manager);
         if (bar_slots_settled()) fx_inventory_bar_qty_draw(cr, coin_key);
 
+        int vis = visible_slot_count(screen_w);
         if (scroll_count > vis) {
             int first     = (int)((s_scroll_px + (float)slot_pitch() * 0.5f) / (float)slot_pitch());
             int dot_count = scroll_count > 40 ? 40 : scroll_count;
@@ -503,6 +598,11 @@ bool inventory_bar_handle_click(int mx, int my, int* out_slot) {
     /* Activation is deferred to a clean release — see inventory_bar_take_tap. */
     if (out_slot) *out_slot = -1;
     if (inventory_bar_handle_toggle_click(mx, my)) return true;
+    const UseButton* use = use_button_at(mx, my);
+    if (NULL != use) {
+        copy_str(s_use_item, sizeof s_use_item, use->item_id);
+        return true;
+    }
 
     float current_bar_top = bar_top(GetScreenHeight());
     if ((float)my < current_bar_top || my >= GetScreenHeight()) return false;
@@ -525,9 +625,16 @@ bool inventory_bar_take_tap(int* out_slot) {
     return true;
 }
 
+bool inventory_bar_take_use(char* out_item_id, size_t cap) {
+    if ('\0' == s_use_item[0]) return false;
+    copy_str(out_item_id, cap, s_use_item);
+    s_use_item[0] = '\0';
+    return true;
+}
+
 bool inventory_bar_point_covered(int mx, int my) {
     ensure_bar_toggle();
-    if (ui_button_hit(s_bar_toggle.anchor, mx, my)) return true;
+    if (ui_button_hit(s_bar_toggle.anchor, mx, my) || NULL != use_button_at(mx, my)) return true;
     if (s_bar_toggle.anim_t <= 0.0f) return false;
     return (float)my >= bar_top(GetScreenHeight()) && my < GetScreenHeight();
 }

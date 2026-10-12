@@ -2,6 +2,7 @@
 
 #include <string.h>
 
+#include "domain/item_use.h"
 #include "domain/vault_ops.h"
 #include "network/game/client_event.h"
 #include "util/utils.h"
@@ -16,6 +17,7 @@ static struct {
     uint8_t       status_icon;
     float         move_speed;
     float         action_cooldown_s;
+    double        action_ready_at;
     bool          on_portal;
     float         portal_hold_progress;
     LocalFctEvent fct[LOCAL_FCT_PENDING_MAX];
@@ -33,10 +35,12 @@ void local_player_reset(void) {
     g_local.status_icon          = 0;
     g_local.move_speed           = LOCAL_PLAYER_DEFAULT_MOVE_SPEED;
     g_local.action_cooldown_s    = LOCAL_PLAYER_DEFAULT_ACTION_COOLDOWN_S;
+    g_local.action_ready_at      = 0.0;
     g_local.on_portal            = false;
     g_local.portal_hold_progress = 0.0f;
     g_local.fct_count            = 0;
     vault_ops_clear();
+    item_use_reset();
 }
 
 void local_player_set_stasis(bool stasis) { g_local.stasis = stasis; }
@@ -95,6 +99,15 @@ void local_player_set_action_cooldown(float seconds) {
     if (seconds > 0.0f) g_local.action_cooldown_s = seconds;
 }
 float local_player_action_cooldown(void) { return g_local.action_cooldown_s; }
+
+void local_player_set_action_ready_at(double time_s) { g_local.action_ready_at = time_s; }
+
+float local_player_action_charge(double now) {
+    double left = g_local.action_ready_at - now;
+    if (0.0 >= left) return 1.0f;
+    double charge = 1.0 - left / (double)g_local.action_cooldown_s;
+    return 0.0 < charge ? (float)charge : 0.0f;
+}
 
 void local_player_set_portal_hold(bool on_portal, float progress) {
     g_local.on_portal = on_portal;

@@ -43,6 +43,9 @@ cJSON* json_pack_events(cJSON* events);
 cJSON* json_pack_player_action(float target_x, float target_y);
 
 cJSON* json_pack_item_active(const char* item_id, bool active);
+/* Consume one unit of an owned consumable. The server checks the stack, the
+ * cooldown and the effect, and spends the unit only when the effect applies. */
+cJSON* json_pack_item_use(const char* item_id);
 cJSON* json_pack_player_stasis(bool stasis);
 cJSON* json_pack_chat(const char* to_id, const char* text);
 

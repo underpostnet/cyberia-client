@@ -5,6 +5,7 @@
 
 #include <raylib.h>
 #include <stdbool.h>
+#include <stddef.h>
 
 /* Inventory bottom bar — a scrollable strip of item slots holding every
  * ObjectLayer the self-player owns, active and inactive. An active slot gets
@@ -15,7 +16,8 @@
  *
  * A press-and-slide scrolls the strip 1:1 and releases into an inertial
  * glide. A press that never became a drag taps the slot below it, so
- * scrolling never opens a modal. */
+ * scrolling never opens a modal. The quick-use button above a consumable slot
+ * spends one unit. */
 
 /* The layout metrics live in inventory_bar.c — only the bar itself lays them
  * out. Ask `inventory_bar_visible_height` for the height on screen. */
@@ -55,6 +57,9 @@ bool inventory_bar_handle_click(int mx, int my, int* out_slot);
 /* One-shot: the deferred slot activation from a clean (drag-less) release.
  * `out_slot` receives a full_inventory index, or -1 when the tap hit no slot. */
 bool inventory_bar_take_tap(int* out_slot);
+
+/* One-shot: the consumable a quick-use button press asks to use. */
+bool inventory_bar_take_use(char* out_item_id, size_t cap);
 
 /* True for the visible bar or its persistent bottom toggle. */
 bool inventory_bar_point_covered(int mx, int my);

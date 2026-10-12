@@ -124,6 +124,13 @@ float  local_player_move_speed(void);
 void   local_player_set_action_cooldown(float seconds);
 float  local_player_action_cooldown(void);
 
+/* Authoritative end of the running action cooldown, on the GetTime() clock.
+ * Every skill preview reads this one value. */
+void   local_player_set_action_ready_at(double time_s);
+/* Elapsed part of the action cooldown at `now`, 0..1. 1 means the next tap
+ * fires skills; a skill can still fail its summon chance. */
+float  local_player_action_charge(double now);
+
 /* Portal hold — authoritative teleport charge for the local player. on_portal
  * mirrors the server OnPortal flag; hold_progress is the 0..1 fraction of the
  * hold time elapsed. Both come from the AOI self-player block; the HUD renders
