@@ -3,7 +3,9 @@
 #include "config.h"
 #include "game_state.h"
 #include "fx/fx_death.h"
+#include "fx/fx_heal_aura.h"
 #include "fx/fx_level_up.h"
+#include "fx/fx_obstacle_burst.h"
 #include "domain/stat_contract_generated.h"
 #include "util/serial.h"
 #include "world_types.h"
@@ -13,6 +15,7 @@
 #include "domain/local_player.h"
 #include "domain/presentation_runtime.h"
 #include "domain/audio_context.h"
+#include "domain/item_use.h"
 #include "domain/vault_ops.h"
 #include "audio/audio.h"
 #include "audio/audio_events.h"
@@ -97,7 +100,9 @@ static Vector2 lookup_prev_server_pos(const PrevPos* arr, int n,
 void message_reset_prev_snapshots(void) {
     audio_context_reset();
     fx_level_up_reset();
+    fx_heal_aura_reset();
     fx_death_reset();
+    fx_obstacle_burst_reset();
     s_prev_bot_count = 0;
     s_prev_player_count = 0;
     s_prev_resource_count = 0;
@@ -346,6 +351,8 @@ static void unpack_passive(const cJSON* e, const char* type) {
     o->dims = (Vector2){ serial_get_float_default(e, "dimW", 0.0f),
                          serial_get_float_default(e, "dimH", 0.0f) };
     o->status_icon = (uint8_t)serial_get_int_default(e, "statusIcon", 0);
+    o->life        = serial_get_float_default(e, "life", 0.0f);
+    o->max_life    = serial_get_float_default(e, "maxLife", 0.0f);
     serial_get_string(e, "targetMapCode", o->target_map_code, MAX_ID_LENGTH);
     o->target_cell_x = serial_get_int_default(e, "targetCellX", 0);
     o->target_cell_y = serial_get_int_default(e, "targetCellY", 0);
@@ -408,6 +415,8 @@ static void unpack_self(const cJSON* e) {
      * gated by it; keyboard steering paces its refresh by it. */
     int cooldown_ms = serial_get_int_default(e, "actionCooldownMs", 0);
     if (cooldown_ms > 0) local_player_set_action_cooldown((float)cooldown_ms / 1000.0f);
+    local_player_set_action_ready_at(GetTime() + serial_get_int_default(e, "actionReadyInMs", 0) / 1000.0);
+    item_use_set_ready_at(GetTime() + serial_get_int_default(e, "itemReadyInMs", 0) / 1000.0);
 
     /* The HUD renders the hold bar only while on_portal is set. */
     local_player_set_portal_hold(serial_get_bool_default(e, "onPortal", false),
@@ -420,6 +429,7 @@ static void json_unpack_snapshot(const cJSON* payload) {
     if (NULL != destination_self) serial_get_string(destination_self, "mapCode", destination, sizeof(destination));
     const bool map_changed = '\0' != destination[0] && 0 != strcmp(destination, g_local_player.map_code);
     if (map_changed) {
+        fx_obstacle_burst_reset();
         if ('\0' != g_local_player.map_code[0]) fetch_deprioritize();
         fetch_event("destination_snapshot", destination, 0, 0);
     }
@@ -467,6 +477,7 @@ static void json_unpack_snapshot(const cJSON* payload) {
         else                                    unpack_passive(entity, type);
     }
 
+    fx_obstacle_burst_snapshot();
     audio_context_snapshot();
 }
 
@@ -512,7 +523,17 @@ static void json_unpack_drop_collect(const cJSON* payload) {
     serial_get_string(payload, "itemId", item_id, sizeof(item_id));
     loot_fx_push(drop_id, collector_id, item_id,
                  serial_get_float_default(payload, "worldX", 0.0f),
-                 serial_get_float_default(payload, "worldY", 0.0f));
+                 serial_get_float_default(payload, "worldY", 0.0f),
+                 serial_get_bool_default(payload, "granted", true));
+}
+
+static void json_unpack_item_consume(const cJSON* payload) {
+    char entity_id[MAX_ID_LENGTH] = {0};
+    char behavior[MAX_BEHAVIOR_LENGTH] = {0};
+    serial_get_string(payload, "entityId", entity_id, sizeof(entity_id));
+    serial_get_string(payload, "behavior", behavior, sizeof(behavior));
+    /* An empty id would resolve to the local player. */
+    if ('\0' != entity_id[0]) fx_heal_aura_observe(behavior, game_state_find_entity(entity_id));
 }
 
 static void json_unpack_drop_spawn(const cJSON* payload) {
@@ -783,6 +804,17 @@ static void json_unpack_shop_ack(const cJSON* payload) {
                             (Color){ 210, 120, 110, 255 });
 }
 
+/* item_use_ack settles a consumable use. An applied use needs nothing here: the
+ * restored life and the spent unit arrive in the snapshot. Only a rejection
+ * surfaces, so the player learns why nothing changed. */
+static void json_unpack_item_use_ack(const cJSON* payload) {
+    char reason[64] = {0};
+    serial_get_string(payload, "reason", reason, sizeof(reason));
+    item_use_state_e state = item_use_settle(serial_get_bool_default(payload, "ok", false), reason);
+    if (ITEM_USE_READY != state)
+        modal_notification_show("Item not used", item_use_state_text(state), (Color){ 210, 120, 110, 255 });
+}
+
 /* storage_state is the vault, sent once per open. It seeds the grid. */
 static void json_unpack_storage_state(const cJSON* payload) {
     char entity_id[64] = {0};
@@ -867,12 +899,14 @@ void message_receive(const uint8_t* data, size_t len) {
     else if (0 == strcmp(type, "combat_text"))     json_unpack_combat_text(payload);
     else if (0 == strcmp(type, "audio_event"))     json_unpack_audio_event(payload);
     else if (0 == strcmp(type, "drop_collect"))    json_unpack_drop_collect(payload);
+    else if (0 == strcmp(type, "item_consume"))    json_unpack_item_consume(payload);
     else if (0 == strcmp(type, "drop_spawn"))      json_unpack_drop_spawn(payload);
     else if (0 == strcmp(type, "init_data"))       json_unpack_init_data(payload);
     else if (0 == strcmp(type, "metadata"))        json_unpack_metadata(payload);
     else if (0 == strcmp(type, "chat"))            json_unpack_chat(payload);
     else if (0 == strcmp(type, "dialog_ack"))      json_unpack_dialog_ack(payload);
     else if (0 == strcmp(type, "shop_ack"))        json_unpack_shop_ack(payload);
+    else if (0 == strcmp(type, "item_use_ack"))    json_unpack_item_use_ack(payload);
     else if (0 == strcmp(type, "craft_ack"))       json_unpack_craft_ack(payload);
     else if (0 == strcmp(type, "storage_state"))   json_unpack_storage_state(payload);
     else LOG_ERROR("[MESSAGE] unknown type '%s'\n", type);

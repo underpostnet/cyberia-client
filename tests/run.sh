@@ -25,9 +25,51 @@ cc "${cc_flags[@]}" -o "$out/fx_level_up" tests/fx_level_up_test.c src/fx/fx_lev
 cc "${cc_flags[@]}" -o "$out/fx_death" tests/fx_death_test.c src/fx/fx_death.c -lm
 "$out/fx_death"
 
+cc "${cc_flags[@]}" -o "$out/fx_heal_aura" tests/fx_heal_aura_test.c src/fx/fx_heal_aura.c -lm
+"$out/fx_heal_aura"
+
+cc "${cc_flags[@]}" -ffunction-sections -fdata-sections -Wl,--gc-sections \
+    -o "$out/fx_obstacle_burst" tests/fx_obstacle_burst_test.c src/fx/fx_obstacle_burst.c \
+    src/util/utils.c -lm
+"$out/fx_obstacle_burst"
+
 cc "${cc_flags[@]}" -o "$out/object_layer_metadata" tests/object_layer_metadata_test.c \
     src/object_layer.c src/util/hash_table.c libs/cJSON/cJSON.c -lm
 "$out/object_layer_metadata"
 
 cc "${cc_flags[@]}" -o "$out/overhead_occlusion" tests/overhead_occlusion_test.c src/domain/overhead_occlusion.c -lm
 "$out/overhead_occlusion"
+
+cc "${cc_flags[@]}" -o "$out/pointer_gesture" tests/pointer_gesture_test.c src/input/pointer_gesture.c -lm
+"$out/pointer_gesture"
+
+cc "${cc_flags[@]}" -o "$out/input" tests/input_test.c src/input/input.c src/input/pointer_gesture.c -lm
+"$out/input"
+
+cc "${cc_flags[@]}" -o "$out/hud_joystick" tests/hud_joystick_test.c src/ui/hud_joystick.c -lm
+"$out/hud_joystick"
+
+cc "${cc_flags[@]}" -o "$out/skill_preview" tests/skill_preview_test.c src/ui/skill_preview.c src/ui/ui_state.c \
+    src/domain/local_player.c src/util/utils.c libs/cJSON/cJSON.c -lm
+"$out/skill_preview"
+
+cc "${cc_flags[@]}" -ffunction-sections -fdata-sections -Wl,--gc-sections \
+    -o "$out/world_depth" tests/world_depth_test.c -lm
+"$out/world_depth"
+
+cc "${cc_flags[@]}" -ffunction-sections -fdata-sections -Wl,--gc-sections \
+    -o "$out/inventory_bar_preview" tests/inventory_bar_preview_test.c \
+    src/ui/skill_preview.c src/ui/ui_state.c src/util/utils.c -lm
+"$out/inventory_bar_preview"
+
+cc "${cc_flags[@]}" -o "$out/entity_overhead_ui" tests/entity_overhead_ui_test.c src/ui/entity_overhead_ui.c -lm
+"$out/entity_overhead_ui"
+
+cc "${cc_flags[@]}" -ffunction-sections -fdata-sections -Wl,--gc-sections \
+    -o "$out/loot_fx" tests/loot_fx_test.c src/fx/loot_fx.c src/util/utils.c -lm
+"$out/loot_fx"
+
+cc "${cc_flags[@]}" -ffunction-sections -fdata-sections -Wl,--gc-sections \
+    -o "$out/item_use" tests/item_use_test.c src/domain/item_use.c src/domain/local_player.c \
+    src/util/utils.c -lm
+"$out/item_use"

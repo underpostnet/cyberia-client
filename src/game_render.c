@@ -20,7 +20,9 @@
 #include "ui/interaction_bubble.h"
 #include "ui/hud_minimap_overlay.h"
 #include "fx/fx_death.h"
+#include "fx/fx_heal_aura.h"
 #include "fx/fx_level_up.h"
+#include "fx/fx_obstacle_burst.h"
 #include "ui/inventory_bar.h"
 #include "fx/loot_fx.h"
 #include "ui/inventory_modal.h"
@@ -35,6 +37,8 @@
 #include "ui/modal_notification.h"
 #include "fx/fx_dust.h"
 #include "fx/fx_tap.h"
+#include "input/input.h"
+#include "ui/hud_joystick.h"
 #include "ui/ui_icon.h"
 #include "util/log.h"
 
@@ -142,6 +146,9 @@ void game_render_frame(void) {
 
     // FCT screen-space overlay: damage red flash / regen green pulse
     fct_draw_overlay();
+
+    // Floating joystick (screen space), under every HUD surface and modal.
+    hud_joystick_draw(input_pointer_gesture());
 
     // Render UI (screen space)
     game_render_ui();
@@ -256,11 +263,13 @@ void game_render_world(void) {
     // 7. Foregrounds (always on top of entities) - creates depth
     game_render_foregrounds();
 
-    // 8. Effects — FCT pop-ups, loot flights, level-up auras, death cues
+    // 8. Effects — FCT pop-ups, loot flights, level-up and heal auras, death cues
     fct_draw();
     game_render_loot_fx();
     fx_level_up_draw();
+    fx_heal_aura_draw();
     fx_death_draw();
+    fx_obstacle_burst_draw();
 
     // 9. Grid overlay (if dev_ui enabled - renders on top of everything)
     if (presentation_runtime_dev_ui()) {
@@ -424,14 +433,10 @@ void game_render_world_objects(void) {
     }
 }
 
-/* A lower bottom edge draws first. An equal depth orders by id, so the order holds from one
- * snapshot to the next, whatever order the server lists the entities in. */
-#define ENTITY_DEPTH_EPSILON 0.001f
-
-static int compare_depth(float bottom_a, const char* id_a, float bottom_b, const char* id_b) {
-    const float depth_delta = bottom_a - bottom_b;
-    if (-ENTITY_DEPTH_EPSILON > depth_delta) return -1;
-    if (ENTITY_DEPTH_EPSILON < depth_delta) return 1;
+/* Equal depths sort by ID across snapshots. */
+static int compare_depth(float depth_a, const char* id_a, float depth_b, const char* id_b) {
+    if (depth_b > depth_a) return -1;
+    if (depth_b < depth_a) return 1;
     return (NULL != id_a && NULL != id_b) ? strcmp(id_a, id_b) : 0;
 }
 
@@ -496,7 +501,7 @@ void game_render_foregrounds(void) {
 
 typedef struct {
     enum { ENTITY_TYPE_OBSTACLE, ENTITY_TYPE_STATIC, ENTITY_TYPE_PLAYER, ENTITY_TYPE_OTHER_PLAYER, ENTITY_TYPE_BOT, ENTITY_TYPE_RESOURCE } type;
-    float bottom_y;  // Y position of entity's bottom edge (for depth sorting)
+    float depth_y;
     const char* sort_id;
     int source_order;
     union {
@@ -511,7 +516,7 @@ typedef struct {
 static int compare_entities_by_depth(const void* a, const void* b) {
     const EntitySortEntry* ea = (const EntitySortEntry*)a;
     const EntitySortEntry* eb = (const EntitySortEntry*)b;
-    const int depth_order = compare_depth(ea->bottom_y, ea->sort_id, eb->bottom_y, eb->sort_id);
+    const int depth_order = compare_depth(ea->depth_y, ea->sort_id, eb->depth_y, eb->sort_id);
     if (0 != depth_order) return depth_order;
 
     if (ea->type != eb->type) {
@@ -572,10 +577,11 @@ void game_render_entities(void) {
     // Add obstacles to sort list so they share the same depth rules as entities.
     for (int i = 0; i < g_game_state.obstacle_count; i++) {
         WorldObject* obj = &g_game_state.obstacles[i];
-        float bottom_y = obj->pos.y + obj->dims.y;
+        /* Depleted obstacles draw below entities on their cells. */
+        float depth_y = obj->pos.y + (game_state_obstacle_depleted(obj) ? 0.0f : obj->dims.y);
 
         sort_entries[entry_count].type = ENTITY_TYPE_OBSTACLE;
-        sort_entries[entry_count].bottom_y = bottom_y;
+        sort_entries[entry_count].depth_y = depth_y;
         sort_entries[entry_count].sort_id = obj->id;
         sort_entries[entry_count].source_order = entry_count;
         sort_entries[entry_count].data.object = obj;
@@ -590,7 +596,7 @@ void game_render_entities(void) {
         float bottom_y = st->pos.y + st->dims.y;
 
         sort_entries[entry_count].type = ENTITY_TYPE_STATIC;
-        sort_entries[entry_count].bottom_y = bottom_y;
+        sort_entries[entry_count].depth_y = bottom_y;
         sort_entries[entry_count].sort_id = st->id;
         sort_entries[entry_count].source_order = entry_count;
         sort_entries[entry_count].data.object = st;
@@ -601,7 +607,7 @@ void game_render_entities(void) {
     // Add main player to sort list
     float player_bottom_y = g_game_state.player.base.interp_pos.y + g_game_state.player.base.dims.y;
     sort_entries[entry_count].type = ENTITY_TYPE_PLAYER;
-    sort_entries[entry_count].bottom_y = player_bottom_y;
+    sort_entries[entry_count].depth_y = player_bottom_y;
     sort_entries[entry_count].sort_id = g_game_state.player.base.id;
     sort_entries[entry_count].source_order = entry_count;
     sort_entries[entry_count].data.player = &g_game_state.player;
@@ -614,7 +620,7 @@ void game_render_entities(void) {
         float bottom_y = player->base.interp_pos.y + player->base.dims.y;
 
         sort_entries[entry_count].type = ENTITY_TYPE_OTHER_PLAYER;
-        sort_entries[entry_count].bottom_y = bottom_y;
+        sort_entries[entry_count].depth_y = bottom_y;
         sort_entries[entry_count].sort_id = player->base.id;
         sort_entries[entry_count].source_order = entry_count;
         sort_entries[entry_count].data.player = player;
@@ -628,7 +634,7 @@ void game_render_entities(void) {
         float bottom_y = bot->base.interp_pos.y + bot->base.dims.y;
 
         sort_entries[entry_count].type = ENTITY_TYPE_BOT;
-        sort_entries[entry_count].bottom_y = bottom_y;
+        sort_entries[entry_count].depth_y = bottom_y;
         sort_entries[entry_count].sort_id = bot->base.id;
         sort_entries[entry_count].source_order = entry_count;
         sort_entries[entry_count].data.bot = bot;
@@ -642,7 +648,7 @@ void game_render_entities(void) {
         float bottom_y = res->base.interp_pos.y + res->base.dims.y;
 
         sort_entries[entry_count].type = ENTITY_TYPE_RESOURCE;
-        sort_entries[entry_count].bottom_y = bottom_y;
+        sort_entries[entry_count].depth_y = bottom_y;
         sort_entries[entry_count].sort_id = res->base.id;
         sort_entries[entry_count].source_order = entry_count;
         sort_entries[entry_count].data.bot = res;
@@ -650,7 +656,7 @@ void game_render_entities(void) {
         entry_count++;
     }
 
-    // Sort entities by depth (bottom Y coordinate) - no lock needed
+    // Sort entities by depth.
     qsort(sort_entries, entry_count, sizeof(EntitySortEntry), compare_entities_by_depth);
 
     // Allocate temporary layer pointer array for all entities
@@ -699,14 +705,15 @@ void game_render_entities(void) {
             case ENTITY_TYPE_BOT:
                 entity_base = &entry->data.bot->base;
                 // Map bot behavior to the entity_type_str used for entity defaults lookup.
-                // Skills and coins are spawned as bots server-side; their behavior
-                // string distinguishes them so the correct color / item defaults apply.
+                // Skills, coins and loot tokens are spawned as bots server-side; their
+                // behavior distinguishes them so the correct color / item defaults apply.
+                // A loot token travels with the behavior "drop".
                 if (strcmp(entry->data.bot->behavior, "skill") == 0)
                     entity_type_str = "skill";
                 else if (strcmp(entry->data.bot->behavior, "coin") == 0)
                     entity_type_str = "coin";
                 else if (strcmp(entry->data.bot->behavior, "drop") == 0)
-                    entity_type_str = "drop";
+                    entity_type_str = "loot";
                 else
                     entity_type_str = "bot";
                 entity_id = entity_base->id;
@@ -722,6 +729,9 @@ void game_render_entities(void) {
         }
 
         if (obstacle && entity_id) {
+            /* A depleted obstacle with no dead items is gone. */
+            if (game_state_obstacle_depleted(obstacle) && 0 == layers_count) continue;
+
             // entity_type_str is "obstacle" or "static"; resolve the solid-colour
             // fallback from the entity-colour table so each renders its own palette
             // key when no object-layer texture is present.
@@ -758,6 +768,7 @@ void game_render_entities(void) {
                     WHITE
                 );
             }
+            entity_overhead_ui_draw_obstacle(obstacle, cell_size);
 
             continue;
         }
@@ -774,14 +785,14 @@ void game_render_entities(void) {
             bool is_non_combat_bot = (entry->type == ENTITY_TYPE_BOT)
                 && (strcmp(entity_type_str, "skill") == 0
                     || strcmp(entity_type_str, "coin")  == 0
-                    || strcmp(entity_type_str, "drop")  == 0);
+                    || strcmp(entity_type_str, "loot")  == 0);
 
             /* Draw position — authoritative interpolation, except loot drops,
              * whose top-left is driven by the launch/idle-float FX timeline.
              * A collected drop yields entirely to its detached vacuum flight. */
             float draw_x = entity_base->interp_pos.x;
             float draw_y = entity_base->interp_pos.y;
-            if (entry->type == ENTITY_TYPE_BOT && strcmp(entity_type_str, "drop") == 0) {
+            if (entry->type == ENTITY_TYPE_BOT && strcmp(entity_type_str, "loot") == 0) {
                 /* Per-viewer loot eligibility (AOI bot flag) picks the drop's
                  * particle tint: gold = collectable by us, gray = another
                  * player's loot. */
@@ -859,7 +870,7 @@ void game_render_entities(void) {
             }
 
             /* On-grid quantity counter above a stacked drop (coins, bundles). */
-            if (entry->type == ENTITY_TYPE_BOT && strcmp(entity_type_str, "drop") == 0
+            if (entry->type == ENTITY_TYPE_BOT && strcmp(entity_type_str, "loot") == 0
                 && entity_base->layer_count > 0
                 && OBJ_LAYERS(entity_base)[0].quantity > 1) {
                 draw_drop_count(draw_x, draw_y, entity_base->dims.x, cell_size,
