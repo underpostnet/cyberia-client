@@ -201,12 +201,13 @@ void audio_context_snapshot(void) {
     s_life = (float)own->life;
     s_coins = local_player_coins();
 
-    const WorldObject* closest = NULL;
+    const Portal* closest = NULL;
     float distance = 36.0f;
     for (int i = 0; g_game_state.portal_count > i; i++) {
-        const WorldObject* portal = &g_game_state.portals[i];
-        if ('\0' == portal->target_map_code[0]) continue;
-        const Vector2 at = game_state_transform(portal->id)->pos;
+        const EntityID id = g_game_state.portals[i];
+        const Portal* portal = game_state_portal(id);
+        if ('\0' == portal->target_map[0]) continue;
+        const Vector2 at = game_state_transform(id)->pos;
         const float dx = game_state_own_transform()->pos.x - at.x;
         const float dy = game_state_own_transform()->pos.y - at.y;
         const float squared = dx * dx + dy * dy;
@@ -214,8 +215,8 @@ void audio_context_snapshot(void) {
         distance = squared;
         closest = portal;
     }
-    if (NULL != closest && 0 != strcmp(closest->target_map_code, s_destination)) {
-        copy_str(s_destination, sizeof(s_destination), closest->target_map_code);
+    if (NULL != closest && 0 != strcmp(closest->target_map, s_destination)) {
+        copy_str(s_destination, sizeof(s_destination), closest->target_map);
         fetch_event("portal_target_known", s_destination, 0, 0);
         audio_prefetch_map(s_destination);
     }

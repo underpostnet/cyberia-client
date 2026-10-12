@@ -89,6 +89,19 @@ typedef struct {
     char     action_code[MAX_ID_LENGTH];
 } Agent;
 
+/* A whole grid cell. */
+typedef struct {
+    int x, y;
+} Cell;
+
+/* The portal component: where the portal sends the player. A negative
+ * target_cell marks a random spawn on the target map; an empty target_map, an
+ * unlinked portal. */
+typedef struct {
+    char target_map[MAX_ID_LENGTH];
+    Cell target_cell;
+} Portal;
+
 /* Client-only render interpolation, beside the components. snapshot_time is
  * the arrival of the snapshot that wrote transform.pos; the lerp runs from
  * pos_prev to transform.pos per entity. */
@@ -153,13 +166,5 @@ struct BotState {
     char quest_talk_dialog_codes[BOT_QUEST_CODES_MAX][MAX_ID_LENGTH];
 };
 
-/* A portal: the teleport destination, for the "<targetMapCode> <x>,<y>"
- * overhead nameplate. */
-typedef struct WorldObject {
-    EntityID         id;
-    char             target_map_code[MAX_ID_LENGTH];
-    int              target_cell_x;
-    int              target_cell_y;
-} WorldObject;
 
 #endif /* WORLD_TYPES_H */

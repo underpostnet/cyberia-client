@@ -35,7 +35,7 @@
 #define MAX_ACTIVE_ITEM_TYPES 8
 #define MAX_DEAD_ITEM_IDS    16
 
-/* EntityState / PlayerState / BotState / WorldObject + their MAX_* sizing
+/* EntityState / PlayerState / BotState + their MAX_* sizing
  * macros live in world_types.h. */
 
 /* Object-layer pool. Every appearance holds an offset and a count into it
@@ -94,7 +94,7 @@ struct GameState {
     BotState resources[MAX_ENTITIES];
     int resource_count;
 
-    WorldObject portals[MAX_OBJECTS];
+    EntityID portals[MAX_OBJECTS];   /* portal ids in wire order */
     int portal_count;
 
     EquipmentRules equipment_rules;
@@ -118,6 +118,7 @@ struct GameState {
     Progress        progress[ENTITY_CAP];
     Motion          motion[ENTITY_CAP];
     Agent           agent[ENTITY_CAP];
+    Portal          portal[ENTITY_CAP];
     RenderState     render[ENTITY_CAP];   /* client only */
 };
 
@@ -129,6 +130,7 @@ struct GameState {
 #define COMP_PROGRESS   ((uint64_t)1 << 4)
 #define COMP_MOTION     ((uint64_t)1 << 5)
 #define COMP_AGENT      ((uint64_t)1 << 6)
+#define COMP_PORTAL     ((uint64_t)1 << 7)
 
 extern GameState g_game_state;
 
@@ -197,6 +199,12 @@ static inline Agent* game_state_agent(EntityID id) {
     int slot = game_state_slot(id);
     assert(0 <= slot && 0 != (g_game_state.mask[slot] & COMP_AGENT));
     return &g_game_state.agent[slot];
+}
+
+static inline Portal* game_state_portal(EntityID id) {
+    int slot = game_state_slot(id);
+    assert(0 <= slot && 0 != (g_game_state.mask[slot] & COMP_PORTAL));
+    return &g_game_state.portal[slot];
 }
 
 static inline RenderState* game_state_render(EntityID id) {

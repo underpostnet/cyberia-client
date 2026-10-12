@@ -350,9 +350,10 @@ void game_render_world_objects(void) {
 
     // Render portals
     for (int i = 0; i < g_game_state.portal_count; i++) {
-        WorldObject* portal = &g_game_state.portals[i];
-        const EntityTransform* tf = game_state_transform(portal->id);
-        const Appearance* ap = game_state_appearance(portal->id);
+        const EntityID portal_id = g_game_state.portals[i];
+        const Portal* portal = game_state_portal(portal_id);
+        const EntityTransform* tf = game_state_transform(portal_id);
+        const Appearance* ap = game_state_appearance(portal_id);
         Color portal_color = presentation_runtime_palette("PORTAL");
 
         if (ap->layer_count > 0) {
@@ -363,7 +364,7 @@ void game_render_world_objects(void) {
 
             draw_entity_layers(
                 g_entity_render,
-                portal->id,
+                portal_id,
                 tf->pos.x,
                 tf->pos.y,
                 tf->size.x,
@@ -391,14 +392,14 @@ void game_render_world_objects(void) {
         /* Overhead: portals carry only the 'portal' presence icon (transport)
          * plus a "<targetMapCode> <x>,<y>" destination nameplate. */
         char portal_name[80];
-        nameplate_resolve_portal(portal->target_map_code, portal->target_cell_x,
-                                 portal->target_cell_y, portal_name, (int)sizeof(portal_name));
+        nameplate_resolve_portal(portal->target_map, portal->target_cell.x,
+                                 portal->target_cell.y, portal_name, (int)sizeof(portal_name));
         EntityOverheadParams ohp = {
             .name              = portal_name,
             .show_name         = portal_name[0] != '\0',
             .show_stats        = false,
             .show_hp           = false,
-            .status_icon       = game_state_data(portal->id)->status_icon,
+            .status_icon       = game_state_data(portal_id)->status_icon,
             .interaction_flags = 0,
         };
         entity_overhead_ui_draw(&ohp, tf->pos.x, tf->pos.y,

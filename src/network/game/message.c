@@ -328,14 +328,16 @@ static void unpack_portal(const cJSON* e) {
     EntityID id = serial_get_u32_default(e, "id", 0);
     int slot = claim_slot(id);
     if (0 > slot) return;
-    WorldObject* o = &gs->portals[gs->portal_count++];
-    *o = (WorldObject){ .id = id };
+    gs->portals[gs->portal_count++] = id;
     write_data(slot, e, ENTITY_KIND_PORTAL);
     write_transform(slot, e, true);
     write_appearance(slot, e, FETCH_P2);
-    serial_get_string(e, "targetMapCode", o->target_map_code, MAX_ID_LENGTH);
-    o->target_cell_x = serial_get_int_default(e, "targetCellX", 0);
-    o->target_cell_y = serial_get_int_default(e, "targetCellY", 0);
+    Portal* p = &gs->portal[slot];
+    serial_get_string(e, "targetMap", p->target_map, MAX_ID_LENGTH);
+    const cJSON* cell = serial_get_object(e, "targetCell");
+    p->target_cell = (Cell){ NULL != cell ? serial_get_int_default(cell, "x", 0) : 0,
+                             NULL != cell ? serial_get_int_default(cell, "y", 0) : 0 };
+    gs->mask[slot] |= COMP_PORTAL;
 }
 
 static void unpack_self(const cJSON* e, cyberia_frame_t frame, cyberia_input_seq_t consumed) {

@@ -185,7 +185,7 @@ static void draw_current_portals(const ImapGraph* graph, int current_index,
     const ImapNode* node = &graph->nodes[current_index];
     Rectangle rect = current_map_rect(graph, current_index, bounds);
     for (int i = 0; i < g_game_state.portal_count; ++i) {
-        const EntityTransform* tf = game_state_transform(g_game_state.portals[i].id);
+        const EntityTransform* tf = game_state_transform(g_game_state.portals[i]);
         Vector2 at = current_map_position(node, rect, tf->pos, tf->size);
         draw_square_marker(at, 7.0f, (Color){ 175, 110, 255, 240 });
     }
