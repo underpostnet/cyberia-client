@@ -49,12 +49,13 @@ Drop the silencer cast. Leave param unused. Warnings for this are allowed.
 ## Inline single-use helpers
 One call site → keep inline. Extract only if ≥2 sites or inline obscures control flow at function scale (not loop scale).
 
-## Never auto-edit Makefiles
-- `Makefile`, `Web.mk`, `config.mk`, any `*.mk` → off-limits to autonomous edits.
+## Makefile edits — source list only
+- Applies to `Makefile`, `Web.mk`, `config.mk` and any `*.mk`.
+- You can edit a Makefile if and only if the change edits the `src_files` variable or changes how source files are discovered. Nothing else in the same edit.
+- All other edits need manual review: compile flags, link flags, linker order, targets, toolchain. STOP, name the flag or line, tell why, and wait for explicit approval.
 - Build flags (`-sASYNCIFY`, `-D_DEBUG`, `-O3`, linker order, etc.) are load-bearing in non-obvious ways. Wrong flag = silent miscompile, heap corruption, broken release.
-- If a change seems to require a Makefile edit: STOP, explain what flag/line you want to change and why, ask the user to confirm they understand the implication. Wait for explicit approval.
-- There is no recursive glob. `config.mk` lists one wildcard per directory: `src`, `js`, `network`, `ui`, `input`, `domain`, `fx`, `util`.
-- A new `.c` in one of those directories builds with no edit. A new directory does not — it needs a `config.mk` line, so stop and ask. A file in an unlisted directory compiles nowhere and links to nothing.
+- There is no recursive glob. `src_files` in `config.mk` lists one wildcard per directory under `src/`.
+- A new `.c` in a listed directory builds with no edit. A new directory needs a `src_files` line — add it. A file in an unlisted directory compiles nowhere and links to nothing.
 
 ## src/shell.html — keep it close to raylib's shell
 
@@ -124,7 +125,7 @@ Browser compatibility is not a goal. Keep the code minimal and target recent bro
 - If a change needs a compatibility layer (a polyfill, a vendor prefix, a feature check or a fallback), do not write it. Drop support for the older browser instead.
 - `Web.mk` holds the supported minimums: `-sMIN_CHROME_VERSION`, `-sMIN_FIREFOX_VERSION`, `-sMIN_SAFARI_VERSION`. Check them before you use a browser API. If the API needs a newer version, raise the minimum in the same commit.
 - Raise a minimum when the higher value makes emscripten emit less code. To find the version gates, grep `MIN_*_VERSION` in the emsdk `src/` and `emcc.py`.
-- A `Web.mk` edit needs approval. See "Never auto-edit Makefiles".
+- A `Web.mk` flag edit needs approval. See "Makefile edits — source list only".
 - Code for a behavior of a current browser is not a compatibility layer. Keep it. Example: iOS zooms on focus of an input under 16px.
 
 # System Map
