@@ -575,15 +575,17 @@ void game_render_entities(void) {
         entry_count++;
     }
 
-    // Add main player to sort list
-    float player_bottom_y = drawn_bottom(g_game_state.player.base.id);
-    sort_entries[entry_count].type = ENTITY_TYPE_PLAYER;
-    sort_entries[entry_count].depth_y = player_bottom_y;
-    sort_entries[entry_count].sort_id = g_game_state.player.base.id;
-    sort_entries[entry_count].source_order = entry_count;
-    sort_entries[entry_count].data.player = &g_game_state.player;
-    sort_entries[entry_count].is_main_player = true;
-    entry_count++;
+    // Add main player to sort list. It has no slot between init_data and the
+    // first snapshot, and the preload loop already draws then.
+    if (0 <= game_state_slot(g_game_state.player.base.id)) {
+        sort_entries[entry_count].type = ENTITY_TYPE_PLAYER;
+        sort_entries[entry_count].depth_y = drawn_bottom(g_game_state.player.base.id);
+        sort_entries[entry_count].sort_id = g_game_state.player.base.id;
+        sort_entries[entry_count].source_order = entry_count;
+        sort_entries[entry_count].data.player = &g_game_state.player;
+        sort_entries[entry_count].is_main_player = true;
+        entry_count++;
+    }
 
     // Add other players to sort list
     for (int i = 0; i < g_game_state.other_player_count; i++) {
@@ -979,6 +981,7 @@ void game_render_player_path(void) {
 }
 
 void game_render_aoi_circle(void) {
+    if (0 > game_state_slot(g_game_state.player.base.id)) return;
     float cell_size = world_cell_size();
     float aoi_radius = g_game_state.aoi_radius * cell_size;
 
