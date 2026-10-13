@@ -3,7 +3,7 @@
 
 #include <stdbool.h>
 
-#include "world_types.h"
+#include "world/world_types.h"
 
 /* Dialogue modal for an NPC-type entity (bot or other player). Each tap
  * advances one line; the last line, a tap outside, or ESC closes it. A full

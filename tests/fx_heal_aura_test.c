@@ -1,5 +1,5 @@
 #include "fx/fx_heal_aura.h"
-#include "game_state.h"
+#include "sim/game_state.h"
 
 #include <assert.h>
 #include <raylib.h>

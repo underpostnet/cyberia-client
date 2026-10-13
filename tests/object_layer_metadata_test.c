@@ -1,4 +1,4 @@
-#include "object_layers_management.c"
+#include "world/object_layers_management.c"
 
 #include <assert.h>
 #include <stdio.h>

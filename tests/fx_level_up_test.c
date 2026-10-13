@@ -1,5 +1,5 @@
 #include "fx/fx_level_up.h"
-#include "game_state.h"
+#include "sim/game_state.h"
 #include "ui/text.h"
 
 #include <assert.h>

@@ -1,5 +1,5 @@
 #include "ui/entity_overhead_ui.h"
-#include "world_types.h"
+#include "world/world_types.h"
 
 #include <assert.h>
 #include <raylib.h>

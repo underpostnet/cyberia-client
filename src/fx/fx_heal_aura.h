@@ -3,14 +3,14 @@
 // so a walking player keeps its aura.
 //
 // Integration pattern:
-//   observe: fx_heal_aura_observe(behavior, entity)  // item_consume event
+//   observe: fx_heal_aura_observe(behavior, id)  // item_consume event
 //   update:  fx_heal_aura_update(delta_time);
 //   draw:    fx_heal_aura_draw();   // inside BeginMode2D, above the entities
 
 #ifndef CYBERIA_FX_FX_HEAL_AURA_H
 #define CYBERIA_FX_FX_HEAL_AURA_H
 
-#include "world_types.h"
+#include "world/world_types.h"
 
 #include <stdbool.h>
 

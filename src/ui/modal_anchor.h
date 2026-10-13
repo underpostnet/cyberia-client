@@ -4,7 +4,7 @@
 #include <raylib.h>
 #include <stdbool.h>
 
-#include "world_types.h"
+#include "world/world_types.h"
 
 /* Large-screen placement for the entity panel modals (interact, inventory
  * item detail).

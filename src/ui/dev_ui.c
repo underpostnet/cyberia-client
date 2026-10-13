@@ -1,16 +1,16 @@
 #include "dev_ui.h"
 #include "text.h"
 
-#include "network/game/game_client.h"
-#include "network/game/replication.h"
-#include "domain/self_motion.h"
-#include "game_render.h"
-#include "domain/local_player.h"
-#include "game_state.h"
-#include "domain/local_player_view.h"
-#include "domain/presentation_runtime.h"
+#include "net/game_client.h"
+#include "sim/replication.h"
+#include "sim/self_motion.h"
+#include "view/game_render.h"
+#include "sim/local_player.h"
+#include "sim/game_state.h"
+#include "view/local_player_view.h"
+#include "content/presentation_runtime.h"
 #include "inventory_bar.h"
-#include "util/log.h"
+#include "log.h"
 
 #include <assert.h>
 #include <stdio.h>

@@ -2,13 +2,13 @@
 #include "modal.h"
 
 #include "hud_side_stack.h"
-#include "instance_map_data.h"
+#include "data/instance_map_data.h"
 #include "text.h"
 #include "ui_button.h"
 #include "ui_rect.h"
 
-#include "domain/local_player.h"
-#include "game_state.h"
+#include "sim/local_player.h"
+#include "sim/game_state.h"
 #include "input/input.h"
 
 #include <math.h>

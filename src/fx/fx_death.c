@@ -8,10 +8,10 @@
 
 #include "fx_shapes.h"
 
-#include "domain/presentation_runtime.h"
-#include "game_state.h"
+#include "content/presentation_runtime.h"
+#include "sim/game_state.h"
 #include "ui/ui_icon.h"
-#include "world_types.h"
+#include "world/world_types.h"
 
 #include <math.h>
 #include <raylib.h>

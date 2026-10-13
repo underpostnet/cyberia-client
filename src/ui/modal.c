@@ -2,9 +2,9 @@
 #include "ease.h"
 #include "text.h"
 #include "toolbar.h"
-#include "domain/local_player.h"
-#include "network/game/client_event.h"
-#include "util/log.h"
+#include "sim/local_player.h"
+#include "net/client_event.h"
+#include "log.h"
 #include <assert.h>
 #include <stdlib.h>
 #include <string.h>

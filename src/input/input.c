@@ -1,13 +1,13 @@
 #include "input.h"
 #include "pointer_gesture.h"
-#include "network/game/client_event.h"
-#include "network/game/replication.h"
-#include "domain/camera.h"
-#include "domain/local_player.h"
-#include "domain/presentation_runtime.h"
-#include "game_state.h"
 #include "js/pointer_bridge.h"
-#include "util/log.h"
+#include "net/client_event.h"
+#include "sim/replication.h"
+#include "view/camera.h"
+#include "sim/local_player.h"
+#include "content/presentation_runtime.h"
+#include "sim/game_state.h"
+#include "log.h"
 
 #include <assert.h>
 #include <raylib.h>

@@ -1,7 +1,7 @@
 #include "fx/loot_fx.h"
 #include "audio/audio_events.h"
-#include "domain/local_player.h"
-#include "game_state.h"
+#include "sim/local_player.h"
+#include "sim/game_state.h"
 
 #include <assert.h>
 #include <math.h>

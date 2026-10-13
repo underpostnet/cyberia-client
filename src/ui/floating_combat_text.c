@@ -36,12 +36,12 @@
 #include "floating_combat_text.h"
 #include "text.h"
 
-#include "domain/local_player.h"
-#include "domain/presentation_runtime.h"
-#include "game_state.h"
-#include "util/log.h"
-#include "util/utils.h"
-#include "world_types.h"
+#include "sim/local_player.h"
+#include "content/presentation_runtime.h"
+#include "sim/game_state.h"
+#include "log.h"
+#include "utils.h"
+#include "world/world_types.h"
 
 #include <assert.h>
 #include <math.h>

@@ -13,10 +13,10 @@ cc "${cc_flags[@]}" -o "$out/asset_stream" tests/asset_stream_test.c -lm
 "$out/asset_stream"
 
 cc "${cc_flags[@]}" -o "$out/player_render_ready" tests/player_render_ready_test.c \
-    src/object_layer.c src/layer_z_order.c src/util/hash_table.c -lm
+    src/world/object_layer.c src/world/layer_z_order.c src/hash_table.c -lm
 "$out/player_render_ready"
 
-cc "${cc_flags[@]}" -o "$out/instance_route" tests/instance_route_test.c src/instance_route.c -lm
+cc "${cc_flags[@]}" -o "$out/instance_route" tests/instance_route_test.c src/world/instance_route.c -lm
 "$out/instance_route"
 
 cc "${cc_flags[@]}" -o "$out/fx_level_up" tests/fx_level_up_test.c src/fx/fx_level_up.c -lm
@@ -38,10 +38,10 @@ cc "${cc_flags[@]}" -o "$out/fx_obstacle_burst" tests/fx_obstacle_burst_test.c s
 "$out/fx_obstacle_burst"
 
 cc "${cc_flags[@]}" -o "$out/object_layer_metadata" tests/object_layer_metadata_test.c \
-    src/object_layer.c src/util/hash_table.c libs/cJSON/cJSON.c -lm
+    src/world/object_layer.c src/hash_table.c libs/cJSON/cJSON.c -lm
 "$out/object_layer_metadata"
 
-cc "${cc_flags[@]}" -o "$out/overhead_occlusion" tests/overhead_occlusion_test.c src/domain/overhead_occlusion.c -lm
+cc "${cc_flags[@]}" -o "$out/overhead_occlusion" tests/overhead_occlusion_test.c src/view/overhead_occlusion.c -lm
 "$out/overhead_occlusion"
 
 cc "${cc_flags[@]}" -o "$out/pointer_gesture" tests/pointer_gesture_test.c src/input/pointer_gesture.c -lm
@@ -54,7 +54,7 @@ cc "${cc_flags[@]}" -o "$out/hud_joystick" tests/hud_joystick_test.c src/ui/hud_
 "$out/hud_joystick"
 
 cc "${cc_flags[@]}" -o "$out/skill_preview" tests/skill_preview_test.c src/ui/skill_preview.c src/ui/ui_state.c \
-    src/domain/local_player.c src/util/utils.c libs/cJSON/cJSON.c -lm
+    src/sim/local_player.c src/utils.c libs/cJSON/cJSON.c -lm
 "$out/skill_preview"
 
 cc "${cc_flags[@]}" -ffunction-sections -fdata-sections -Wl,--gc-sections \
@@ -63,12 +63,12 @@ cc "${cc_flags[@]}" -ffunction-sections -fdata-sections -Wl,--gc-sections \
 
 cc "${cc_flags[@]}" -ffunction-sections -fdata-sections -Wl,--gc-sections \
     -o "$out/inventory_bar_preview" tests/inventory_bar_preview_test.c \
-    src/ui/skill_preview.c src/ui/ui_state.c src/util/utils.c -lm
+    src/ui/skill_preview.c src/ui/ui_state.c src/utils.c -lm
 "$out/inventory_bar_preview"
 
 cc "${cc_flags[@]}" -o "$out/entity_overhead_ui" tests/entity_overhead_ui_test.c src/ui/entity_overhead_ui.c -lm
 "$out/entity_overhead_ui"
 
 cc "${cc_flags[@]}" -ffunction-sections -fdata-sections -Wl,--gc-sections \
-    -o "$out/loot_fx" tests/loot_fx_test.c src/fx/loot_fx.c src/util/utils.c -lm
+    -o "$out/loot_fx" tests/loot_fx_test.c src/fx/loot_fx.c src/utils.c -lm
 "$out/loot_fx"

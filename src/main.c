@@ -4,16 +4,16 @@
 #include <assert.h>
 
 #include "input/input.h"
-#include "game_state.h"
-#include "network/data/engine_client.h"
-#include "entity_render.h"
-#include "world_types.h"
-#include "object_layer.h"
-#include "util/utils.h"
-#include "render.h"
-#include "network/game/game_client.h"
-#include "network/game/replication.h"
-#include "network/game/client_event.h"
+#include "sim/game_state.h"
+#include "data/engine_client.h"
+#include "view/entity_render.h"
+#include "world/world_types.h"
+#include "world/object_layer.h"
+#include "utils.h"
+#include "view/render.h"
+#include "net/game_client.h"
+#include "sim/replication.h"
+#include "net/client_event.h"
 #include "config.h"
 
 #include <raylib.h>
@@ -22,18 +22,18 @@
 #include "js/loading_bridge.h"
 #include "js/text_input_bridge.h"
 
-#include "domain/camera.h"
-#include "domain/presentation_runtime.h"
-#include "domain/audio_context.h"
+#include "view/camera.h"
+#include "content/presentation_runtime.h"
+#include "audio/audio_context.h"
 #include "audio/audio.h"
-#include "util/log.h"
+#include "log.h"
 #include "ui/ui_dispatch.h"
 #include "fx/fx_tap.h"
 #include "ui/interaction_bubble.h"
 #include "ui/text.h"
 #include "ui/modal.h"
-#include "domain/local_player.h"
-#include "domain/local_player_view.h"
+#include "sim/local_player.h"
+#include "view/local_player_view.h"
 
 static const double fixed_step = 1.0/(double)TICK_RATE_HZ;
 static double sim_acc = 0.0;

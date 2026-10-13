@@ -17,7 +17,7 @@
 
 #include "fx_shapes.h"
 
-#include "util/utils.h"
+#include "utils.h"
 
 #include <math.h>
 #include <raymath.h>

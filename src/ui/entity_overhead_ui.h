@@ -5,7 +5,7 @@
 #include <stdbool.h>
 #include <stdint.h>
 
-#include "world_types.h"
+#include "world/world_types.h"
 
 /* World-space overhead UI above one entity. Draws bottom to top: XP bar,
  * HP bar, nameplate, capability bar (level, stats sum, capability icons),

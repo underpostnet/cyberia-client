@@ -1,8 +1,8 @@
 #ifndef INTERACTION_BUBBLE_H
 #define INTERACTION_BUBBLE_H
 
-#include "game_state.h"
-#include "object_layer.h"
+#include "sim/game_state.h"
+#include "world/object_layer.h"
 
 #include <stdbool.h>
 

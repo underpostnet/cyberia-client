@@ -17,8 +17,8 @@
 #ifndef MODAL_INTERACT_H
 #define MODAL_INTERACT_H
 
-#include "object_layer.h"
-#include "world_types.h"
+#include "world/object_layer.h"
+#include "world/world_types.h"
 #include <raylib.h>
 #include <stdbool.h>
 #include <stdint.h>

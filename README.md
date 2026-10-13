@@ -63,37 +63,29 @@ Render frame rate is independent of simulation tick rate. The fixed-timestep acc
 
 ## Module map
 
-Directional dependency: from outermost (UI / render) inward toward `domain/`. Nothing in `domain/` imports outward.
+`net/`, `sim/`, `world/` and `content/` mirror the server folders of the same
+name. The other folders are client-only.
 
 ```
 src/
-  domain/
-    tick.h                          tick rate constants, monotonic types
-    presentation_runtime.{c,h}      sole owner of presentation: async fetch of
-                                    /api/v1/cyberia-client-hints/:CYBERIA_CLIENT_HINTS_CODE,
-                                    palette/status-icon/camera accessors, tiny
-                                    inline bootstrap fallback
-  input/
-    input_command.{c,h}             typed InputCommand factory; sequence allocation
-  prediction/
-    prediction.{c,h}                predicted self position; replay buffer; reconcile
-  interpolation/
-    interpolation.{c,h}             remote entity view positions at renderTick
-  network/
-    session.{c,h}                   last server tick, last acked sequence, tick estimate
-    client.{c,h}                    WebSocket lifecycle + binary I/O
-    socket.{c,h}                    Emscripten WebSocket bridge
-  ui/                               modals, HUD, inventory bar, FCT, nameplates
-  game_state.{c,h}                  world state mirror (gameplay subset only)
-  binary_aoi_decoder.{c,h}          server snapshot parser
-  game_render.{c,h}, render.{c,h}   render pipeline
-  main.c                            entry point + render loop
-  js/services.{js,c,h}              REST fetch bridge (atlas, ui-icons, client-hints)
+  config, log, utils, hash_table, serial   small helpers read by everything
+  main.c        the frame loop
+  net/          socket, envelope, decode-to-state, client_event queue
+  sim/          entity table, local player, fixed step, replay, vault ops
+  world/        world_types, object layers, layer z order, instance route
+  content/      rules tables: stat contract, presentation runtime, audio map
+  data/         REST caches: quest, action, meta, instance map, dialogue, engine client
+  input/        raw input capture
+  view/         render, camera, viewport, entity render, notification
+  fx/           effects
+  ui/           widgets and modals
+  audio/        playback, mixing, audio context
+  js/           browser bridges
 ```
 
 | Owner                         | Owns                                                                                                                                                              | Reads                                             | Writes                                                                                          |
 | ----------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------- | ----------------------------------------------------------------------------------------------- |
-| `domain/presentation_runtime` | the entire presentation surface (palette, entity colour keys, status icons, camera, cell, interpolation). Inline bootstrap fallback while the fetch is in flight. | JSON response from `/api/v1/cyberia-client-hints` | own table + one-shot hydration of `g_game_state.cell_size`, `.interpolation_ms`, `.camera.zoom` |
+| `content/presentation_runtime` | the entire presentation surface (palette, entity colour keys, status icons, camera, cell, interpolation). Inline bootstrap fallback while the fetch is in flight. | JSON response from `/api/v1/cyberia-client-hints` | own table + one-shot hydration of `g_game_state.cell_size`, `.interpolation_ms`, `.camera.zoom` |
 | `input/input_command`         | typed InputCommand factory                                                                                                                                        | session for tick + sequence                       | —                                                                                               |
 | `prediction/`                 | predicted self position, input replay buffer                                                                                                                      | snapshot self + session ack                       | predicted self                                                                                  |
 | `interpolation/`              | remote entity `interp_pos`                                                                                                                                        | snapshot history                                  | remote `interp_pos` only                                                                        |
@@ -112,7 +104,7 @@ The client owns its render policy. The authoritative server holds no presentatio
 
 Three layers, strictly inward-dependent:
 
-1. **`domain/presentation_runtime.{c,h}`** — sole owner of every presentation value. Fires a single asynchronous GET against `/api/v1/cyberia-client-hints/:CYBERIA_CLIENT_HINTS_CODE` at startup, polled once per render frame. When the response settles, parses palette, entity colour keys, status-icon visuals, and camera/cell tunings into a process-local table and writes a one-shot hydration into `g_game_state` (cell_size, interpolation_ms, camera.zoom). The C client carries NO compile-time palette or status table — only a tiny inline neutral-grey bootstrap so the splash screen has something to draw while the fetch is in flight. The canonical schema for the response lives at engine-cyberia's `src/client/components/cyberia/SharedDefaultsCyberia.js`.
+1. **`content/presentation_runtime.{c,h}`** — sole owner of every presentation value. Fires a single asynchronous GET against `/api/v1/cyberia-client-hints/:CYBERIA_CLIENT_HINTS_CODE` at startup, polled once per render frame. When the response settles, parses palette, entity colour keys, status-icon visuals, and camera/cell tunings into a process-local table and writes a one-shot hydration into `g_game_state` (cell_size, interpolation_ms, camera.zoom). The C client carries NO compile-time palette or status table — only a tiny inline neutral-grey bootstrap so the splash screen has something to draw while the fetch is in flight. The canonical schema for the response lives at engine-cyberia's `src/client/components/cyberia/SharedDefaultsCyberia.js`.
 2. **Renderers** — call `presentation_runtime_palette("KEY")`, `presentation_runtime_status_icon(u8)`, `presentation_runtime_status_border(u8)`, `presentation_runtime_entity_fallback_color(entity_type)` at each use site.
 
 What lives in this layer:
@@ -152,18 +144,18 @@ No authentication; presentation hints are not secret. The Go authoritative serve
 
 ### Session
 
-`network/game/replication.{c,h}` holds the per-connection counters. A reconnect resets them.
+`sim/replication.{c,h}` holds the per-connection counters. A reconnect resets them.
 
 - `session_frame()` — completed fixed steps in this session. Every client event carries it.
 - `session_next_input_sequence()` — monotonic counter for outgoing client events.
 
 ### Prediction
 
-`network/game/replication.{c,h}` predicts the own player only. One motion function, `self_motion_step` (`domain/self_motion.c`), moves it in the live step and in the replay. It mirrors the server `stepAlongPath`.
+`sim/replication.{c,h}` predicts the own player only. One motion function, `self_motion_step` (`sim/self_motion.c`), moves it in the live step and in the replay. It mirrors the server `stepAlongPath`.
 
 - `prediction_step(s)` — one fixed step: applies the events that take effect in step `s`, then steps.
 - `prediction_reconcile()` — phase 1 of each tick: replaces the own state with the newest snapshot, drops the events up to `inputConsumedThrough`, and replays the rest from the snapshot `frame`.
-- `prediction_prev()` / `prediction_self()` — the last two fixed steps. `domain/local_player_view.c` draws a lerp between them.
+- `prediction_prev()` / `prediction_self()` — the last two fixed steps. `view/local_player_view.c` draws a lerp between them.
 
 ### Interpolation
 
@@ -283,7 +275,7 @@ Strict independence from the gameplay renderer:
 
 | Concern    | Owner                                                                                  |
 | ---------- | -------------------------------------------------------------------------------------- |
-| Graph data | `ui/instance_map_data` — engine-cyberia REST only, never the AOI stream                |
+| Graph data | `data/instance_map_data` — engine-cyberia REST only, never the AOI stream                |
 | Camera     | own pan/zoom with smooth exponential interpolation (drag pan, wheel zoom, pinch zoom)  |
 | Layout     | deterministic row-major map-card grid with quarter-turn rotation, computed client-side |
 | Selection  | tap a node → contextual panel (name, quest/action provider counts, portal links)       |

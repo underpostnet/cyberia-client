@@ -1,8 +1,8 @@
 #ifndef CYBERIA_FX_FX_ITEM_TRANSFER_H
 #define CYBERIA_FX_FX_ITEM_TRANSFER_H
 
-#include "object_layer.h"
-#include "object_layers_management.h"
+#include "world/object_layer.h"
+#include "world/object_layers_management.h"
 
 #include <raylib.h>
 

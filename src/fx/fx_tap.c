@@ -8,8 +8,8 @@
 
 #include "fx_shapes.h"
 
-#include "domain/camera.h"
-#include "util/utils.h"
+#include "view/camera.h"
+#include "utils.h"
 
 #include <math.h>
 #include <raymath.h>

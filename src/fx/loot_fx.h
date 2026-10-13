@@ -4,8 +4,8 @@
 #include <stdbool.h>
 #include <stdint.h>
 
-#include "object_layer.h"
-#include "world_types.h"
+#include "world/object_layer.h"
+#include "world/world_types.h"
 
 /* Loot drop FX — the full client-side visual lifecycle of a scattered drop.
  *

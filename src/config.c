@@ -1,6 +1,6 @@
 #include "config.h"
-#include "instance_route.h"
-#include "util/log.h"
+#include "world/instance_route.h"
+#include "log.h"
 
 #include <assert.h>
 #include <emscripten/emscripten.h>

@@ -1,12 +1,12 @@
 #include "fx_inventory_bar_qty.h"
 
-#include "domain/local_player.h"
-#include "game_state.h"
+#include "sim/local_player.h"
+#include "sim/game_state.h"
 #include "ui/inventory_bar.h"
 #include "loot_fx.h"
-#include "object_layer.h"
+#include "world/object_layer.h"
 #include "ui/text.h"
-#include "util/utils.h"
+#include "utils.h"
 
 #include <math.h>
 #include <raylib.h>

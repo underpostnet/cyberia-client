@@ -23,9 +23,9 @@
 #include "entity_overhead_ui.h"
 #include "text.h"
 
-#include "domain/presentation_runtime.h"
+#include "content/presentation_runtime.h"
 #include "ui_icon.h"
-#include "world_types.h"
+#include "world/world_types.h"
 
 #include <assert.h>
 #include <raylib.h>

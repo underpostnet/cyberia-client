@@ -1,9 +1,9 @@
 #include "skill_preview.h"
 #include "ui_state.h"
 
-#include "domain/local_player.h"
-#include "object_layer.h"
-#include "object_layers_management.h"
+#include "sim/local_player.h"
+#include "world/object_layer.h"
+#include "world/object_layers_management.h"
 
 #include <assert.h>
 #include <raylib.h>

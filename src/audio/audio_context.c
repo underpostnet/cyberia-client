@@ -1,0 +1,255 @@
+#include "audio_context.h"
+#include "data/engine_client.h"
+#include "audio/audio.h"
+#include "audio/audio_events.h"
+#include "sim/game_state.h"
+#include "sim/local_player.h"
+#include "ui/modal_notification.h"
+#include "world/object_layer.h"
+#include "world/world_types.h"
+#include "utils.h"
+
+#include <stdbool.h>
+#include <string.h>
+
+#define SEEN_SKILLS_CAP 128
+#define TRACKED_LIVES_CAP 256
+
+/* Life fractions a heal is worth sounding at. Regeneration ticks constantly and in small
+ * amounts, so sounding every tick saturates the SFX bus as soon as a few wounded entities share
+ * the view. Only a milestone sounds: coming back from zero, and each quarter of maximum life the
+ * entity climbs past. */
+static const float LIFE_MILESTONES[] = { 0.0f, 0.25f, 0.5f, 0.75f };
+
+/* Seconds between one entity's footfalls while it is walking. Every walker keeps its own timer,
+ * so a crowd sounds like a crowd; each is offset by a phase taken from its id, because feet that
+ * all landed on the same frame would read as one loud step instead of several people. */
+#define FOOTSTEP_CADENCE_SECONDS 0.46f
+
+/* What the audio layer remembers about one entity between snapshots. */
+typedef struct {
+    EntityID id;
+    float fraction;        /* life / max_life at the last snapshot */
+    bool walking;          /* on feet and moving at the last snapshot */
+    float step_remaining;  /* seconds until this entity's next footfall */
+} TrackedEntity;
+
+/* One snapshot's worth of tracked entities, and whether any of them crossed a life milestone. */
+typedef struct {
+    TrackedEntity entries[TRACKED_LIVES_CAP];
+    int count;
+    bool healed;
+} EntityScan;
+
+static char s_map[MAX_ID_LENGTH];
+static char s_destination[MAX_ID_LENGTH];
+static EntityID s_skills[SEEN_SKILLS_CAP];
+static int s_skill_count;
+static TrackedEntity s_tracked[TRACKED_LIVES_CAP];
+static int s_tracked_count;
+static float s_life;
+static int s_coins;
+static float s_combat_remaining;
+static bool s_portal_hold;
+static bool s_craft_hold;
+static float s_portal_progress;
+
+static bool crossed_milestone(float before, float after) {
+    for (size_t i = 0; sizeof(LIFE_MILESTONES) / sizeof(*LIFE_MILESTONES) > i; i++) {
+        if (before <= LIFE_MILESTONES[i] && after > LIFE_MILESTONES[i]) return true;
+    }
+    return false;
+}
+
+/* A stable fraction of the cadence, derived from the entity id: two entities that start walking
+ * on the same frame still land their feet apart. */
+static float step_phase(EntityID id) {
+    unsigned hash = id * 2654435761u;
+    return FOOTSTEP_CADENCE_SECONDS * (float)((hash >> 16) % 1000u) / 1000.0f;
+}
+
+/* Carries one entity across the snapshot: its life fraction, whether it is walking, and the
+ * footstep timer that survives with it. An entity seen for the first time is recorded without
+ * sounding a heal — entering the area of interest already wounded is not a heal — and starts its
+ * gait on its own phase so it never lands in step with everyone else.
+ *
+ * `on_feet` is false for what travels without walking: skill projectiles, coins and drops. */
+static void scan_entity(EntityScan* scan, EntityID id, bool on_feet, bool reset) {
+    const Vitals* v = game_state_vitals(id);
+    if (0 >= v->max_life || TRACKED_LIVES_CAP <= scan->count) return;
+    const float fraction = (float)v->life / (float)v->max_life;
+    TrackedEntity* out = &scan->entries[scan->count];
+    out->id = id;
+    out->fraction = fraction;
+    out->walking = on_feet && MODE_WALKING == game_state_motion(id)->mode;
+    out->step_remaining = step_phase(id);
+    if (!reset) {
+        for (int i = 0; s_tracked_count > i; i++) {
+            if (id != s_tracked[i].id) continue;
+            if (crossed_milestone(s_tracked[i].fraction, fraction)) scan->healed = true;
+            // A walk already under way keeps its timer; one just beginning steps immediately.
+            if (s_tracked[i].walking && out->walking) out->step_remaining = s_tracked[i].step_remaining;
+            else if (out->walking) out->step_remaining = 0.0f;
+            break;
+        }
+    }
+    scan->count++;
+}
+
+/* One pass over everything in view. Heal sounds once for however many entities crossed a
+ * milestone this snapshot — crossings are rare, and a crowd recovering together is one event to
+ * the ear. Footsteps are the opposite: every walker keeps its own timer, so several sets of feet
+ * are several sets of feet. */
+static void entity_snapshot(bool map_changed) {
+    EntityScan scan = { .count = 0, .healed = false };
+    scan_entity(&scan, g_local_player.id, true, map_changed);
+    for (int i = 0; g_game_state.other_player_count > i; i++) {
+        scan_entity(&scan, g_game_state.other_players[i], true, map_changed);
+    }
+    for (int i = 0; g_game_state.bot_count > i; i++) {
+        EntityID bot = g_game_state.bots[i];
+        scan_entity(&scan, bot, game_state_bot_has_feet(bot), map_changed);
+    }
+    memcpy(s_tracked, scan.entries, (size_t)scan.count * sizeof(TrackedEntity));
+    s_tracked_count = scan.count;
+    if (scan.healed) audio_event(AUDIO_EVENT_HEAL);
+}
+
+/* The music bed to return to once a one-off cue ends: a hold still in progress keeps the bus, so
+ * a portal charge or a running assembly outlives a combat exchange rather than being cut by it. */
+static void restore_music(void) {
+    if (s_portal_hold) { audio_event(AUDIO_EVENT_PORTAL_COOLDOWN); return; }
+    if (s_craft_hold) { audio_event(AUDIO_EVENT_CRAFT); return; }
+    audio_event(AUDIO_EVENT_IDLE);
+}
+
+/* The crafting bed is held for exactly as long as the assembly bar charges, the same shape as the
+ * portal charge above: entered once, released once, looping in between. The modal owns the bar and
+ * says whether one is running; arbitration of the music bus stays here, in one place. */
+static void craft_snapshot(bool map_changed) {
+    const bool charging = modal_notification_is_charging();
+    if (charging == s_craft_hold) return;
+    s_craft_hold = charging;
+    if (charging) { audio_event(AUDIO_EVENT_CRAFT); return; }
+    /* On a transfer the caller's audio_set_map installs the destination bed instead. */
+    if (!map_changed) audio_event(AUDIO_EVENT_IDLE);
+}
+
+/* Portal audio is driven by the authoritative hold flag, never by the map code: an
+ * intra-map portal moves the player without changing maps, so a map-code watch is
+ * silent for exactly the case the player notices most.
+ *
+ * The charge is a held music bed; completing it fires the portal SFX while the
+ * departing map's bindings are still current, because audio_set_map would otherwise
+ * ask the map just entered for a binding it has not loaded yet. */
+static void portal_snapshot(bool map_changed) {
+    const Player* own = game_state_own_player();
+    if (own->on_portal) {
+        if (!s_portal_hold) {
+            s_portal_hold = true;
+            fetch_event("portal_enter", s_map, 0, 0);
+            audio_event(AUDIO_EVENT_PORTAL_COOLDOWN);
+        }
+        s_portal_progress = own->portal_hold;
+        return;
+    }
+    if (!s_portal_hold) return;
+    s_portal_hold = false;
+    /* The hold ends either way; only a teleport sounds. TELEPORTING is the direct
+     * signal, but it survives a single snapshot, so a changed map or a charge that
+     * reached full still counts the jump if that one snapshot was coalesced away. */
+    const bool teleported = map_changed || MODE_TELEPORTING == game_state_motion(g_local_player.id)->mode ||
+                            0.98f <= s_portal_progress;
+    s_portal_progress = 0.0f;
+    if (teleported) audio_event(AUDIO_EVENT_PORTAL);
+    /* On a transfer the caller's audio_set_map installs the destination bed instead. */
+    if (!map_changed) audio_event(AUDIO_EVENT_IDLE);
+}
+
+void audio_context_reset(void) {
+    s_map[0] = '\0';
+    s_destination[0] = '\0';
+    s_skill_count = 0;
+    s_tracked_count = 0;
+    s_combat_remaining = 0;
+    s_portal_hold = false;
+    s_craft_hold = false;
+    s_portal_progress = 0.0f;
+    audio_set_map("");
+}
+
+void audio_context_snapshot(void) {
+    if ('\0' == g_local_player.map_code[0]) return;
+    const Vitals* own = game_state_vitals(g_local_player.id);
+    bool changed = 0 != strcmp(s_map, g_local_player.map_code);
+    portal_snapshot(changed);
+    craft_snapshot(changed);
+    entity_snapshot(changed);
+    if (changed) {
+        copy_str(s_map, sizeof(s_map), g_local_player.map_code);
+        audio_set_map(s_map);
+        s_skill_count = 0;
+        s_combat_remaining = 0;
+    } else {
+        // Impact itself is sounded by the server's damage events (see message.c), which cover
+        // every entity. Own damage only decides whether combat music takes over.
+        if (s_life > own->life && 0 < own->max_life) {
+            if (0.0f >= s_combat_remaining) audio_event(AUDIO_EVENT_COMBAT);
+            s_combat_remaining = 8;
+        }
+        if (s_coins != local_player_coins()) audio_event(AUDIO_EVENT_COIN);
+    }
+    s_life = (float)own->life;
+    s_coins = local_player_coins();
+
+    const Portal* closest = NULL;
+    float distance = 36.0f;
+    for (int i = 0; g_game_state.portal_count > i; i++) {
+        const EntityID id = g_game_state.portals[i];
+        const Portal* portal = game_state_portal(id);
+        if ('\0' == portal->target_map[0]) continue;
+        const Vector2 at = game_state_transform(id)->pos;
+        const float dx = game_state_own_transform()->pos.x - at.x;
+        const float dy = game_state_own_transform()->pos.y - at.y;
+        const float squared = dx * dx + dy * dy;
+        if (distance < squared) continue;
+        distance = squared;
+        closest = portal;
+    }
+    if (NULL != closest && 0 != strcmp(closest->target_map, s_destination)) {
+        copy_str(s_destination, sizeof(s_destination), closest->target_map);
+        fetch_event("portal_target_known", s_destination, 0, 0);
+        audio_prefetch_map(s_destination);
+    }
+
+    EntityID current[SEEN_SKILLS_CAP];
+    int count = 0;
+    for (int i = 0; g_game_state.bot_count > i && SEEN_SKILLS_CAP > count; i++) {
+        EntityID bot = g_game_state.bots[i];
+        if (0 != strcmp(game_state_agent(bot)->behavior, "skill") || g_local_player.id != game_state_agent(bot)->caster_id) continue;
+        bool seen = changed;
+        for (int j = 0; s_skill_count > j; j++) {
+            if (bot == s_skills[j]) seen = true;
+        }
+        if (!seen) audio_event(AUDIO_EVENT_PROJECTILE);
+        current[count++] = bot;
+    }
+    memcpy(s_skills, current, (size_t)count * sizeof current[0]);
+    s_skill_count = count;
+}
+
+void audio_context_update(float dt) {
+    // Each walker's own gait. Feet landing within the mixer's retrigger window collapse into one
+    // sound, which is why the phase offsets matter: they are what turns a crowd into a crowd
+    // rather than into a single louder step.
+    for (int i = 0; s_tracked_count > i; i++) {
+        if (!s_tracked[i].walking) continue;
+        s_tracked[i].step_remaining -= dt;
+        if (0.0f < s_tracked[i].step_remaining) continue;
+        s_tracked[i].step_remaining = FOOTSTEP_CADENCE_SECONDS;
+        audio_event(AUDIO_EVENT_FOOTSTEPS);
+    }
+    if (0.0f >= s_combat_remaining) return;
+    s_combat_remaining -= dt;
+    if (0.0f >= s_combat_remaining) restore_music();
+}

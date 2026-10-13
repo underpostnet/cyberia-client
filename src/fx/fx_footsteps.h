@@ -1,7 +1,7 @@
 /* Footstep emitter — decides when a moving entity kicks up dust.
  *
  * The client has no per-entity controller: the local player's gait comes from
- * domain/local_player_view and every remote entity's from interpolation, and
+ * view/local_player_view and every remote entity's from interpolation, and
  * both have written their render position, facing, and walk/idle mode into
  * g_game_state by the time the frame updates. So this module reads that one
  * settled state each frame rather than being called from several controllers.

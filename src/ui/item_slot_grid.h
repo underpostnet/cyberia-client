@@ -1,8 +1,8 @@
 #ifndef CYBERIA_UI_ITEM_SLOT_GRID_H
 #define CYBERIA_UI_ITEM_SLOT_GRID_H
 
-#include "object_layer.h"
-#include "object_layers_management.h"
+#include "world/object_layer.h"
+#include "world/object_layers_management.h"
 
 #include <raylib.h>
 #include <stdbool.h>

@@ -3,11 +3,11 @@
 #define CYBERIA_TEXT_NO_OVERRIDE
 #include "text.h"
 
-#include "domain/presentation_runtime.h"
-#include "domain/viewport.h"
-#include "network/data/engine_client.h"
-#include "util/log.h"
-#include "util/utils.h"
+#include "content/presentation_runtime.h"
+#include "view/viewport.h"
+#include "data/engine_client.h"
+#include "log.h"
+#include "utils.h"
 
 #include <raylib.h>
 #include <stdlib.h>
@@ -16,7 +16,7 @@
 /* Glyph atlas base size — generous so the font stays crisp when scaled up. */
 #define TEXT_FONT_BASE_SIZE 64
 
-/* Responsive scaling: on a mobile viewport (see domain/viewport.h) the global
+/* Responsive scaling: on a mobile viewport (see view/viewport.h) the global
  * font multiplier is reduced so HUD/UI text is proportionally smaller on
  * phones. Desktop is unaffected. */
 #define TEXT_MOBILE_FONT_SCALE 0.88f

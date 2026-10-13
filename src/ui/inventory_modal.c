@@ -1,4 +1,4 @@
-#include "network/data/engine_client.h"
+#include "data/engine_client.h"
 /**
  * @file inventory_modal.c
  * @brief Full-screen inventory item detail modal implementation.
@@ -21,29 +21,29 @@
 #include "inventory_modal.h"
 #include "text.h"
 
-#include "domain/local_player.h"
-#include "domain/viewport.h"
-#include "network/game/client_event.h"
-#include "dialogue_data.h"
-#include "game_state.h"
+#include "skill_preview.h"
+#include "sim/local_player.h"
+#include "view/viewport.h"
+#include "net/client_event.h"
+#include "data/dialogue_data.h"
+#include "sim/game_state.h"
 #include "interaction_bubble.h"
 #include "inventory_bar.h"
 #include "modal.h"
 #include "modal_anchor.h"
 #include "modal_dialogue.h"
 #include "modal_interact.h"
-#include "object_layer.h"
-#include "object_layers_management.h"
+#include "world/object_layer.h"
+#include "world/object_layers_management.h"
 #include "ol_as_animated_ico.h"
-#include "util/utils.h"
-#include "skill_preview.h"
+#include "utils.h"
 #include "stat_panel.h"
 #include "toolbar.h"
 #include "ui_button.h"
 #include "ui_rect.h"
 #include "ui_scroll.h"
 #include "ui_state.h"
-#include "world_types.h"
+#include "world/world_types.h"
 
 #include <assert.h>
 #include <math.h>

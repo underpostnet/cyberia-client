@@ -1,7 +1,7 @@
 #include "input/input.h"
 #include "input/pointer_gesture.h"
-#include "network/game/client_event.h"
-#include "network/game/replication.h"
+#include "net/client_event.h"
+#include "sim/replication.h"
 
 #include <assert.h>
 #include <math.h>

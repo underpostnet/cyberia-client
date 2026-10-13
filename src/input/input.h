@@ -21,7 +21,7 @@ static inline bool input_pointer_down(void) {
 /* Raw per-frame input event ring. Captures OS events (tap, debug key, zoom)
  * and hands them to the UI dispatch and prediction/replication stages. Raw
  * input never leaves the client: input_push_client_events converts it into
- * the client events of network/game/client_event.h. */
+ * the client events of net/client_event.h. */
 
 typedef enum input_type {
     INPUT_NONE,

@@ -9,7 +9,7 @@
 #ifndef CYBERIA_FX_FX_DEATH_H
 #define CYBERIA_FX_FX_DEATH_H
 
-#include "world_types.h"
+#include "world/world_types.h"
 
 #include <stdbool.h>
 

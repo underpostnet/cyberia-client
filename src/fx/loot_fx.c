@@ -1,14 +1,14 @@
 #include "loot_fx.h"
 
-#include "game_render.h"
-#include "domain/local_player.h"
-#include "game_state.h"
+#include "view/game_render.h"
+#include "sim/local_player.h"
+#include "sim/game_state.h"
 #include "fx_inventory_bar_qty.h"
 #include "audio/audio.h"
 #include "audio/audio_events.h"
 #include "ui/inventory_bar.h"
-#include "world_types.h"
-#include "util/utils.h"
+#include "world/world_types.h"
+#include "utils.h"
 
 #include <math.h>
 #include <raylib.h>

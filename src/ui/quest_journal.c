@@ -3,8 +3,8 @@
 
 #include "hud_side_stack.h"
 #include "modal.h"
-#include "quest_cache.h"
-#include "quest_progress_store.h"
+#include "data/quest_cache.h"
+#include "data/quest_progress_store.h"
 #include "ui_button.h"
 #include "ui_icon.h"
 #include "ui_scroll.h"

@@ -2,14 +2,14 @@
 #include "modal.h"
 #include "text.h"
 
-#include "domain/viewport.h"
+#include "view/viewport.h"
 #include "js/text_input_bridge.h"
-#include "network/game/client_event.h"
-#include "notification.h"
+#include "net/client_event.h"
+#include "view/notification.h"
 #include "notify_store.h"
 #include "ui_button.h"
 #include "ui_scroll.h"
-#include "util/utils.h"
+#include "utils.h"
 
 #include <assert.h>
 #include <ctype.h>

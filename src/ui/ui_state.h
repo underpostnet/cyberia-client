@@ -4,7 +4,7 @@
 #include <stdbool.h>
 #include <stddef.h>
 
-#include "object_layer.h"
+#include "world/object_layer.h"
 
 /* UI-only data fed by engine metadata.
  *

@@ -1,7 +1,7 @@
 #include "ui_dispatch.h"
-#include "domain/local_player.h"
-#include "domain/presentation_runtime.h"
-#include "domain/camera.h"
+#include "sim/local_player.h"
+#include "content/presentation_runtime.h"
+#include "view/camera.h"
 #include "audio/audio.h"
 #include "audio/audio_events.h"
 
@@ -17,8 +17,8 @@
 #include "modal_notification.h"
 #include "quest_journal.h"
 #include "toolbar.h"
-#include "game_state.h"
-#include "object_layers_management.h"
+#include "sim/game_state.h"
+#include "world/object_layers_management.h"
 
 #include <string.h>
 

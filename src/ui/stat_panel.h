@@ -1,6 +1,6 @@
 #ifndef UI_STAT_PANEL_H
 #define UI_STAT_PANEL_H
-#include "domain/stat_contract_generated.h"
+#include "content/stat_contract_generated.h"
 
 /* Stat display shared by the inventory modal and the interact modal. Every
  * block reads one canonical-order value array and returns the height it drew. */

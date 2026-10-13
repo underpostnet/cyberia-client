@@ -1,7 +1,7 @@
 #ifndef INVENTORY_BAR_H
 #define INVENTORY_BAR_H
 
-#include "object_layers_management.h"
+#include "world/object_layers_management.h"
 
 #include <raylib.h>
 #include <stdbool.h>

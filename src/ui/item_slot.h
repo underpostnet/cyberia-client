@@ -10,8 +10,8 @@
 #ifndef ITEM_SLOT_H
 #define ITEM_SLOT_H
 
-#include "object_layer.h"
-#include "object_layers_management.h"
+#include "world/object_layer.h"
+#include "world/object_layers_management.h"
 
 #include <raylib.h>
 #include <stdbool.h>

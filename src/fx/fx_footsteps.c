@@ -6,13 +6,13 @@
 
 #include "fx_dust.h"
 
-#include "domain/camera.h"
-#include "domain/local_player.h"
-#include "domain/local_player_view.h"
-#include "domain/presentation_runtime.h"
-#include "game_state.h"
-#include "object_layer.h"
-#include "world_types.h"
+#include "view/camera.h"
+#include "sim/local_player.h"
+#include "view/local_player_view.h"
+#include "content/presentation_runtime.h"
+#include "sim/game_state.h"
+#include "world/object_layer.h"
+#include "world/world_types.h"
 
 #include <math.h>
 #include <stdbool.h>

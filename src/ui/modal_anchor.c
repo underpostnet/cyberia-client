@@ -1,13 +1,13 @@
 #include "modal_anchor.h"
 #include "ease.h"
 
-#include "domain/viewport.h"
-#include "game_render.h"
-#include "game_state.h"
-#include "domain/local_player.h"
+#include "view/viewport.h"
+#include "view/game_render.h"
+#include "sim/game_state.h"
+#include "sim/local_player.h"
 #include "inventory_bar.h"
 #include "toolbar.h"
-#include "world_types.h"
+#include "world/world_types.h"
 
 #include <math.h>
 

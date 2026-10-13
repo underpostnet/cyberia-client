@@ -1,10 +1,10 @@
 #include "ui/skill_preview.h"
 #include "ui/ui_state.h"
 
-#include "domain/local_player.h"
-#include "network/game/client_event.h"
-#include "object_layer.h"
-#include "util/utils.h"
+#include "sim/local_player.h"
+#include "net/client_event.h"
+#include "world/object_layer.h"
+#include "utils.h"
 
 #include <assert.h>
 #include <raylib.h>

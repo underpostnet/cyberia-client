@@ -1,9 +1,9 @@
 #ifndef NAMEPLATE_H
 #define NAMEPLATE_H
 
-#include "object_layer.h"
-#include "object_layers_management.h"
-#include "world_types.h"
+#include "world/object_layer.h"
+#include "world/object_layers_management.h"
+#include "world/world_types.h"
 
 #include <stdbool.h>
 

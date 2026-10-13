@@ -36,15 +36,16 @@ endif
 src_files = \
 	$(wildcard $(SRC_DIR)/*.c) \
 	$(wildcard $(SRC_DIR)/js/*.c) \
-	$(wildcard $(SRC_DIR)/network/*.c) \
-	$(wildcard $(SRC_DIR)/network/data/*.c) \
-	$(wildcard $(SRC_DIR)/network/game/*.c) \
+	$(wildcard $(SRC_DIR)/net/*.c) \
+	$(wildcard $(SRC_DIR)/sim/*.c) \
+	$(wildcard $(SRC_DIR)/world/*.c) \
+	$(wildcard $(SRC_DIR)/content/*.c) \
+	$(wildcard $(SRC_DIR)/data/*.c) \
+	$(wildcard $(SRC_DIR)/view/*.c) \
 	$(wildcard $(SRC_DIR)/ui/*.c) \
 	$(wildcard $(SRC_DIR)/input/*.c) \
 	$(wildcard $(SRC_DIR)/audio/*.c) \
-	$(wildcard $(SRC_DIR)/domain/*.c) \
-	$(wildcard $(SRC_DIR)/fx/*.c) \
-	$(wildcard $(SRC_DIR)/util/*.c)
+	$(wildcard $(SRC_DIR)/fx/*.c)
 
 #------------------------------------------------
 # Raylib Dependendy

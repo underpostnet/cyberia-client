@@ -1,7 +1,7 @@
 #include "fx/fx_obstacle_burst.h"
 #include "fx/fx_shapes.h"
-#include "game_state.h"
-#include "world_types.h"
+#include "sim/game_state.h"
+#include "world/world_types.h"
 
 #include <assert.h>
 #include <raylib.h>

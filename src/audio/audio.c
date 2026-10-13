@@ -1,7 +1,7 @@
 #include "audio.h"
 #include "audio_internal.h"
-#include "util/utils.h"
-#include "network/data/engine_client.h"
+#include "utils.h"
+#include "data/engine_client.h"
 
 #include <raylib.h>
 #include <math.h>

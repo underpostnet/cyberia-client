@@ -1,7 +1,7 @@
 #include "modal_instance_map.h"
 #include "ease.h"
 
-#include "instance_map_data.h"
+#include "data/instance_map_data.h"
 #include "modal.h"
 #include "modal_map.h"
 #include "text.h"
@@ -9,13 +9,13 @@
 #include "ui_icon.h"
 #include "ui_rect.h"
 
-#include "domain/local_player.h"
-#include "domain/presentation_runtime.h"
-#include "game_state.h"
+#include "sim/local_player.h"
+#include "content/presentation_runtime.h"
+#include "sim/game_state.h"
 #include "input/input.h"
-#include "network/data/engine_client.h"
-#include "util/utils.h"
-#include "world_types.h"
+#include "data/engine_client.h"
+#include "utils.h"
+#include "world/world_types.h"
 
 #include <assert.h>
 #include <limits.h>

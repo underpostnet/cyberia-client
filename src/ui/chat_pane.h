@@ -4,7 +4,7 @@
 #include <raylib.h>
 #include <stdbool.h>
 
-#include "world_types.h"
+#include "world/world_types.h"
 
 /* One-to-one chat inside a modal's content rect: the history from notify_store,
  * a DOM text input (js/text_input_bridge.h), a Send button and quick-chat

@@ -1,5 +1,5 @@
-#include "domain/overhead_occlusion.h"
-#include "game_state.h"
+#include "view/overhead_occlusion.h"
+#include "sim/game_state.h"
 
 #include <assert.h>
 #include <math.h>

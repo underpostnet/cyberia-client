@@ -2,7 +2,7 @@
  * from the first path segment, so every non-root path must dial its own
  * server mount instead of the default one. */
 
-#include "instance_route.h"
+#include "world/instance_route.h"
 
 #include <assert.h>
 #include <stdbool.h>

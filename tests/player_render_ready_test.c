@@ -1,4 +1,4 @@
-#include "entity_render.c"
+#include "view/entity_render.c"
 
 #include <assert.h>
 #include <stdio.h>

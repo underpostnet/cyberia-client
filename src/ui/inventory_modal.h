@@ -1,9 +1,9 @@
 #ifndef INVENTORY_MODAL_H
 #define INVENTORY_MODAL_H
 
-#include "object_layer.h"
-#include "object_layers_management.h"
-#include "world_types.h"
+#include "world/object_layer.h"
+#include "world/object_layers_management.h"
+#include "world/world_types.h"
 
 #include <raylib.h>
 #include <stdbool.h>

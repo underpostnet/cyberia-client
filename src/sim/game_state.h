@@ -1,0 +1,279 @@
+#ifndef GAME_STATE_H
+#define GAME_STATE_H
+
+#include <assert.h>
+#include <raylib.h>
+#include <stdbool.h>
+#include <stdint.h>
+#include <stddef.h>
+#include <string.h>
+
+#include "world/object_layer.h"
+#include "world/world_types.h"
+
+/* The client mirror of the simulation. Carries gameplay fields only:
+ * entities with their positions and life, the world configuration the server
+ * pushed at boot, and the economy and inventory state the simulation owns.
+ *
+ * Render data, per-frame UI bookkeeping, status indicators, and the camera
+ * live in their own modules:
+ *
+ *   - view/camera.h                Camera2D and follow smoothing
+ *   - content/presentation_runtime.h  palette, status icon visuals, dev_ui
+ *   - sim/local_player.h          identity, map code, coins, inventory,
+ *                                    stasis flag, FCT queue, self status
+ *                                    icon, authoritative move speed
+ *   - ui/ui_state.h                  skill_map
+ */
+
+#define MAX_ENTITIES 1000
+#define MAX_OBJECTS 5000
+/* Slots in the entity table. One slot per entity in the area of interest. */
+#define ENTITY_CAP 8192
+#define MAX_ENTITY_TYPES     16
+#define MAX_DEFAULT_ITEM_IDS  8
+#define MAX_ACTIVE_ITEM_TYPES 8
+#define MAX_DEAD_ITEM_IDS    16
+
+/* Object-layer pool. Every appearance holds an offset and a count into it
+ * instead of an embedded [MAX_OBJECT_LAYERS] array, of which the server fills
+ * one to four slots. Sized for the worst realistic AOI, not for the array
+ * caps: the server ships only active layers. */
+#define LAYER_POOL_SIZE 4096
+
+extern ObjectLayerState g_layer_pool[LAYER_POOL_SIZE];
+
+/* The layers of an Appearance. */
+#define OBJ_LAYERS(ap) (&g_layer_pool[(ap)->layer_offset])
+
+typedef struct GameState GameState;
+
+typedef struct {
+    char active_item_types[MAX_ACTIVE_ITEM_TYPES][32];
+    int  active_item_type_count;
+    bool one_per_type;
+    bool require_skin;
+} EquipmentRules;
+
+typedef struct {
+    char entity_type[32];
+    char live_item_ids[MAX_DEFAULT_ITEM_IDS][128];
+    int  live_item_id_count;
+    char dead_item_ids[MAX_DEFAULT_ITEM_IDS][128];
+    int  dead_item_id_count;
+} EntityTypeDefault;
+
+struct GameState {
+    /* Instance the simulation server loaded (forwarded in the metadata
+     * message) — keys the Instance Map REST fetches against engine-cyberia. */
+    char instance_code[MAX_ID_LENGTH];
+
+    int grid_w;
+    int grid_h;
+    float aoi_radius;
+
+    EntityTypeDefault entity_defaults[MAX_ENTITY_TYPES];
+    int entity_defaults_count;
+
+    /* Entity ids by kind, in wire order. The own player is g_local_player.id
+     * and is not in other_players. */
+    EntityID other_players[MAX_ENTITIES];
+    int other_player_count;
+
+    EntityID bots[MAX_ENTITIES];
+    int bot_count;
+
+    /* Scenery ids in wire order. The server sends floors sorted, and the floor
+     * pass draws them in this order. */
+    EntityID scenery[MAX_OBJECTS];
+    int scenery_count;
+
+    EntityID resources[MAX_ENTITIES];
+    int resource_count;
+
+    EntityID portals[MAX_OBJECTS];   /* portal ids in wire order */
+    int portal_count;
+
+    EquipmentRules equipment_rules;
+
+    /* Dead-state (Fragmentation) item ids from init_data. Visible in the
+     * inventory but never equippable; the default id is server-filtered. */
+    char dead_item_ids[MAX_DEAD_ITEM_IDS][128];
+    int  dead_item_id_count;
+
+    bool init_received;
+    double last_update_time;       /* wall-clock arrival of the latest snapshot */
+
+    /* The entity table. ids[i] is the entity at slot i, 0 = free slot. mask[i]
+     * is the only answer to "does slot i have component X". */
+    EntityID        ids[ENTITY_CAP];
+    uint64_t        mask[ENTITY_CAP];
+    EntityData      data[ENTITY_CAP];
+    EntityTransform transform[ENTITY_CAP];
+    Appearance      appearance[ENTITY_CAP];
+    Vitals          vitals[ENTITY_CAP];
+    Progress        progress[ENTITY_CAP];
+    Motion          motion[ENTITY_CAP];
+    Agent           agent[ENTITY_CAP];
+    Portal          portal[ENTITY_CAP];
+    Player          player[ENTITY_CAP];
+    RenderState     render[ENTITY_CAP];   /* client only */
+};
+
+/* Component bits of mask[], in the §4 order. */
+#define COMP_DATA       ((uint64_t)1 << 0)
+#define COMP_TRANSFORM  ((uint64_t)1 << 1)
+#define COMP_APPEARANCE ((uint64_t)1 << 2)
+#define COMP_VITALS     ((uint64_t)1 << 3)
+#define COMP_PROGRESS   ((uint64_t)1 << 4)
+#define COMP_MOTION     ((uint64_t)1 << 5)
+#define COMP_AGENT      ((uint64_t)1 << 6)
+#define COMP_PORTAL     ((uint64_t)1 << 7)
+#define COMP_PLAYER     ((uint64_t)1 << 8)   /* a client controls the entity */
+
+extern GameState g_game_state;
+
+/* Clear the world mirror to its post-disconnect defaults: the init flag, the
+ * player id, and every entity and object count. The one entry point to reset
+ * world state — code outside game_state.c must not touch the count fields. */
+void         game_state_reset(void);
+
+/* Drop every pooled layer. The whole pool dies with the entity counts, so the
+ * decoder calls this where it resets them. */
+void         game_state_layer_pool_reset(void);
+
+/* Claim `count` pool slots and return the offset, or -1 when the pool is full.
+ * The decoder is a bump allocator — there is no free. */
+int          game_state_layer_alloc(int count);
+
+/* The slot of `id`, given one if it has none. -1 when the table is full. Only
+ * the snapshot decoder calls it. No code may keep a slot across a tick. */
+int          game_state_spawn(EntityID id);
+
+/* Free the slot of `id`. Its component values stay, but the clear mask makes
+ * them unreadable. */
+void         game_state_despawn(EntityID id);
+
+/* The slot of `id`, or -1. */
+int          game_state_slot(EntityID id);
+
+/* The transform and the render state of `id`. The id must have a transform. */
+static inline EntityData* game_state_data(EntityID id) {
+    int slot = game_state_slot(id);
+    assert(0 <= slot && 0 != (g_game_state.mask[slot] & COMP_DATA));
+    return &g_game_state.data[slot];
+}
+
+static inline EntityTransform* game_state_transform(EntityID id) {
+    int slot = game_state_slot(id);
+    assert(0 <= slot && 0 != (g_game_state.mask[slot] & COMP_TRANSFORM));
+    return &g_game_state.transform[slot];
+}
+
+static inline Appearance* game_state_appearance(EntityID id) {
+    int slot = game_state_slot(id);
+    assert(0 <= slot && 0 != (g_game_state.mask[slot] & COMP_APPEARANCE));
+    return &g_game_state.appearance[slot];
+}
+
+static inline Vitals* game_state_vitals(EntityID id) {
+    int slot = game_state_slot(id);
+    assert(0 <= slot && 0 != (g_game_state.mask[slot] & COMP_VITALS));
+    return &g_game_state.vitals[slot];
+}
+
+static inline Progress* game_state_progress(EntityID id) {
+    int slot = game_state_slot(id);
+    assert(0 <= slot && 0 != (g_game_state.mask[slot] & COMP_PROGRESS));
+    return &g_game_state.progress[slot];
+}
+
+static inline Motion* game_state_motion(EntityID id) {
+    int slot = game_state_slot(id);
+    assert(0 <= slot && 0 != (g_game_state.mask[slot] & COMP_MOTION));
+    return &g_game_state.motion[slot];
+}
+
+static inline Agent* game_state_agent(EntityID id) {
+    int slot = game_state_slot(id);
+    assert(0 <= slot && 0 != (g_game_state.mask[slot] & COMP_AGENT));
+    return &g_game_state.agent[slot];
+}
+
+static inline Portal* game_state_portal(EntityID id) {
+    int slot = game_state_slot(id);
+    assert(0 <= slot && 0 != (g_game_state.mask[slot] & COMP_PORTAL));
+    return &g_game_state.portal[slot];
+}
+
+static inline Player* game_state_player(EntityID id) {
+    int slot = game_state_slot(id);
+    assert(0 <= slot && 0 != (g_game_state.mask[slot] & COMP_PLAYER));
+    return &g_game_state.player[slot];
+}
+
+/* True when `id` has a slot and every component in `comps`. */
+static inline bool game_state_has(EntityID id, uint64_t comps) {
+    int slot = game_state_slot(id);
+    return 0 <= slot && comps == (g_game_state.mask[slot] & comps);
+}
+
+/* True when a client controls `id`. */
+static inline bool game_state_is_player(EntityID id) { return game_state_has(id, COMP_PLAYER); }
+
+static inline RenderState* game_state_render(EntityID id) {
+    int slot = game_state_slot(id);
+    assert(0 <= slot && 0 != (g_game_state.mask[slot] & COMP_TRANSFORM));
+    return &g_game_state.render[slot];
+}
+
+/* The own player's transform, render state and player row. Before the first
+ * snapshot the own player has no slot, and all three read as zero. */
+const EntityTransform* game_state_own_transform(void);
+const RenderState*     game_state_own_render(void);
+const Player*          game_state_own_player(void);
+
+static inline const EntityTypeDefault* game_state_get_entity_default(const char* entity_type) {
+    for (int i = 0; i < g_game_state.entity_defaults_count; i++) {
+        if (strcmp(g_game_state.entity_defaults[i].entity_type, entity_type) == 0)
+            return &g_game_state.entity_defaults[i];
+    }
+    return NULL;
+}
+
+/* True when item_id is a dead-state (Fragmentation) visual — an incomplete
+ * manifestation the player can hold but never equip. */
+static inline bool game_state_is_dead_item(const char* item_id) {
+    if (NULL == item_id || '\0' == item_id[0]) return false;
+    for (int i = 0; i < g_game_state.dead_item_id_count; i++) {
+        if (0 == strcmp(g_game_state.dead_item_ids[i], item_id)) return true;
+    }
+    return false;
+}
+
+/* True for a bot that is a creature in the world rather than a thing travelling through it:
+ * skill projectiles, coins and drops carry no feet. These are the bots that walk, raise dust and
+ * cast the ground shadow, so the rule is stated once and read by everything that needs it. */
+static inline bool game_state_bot_has_feet(EntityID bot) {
+    const Agent* agent = game_state_agent(bot);
+    if (0 != agent->caster_id) return false;
+    return 0 != strcmp(agent->behavior, "skill") &&
+           0 != strcmp(agent->behavior, "coin") &&
+           0 != strcmp(agent->behavior, "drop");
+}
+
+/* Ordinary obstacles have zero maximum life and cannot deplete. */
+static inline bool game_state_obstacle_depleted(const Vitals* v) {
+    return 0 < v->max_life && 0 >= v->life;
+}
+
+static inline bool game_state_is_active_item_type(const char* item_type) {
+    if (!item_type || item_type[0] == '\0') return false;
+    for (int i = 0; i < g_game_state.equipment_rules.active_item_type_count; i++) {
+        if (strcmp(g_game_state.equipment_rules.active_item_types[i], item_type) == 0)
+            return true;
+    }
+    return false;
+}
+
+#endif /* GAME_STATE_H */

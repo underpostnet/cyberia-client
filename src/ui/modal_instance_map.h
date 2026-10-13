@@ -14,7 +14,7 @@
  *
  * Fully independent from the gameplay renderer and camera: it owns its own
  * camera (drag pan, wheel/pinch zoom, smooth interpolation), its own data
- * layer (ui/instance_map_data — engine-cyberia REST, never the AOI stream),
+ * layer (data/instance_map_data — engine-cyberia REST, never the AOI stream),
  * and its own selection state.
  *
  * The compact coordinate readout opens this expanded inspection surface. Its

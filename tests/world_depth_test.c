@@ -1,5 +1,5 @@
-#include "game_render.c"
-#include "game_state.h"
+#include "view/game_render.c"
+#include "sim/game_state.h"
 
 #include <assert.h>
 #include <stdio.h>
