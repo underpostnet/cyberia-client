@@ -42,9 +42,10 @@ ObjectLayer* lookup_cached_layer(const char* id) { return documents[id[0] - '0']
 int game_state_slot(EntityID id) { return 0 < id ? (int)id - 1 : -1; }
 Direction local_player_view_direction(void) { return DIRECTION_DOWN; }
 ObjectLayerMode local_player_view_mode(void) { return MODE_IDLE; }
+LocalPlayer g_local_player;
 
 int main(void) {
-    g_game_state.player.base.id = 1;
+    g_local_player.id = 1;
     g_game_state.mask[0] = COMP_TRANSFORM | COMP_APPEARANCE;
     g_game_state.appearance[0] = (Appearance){.layer_count = 2};
     for (int i = 0; 4 > i; i++) {

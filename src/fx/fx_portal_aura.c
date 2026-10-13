@@ -13,6 +13,7 @@
 
 #include <math.h>
 #include <raylib.h>
+#include <stdint.h>
 
 #define FX_PORTAL_AURA_TAU    6.28318530718f
 #define FX_PORTAL_AURA_RING   10
@@ -32,10 +33,10 @@ void fx_portal_aura_update(float dt) {
     s_clock += dt;
 }
 
-static void draw_entity(const EntityState* e, float cell) {
-    float charge = fminf(fmaxf(e->portal_hold, 0.0f), 1.0f);
-    Vector2 pos = game_state_render(e->id)->interp_pos;
-    Vector2 size = game_state_transform(e->id)->size;
+static void draw_entity(int slot, float cell) {
+    Vector2 pos = g_game_state.render[slot].interp_pos;
+    Vector2 size = g_game_state.transform[slot].size;
+    float charge = fminf(fmaxf(g_game_state.player[slot].portal_hold, 0.0f), 1.0f);
     float width = size.x * cell;
     float height = size.y * cell;
     float feet = (pos.y + size.y) * cell;
@@ -66,9 +67,8 @@ static void draw_entity(const EntityState* e, float cell) {
 
 void fx_portal_aura_draw(void) {
     float cell = world_cell_size();
-    if (g_game_state.player.base.on_portal) draw_entity(&g_game_state.player.base, cell);
-    for (int i = 0; g_game_state.other_player_count > i; i++) {
-        const EntityState* e = &g_game_state.other_players[i].base;
-        if (e->on_portal) draw_entity(e, cell);
+    const uint64_t need = COMP_PLAYER | COMP_TRANSFORM;
+    for (int s = 0; ENTITY_CAP > s; s++) {
+        if (need == (g_game_state.mask[s] & need) && g_game_state.player[s].on_portal) draw_entity(s, cell);
     }
 }

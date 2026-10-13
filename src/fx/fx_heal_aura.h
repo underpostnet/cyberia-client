@@ -14,9 +14,9 @@
 
 #include <stdbool.h>
 
-/* Spawns one aura on `entity` when `behavior` is the loot behavior that heals.
+/* Spawns one aura on entity `id` when `behavior` is the loot behavior that heals.
  * Any other behavior, or no entity in view, spawns nothing. */
-bool fx_heal_aura_observe(const char* behavior, const EntityState* entity);
+bool fx_heal_aura_observe(const char* behavior, EntityID id);
 void fx_heal_aura_update(float dt);
 void fx_heal_aura_draw(void);
 void fx_heal_aura_reset(void);

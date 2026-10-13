@@ -14,11 +14,11 @@ static float lowest_spark_y;
 static float highest_spark_y;
 static float leftmost_spark_x;
 static float rightmost_spark_x;
-static EntityState entity;
+static EntityID entity;
 
 float world_cell_size(void) { return 32.0f; }
 GameState g_game_state;
-int game_state_slot(EntityID id) { return id == entity.id ? 0 : -1; }
+int game_state_slot(EntityID id) { return id == entity ? 0 : -1; }
 void text_draw_compat(const char* text, int x, int y, int size, Color color) {
     assert(0 == strcmp("LEVEL UP", text));
     if (255 == color.r) labels++;
@@ -47,21 +47,21 @@ static void reset_probe(void) {
 }
 
 int main(void) {
-    entity.id = 1;
+    entity = 1;
     g_game_state.render[0].interp_pos = (Vector2){ 2.0f, 3.0f };
     g_game_state.transform[0].size = (Vector2){ 1.0f, 1.0f };
     g_game_state.mask[0] = COMP_TRANSFORM;
 
     fx_level_up_reset();
-    assert(false == fx_level_up_observe(0, 10, &entity));
-    assert(false == fx_level_up_observe(10, 10, &entity));
-    assert(false == fx_level_up_observe(10, 9, &entity));
-    assert(false == fx_level_up_observe(2, 5, NULL));
+    assert(false == fx_level_up_observe(0, 10, entity));
+    assert(false == fx_level_up_observe(10, 10, entity));
+    assert(false == fx_level_up_observe(10, 9, entity));
+    assert(false == fx_level_up_observe(2, 5, 0));
     fx_level_up_draw();
     assert(0 == labels && 0 == sparks && 0 == stars);
 
     /* Sparks live between the feet (y = 4 cells) and above the head. */
-    assert(true == fx_level_up_observe(2, 5, &entity));
+    assert(true == fx_level_up_observe(2, 5, entity));
     reset_probe();
     fx_level_up_draw();
     assert(1 == labels && 0 < sparks);
@@ -87,7 +87,7 @@ int main(void) {
     assert(0 == sparks && false == fx_level_up_active(1));
 
     /* A second level-up on the same entity reuses its slot. */
-    assert(true == fx_level_up_observe(5, 6, &entity));
+    assert(true == fx_level_up_observe(5, 6, entity));
     fx_level_up_reset();
     reset_probe();
     fx_level_up_draw();

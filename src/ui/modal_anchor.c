@@ -4,6 +4,7 @@
 #include "domain/viewport.h"
 #include "game_render.h"
 #include "game_state.h"
+#include "domain/local_player.h"
 #include "inventory_bar.h"
 #include "toolbar.h"
 #include "world_types.h"
@@ -32,15 +33,14 @@ Rectangle modal_anchor_safe_area(float pad, float min_h) {
  * projection — the capture then falls back to a centred placement. */
 static bool entity_point(EntityID entity_id, Vector2* out_point) {
     if (NULL == out_point) return false;
-    const EntityState* entity = game_state_find_entity(entity_id);
-    if (NULL == entity) return false;
+    const bool own = 0 == entity_id || g_local_player.id == entity_id;
+    if (!own && !game_state_has(entity_id, COMP_TRANSFORM)) return false;
 
     /* Grid-space top-centre of the bounding box; game_render_world_to_screen
      * applies cell_size and the gameplay Camera2D, the same projection the
      * overhead nameplates and world FX use. */
-    const bool own = &g_game_state.player.base == entity;
-    const Vector2 at   = own ? game_state_own_render()->interp_pos : game_state_render(entity->id)->interp_pos;
-    const Vector2 size = own ? game_state_own_transform()->size : game_state_transform(entity->id)->size;
+    const Vector2 at   = own ? game_state_own_render()->interp_pos : game_state_render(entity_id)->interp_pos;
+    const Vector2 size = own ? game_state_own_transform()->size : game_state_transform(entity_id)->size;
     Vector2 top_center = { at.x + size.x * 0.5f, at.y };
     Vector2 screen = game_render_world_to_screen(top_center);
     if (!isfinite(screen.x) || !isfinite(screen.y)) return false;

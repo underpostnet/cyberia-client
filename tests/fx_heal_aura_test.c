@@ -13,11 +13,11 @@ static float leftmost_x;
 static float rightmost_x;
 static float lowest_y;
 static float highest_y;
-static EntityState entity;
+static const EntityID entity = 1;
 
 float world_cell_size(void) { return 32.0f; }
 GameState g_game_state;
-int game_state_slot(EntityID id) { return id == entity.id ? 0 : -1; }
+int game_state_slot(EntityID id) { return id == entity ? 0 : -1; }
 const Color FX_SPARK_GREEN = { 70, 220, 100, 255 };
 
 static void probe(float cx, float cy, Color body) {
@@ -50,22 +50,21 @@ static void draw(void) {
 }
 
 int main(void) {
-    entity.id = 1;
     g_game_state.render[0].interp_pos = (Vector2){ 2.0f, 3.0f };
     g_game_state.transform[0].size = (Vector2){ 1.0f, 1.0f };
     g_game_state.mask[0] = COMP_TRANSFORM;
     fx_heal_aura_reset();
 
     /* Only the loot behavior that heals starts an aura, and only on an entity in view. */
-    assert(false == fx_heal_aura_observe("", &entity));
-    assert(false == fx_heal_aura_observe("consume-on-pickup", &entity));
-    assert(false == fx_heal_aura_observe(NULL, &entity));
-    assert(false == fx_heal_aura_observe("consume-on-pickup-heal", NULL));
+    assert(false == fx_heal_aura_observe("", entity));
+    assert(false == fx_heal_aura_observe("consume-on-pickup", entity));
+    assert(false == fx_heal_aura_observe(NULL, entity));
+    assert(false == fx_heal_aura_observe("consume-on-pickup-heal", 2));
     draw();
     assert(0 == sparks && 0 == pluses);
 
     /* Green sparks circle the feet (y = 4 cells) and rise through the body. */
-    assert(true == fx_heal_aura_observe("consume-on-pickup-heal", &entity));
+    assert(true == fx_heal_aura_observe("consume-on-pickup-heal", entity));
     fx_heal_aura_update(0.4f);
     draw();
     assert(0 < sparks && green);
@@ -88,7 +87,7 @@ int main(void) {
     assert(0 == sparks && 0 == pluses);
 
     /* A reset clears a running aura. */
-    assert(true == fx_heal_aura_observe("consume-on-pickup-heal", &entity));
+    assert(true == fx_heal_aura_observe("consume-on-pickup-heal", entity));
     fx_heal_aura_reset();
     draw();
     assert(0 == sparks && 0 == pluses);

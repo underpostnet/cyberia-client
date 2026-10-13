@@ -601,7 +601,7 @@ static bool resolve_collector_center(EntityID collector_id, float* cx, float* cy
 
     bool player = 0 != collector_id && g_local_player.id == collector_id;
     for (int i = 0; !player && i < gs->other_player_count; i++)
-        player = collector_id == gs->other_players[i].base.id;
+        player = collector_id == gs->other_players[i];
     if (!player) return false;
     const Vector2 at   = game_state_render(collector_id)->interp_pos;
     const Vector2 size = game_state_transform(collector_id)->size;

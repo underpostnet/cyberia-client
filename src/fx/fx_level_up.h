@@ -3,7 +3,7 @@
 // walking player keeps its aura.
 //
 // Integration pattern:
-//   observe: fx_level_up_observe(previous, current, entity)  // snapshot decode
+//   observe: fx_level_up_observe(previous, current, id)  // snapshot decode
 //   update:  fx_level_up_update(delta_time);
 //   draw:    fx_level_up_draw();   // inside BeginMode2D, above the entities
 
@@ -14,9 +14,9 @@
 
 #include <stdbool.h>
 
-/* Spawns one effect on `entity` when `current` exceeds a known `previous`
+/* Spawns one effect on entity `id` when `current` exceeds a known `previous`
  * level. A first sight (previous 0), a repeat, or a lower level spawns nothing. */
-bool fx_level_up_observe(int previous, int current, const EntityState* entity);
+bool fx_level_up_observe(int previous, int current, EntityID id);
 void fx_level_up_update(float dt);
 void fx_level_up_draw(void);
 void fx_level_up_reset(void);

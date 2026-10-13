@@ -35,9 +35,6 @@
 #define MAX_ACTIVE_ITEM_TYPES 8
 #define MAX_DEAD_ITEM_IDS    16
 
-/* EntityState / PlayerState / BotState + their MAX_* sizing
- * macros live in world_types.h. */
-
 /* Object-layer pool. Every appearance holds an offset and a count into it
  * instead of an embedded [MAX_OBJECT_LAYERS] array, of which the server fills
  * one to four slots. Sized for the worst realistic AOI, not for the array
@@ -78,12 +75,12 @@ struct GameState {
     EntityTypeDefault entity_defaults[MAX_ENTITY_TYPES];
     int entity_defaults_count;
 
-    PlayerState player;
-
-    PlayerState other_players[MAX_ENTITIES];
+    /* Entity ids by kind, in wire order. The own player is g_local_player.id
+     * and is not in other_players. */
+    EntityID other_players[MAX_ENTITIES];
     int other_player_count;
 
-    BotState bots[MAX_ENTITIES];
+    EntityID bots[MAX_ENTITIES];
     int bot_count;
 
     /* Scenery ids in wire order. The server sends floors sorted, and the floor
@@ -91,7 +88,7 @@ struct GameState {
     EntityID scenery[MAX_OBJECTS];
     int scenery_count;
 
-    BotState resources[MAX_ENTITIES];
+    EntityID resources[MAX_ENTITIES];
     int resource_count;
 
     EntityID portals[MAX_OBJECTS];   /* portal ids in wire order */
@@ -119,6 +116,7 @@ struct GameState {
     Motion          motion[ENTITY_CAP];
     Agent           agent[ENTITY_CAP];
     Portal          portal[ENTITY_CAP];
+    Player          player[ENTITY_CAP];
     RenderState     render[ENTITY_CAP];   /* client only */
 };
 
@@ -131,7 +129,7 @@ struct GameState {
 #define COMP_MOTION     ((uint64_t)1 << 5)
 #define COMP_AGENT      ((uint64_t)1 << 6)
 #define COMP_PORTAL     ((uint64_t)1 << 7)
-#define COMP_PLAYER     ((uint64_t)1 << 8)   /* a client controls the entity; no array yet */
+#define COMP_PLAYER     ((uint64_t)1 << 8)   /* a client controls the entity */
 
 extern GameState g_game_state;
 
@@ -208,11 +206,20 @@ static inline Portal* game_state_portal(EntityID id) {
     return &g_game_state.portal[slot];
 }
 
-/* True when a client controls `id`. */
-static inline bool game_state_is_player(EntityID id) {
+static inline Player* game_state_player(EntityID id) {
     int slot = game_state_slot(id);
-    return 0 <= slot && 0 != (g_game_state.mask[slot] & COMP_PLAYER);
+    assert(0 <= slot && 0 != (g_game_state.mask[slot] & COMP_PLAYER));
+    return &g_game_state.player[slot];
 }
+
+/* True when `id` has a slot and every component in `comps`. */
+static inline bool game_state_has(EntityID id, uint64_t comps) {
+    int slot = game_state_slot(id);
+    return 0 <= slot && comps == (g_game_state.mask[slot] & comps);
+}
+
+/* True when a client controls `id`. */
+static inline bool game_state_is_player(EntityID id) { return game_state_has(id, COMP_PLAYER); }
 
 static inline RenderState* game_state_render(EntityID id) {
     int slot = game_state_slot(id);
@@ -220,17 +227,11 @@ static inline RenderState* game_state_render(EntityID id) {
     return &g_game_state.render[slot];
 }
 
-/* The own player's transform and render state. Before the first snapshot the
- * own player has no slot, and both read as zero. */
+/* The own player's transform, render state and player row. Before the first
+ * snapshot the own player has no slot, and all three read as zero. */
 const EntityTransform* game_state_own_transform(void);
 const RenderState*     game_state_own_render(void);
-
-PlayerState* game_state_find_player(EntityID id);
-BotState*    game_state_find_bot(EntityID id);
-
-/* Any entity a modal can target: the local player, other players, bots and
- * resources. 0 resolves to the local player. */
-const EntityState* game_state_find_entity(EntityID id);
+const Player*          game_state_own_player(void);
 
 static inline const EntityTypeDefault* game_state_get_entity_default(const char* entity_type) {
     for (int i = 0; i < g_game_state.entity_defaults_count; i++) {
@@ -253,9 +254,8 @@ static inline bool game_state_is_dead_item(const char* item_id) {
 /* True for a bot that is a creature in the world rather than a thing travelling through it:
  * skill projectiles, coins and drops carry no feet. These are the bots that walk, raise dust and
  * cast the ground shadow, so the rule is stated once and read by everything that needs it. */
-static inline bool game_state_bot_has_feet(const BotState* bot) {
-    if (!bot) return false;
-    const Agent* agent = game_state_agent(bot->base.id);
+static inline bool game_state_bot_has_feet(EntityID bot) {
+    const Agent* agent = game_state_agent(bot);
     if (0 != agent->caster_id) return false;
     return 0 != strcmp(agent->behavior, "skill") &&
            0 != strcmp(agent->behavior, "coin") &&

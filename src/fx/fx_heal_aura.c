@@ -59,18 +59,18 @@ static float exit_scale(float age) {
     return left < FX_HEAL_AURA_EXIT_S ? left / FX_HEAL_AURA_EXIT_S : 1.0f;
 }
 
-bool fx_heal_aura_observe(const char* behavior, const EntityState* entity) {
+bool fx_heal_aura_observe(const char* behavior, EntityID id) {
     if (NULL == behavior || 0 != strcmp(behavior, FX_HEAL_AURA_BEHAVIOR)) return false;
-    if (NULL == entity || 0 == entity->id) return false;
+    if (0 == id || !game_state_has(id, COMP_TRANSFORM)) return false;
     FxHealAuraEntry* slot = &s_entries[0];
     for (int i = 0; FX_HEAL_AURA_CAPACITY > i; i++) {
-        if (s_entries[i].entity_id == entity->id) { slot = &s_entries[i]; break; }
+        if (s_entries[i].entity_id == id) { slot = &s_entries[i]; break; }
         if (!s_entries[i].active) { slot = &s_entries[i]; break; }
         if (s_entries[i].age > slot->age) slot = &s_entries[i];
     }
-    *slot = (FxHealAuraEntry){ .entity_id = entity->id,
-                               .pos = game_state_render(entity->id)->interp_pos,
-                               .dims = game_state_transform(entity->id)->size, .active = true };
+    *slot = (FxHealAuraEntry){ .entity_id = id,
+                               .pos = game_state_render(id)->interp_pos,
+                               .dims = game_state_transform(id)->size, .active = true };
     return true;
 }
 

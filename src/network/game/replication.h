@@ -20,7 +20,7 @@ const self_motion_t* prediction_prev(void);
 const self_motion_t* prediction_self(void);
 
 /* Interpolation — render-time smoothing of remote entities (sole writer of
- * EntityState.interp_pos; never the local player). */
+ * RenderState.interp_pos; never the local player). */
 void interpolation_compute_view(void);
 
 /* Session — per-connection frame and sequence counters (sole writer). */

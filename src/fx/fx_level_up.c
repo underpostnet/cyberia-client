@@ -54,17 +54,17 @@ static float exit_scale(float age) {
     return left < FX_LEVEL_UP_EXIT_S ? left / FX_LEVEL_UP_EXIT_S : 1.0f;
 }
 
-bool fx_level_up_observe(int previous, int current, const EntityState* entity) {
-    if (0 >= previous || current <= previous || NULL == entity || 0 == entity->id) return false;
+bool fx_level_up_observe(int previous, int current, EntityID id) {
+    if (0 >= previous || current <= previous || 0 == id) return false;
     FxLevelUpEntry* slot = &s_entries[0];
     for (int i = 0; FX_LEVEL_UP_CAPACITY > i; i++) {
-        if (entity->id == s_entries[i].entity_id) { slot = &s_entries[i]; break; }
+        if (id == s_entries[i].entity_id) { slot = &s_entries[i]; break; }
         if (!s_entries[i].active) { slot = &s_entries[i]; break; }
         if (s_entries[i].age > slot->age) slot = &s_entries[i];
     }
-    *slot = (FxLevelUpEntry){ .entity_id = entity->id,
-                              .pos = game_state_render(entity->id)->interp_pos,
-                              .dims = game_state_transform(entity->id)->size, .active = true };
+    *slot = (FxLevelUpEntry){ .entity_id = id,
+                              .pos = game_state_render(id)->interp_pos,
+                              .dims = game_state_transform(id)->size, .active = true };
     return true;
 }
 

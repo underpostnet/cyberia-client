@@ -203,18 +203,18 @@ static void draw_live_presence(const ImapGraph* graph, int current_index,
     Rectangle rect = current_map_rect(graph, current_index, bounds);
 
     for (int i = 0; i < g_game_state.other_player_count; ++i) {
-        Vector2 at = drawn_map_position(node, rect, g_game_state.other_players[i].base.id);
+        Vector2 at = drawn_map_position(node, rect, g_game_state.other_players[i]);
         draw_square_marker(at, 7.0f, MINIMAP_OTHER_PLAYER);
     }
     for (int i = 0; i < g_game_state.bot_count; ++i) {
-        const BotState* bot = &g_game_state.bots[i];
-        Vector2 at = drawn_map_position(node, rect, bot->base.id);
+        EntityID bot = g_game_state.bots[i];
+        Vector2 at = drawn_map_position(node, rect, bot);
         draw_square_marker(at, 5.0f, instance_map_presence_color(
-            STATUS_ICON_HOSTILE == game_state_data(bot->base.id)->status_icon ? IMAP_PRESENCE_HOSTILE
+            STATUS_ICON_HOSTILE == game_state_data(bot)->status_icon ? IMAP_PRESENCE_HOSTILE
                                                          : IMAP_PRESENCE_PASSIVE));
     }
     for (int i = 0; i < g_game_state.resource_count; ++i) {
-        Vector2 at = drawn_map_position(node, rect, g_game_state.resources[i].base.id);
+        Vector2 at = drawn_map_position(node, rect, g_game_state.resources[i]);
         draw_square_marker(at, 5.0f,
                            instance_map_presence_color(IMAP_PRESENCE_RESOURCE));
     }

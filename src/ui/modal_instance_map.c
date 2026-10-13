@@ -776,7 +776,7 @@ static void draw_node_overlay(int idx, float fade, double t) {
         const char* self_ic = presentation_runtime_status_icon(self_status);
         if (zoomed) {
             draw_zoomed_capability_tab(mp, self_ic, 0, false, false, true,
-                                       game_state_progress(g_game_state.player.base.id)->stats_sum,
+                                       game_state_progress(g_local_player.id)->stats_sum,
                                        IMAP_PLAYER, IMAP_PLAYER, fade, t);
         } else {
             float shell = floorf(icon_size) + 6.0f;

@@ -2,7 +2,7 @@
 // over it. One shot at the moment of death; it follows the body while it runs.
 //
 // Integration pattern:
-//   observe: fx_death_observe(prior_alive, dead, entity)  // snapshot decode
+//   observe: fx_death_observe(prior_alive, dead, id)  // snapshot decode
 //   update:  fx_death_update(delta_time);
 //   draw:    fx_death_draw();   // inside BeginMode2D, above the entities
 
@@ -13,9 +13,9 @@
 
 #include <stdbool.h>
 
-/* Spawns one effect on `entity` when it was alive in the prior snapshot and
+/* Spawns one effect on entity `id` when it was alive in the prior snapshot and
  * is dead now. An entity first seen dead, or still dead, spawns nothing. */
-bool fx_death_observe(bool prior_alive, bool dead, const EntityState* entity);
+bool fx_death_observe(bool prior_alive, bool dead, EntityID id);
 void fx_death_update(float dt);
 void fx_death_draw(void);
 void fx_death_reset(void);

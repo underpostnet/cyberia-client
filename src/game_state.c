@@ -1,4 +1,5 @@
 #include "game_state.h"
+#include "domain/local_player.h"
 #include "util/log.h"
 
 #include <assert.h>
@@ -92,21 +93,27 @@ void game_state_despawn(EntityID id) {
 
 const EntityTransform* game_state_own_transform(void) {
     static const EntityTransform none = {0};
-    int slot = game_state_slot(g_game_state.player.base.id);
+    int slot = game_state_slot(g_local_player.id);
     return 0 <= slot ? &g_game_state.transform[slot] : &none;
 }
 
 const RenderState* game_state_own_render(void) {
     static const RenderState none = {0};
-    int slot = game_state_slot(g_game_state.player.base.id);
+    int slot = game_state_slot(g_local_player.id);
     return 0 <= slot ? &g_game_state.render[slot] : &none;
+}
+
+const Player* game_state_own_player(void) {
+    static const Player none = {0};
+    int slot = game_state_slot(g_local_player.id);
+    return 0 <= slot ? &g_game_state.player[slot] : &none;
 }
 
 void game_state_reset(void) {
     /* The own player keeps its slot, so it still draws until the next session
      * sends a new own id; that snapshot frees the old slot. */
     for (int i = 0; ENTITY_CAP > i; i++) {
-        if (0 != g_game_state.ids[i] && g_game_state.player.base.id != g_game_state.ids[i])
+        if (0 != g_game_state.ids[i] && g_local_player.id != g_game_state.ids[i])
             game_state_despawn(g_game_state.ids[i]);
     }
     g_game_state.init_received        = false;
@@ -120,31 +127,3 @@ void game_state_reset(void) {
     game_state_layer_pool_reset();
 }
 
-PlayerState* game_state_find_player(EntityID id) {
-    for (int i = 0; i < g_game_state.other_player_count; i++) {
-        if (id == g_game_state.other_players[i].base.id)
-            return &g_game_state.other_players[i];
-    }
-    return NULL;
-}
-
-BotState* game_state_find_bot(EntityID id) {
-    for (int i = 0; i < g_game_state.bot_count; i++) {
-        if (id == g_game_state.bots[i].base.id)
-            return &g_game_state.bots[i];
-    }
-    return NULL;
-}
-
-const EntityState* game_state_find_entity(EntityID id) {
-    if (0 == id || id == g_game_state.player.base.id)
-        return &g_game_state.player.base;
-    const BotState* bot = game_state_find_bot(id);
-    if (NULL != bot) return &bot->base;
-    const PlayerState* player = game_state_find_player(id);
-    if (NULL != player) return &player->base;
-    for (int i = 0; g_game_state.resource_count > i; i++) {
-        if (id == g_game_state.resources[i].base.id) return &g_game_state.resources[i].base;
-    }
-    return NULL;
-}

@@ -162,7 +162,7 @@ static void read_stats(const cJSON* owner, const char* key, int values[CYBERIA_S
 
 /* `death_cue` is false for what is extracted rather than slain: a resource
  * goes straight to its extracted state with no death cue. */
-static void read_entity_state(int slot, const cJSON* e, EntityState* base, FetchPriority priority, bool death_cue) {
+static void read_entity_state(int slot, const cJSON* e, EntityID id, FetchPriority priority, bool death_cue) {
     g_game_state.motion[slot] = (Motion){
         .direction = (Direction)serial_get_int_default(e, "direction", 0),
         .mode      = (ObjectLayerMode)serial_get_int_default(e, "mode", 0),
@@ -184,13 +184,11 @@ static void read_entity_state(int slot, const cJSON* e, EntityState* base, Fetch
     read_stats(e, "stats", pr->stats);
     gs->mask[slot] |= COMP_VITALS | COMP_PROGRESS;
     /* Snapshots own typed death cues. The server owns level-up audio. */
-    fx_level_up_observe(prior_level, pr->level, base);
+    fx_level_up_observe(prior_level, pr->level, id);
     if (death_cue &&
-        fx_death_observe(prior_alive, 0 < v->max_life && !entity_alive(v), base)) {
+        fx_death_observe(prior_alive, 0 < v->max_life && !entity_alive(v), id)) {
         audio_event(AUDIO_EVENT_DEATH);
     }
-    base->on_portal   = serial_get_bool_default(e, "onPortal", false);
-    base->portal_hold = serial_get_float_default(e, "portalHoldProgress", 0.0f);
 }
 
 /* Write the data of `slot`. The decoder knows the kind from its dispatch. */
@@ -202,7 +200,12 @@ static void write_data(int slot, const cJSON* e, EntityKind kind) {
         .status_icon = (uint8_t)serial_get_int_default(e, "statusIcon", 0),
     };
     g_game_state.mask[slot] |= COMP_DATA;
-    if (ENTITY_KIND_PLAYER == kind) g_game_state.mask[slot] |= COMP_PLAYER;
+    if (ENTITY_KIND_PLAYER != kind) return;
+    g_game_state.player[slot] = (Player){
+        .on_portal   = serial_get_bool_default(e, "onPortal", false),
+        .portal_hold = serial_get_float_default(e, "portalHoldProgress", 0.0f),
+    };
+    g_game_state.mask[slot] |= COMP_PLAYER;
 }
 
 /* TELEPORTING is a one-snapshot signal that the entity jumped (portal), so a
@@ -219,19 +222,18 @@ static void unpack_player(const cJSON* e) {
 
     int idx = -1;
     for (int i = 0; i < gs->other_player_count; i++) {
-        if (id == gs->other_players[i].base.id) { idx = i; break; }
+        if (id == gs->other_players[i]) { idx = i; break; }
     }
     if (idx < 0) {
         if (gs->other_player_count >= MAX_ENTITIES) { warn_overflow(OVF_PLAYERS); return; }
         idx = gs->other_player_count++;
-        memset(&gs->other_players[idx], 0, sizeof(PlayerState));
-        gs->other_players[idx].base.id = id;
+        gs->other_players[idx] = id;
     }
 
     write_data(slot, e, ENTITY_KIND_PLAYER);
     write_transform(slot, e, teleported(e));
     write_appearance(slot, e, FETCH_P2);
-    read_entity_state(slot, e, &gs->other_players[idx].base, FETCH_P2, true);
+    read_entity_state(slot, e, id, FETCH_P2, true);
 }
 
 static void unpack_bot(const cJSON* e) {
@@ -242,20 +244,18 @@ static void unpack_bot(const cJSON* e) {
 
     int idx = -1;
     for (int i = 0; i < gs->bot_count; i++) {
-        if (id == gs->bots[i].base.id) { idx = i; break; }
+        if (id == gs->bots[i]) { idx = i; break; }
     }
     if (idx < 0) {
         if (gs->bot_count >= MAX_ENTITIES) { warn_overflow(OVF_BOTS); return; }
         idx = gs->bot_count++;
-        memset(&gs->bots[idx], 0, sizeof(BotState));
-        gs->bots[idx].base.id = id;
+        gs->bots[idx] = id;
     }
 
-    BotState* b = &gs->bots[idx];
     write_data(slot, e, ENTITY_KIND_BOT);
     write_transform(slot, e, teleported(e));
     write_appearance(slot, e, FETCH_P2);
-    read_entity_state(slot, e, &b->base, FETCH_P2, true);
+    read_entity_state(slot, e, id, FETCH_P2, true);
 
     Agent* agent = &gs->agent[slot];
     serial_get_string(e, "behavior", agent->behavior, MAX_BEHAVIOR_LENGTH);
@@ -295,14 +295,12 @@ static void unpack_resource(const cJSON* e) {
     EntityID id = serial_get_u32_default(e, "id", 0);
     int slot = claim_slot(id);
     if (0 > slot) return;
-    BotState* res = &gs->resources[gs->resource_count++];
-    memset(res, 0, sizeof(BotState));
-    res->base.id = id;
+    gs->resources[gs->resource_count++] = id;
 
     write_data(slot, e, ENTITY_KIND_RESOURCE);
     write_transform(slot, e, true); /* static — no interpolation */
     write_appearance(slot, e, FETCH_P2);
-    read_entity_state(slot, e, &res->base, FETCH_P2, false);
+    read_entity_state(slot, e, id, FETCH_P2, false);
 }
 
 /* Scenery never acts: data, transform, appearance and vitals are the whole
@@ -344,17 +342,16 @@ static void unpack_portal(const cJSON* e) {
 
 static void unpack_self(const cJSON* e, cyberia_frame_t frame, cyberia_input_seq_t consumed) {
     GameState* gs = &g_game_state;
-    PlayerState* p = &gs->player;
 
-    p->base.id = serial_get_u32_default(e, "id", 0);
-    g_local_player.id = p->base.id;
-    int slot = claim_slot(p->base.id);
+    EntityID id = serial_get_u32_default(e, "id", 0);
+    g_local_player.id = id;
+    int slot = claim_slot(id);
     assert(0 <= slot);
 
     write_data(slot, e, ENTITY_KIND_PLAYER);
     write_transform(slot, e, false);
     write_appearance(slot, e, FETCH_P0);
-    read_entity_state(slot, e, &p->base, FETCH_P0, true);
+    read_entity_state(slot, e, id, FETCH_P0, true);
 
     g_local_player.xp = serial_get_double_default(e, "xp", 0.0);
     g_local_player.level_xp = serial_get_double_default(e, "levelXp", 0.0);
@@ -526,8 +523,7 @@ static void json_unpack_item_consume(const cJSON* payload) {
     EntityID entity_id = serial_get_u32_default(payload, "entityId", 0);
     char behavior[MAX_BEHAVIOR_LENGTH] = {0};
     serial_get_string(payload, "behavior", behavior, sizeof(behavior));
-    /* Id 0 would resolve to the local player. */
-    if (0 != entity_id) fx_heal_aura_observe(behavior, game_state_find_entity(entity_id));
+    fx_heal_aura_observe(behavior, entity_id);
 }
 
 static void json_unpack_drop_spawn(const cJSON* payload) {

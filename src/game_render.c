@@ -486,10 +486,6 @@ typedef struct {
     float depth_y;
     EntityID sort_id;
     int source_order;
-    union {
-        PlayerState* player;
-        BotState* bot;
-    } data;   /* unset for scenery */
     bool is_main_player;
 } EntitySortEntry;
 
@@ -526,18 +522,18 @@ void game_render_entities(void) {
         const float cell_size = world_cell_size();
 
         // Draw simple rectangles as fallback to ensure entities are visible
-        DrawRectangleRec(entity_screen_rect(g_game_state.player.base.id, cell_size),
+        DrawRectangleRec(entity_screen_rect(g_local_player.id, cell_size),
                          presentation_runtime_palette("PLAYER"));
 
         // Also draw other players as rectangles
         for (int i = 0; i < g_game_state.other_player_count; i++) {
-            DrawRectangleRec(entity_screen_rect(g_game_state.other_players[i].base.id, cell_size),
+            DrawRectangleRec(entity_screen_rect(g_game_state.other_players[i], cell_size),
                              presentation_runtime_palette("OTHER_PLAYER"));
         }
 
         // Draw bots as rectangles
         for (int i = 0; i < g_game_state.bot_count; i++) {
-            DrawRectangleRec(entity_screen_rect(g_game_state.bots[i].base.id, cell_size),
+            DrawRectangleRec(entity_screen_rect(g_game_state.bots[i], cell_size),
                              (Color){100, 200, 100, 200});
         }
         return;
@@ -570,54 +566,50 @@ void game_render_entities(void) {
 
     // Add main player to sort list. It has no slot between init_data and the
     // first snapshot, and the preload loop already draws then.
-    if (0 <= game_state_slot(g_game_state.player.base.id)) {
+    if (game_state_has(g_local_player.id, COMP_TRANSFORM)) {
         sort_entries[entry_count].type = ENTITY_TYPE_PLAYER;
-        sort_entries[entry_count].depth_y = drawn_bottom(g_game_state.player.base.id);
-        sort_entries[entry_count].sort_id = g_game_state.player.base.id;
+        sort_entries[entry_count].depth_y = drawn_bottom(g_local_player.id);
+        sort_entries[entry_count].sort_id = g_local_player.id;
         sort_entries[entry_count].source_order = entry_count;
-        sort_entries[entry_count].data.player = &g_game_state.player;
         sort_entries[entry_count].is_main_player = true;
         entry_count++;
     }
 
     // Add other players to sort list
     for (int i = 0; i < g_game_state.other_player_count; i++) {
-        PlayerState* player = &g_game_state.other_players[i];
-        float bottom_y = drawn_bottom(player->base.id);
+        EntityID player = g_game_state.other_players[i];
+        float bottom_y = drawn_bottom(player);
 
         sort_entries[entry_count].type = ENTITY_TYPE_OTHER_PLAYER;
         sort_entries[entry_count].depth_y = bottom_y;
-        sort_entries[entry_count].sort_id = player->base.id;
+        sort_entries[entry_count].sort_id = player;
         sort_entries[entry_count].source_order = entry_count;
-        sort_entries[entry_count].data.player = player;
         sort_entries[entry_count].is_main_player = false;
         entry_count++;
     }
 
     // Add bots to sort list
     for (int i = 0; i < g_game_state.bot_count; i++) {
-        BotState* bot = &g_game_state.bots[i];
-        float bottom_y = drawn_bottom(bot->base.id);
+        EntityID bot = g_game_state.bots[i];
+        float bottom_y = drawn_bottom(bot);
 
         sort_entries[entry_count].type = ENTITY_TYPE_BOT;
         sort_entries[entry_count].depth_y = bottom_y;
-        sort_entries[entry_count].sort_id = bot->base.id;
+        sort_entries[entry_count].sort_id = bot;
         sort_entries[entry_count].source_order = entry_count;
-        sort_entries[entry_count].data.bot = bot;
         sort_entries[entry_count].is_main_player = false;
         entry_count++;
     }
 
     // Add resources to sort list
     for (int i = 0; i < g_game_state.resource_count; i++) {
-        BotState* res = &g_game_state.resources[i];
-        float bottom_y = drawn_bottom(res->base.id);
+        EntityID res = g_game_state.resources[i];
+        float bottom_y = drawn_bottom(res);
 
         sort_entries[entry_count].type = ENTITY_TYPE_RESOURCE;
         sort_entries[entry_count].depth_y = bottom_y;
-        sort_entries[entry_count].sort_id = res->base.id;
+        sort_entries[entry_count].sort_id = res;
         sort_entries[entry_count].source_order = entry_count;
-        sort_entries[entry_count].data.bot = res;
         sort_entries[entry_count].is_main_player = false;
         entry_count++;
     }
@@ -635,7 +627,6 @@ void game_render_entities(void) {
 
         const char* entity_type_str = NULL;
         EntityID entity_id = 0;
-        EntityState* entity_base = NULL;
         bool scenery = false;
 
         switch (entry->type) {
@@ -652,38 +643,34 @@ void game_render_entities(void) {
                 break;
 
             case ENTITY_TYPE_PLAYER:
-                entity_base = &entry->data.player->base;
                 entity_type_str = entry->is_main_player ? "self" : "other";
-                entity_id = entity_base->id;
+                entity_id = entry->sort_id;
                 break;
 
             case ENTITY_TYPE_OTHER_PLAYER:
-                entity_base = &entry->data.player->base;
                 entity_type_str = "other";
-                entity_id = entity_base->id;
+                entity_id = entry->sort_id;
                 break;
 
             case ENTITY_TYPE_BOT:
-                entity_base = &entry->data.bot->base;
                 // Map bot behavior to the entity_type_str used for entity defaults lookup.
                 // Skills, coins and loot tokens are spawned as bots server-side; their
                 // behavior distinguishes them so the correct color / item defaults apply.
                 // A loot token travels with the behavior "drop".
-                if (strcmp(game_state_agent(entry->data.bot->base.id)->behavior, "skill") == 0)
+                if (strcmp(game_state_agent(entry->sort_id)->behavior, "skill") == 0)
                     entity_type_str = "skill";
-                else if (strcmp(game_state_agent(entry->data.bot->base.id)->behavior, "coin") == 0)
+                else if (strcmp(game_state_agent(entry->sort_id)->behavior, "coin") == 0)
                     entity_type_str = "coin";
-                else if (strcmp(game_state_agent(entry->data.bot->base.id)->behavior, "drop") == 0)
+                else if (strcmp(game_state_agent(entry->sort_id)->behavior, "drop") == 0)
                     entity_type_str = "loot";
                 else
                     entity_type_str = "bot";
-                entity_id = entity_base->id;
+                entity_id = entry->sort_id;
                 break;
 
             case ENTITY_TYPE_RESOURCE:
-                entity_base = &entry->data.bot->base;
                 entity_type_str = "resource";
-                entity_id = entity_base->id;
+                entity_id = entry->sort_id;
                 break;
         }
         const Appearance* ap = game_state_appearance(entity_id);
@@ -736,7 +723,7 @@ void game_render_entities(void) {
             continue;
         }
 
-        if (entity_base && entity_id) {
+        if (!scenery && entity_id) {
             // Compute the solid-colour fallback once — used both when layers_count==0
             // and passed into draw_entity_layers so it can use the same colour when
             // a texture fails to load instead of a generic gray rectangle.
@@ -857,13 +844,13 @@ void game_render_entities(void) {
                 if (!np_is_player) {
                     int alive_lc = 0;
                     const ObjectLayerState *alive = interaction_bubble_get_alive_layers(
-                        entity_base->id, &alive_lc);
+                        entity_id, &alive_lc);
                     if (alive && alive_lc > 0) {
                         np_layers = alive;
                         np_lc = alive_lc;
                     }
                 }
-                nameplate_resolve(entity_base->id, np_is_player,
+                nameplate_resolve(entity_id, np_is_player,
                                   np_layers, np_lc,
                                   np_buf, (int)sizeof(np_buf));
                 /* Action bots show the action's label (NPC name) once its
@@ -875,14 +862,14 @@ void game_render_entities(void) {
                  * capability icons still show. */
                 bool np_is_provider = false;
                 if (!np_is_player) {
-                    const BotState* np_bot = game_state_find_bot(entity_base->id);
-                    if (np_bot) {
-                        np_flags = local_player_interaction_flags(np_bot->base.id);
-                        np_is_provider = (0 == strcmp(game_state_agent(np_bot->base.id)->behavior, "provider"))
-                                         || (0 == strcmp(game_state_agent(np_bot->base.id)->behavior, "provider-static"));
-                        if (game_state_agent(np_bot->base.id)->action_code[0] != '\0') {
-                            action_cache_fetch(game_state_agent(np_bot->base.id)->action_code);
-                            const ActionMetadataEntry* am = action_cache_get(game_state_agent(np_bot->base.id)->action_code);
+                    const EntityID np_bot = entity_id;
+                    if (game_state_has(np_bot, COMP_AGENT)) {
+                        np_flags = local_player_interaction_flags(np_bot);
+                        np_is_provider = (0 == strcmp(game_state_agent(np_bot)->behavior, "provider"))
+                                         || (0 == strcmp(game_state_agent(np_bot)->behavior, "provider-static"));
+                        if (game_state_agent(np_bot)->action_code[0] != '\0') {
+                            action_cache_fetch(game_state_agent(np_bot)->action_code);
+                            const ActionMetadataEntry* am = action_cache_get(game_state_agent(np_bot)->action_code);
                             if (am && META_CACHE_READY == am->head.state && am->label[0] != '\0') {
                                 strncpy(np_buf, am->label, sizeof(np_buf) - 1);
                                 np_buf[sizeof(np_buf) - 1] = '\0';
@@ -892,7 +879,7 @@ void game_render_entities(void) {
                 }
                 /* A running level-up or death cue takes the whole overhead
                  * space: every row and the presence icon yield to it. */
-                bool cue = fx_level_up_active(entity_base->id) || fx_death_active(entity_base->id);
+                bool cue = fx_level_up_active(entity_id) || fx_death_active(entity_id);
                 const Vitals* v = game_state_vitals(entity_id);
                 EntityOverheadParams ohp = {
                     .name              = np_buf,
@@ -911,8 +898,8 @@ void game_render_entities(void) {
                                          && 0 >= v->respawn_in,
                     .status_icon       = cue ? 0 : game_state_data(entity_id)->status_icon,
                     .interaction_flags = np_flags,
-                    .on_portal         = !cue && entity_base->on_portal,
-                    .portal_hold       = entity_base->portal_hold,
+                    .on_portal         = !cue && np_is_player && game_state_player(entity_id)->on_portal,
+                    .portal_hold       = np_is_player ? game_state_player(entity_id)->portal_hold : 0.0f,
                     /* Respawn countdown is local-player-only: a remote client
                      * must never see another player's countdown. */
                     .respawn_seconds   = (!cue && entry->is_main_player) ? v->respawn_in : 0,
@@ -968,11 +955,11 @@ void game_render_player_path(void) {
 }
 
 void game_render_aoi_circle(void) {
-    if (0 > game_state_slot(g_game_state.player.base.id)) return;
+    if (!game_state_has(g_local_player.id, COMP_TRANSFORM)) return;
     float cell_size = world_cell_size();
     float aoi_radius = g_game_state.aoi_radius * cell_size;
 
-    const Rectangle box = entity_screen_rect(g_game_state.player.base.id, cell_size);
+    const Rectangle box = entity_screen_rect(g_local_player.id, cell_size);
     Vector2 center = { box.x + box.width / 2.0f, box.y + box.height / 2.0f };
 
     /* AOI ring is a debug overlay; fixed constant. */

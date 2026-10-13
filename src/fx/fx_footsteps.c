@@ -121,10 +121,10 @@ static bool step_is_visible(Vector2 world_px) {
 
 /* One burst at the entity's feet, set back along the reverse of travel so the
  * dust trails the character instead of sitting under the sprite. */
-static void emit_step(const EntityState* e, Vector2 heading, bool running) {
+static void emit_step(EntityID id, Vector2 heading, bool running) {
     float cs = cell_size();
-    const Vector2 pos  = game_state_render(e->id)->interp_pos;
-    const Vector2 size = game_state_transform(e->id)->size;
+    const Vector2 pos  = game_state_render(id)->interp_pos;
+    const Vector2 size = game_state_transform(id)->size;
     float feet_x = (pos.x + size.x * 0.5f) * cs;
     float feet_y = (pos.y + size.y) * cs;
     Vector2 at = { feet_x - heading.x * FX_STEP_BEHIND_CELLS * cs,
@@ -136,14 +136,14 @@ static void emit_step(const EntityState* e, Vector2 heading, bool running) {
 }
 
 /* Advance one entity's stride and emit whatever steps it crossed this frame. */
-static void track_entity(const EntityState* e, ObjectLayerMode mode, float dt) {
-    if (!e || 0 == e->id) return;
+static void track_entity(EntityID id, ObjectLayerMode mode, float dt) {
+    if (0 == id) return;
 
-    FxStepTracker* t = tracker_for(e->id);
+    FxStepTracker* t = tracker_for(id);
     if (!t) return;
     t->seen = true;
 
-    Vector2 pos = game_state_render(e->id)->interp_pos;
+    Vector2 pos = game_state_render(id)->interp_pos;
     Vector2 delta = { pos.x - t->last_pos.x, pos.y - t->last_pos.y };
     float moved = sqrtf(delta.x * delta.x + delta.y * delta.y);
     bool  fresh = !t->primed;
@@ -152,7 +152,7 @@ static void track_entity(const EntityState* e, ObjectLayerMode mode, float dt) {
 
     /* Dead entities, snapped ones, and the first frame of a tracker have no
      * gait to read — restart the stride from here. */
-    if (fresh || moved > FX_STEP_TELEPORT_CELLS || 0 < game_state_vitals(e->id)->respawn_in) {
+    if (fresh || moved > FX_STEP_TELEPORT_CELLS || 0 < game_state_vitals(id)->respawn_in) {
         t->stride_accum = 0.0f;
         return;
     }
@@ -173,7 +173,7 @@ static void track_entity(const EntityState* e, ObjectLayerMode mode, float dt) {
     /* One burst per frame: a frame long enough to cover several strides is a
      * hitch, and stacking its bursts on one spot only makes a blob. */
     t->stride_accum = fmodf(t->stride_accum, stride);
-    emit_step(e, heading, running);
+    emit_step(id, heading, running);
 }
 
 void fx_footsteps_update(float dt) {
@@ -183,15 +183,15 @@ void fx_footsteps_update(float dt) {
     for (int i = 0; i < FX_FOOTSTEPS_MAX_TRACKED; i++) s_trackers[i].seen = false;
 
     if (0 != g_local_player.id) {
-        track_entity(&g_game_state.player.base, local_player_view_mode(), dt);
+        track_entity(g_local_player.id, local_player_view_mode(), dt);
     }
     for (int i = 0; i < g_game_state.other_player_count; i++) {
-        track_entity(&g_game_state.other_players[i].base,
-                     game_state_motion(g_game_state.other_players[i].base.id)->mode, dt);
+        track_entity(g_game_state.other_players[i],
+                     game_state_motion(g_game_state.other_players[i])->mode, dt);
     }
     for (int i = 0; i < g_game_state.bot_count; i++) {
-        if (game_state_bot_has_feet(&g_game_state.bots[i])) {
-            track_entity(&g_game_state.bots[i].base, game_state_motion(g_game_state.bots[i].base.id)->mode, dt);
+        if (game_state_bot_has_feet(g_game_state.bots[i])) {
+            track_entity(g_game_state.bots[i], game_state_motion(g_game_state.bots[i])->mode, dt);
         }
     }
 

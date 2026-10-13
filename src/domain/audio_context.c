@@ -74,18 +74,18 @@ static float step_phase(EntityID id) {
  * gait on its own phase so it never lands in step with everyone else.
  *
  * `on_feet` is false for what travels without walking: skill projectiles, coins and drops. */
-static void scan_entity(EntityScan* scan, const EntityState* entity, bool on_feet, bool reset) {
-    const Vitals* v = game_state_vitals(entity->id);
+static void scan_entity(EntityScan* scan, EntityID id, bool on_feet, bool reset) {
+    const Vitals* v = game_state_vitals(id);
     if (0 >= v->max_life || TRACKED_LIVES_CAP <= scan->count) return;
     const float fraction = (float)v->life / (float)v->max_life;
     TrackedEntity* out = &scan->entries[scan->count];
-    out->id = entity->id;
+    out->id = id;
     out->fraction = fraction;
-    out->walking = on_feet && MODE_WALKING == game_state_motion(entity->id)->mode;
-    out->step_remaining = step_phase(entity->id);
+    out->walking = on_feet && MODE_WALKING == game_state_motion(id)->mode;
+    out->step_remaining = step_phase(id);
     if (!reset) {
         for (int i = 0; s_tracked_count > i; i++) {
-            if (entity->id != s_tracked[i].id) continue;
+            if (id != s_tracked[i].id) continue;
             if (crossed_milestone(s_tracked[i].fraction, fraction)) scan->healed = true;
             // A walk already under way keeps its timer; one just beginning steps immediately.
             if (s_tracked[i].walking && out->walking) out->step_remaining = s_tracked[i].step_remaining;
@@ -102,13 +102,13 @@ static void scan_entity(EntityScan* scan, const EntityState* entity, bool on_fee
  * are several sets of feet. */
 static void entity_snapshot(bool map_changed) {
     EntityScan scan = { .count = 0, .healed = false };
-    scan_entity(&scan, &g_game_state.player.base, true, map_changed);
+    scan_entity(&scan, g_local_player.id, true, map_changed);
     for (int i = 0; g_game_state.other_player_count > i; i++) {
-        scan_entity(&scan, &g_game_state.other_players[i].base, true, map_changed);
+        scan_entity(&scan, g_game_state.other_players[i], true, map_changed);
     }
     for (int i = 0; g_game_state.bot_count > i; i++) {
-        const BotState* bot = &g_game_state.bots[i];
-        scan_entity(&scan, &bot->base, game_state_bot_has_feet(bot), map_changed);
+        EntityID bot = g_game_state.bots[i];
+        scan_entity(&scan, bot, game_state_bot_has_feet(bot), map_changed);
     }
     memcpy(s_tracked, scan.entries, (size_t)scan.count * sizeof(TrackedEntity));
     s_tracked_count = scan.count;
@@ -143,13 +143,14 @@ static void craft_snapshot(bool map_changed) {
  * departing map's bindings are still current, because audio_set_map would otherwise
  * ask the map just entered for a binding it has not loaded yet. */
 static void portal_snapshot(bool map_changed) {
-    if (g_game_state.player.base.on_portal) {
+    const Player* own = game_state_own_player();
+    if (own->on_portal) {
         if (!s_portal_hold) {
             s_portal_hold = true;
             fetch_event("portal_enter", s_map, 0, 0);
             audio_event(AUDIO_EVENT_PORTAL_COOLDOWN);
         }
-        s_portal_progress = g_game_state.player.base.portal_hold;
+        s_portal_progress = own->portal_hold;
         return;
     }
     if (!s_portal_hold) return;
@@ -157,7 +158,7 @@ static void portal_snapshot(bool map_changed) {
     /* The hold ends either way; only a teleport sounds. TELEPORTING is the direct
      * signal, but it survives a single snapshot, so a changed map or a charge that
      * reached full still counts the jump if that one snapshot was coalesced away. */
-    const bool teleported = map_changed || MODE_TELEPORTING == game_state_motion(g_game_state.player.base.id)->mode ||
+    const bool teleported = map_changed || MODE_TELEPORTING == game_state_motion(g_local_player.id)->mode ||
                             0.98f <= s_portal_progress;
     s_portal_progress = 0.0f;
     if (teleported) audio_event(AUDIO_EVENT_PORTAL);
@@ -179,7 +180,7 @@ void audio_context_reset(void) {
 
 void audio_context_snapshot(void) {
     if ('\0' == g_local_player.map_code[0]) return;
-    const Vitals* own = game_state_vitals(g_game_state.player.base.id);
+    const Vitals* own = game_state_vitals(g_local_player.id);
     bool changed = 0 != strcmp(s_map, g_local_player.map_code);
     portal_snapshot(changed);
     craft_snapshot(changed);
@@ -224,14 +225,14 @@ void audio_context_snapshot(void) {
     EntityID current[SEEN_SKILLS_CAP];
     int count = 0;
     for (int i = 0; g_game_state.bot_count > i && SEEN_SKILLS_CAP > count; i++) {
-        const BotState* bot = &g_game_state.bots[i];
-        if (0 != strcmp(game_state_agent(bot->base.id)->behavior, "skill") || g_game_state.player.base.id != game_state_agent(bot->base.id)->caster_id) continue;
+        EntityID bot = g_game_state.bots[i];
+        if (0 != strcmp(game_state_agent(bot)->behavior, "skill") || g_local_player.id != game_state_agent(bot)->caster_id) continue;
         bool seen = changed;
         for (int j = 0; s_skill_count > j; j++) {
-            if (bot->base.id == s_skills[j]) seen = true;
+            if (bot == s_skills[j]) seen = true;
         }
         if (!seen) audio_event(AUDIO_EVENT_PROJECTILE);
-        current[count++] = bot->base.id;
+        current[count++] = bot;
     }
     memcpy(s_skills, current, (size_t)count * sizeof current[0]);
     s_skill_count = count;

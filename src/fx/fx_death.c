@@ -48,17 +48,17 @@ static float exit_scale(float age) {
     return left < FX_DEATH_EXIT_S ? left / FX_DEATH_EXIT_S : 1.0f;
 }
 
-bool fx_death_observe(bool prior_alive, bool dead, const EntityState* entity) {
-    if (!prior_alive || !dead || NULL == entity || 0 == entity->id) return false;
+bool fx_death_observe(bool prior_alive, bool dead, EntityID id) {
+    if (!prior_alive || !dead || 0 == id) return false;
     FxDeathEntry* slot = &s_entries[0];
     for (int i = 0; FX_DEATH_CAPACITY > i; i++) {
-        if (entity->id == s_entries[i].entity_id) { slot = &s_entries[i]; break; }
+        if (id == s_entries[i].entity_id) { slot = &s_entries[i]; break; }
         if (!s_entries[i].active) { slot = &s_entries[i]; break; }
         if (s_entries[i].age > slot->age) slot = &s_entries[i];
     }
-    *slot = (FxDeathEntry){ .entity_id = entity->id,
-                            .pos = game_state_render(entity->id)->interp_pos,
-                            .dims = game_state_transform(entity->id)->size, .active = true };
+    *slot = (FxDeathEntry){ .entity_id = id,
+                            .pos = game_state_render(id)->interp_pos,
+                            .dims = game_state_transform(id)->size, .active = true };
     return true;
 }
 

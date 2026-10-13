@@ -102,6 +102,12 @@ typedef struct {
     Cell target_cell;
 } Portal;
 
+/* The player component: the portal hold, which every viewer draws. */
+typedef struct {
+    bool  on_portal;
+    float portal_hold;   /* the teleport charge, 0..1 */
+} Player;
+
 /* Client-only render interpolation, beside the components. snapshot_time is
  * the arrival of the snapshot that wrote transform.pos; the lerp runs from
  * pos_prev to transform.pos per entity. */
@@ -110,20 +116,6 @@ typedef struct {
     Vector2 interp_pos;
     double  snapshot_time;
 } RenderState;
-
-typedef struct EntityState EntityState;
-typedef struct PlayerState PlayerState;
-typedef struct BotState BotState;
-
-struct EntityState {
-    EntityID id;
-    bool on_portal;     /* a player standing on a portal */
-    float portal_hold;  /* its teleport charge, 0..1 */
-};
-
-struct PlayerState {
-    EntityState base;
-};
 
 /* Interaction capability bits (mirror cyberia-server entity_status.go). The bit
  * index pairs with the capability status-icon ID (bit i ↔ status icon 8+i).
@@ -151,10 +143,6 @@ struct PlayerState {
 #define STATUS_ICON_PORTAL_RANDOM     11
 
 #define BOT_QUEST_CODES_MAX           8
-
-struct BotState {
-    EntityState base;
-};
 
 /* What one bot in the AOI offers the local player. The self block carries one
  * row per bot that offers something. */

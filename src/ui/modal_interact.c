@@ -375,8 +375,8 @@ static bool craft_tab_visible(void) {
  * changed. The selected quest-talk is re-resolved by quest code, so it survives
  * the set growing or shrinking around it. */
 static bool refresh_bot_snapshot(void) {
-    const BotState* bot = game_state_find_bot(s_entity_id);
-    if (!bot) return false;
+    const EntityID bot = s_entity_id;
+    if (!game_state_has(bot, COMP_AGENT)) return false;
 
     char prev_sel[64] = {0};
     if (0 <= s_talk_sel && s_talk_sel < s_talk_count) {
@@ -386,7 +386,7 @@ static bool refresh_bot_snapshot(void) {
     char prev_dialogs[BOT_QUEST_CODES_MAX][64];
     memcpy(prev_dialogs, s_talk_dialog_codes, sizeof(prev_dialogs));
 
-    copy_str(s_action_code, sizeof(s_action_code), game_state_agent(bot->base.id)->action_code);
+    copy_str(s_action_code, sizeof(s_action_code), game_state_agent(bot)->action_code);
     action_cache_fetch(s_action_code);
     s_quest_code_count = 0;
     s_talk_count = 0;
@@ -1154,17 +1154,17 @@ static void draw_stack_tab(Rectangle content) {
 /* Every entity shows the server's effective stats. The local player also gets
  * the breakdown the self snapshot carries. */
 static void draw_stats_tab(Rectangle content) {
-    const EntityState* entity = game_state_find_entity(s_entity_id);
+    const EntityID entity = 0 == s_entity_id ? g_local_player.id : s_entity_id;
     float pad = mi_pad();
     float top = content.y - ui_scroll_offset(&s_s_scroll);
     float y = top;
     ui_scroll_begin(&s_s_scroll);
-    if (NULL == entity) {
+    if (!game_state_has(entity, COMP_PROGRESS)) {
         DrawText("Entity outside view.", (int)content.x, (int)y, MI_FONT_LABEL, MODAL_LABEL);
         y += MI_FONT_LABEL + pad;
     } else {
-        bool self = entity == &g_game_state.player.base;
-        const Progress* pr = game_state_progress(entity->id);
+        bool self = entity == g_local_player.id;
+        const Progress* pr = game_state_progress(entity);
         int icon_sz = MI_FONT_LABEL * 2;
         ui_icon_draw("stats", content.x + icon_sz * 0.5f, y + icon_sz * 0.5f, icon_sz, false, 0.0f);
         char heading[64];

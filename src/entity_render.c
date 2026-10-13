@@ -3,6 +3,7 @@
 #include "game_state.h"
 #include "world_types.h"
 #include "network/data/engine_client.h"
+#include "domain/local_player.h"
 #include "domain/local_player_view.h"
 #include "domain/camera.h"
 #include "ui/text.h"
@@ -254,7 +255,7 @@ static bool layers_render_ready(const ObjectLayerState* layers, int count, Direc
 }
 
 bool player_render_ready(void) {
-    const EntityID id = g_game_state.player.base.id;
+    const EntityID id = g_local_player.id;
     if (0 == id || 0 == game_state_appearance(id)->layer_count) return false;
     const Appearance* ap = game_state_appearance(id);
     bool active = false;
@@ -267,7 +268,7 @@ bool player_render_ready(void) {
 }
 
 bool immediate_scene_ready(void) {
-    const EntityTransform* player = game_state_transform(g_game_state.player.base.id);
+    const EntityTransform* player = game_state_transform(g_local_player.id);
     const float x = player->pos.x + player->size.x * 0.5f;
     const float y = player->pos.y + player->size.y * 0.5f;
     bool ready = true;

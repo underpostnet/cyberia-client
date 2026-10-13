@@ -28,7 +28,7 @@
 /* What the server says about this client's own player and nobody else's:
  * identity, the map it stands on, the economy counters and the full
  * inventory. World-mirror data — position, layers, life — stays on
- * g_game_state.player, where every entity keeps it. The snapshot decoder is
+ * the own slot of g_game_state, where every entity keeps it. The decoder is
  * the sole writer. */
 
 /* Matches the server storageMaxSlots and ITEM_SLOT_GRID_MAX_SLOTS. */

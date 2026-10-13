@@ -28,7 +28,11 @@ static struct {
 LocalPlayer g_local_player = {0};
 
 void local_player_reset(void) {
+    /* The id stays: game_state_reset keeps the own slot, so the own player
+     * still draws until the next session sends a new own id. */
+    EntityID id = g_local_player.id;
     memset(&g_local_player, 0, sizeof(g_local_player));
+    g_local_player.id = id;
     g_local.stasis               = false;
     g_local.status_icon          = 0;
     g_local.move_speed           = LOCAL_PLAYER_DEFAULT_MOVE_SPEED;

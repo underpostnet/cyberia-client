@@ -69,7 +69,7 @@ static void apply_motion(cyberia_frame_t from, cyberia_frame_t to) {
         if (from > step || to < step) continue;
         if (CLIENT_EVENT_PLAYER_ACTION == e->kind) {
             /* The server refuses a tap in stasis or as a ghost. */
-            if (local_player_in_stasis() || 0 < game_state_vitals(g_game_state.player.base.id)->respawn_in) continue;
+            if (local_player_in_stasis() || 0 < game_state_vitals(g_local_player.id)->respawn_in) continue;
             self_motion_tap(&s_pred.curr, (Vector2){ e->payload.target_x, e->payload.target_y });
         } else if (CLIENT_EVENT_PLAYER_STASIS == e->kind && e->payload.active) {
             self_motion_stop(&s_pred.curr);
@@ -121,7 +121,7 @@ void prediction_reconcile(void) {
             LOG_DEBUG("[REPLAY] frame=%u error=%.3f", session_frame(), error);
         }
     }
-    if (MODE_TELEPORTING == game_state_motion(g_game_state.player.base.id)->mode) s_pred.prev = s_pred.curr;
+    if (MODE_TELEPORTING == game_state_motion(g_local_player.id)->mode) s_pred.prev = s_pred.curr;
 }
 
 const self_motion_t* prediction_prev(void) { return &s_pred.prev; }
@@ -163,7 +163,7 @@ void interpolation_compute_view(void) {
     const int window_ms = world_interpolation_ms();
 
     for (int i = 0; i < g_game_state.other_player_count; i++)
-        lerp_entity(g_game_state.other_players[i].base.id, now, window_ms);
+        lerp_entity(g_game_state.other_players[i], now, window_ms);
     for (int i = 0; i < g_game_state.bot_count; i++)
-        lerp_entity(g_game_state.bots[i].base.id, now, window_ms);
+        lerp_entity(g_game_state.bots[i], now, window_ms);
 }

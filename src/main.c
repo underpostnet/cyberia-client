@@ -43,11 +43,11 @@ static double sim_acc = 0.0;
 static bool tap_hits_provider(Vector2 world_pos) {
     float cell = world_cell_size();
     for (int i = 0; i < g_game_state.bot_count; i++) {
-        const BotState* bot = &g_game_state.bots[i];
-        const Interaction* in = local_player_interaction(bot->base.id);
-        if ('\0' == game_state_agent(bot->base.id)->action_code[0] && (!in || 0 == in->quest_code_count)) continue;
-        Vector2 size = game_state_transform(bot->base.id)->size;
-        Vector2 at   = game_state_render(bot->base.id)->interp_pos;
+        EntityID bot = g_game_state.bots[i];
+        const Interaction* in = local_player_interaction(bot);
+        if ('\0' == game_state_agent(bot)->action_code[0] && (!in || 0 == in->quest_code_count)) continue;
+        Vector2 size = game_state_transform(bot)->size;
+        Vector2 at   = game_state_render(bot)->interp_pos;
         float half_w = size.x * 0.5f;
         float half_h = size.y * 0.5f;
         float cx = (at.x + half_w) * cell;
@@ -68,7 +68,7 @@ static Vector2 s_trace_position;
 
 static void observe_scene(bool gameplay) {
     if ('\0' == g_local_player.map_code[0]) return;
-    const Vector2 pos = game_state_transform(g_game_state.player.base.id)->pos;
+    const Vector2 pos = game_state_transform(g_local_player.id)->pos;
     if (0 != strcmp(s_trace_map, g_local_player.map_code)) {
         s_destination = '\0' != s_trace_map[0];
         copy_str(s_trace_map, sizeof(s_trace_map), g_local_player.map_code);
@@ -104,7 +104,7 @@ static void gameloop(void) {
     // reconcile first, from the tick boundary: the decoder only stores the snapshot
     prediction_reconcile();
 
-    fetch_frame_begin((double)frame_dt * 1000, !player_render_ready() || !immediate_scene_ready() || g_game_state.player.base.on_portal);
+    fetch_frame_begin((double)frame_dt * 1000, !player_render_ready() || !immediate_scene_ready() || game_state_own_player()->on_portal);
     text_font_sync();
     game_client_on_tick();
     audio_context_update(frame_dt);
@@ -125,7 +125,7 @@ static void gameloop(void) {
             if(!consumed && INPUT_TAP == evt.type) {
                 /* A player in stasis does not act: drop the tap. */
                 if (local_player_in_stasis()) { consumed = true; }
-                if (0 < game_state_vitals(g_game_state.player.base.id)->respawn_in) { consumed = true; }
+                if (0 < game_state_vitals(g_local_player.id)->respawn_in) { consumed = true; }
             }
             // unconsumed event back to the queue
             if(!consumed) {
@@ -188,8 +188,8 @@ static void gameloop(void) {
     /* interp_pos is the presentation position of every entity; for the local
      * player the view owns it. */
     local_player_view_update(prediction_prev(), prediction_self(), (float)(sim_acc / fixed_step));
-    if (0 != g_game_state.player.base.id)
-        game_state_render(g_game_state.player.base.id)->interp_pos = local_player_view_position();
+    if (0 != g_local_player.id)
+        game_state_render(g_local_player.id)->interp_pos = local_player_view_position();
 
     /* Remote-entity render-time interpolation. */
     interpolation_compute_view();
@@ -216,7 +216,7 @@ static void preloading_loop(void) {
     if (!s_load_ready) {
         const char* label = NULL;
         if (!connection_is_open()) label = "Connecting to Cyberia...";
-        else if (!g_game_state.init_received || 0 == g_game_state.player.base.id) label = "Entering the world...";
+        else if (!g_game_state.init_received || 0 == g_local_player.id) label = "Entering the world...";
         else if (!presentation_runtime_is_ready()) label = "Preparing the view...";
         else if (!player_render_ready()) label = "Loading your character...";
         else if (!immediate_scene_ready()) label = "Preparing your location...";
