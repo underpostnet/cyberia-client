@@ -21,9 +21,10 @@
 #include "ui/hud_minimap_overlay.h"
 #include "fx/fx_death.h"
 #include "fx/fx_heal_aura.h"
+#include "fx/fx_hit_burst.h"
 #include "fx/fx_level_up.h"
-#include "fx/fx_obstacle_burst.h"
 #include "fx/fx_portal_aura.h"
+#include "fx/fx_obstacle_burst.h"
 #include "ui/inventory_bar.h"
 #include "fx/loot_fx.h"
 #include "ui/inventory_modal.h"
@@ -229,13 +230,14 @@ void game_render_world(void) {
     // 7. Foregrounds (always on top of entities) - creates depth
     game_render_foregrounds();
 
-    // 8. Effects — FCT pop-ups, loot flights, level-up and heal auras, death cues
+    // 8. Effects — FCT pop-ups, loot flights, level-up, heal and transport auras, hit bursts, death cues
     fct_draw();
     game_render_loot_fx();
     fx_level_up_draw();
     fx_heal_aura_draw();
-    fx_death_draw();
     fx_portal_aura_draw();
+    fx_hit_burst_draw();
+    fx_death_draw();
     fx_obstacle_burst_draw();
 
     // 9. Grid overlay (if dev_ui enabled - renders on top of everything)
@@ -914,11 +916,11 @@ void game_render_entities(void) {
                                          && entity_base->respawn_in <= 0.0f,
                     .status_icon       = cue ? 0 : entity_base->status_icon,
                     .interaction_flags = np_flags,
+                    .on_portal         = !cue && entity_base->on_portal,
+                    .portal_hold       = entity_base->portal_hold,
                     /* Respawn countdown is local-player-only: a remote client
                      * must never see another player's countdown. */
                     .respawn_seconds   = (!cue && entry->is_main_player && entity_base->respawn_in > 0.0f)
-                    .on_portal         = !cue && entity_base->on_portal,
-                    .portal_hold       = entity_base->portal_hold,
                                          ? (int)(entity_base->respawn_in + 0.5f) : 0,
                 };
                 entity_overhead_ui_draw(

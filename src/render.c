@@ -1,9 +1,10 @@
 #include "render.h"
 #include "fx/fx_death.h"
 #include "fx/fx_heal_aura.h"
+#include "fx/fx_hit_burst.h"
 #include "fx/fx_level_up.h"
-#include "fx/fx_obstacle_burst.h"
 #include "fx/fx_portal_aura.h"
+#include "fx/fx_obstacle_burst.h"
 #include "ui/text.h"
 
 #include "dialogue_data.h"
@@ -95,8 +96,9 @@ void render_on_tick(float delta_time) {
     fx_tap_update(delta_time);
     fx_level_up_update(delta_time);
     fx_heal_aura_update(delta_time);
-    fx_death_update(delta_time);
     fx_portal_aura_update(delta_time);
+    fx_hit_burst_update(delta_time);
+    fx_death_update(delta_time);
     fx_obstacle_burst_update(delta_time);
     /* Reads the render positions main.c settled this frame, so the dust lands
      * with the sprite that raised it. */

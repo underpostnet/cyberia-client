@@ -4,6 +4,7 @@
 #include "game_state.h"
 #include "fx/fx_death.h"
 #include "fx/fx_heal_aura.h"
+#include "fx/fx_hit_burst.h"
 #include "fx/fx_level_up.h"
 #include "fx/fx_obstacle_burst.h"
 #include "domain/stat_contract_generated.h"
@@ -100,6 +101,7 @@ static Vector2 lookup_prev_server_pos(const PrevPos* arr, int n,
 void message_reset_prev_snapshots(void) {
     audio_context_reset();
     fx_level_up_reset();
+    fx_hit_burst_reset();
     fx_heal_aura_reset();
     fx_death_reset();
     fx_obstacle_burst_reset();
@@ -507,13 +509,16 @@ static void json_unpack_combat_text(const cJSON* payload) {
     };
     local_player_fct_push(&ev);
     /* The authoritative collision signal: the server emits one of these wherever damage lands,
-     * on any entity in view. Sounding it here is what makes a hit audible when it is someone
-     * else being hit, not only when it is the player.
+     * on any entity in view. Sounding it and bursting it here is what makes a hit audible and
+     * visible when it is someone else being hit, not only when it is the player.
      *
      * Only damage sounds here. Regeneration is emitted constantly and in small amounts, so it is
      * sounded from the snapshot instead, once an entity's life actually crosses a milestone —
      * see audio_context.c. */
-    if (FCT_TYPE_DAMAGE == ev.type) audio_event(AUDIO_EVENT_HIT);
+    if (FCT_TYPE_DAMAGE == ev.type) {
+        audio_event(AUDIO_EVENT_HIT);
+        fx_hit_burst_spawn((Vector2){ ev.world_x, ev.world_y });
+    }
 }
 
 static void json_unpack_drop_collect(const cJSON* payload) {
