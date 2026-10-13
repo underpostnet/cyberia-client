@@ -26,18 +26,21 @@ const char* skill_preview_summon_id(const UiSkillEntry* skill) {
     return id;
 }
 
-int skill_preview_summons(const ObjectLayerState* slot, const char* out[SKILL_PREVIEW_MAX]) {
-    assert(slot && out);
-    if (!slot->active) return 0;
+int skill_preview_summons(const ObjectLayerState* slot, SkillPreview out[SKILL_PREVIEW_MAX], bool* held) {
+    assert(slot && out && held);
+    *held = false;
     int n = 0;
     for (int i = 0; ui_state_skill_count() > i && SKILL_PREVIEW_MAX > n; i++) {
         const UiSkillEntry* skill = ui_state_skill_at(i);
         if (0 != strcmp(skill->trigger_item_id, slot->item_id)) continue;
+        if (!slot->active && !skill->held) continue;
         const char* id = skill_preview_summon_id(skill);
         if (NULL == id) continue;
         bool seen = false;
-        for (int j = 0; n > j; j++) seen = seen || 0 == strcmp(out[j], id);
-        if (!seen) out[n++] = id;
+        for (int j = 0; n > j; j++) seen = seen || 0 == strcmp(out[j].item_id, id);
+        if (seen) continue;
+        out[n++] = (SkillPreview){ .item_id = id, .quantity = local_player_item_quantity(id) };
+        *held = *held || skill->held;
     }
     return n;
 }

@@ -68,14 +68,6 @@ cJSON* json_pack_item_active(const char* item_id, bool active) {
     return root;
 }
 
-cJSON* json_pack_item_use(const char* item_id) {
-    assert(item_id);
-    cJSON* p;
-    cJSON* root = new_message("item_use", &p);
-    cJSON_AddStringToObject(p, "itemId", item_id);
-    return root;
-}
-
 cJSON* json_pack_player_stasis(bool stasis) {
     cJSON* p;
     cJSON* root = new_message("player_stasis", &p);

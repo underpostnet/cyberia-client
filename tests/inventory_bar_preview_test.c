@@ -24,8 +24,10 @@ static bool stasis;
 static int preview_count;
 static int slot_count;
 static Rectangle preview;
+static char preview_item[MAX_ITEM_ID_LENGTH];
+static int badge_quantity;
 static Rectangle cooldown;
-static float charge = 1.0f;
+static float cooldown_charge;
 static bool mouse_down;
 static Vector2 mouse;
 
@@ -35,6 +37,7 @@ double GetTime(void) { return 10.0; }
 bool viewport_is_mobile(void) { return false; }
 bool local_player_in_stasis(void) { return stasis; }
 float local_player_action_charge(double now) { return 0.5f; }
+float local_player_consume_charge(double now) { return 0.25f; }
 ObjectLayer* lookup_cached_layer(const char* id) { return NULL; }
 const char* active_layer_item_id(const ObjectLayerState* layers, int count, const char* type) { return NULL; }
 void ui_toggle_init(UIToggle* toggle, Rectangle anchor, bool expanded, UIToggleChevron chevron) {
@@ -68,9 +71,6 @@ bool ui_button_hit(Rectangle b, int mx, int my) {
 bool ui_toggle_handle_click(UIToggle* toggle, int mx, int my) { return false; }
 void ui_toggle_update(UIToggle* toggle, float dt) {}
 void fx_inventory_bar_qty_update(float dt) {}
-bool item_use_is_consumable(const char* id) { return 0 == strcmp("gel", id); }
-float item_use_charge(double now) { return charge; }
-item_use_state_e item_use_state(const char* id, double now) { return ITEM_USE_READY; }
 bool CheckCollisionPointRec(Vector2 point, Rectangle rect) { return false; }
 Color ColorBrightness(Color color, float factor) { return color; }
 void item_slot_draw_ex(Rectangle rect, const ObjectLayerState* layer, ObjectLayersManager* manager,
@@ -80,12 +80,15 @@ void ol_as_ico_draw(ObjectLayersManager* manager, const char* id, int x, int y, 
 void ol_stack_ico_draw(ObjectLayersManager* manager, const ObjectLayerState* layers, int count,
                        int x, int y, int size, const char* direction, int frame_ms, Color tint) {
     assert(1 == count && 1 == layers[0].quantity);
-    if (0 == strcmp("gel", layers[0].item_id)) return;
-    assert(0 == strcmp("bullet", layers[0].item_id));
+    copy_str(preview_item, sizeof preview_item, layers[0].item_id);
     preview = (Rectangle){ (float)x, (float)y, (float)size, (float)size };
     preview_count++;
 }
-void fx_shape_cooldown_bar(Rectangle r, float elapsed) { cooldown = r; }
+void item_slot_draw_quantity(Rectangle r, int quantity) { badge_quantity = quantity; }
+void fx_shape_cooldown_bar(Rectangle r, float elapsed) {
+    cooldown = r;
+    cooldown_charge = elapsed;
+}
 
 /* Press and release at the centre of `r`, and settle the gesture. */
 static void press(Rectangle r) {
@@ -115,7 +118,8 @@ int main(void) {
     g_local_player.inventory[1].active = true;
 
     draw_at(1.0f);
-    assert(1 == preview_count && 2 == slot_count);
+    assert(1 == preview_count && 2 == slot_count && 0 == strcmp("bullet", preview_item));
+    assert(0.5f == cooldown_charge && 0 == badge_quantity);
     Rectangle shown = preview;
     assert(cooldown.y + cooldown.height < 600.0f - (float)bar_height());
 
@@ -136,33 +140,30 @@ int main(void) {
     draw_at(0.0f);
     assert(0 == preview_count);
 
-    /* A consumable slot carries a quick-use button above it, as an active slot carries its skills. */
+    /* A held skill previews its inactive stack above the slot: the item, the units left and the consume cooldown. */
+    UiSkillEntry dose = { .held = true };
+    strcpy(dose.trigger_item_id, "gel");
+    strcpy(dose.summoned_entity_item_id, "gel");
+    assert(0 <= ui_state_push_skill(&dose));
     g_local_player.inventory_count = 3;
     strcpy(g_local_player.inventory[2].item_id, "gel");
     g_local_player.inventory[2].quantity = 2;
-    charge = 0.5f;
     draw_at(1.0f);
     Rectangle gel = slot_rect(2, bar_top(600));
-    assert(1 == s_use_button_count);
-    Rectangle button = s_use_buttons[0].rect;
-    assert(button.y + button.height < gel.y && button.x > gel.x && button.x + button.width < gel.x + gel.width);
-    assert(cooldown.y + cooldown.height <= button.y + button.height && cooldown.y > button.y);
-    assert(inventory_bar_point_covered((int)(button.x + 1.0f), (int)(button.y + 1.0f)));
+    assert(1 == preview_count && 0 == strcmp("gel", preview_item) && 2 == badge_quantity);
+    assert(0.25f == cooldown_charge);
+    assert(preview.y + preview.height < gel.y && preview.x > gel.x && preview.x + preview.width < gel.x + gel.width);
 
-    /* A press on the button spends one unit and opens nothing; a press on the slot opens it. */
-    char used[MAX_ITEM_ID_LENGTH];
+    /* The preview takes no press: a press on the slot opens it. */
     int tapped = -1;
-    press(button);
-    assert(inventory_bar_take_use(used, sizeof used) && 0 == strcmp("gel", used));
-    assert(!inventory_bar_take_tap(&tapped));
+    assert(!inventory_bar_point_covered((int)(preview.x + 1.0f), (int)(preview.y + 1.0f)));
     press(gel);
-    assert(!inventory_bar_take_use(used, sizeof used));
     assert(inventory_bar_take_tap(&tapped) && 2 == tapped);
 
-    /* In stasis the buttons hide and take no press. */
+    /* In stasis the preview hides. */
     stasis = true;
     draw_at(1.0f);
-    assert(0 == s_use_button_count && !inventory_bar_point_covered((int)(button.x + 1.0f), (int)(button.y + 1.0f)));
+    assert(0 == preview_count);
     stasis = false;
 
     puts("inventory_bar_preview_test OK");

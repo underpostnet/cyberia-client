@@ -26,4 +26,7 @@ void item_slot_draw(Rectangle r, const ObjectLayerState* ols, ObjectLayersManage
 void item_slot_draw_ex(Rectangle r, const ObjectLayerState* ols, ObjectLayersManager* mgr,
                        Color highlight, float highlight_t, bool sprite_full_color);
 
+/* Quantity badge in the bottom-right corner of `r`, for more than one unit. */
+void item_slot_draw_quantity(Rectangle r, int quantity);
+
 #endif /* ITEM_SLOT_H */

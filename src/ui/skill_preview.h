@@ -2,6 +2,7 @@
 #define CYBERIA_UI_SKILL_PREVIEW_H
 
 #include <raylib.h>
+#include <stdbool.h>
 
 #include "object_layer.h"
 #include "ui_state.h"
@@ -16,9 +17,16 @@
  * player's active skin. NULL when no entity resolves. */
 const char* skill_preview_summon_id(const UiSkillEntry* skill);
 
+/* One summoned entity, and the units of it the local player holds. */
+typedef struct {
+    const char* item_id;
+    int         quantity;
+} SkillPreview;
+
 /* Fill `out` with the distinct entities the skills of `slot` summon, in skill
- * map order. An inactive slot fires no skill and gives 0. */
-int skill_preview_summons(const ObjectLayerState* slot, const char* out[SKILL_PREVIEW_MAX]);
+ * map order. An inactive slot shows only its held skills. `held` reports a
+ * held skill in the row: the consume cooldown then times it. */
+int skill_preview_summons(const ObjectLayerState* slot, SkillPreview out[SKILL_PREVIEW_MAX], bool* held);
 
 /* One row of `count` previews centered over `slot`, with the cooldown bar
  * under the row. Both stay above `floor_y`, and above `keep_clear` where the

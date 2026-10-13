@@ -10,8 +10,7 @@
  *   - Activation intent is an item_active client event. The server
  *     validates, swaps if needed, and pushes the updated state back in
  *     the next AOI frame.
- *   - A consumable shows Use instead: an item_use client event. The modal
- *     stays on the stack, follows it by item id, and closes once it is gone.
+ *   - The modal follows its stack by item id and closes once it is gone.
  *   - The sprite preview uses ol_as_animated_ico so it plays the live
  *     animation for the selected direction/mode pair.
  *   - Direction (up/down/left/right) and mode (idle/walking) buttons let
@@ -22,12 +21,10 @@
 #include "inventory_modal.h"
 #include "text.h"
 
-#include "domain/item_use.h"
 #include "domain/local_player.h"
 #include "domain/viewport.h"
 #include "network/game/client_event.h"
 #include "dialogue_data.h"
-#include "fx/fx_shapes.h"
 #include "game_state.h"
 #include "interaction_bubble.h"
 #include "inventory_bar.h"
@@ -146,7 +143,6 @@ static const Color C_TITLE         = { 220, 220, 255, 255 };
 static const Color C_BODY          = { 180, 180, 200, 220 };
 static const Color C_BTN_ACTIVATE  = {  30, 120,  60, 240 };
 static const Color C_BTN_DEACT     = { 120,  40,  40, 240 };
-static const Color C_BTN_USE       = {  30, 110, 120, 240 };
 static const Color C_BTN_DISABLED  = {  50,  50,  60, 200 };
 static const Color C_TEXT_DISABLED = { 100, 100, 110, 160 };
 static const Color C_BTN_TEXT      = { 230, 230, 230, 255 };
@@ -366,24 +362,6 @@ static void update_anchor_layout(float dt, bool lore_available) {
                                modal_anchor_safe_area(IM_CARD_PAD, IM_ANCHOR_MIN_H),
                                content, IM_ANCHOR_DEFAULT_H, IM_ANCHOR_MIN_H,
                                s_age >= MODAL_POP_DURATION, dt);
-}
-
-/* Use button of a consumable: enabled while the server would accept the use,
- * else it names what blocks it; the item-use cooldown runs along its base. */
-static void draw_use_button(Rectangle r, const char* item_id, int font_size) {
-    double now = GetTime();
-    item_use_state_e state = item_use_state(item_id, now);
-    bool ready   = ITEM_USE_READY == state;
-    bool cooling = ITEM_USE_COOLDOWN == state;
-    UIButtonPixelRetroStyle st = { .label = ready || cooling ? "Use" : item_use_state_text(state),
-                                   .icon_id = "hand", .font_size = font_size,
-                                   .bg = ready ? C_BTN_USE : C_BTN_DISABLED,
-                                   .text_color = ready ? C_BTN_TEXT : C_TEXT_DISABLED,
-                                   .enabled = ready };
-    ui_button_pixel_retro_draw(r, &st, ready && ui_button_hit(r, GetMouseX(), GetMouseY()));
-    if (cooling)
-        fx_shape_cooldown_bar((Rectangle){ r.x + 6.0f, r.y + r.height - 6.0f, r.width - 12.0f, 3.0f },
-                              item_use_charge(now));
 }
 
 static void send_activation(const char* item_id, bool active) {
@@ -960,14 +938,9 @@ void inventory_modal_draw(void) {
         ui_button_pixel_retro_draw(s_lore_btn_rect, &lore_btn, ui_button_hit(s_lore_btn_rect, mx, my));
     }
 
-    /* 12. Primary action — only for the player's own items: Use for a
-     * consumable, Activate / Deactivate for the rest. */
+    /* 12. Activate / Deactivate button — only for the player's own items. */
     s_activate_btn_visible = false;
-    if (!s_is_external && item_use_is_consumable(ols->item_id)) {
-        s_activate_btn_rect = inventory_activate_button_rect(card, layout, button_w, button_h);
-        s_activate_btn_visible = true;
-        draw_use_button(s_activate_btn_rect, ols->item_id, body_font + 2);
-    } else if (!s_is_external) {
+    if (!s_is_external) {
         bool currently_active = ols->active;
         const char* btn_label  = currently_active ? "Deactivate" : "Activate";
         const char* btn_icon   = currently_active ? "unequip" : "equip";
@@ -1031,14 +1004,8 @@ bool inventory_modal_handle_click(int mx, int my) {
         }
     }
 
-    /* Use: the request stays pending until item_use_ack, and the next
-     * snapshot carries the spent unit. */
-    if (NULL != own && item_use_is_consumable(own->item_id)) {
-        if (s_activate_btn_visible && ui_button_hit(s_activate_btn_rect, mx, my)) {
-            item_use_request(own->item_id, GetTime());
-            return true;
-        }
-    } else if (NULL != own) {
+    /* Activate / Deactivate */
+    if (NULL != own) {
         if (activate_enabled(own)) {
             if (s_activate_btn_visible && ui_button_hit(s_activate_btn_rect, mx, my)) {
                 bool new_active = !own->active;

@@ -1,5 +1,4 @@
 #include "ui_dispatch.h"
-#include "domain/item_use.h"
 #include "domain/local_player.h"
 #include "domain/presentation_runtime.h"
 #include "domain/camera.h"
@@ -223,14 +222,6 @@ void ui_on_tick(input_queue_t* input_queue, double dt) {
             modal_dialogue_close();
         }
         else if (!modal_dialogue_is_open())  inventory_modal_open(inv_tap);
-    }
-
-    /* A quick-use button spends one unit, unless a dialogue keeps the slots read-only. */
-    char use_item[MAX_ITEM_ID_LENGTH];
-    if (inventory_bar_take_use(use_item, sizeof use_item) && !modal_dialogue_is_open()) {
-        item_use_state_e state = item_use_request(use_item, GetTime());
-        if (ITEM_USE_READY != state)
-            modal_notification_show("Item not used", item_use_state_text(state), (Color){ 210, 120, 110, 255 });
     }
 
     input_queue_filter(input_queue, ui_consume_event);

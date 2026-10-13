@@ -131,13 +131,11 @@ void   local_player_set_action_ready_at(double time_s);
  * fires skills; a skill can still fail its summon chance. */
 float  local_player_action_charge(double now);
 
-/* Portal hold — authoritative teleport charge for the local player. on_portal
- * mirrors the server OnPortal flag; hold_progress is the 0..1 fraction of the
- * hold time elapsed. Both come from the AOI self-player block; the HUD renders
- * the progress bar only while on_portal is set. */
-void   local_player_set_portal_hold(bool on_portal, float progress);
-bool   local_player_on_portal(void);
-float  local_player_portal_hold_progress(void);
+/* Authoritative end of the consume cooldown a held skill starts, on the
+ * GetTime() clock. The action cooldown rule times it. */
+void   local_player_set_consume_ready_at(double time_s);
+/* Elapsed part of the consume cooldown at `now`, 0..1. */
+float  local_player_consume_charge(double now);
 
 /* FCT event queue — single-producer (message.c) /
  * single-consumer (floating_combat_text). */

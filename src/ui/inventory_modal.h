@@ -8,18 +8,17 @@
 #include <stdbool.h>
 
 /* Inventory item detail modal, opened from a slot in the bottom bar. Shows
- * the item sprite, name, description, stats, quantity, and one action: Use
- * for a consumable, Activate/Deactivate for the rest.
+ * the item sprite, name, description, stats, quantity, and an
+ * Activate/Deactivate button.
  *
- * Intent only: Activate sends an "item_active" event and closes. Use sends an
- * "item_use" event and stays on the stack until it is gone. The modal never
- * changes local state — the next AOI push carries the result. */
+ * Intent only: Activate sends an "item_active" event and closes. The modal
+ * never changes local state — the next AOI push carries the result. */
 
 /* The manager must stay valid for the lifetime of the modal. */
 void inventory_modal_init(ObjectLayersManager* ol_manager);
 
 /* `inv_idx` indexes g_local_player.inventory. The modal then follows that
- * stack by its item id. */
+ * stack by its item id, and closes once the stack is gone. */
 void inventory_modal_open(int inv_idx);
 
 /* Switch an already-open modal to a different inventory slot (the inventory

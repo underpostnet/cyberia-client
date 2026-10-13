@@ -1,6 +1,7 @@
 #ifndef CYBERIA_UI_STATE_H
 #define CYBERIA_UI_STATE_H
 
+#include <stdbool.h>
 #include <stddef.h>
 
 #include "object_layer.h"
@@ -22,6 +23,7 @@ typedef struct {
     char name[MAX_ITEM_ID_LENGTH];
     char description[256];
     char summoned_entity_item_id[MAX_ITEM_ID_LENGTH];
+    bool held;  /* runs by itself on held units; a tap never fires it */
 } UiSkillEntry;
 
 void ui_state_reset(void);

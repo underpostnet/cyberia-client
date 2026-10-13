@@ -74,8 +74,3 @@ cc "${cc_flags[@]}" -o "$out/entity_overhead_ui" tests/entity_overhead_ui_test.c
 cc "${cc_flags[@]}" -ffunction-sections -fdata-sections -Wl,--gc-sections \
     -o "$out/loot_fx" tests/loot_fx_test.c src/fx/loot_fx.c src/util/utils.c -lm
 "$out/loot_fx"
-
-cc "${cc_flags[@]}" -ffunction-sections -fdata-sections -Wl,--gc-sections \
-    -o "$out/item_use" tests/item_use_test.c src/domain/item_use.c src/domain/local_player.c \
-    src/util/utils.c -lm
-"$out/item_use"

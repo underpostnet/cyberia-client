@@ -19,6 +19,25 @@ static const Color C_ACTIVE_GLOW  = { 100, 200, 255, 240 };
 static const Color C_QTY_BG       = {   0,   0,   0, 190 };
 static const Color C_QTY_TEXT     = { 255, 230,  80, 255 };
 
+/* Badge font of a slot of width `w`. */
+static int badge_font(float w) {
+    int fs = (int)(w * 0.26f);
+    return fs < 13 ? 13 : fs;
+}
+
+void item_slot_draw_quantity(Rectangle r, int quantity) {
+    if (quantity <= 1) return;
+    int fs = badge_font(r.width);
+    char buf[16];
+    if (quantity >= 1000) snprintf(buf, sizeof(buf), "%dk", quantity / 1000);
+    else                  snprintf(buf, sizeof(buf), "%d", quantity);
+    int tw = MeasureText(buf, fs);
+    int bx = (int)(r.x + r.width - tw - 3);
+    int by = (int)(r.y + r.height - fs - 2);
+    DrawRectangle(bx - 1, by - 1, tw + 2, fs + 2, C_QTY_BG);
+    DrawText(buf, bx, by, fs, C_QTY_TEXT);
+}
+
 void item_slot_draw(Rectangle r, const ObjectLayerState* ols, ObjectLayersManager* mgr) {
     item_slot_draw_ex(r, ols, mgr, WHITE, 0.0f, false);
 }
@@ -27,8 +46,7 @@ void item_slot_draw_ex(Rectangle r, const ObjectLayerState* ols, ObjectLayersMan
                        Color highlight, float highlight_t, bool sprite_full_color) {
     int pad = (int)(r.width * 0.07f);
     if (pad < 3) pad = 3;
-    int fs = (int)(r.width * 0.26f);
-    if (fs < 13) fs = 13;
+    int fs = badge_font(r.width);
 
     bool active    = ols->active;
     bool activable = true;
@@ -72,16 +90,7 @@ void item_slot_draw_ex(Rectangle r, const ObjectLayerState* ols, ObjectLayersMan
                    (int)(r.x + pad), (int)(r.y + pad), inner_sprite,
                    OL_ICO_DEFAULT_DIR, 0, tint);
 
-    if (ols->quantity > 1) {
-        char buf[16];
-        if (ols->quantity >= 1000) snprintf(buf, sizeof(buf), "%dk", ols->quantity / 1000);
-        else                       snprintf(buf, sizeof(buf), "%d", ols->quantity);
-        int tw = MeasureText(buf, fs);
-        int bx = (int)(r.x + r.width - tw - 3);
-        int by = (int)(r.y + r.height - fs - 2);
-        DrawRectangle(bx - 1, by - 1, tw + 2, fs + 2, C_QTY_BG);
-        DrawText(buf, bx, by, fs, C_QTY_TEXT);
-    }
+    item_slot_draw_quantity(r, ols->quantity);
 
     if (!activable) {
         int lx = (int)(r.x + 3), ly = (int)(r.y + 3);
