@@ -11,6 +11,7 @@ extern const Color FX_SPARK_GOLD;   /* golden yellow — loot the player may col
 extern const Color FX_SPARK_GRAY;   /* neutral gray — another player's loot */
 extern const Color FX_SPARK_RED;    /* blood red — a defeat */
 extern const Color FX_SPARK_GREEN;  /* leaf green — a heal */
+extern const Color FX_SPARK_BLUE;   /* portal blue — a teleport charge */
 
 /* Pixel-snapped filled rectangle with a solid black border `border` px larger on
  * every side (the tap-effect bar look). */

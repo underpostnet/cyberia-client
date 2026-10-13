@@ -6,6 +6,7 @@ const Color FX_SPARK_GOLD = { 255, 226, 20, 255 };
 const Color FX_SPARK_GRAY = { 168, 168, 168, 255 };
 const Color FX_SPARK_RED  = { 220,  40,  40, 255 };
 const Color FX_SPARK_GREEN = {  70, 220, 100, 255 };
+const Color FX_SPARK_BLUE  = {  80, 160, 255, 255 };
 
 void fx_shape_bar(float x, float y, float w, float h, float border, Color body) {
     DrawRectangle((int)(x - border), (int)(y - border),

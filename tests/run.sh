@@ -28,6 +28,9 @@ cc "${cc_flags[@]}" -o "$out/fx_death" tests/fx_death_test.c src/fx/fx_death.c -
 cc "${cc_flags[@]}" -o "$out/fx_heal_aura" tests/fx_heal_aura_test.c src/fx/fx_heal_aura.c -lm
 "$out/fx_heal_aura"
 
+cc "${cc_flags[@]}" -o "$out/fx_portal_aura" tests/fx_portal_aura_test.c src/fx/fx_portal_aura.c -lm
+"$out/fx_portal_aura"
+
 cc "${cc_flags[@]}" -ffunction-sections -fdata-sections -Wl,--gc-sections \
     -o "$out/fx_obstacle_burst" tests/fx_obstacle_burst_test.c src/fx/fx_obstacle_burst.c \
     src/util/utils.c -lm

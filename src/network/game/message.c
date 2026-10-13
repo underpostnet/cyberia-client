@@ -212,6 +212,8 @@ static void read_entity_state(const cJSON* e, EntityState* base, FetchPriority p
     }
     base->status_icon = (uint8_t)serial_get_int_default(e, "statusIcon", 0);
     base->layer_count = read_pooled_layers(e, "objectLayers", &base->layer_offset, priority);
+    base->on_portal   = serial_get_bool_default(e, "onPortal", false);
+    base->portal_hold = serial_get_float_default(e, "portalHoldProgress", 0.0f);
     base->snapshot_time = gs->last_update_time;
 }
 

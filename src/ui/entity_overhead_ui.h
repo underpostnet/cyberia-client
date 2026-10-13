@@ -9,7 +9,8 @@
 
 /* World-space overhead UI above one entity. Draws bottom to top: XP bar,
  * HP bar, nameplate, capability bar (level, stats sum, capability icons),
- * presence status icon. Read-only — the module never changes game state. */
+ * respawn countdown, transport bar, presence status icon. Read-only — the
+ * module never changes game state. */
 
 /* ── Layout constants ─────────────────────────────────────────────────── */
 
@@ -83,6 +84,11 @@ typedef struct {
     /* Remaining respawn seconds; 0 hides the row. The caller sets this for
      * the self-player only, so no client shows another player's countdown. */
     int respawn_seconds;
+
+    /* A player standing on a portal shows the transport bar, filled by its
+     * teleport charge, 0..1. */
+    bool on_portal;
+    float portal_hold;
 } EntityOverheadParams;
 
 /* Draw the stack above one entity. Call inside BeginMode2D / EndMode2D. The

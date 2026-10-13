@@ -41,6 +41,8 @@ struct EntityState {
     int level;
     float effective_stats[CYBERIA_STAT_COUNT];
     uint8_t status_icon;
+    bool on_portal;     /* a player standing on a portal */
+    float portal_hold;  /* its teleport charge, 0..1 */
 };
 
 struct PlayerState {

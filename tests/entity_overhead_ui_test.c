@@ -10,6 +10,8 @@
 /* Rounded rectangles drawn, and the widest one that is not a full bar: the HP fill. */
 static int   s_rounded;
 static float s_fill_w;
+/* The rows drawn, from the bottom up: whether the transport label came last. */
+static bool  s_transport_top;
 
 void DrawRectangleRounded(Rectangle rec, float roundness, int segments, Color color) {
     s_rounded++;
@@ -18,7 +20,9 @@ void DrawRectangleRounded(Rectangle rec, float roundness, int segments, Color co
 void DrawRectangleRoundedLinesEx(Rectangle rec, float roundness, int segments, float thick, Color color) {}
 Color ColorLerp(Color a, Color b, float t) { return a; }
 const char* presentation_runtime_status_icon(uint8_t status_id) { return ""; }
-void text_draw_compat(const char* text, int x, int y, int size, Color color) {}
+void text_draw_compat(const char* text, int x, int y, int size, Color color) {
+    s_transport_top = 0 == strcmp("Transporting...", text);
+}
 int text_measure_compat(const char* text, int size) { return 10; }
 void text_draw_outlined(const char* text, int x, int y, int size, Color fg, Color outline, int rings) {}
 void ui_icon_draw(const char* icon_id, float cx, float cy, int size, bool bounce, float phase) {}
@@ -58,6 +62,18 @@ int main(void) {
     s_fill_w = 0.0f;
     entity_overhead_ui_draw(&resource, 4.0f, 4.0f, 2.0f, 32.0f);
     assert((float)EOHUD_HP_BAR_W * 0.5f == s_fill_w);
+
+    /* A player on a portal shows the transport bar at the top, filled by its charge. */
+    EntityOverheadParams traveler = { .name = "traveler", .life = 10.0f, .max_life = 10.0f, .show_hp = true,
+                                      .show_name = true, .on_portal = true, .portal_hold = 0.25f };
+    s_fill_w = 0.0f;
+    entity_overhead_ui_draw(&traveler, 4.0f, 4.0f, 1.0f, 32.0f);
+    assert(s_transport_top && (float)EOHUD_HP_BAR_W * 0.25f == s_fill_w);
+
+    /* Off a portal, no transport bar. */
+    traveler.on_portal = false;
+    entity_overhead_ui_draw(&traveler, 4.0f, 4.0f, 1.0f, 32.0f);
+    assert(!s_transport_top);
 
     puts("entity_overhead_ui_test OK");
     return 0;

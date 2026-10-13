@@ -101,7 +101,7 @@ static void gameloop(void) {
     // reconcile first, from the tick boundary: the decoder only stores the snapshot
     prediction_reconcile();
 
-    fetch_frame_begin((double)frame_dt * 1000, !player_render_ready() || !immediate_scene_ready() || local_player_on_portal());
+    fetch_frame_begin((double)frame_dt * 1000, !player_render_ready() || !immediate_scene_ready() || g_game_state.player.base.on_portal);
     text_font_sync();
     game_client_on_tick();
     audio_context_update(frame_dt);

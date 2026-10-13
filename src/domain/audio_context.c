@@ -143,13 +143,13 @@ static void craft_snapshot(bool map_changed) {
  * departing map's bindings are still current, because audio_set_map would otherwise
  * ask the map just entered for a binding it has not loaded yet. */
 static void portal_snapshot(bool map_changed) {
-    if (local_player_on_portal()) {
+    if (g_game_state.player.base.on_portal) {
         if (!s_portal_hold) {
             s_portal_hold = true;
             fetch_event("portal_enter", s_map, 0, 0);
             audio_event(AUDIO_EVENT_PORTAL_COOLDOWN);
         }
-        s_portal_progress = local_player_portal_hold_progress();
+        s_portal_progress = g_game_state.player.base.portal_hold;
         return;
     }
     if (!s_portal_hold) return;

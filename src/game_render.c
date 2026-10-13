@@ -23,6 +23,7 @@
 #include "fx/fx_heal_aura.h"
 #include "fx/fx_level_up.h"
 #include "fx/fx_obstacle_burst.h"
+#include "fx/fx_portal_aura.h"
 #include "ui/inventory_bar.h"
 #include "fx/loot_fx.h"
 #include "ui/inventory_modal.h"
@@ -46,41 +47,6 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-
-/* ── Portal hold progress bar ─────────────────────────────────────────── */
-#define PORTAL_BAR_W       220
-#define PORTAL_BAR_H        14
-#define PORTAL_BAR_MARGIN   10
-
-/* Centered just above the inventory hotbar; visible only while the local
- * player is standing inside an active portal. Renders the authoritative
- * replicated hold progress — the client derives nothing. */
-static void draw_portal_progress_bar(int sw, int sh) {
-    if (!local_player_on_portal()) return;
-
-    float progress = local_player_portal_hold_progress();
-    if (progress < 0.0f) progress = 0.0f;
-    if (progress > 1.0f) progress = 1.0f;
-
-    float x = (sw - PORTAL_BAR_W) * 0.5f;
-    float y = (float)(sh - inventory_bar_visible_height() - PORTAL_BAR_MARGIN - PORTAL_BAR_H);
-    Rectangle track = { x, y, (float)PORTAL_BAR_W, (float)PORTAL_BAR_H };
-
-    DrawRectangleRounded(track, 0.5f, 6, (Color){ 10, 12, 24, 220 });
-    if (progress > 0.0f) {
-        Rectangle fill = { x, y, PORTAL_BAR_W * progress, (float)PORTAL_BAR_H };
-        DrawRectangleRounded(fill, 0.5f, 6, (Color){ 90, 170, 255, 240 });
-    }
-    DrawRectangleRoundedLinesEx(track, 0.5f, 6, 1.0f, (Color){ 120, 160, 220, 200 });
-
-    const char* label = "Teleporting...";
-    int fs = 12;
-    int tw = MeasureText(label, fs);
-    int tx = (int)(x + (PORTAL_BAR_W - tw) * 0.5f);
-    int ty = (int)(y - fs - 2);
-    DrawText(label, tx + 1, ty + 1, fs, (Color){ 0, 0, 0, 200 });
-    DrawText(label, tx, ty, fs, (Color){ 220, 230, 245, 245 });
-}
 
 // Global renderer instance
 GameRenderer g_renderer = {0};
@@ -269,6 +235,7 @@ void game_render_world(void) {
     fx_level_up_draw();
     fx_heal_aura_draw();
     fx_death_draw();
+    fx_portal_aura_draw();
     fx_obstacle_burst_draw();
 
     // 9. Grid overlay (if dev_ui enabled - renders on top of everything)
@@ -950,6 +917,8 @@ void game_render_entities(void) {
                     /* Respawn countdown is local-player-only: a remote client
                      * must never see another player's countdown. */
                     .respawn_seconds   = (!cue && entry->is_main_player && entity_base->respawn_in > 0.0f)
+                    .on_portal         = !cue && entity_base->on_portal,
+                    .portal_hold       = entity_base->portal_hold,
                                          ? (int)(entity_base->respawn_in + 0.5f) : 0,
                 };
                 entity_overhead_ui_draw(
@@ -1057,10 +1026,6 @@ void game_render_ui(void) {
     if (!bar_on_top) {
         inventory_bar_draw();
     }
-
-    // Portal hold progress bar (centered above the inventory bar; only while
-    // the local player stands inside an active portal)
-    draw_portal_progress_bar(g_renderer.screen_width, g_renderer.screen_height);
 
     // Inventory modal (shown on top of everything when open)
     if (inventory_modal_is_open()) {

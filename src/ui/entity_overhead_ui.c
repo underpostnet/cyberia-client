@@ -5,6 +5,7 @@
  * Rendering stack (drawn bottom → top, above the entity):
  *
  *   [presence icon]                          ← standalone lifecycle icon
+ *   [== Transporting... ]                    transport bar, blue, on a portal
  *   [stats] lv.3  [stack] 107 [action][quest] capability bar
  *   [ Display Name ]                         nameplate
  *   [ HP 73 / 100  ]                         HP bar
@@ -43,6 +44,10 @@ static const Color C_PILL_BORDER = {120, 120, 120, 160 };
 
 /* HP bar — black background (the depleted portion reads as black) + outline. */
 static const Color C_HP_BG       = {  0,   0,   0, 235 };
+
+/* Transport bar — blue teleport charge over the HP bar's black track. */
+static const Color C_TRANSPORT_FILL   = { 90, 170, 255, 240 };
+static const Color C_TRANSPORT_BORDER = {120, 160, 220, 200 };
 
 /* XP bar — translucent gold over a translucent dark track. */
 static const Color C_XP_FILL     = {255, 215,   0, 220 };
@@ -146,6 +151,21 @@ static void draw_xp_bar(float cx, float top_y, float ratio, double xp, double xp
         snprintf(label, sizeof(label), "XP %.0f / %.0f", xp, xp_next);
         draw_centered_label(label, cx, top_y, EOHUD_XP_LABEL_FONT_SIZE, C_LABEL, C_NAME_SHADOW, (float)EOHUD_XP_BAR_H);
     }
+}
+
+static void draw_transport_bar(float cx, float top_y, float charge) {
+    Rectangle bar = { cx - EOHUD_HP_BAR_W * 0.5f, top_y,
+                      (float)EOHUD_HP_BAR_W, (float)EOHUD_BAR_H };
+    DrawRectangleRounded(bar, EOHUD_PILL_ROUND, 8, C_HP_BG);
+    if (charge > 1.0f) charge = 1.0f;
+    if (charge > 0.0f) {
+        Rectangle fill = bar;
+        fill.width = bar.width * charge;
+        DrawRectangleRounded(fill, EOHUD_PILL_ROUND, 8, C_TRANSPORT_FILL);
+    }
+    DrawRectangleRoundedLinesEx(bar, EOHUD_PILL_ROUND, 8, 1.0f, C_TRANSPORT_BORDER);
+    draw_centered_label("Transporting...", cx, top_y, EOHUD_HP_LABEL_FONT_SIZE, C_LABEL, C_NAME_SHADOW,
+                        (float)EOHUD_BAR_H);
 }
 
 static void draw_nameplate(const char *name, float cx, float top_y) {
@@ -265,6 +285,12 @@ void entity_overhead_ui_draw(
         draw_centered_outlined_label(rbuf, entity_cx_px, cursor_px, EOHUD_RESPAWN_FONT_SIZE,
                                      C_RESPAWN_TEXT, C_STAT_SHADOW, EOHUD_OUTLINE_RINGS,
                                      (float)EOHUD_RESPAWN_BAR_H);
+        cursor_px -= EOHUD_ROW_GAP;
+    }
+
+    if (p->on_portal) {
+        cursor_px -= EOHUD_BAR_H;
+        draw_transport_bar(entity_cx_px, cursor_px, p->portal_hold);
         cursor_px -= EOHUD_ROW_GAP;
     }
 
