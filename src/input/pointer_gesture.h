@@ -9,7 +9,11 @@
  * raylib and acts on the result. */
 
 /* Joystick base radius in screen pixels. The thumb stays inside it. */
-#define POINTER_JOYSTICK_RADIUS 72.0f
+#define POINTER_JOYSTICK_RADIUS      72.0f
+/* A gameplay press starts the joystick once it is held this long and travels
+ * this far. Released sooner, it taps at its press, however far it travelled. */
+#define POINTER_JOYSTICK_HOLD_S      0.15
+#define POINTER_JOYSTICK_ACTIVATE_PX 35.0f
 
 typedef enum pointer_state {
     POINTER_IDLE,
@@ -38,7 +42,7 @@ typedef struct pointer_sample {
 typedef struct pointer_gesture {
     enum pointer_state state;
     int     id;       /* identifier of the pointer that started the gesture */
-    double  age;      /* POINTER_UI_PENDING: seconds since the press */
+    double  age;      /* pending states: seconds since the press */
     Vector2 origin;   /* press position: the joystick base */
     Vector2 tap;      /* POINTER_TAP: the position tapped */
     Vector2 thumb;    /* pointer position, clamped to the radius */

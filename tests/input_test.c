@@ -11,6 +11,8 @@
 #include <stdio.h>
 
 #define DT (1.0 / 60.0)
+/* Frames that hold a press past the joystick hold time. */
+#define HOLD_FRAMES ((int)ceil(POINTER_JOYSTICK_HOLD_S / DT) + 1)
 
 /* Stubbed platform: identity camera, player at cell (10, 10), 32 px cells,
  * speed 2 and a 0.5 s cooldown, so a steering tap reaches 3 cells. */
@@ -90,6 +92,11 @@ static void touch_down(float x, float y) {
     s_presses++;
 }
 
+/* Hold the pointer still past the joystick hold time; nothing taps. */
+static void hold_still(void) {
+    for (int i = 0; i < HOLD_FRAMES; i++) assert(0 == all_taps(frame()));
+}
+
 /* One synthetic tap in a frame, at the given screen and world point. */
 static void assert_steer(input_queue_t q, float x, float y) {
     input_event_t e;
@@ -107,9 +114,18 @@ int main(void) {
     assert(1 == taps(q, false, &e) && 0 == taps(q, true, NULL));
     assert(near(e.screen_position, 50.0f, 60.0f) && near(e.world_position, 50.0f, 60.0f));
 
-    /* A mouse drag steers like the keys; release stops the walk once. */
-    mouse_down(200.0f, 200.0f);
+    /* A quick click on the move taps at its press and never steers. */
+    mouse_down(100.0f, 100.0f);
     assert(0 == all_taps(frame()));
+    s_mouse = (Vector2){ 220.0f, 100.0f };
+    assert(0 == all_taps(frame()) && POINTER_JOYSTICK != input_pointer_gesture()->state);
+    s_mouse_down = false;
+    q = frame();
+    assert(1 == taps(q, false, &e) && 0 == taps(q, true, NULL) && near(e.screen_position, 100.0f, 100.0f));
+
+    /* A held mouse drag steers like the keys; release stops the walk once. */
+    mouse_down(200.0f, 200.0f);
+    hold_still();
     s_mouse = (Vector2){ 260.0f, 200.0f };
     assert_steer(frame(), 416.0f, 320.0f);
     assert(POINTER_JOYSTICK == input_pointer_gesture()->state);
@@ -160,9 +176,9 @@ int main(void) {
     assert(1 == s_actions && CLIENT_EVENT_PLAYER_ACTION == s_action.kind);
     assert(fabsf(s_action.payload.target_x - 100.0f / 32.0f) < 0.001f);
 
-    /* A drag steers like the keys and never taps the press position. */
+    /* A held drag steers like the keys and never taps the press position. */
     touch_down(200.0f, 200.0f);
-    assert(0 == all_taps(frame()));
+    hold_still();
     s_touch_pos[0] = (Vector2){ 260.0f, 200.0f };
     q = frame();
     assert_steer(q, 416.0f, 320.0f);
@@ -203,7 +219,7 @@ int main(void) {
 
     /* A second finger stops the joystick once; the pinch still zooms. */
     touch_down(200.0f, 200.0f);
-    frame();
+    hold_still();
     s_touch_pos[0] = (Vector2){ 260.0f, 200.0f };
     assert_steer(frame(), 416.0f, 320.0f);
     s_touches = 2;

@@ -10,6 +10,9 @@
 #define DT (1.0 / 60.0)
 #define FINGER 7
 #define MOUSE  (-1)
+/* Frames that hold a press past the joystick hold time. */
+#define HOLD_FRAMES ((int)ceil(POINTER_JOYSTICK_HOLD_S / DT) + 1)
+#define ACTIVATE    POINTER_JOYSTICK_ACTIVATE_PX
 
 static const Vector2 ORIGIN = { 200.0f, 300.0f };
 
@@ -29,11 +32,11 @@ static const pointer_sample_t lifted = { 0 };
 
 static Vector2 offset(float dx, float dy) { return (Vector2){ ORIGIN.x + dx, ORIGIN.y + dy }; }
 
-/* A gameplay press at ORIGIN, then a hold at ORIGIN + (dx, dy). */
+/* A gameplay press at ORIGIN, then a hold at ORIGIN + (dx, dy) past the hold time. */
 static pointer_gesture_t drag(float dx, float dy) {
     pointer_gesture_t g = { 0 };
     assert(POINTER_NONE == pointer_gesture_update(&g, press_at(ORIGIN, false), DT));
-    assert(POINTER_NONE == pointer_gesture_update(&g, hold_at(offset(dx, dy)), DT));
+    for (int i = 0; i < HOLD_FRAMES; i++) assert(POINTER_NONE == pointer_gesture_update(&g, hold_at(offset(dx, dy)), DT));
     return g;
 }
 
@@ -55,12 +58,28 @@ int main(void) {
     assert(POINTER_NONE == pointer_gesture_update(&g, lifted, DT));
 
     /* Travel inside the drag threshold stays a tap. */
-    g = drag(10.0f, 0.0f);
+    g = drag(ACTIVATE - 1.0f, 0.0f);
     assert(POINTER_PENDING == g.state);
     assert(POINTER_TAP == pointer_gesture_update(&g, lifted, DT));
 
-    /* Past the threshold the joystick starts; its base stays at the press. */
-    g = drag(15.0f, 0.0f);
+    /* A quick press taps at its press, however far it travelled: a fast click on the move. */
+    g = (pointer_gesture_t){ 0 };
+    assert(POINTER_NONE == pointer_gesture_update(&g, press_at(ORIGIN, false), DT));
+    for (int i = 0; i < HOLD_FRAMES / 2; i++)
+        assert(POINTER_NONE == pointer_gesture_update(&g, hold_at(offset(3.0f * ACTIVATE, 0.0f)), DT));
+    assert(POINTER_PENDING == g.state);
+    assert(POINTER_TAP == pointer_gesture_update(&g, lifted, DT));
+    assert(Vector2Equals(ORIGIN, g.tap));
+
+    /* A press held still past the hold time starts the joystick on its first travel. */
+    g = drag(0.0f, 0.0f);
+    assert(POINTER_PENDING == g.state);
+    assert(POINTER_NONE == pointer_gesture_update(&g, hold_at(offset(0.0f, -(ACTIVATE + 1.0f))), DT));
+    assert(POINTER_JOYSTICK == g.state && 0 == g.dir_x && -1 == g.dir_y);
+    assert(POINTER_STEER_END == pointer_gesture_update(&g, lifted, DT));
+
+    /* Past the hold time and the threshold the joystick starts; its base stays at the press. */
+    g = drag(ACTIVATE + 1.0f, 0.0f);
     assert(POINTER_JOYSTICK == g.state && 1 == g.dir_x && 0 == g.dir_y);
     assert(POINTER_NONE == pointer_gesture_update(&g, hold_at(offset(40.0f, 0.0f)), DT));
     assert(Vector2Equals(ORIGIN, g.origin));
@@ -131,8 +150,8 @@ int main(void) {
     assert(POINTER_NONE == pointer_gesture_update(&g, lifted, DT));
 
     /* A new contact 0 ends the gesture as a lost contact. */
-    g = drag(30.0f, 0.0f);
-    pointer_sample_t other = hold_at(offset(30.0f, 0.0f));
+    g = drag(50.0f, 0.0f);
+    pointer_sample_t other = hold_at(offset(50.0f, 0.0f));
     other.id = FINGER + 1;
     assert(POINTER_STEER_END == pointer_gesture_update(&g, other, DT));
     assert(POINTER_SUPPRESSED == g.state);
@@ -165,12 +184,18 @@ int main(void) {
     assert(POINTER_NONE == pointer_gesture_update(&g, mouse_at(offset(80.0f, 0.0f), false, false), DT));
     assert(POINTER_NONE == pointer_gesture_update(&g, lifted, DT));
 
-    /* A mouse click on the world taps on release; a mouse drag steers. */
+    /* A mouse click on the world taps on release, also when the mouse moved during it; a held
+     * mouse drag steers. */
     assert(POINTER_NONE == pointer_gesture_update(&g, mouse_at(ORIGIN, true, false), DT));
     assert(POINTER_PENDING == g.state);
     assert(POINTER_TAP == pointer_gesture_update(&g, lifted, DT));
     assert(POINTER_NONE == pointer_gesture_update(&g, mouse_at(ORIGIN, true, false), DT));
-    assert(POINTER_NONE == pointer_gesture_update(&g, mouse_at(offset(0.0f, -40.0f), false, false), DT));
+    assert(POINTER_NONE == pointer_gesture_update(&g, mouse_at(offset(0.0f, -100.0f), false, false), DT));
+    assert(POINTER_TAP == pointer_gesture_update(&g, lifted, DT));
+    assert(Vector2Equals(ORIGIN, g.tap));
+    assert(POINTER_NONE == pointer_gesture_update(&g, mouse_at(ORIGIN, true, false), DT));
+    for (int i = 0; i < HOLD_FRAMES; i++)
+        assert(POINTER_NONE == pointer_gesture_update(&g, mouse_at(offset(0.0f, -(ACTIVATE + 5.0f)), false, false), DT));
     assert(POINTER_JOYSTICK == g.state && 0 == g.dir_x && -1 == g.dir_y);
     assert(POINTER_STEER_END == pointer_gesture_update(&g, lifted, DT));
 

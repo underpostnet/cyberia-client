@@ -8,8 +8,6 @@
 
 /* A second finger inside this window makes a UI press a pinch, not a tap. */
 #define TAP_CONFIRM_WINDOW_S 0.12
-/* Drag threshold: a gameplay press that travels farther starts the joystick. */
-#define JOYSTICK_ACTIVATE_PX 14.0f
 /* Part of the radius around the base that gives no heading. */
 #define JOYSTICK_DEAD_ZONE   0.15f
 /* tan 22.5°: the edge between a cardinal and a diagonal 45° sector. */
@@ -77,7 +75,10 @@ enum pointer_result pointer_gesture_update(pointer_gesture_t* g, pointer_sample_
 
     Vector2 d   = Vector2Subtract(s.position, g->origin);
     float   len = Vector2Length(d);
-    if (POINTER_PENDING == g->state && JOYSTICK_ACTIVATE_PX < len) g->state = POINTER_JOYSTICK;
+    if (POINTER_PENDING == g->state) {
+        g->age += dt;
+        if (POINTER_JOYSTICK_HOLD_S <= g->age && POINTER_JOYSTICK_ACTIVATE_PX < len) g->state = POINTER_JOYSTICK;
+    }
     if (POINTER_JOYSTICK != g->state) return POINTER_NONE;
 
     g->thumb = Vector2Add(g->origin, Vector2ClampValue(d, 0.0f, POINTER_JOYSTICK_RADIUS));
