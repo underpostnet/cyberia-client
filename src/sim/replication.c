@@ -108,19 +108,22 @@ void prediction_reconcile(void) {
     apply_facts();                               /* 3. stasis flag, item ops */
     vault_ops_apply_pending();                   /*    the open vault's pending list */
 
-    if (0 == s_pred.state_frame) {               /* 4. no offset yet: apply, do not step */
-        apply_motion(0, UINT32_MAX);
-        s_pred.prev = s_pred.curr;               /*    no step yet: nothing to draw between */
-    } else {
-        apply_motion(0, s_pred.state_frame);     /* 5. in flight, dated before the state */
-        for (cyberia_frame_t s = s_pred.state_frame + 1; s <= session_frame(); s++) {
-            apply_motion(s, s);                  /* 6. replay to now */
-            self_motion_step(&s_pred.curr, local_player_move_speed(), TICK_DURATION_S);
-        }
-        float error = Vector2Distance(predicted, s_pred.curr.pos);
-        if (s_pred.state_frame <= session_frame() && REPLAY_EPS < error) {
-            LOG_DEBUG("[REPLAY] frame=%u error=%.3f", session_frame(), error);
-        }
+    /* 4. With no event consumed, the state stands for the step before the oldest event. */
+    cyberia_frame_t from = s_pred.state_frame;
+    if (0 == from) {
+        int count = 0;
+        const client_event_t* list = client_event_list(&count);
+        from = 0 < count ? list[0].frame : session_frame();
+        if (0 == count) s_pred.prev = s_pred.curr;   /* no event yet: nothing to draw between */
+    }
+    apply_motion(0, from);                       /* 5. in flight, dated before the state */
+    for (cyberia_frame_t s = from + 1; s <= session_frame(); s++) {
+        apply_motion(s, s);                      /* 6. replay to now */
+        self_motion_step(&s_pred.curr, local_player_move_speed(), TICK_DURATION_S);
+    }
+    float error = Vector2Distance(predicted, s_pred.curr.pos);
+    if (from <= session_frame() && REPLAY_EPS < error) {
+        LOG_DEBUG("[REPLAY] frame=%u error=%.3f", session_frame(), error);
     }
     if (MODE_TELEPORTING == game_state_motion(g_local_player.id)->mode) s_pred.prev = s_pred.curr;
 }

@@ -75,3 +75,9 @@ cc "${cc_flags[@]}" -ffunction-sections -fdata-sections -Wl,--gc-sections \
 
 cc "${cc_flags[@]}" -o "$out/self_motion" tests/self_motion_test.c src/sim/self_motion.c -lm
 "$out/self_motion"
+
+cc "${cc_flags[@]}" -ffunction-sections -fdata-sections -Wl,--gc-sections \
+    -o "$out/replication" tests/replication_test.c src/sim/replication.c src/sim/self_motion.c \
+    src/net/client_event.c src/sim/game_state.c src/sim/local_player.c src/sim/vault_ops.c \
+    src/serial.c src/utils.c libs/cJSON/cJSON.c -lm
+"$out/replication"
