@@ -24,4 +24,24 @@ static inline Stats cyberia_stats_from_values(const int values[CYBERIA_STAT_COUN
 }
 static const char* const CYBERIA_STAT_ICONS[CYBERIA_STAT_COUNT] = {"stat-effect", "stat-resistance", "stat-agility", "stat-range", "stat-intelligence", "stat-utility"};
 static const char* const CYBERIA_STAT_LABELS[CYBERIA_STAT_COUNT] = {"Effect", "Resistance", "Agility", "Range", "Intelligence", "Utility"};
+/* The open stack slots of a player container at each level. */
+typedef struct {
+    int base, step, every, max;
+} CyberiaCapacityRule;
+#define CYBERIA_INVENTORY_SLOTS_MAX 24
+#define CYBERIA_STORAGE_SLOTS_MAX 40
+static const CyberiaCapacityRule CYBERIA_INVENTORY_CAPACITY = {8, 1, 3, CYBERIA_INVENTORY_SLOTS_MAX};
+static const CyberiaCapacityRule CYBERIA_STORAGE_CAPACITY = {16, 2, 5, CYBERIA_STORAGE_SLOTS_MAX};
+/* Open slots at level. */
+static inline int cyberia_capacity_slots(CyberiaCapacityRule rule, int level) {
+    int slots = rule.base + rule.step * ((1 < level ? level - 1 : 0) / rule.every);
+    return slots < rule.max ? slots : rule.max;
+}
+/* Level that opens the slot at index slot. */
+static inline int cyberia_capacity_unlock_level(CyberiaCapacityRule rule, int slot) {
+    return slot < rule.base ? 1 : 1 + rule.every * ((slot - rule.base) / rule.step + 1);
+}
+#define CYBERIA_PARTY_MAX_MEMBERS 5
+#define CYBERIA_PARTY_INVITES_MAX 5
+#define CYBERIA_CHAT_TEXT_MAX_RUNES 160
 #endif

@@ -71,6 +71,9 @@ struct GameState {
     int grid_w;
     int grid_h;
     float aoi_radius;
+    /* Highest level of the instance; a container slot that opens past it
+     * never opens. */
+    int max_level;
 
     EntityTypeDefault entity_defaults[MAX_ENTITY_TYPES];
     int entity_defaults_count;

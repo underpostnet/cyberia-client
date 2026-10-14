@@ -16,6 +16,7 @@
 /* ── Tuning ─────────────────────────────────────────────────────────────── */
 
 #define FQ_MAX          96      /* tracked items                                */
+#define FQ_STACKS       CYBERIA_INVENTORY_SLOTS_MAX /* stacks remembered per item */
 #define FQ_RELEASE_WAIT 1.6     /* s to wait for a pickup particle before firing */
 #define FQ_HELD_WAIT    4.0     /* s fallback for externally-held changes (the
                                    holder refreshes pending_since while waiting) */
@@ -35,7 +36,13 @@ static const Color FQ_LOSS = { 245,  65,  55, 255 }; /* vivid red   - */
 
 typedef struct {
     char   item_id[MAX_ITEM_ID_LENGTH];
-    int    actual;        /* last known authoritative quantity                  */
+    int    actual;        /* last known authoritative quantity, over all stacks */
+    /* The stacks of the item last frame, and the bag slot of the latest change:
+     * the one stack its hold, pulse and popup show on. */
+    int    seen_slot[FQ_STACKS];
+    int    seen_qty[FQ_STACKS];
+    int    seen_count;
+    int    cell;
     float  display;       /* badge value: the pre-change count while held       */
     /* A detected change held until the pickup particle lands (or fallback). */
     bool   pending;
@@ -49,8 +56,8 @@ typedef struct {
     bool   held;          /* external hold (reward delivery) — long fallback    */
     bool   silent;        /* next change lands with no FX (a visible transfer)  */
     bool   present;       /* item was in the local inventory this frame         */
-    float  slot_x, slot_y;/* last-known slot center (for the expend after removal) */
-    bool   has_slot;      /* slot center has been captured at least once        */
+    float  slot_x, slot_y;/* last-known center of the changed cell, for the expend */
+    bool   has_slot;      /* that center has been captured at least once        */
     double last_seen;     /* eviction sentinel                                  */
     bool   used;
 } FqEntry;
@@ -95,14 +102,9 @@ static void release_pending(FqEntry* e) {
         e->delta = e->pending_delta;
         e->popup_age = 0.0f;
         if (e->pending_delta > 0 || e->hidden) e->pulse_age = 0.0f;
-        /* A reduction sprays outward from the slot. If the last copy was consumed
-         * the slot is gone, so launch from its captured last-known center. */
-        if (e->pending_delta < 0) {
-            if (!e->present && e->has_slot)
-                loot_fx_slot_expend_at(e->item_id, e->slot_x, e->slot_y);
-            else
-                loot_fx_slot_expend(e->item_id);
-        }
+        /* A reduction sprays outward from the cell that changed, captured
+         * while it held the stack. */
+        if (e->pending_delta < 0 && e->has_slot) loot_fx_slot_expend_at(e->item_id, e->slot_x, e->slot_y);
     }
     /* The badge lands with the delivery: the moment the item visibly arrives is
      * the moment its slot must read the new total, so the count snaps here
@@ -147,6 +149,22 @@ void fx_inventory_bar_qty_notify_arrival(const char* item_id) {
 
 /* ── Update ────────────────────────────────────────────────────────────── */
 
+/* The bag slot whose stack changed since last frame: a stack that grew, shrank
+ * or arrived, else one that left. */
+static int changed_cell(const FqEntry* e, const int slots[], const int qtys[], int count) {
+    for (int k = 0; k < count; k++) {
+        int j = 0;
+        while (j < e->seen_count && slots[k] != e->seen_slot[j]) j++;
+        if (j == e->seen_count || qtys[k] != e->seen_qty[j]) return slots[k];
+    }
+    for (int j = 0; j < e->seen_count; j++) {
+        int k = 0;
+        while (k < count && slots[k] != e->seen_slot[j]) k++;
+        if (k == count) return e->seen_slot[j];
+    }
+    return e->cell;
+}
+
 void fx_inventory_bar_qty_update(float dt) {
     s_clock += dt;
 
@@ -156,12 +174,28 @@ void fx_inventory_bar_qty_update(float dt) {
     for (int i = 0; i < g_local_player.inventory_count; i++) {
         const char* id = g_local_player.inventory[i].item_id;
         if (id[0] == '\0') continue;
-        int qty = g_local_player.inventory[i].quantity;
+        /* One entry per item: the total of its stacks, read at its first stack. */
+        int qty = 0, count = 0, first = i;
+        int slots[FQ_STACKS], qtys[FQ_STACKS];
+        for (int k = 0; k < g_local_player.inventory_count; k++) {
+            const ObjectLayerState* stack = &g_local_player.inventory[k];
+            if (0 != strcmp(stack->item_id, id)) continue;
+            if (0 == count) first = k;
+            if (FQ_STACKS > count) {
+                slots[count] = stack->slot;
+                qtys[count] = stack->quantity;
+            }
+            count++;
+            qty += stack->quantity;
+        }
+        if (first != i) continue;
+        if (FQ_STACKS < count) count = FQ_STACKS;
 
         FqEntry* e = find(id);
         if (!e) {
             e = alloc_entry(id);
             e->actual = qty;
+            e->cell = slots[0];
             if (loot_fx_inbound_to_inventory(id)) {
                 /* First copy with its pickup still in flight: hold the slot
                  * hidden until the flight lands, then reveal + "+N" + tween. */
@@ -175,6 +209,7 @@ void fx_inventory_bar_qty_update(float dt) {
                 e->display = (float)qty;
             }
         } else if (e->actual != qty) {
+            e->cell = changed_cell(e, slots, qtys, count);
             if (e->silent) {
                 /* A transfer between two visible surfaces: land the badge with
                  * no popup, and drop any hold that was waiting on it. */
@@ -189,16 +224,17 @@ void fx_inventory_bar_qty_update(float dt) {
                 e->actual = qty;
             }
         }
-        e->present   = true;
-        e->last_seen = s_clock;
-        /* Remember where the slot sits while it exists, so the expend can launch
-         * from there once the last copy is consumed and the slot is gone. */
-        Vector2 sc;
-        if (inventory_bar_item_slot_center(id, &sc)) {
-            e->slot_x = sc.x;
-            e->slot_y = sc.y;
-            e->has_slot = true;
-        }
+        memcpy(e->seen_slot, slots, (size_t)count * sizeof slots[0]);
+        memcpy(e->seen_qty, qtys, (size_t)count * sizeof qtys[0]);
+        e->seen_count = count;
+        e->present    = true;
+        e->last_seen  = s_clock;
+        /* Remember where the changed cell sits, so the expend can launch from
+         * there once its stack is gone. */
+        Vector2 sc = inventory_bar_cell_center(e->cell);
+        e->slot_x = sc.x;
+        e->slot_y = sc.y;
+        e->has_slot = true;
     }
 
     for (int i = 0; i < FQ_MAX; i++) {
@@ -243,11 +279,13 @@ void fx_inventory_bar_qty_update(float dt) {
 
 /* ── Queries / draw ────────────────────────────────────────────────────── */
 
-int fx_inventory_bar_qty_display(const char* item_id, int actual) {
+int fx_inventory_bar_qty_display(const char* item_id, int slot, int actual) {
     if (!item_id || item_id[0] == '\0') return actual;
     FqEntry* e = find(item_id);
-    if (!e) return actual;
-    return (int)(e->display + 0.5f);
+    if (!e || slot != e->cell) return actual;
+    /* The changed stack holds its share of the held change. */
+    int held = actual + (int)(e->display + 0.5f) - e->actual;
+    return 0 > held ? 0 : held;
 }
 
 bool fx_inventory_bar_qty_slot_visible(const char* item_id) {
@@ -256,19 +294,19 @@ bool fx_inventory_bar_qty_slot_visible(const char* item_id) {
     return !(e && e->hidden);
 }
 
-float fx_inventory_bar_qty_slot_scale(const char* item_id) {
+float fx_inventory_bar_qty_slot_scale(const char* item_id, int slot) {
     if (!item_id || item_id[0] == '\0') return 1.0f;
     FqEntry* e = find(item_id);
-    if (!e || e->pulse_age < 0.0f) return 1.0f;
+    if (!e || slot != e->cell || e->pulse_age < 0.0f) return 1.0f;
     /* Half-sine envelope: eases up to the peak and back with no bounce. */
     float t = e->pulse_age / FQ_PULSE_TTL;
     return 1.0f + FQ_PULSE_AMP * sinf(PI * t);
 }
 
-bool fx_inventory_bar_qty_slot_pulsing(const char* item_id) {
+bool fx_inventory_bar_qty_slot_pulsing(const char* item_id, int slot) {
     if (!item_id || item_id[0] == '\0') return false;
     FqEntry* e = find(item_id);
-    return e && 0.0f <= e->pulse_age;
+    return e && slot == e->cell && 0.0f <= e->pulse_age;
 }
 
 static void draw_popup(const FqEntry* e, Rectangle slot) {
@@ -307,11 +345,11 @@ static void draw_popup(const FqEntry* e, Rectangle slot) {
     DrawText(buf, cx, cy, fs, body);
 }
 
-void fx_inventory_bar_qty_draw(Rectangle slot, const char* item_id) {
+void fx_inventory_bar_qty_draw(Rectangle rect, const char* item_id, int slot) {
     if (!item_id || item_id[0] == '\0') return;
     FqEntry* e = find(item_id);
-    if (!e || e->popup_age < 0.0f) return;
-    draw_popup(e, slot);
+    if (!e || slot != e->cell || e->popup_age < 0.0f) return;
+    draw_popup(e, rect);
 }
 
 void fx_inventory_bar_qty_draw_bottom(Rectangle anchor) {

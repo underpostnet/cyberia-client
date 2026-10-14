@@ -38,6 +38,36 @@ void item_slot_draw_quantity(Rectangle r, int quantity) {
     DrawText(buf, bx, by, fs, C_QTY_TEXT);
 }
 
+static const Color C_EMPTY_FILL   = {  18,  24,  38, 200 };
+static const Color C_EMPTY_BORDER = {  58,  78, 110, 200 };
+static const Color C_LOCKED_FILL  = {   8,  10,  16, 220 };
+static const Color C_LOCKED_TEXT  = { 150, 160, 190, 230 };
+
+void item_slot_draw_empty(Rectangle r) {
+    DrawRectangleRec(r, BLACK);
+    Rectangle inner = ui_rect_inset(r, 2.0f);
+    DrawRectangleRec(inner, C_EMPTY_FILL);
+    DrawRectangleLinesEx(inner, 1.0f, C_EMPTY_BORDER);
+}
+
+void item_slot_draw_locked(Rectangle r, int unlock_level) {
+    DrawRectangleRec(r, BLACK);
+    Rectangle inner = ui_rect_inset(r, 2.0f);
+    DrawRectangleRec(inner, C_LOCKED_FILL);
+    DrawRectangleLinesEx(inner, 1.0f, C_EMPTY_BORDER);
+    int font = badge_font(r.width) - 2;
+    bool labelled = 0 < unlock_level;
+    float icon = r.width * (labelled ? 0.42f : 0.5f);
+    float cy = r.y + r.height * (labelled ? 0.40f : 0.5f);
+    ui_icon_draw("lock", r.x + r.width * 0.5f, cy, (int)icon, false, 0.0f);
+    if (!labelled) return;
+    char label[16];
+    snprintf(label, sizeof(label), "Lv %d", unlock_level);
+    int tw = MeasureText(label, font);
+    DrawText(label, (int)(r.x + (r.width - (float)tw) * 0.5f), (int)(r.y + r.height - (float)font - 4.0f),
+             font, C_LOCKED_TEXT);
+}
+
 void item_slot_draw(Rectangle r, const ObjectLayerState* ols, ObjectLayersManager* mgr) {
     item_slot_draw_ex(r, ols, mgr, WHITE, 0.0f, false);
 }

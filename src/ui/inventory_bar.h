@@ -15,7 +15,12 @@
  *
  * A press-and-slide scrolls the strip 1:1 and releases into an inertial
  * glide. A press that never became a drag taps the slot below it, so
- * scrolling never opens a modal. */
+ * scrolling never opens a modal.
+ *
+ * Each strip cell is a bag slot of the server, so a stack stays where it
+ * was dropped, and a stack that moves slides into its cell. Reorder mode, from
+ * the button beside the bag toggle, makes a drag move a stack to another cell,
+ * or to a cell of the open container. Nothing activates while it is on. */
 
 /* The layout metrics live in inventory_bar.c — only the bar itself lays them
  * out. Ask `inventory_bar_visible_height` for the height on screen. */
@@ -61,6 +66,25 @@ bool inventory_bar_point_covered(int mx, int my);
 
 /* full_inventory index of the slot below the screen point, or -1 on a miss. */
 int inventory_bar_get_tapped_slot(int mx, int my);
+
+/* The bag slot of the bar cell under the screen point: a strip cell, or the
+ * wallet for the coin slot. False off the settled bar. */
+bool inventory_bar_cell_at(int mx, int my, int* slot);
+
+/* The screen rect of the bar cell of a bag slot, the coin slot for the wallet. */
+Rectangle inventory_bar_cell_rect(int slot);
+
+/* Screen-space centre of the bar cell of a bag slot; the bag toggle while the
+ * bar is hidden. */
+Vector2 inventory_bar_cell_center(int slot);
+
+/* Slide the stack of bag slot `slot` in from `origin`, a screen rect. */
+void inventory_bar_animate_from(int slot, Rectangle origin);
+
+bool inventory_bar_reordering(void);
+
+/* Leave reorder mode. True when it was on. */
+bool inventory_bar_exit_reorder(void);
 
 /* Slot rectangle where an item would land after an inventory gain. */
 bool inventory_bar_predicted_item_slot_rect(const char* item_id, Rectangle* out);

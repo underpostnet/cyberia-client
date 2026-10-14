@@ -59,11 +59,12 @@ cJSON* json_pack_player_action(float target_x, float target_y) {
     return root;
 }
 
-cJSON* json_pack_item_active(const char* item_id, bool active) {
+cJSON* json_pack_item_active(const char* item_id, int slot, bool active) {
     assert(item_id);
     cJSON* p;
     cJSON* root = new_message("item_active", &p);
     cJSON_AddStringToObject(p, "itemId", item_id);
+    cJSON_AddNumberToObject(p, "slot", slot);
     cJSON_AddBoolToObject(p, "active", active);
     return root;
 }
@@ -75,10 +76,13 @@ cJSON* json_pack_player_stasis(bool stasis) {
     return root;
 }
 
-cJSON* json_pack_chat(uint32_t to_id, const char* text) {
+cJSON* json_pack_chat(int channel, uint32_t to_id, const char* text) {
+    static const char* const words[] = { "world", "party", "direct" };
+    assert(0 <= channel && channel < (int)(sizeof words / sizeof words[0]));
     cJSON* p;
     cJSON* root = new_message("chat", &p);
-    cJSON_AddNumberToObject(p, "toId", to_id);
+    cJSON_AddStringToObject(p, "channel", words[channel]);
+    if (0 != to_id) cJSON_AddNumberToObject(p, "toId", to_id);
     cJSON_AddStringToObject(p, "text", text ? text : "");
     return root;
 }
@@ -129,21 +133,33 @@ cJSON* json_pack_craft_cancel(void) {
 }
 
 
-cJSON* json_pack_item_op(const char* item_id, int qty, bool to_vault) {
-    cJSON* op = cJSON_CreateObject();
-    assert(op);
-    cJSON_AddStringToObject(op, "itemId", item_id ? item_id : "");
-    cJSON_AddNumberToObject(op, "qty", qty);
-    cJSON_AddBoolToObject(op, "toVault", to_vault);
-    return op;
+cJSON* json_pack_item_move(const char* from, int from_slot, const char* to, int to_slot, int qty,
+                           uint32_t entity_id) {
+    assert(from && to);
+    cJSON* p;
+    cJSON* root = new_message("item_move", &p);
+    cJSON_AddStringToObject(p, "from", from);
+    cJSON_AddNumberToObject(p, "fromSlot", from_slot);
+    cJSON_AddStringToObject(p, "to", to);
+    cJSON_AddNumberToObject(p, "toSlot", to_slot);
+    cJSON_AddNumberToObject(p, "qty", qty);
+    if (0 != entity_id) cJSON_AddNumberToObject(p, "entityId", entity_id);
+    return root;
 }
 
-cJSON* json_pack_item_ops(uint32_t entity_id, cJSON* ops) {
-    assert(ops);
+cJSON* json_pack_party_target(const char* type, const char* key, uint32_t player_id) {
+    assert(type);
     cJSON* p;
-    cJSON* root = new_message("item_ops", &p);
-    cJSON_AddNumberToObject(p, "entityId", entity_id);
-    cJSON_AddItemToObject(p, "ops", ops);
+    cJSON* root = new_message(type, &p);
+    if (NULL != key) cJSON_AddNumberToObject(p, key, player_id);
+    return root;
+}
+
+cJSON* json_pack_party_reply(uint32_t from_id, bool accept) {
+    cJSON* p;
+    cJSON* root = new_message("party_reply", &p);
+    cJSON_AddNumberToObject(p, "fromId", from_id);
+    cJSON_AddBoolToObject(p, "accept", accept);
     return root;
 }
 

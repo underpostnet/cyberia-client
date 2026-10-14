@@ -250,7 +250,7 @@ static void start_dynamic_poll(void) {
     snprintf(asset_id, sizeof(asset_id), "imap-dyn-%d", s_session);
     char url[512];
     snprintf(url, sizeof(url), ENGINE_API_BASE "/cyberia-instance/instance-map/%s/dynamic?playerId=%s",
-             g_game_state.instance_code, g_local_player.engine_id);
+             g_game_state.instance_code, g_local_player.player_id);
     s_poll_inflight = true;
     fetch_request_start(asset_id, url, on_dynamic_fetched);
 }

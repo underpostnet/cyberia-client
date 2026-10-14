@@ -30,7 +30,8 @@ static QuestProgressEntry* find_by_code(const char* code) {
 }
 
 static QuestProgressEntry* upsert(const char* code, const char* status_str,
-                                  const char* active_step, const char* objectives) {
+                                  const char* active_step, const char* objectives,
+                                  bool rewards_held) {
     if (!code || '\0' == code[0]) return NULL;
 
     QuestProgressEntry* e = find_by_code(code);
@@ -49,17 +50,19 @@ static QuestProgressEntry* upsert(const char* code, const char* status_str,
     copy_str(e->active_step, QUEST_STEP_MAX, active_step);
     copy_str(e->objectives,  QUEST_OBJECTIVES_MAX, objectives);
     e->status = quest_progress_store_parse_status(status_str);
+    e->rewards_held = rewards_held;
     return e;
 }
 
 void quest_progress_store_upsert(const char* code, const char* status_str,
-                                 const char* active_step, const char* objectives) {
-    upsert(code, status_str, active_step, objectives);
+                                 const char* active_step, const char* objectives,
+                                 bool rewards_held) {
+    upsert(code, status_str, active_step, objectives, rewards_held);
 }
 
 void quest_progress_store_apply(const char* code, const char* status_str,
                                 const char* active_step, const char* objectives,
-                                bool granted) {
+                                bool rewards_held, bool granted) {
     const QuestProgressEntry* prev = code ? find_by_code(code) : NULL;
     QuestStatus status = quest_progress_store_parse_status(status_str);
 
@@ -68,13 +71,15 @@ void quest_progress_store_apply(const char* code, const char* status_str,
         change = QUEST_CHANGE_COMPLETED;
     } else if (granted) {
         change = QUEST_CHANGE_ACCEPTED;
+    } else if (rewards_held && !(prev && prev->rewards_held)) {
+        change = QUEST_CHANGE_REWARDS_HELD;
     } else if (QUEST_ACTIVE == status && prev && QUEST_ACTIVE == prev->status &&
                '\0' != prev->active_step[0] && 0 != strcmp(prev->active_step, active_step)) {
         /* The step text changes exactly when the previous step finished. */
         change = QUEST_CHANGE_STEP_DONE;
     }
 
-    QuestProgressEntry* e = upsert(code, status_str, active_step, objectives);
+    QuestProgressEntry* e = upsert(code, status_str, active_step, objectives, rewards_held);
     if (NULL == e || QUEST_CHANGE_NONE == change) return;
     e->change = change;
     if (QUEST_CHANGE_COMPLETED == change) audio_event(AUDIO_EVENT_VICTORY);

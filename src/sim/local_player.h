@@ -35,17 +35,49 @@
 #define VAULT_SLOTS_MAX 64
 #define VAULTS_MAX       8
 #define INTERACTIONS_MAX 64
+/* Every stack the inventory capacity opens, plus one appearance for the coin
+ * slot and a dead loadout. */
+#define INVENTORY_LAYERS_MAX (CYBERIA_INVENTORY_SLOTS_MAX + MAX_OBJECT_LAYERS)
 
-/* One vault of the player, keyed by the action code of its terminal. */
+/* The stacks of one container, in server order. */
 typedef struct {
-    char             action_code[MAX_ID_LENGTH];
     ObjectLayerState items[VAULT_SLOTS_MAX];
     int              count;
+} Stacks;
+
+/* One NPC vault of the player, keyed by the action code of its terminal. */
+typedef struct {
+    char   action_code[MAX_ID_LENGTH];
+    Stacks stacks;
 } Vault;
+
+/* One member of the player's party, wherever it is on this server. */
+typedef struct {
+    EntityID id;
+    char     name[PLAYER_NAME_BYTES];
+    int      level;
+    int      life;
+    int      max_life;
+    char     map_code[MAX_ID_LENGTH];
+} PartyMember;
+
+/* The party of the player in join order; member_count 0 is no party. */
+typedef struct {
+    EntityID    leader_id;
+    PartyMember members[CYBERIA_PARTY_MAX_MEMBERS];
+    int         member_count;
+} Party;
+
+/* An invite that waits for the player's answer. */
+typedef struct {
+    EntityID from_id;
+    char     from_name[PLAYER_NAME_BYTES];
+    double   expires_at;   /* GetTime() clock */
+} PartyInvite;
 
 typedef struct {
     EntityID         id;
-    char             engine_id[MAX_ID_LENGTH]; /* the own id for engine REST calls */
+    char             player_id[MAX_ID_LENGTH]; /* the own id for engine REST calls */
     char             map_code[MAX_ID_LENGTH];
     int              coins;
     double           xp;             /* total XP */
@@ -54,10 +86,15 @@ typedef struct {
     int              base_stats[CYBERIA_STAT_COUNT];
     int              layer_stats[CYBERIA_STAT_COUNT];
     int              temporary_stats[CYBERIA_STAT_COUNT];
-    ObjectLayerState inventory[MAX_OBJECT_LAYERS];
+    ObjectLayerState inventory[INVENTORY_LAYERS_MAX];
     int              inventory_count;
-    Vault            vaults[VAULTS_MAX];   /* the server copy, with the unconsumed ops on top */
+    /* The server copies of the containers, with the unconsumed ops on top. */
+    Vault            vaults[VAULTS_MAX];
     int              vault_count;
+    Stacks           storage;              /* the personal storage */
+    Party            party;
+    PartyInvite      invites[CYBERIA_PARTY_INVITES_MAX];
+    int              invite_count;
     bool             crafting;             /* the server runs an assembly */
     Interaction      interactions[INTERACTIONS_MAX];
     int              interaction_count;
@@ -65,6 +102,33 @@ typedef struct {
 
 /* The vault the player has at `action_code`, or NULL when it is still empty. */
 Vault* local_player_vault(const char* action_code);
+
+/* True when item_id is the currency: its stack lives in the wallet slot and
+ * takes no container slot. */
+bool local_player_is_coin(const char* item_id);
+
+/* Open slots of a container rule at the player's level. */
+int  local_player_open_slots(CyberiaCapacityRule rule);
+
+/* Level that opens slot `slot` of a container rule; 0 when this instance
+ * never reaches it. */
+int  local_player_unlock_level(CyberiaCapacityRule rule, int slot);
+
+/* Inventory stacks that take a slot: every stack but the coin. */
+int  local_player_inventory_used(void);
+
+/* True when the inventory takes more of item_id: the stack is held, the item
+ * is the coin, or a slot is open. Mirrors the server rule. */
+bool local_player_inventory_has_room(const char* item_id);
+
+/* The party member `id`, or NULL. */
+const PartyMember* local_player_party_member(EntityID id);
+
+/* True when the local player leads its party. */
+bool local_player_leads_party(void);
+
+/* The pending invite from `id`, or NULL. */
+const PartyInvite* local_player_invite_from(EntityID id);
 
 /* What the bot `id` offers the player, or NULL when it offers nothing. */
 const Interaction* local_player_interaction(EntityID id);
@@ -87,16 +151,25 @@ static inline float local_player_xp_ratio(void) {
     return 0.0 > ratio ? 0.0f : 1.0 < ratio ? 1.0f : (float)ratio;
 }
 
-/* Quantity of an item the player holds; 0 when the inventory has no stack for
- * it. Coins included — the server keeps their display slot in sync with the
- * flat balance. */
+/* Quantity of an item the player holds over all its stacks; 0 when the
+ * inventory has none. Coins included — the server keeps their display slot in
+ * sync with the flat balance. */
 static inline int local_player_item_quantity(const char* item_id) {
     if (NULL == item_id || '\0' == item_id[0]) return 0;
+    int quantity = 0;
     for (int i = 0; i < g_local_player.inventory_count; i++) {
         if (0 == strcmp(g_local_player.inventory[i].item_id, item_id))
-            return g_local_player.inventory[i].quantity;
+            quantity += g_local_player.inventory[i].quantity;
     }
-    return 0;
+    return quantity;
+}
+
+/* The inventory index of the stack in bag slot `slot`, or -1. */
+static inline int local_player_bag_stack(int slot) {
+    for (int i = 0; 0 <= slot && i < g_local_player.inventory_count; i++) {
+        if (slot == g_local_player.inventory[i].slot) return i;
+    }
+    return -1;
 }
 
 #define LOCAL_FCT_PENDING_MAX 64
@@ -132,6 +205,14 @@ void  local_player_request_craft(EntityID entity_id, int recipe_index);
 
 /* Abort the running assembly — the server refunds its ingredients. */
 void  local_player_request_craft_cancel(void);
+
+/* Party requests. The server answers a refusal with party_ack; the snapshot
+ * carries the result. */
+void  local_player_request_party_invite(EntityID player_id);
+void  local_player_request_party_reply(EntityID from_id, bool accept);
+void  local_player_request_party_leave(void);
+void  local_player_request_party_kick(EntityID member_id);
+void  local_player_request_party_disband(void);
 
 /* Status icon ID (mirrors entity status indicator for self). */
 void     local_player_set_status_icon(uint8_t id);

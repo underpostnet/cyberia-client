@@ -20,6 +20,10 @@
  * therefore presentation only — an index is the sole stable identity, and the
  * one a host may put on the wire.
  *
+ * A locked cell takes no drop; empty, it shows the lock with the level that
+ * opens it. A stack in a locked cell can still leave it. A press on a locked
+ * cell still reaches the host as a tap.
+ *
  * Drag model:
  *   - A press on a filled cell arms a drag; it becomes one past a small slop,
  *     so a tap still reaches the host as a click.
@@ -43,6 +47,9 @@
 /* A cell never grows past this, however wide the host's area is; surplus width
  * becomes more columns instead. */
 #define ITEM_SLOT_GRID_CELL_MAX  100.0f
+/* Seconds a stack takes to slide into a cell it was just moved to. The bar
+ * slides its cells at the same pace. */
+#define ITEM_SLOT_GRID_SETTLE_DUR 0.70f
 
 typedef enum {
     ITEM_SLOT_GRID_EVENT_NONE = 0,
@@ -52,7 +59,7 @@ typedef enum {
     ITEM_SLOT_GRID_EVENT_SWAP,
     /* Dropped outside the grid — the host decides what is under `point`. */
     ITEM_SLOT_GRID_EVENT_DROP_OUT,
-    /* An external drag was released over a cell of this grid. */
+    /* An external drag was released over an open cell of this grid. */
     ITEM_SLOT_GRID_EVENT_DROP_IN,
     /* A press that never became a drag. */
     ITEM_SLOT_GRID_EVENT_TAP,
@@ -81,6 +88,8 @@ typedef struct {
 
     /* Cell contents, inline order. An empty cell has an empty item_id. */
     ObjectLayerState cells[ITEM_SLOT_GRID_MAX_SLOTS];
+    bool             locked[ITEM_SLOT_GRID_MAX_SLOTS];
+    int              unlock_level[ITEM_SLOT_GRID_MAX_SLOTS]; /* 0 shows the lock alone */
 
     /* Drag state. */
     bool    pressed;        /* pointer down inside a cell                */
@@ -108,8 +117,9 @@ void item_slot_grid_init(ItemSlotGrid* g, int capacity);
 /* Replace the cell at `index`. A NULL or empty `ols` clears it. */
 void item_slot_grid_set(ItemSlotGrid* g, int index, const ObjectLayerState* ols);
 
-/* Drop every cell's contents (a fresh authoritative snapshot follows). */
-void item_slot_grid_clear(ItemSlotGrid* g);
+/* Lock or open the cell at `index`. `unlock_level` labels a locked cell. The
+ * contents stay. */
+void item_slot_grid_set_locked(ItemSlotGrid* g, int index, bool locked, int unlock_level);
 
 /* Flow the cells across the width of `area`, wrapping into as many rows as the
  * capacity needs. Call before drawing or hit-testing so the two agree. */
@@ -137,6 +147,9 @@ bool item_slot_grid_take_event(ItemSlotGrid* g, ItemSlotGridEvent* out);
 
 /* True while a drag is in flight — hosts suppress their own scroll/tap paths. */
 bool item_slot_grid_is_dragging(const ItemSlotGrid* g);
+
+/* The visible cell under the screen point, or -1. */
+int item_slot_grid_cell_at(const ItemSlotGrid* g, int mx, int my);
 
 /* Cell rect for an index, in the coordinates of the last layout. */
 Rectangle item_slot_grid_cell_rect(const ItemSlotGrid* g, int index);

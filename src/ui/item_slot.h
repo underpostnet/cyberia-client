@@ -29,4 +29,11 @@ void item_slot_draw_ex(Rectangle r, const ObjectLayerState* ols, ObjectLayersMan
 /* Quantity badge in the bottom-right corner of `r`, for more than one unit. */
 void item_slot_draw_quantity(Rectangle r, int quantity);
 
+/* An open slot that holds nothing. */
+void item_slot_draw_empty(Rectangle r);
+
+/* A slot the player cannot use yet: the lock icon, and the level that opens
+ * it under the lock. `unlock_level` 0 shows the lock alone. */
+void item_slot_draw_locked(Rectangle r, int unlock_level);
+
 #endif /* ITEM_SLOT_H */

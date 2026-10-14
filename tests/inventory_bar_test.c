@@ -39,6 +39,13 @@ bool local_player_in_stasis(void) { return stasis; }
 float local_player_action_charge(double now) { return 0.5f; }
 float local_player_consume_charge(double now) { return 0.25f; }
 ObjectLayer* lookup_cached_layer(const char* id) { return NULL; }
+bool local_player_is_coin(const char* id) { return 0 == strcmp("coin", id); }
+int local_player_open_slots(CyberiaCapacityRule rule) { return rule.base; }
+int local_player_unlock_level(CyberiaCapacityRule rule, int slot) { return 0; }
+void item_slot_draw_empty(Rectangle r) {}
+void item_slot_draw_locked(Rectangle r, int unlock_level) {}
+void modal_notification_show(const char* title, const char* message, Color accent) {}
+void text_draw_outlined(const char* text, int x, int y, int size, Color fg, Color outline, int rings) {}
 const char* active_layer_item_id(const ObjectLayerState* layers, int count, const char* type) { return NULL; }
 void ui_toggle_init(UIToggle* toggle, Rectangle anchor, bool expanded, UIToggleChevron chevron) {
     *toggle = (UIToggle){ .anchor = anchor, .expanded = expanded, .anim_t = expanded ? 1.0f : 0.0f };
@@ -47,10 +54,18 @@ void ui_toggle_set_drag(UIToggle* toggle) {}
 void ui_toggle_set_anchor(UIToggle* toggle, Rectangle anchor) { toggle->anchor = anchor; }
 void ui_toggle_draw(const UIToggle* toggle) {}
 bool fx_inventory_bar_qty_slot_visible(const char* id) { return true; }
-bool fx_inventory_bar_qty_slot_pulsing(const char* id) { return false; }
-float fx_inventory_bar_qty_slot_scale(const char* id) { return 1.0f; }
-int fx_inventory_bar_qty_display(const char* id, int actual) { return actual; }
-void fx_inventory_bar_qty_draw(Rectangle slot, const char* id) {}
+bool fx_inventory_bar_qty_slot_pulsing(const char* id, int slot) { return false; }
+float fx_inventory_bar_qty_slot_scale(const char* id, int slot) { return 1.0f; }
+int fx_inventory_bar_qty_display(const char* id, int slot, int actual) { return actual; }
+void fx_inventory_bar_qty_draw(Rectangle rect, const char* id, int slot) {}
+static bool panel_open;
+bool container_panel_cell_at(int mx, int my, Box* box, int* slot) {
+    if (!panel_open || my > 100) return false;
+    *box = BOX_STORAGE;
+    *slot = mx / 100;
+    return true;
+}
+Rectangle container_panel_cell_rect(int slot) { return (Rectangle){ (float)slot * 100.0f, 0.0f, 100.0f, 100.0f }; }
 void fx_inventory_bar_qty_draw_bottom(Rectangle anchor) {}
 void DrawRectangle(int x, int y, int width, int height, Color color) {}
 void DrawRectangleRounded(Rectangle rect, float roundness, int segments, Color color) {}
@@ -68,7 +83,11 @@ bool IsMouseButtonDown(int button) { return mouse_down; }
 bool ui_button_hit(Rectangle b, int mx, int my) {
     return mx >= b.x && mx < b.x + b.width && my >= b.y && my < b.y + b.height;
 }
-bool ui_toggle_handle_click(UIToggle* toggle, int mx, int my) { return false; }
+bool ui_toggle_handle_click(UIToggle* toggle, int mx, int my) {
+    if (!ui_button_hit(toggle->anchor, mx, my)) return false;
+    toggle->expanded = !toggle->expanded;
+    return true;
+}
 void ui_toggle_update(UIToggle* toggle, float dt) {}
 void fx_inventory_bar_qty_update(float dt) {}
 bool CheckCollisionPointRec(Vector2 point, Rectangle rect) { return false; }
@@ -85,6 +104,16 @@ void ol_stack_ico_draw(ObjectLayersManager* manager, const ObjectLayerState* lay
     preview_count++;
 }
 void item_slot_draw_quantity(Rectangle r, int quantity) { badge_quantity = quantity; }
+static int dropped_from = -2, dropped_to = -2;
+static Box dropped_box;
+bool stack_move_drop(Box from, int from_slot, Box to, int to_slot, Rectangle origin) {
+    assert(BOX_BAG == from);
+    dropped_from = from_slot;
+    dropped_to = to_slot;
+    dropped_box = to;
+    return true;
+}
+MoveKind container_ops_check(Box from, int from_slot, Box to, int to_slot, int qty) { return MOVE_PLACE; }
 void fx_shape_cooldown_bar(Rectangle r, float elapsed) {
     cooldown = r;
     cooldown_charge = elapsed;
@@ -98,6 +127,96 @@ static void press(Rectangle r) {
     inventory_bar_update(0.05f);
     mouse_down = false;
     inventory_bar_update(0.05f);
+}
+
+/* Press at the centre of `from`, drag to the centre of `to`, and release. */
+static void drag(Rectangle from, Rectangle to) {
+    mouse = (Vector2){ from.x + from.width * 0.5f, from.y + from.height * 0.5f };
+    assert(inventory_bar_handle_click((int)mouse.x, (int)mouse.y, NULL));
+    mouse_down = true;
+    inventory_bar_update(0.05f);
+    mouse = (Vector2){ to.x + to.width * 0.5f, to.y + to.height * 0.5f };
+    inventory_bar_update(0.05f);
+    mouse_down = false;
+    inventory_bar_update(0.05f);
+}
+
+static void carry(int at, const char* item_id, int slot) {
+    memset(&g_local_player.inventory[at], 0, sizeof g_local_player.inventory[at]);
+    strcpy(g_local_player.inventory[at].item_id, item_id);
+    g_local_player.inventory[at].quantity = 1;
+    g_local_player.inventory[at].slot = slot;
+}
+
+static Rectangle cell(int si) { return slot_rect(si, bar_top(600)); }
+
+static Rectangle center_of(Rectangle r) { return (Rectangle){ r.x + r.width * 0.5f, r.y + r.height * 0.5f, 0, 0 }; }
+
+/* Each cell is a bag slot: a stack shows in the cell of its slot, and the empty
+ * cells between stacks stay empty. */
+static void test_cells_are_bag_slots(void) {
+    g_local_player.inventory_count = 3;
+    carry(0, "skin", 0);
+    carry(1, "pistol", 3);
+    carry(2, "coin", BAG_WALLET_SLOT);
+    Rectangle empty = center_of(cell(1)), stack = center_of(cell(3)), coin = center_of(coin_slot_rect(800, bar_top(600)));
+    assert(-1 == inventory_bar_get_tapped_slot((int)empty.x, (int)empty.y));
+    assert(1 == inventory_bar_get_tapped_slot((int)stack.x, (int)stack.y));
+
+    int slot = 0;
+    assert(inventory_bar_cell_at((int)empty.x, (int)empty.y, &slot) && 1 == slot);
+    assert(inventory_bar_cell_at((int)coin.x, (int)coin.y, &slot) && BAG_WALLET_SLOT == slot);
+    assert(!inventory_bar_cell_at(300, 100, &slot));
+    Rectangle rect = inventory_bar_cell_rect(3);
+    assert(rect.x == cell(3).x);
+
+    /* A new item lands in the lowest free slot. */
+    Rectangle landing;
+    assert(inventory_bar_predicted_item_slot_rect("gem", &landing) && landing.x == cell(1).x);
+}
+
+/* Reorder mode drops a lifted stack on the cell under the release, of the bar
+ * or of the open container, and activates nothing. It ends with Escape and
+ * with the bar. */
+static void test_reorder_mode(void) {
+    g_local_player.inventory_count = 2;
+    carry(0, "skin", 0);
+    carry(1, "pistol", 3);
+    Rectangle order = s_order_toggle.anchor;
+    assert(!inventory_bar_reordering());
+    assert(inventory_bar_handle_toggle_click((int)(order.x + 1.0f), (int)(order.y + 1.0f)));
+    assert(inventory_bar_reordering());
+
+    int tapped = -1;
+    press(cell(3));
+    assert(!inventory_bar_take_tap(&tapped) && -2 == dropped_from);
+
+    drag(cell(3), cell(5));
+    assert(3 == dropped_from && 5 == dropped_to && BOX_BAG == dropped_box);
+    dropped_from = -2;
+    drag(cell(0), (Rectangle){ 300.0f, 100.0f, 10.0f, 10.0f });
+    assert(-2 == dropped_from);
+
+    /* With a container open, a lifted stack drops on its cells too. */
+    panel_open = true;
+    drag(cell(0), (Rectangle){ 250.0f, 40.0f, 10.0f, 10.0f });
+    assert(0 == dropped_from && BOX_STORAGE == dropped_box && 2 == dropped_to);
+    panel_open = false;
+
+    /* A container drop reaches the bar in reorder mode as well. */
+    int slot = 0;
+    Rectangle free = center_of(cell(4));
+    assert(inventory_bar_cell_at((int)free.x, (int)free.y, &slot) && 4 == slot);
+
+    assert(inventory_bar_exit_reorder() && !inventory_bar_exit_reorder());
+    press(cell(3));
+    assert(inventory_bar_take_tap(&tapped) && 1 == tapped);
+
+    s_order_toggle.expanded = true;
+    s_bar_toggle.expanded = false;
+    inventory_bar_update(0.05f);
+    assert(!inventory_bar_reordering());
+    s_bar_toggle.expanded = true;
 }
 
 static void draw_at(float animation) {
@@ -115,6 +234,7 @@ int main(void) {
     g_local_player.inventory_count = 2;
     strcpy(g_local_player.inventory[0].item_id, "skin");
     strcpy(g_local_player.inventory[1].item_id, "pistol");
+    g_local_player.inventory[1].slot = 1;
     g_local_player.inventory[1].active = true;
 
     draw_at(1.0f);
@@ -148,6 +268,7 @@ int main(void) {
     g_local_player.inventory_count = 3;
     strcpy(g_local_player.inventory[2].item_id, "gel");
     g_local_player.inventory[2].quantity = 2;
+    g_local_player.inventory[2].slot = 2;
     draw_at(1.0f);
     Rectangle gel = slot_rect(2, bar_top(600));
     assert(1 == preview_count && 0 == strcmp("gel", preview_item) && 2 == badge_quantity);
@@ -166,6 +287,11 @@ int main(void) {
     assert(0 == preview_count);
     stasis = false;
 
-    puts("inventory_bar_preview_test OK");
+    s_bar_toggle.anim_t = 1.0f;
+    s_bar_toggle.expanded = true;
+    test_cells_are_bag_slots();
+    test_reorder_mode();
+
+    puts("inventory_bar_test OK");
     return 0;
 }

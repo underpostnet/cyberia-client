@@ -42,9 +42,11 @@ cJSON* json_pack_events(cJSON* events);
 /* Client event packers. Only client_event_flush calls them. */
 cJSON* json_pack_player_action(float target_x, float target_y);
 
-cJSON* json_pack_item_active(const char* item_id, bool active);
+/* Equip or unequip the stack of item_id in bag slot `slot`. */
+cJSON* json_pack_item_active(const char* item_id, int slot, bool active);
 cJSON* json_pack_player_stasis(bool stasis);
-cJSON* json_pack_chat(uint32_t to_id, const char* text);
+/* `channel` is a chat_channel_t; only a direct line names to_id. */
+cJSON* json_pack_chat(int channel, uint32_t to_id, const char* text);
 
 /* The player read dialogue group `dialog_code` with the entity to the end. The
  * server resolves the bound action and quest from its own cache. */
@@ -69,11 +71,16 @@ cJSON* json_pack_craft_item(uint32_t entity_id, int recipe_index);
 /* Abort the running assembly. The server refunds its ingredients. */
 cJSON* json_pack_craft_cancel(void);
 
-/* Storage vault. item_ops reports the deposits and withdrawals of one session;
- * the server replays them in order. json_pack_item_ops takes ownership of the
- * ops array. */
-cJSON* json_pack_item_op(const char* item_id, int qty, bool to_vault);
-cJSON* json_pack_item_ops(uint32_t entity_id, cJSON* ops);
+/* Move `qty` units of the stack in `from_slot` of box `from` to `to_slot` of
+ * box `to`, each box by its wire word. A vault move names its terminal in
+ * `entity_id`, else 0. */
+cJSON* json_pack_item_move(const char* from, int from_slot, const char* to, int to_slot, int qty,
+                           uint32_t entity_id);
+
+/* A party request of type `type`. `key` names the player field (toId), or is
+ * NULL for a request that names none. */
+cJSON* json_pack_party_target(const char* type, const char* key, uint32_t player_id);
+cJSON* json_pack_party_reply(uint32_t from_id, bool accept);
 
 /* ── Read helpers ───────────────────────────────────────────────────── */
 

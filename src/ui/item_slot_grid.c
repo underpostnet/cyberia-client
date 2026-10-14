@@ -4,7 +4,6 @@
 
 #include "item_slot.h"
 #include "ui_button.h"
-#include "ui_rect.h"
 
 #include <math.h>
 #include <string.h>
@@ -13,13 +12,10 @@
  * tap — the same disambiguation ui_scroll applies to its strip. */
 #define GRID_DRAG_SLOP 6.0f
 #define GRID_GAP       6.0f
-/* Seconds an occupant takes to slide into a cell it was just moved to. */
-#define GRID_SETTLE_DUR 0.70f
 
-static const Color GRID_CELL_EMPTY  = {  18,  24,  38, 200 };
-static const Color GRID_CELL_BORDER = {  58,  78, 110, 200 };
-static const Color GRID_HOVER_FREE  = { 120, 200, 140, 255 };
-static const Color GRID_HOVER_SWAP  = { 235, 190,  70, 255 };
+static const Color GRID_HOVER_FREE   = { 120, 200, 140, 255 };
+static const Color GRID_HOVER_JOIN   = { 235, 190,  70, 255 };
+static const Color GRID_HOVER_REFUSE = { 210,  90,  80, 255 };
 
 /* ── Lifecycle ────────────────────────────────────────────────────────── */
 
@@ -29,7 +25,7 @@ void item_slot_grid_init(ItemSlotGrid* g, int capacity) {
     if (capacity > ITEM_SLOT_GRID_MAX_SLOTS) capacity = ITEM_SLOT_GRID_MAX_SLOTS;
     memset(g, 0, sizeof(*g));
     g->capacity = capacity;
-    for (int i = 0; i < ITEM_SLOT_GRID_MAX_SLOTS; i++) g->settle_age[i] = GRID_SETTLE_DUR;
+    for (int i = 0; i < ITEM_SLOT_GRID_MAX_SLOTS; i++) g->settle_age[i] = ITEM_SLOT_GRID_SETTLE_DUR;
     g->gap = GRID_GAP;
     g->drag_index = -1;
     g->hover_index = -1;
@@ -41,9 +37,10 @@ void item_slot_grid_set(ItemSlotGrid* g, int index, const ObjectLayerState* ols)
     else                               memset(&g->cells[index], 0, sizeof(g->cells[index]));
 }
 
-void item_slot_grid_clear(ItemSlotGrid* g) {
-    if (!g) return;
-    memset(g->cells, 0, sizeof(g->cells));
+void item_slot_grid_set_locked(ItemSlotGrid* g, int index, bool locked, int unlock_level) {
+    if (!g || index < 0 || index >= g->capacity) return;
+    g->locked[index] = locked;
+    g->unlock_level[index] = locked ? unlock_level : 0;
 }
 
 /* ── Layout ───────────────────────────────────────────────────────────── */
@@ -92,7 +89,7 @@ Rectangle item_slot_grid_cell_rect(const ItemSlotGrid* g, int index) {
                         g->cell_size, g->cell_size };
 }
 
-static int item_slot_grid_index_at(const ItemSlotGrid* g, int mx, int my) {
+int item_slot_grid_cell_at(const ItemSlotGrid* g, int mx, int my) {
     if (!g) return -1;
     /* A wrapped grid overflows the panel that scrolls it, so cells exist below
      * the viewport — and under the inventory bar. Only what the player can see
@@ -115,7 +112,7 @@ static bool grid_point_in_visible_bounds(const ItemSlotGrid* g, Vector2 point) {
 
 bool item_slot_grid_handle_press(ItemSlotGrid* g, int mx, int my) {
     if (!g) return false;
-    int index = item_slot_grid_index_at(g, mx, my);
+    int index = item_slot_grid_cell_at(g, mx, my);
     if (index < 0) return false;
 
     g->pressed = true;
@@ -179,7 +176,7 @@ static void return_dragged_item(ItemSlotGrid* g) {
 void item_slot_grid_update(ItemSlotGrid* g, float dt) {
     if (!g) return;
     for (int i = 0; i < g->capacity; i++) {
-        if (g->settle_age[i] < GRID_SETTLE_DUR) g->settle_age[i] += dt;
+        if (g->settle_age[i] < ITEM_SLOT_GRID_SETTLE_DUR) g->settle_age[i] += dt;
     }
     if (!g->pressed) return;
 
@@ -192,20 +189,22 @@ void item_slot_grid_update(ItemSlotGrid* g, float dt) {
 
     /* Live preview of where the drop would land. */
     g->hover_index = g->dragging
-        ? item_slot_grid_index_at(g, (int)g->pointer.x, (int)g->pointer.y) : -1;
+        ? item_slot_grid_cell_at(g, (int)g->pointer.x, (int)g->pointer.y) : -1;
 
     if (input_pointer_down()) return;
 
     if (!g->dragging) {
         /* A press that never travelled is a tap on whatever it landed on. */
-        int index = item_slot_grid_index_at(g, (int)g->pointer.x, (int)g->pointer.y);
+        int index = item_slot_grid_cell_at(g, (int)g->pointer.x, (int)g->pointer.y);
         if (index >= 0) emit(g, ITEM_SLOT_GRID_EVENT_TAP, index);
         end_gesture(g);
         return;
     }
 
-    int target = item_slot_grid_index_at(g, (int)g->pointer.x, (int)g->pointer.y);
-    if (target < 0) {
+    int target = item_slot_grid_cell_at(g, (int)g->pointer.x, (int)g->pointer.y);
+    if (0 <= target && g->locked[target]) {
+        return_dragged_item(g);
+    } else if (target < 0) {
         /* Outside the grid — the host resolves what container is there. */
         if (!g->external) {
             if (grid_point_in_visible_bounds(g, g->pointer)) return_dragged_item(g);
@@ -240,7 +239,7 @@ bool item_slot_grid_is_dragging(const ItemSlotGrid* g) {
  * point it came from toward its own cell. Hit-testing always uses the final
  * rect, so a mid-flight item is still grabbed where it will land. */
 static Rectangle settled_rect(const ItemSlotGrid* g, int index, Rectangle cell) {
-    float t = g->settle_age[index] / GRID_SETTLE_DUR;
+    float t = g->settle_age[index] / ITEM_SLOT_GRID_SETTLE_DUR;
     if (t >= 1.0f) return cell;
     float e = ease_out_cubic(t);
     return (Rectangle){ ease_approach(g->settle_from[index].x, cell.x, e),
@@ -256,24 +255,26 @@ void item_slot_grid_draw(const ItemSlotGrid* g, ObjectLayersManager* mgr) {
         bool source = g->dragging && !g->external && i == g->drag_index;
         bool hovered = g->dragging && i == g->hover_index;
         bool settling = '\0' != g->cells[i].item_id[0] &&
-                        GRID_SETTLE_DUR > g->settle_age[i];
+                        ITEM_SLOT_GRID_SETTLE_DUR > g->settle_age[i];
 
-        if ('\0' == g->cells[i].item_id[0] || source || settling) {
+        if (g->locked[i] && '\0' == g->cells[i].item_id[0]) {
+            item_slot_draw_locked(cell, g->unlock_level[i]);
+        } else if ('\0' == g->cells[i].item_id[0] || source || settling) {
             /* Draw a well while a cell is empty, lifted, or moving. */
-            DrawRectangleRec(cell, BLACK);
-            Rectangle inner = ui_rect_inset(cell, 2.0f);
-            DrawRectangleRec(inner, GRID_CELL_EMPTY);
-            DrawRectangleLinesEx(inner, 1.0f, GRID_CELL_BORDER);
+            item_slot_draw_empty(cell);
         } else {
             item_slot_draw_ex(settled_rect(g, i, cell), &g->cells[i], mgr,
                               WHITE, 0.0f, true);
         }
 
-        /* Preview: green marks a free landing, amber that the occupant would
-         * be displaced, so the outcome reads before the player commits. */
+        /* Preview: green marks a free landing, amber a stack or a swap, red a
+         * refused drop, so the outcome reads before the player commits. An
+         * item from another container never displaces a different one. */
         if (hovered) {
             bool occupied = '\0' != g->cells[i].item_id[0] && !source;
-            DrawRectangleLinesEx(cell, 3.0f, occupied ? GRID_HOVER_SWAP : GRID_HOVER_FREE);
+            bool same = 0 == strcmp(g->cells[i].item_id, g->drag_item.item_id);
+            bool refused = g->locked[i] || (occupied && g->external && !same);
+            DrawRectangleLinesEx(cell, 3.0f, refused ? GRID_HOVER_REFUSE : occupied ? GRID_HOVER_JOIN : GRID_HOVER_FREE);
         }
     }
 
@@ -281,7 +282,7 @@ void item_slot_grid_draw(const ItemSlotGrid* g, ObjectLayersManager* mgr) {
     for (int i = 0; i < g->capacity; i++) {
         bool source = g->dragging && !g->external && i == g->drag_index;
         if (source || '\0' == g->cells[i].item_id[0] ||
-            GRID_SETTLE_DUR <= g->settle_age[i]) continue;
+            ITEM_SLOT_GRID_SETTLE_DUR <= g->settle_age[i]) continue;
         Rectangle cell = item_slot_grid_cell_rect(g, i);
         item_slot_draw_ex(settled_rect(g, i, cell), &g->cells[i], mgr,
                           WHITE, 0.0f, true);

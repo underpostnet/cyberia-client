@@ -59,6 +59,7 @@ static bool  s_open       = false;
 static float s_age        = 0.0f;
 /* The player stack shown, by item id: its inventory index moves as stacks come and go. */
 static char  s_item_id[MAX_ITEM_ID_LENGTH] = {0};
+static int   s_slot = -1;  /* the bag slot of the shown stack */
 
 /* External item: a read-only detail view for an item the player does not own
  * (e.g. another entity's active layer). When set, the modal renders from
@@ -270,6 +271,9 @@ static void inventory_modal_handle_content_click(int mx, int my);
 /* Index of the shown player stack in g_local_player.inventory; -1 once it is gone. */
 static int shown_inv_idx(void) {
     if (s_is_external || '\0' == s_item_id[0]) return -1;
+    /* The stack in its slot, else another stack of the item when that one moved. */
+    int at = local_player_bag_stack(s_slot);
+    if (0 <= at && 0 == strcmp(g_local_player.inventory[at].item_id, s_item_id)) return at;
     for (int i = 0; i < g_local_player.inventory_count; i++)
         if (0 == strcmp(g_local_player.inventory[i].item_id, s_item_id)) return i;
     return -1;
@@ -304,7 +308,7 @@ static Rectangle anchored_card_rect(void) {
                              safe);
 }
 
-/* True when the Activate / Deactivate button acts on `ols`. Fragmentation
+/* True when the Equip / Unequip button acts on `ols`. Fragmentation
  * items equip only during the Fragmented State (dead). A type outside
  * activeItemTypes never activates. An active skin cannot come off while
  * requireSkin is set; fragments are exempt, because the server swaps in the
@@ -364,9 +368,9 @@ static void update_anchor_layout(float dt, bool lore_available) {
                                s_age >= MODAL_POP_DURATION, dt);
 }
 
-static void send_activation(const char* item_id, bool active) {
-    client_event_payload_t p = { .active = active };
-    copy_str(p.item_id, sizeof p.item_id, item_id);
+static void send_activation(const ObjectLayerState* stack, bool active) {
+    client_event_payload_t p = { .active = active, .slot = stack->slot };
+    copy_str(p.item_id, sizeof p.item_id, stack->item_id);
     client_event_push(CLIENT_EVENT_ITEM_ACTIVE, p);
 }
 
@@ -440,6 +444,7 @@ void inventory_modal_set_anchor_entity(EntityID entity_id) {
 void inventory_modal_open(int inv_idx) {
     if (inv_idx < 0 || inv_idx >= g_local_player.inventory_count) return;
     copy_str(s_item_id, sizeof s_item_id, g_local_player.inventory[inv_idx].item_id);
+    s_slot        = g_local_player.inventory[inv_idx].slot;
     s_is_external = false;
     if (!s_open) modal_opened();
     s_open        = true;
@@ -450,7 +455,8 @@ void inventory_modal_switch_slot(int inv_idx) {
     if (!s_open) return;
     if (inv_idx < 0 || inv_idx >= g_local_player.inventory_count) return;
     const char* item_id = g_local_player.inventory[inv_idx].item_id;
-    if (!s_is_external && 0 == strcmp(item_id, s_item_id)) return; /* already showing it */
+    int slot = g_local_player.inventory[inv_idx].slot;
+    if (!s_is_external && 0 == strcmp(item_id, s_item_id) && slot == s_slot) return; /* already showing it */
 
     /* Switching straight to a bar slot closes the opener chain rather than
      * returning to it: drop the on-close callback and discard any pending
@@ -459,6 +465,7 @@ void inventory_modal_switch_slot(int inv_idx) {
     modal_interact_discard_stack();
 
     copy_str(s_item_id, sizeof s_item_id, item_id);
+    s_slot        = slot;
     s_is_external = false;
     reset_view_state();          /* replays the pop-in transition */
 }
@@ -935,11 +942,11 @@ void inventory_modal_draw(void) {
         ui_button_pixel_retro_draw(s_lore_btn_rect, &lore_btn, ui_button_hit(s_lore_btn_rect, mx, my));
     }
 
-    /* 12. Activate / Deactivate button — only for the player's own items. */
+    /* 12. Equip / Unequip button — only for the player's own items. */
     s_activate_btn_visible = false;
     if (!s_is_external) {
         bool currently_active = ols->active;
-        const char* btn_label  = currently_active ? "Deactivate" : "Activate";
+        const char* btn_label  = currently_active ? "Unequip" : "Equip";
         const char* btn_icon   = currently_active ? "unequip" : "equip";
 
         bool btn_enabled = activate_enabled(ols);
@@ -1001,12 +1008,12 @@ bool inventory_modal_handle_click(int mx, int my) {
         }
     }
 
-    /* Activate / Deactivate */
+    /* Equip / Unequip */
     if (NULL != own) {
         if (activate_enabled(own)) {
             if (s_activate_btn_visible && ui_button_hit(s_activate_btn_rect, mx, my)) {
                 bool new_active = !own->active;
-                send_activation(own->item_id, new_active);
+                send_activation(own, new_active);
 
                 /* Dead-equip: optimistically update the self-player bubble
                  * so it reflects what will render on revive (the server

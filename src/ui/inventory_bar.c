@@ -3,12 +3,23 @@
  * @brief Horizontal inventory bottom bar implementation.
  *
  * Layout (left → right):
- *   [ drag-scrollable items ... ]  [coin slot]
+ *   [ drag-scrollable bag slots ... ]  [coin slot]
+ *
+ * Each strip cell is a bag slot, and a stack shows in the cell of its slot, so
+ * a stack that leaves leaves its cell empty and the others stay. The strip
+ * shows every slot the inventory capacity can open; the slots the level has
+ * not opened yet show the lock icon and the level that opens them. A tap on a
+ * locked slot says so.
  *
  * The strip scrolls by a continuous pixel offset: press and slide left/right
  * (finger or mouse) moves it 1:1 and releases into an inertial glide. A press
  * only activates a slot when it never became a drag, so scrolling never opens
  * a modal — activation is deferred to release via inventory_bar_take_tap().
+ *
+ * Reorder mode lifts a stack onto another strip cell, or onto a cell of the
+ * open container, and drops it through ui/stack_move: an empty cell takes it,
+ * the same item stacks it, another stack trades places. A stack that lands
+ * slides into its cell from where it came.
  *
  * The coin slot is always the rightmost slot, pinned outside the scrollable
  * region.  Coins cannot be activated (non-activable), so they never get the
@@ -26,7 +37,7 @@
 
 #include "inventory_bar.h"
 #include "input/input.h"
-#include "ease.h"
+#include "modal_notification.h"
 #include "text.h"
 
 #include "fx/fx_shapes.h"
@@ -36,6 +47,11 @@
 #include "fx/fx_inventory_bar_qty.h"
 #include "sim/local_player.h"
 #include "sim/game_state.h"
+#include "sim/container_ops.h"
+#include "stack_move.h"
+#include "container_panel.h"
+#include "item_slot_grid.h"
+#include "ease.h"
 #include "item_slot.h"
 #include "world/object_layers_management.h"
 #include "ol_as_animated_ico.h"
@@ -66,7 +82,18 @@
 static ObjectLayersManager* s_ol_manager = NULL;
 
 static UIToggle s_bar_toggle;
+static UIToggle s_order_toggle;          /* expanded = reorder mode */
 static bool     s_bar_toggle_init = false;
+
+/* A stack that lands in a cell slides in from where it came: the screen point
+ * it starts from and its age, per bag slot. */
+static Vector2 s_settle_from[INVENTORY_LAYERS_MAX];
+static float   s_settle_age[INVENTORY_LAYERS_MAX];
+
+/* The stack held in reorder mode: its slot, or -1. */
+static int     s_lift_si = -1;
+static bool    s_lifting = false;        /* the press passed the slop */
+static Vector2 s_lift_press;
 
 /* Horizontal drag scroll: offset in px, plus gesture + inertia tracking. */
 static float s_scroll_px  = 0.0f;
@@ -92,6 +119,9 @@ static const Color C_BAR_BG        = {  10,  10,  20, INV_BAR_ALPHA };
 static const Color C_COIN_BORDER   = { 230, 190,  60, 200 };  /* gold border for coin slot */
 static const Color C_COIN_QTY_TEXT = { 255, 215,   0, 255 };
 static const Color C_PREVIEW_BG    = {  18,  20,  32, 210 };
+static const Color C_REORDER       = { 235, 190,  70, 255 };
+static const Color C_DROP_FREE     = { 120, 200, 140, 255 };
+static const Color C_DROP_REFUSE   = { 210,  90,  80, 255 };
 
 /* ── Internal helpers ─────────────────────────────────────────────────── */
 
@@ -118,6 +148,12 @@ static Rectangle bar_toggle_anchor(int screen_h) {
     return (Rectangle){ x, y, size, size };
 }
 
+/* The reorder button sits right of the bag toggle. */
+static Rectangle order_toggle_anchor(void) {
+    Rectangle bag = s_bar_toggle.anchor;
+    return (Rectangle){ bag.x + bag.width + (float)bar_toggle_pad(), bag.y, bag.width, bag.height };
+}
+
 static void ensure_bar_toggle(void) {
     int screen_h = GetScreenHeight();
     if (!s_bar_toggle_init) {
@@ -126,65 +162,46 @@ static void ensure_bar_toggle(void) {
         s_bar_toggle.icon_collapsed = "bag";
         /* Drag the button in any direction to show or hide the bar. */
         ui_toggle_set_drag(&s_bar_toggle);
+        ui_toggle_init(&s_order_toggle, (Rectangle){ 0 }, false, UI_TOGGLE_CHEVRON_DOWN);
+        s_order_toggle.icon_expanded  = "check";
+        s_order_toggle.icon_collapsed = "grid";
+        s_order_toggle.ring_expanded  = C_REORDER;
         s_bar_toggle_init = true;
     }
     ui_toggle_set_anchor(&s_bar_toggle, bar_toggle_anchor(screen_h));
+    ui_toggle_set_anchor(&s_order_toggle, order_toggle_anchor());
 }
 
 static bool bar_slots_settled(void) {
     return s_bar_toggle.expanded && s_bar_toggle.anim_t >= 0.98f;
 }
 
+static bool order_toggle_shown(void) { return bar_slots_settled(); }
+
 /* coin_item_key returns a representative coin item ID from entity_defaults
  * (the world-drop pickup bot's default skin), or NULL. This is ONLY a
  * fallback icon for the pinned slot before any coin entry has arrived in
  * full_inventory (e.g. a fresh session with a zero balance) — it must never
- * be used for matching, see is_coin_item_id(). */
+ * be used for matching, see local_player_is_coin(). */
 static const char* coin_item_key(void) {
     const EntityTypeDefault* def = game_state_get_entity_default("coin");
     if (def && def->live_item_id_count > 0) return def->live_item_ids[0];
     return NULL;
 }
 
-/* is_coin_item_id classifies an inventory entry as currency via the item's
- * OWN type metadata (ObjectLayer.data.item.type == "coin") — the same
- * authoritative field layer_z_order.c uses to tell "skin" from "weapon".
- * This is deliberately independent of entity_defaults: the "coin" entity
- * type there describes the default sprite for world coin-pickup bots, not
- * the currency item's classification, so matching against it (as this used
- * to) missed real coin entries whenever their id wasn't also the pickup
- * bot's first registered skin — letting the coin fall through into the
- * scrollable list as an ordinary item. */
-static bool is_coin_item_id(const char* item_id) {
-    if (!item_id || item_id[0] == '\0') return false;
-    ObjectLayer* ol = lookup_cached_layer(item_id);
-    return ol && 0 == strcmp(ol->data.item.type, "coin");
-}
-
 /* find_coin_slot returns the index of the coin slot in full_inventory, or -1. */
 static int find_coin_slot(void) {
     for (int i = 0; i < g_local_player.inventory_count; i++) {
-        if (is_coin_item_id(g_local_player.inventory[i].item_id)) return i;
+        if (local_player_is_coin(g_local_player.inventory[i].item_id)) return i;
     }
     return -1;
 }
 
-/* build_scroll_map fills `map` (vis index → full_inventory index) with the
- * scrollable slots: everything except the pinned coin slot and — unless
- * `include_hidden` — first-copy slots still awaiting their pickup flight.
- * Delivery targeting passes include_hidden=true so the flight aims at the
- * cell where the slot will reveal. Returns the slot count. */
-static int build_scroll_map(int coin_idx, int map[MAX_OBJECT_LAYERS], bool include_hidden) {
-    int n = 0;
-    for (int i = 0; i < g_local_player.inventory_count && n < MAX_OBJECT_LAYERS; i++) {
-        if (i == coin_idx) continue;
-        if (!include_hidden &&
-            !fx_inventory_bar_qty_slot_visible(g_local_player.inventory[i].item_id)) {
-            continue;
-        }
-        map[n++] = i;
-    }
-    return n;
+/* The inventory index of the stack the strip shows in cell si, or -1. A first
+ * copy waits hidden for its pickup flight. */
+static int shown_stack(int si) {
+    int i = local_player_bag_stack(si);
+    return 0 <= i && fx_inventory_bar_qty_slot_visible(g_local_player.inventory[i].item_id) ? i : -1;
 }
 
 static int slot_pitch(void) { return bar_slot_size() + bar_slot_gap(); }
@@ -205,92 +222,27 @@ static int visible_slot_count(int screen_w) {
     return (n < 1) ? 1 : n;
 }
 
-/* Furthest the strip may slide before its last slot reaches the right edge. */
+/* Cells of the strip: every slot the capacity can open, and a stack past them. */
+static int strip_cells(void) {
+    int cells = CYBERIA_INVENTORY_SLOTS_MAX;
+    for (int i = 0; i < g_local_player.inventory_count; i++) {
+        if (g_local_player.inventory[i].slot >= cells) cells = g_local_player.inventory[i].slot + 1;
+    }
+    return cells;
+}
+
+/* Furthest the strip may slide before its last cell reaches the right edge. */
 static float max_scroll_px(int screen_w, int scroll_count) {
     float content = scroll_count > 0 ? (float)(scroll_count * slot_pitch() - bar_slot_gap()) : 0.0f;
     float max = content - (strip_right(screen_w) - strip_left());
     return max > 0.0f ? max : 0.0f;
 }
 
-/* slot_rect_at returns the screen rect at a fractional slot position — the
- * reflow slide lands between two indices. */
-static Rectangle slot_rect_at(float si, float bar_top) {
-    float slot_top = bar_top + (bar_height() - bar_slot_size()) * 0.5f;
-    float x = strip_left() + si * (float)slot_pitch() - s_scroll_px;
-    return (Rectangle){ x, slot_top, (float)bar_slot_size(), (float)bar_slot_size() };
-}
-
-/* slot_rect returns the screen rect for the si-th scrollable slot. */
+/* slot_rect returns the screen rect of strip cell si. */
 static Rectangle slot_rect(int si, float bar_top) {
-    return slot_rect_at((float)si, bar_top);
-}
-
-/* ── Reflow ───────────────────────────────────────────────────────────── */
-
-/* The strip is left-aligned, so a slot leaving anywhere but the end makes every
- * slot after it close the gap. Each remembers the position it held, turning
- * that shift into a slide. Keyed by item_id — inventory entries merge by item,
- * so one id is one slot. Hit-testing keeps using the settled position, so a
- * mid-slide slot is tapped where it will land. */
-#define INV_REFLOW_DUR 0.22f
-
-typedef struct {
-    char  item_id[64];
-    float from_si;
-    float to_si;
-    float age;
-} InvReflow;
-
-static InvReflow s_reflow[MAX_OBJECT_LAYERS];
-static int       s_reflow_count = 0;
-
-static float reflow_position(const InvReflow* e) {
-    if (e->age >= INV_REFLOW_DUR) return e->to_si;
-    float eased = ease_out_cubic(e->age / INV_REFLOW_DUR);
-    return ease_approach(e->from_si, e->to_si, eased);
-}
-
-static const InvReflow* reflow_find(const char* item_id) {
-    for (int i = 0; i < s_reflow_count; i++) {
-        if (0 == strcmp(s_reflow[i].item_id, item_id)) return &s_reflow[i];
-    }
-    return NULL;
-}
-
-/* Position a slot is drawn at, mid-slide while it closes a gap. */
-static float reflow_si(const char* item_id, int si) {
-    const InvReflow* e = reflow_find(item_id);
-    return e ? reflow_position(e) : (float)si;
-}
-
-static void update_reflow(float dt) {
-    int map[MAX_OBJECT_LAYERS];
-    int n = build_scroll_map(find_coin_slot(), map, false);
-
-    InvReflow next[MAX_OBJECT_LAYERS];
-    for (int si = 0; si < n; si++) {
-        const char* id = g_local_player.inventory[map[si]].item_id;
-        const InvReflow* prev = reflow_find(id);
-        InvReflow* e = &next[si];
-        memset(e, 0, sizeof(*e));
-        strncpy(e->item_id, id, sizeof(e->item_id) - 1);
-        if (!prev) {
-            /* A slot appearing for the first time starts where it belongs. */
-            e->from_si = e->to_si = (float)si;
-            e->age = INV_REFLOW_DUR;
-        } else if (prev->to_si != (float)si) {
-            /* Slide from wherever it is right now, so a second shift arriving
-             * mid-slide continues rather than snapping back. */
-            e->from_si = reflow_position(prev);
-            e->to_si   = (float)si;
-            e->age     = 0.0f;
-        } else {
-            *e = *prev;
-            e->age += dt;
-        }
-    }
-    memcpy(s_reflow, next, sizeof(InvReflow) * (size_t)n);
-    s_reflow_count = n;
+    float slot_top = bar_top + (bar_height() - bar_slot_size()) * 0.5f;
+    float x = strip_left() + (float)si * (float)slot_pitch() - s_scroll_px;
+    return (Rectangle){ x, slot_top, (float)bar_slot_size(), (float)bar_slot_size() };
 }
 
 /* coin_slot_rect returns the rect for the pinned coin slot (right of scrollable area). */
@@ -302,9 +254,7 @@ static Rectangle coin_slot_rect(int screen_w, float bar_top) {
 
 /* Hold the offset inside range, killing any glide that runs into an edge. */
 static void clamp_scroll(void) {
-    int map[MAX_OBJECT_LAYERS];
-    int count = build_scroll_map(find_coin_slot(), map, false);
-    float max = max_scroll_px(GetScreenWidth(), count);
+    float max = max_scroll_px(GetScreenWidth(), strip_cells());
     if (s_scroll_px < 0.0f) { s_scroll_px = 0.0f; s_scroll_vel = 0.0f; }
     if (s_scroll_px > max)  { s_scroll_px = max;  s_scroll_vel = 0.0f; }
 }
@@ -430,6 +380,93 @@ static void update_drag(float dt) {
     clamp_scroll();
 }
 
+/* ── Reorder mode ─────────────────────────────────────────────────────── */
+
+/* Pixels per second the strip scrolls while a lifted stack waits at its edge. */
+#define INV_EDGE_SCROLL_PX 360.0f
+
+/* Strip cell index under the screen point, or -1 off the strip. */
+static int strip_cell_at(int mx, int my) {
+    if (!s_bar_toggle.expanded) return -1;
+    float current_bar_top = bar_top(GetScreenHeight());
+    if ((float)my < current_bar_top || (float)mx < strip_left() || (float)mx >= strip_right(GetScreenWidth()))
+        return -1;
+    int cells = strip_cells();
+    for (int si = 0; si < cells; si++) {
+        if (ui_button_hit(slot_rect(si, current_bar_top), mx, my)) return si;
+    }
+    return -1;
+}
+
+/* The ghost of the lifted stack under the pointer. */
+static Rectangle lift_ghost(Vector2 p) {
+    float size = (float)bar_slot_size();
+    return (Rectangle){ p.x - size * 0.5f, p.y - size * 0.5f, size, size };
+}
+
+/* Where a lifted stack would land: a strip cell, or a cell of the open
+ * container. */
+static bool lift_target(Vector2 p, Box* box, int* slot) {
+    int cell = strip_cell_at((int)p.x, (int)p.y);
+    if (0 <= cell) {
+        *box = BOX_BAG;
+        *slot = cell;
+        return true;
+    }
+    return container_panel_cell_at((int)p.x, (int)p.y, box, slot);
+}
+
+static void set_reordering(bool on) {
+    s_order_toggle.expanded = on;
+    s_lift_si = -1;
+    s_lifting = false;
+}
+
+/* Carry a lifted stack and drop it on release. Off the strip, or where the
+ * move is refused, the stack stays where it was. */
+static void update_lift(float dt) {
+    if (0 > s_lift_si) return;
+    Vector2 p = input_pointer_position();
+    if (!s_lifting && INV_DRAG_SLOP_PX < hypotf(p.x - s_lift_press.x, p.y - s_lift_press.y)) s_lifting = true;
+    if (s_lifting && p.y >= bar_top(GetScreenHeight())) {
+        float edge = (float)slot_pitch();
+        if (p.x < strip_left() + edge)                      s_scroll_px -= INV_EDGE_SCROLL_PX * dt;
+        else if (p.x > strip_right(GetScreenWidth()) - edge) s_scroll_px += INV_EDGE_SCROLL_PX * dt;
+        clamp_scroll();
+    }
+    if (input_pointer_down()) return;
+    Box box = BOX_BAG;
+    int to = 0;
+    if (s_lifting && lift_target(p, &box, &to)) stack_move_drop(BOX_BAG, s_lift_si, box, to, lift_ghost(p));
+    s_lift_si = -1;
+    s_lifting = false;
+}
+
+static void draw_lift(void) {
+    if (0 > s_lift_si || !s_lifting) return;
+    int lifted = local_player_bag_stack(s_lift_si);
+    if (0 > lifted) return;
+    const ObjectLayerState* stack = &g_local_player.inventory[lifted];
+    Vector2 p = input_pointer_position();
+    Box box = BOX_BAG;
+    int to = 0;
+    if (lift_target(p, &box, &to) && !(BOX_BAG == box && to == s_lift_si)) {
+        bool lands = MOVE_REFUSED != container_ops_check(BOX_BAG, s_lift_si, box, to, stack->quantity);
+        Rectangle cell = BOX_BAG == box ? slot_rect(to, bar_top(GetScreenHeight())) : container_panel_cell_rect(to);
+        DrawRectangleLinesEx(cell, 3.0f, lands ? C_DROP_FREE : C_DROP_REFUSE);
+    }
+    item_slot_draw_ex(lift_ghost(p), stack, s_ol_manager, C_DROP_FREE, 0.25f, true);
+}
+
+static bool settling(int si) { return ITEM_SLOT_GRID_SETTLE_DUR > s_settle_age[si]; }
+
+/* Where a sliding stack is drawn: eased from where it came toward its cell. */
+static Rectangle settled_rect(int si, Rectangle cell) {
+    float e = ease_out_cubic(s_settle_age[si] / ITEM_SLOT_GRID_SETTLE_DUR);
+    return (Rectangle){ ease_approach(s_settle_from[si].x, cell.x, e), ease_approach(s_settle_from[si].y, cell.y, e),
+                        cell.width, cell.height };
+}
+
 /* ── Public API ─────────────────────────────────────────────────────────── */
 
 void inventory_bar_init(ObjectLayersManager* ol_manager) {
@@ -440,7 +477,9 @@ void inventory_bar_init(ObjectLayersManager* ol_manager) {
     s_dragging      = false;
     s_pointer_was_down = false;
     s_tap_pending   = false;
-    s_reflow_count  = 0;
+    s_lift_si       = -1;
+    for (int i = 0; i < INVENTORY_LAYERS_MAX; i++) s_settle_age[i] = ITEM_SLOT_GRID_SETTLE_DUR;
+    s_lifting       = false;
     s_bar_toggle_init = false;
     ensure_bar_toggle();
     fx_inventory_bar_qty_init();
@@ -449,10 +488,14 @@ void inventory_bar_init(ObjectLayersManager* ol_manager) {
 void inventory_bar_update(float dt) {
     ensure_bar_toggle();
     ui_toggle_update(&s_bar_toggle, dt);
-    ui_toggle_set_anchor(&s_bar_toggle,
-                         bar_toggle_anchor(GetScreenHeight()));
+    if (!s_bar_toggle.expanded && inventory_bar_reordering()) set_reordering(false);
+    ui_toggle_update(&s_order_toggle, dt);
+    ensure_bar_toggle();
     fx_inventory_bar_qty_update(dt);
-    update_reflow(dt);
+    for (int i = 0; i < INVENTORY_LAYERS_MAX; i++) {
+        if (ITEM_SLOT_GRID_SETTLE_DUR > s_settle_age[i]) s_settle_age[i] += dt;
+    }
+    update_lift(dt);
     update_drag(dt);
 }
 
@@ -472,7 +515,19 @@ Rectangle inventory_bar_toggle_bounds(void) {
 
 bool inventory_bar_handle_toggle_click(int mx, int my) {
     ensure_bar_toggle();
+    if (order_toggle_shown() && ui_toggle_handle_click(&s_order_toggle, mx, my)) {
+        set_reordering(s_order_toggle.expanded);
+        return true;
+    }
     return ui_toggle_handle_click(&s_bar_toggle, mx, my);
+}
+
+bool inventory_bar_reordering(void) { return s_order_toggle.expanded; }
+
+bool inventory_bar_exit_reorder(void) {
+    if (!inventory_bar_reordering()) return false;
+    set_reordering(false);
+    return true;
 }
 
 void inventory_bar_draw(void) {
@@ -482,8 +537,8 @@ void inventory_bar_draw(void) {
     float current_bar_top = bar_top(screen_h);
     /* Skill previews follow the bar top to the screen edge. */
     bool  shown    = 0.0f < s_bar_toggle.anim_t;
-    /* Stasis hides skill previews over modals. */
-    bool  previews = !local_player_in_stasis();
+    /* Stasis hides skill previews over modals; reorder mode hides them too. */
+    bool  previews = !local_player_in_stasis() && !inventory_bar_reordering();
     double now     = GetTime();
 
     if (shown) {
@@ -493,42 +548,59 @@ void inventory_bar_draw(void) {
     }
 
     int coin_idx = find_coin_slot();
-    int scroll_map[MAX_OBJECT_LAYERS];
-    int scroll_count = build_scroll_map(coin_idx, scroll_map, false);
+    int cells = strip_cells();
+    int open = local_player_open_slots(CYBERIA_INVENTORY_CAPACITY);
     float left  = strip_left();
     float right = strip_right(screen_w);
+    int moving[INVENTORY_LAYERS_MAX];
+    int moving_count = 0;
 
-    for (int si = 0; si < scroll_count; si++) {
+    for (int si = 0; si < cells; si++) {
         Rectangle r = slot_rect(si, current_bar_top);
         if (left >= r.x + r.width) continue;
         if (right <= r.x)          break;
 
-        int inv_idx = scroll_map[si];
+        int inv_idx = shown_stack(si);
+        if (0 > inv_idx || (s_lifting && si == s_lift_si)) {
+            if (shown && si < open) item_slot_draw_empty(r);
+            else if (shown)         item_slot_draw_locked(r, local_player_unlock_level(CYBERIA_INVENTORY_CAPACITY, si));
+            continue;
+        }
         ObjectLayerState ol = g_local_player.inventory[inv_idx];
-        /* Culled on the settled rect, drawn at the sliding one. */
-        r = slot_rect_at(reflow_si(ol.item_id, si), current_bar_top);
-        if (shown) {
-            ol.quantity = fx_inventory_bar_qty_display(ol.item_id, ol.quantity);
+        if (shown && settling(si)) {
+            item_slot_draw_empty(r);
+            moving[moving_count++] = si;
+        } else if (shown) {
+            ol.quantity = fx_inventory_bar_qty_display(ol.item_id, si, ol.quantity);
             /* During the arrival pulse the sprite renders in full colour. */
-            item_slot_draw_ex(ui_rect_scale(r, fx_inventory_bar_qty_slot_scale(ol.item_id)),
+            item_slot_draw_ex(ui_rect_scale(r, fx_inventory_bar_qty_slot_scale(ol.item_id, si)),
                               &ol, s_ol_manager, WHITE, 0.0f,
-                              fx_inventory_bar_qty_slot_pulsing(ol.item_id));
-            if (bar_slots_settled())
-                fx_inventory_bar_qty_draw(r, g_local_player.inventory[inv_idx].item_id);
+                              fx_inventory_bar_qty_slot_pulsing(ol.item_id, si));
+            if (bar_slots_settled()) fx_inventory_bar_qty_draw(r, ol.item_id, si);
+            if (inventory_bar_reordering()) DrawRectangleLinesEx(r, 2.0f, C_REORDER);
         }
         if (previews) draw_skill_previews(r, &ol, current_bar_top, now);
+    }
+
+    /* Sliding stacks ride above the settled cells. */
+    for (int m = 0; m < moving_count; m++) {
+        int si = moving[m];
+        ObjectLayerState ol = g_local_player.inventory[local_player_bag_stack(si)];
+        ol.quantity = fx_inventory_bar_qty_display(ol.item_id, si, ol.quantity);
+        item_slot_draw_ex(settled_rect(si, slot_rect(si, current_bar_top)), &ol, s_ol_manager, WHITE, 0.0f, true);
     }
 
     if (shown) {
         Rectangle cr = coin_slot_rect(screen_w, current_bar_top);
         const char* coin_key = (coin_idx >= 0) ? g_local_player.inventory[coin_idx].item_id : coin_item_key();
-        draw_coin_slot(ui_rect_scale(cr, fx_inventory_bar_qty_slot_scale(coin_key)), coin_idx, s_ol_manager);
-        if (bar_slots_settled()) fx_inventory_bar_qty_draw(cr, coin_key);
+        draw_coin_slot(ui_rect_scale(cr, fx_inventory_bar_qty_slot_scale(coin_key, BAG_WALLET_SLOT)), coin_idx,
+                       s_ol_manager);
+        if (bar_slots_settled()) fx_inventory_bar_qty_draw(cr, coin_key, BAG_WALLET_SLOT);
 
         int vis = visible_slot_count(screen_w);
-        if (scroll_count > vis) {
+        if (cells > vis) {
             int first     = (int)((s_scroll_px + (float)slot_pitch() * 0.5f) / (float)slot_pitch());
-            int dot_count = scroll_count > 40 ? 40 : scroll_count;
+            int dot_count = cells > 40 ? 40 : cells;
             int dot_r     = 3;
             int dot_gap   = 4;
             int total_w   = dot_count * (dot_r * 2 + dot_gap) - dot_gap;
@@ -544,6 +616,16 @@ void inventory_bar_draw(void) {
 
     if (!bar_slots_settled()) fx_inventory_bar_qty_draw_bottom(s_bar_toggle.anchor);
     ui_toggle_draw(&s_bar_toggle);
+    if (order_toggle_shown()) {
+        Rectangle a = s_order_toggle.anchor;
+        if (inventory_bar_reordering()) {
+            int font = bar_qty_font() + 3;
+            text_draw_outlined("Drag stacks to reorder", (int)(a.x + a.width) + bar_toggle_pad(),
+                               (int)(a.y + (a.height - (float)font) * 0.5f), font, C_REORDER, BLACK, 1);
+        }
+        ui_toggle_draw(&s_order_toggle);
+    }
+    draw_lift();
 }
 
 bool inventory_bar_handle_click(int mx, int my, int* out_slot) {
@@ -555,6 +637,14 @@ bool inventory_bar_handle_click(int mx, int my, int* out_slot) {
     float current_bar_top = bar_top(GetScreenHeight());
     if ((float)my < current_bar_top || my >= GetScreenHeight()) return false;
     if (!s_bar_toggle.expanded) return s_bar_toggle.anim_t > 0.0f;
+
+    int cell = strip_cell_at(mx, my);
+    if (inventory_bar_reordering() && 0 <= cell && 0 <= shown_stack(cell)) {
+        s_lift_si    = cell;
+        s_lifting    = false;
+        s_lift_press = (Vector2){ (float)mx, (float)my };
+        return true;
+    }
 
     s_press_armed = true;
     s_dragging    = false;
@@ -568,14 +658,24 @@ bool inventory_bar_handle_click(int mx, int my, int* out_slot) {
 bool inventory_bar_take_tap(int* out_slot) {
     if (!s_tap_pending) return false;
     s_tap_pending = false;
+    if (inventory_bar_reordering()) return false;
     int slot = inventory_bar_get_tapped_slot(s_tap_x, s_tap_y);
     if (out_slot) *out_slot = slot;
+    int cell = strip_cell_at(s_tap_x, s_tap_y);
+    if (0 > slot && cell >= local_player_open_slots(CYBERIA_INVENTORY_CAPACITY)) {
+        int level = local_player_unlock_level(CYBERIA_INVENTORY_CAPACITY, cell);
+        char body[96];
+        if (0 < level) snprintf(body, sizeof(body), "This bag slot opens at level %d.", level);
+        else           copy_str(body, sizeof(body), "This bag slot does not open in this world.");
+        modal_notification_show("Locked Slot", body, (Color){ 230, 170, 110, 255 });
+    }
     return true;
 }
 
 bool inventory_bar_point_covered(int mx, int my) {
     ensure_bar_toggle();
     if (ui_button_hit(s_bar_toggle.anchor, mx, my)) return true;
+    if (order_toggle_shown() && ui_button_hit(s_order_toggle.anchor, mx, my)) return true;
     if (s_bar_toggle.anim_t <= 0.0f) return false;
     return (float)my >= bar_top(GetScreenHeight()) && my < GetScreenHeight();
 }
@@ -598,25 +698,45 @@ static int inventory_bar_slot_at(int mx, int my, Rectangle* out_rect) {
         return (0 <= coin_idx) ? coin_idx : -1;
     }
 
-    int scroll_map[MAX_OBJECT_LAYERS];
-    int scroll_count = build_scroll_map(coin_idx, scroll_map, false);
-    float left  = strip_left();
-    float right = strip_right(screen_w);
-
-    for (int si = 0; si < scroll_count; si++) {
-        Rectangle r = slot_rect(si, current_bar_top);
-        if (r.x + r.width <= left) continue;
-        if (r.x >= right)          break;
-        if (ui_button_hit(r, mx, my)) {
-            if (NULL != out_rect) *out_rect = r;
-            return scroll_map[si];
-        }
-    }
-    return -1;
+    int cell = strip_cell_at(mx, my);
+    int inv_idx = 0 <= cell ? shown_stack(cell) : -1;
+    if (0 <= inv_idx && NULL != out_rect) *out_rect = slot_rect(cell, current_bar_top);
+    return inv_idx;
 }
 
 int inventory_bar_get_tapped_slot(int mx, int my) {
     return inventory_bar_slot_at(mx, my, NULL);
+}
+
+void inventory_bar_animate_from(int slot, Rectangle origin) {
+    if (0 > slot || INVENTORY_LAYERS_MAX <= slot) return;
+    s_settle_from[slot] = (Vector2){ origin.x, origin.y };
+    s_settle_age[slot] = 0.0f;
+}
+
+bool inventory_bar_cell_at(int mx, int my, int* slot) {
+    ensure_bar_toggle();
+    if (!bar_slots_settled()) return false;
+    if (ui_button_hit(coin_slot_rect(GetScreenWidth(), bar_top(GetScreenHeight())), mx, my)) {
+        *slot = BAG_WALLET_SLOT;
+        return true;
+    }
+    int cell = strip_cell_at(mx, my);
+    if (0 > cell) return false;
+    *slot = cell;
+    return true;
+}
+
+Rectangle inventory_bar_cell_rect(int slot) {
+    ensure_bar_toggle();
+    float top = bar_top(GetScreenHeight());
+    return BAG_WALLET_SLOT == slot ? coin_slot_rect(GetScreenWidth(), top) : slot_rect(slot, top);
+}
+
+Vector2 inventory_bar_cell_center(int slot) {
+    ensure_bar_toggle();
+    Rectangle r = bar_slots_settled() ? inventory_bar_cell_rect(slot) : s_bar_toggle.anchor;
+    return (Vector2){ r.x + r.width * 0.5f, r.y + r.height * 0.5f };
 }
 
 static bool inventory_bar_item_slot_rect(const char* item_id, bool append_missing,
@@ -627,31 +747,19 @@ static bool inventory_bar_item_slot_rect(const char* item_id, bool append_missin
     int screen_w = GetScreenWidth();
     int screen_h = GetScreenHeight();
     float current_bar_top = bar_top(screen_h);
-    int n_inv    = g_local_player.inventory_count;
-    int coin_idx = find_coin_slot();
-
-    int inv_idx = -1;
-    for (int i = 0; i < n_inv; i++) {
-        if (0 == strcmp(g_local_player.inventory[i].item_id, item_id)) {
-            inv_idx = i;
-            break;
-        }
-    }
-
-    if ((0 <= inv_idx && inv_idx == coin_idx) ||
-        (0 > inv_idx && append_missing && is_coin_item_id(item_id))) {
+    if (local_player_is_coin(item_id)) {
         *out = coin_slot_rect(screen_w, current_bar_top);
         return true;
     }
 
-    int scroll_map[MAX_OBJECT_LAYERS];
-    int scroll_count = build_scroll_map(coin_idx, scroll_map, true);
-    int si = append_missing ? scroll_count : -1;
-    for (int i = 0; i < scroll_count; i++) {
-        if (scroll_map[i] == inv_idx) {
-            si = i;
-            break;
-        }
+    /* The first stack of the item, else the slot a new stack takes: the lowest free one. */
+    int si = -1;
+    for (int i = 0; i < g_local_player.inventory_count; i++) {
+        const ObjectLayerState* stack = &g_local_player.inventory[i];
+        if (0 == strcmp(stack->item_id, item_id) && (0 > si || stack->slot < si)) si = stack->slot;
+    }
+    if (0 > si && append_missing) {
+        for (si = 0; 0 <= local_player_bag_stack(si); si++) {}
     }
     if (0 > si) return false;
 

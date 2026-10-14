@@ -4,7 +4,7 @@
 #include "content/presentation_runtime.h"
 #include "self_motion.h"
 #include "local_player.h"
-#include "vault_ops.h"
+#include "container_ops.h"
 #include "game_state.h"
 #include "log.h"
 #include "config.h"
@@ -86,8 +86,8 @@ static void apply_facts(void) {
         const client_event_t* e = &list[i];
         if (CLIENT_EVENT_PLAYER_STASIS == e->kind) {
             local_player_set_stasis(e->payload.active);
-        } else if (CLIENT_EVENT_ITEM_OPS == e->kind) {
-            vault_ops_apply(e->payload.entity_id, e->payload.ops, e->payload.op_count);
+        } else if (CLIENT_EVENT_ITEM_MOVE == e->kind) {
+            container_ops_apply(&e->payload);
         }
     }
 }
@@ -105,8 +105,7 @@ void prediction_reconcile(void) {
 
     s_pred.curr = s_pred.state;                  /* 1. replace */
     client_event_trim(s_pred.state_consumed);    /* 2. drop what the state holds */
-    apply_facts();                               /* 3. stasis flag, item ops */
-    vault_ops_apply_pending();                   /*    the open vault's pending list */
+    apply_facts();                               /* 3. stasis flag, item moves */
 
     /* 4. With no event consumed, the state stands for the step before the oldest event. */
     cyberia_frame_t from = s_pred.state_frame;

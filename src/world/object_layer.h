@@ -50,6 +50,7 @@ typedef struct {
     char item_id[MAX_ITEM_ID_LENGTH];
     bool active;
     int quantity;
+    int slot;  /* the cell of a carried or stored stack; -1 for none */
 } ObjectLayerState;
 
 

@@ -12,6 +12,7 @@
 #include "sim/local_player.h"
 #include "sim/replication.h"
 #include "sim/self_motion.h"
+#include "world/object_layers_management.h"
 
 #include <assert.h>
 #include <math.h>
@@ -20,6 +21,7 @@
 
 double GetTime(void) { return 0.0; }
 bool network_send(cJSON* msg) { cJSON_Delete(msg); return true; }
+ObjectLayer* lookup_cached_layer(const char* item_id) { return NULL; }
 
 #define SPEED 5.0f
 

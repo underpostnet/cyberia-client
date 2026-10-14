@@ -57,14 +57,21 @@ cc "${cc_flags[@]}" -o "$out/skill_preview" tests/skill_preview_test.c src/ui/sk
     src/sim/local_player.c src/utils.c libs/cJSON/cJSON.c -lm
 "$out/skill_preview"
 
+cc "${cc_flags[@]}" -o "$out/item_slot_grid" tests/item_slot_grid_test.c src/ui/item_slot_grid.c -lm
+"$out/item_slot_grid"
+
+cc "${cc_flags[@]}" -o "$out/player_containers" tests/player_containers_test.c src/sim/local_player.c \
+    src/sim/container_ops.c src/ui/chat_log.c src/utils.c libs/cJSON/cJSON.c -lm
+"$out/player_containers"
+
 cc "${cc_flags[@]}" -ffunction-sections -fdata-sections -Wl,--gc-sections \
     -o "$out/world_depth" tests/world_depth_test.c -lm
 "$out/world_depth"
 
 cc "${cc_flags[@]}" -ffunction-sections -fdata-sections -Wl,--gc-sections \
-    -o "$out/inventory_bar_preview" tests/inventory_bar_preview_test.c \
+    -o "$out/inventory_bar" tests/inventory_bar_test.c \
     src/ui/skill_preview.c src/ui/ui_state.c src/utils.c -lm
-"$out/inventory_bar_preview"
+"$out/inventory_bar"
 
 cc "${cc_flags[@]}" -o "$out/entity_overhead_ui" tests/entity_overhead_ui_test.c src/ui/entity_overhead_ui.c -lm
 "$out/entity_overhead_ui"
@@ -78,6 +85,6 @@ cc "${cc_flags[@]}" -o "$out/self_motion" tests/self_motion_test.c src/sim/self_
 
 cc "${cc_flags[@]}" -ffunction-sections -fdata-sections -Wl,--gc-sections \
     -o "$out/replication" tests/replication_test.c src/sim/replication.c src/sim/self_motion.c \
-    src/net/client_event.c src/sim/game_state.c src/sim/local_player.c src/sim/vault_ops.c \
+    src/net/client_event.c src/sim/game_state.c src/sim/local_player.c src/sim/container_ops.c \
     src/serial.c src/utils.c libs/cJSON/cJSON.c -lm
 "$out/replication"

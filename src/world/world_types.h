@@ -16,6 +16,7 @@
 #define MAX_PATH_POINTS     100
 #define MAX_ID_LENGTH       64
 #define MAX_BEHAVIOR_LENGTH 32
+#define PLAYER_NAME_BYTES   32
 
 /* The id of an entity on the server, on the wire and here. 0 is no entity. */
 typedef uint32_t EntityID;
@@ -102,8 +103,10 @@ typedef struct {
     Cell target_cell;
 } Portal;
 
-/* The player component: the portal hold, which every viewer draws. */
+/* The player component: the server-given name and the portal hold, which
+ * every viewer draws. */
 typedef struct {
+    char  name[PLAYER_NAME_BYTES];
     bool  on_portal;
     float portal_hold;   /* the teleport charge, 0..1 */
 } Player;
@@ -129,6 +132,10 @@ typedef struct {
  * contributor eligible to collect. Drives particle tint (gold vs gray); no
  * overhead icon. */
 #define INTERACTION_FLAG_LOOT_ELIGIBLE (1u << 2)
+/* Other players only, per viewing player: the local player may invite this
+ * player to its party now, or its invite to this player waits for an answer. */
+#define INTERACTION_FLAG_PARTY_INVITE  (1u << 3)
+#define INTERACTION_FLAG_PARTY_INVITED (1u << 4)
 #define STATUS_ICON_NONE              0
 #define STATUS_ICON_PASSIVE           1
 #define STATUS_ICON_HOSTILE           2
@@ -144,8 +151,8 @@ typedef struct {
 
 #define BOT_QUEST_CODES_MAX           8
 
-/* What one bot in the AOI offers the local player. The self block carries one
- * row per bot that offers something. */
+/* What one bot or other player in the AOI offers the local player. The self
+ * block carries one row per entity that offers something. */
 typedef struct {
     EntityID id;
     /* Per-player interaction capability bitmask (INTERACTION_FLAG_*). */

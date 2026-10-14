@@ -2,8 +2,9 @@
 
 #include <string.h>
 
-#include "vault_ops.h"
+#include "game_state.h"
 #include "net/client_event.h"
+#include "world/object_layers_management.h"
 #include "utils.h"
 
 #define LOCAL_PLAYER_DEFAULT_MOVE_SPEED 3.0f
@@ -40,12 +41,61 @@ void local_player_reset(void) {
     g_local.action_ready_at      = 0.0;
     g_local.consume_ready_at     = 0.0;
     g_local.fct_count            = 0;
-    vault_ops_clear();
 }
 
 Vault* local_player_vault(const char* action_code) {
     for (int i = 0; i < g_local_player.vault_count; i++) {
         if (0 == strcmp(g_local_player.vaults[i].action_code, action_code)) return &g_local_player.vaults[i];
+    }
+    return NULL;
+}
+
+bool local_player_is_coin(const char* item_id) {
+    if (NULL == item_id || '\0' == item_id[0]) return false;
+    const ObjectLayer* ol = lookup_cached_layer(item_id);
+    return NULL != ol && 0 == strcmp(ol->data.item.type, "coin");
+}
+
+static int own_level(void) {
+    return game_state_has(g_local_player.id, COMP_PROGRESS) ? game_state_progress(g_local_player.id)->level : 1;
+}
+
+int local_player_open_slots(CyberiaCapacityRule rule) {
+    return cyberia_capacity_slots(rule, own_level());
+}
+
+int local_player_unlock_level(CyberiaCapacityRule rule, int slot) {
+    int level = cyberia_capacity_unlock_level(rule, slot);
+    return 0 < g_game_state.max_level && level > g_game_state.max_level ? 0 : level;
+}
+
+int local_player_inventory_used(void) {
+    int used = 0;
+    for (int i = 0; i < g_local_player.inventory_count; i++) {
+        if (!local_player_is_coin(g_local_player.inventory[i].item_id)) used++;
+    }
+    return used;
+}
+
+bool local_player_inventory_has_room(const char* item_id) {
+    return local_player_is_coin(item_id) || 0 < local_player_item_quantity(item_id) ||
+           local_player_inventory_used() < local_player_open_slots(CYBERIA_INVENTORY_CAPACITY);
+}
+
+const PartyMember* local_player_party_member(EntityID id) {
+    for (int i = 0; i < g_local_player.party.member_count; i++) {
+        if (id == g_local_player.party.members[i].id) return &g_local_player.party.members[i];
+    }
+    return NULL;
+}
+
+bool local_player_leads_party(void) {
+    return 0 < g_local_player.party.member_count && g_local_player.id == g_local_player.party.leader_id;
+}
+
+const PartyInvite* local_player_invite_from(EntityID id) {
+    for (int i = 0; i < g_local_player.invite_count; i++) {
+        if (id == g_local_player.invites[i].from_id) return &g_local_player.invites[i];
     }
     return NULL;
 }
@@ -92,6 +142,26 @@ void local_player_request_craft(EntityID entity_id, int recipe_index) {
 
 void local_player_request_craft_cancel(void) {
     client_event_push(CLIENT_EVENT_CRAFT_CANCEL, (client_event_payload_t){0});
+}
+
+void local_player_request_party_invite(EntityID player_id) {
+    client_event_push(CLIENT_EVENT_PARTY_INVITE, (client_event_payload_t){ .entity_id = player_id });
+}
+
+void local_player_request_party_reply(EntityID from_id, bool accept) {
+    client_event_push(CLIENT_EVENT_PARTY_REPLY, (client_event_payload_t){ .entity_id = from_id, .active = accept });
+}
+
+void local_player_request_party_leave(void) {
+    client_event_push(CLIENT_EVENT_PARTY_LEAVE, (client_event_payload_t){0});
+}
+
+void local_player_request_party_kick(EntityID member_id) {
+    client_event_push(CLIENT_EVENT_PARTY_KICK, (client_event_payload_t){ .entity_id = member_id });
+}
+
+void local_player_request_party_disband(void) {
+    client_event_push(CLIENT_EVENT_PARTY_DISBAND, (client_event_payload_t){0});
 }
 
 void    local_player_set_status_icon(uint8_t id) { g_local.status_icon = id; }

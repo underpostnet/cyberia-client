@@ -1,9 +1,11 @@
 #include "ui/skill_preview.h"
 #include "ui/ui_state.h"
 
+#include "sim/game_state.h"
 #include "sim/local_player.h"
 #include "net/client_event.h"
 #include "world/object_layer.h"
+#include "world/object_layers_management.h"
 #include "utils.h"
 
 #include <assert.h>
@@ -20,7 +22,9 @@ const char* active_layer_item_id(const ObjectLayerState* layers, int count, cons
     return s_skin;
 }
 void client_event_push(client_event_kind_t kind, client_event_payload_t p) {}
-void vault_ops_clear(void) {}
+GameState g_game_state;
+int game_state_slot(EntityID id) { return -1; }
+ObjectLayer* lookup_cached_layer(const char* item_id) { return NULL; }
 
 static void push_skill_held(const char* trigger, const char* logic, const char* summon, bool held) {
     UiSkillEntry skill = { .held = held };
@@ -68,6 +72,11 @@ int main(void) {
     g_local_player.inventory_count = 1;
     assert(1 == skill_preview_summons(&g_local_player.inventory[0], summons, &held) && held);
     assert(0 == strcmp("med-gel", summons[0].item_id) && 3 == summons[0].quantity);
+    /* Each stack of the consumable counts its own units, not the item total. */
+    g_local_player.inventory[1] = slot("med-gel", false);
+    g_local_player.inventory[1].quantity = 2;
+    g_local_player.inventory_count = 2;
+    assert(1 == skill_preview_summons(&g_local_player.inventory[1], summons, &held) && 2 == summons[0].quantity);
     g_local_player.inventory_count = 0;
 
     /* One preview per distinct entity, in skill map order, up to the row size. */

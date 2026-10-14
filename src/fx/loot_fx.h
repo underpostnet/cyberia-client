@@ -126,14 +126,9 @@ void loot_fx_reward_delivery(const char* item_id, float from_x, float from_y);
 
 /* Reverse of delivery: on a quantity reduction (coins lost on death, a quest
  * step "collect" turn-in, any item-slot decrement) the item icon and a particle
- * spray fly OUT of the slot to random screen points along a parabola, then fade.
- * Starts at the item's inventory slot, or the bottom-left toggle when the bar is
- * hidden. Paired with the fx_inventory_bar_qty "-N" popup on the same event. */
-void loot_fx_slot_expend(const char* item_id);
-
-/* Same outward spray from an explicit screen origin — used when the item's slot
- * is already gone (its last copy was consumed) so the caller supplies the slot's
- * last-known center. */
+ * spray fly OUT of the screen origin of the changed cell to random screen points
+ * along a parabola, then fade. Paired with the fx_inventory_bar_qty "-N" popup on
+ * the same event. */
 void loot_fx_slot_expend_at(const char* item_id, float from_x, float from_y);
 
 #endif /* CYBERIA_FX_LOOT_FX_H */

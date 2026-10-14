@@ -36,6 +36,7 @@ typedef enum {
     QUEST_CHANGE_ACCEPTED,
     QUEST_CHANGE_STEP_DONE,
     QUEST_CHANGE_COMPLETED,
+    QUEST_CHANGE_REWARDS_HELD,  /* every step is done; the rewards wait for room */
 } QuestChange;
 
 typedef struct {
@@ -45,6 +46,7 @@ typedef struct {
     char        active_step[QUEST_STEP_MAX];
     char        objectives[QUEST_OBJECTIVES_MAX];
     QuestStatus status;
+    bool        rewards_held; /* the rewards wait for a free inventory slot */
     QuestChange change;     /* not yet shown; see quest_progress_store_take_change */
 } QuestProgressEntry;
 
@@ -54,13 +56,14 @@ void quest_progress_store_reset(void);
  * "completed" | "failed"; unknown values default to active. A new entry takes
  * its title and description from quest_cache. Records no change. */
 void quest_progress_store_upsert(const char* code, const char* status_str,
-                                 const char* active_step, const char* objectives);
+                                 const char* active_step, const char* objectives,
+                                 bool rewards_held);
 
 /* Upsert from dialog_ack, and record the change against the prior state.
  * `granted` is true for the quest the server just granted. */
 void quest_progress_store_apply(const char* code, const char* status_str,
                                 const char* active_step, const char* objectives,
-                                bool granted);
+                                bool rewards_held, bool granted);
 
 /* Entry with an unshown change, which is cleared. NULL when none is left. */
 const QuestProgressEntry* quest_progress_store_take_change(QuestChange* change);

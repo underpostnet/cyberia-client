@@ -39,7 +39,10 @@ int skill_preview_summons(const ObjectLayerState* slot, SkillPreview out[SKILL_P
         bool seen = false;
         for (int j = 0; n > j; j++) seen = seen || 0 == strcmp(out[j].item_id, id);
         if (seen) continue;
-        out[n++] = (SkillPreview){ .item_id = id, .quantity = local_player_item_quantity(id) };
+        /* A stack that summons its own item counts its own units: a held
+         * consumable spends them one stack at a time. */
+        int quantity = 0 == strcmp(id, slot->item_id) ? slot->quantity : local_player_item_quantity(id);
+        out[n++] = (SkillPreview){ .item_id = id, .quantity = quantity };
         *held = *held || skill->held;
     }
     return n;

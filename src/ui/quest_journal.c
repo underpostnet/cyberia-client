@@ -38,6 +38,7 @@ static const Color C_CARD     = {  30,  34,  52, 210 };
 static const Color C_STEP     = { 120, 200, 140, 235 };
 static const Color C_STEP_DONE = { 105, 145, 118, 185 }; /* muted green — completed step */
 static const Color C_DIS      = {  90,  90, 110, 160 };  /* also: future (locked) steps  */
+static const Color C_HELD     = { 230, 170, 110, 235 };  /* rewards wait for a bag slot  */
 
 static const Color C_STATUS[QUEST_STATUS_COUNT] = {
     { 220, 190,  60, 255 }, /* active    — gold */
@@ -121,6 +122,9 @@ static int quest_card_layout(bool draw, const QuestProgressEntry* e, QuestStatus
         } else {
             cy += text_wrap(e->active_step, tx, cy, tw, QJ_FONT_SMALL, C_STEP, false, draw);
             cy += text_wrap(e->objectives, tx, cy, tw, QJ_FONT_SMALL, C_DIM, false, draw);
+        }
+        if (e->rewards_held) {
+            cy += text_wrap("Rewards wait: free a bag slot.", tx, cy, tw, QJ_FONT_SMALL, C_HELD, false, draw);
         }
     } else {
         const char* status = (QUEST_COMPLETED == sec) ? "Completed" : "Abandoned";

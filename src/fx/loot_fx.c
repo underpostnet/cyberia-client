@@ -523,13 +523,6 @@ void loot_fx_slot_expend_at(const char* item_id, float from_x, float from_y) {
     }
 }
 
-void loot_fx_slot_expend(const char* item_id) {
-    if (!item_id || item_id[0] == '\0') return;
-    Vector2 slot;
-    if (!inventory_bar_item_slot_center(item_id, &slot)) return;
-    loot_fx_slot_expend_at(item_id, slot.x, slot.y);
-}
-
 /* ── Vacuum flight (stage 3) ───────────────────────────────────────────── */
 
 void loot_fx_push(EntityID drop_id, EntityID collector_id,

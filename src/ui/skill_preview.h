@@ -17,7 +17,8 @@
  * player's active skin. NULL when no entity resolves. */
 const char* skill_preview_summon_id(const UiSkillEntry* skill);
 
-/* One summoned entity, and the units of it the local player holds. */
+/* One summoned entity, and the units of it the local player holds: those of
+ * the slot itself when the slot summons its own item. */
 typedef struct {
     const char* item_id;
     int         quantity;
