@@ -72,3 +72,6 @@ cc "${cc_flags[@]}" -o "$out/entity_overhead_ui" tests/entity_overhead_ui_test.c
 cc "${cc_flags[@]}" -ffunction-sections -fdata-sections -Wl,--gc-sections \
     -o "$out/loot_fx" tests/loot_fx_test.c src/fx/loot_fx.c src/utils.c -lm
 "$out/loot_fx"
+
+cc "${cc_flags[@]}" -o "$out/self_motion" tests/self_motion_test.c src/sim/self_motion.c -lm
+"$out/self_motion"

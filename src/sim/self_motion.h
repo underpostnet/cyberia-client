@@ -15,13 +15,14 @@ typedef struct {
     Direction direction;              /* DIRECTION_NONE when idle */
 } self_motion_t;
 
-/* Walk straight to the cell of target, as the server PendingMove rounds it. */
+/* Walk straight to the cell of target, as the server PendingMove rounds it.
+ * A walk to that cell keeps its path, as the server keeps it. */
 void self_motion_tap(self_motion_t* m, Vector2 target);
 
 /* Drop the path, as FreezePlayer does. */
 void self_motion_stop(self_motion_t* m);
 
-/* One tick along the path. */
+/* One tick along the path. The rest of the step after a node walks the next leg. */
 void self_motion_step(self_motion_t* m, double speed, double dt);
 
 /* The facing of a motion vector, as the server directionFromVector.
