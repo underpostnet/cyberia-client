@@ -25,6 +25,8 @@ void modal_opened(void) {
     if (0 == s_open_count++) modal_push_stasis();
 }
 
+bool modal_any_open(void) { return 0 < s_open_count; }
+
 void modal_closed(void) {
     if (!(0 < s_open_count)) {
         assert(false && "modal closed more often than opened");

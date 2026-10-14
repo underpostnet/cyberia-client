@@ -1,5 +1,6 @@
 #include "hud_side_stack.h"
 
+#include "chat_panel.h"
 #include "hud_minimap_overlay.h"
 #include "inventory_bar.h"
 #include "quest_journal.h"
@@ -17,9 +18,24 @@ static float hud_side_stack_available(void) {
     return 0.0f < avail ? avail : 0.0f;
 }
 
+/* Height the chat takes at the bottom of the column, its gap included. */
+static float chat_height(float desired_h) {
+    if (!chat_panel_is_visible()) return 0.0f;
+    float avail = hud_side_stack_available();
+    bool shared = hud_minimap_overlay_is_visible() || quest_journal_is_visible();
+    float cap = shared ? avail * HUD_SIDE_STACK_CHAT_SHARE : avail;
+    return desired_h < cap ? desired_h : cap;
+}
+
+static float chat_reserve(void) {
+    float h = chat_height(chat_panel_desired_height());
+    return 0.0f < h ? h + HUD_SIDE_STACK_GAP : 0.0f;
+}
+
 static float map_height(void) {
     if (!hud_minimap_overlay_is_visible()) return 0.0f;
-    float avail = hud_side_stack_available();
+    float avail = hud_side_stack_available() - chat_reserve();
+    if (0.0f > avail) avail = 0.0f;
     float h = HUD_MINIMAP_OVERLAY_SIZE < avail ? HUD_MINIMAP_OVERLAY_SIZE : avail;
     if (quest_journal_is_visible()) {
         float shared = avail - HUD_SIDE_STACK_JOURNAL_RESERVE - HUD_SIDE_STACK_GAP;
@@ -36,7 +52,7 @@ Rectangle hud_side_stack_map_slot(void) {
 
 Rectangle hud_side_stack_journal_slot(float desired_h) {
     float top = toolbar_height();
-    float room = hud_side_stack_available();
+    float room = hud_side_stack_available() - chat_reserve();
     float map_h = map_height();
     if (0.0f < map_h) {
         top += map_h + HUD_SIDE_STACK_GAP;
@@ -44,4 +60,10 @@ Rectangle hud_side_stack_journal_slot(float desired_h) {
     }
     if (!quest_journal_is_visible() || 0.0f >= room) return (Rectangle){ column_x(), top, HUD_SIDE_STACK_W, 0.0f };
     return (Rectangle){ column_x(), top, HUD_SIDE_STACK_W, desired_h < room ? desired_h : room };
+}
+
+Rectangle hud_side_stack_chat_slot(float desired_h) {
+    float h = chat_height(desired_h);
+    float bottom = toolbar_height() + hud_side_stack_available();
+    return (Rectangle){ column_x(), bottom - h, HUD_SIDE_STACK_W, h };
 }

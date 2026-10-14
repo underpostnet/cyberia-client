@@ -2,6 +2,7 @@
 #include "ease.h"
 
 #include "audio/audio.h"
+#include "chat_panel.h"
 #include "hud_minimap_overlay.h"
 #include "inventory_modal.h"
 #include "modal_instance_map.h"
@@ -15,6 +16,7 @@
 
 #include <math.h>
 #include <raylib.h>
+#include <stdio.h>
 
 #define TOOLBAR_SLIDE_DURATION 0.22f
 
@@ -33,6 +35,9 @@ static float slide_eased(void) {
 float toolbar_height(void)   { return TOOLBAR_H * (1.0f - slide_eased()); }
 float toolbar_offset_y(void) { return -TOOLBAR_H * slide_eased(); }
 
+/* Buttons of the toggle row: audio, chat, quest, map, fullscreen. */
+#define TOOLBAR_TOGGLE_COUNT 5
+
 /* Toggle row, right-aligned: index 0 is the rightmost button (fullscreen).
  * All ride the strip's slide. */
 static Rectangle btn_rect(int index_from_right) {
@@ -41,6 +46,8 @@ static Rectangle btn_rect(int index_from_right) {
     float y = (TOOLBAR_H - TOOLBAR_BTN_SIZE) * 0.5f + toolbar_offset_y();
     return (Rectangle){ x, y, TOOLBAR_BTN_SIZE, TOOLBAR_BTN_SIZE };
 }
+
+float toolbar_row_left(void) { return btn_rect(TOOLBAR_TOGGLE_COUNT - 1).x; }
 
 /* Hide/show toggle — top-left corner, pinned to the screen so the strip can
  * always be brought back.  Nearly full toolbar height with minimal edge
@@ -54,13 +61,12 @@ static Rectangle toggle_rect(void) {
 
 static void draw_btn(Rectangle r, const char* icon, bool selected, Vector2 mouse) {
     /* Clean icon-only button: draw the icon directly with no background,
-     * no border, no shadow. White hover outline for the pixel-retro feel. */
+     * no border, no shadow. One white ring marks the hover or the selection. */
     float sz = r.width < r.height ? r.width : r.height;
     float cx = r.x + r.width * 0.5f;
     float cy = r.y + r.height * 0.5f;
     ui_icon_draw(icon, cx, cy, (int)(sz * 0.65f), false, 0.0f);
-    if (selected || CheckCollisionPointRec(mouse, r))
-        DrawRectangleRoundedLinesEx(r, 0.18f, 6, 1.0f, WHITE);
+    if (selected || CheckCollisionPointRec(mouse, r)) ui_button_draw_ring(r, WHITE);
 }
 
 static bool interact_inventory_chain_is_open(void) {
@@ -104,6 +110,23 @@ static void toggle_quest_journal(void) {
     quest_journal_toggle();
 }
 
+static void toggle_chat_panel(void) {
+    bool dismissed = dismiss_world_covers();
+    if (dismissed && chat_panel_is_visible()) return;
+    chat_panel_toggle();
+}
+
+/* Unread count in the top-right corner of a toolbar button. */
+static void draw_badge(Rectangle r, int count) {
+    if (0 >= count) return;
+    char text[8];
+    snprintf(text, sizeof text, "%d", 99 < count ? 99 : count);
+    float cx = r.x + r.width - 3.0f;
+    float cy = r.y + 4.0f;
+    DrawCircle((int)cx, (int)cy, 8.0f, (Color){ 210, 60, 60, 245 });
+    DrawText(text, (int)(cx - (float)MeasureText(text, 10) * 0.5f), (int)(cy - 5.0f), 10, WHITE);
+}
+
 static void toggle_expanded_instance_map(void) {
     if (modal_instance_map_is_open()) {
         modal_instance_map_close();
@@ -134,8 +157,10 @@ void toolbar_draw(int screen_width) {
         draw_btn(btn_rect(0), fs_active ? "shrink" : "fullscreen", fs_active, mp);
         draw_btn(btn_rect(1), "map", map_open, mp);
         draw_btn(btn_rect(2), "quest", quest_journal_is_visible(), mp);
+        draw_btn(btn_rect(3), "chat", chat_panel_is_visible(), mp);
+        draw_badge(btn_rect(3), chat_panel_unread());
         /* The icon shows the state, not the action: muted audio reads as muted. */
-        draw_btn(btn_rect(3), muted ? "audio-mute" : "audio", muted, mp);
+        draw_btn(btn_rect(4), muted ? "audio-mute" : "audio", muted, mp);
     }
 
     draw_btn(toggle_rect(), s_hidden ? "cyberia-white-0" : "cyberia-yellow-1", false, mp);
@@ -152,7 +177,11 @@ bool toolbar_handle_click(int mx, int my) {
         toggle_minimap();
         return true;
     }
-    if (ui_button_hit(btn_rect(3), mx, my)) { audio_toggle_mute(); return true; }
+    if (ui_button_hit(btn_rect(4), mx, my)) { audio_toggle_mute(); return true; }
+    if (ui_button_hit(btn_rect(3), mx, my)) {
+        toggle_chat_panel();
+        return true;
+    }
     if (ui_button_hit(btn_rect(2), mx, my)) {
         toggle_quest_journal();
         return true;

@@ -44,6 +44,7 @@ typedef struct {
     bool            pointer_was_down;
     Vector2         press_pos;       /* gesture origin — icon follow and flip test  */
     Vector2         drag_offset;     /* px the glyph trails the pointer, springs to 0 */
+    Color           ring_expanded;   /* alpha > 0: a ring of this color marks the expanded state */
     float           icon_scale;      /* 1.0, eased up while dragging                */
 } UIToggle;
 

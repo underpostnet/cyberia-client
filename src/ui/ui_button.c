@@ -3,6 +3,7 @@
 #include "ui_icon.h"
 #include "ui_rect.h"
 
+#include <math.h>
 #include <stddef.h>
 
 /* Toggle-derived baseline chrome. */
@@ -78,6 +79,20 @@ static void draw_outlined_wrap(const char* text, int x, int y, int maxw, int fon
         for (int ox = -1; ox <= 1; ox++)
             if (ox || oy) text_wrap(text, x + ox, y + oy, maxw, font, BLACK, false, true);
     text_wrap(text, x, y, maxw, font, col, false, true);
+}
+
+void ui_button_draw_ring(Rectangle bounds, Color color) {
+    int x = (int)floorf(bounds.x), y = (int)floorf(bounds.y);
+    int w = (int)roundf(bounds.width), h = (int)roundf(bounds.height);
+    if (4 > w || 4 > h) return;
+    DrawRectangle(x + 2, y, w - 4, 1, color);
+    DrawRectangle(x + 2, y + h - 1, w - 4, 1, color);
+    DrawRectangle(x, y + 2, 1, h - 4, color);
+    DrawRectangle(x + w - 1, y + 2, 1, h - 4, color);
+    DrawRectangle(x + 1, y + 1, 1, 1, color);
+    DrawRectangle(x + w - 2, y + 1, 1, 1, color);
+    DrawRectangle(x + 1, y + h - 2, 1, 1, color);
+    DrawRectangle(x + w - 2, y + h - 2, 1, 1, color);
 }
 
 /* ── Pixel-retro draw (public, used by modal_interact etc.) ──────────── */

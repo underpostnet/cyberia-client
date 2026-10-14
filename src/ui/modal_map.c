@@ -1,4 +1,5 @@
 #include "modal_map.h"
+#include "modal.h"
 #include "ease.h"
 #include "text.h"
 #include "toolbar.h"
@@ -78,9 +79,9 @@ float modal_map_expand_progress(void) {
 /* ── Draw helpers ─────────────────────────────────────────────────────── */
 
 /* shadow_text renders `text` with a subtle 1-pixel black shadow. */
-static void shadow_text(const char* text, int x, int y, int fs, Color c) {
-    DrawText(text, x + 1, y + 1, fs, (Color){ 0, 0, 0, (unsigned char)(160.0f * (c.a / 255.0f)) });
-    DrawText(text, x,     y,     fs, c);
+static void shadow_text(const char* text, int x, int y, int max_w, int fs, Color c) {
+    modal_draw_clipped_text(text, x + 1, y + 1, max_w, fs, (Color){ 0, 0, 0, (unsigned char)(160.0f * (c.a / 255.0f)) });
+    modal_draw_clipped_text(text, x, y, max_w, fs, c);
 }
 
 /* ── Draw ─────────────────────────────────────────────────────────────── */
@@ -118,6 +119,10 @@ void modal_map_draw(void) {
      * vertically centred on the strip; rides the strip's hide/show slide. */
     int bx = (int)(TOOLBAR_BTN_MARGIN * 2.0f + TOOLBAR_BTN_SIZE);
     int by = (int)(toolbar_offset_y() + (TOOLBAR_H - (float)box_h) * 0.5f);
+    /* A long map code on a narrow screen ends before the toggle row. */
+    int room = (int)(toolbar_row_left() - TOOLBAR_BTN_MARGIN) - bx;
+    if (box_w > room) box_w = room;
+    int text_w = box_w - pad * 2;
 
     g_modal_map.bounds = (Rectangle){ (float)bx, (float)by, (float)box_w, (float)box_h };
 
@@ -141,12 +146,12 @@ void modal_map_draw(void) {
         /* ── Line 1: map code ──────────────────────────────────────────── */
         Color line1_c = { 240, 215, 100, 230 };
         line1_c.a = (unsigned char)((float)line1_c.a * fade);
-        shadow_text(line1, bx + pad, by + pad, fs, line1_c);
+        shadow_text(line1, bx + pad, by + pad, text_w, fs, line1_c);
 
         /* ── Line 2: position + fps ────────────────────────────────────── */
         Color line2_c = { 180, 195, 220, 210 };
         line2_c.a = (unsigned char)((float)line2_c.a * fade);
-        shadow_text(line2, bx + pad, by + pad + lsp, fs, line2_c);
+        shadow_text(line2, bx + pad, by + pad + lsp, text_w, fs, line2_c);
     }
 }
 

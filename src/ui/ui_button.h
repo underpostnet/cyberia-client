@@ -70,6 +70,10 @@ UIButtonState ui_button_resolve_state(bool enabled, bool selected, bool hovered)
 
 bool ui_button_hit(Rectangle bounds, int mx, int my);
 
+/* A one-pixel ring with cut corners on whole pixels: the hover and the
+ * selected mark of an icon-only button. */
+void ui_button_draw_ring(Rectangle bounds, Color color);
+
 /* ── Pixel-retro button style ────────────────────────────────────────── */
 
 typedef struct {

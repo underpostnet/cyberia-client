@@ -4,6 +4,7 @@
 #include <stdbool.h>
 #include <stdint.h>
 
+#include "content/stat_contract_generated.h"
 #include "world/object_layer.h"
 #include "world/world_types.h"
 
@@ -23,7 +24,8 @@ typedef uint32_t cyberia_input_seq_t;
 
 /* Matches the server queue cap, so one batch from this client always fits. */
 #define CLIENT_EVENT_CAP 512
-#define CHAT_LINE_BYTES  512
+/* One chat line: the rune limit in UTF-8 bytes, plus the NUL. */
+#define CHAT_LINE_BYTES  (CYBERIA_CHAT_TEXT_MAX_RUNES * 4 + 1)
 /* The server accepts an id of up to 128 bytes (maxItemIDLen), plus the NUL. */
 #define CLIENT_EVENT_ID_BYTES 129
 
@@ -39,33 +41,43 @@ typedef enum {
     CLIENT_EVENT_SHOP_BUY,
     CLIENT_EVENT_CRAFT_ITEM,
     CLIENT_EVENT_CRAFT_CANCEL,
-    CLIENT_EVENT_ITEM_OPS,
+    CLIENT_EVENT_ITEM_MOVE,
+    CLIENT_EVENT_PARTY_INVITE,
+    CLIENT_EVENT_PARTY_REPLY,
+    CLIENT_EVENT_PARTY_LEAVE,
+    CLIENT_EVENT_PARTY_KICK,
+    CLIENT_EVENT_PARTY_DISBAND,
 } client_event_kind_t;
 
-/* Matches the server cap on one item_ops list (storageMaxSlots). */
-#define CLIENT_EVENT_ITEM_OPS_MAX 64
+/* Who one chat line reaches; packs to the wire word. */
+typedef enum {
+    CHAT_CHANNEL_WORLD,    /* every player on this server */
+    CHAT_CHANNEL_PARTY,    /* the members of the party */
+    CHAT_CHANNEL_DIRECT,   /* one player on the map */
+    CHAT_CHANNEL_COUNT,
+} chat_channel_t;
 
-/* One vault op: qty of item_id into the vault when to_vault, else out of it. */
-typedef struct {
-    char item_id[MAX_ITEM_ID_LENGTH];
-    int  qty;
-    bool to_vault;
-} client_event_item_op_t;
+/* The container a slot of an item move belongs to; packs to the wire word. */
+typedef enum {
+    BOX_BAG,      /* the carried inventory */
+    BOX_STORAGE,  /* the personal storage */
+    BOX_VAULT,    /* the NPC vault at entity_id */
+} Box;
 
 /* One flat payload, the same shape as the server inputPayload. Each kind
  * reads only its own fields. */
 typedef struct {
     float  target_x, target_y;                 /* player_action */
-    EntityID entity_id;                        /* also chat to_id */
+    EntityID entity_id;                        /* also chat to_id, party player */
     char   item_id[CLIENT_EVENT_ID_BYTES];     /* also quest_code */
     char   code[CLIENT_EVENT_ID_BYTES];        /* dialog_code */
+    chat_channel_t channel;                    /* chat */
     char   text[CHAT_LINE_BYTES];              /* chat */
-    int    quantity, recipe_index;
-    bool   active;                             /* also player_stasis */
-    /* ponytail: inline list, ~4.6 KB in every queue slot (~2.4 MB BSS).
-     * Move it to a side pool keyed by sequence if memory matters. */
-    int    op_count;                           /* item_ops */
-    client_event_item_op_t ops[CLIENT_EVENT_ITEM_OPS_MAX];
+    int    quantity, recipe_index;             /* quantity: also the units of item_move */
+    bool   active;                             /* also player_stasis, party_reply accept */
+    int    slot;                               /* item_active: the bag slot of the stack */
+    Box    from, to;                           /* item_move */
+    int    from_slot, to_slot;
 } client_event_payload_t;
 
 typedef struct {

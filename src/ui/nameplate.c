@@ -6,6 +6,7 @@
 #include "nameplate.h"
 
 #include "content/presentation_runtime.h"
+#include "sim/game_state.h"
 
 #include <assert.h>
 #include <ctype.h>
@@ -35,10 +36,11 @@ void nameplate_resolve(EntityID entity_id,
     /* The "-<id>" suffix is a dev aid; off-mode shows the clean label. */
     bool dev = presentation_runtime_dev_ui();
 
-    /* ── Players: "Anon" (+ "-<entity id>" in dev). ── */
+    /* ── Players: the server-given name (+ "-<entity id>" in dev). ── */
     if (is_player) {
-        if (dev) snprintf(out, (size_t)out_size, "Anon-%u", entity_id);
-        else     snprintf(out, (size_t)out_size, "Anon");
+        const char* name = game_state_is_player(entity_id) ? game_state_player(entity_id)->name : "";
+        if (dev) snprintf(out, (size_t)out_size, "%s-%u", name, entity_id);
+        else     snprintf(out, (size_t)out_size, "%s", name);
         return;
     }
 

@@ -5,8 +5,7 @@
 #include "view/viewport.h"
 #include "js/text_input_bridge.h"
 #include "net/client_event.h"
-#include "view/notification.h"
-#include "notify_store.h"
+#include "chat_log.h"
 #include "ui_button.h"
 #include "ui_scroll.h"
 #include "utils.h"
@@ -18,7 +17,6 @@
 #include <stdio.h>
 #include <string.h>
 
-#define CHAT_TEXT_MAX     128
 #define CHAT_DRAW_MAX     50
 #define CHAT_GAP          6.0f
 #define CHAT_SEND_W       76.0f
@@ -30,6 +28,7 @@ static const char* CHAT_PRESETS[CHAT_PRESET_COUNT] = {
 
 static const Color C_MINE     = { 120, 180, 240, 255 };
 static const Color C_THEIRS   = { 200, 200, 220, 230 };
+static const Color C_SYSTEM   = { 230, 170, 110, 235 };
 static const Color C_HINT     = { 130, 140, 165, 200 };
 static const Color C_BTN      = {  24,  30,  48, 255 };
 static const Color C_SEND     = {  35,  80, 160, 255 };
@@ -42,13 +41,8 @@ typedef struct {
     Rectangle presets[CHAT_PRESET_COUNT];
 } ChatLayout;
 
-static EntityID  s_entity_id;
-static UIScroll  s_scroll;
-static float     s_content_h;
-static int       s_seen_count;
-static double    s_seen_ts;
-static bool      s_stick;
-static bool      s_input_shown;
+/* The pane that shows the one DOM input, and where. */
+static ChatPane* s_input_owner;
 static Rectangle s_input_rect;
 
 static inline int   chat_font(void)  { return viewport_is_mobile() ? 12 : 14; }
@@ -83,9 +77,8 @@ static ChatLayout chat_layout(Rectangle content) {
     return l;
 }
 
-/* Trim and push one line. The history shows it at once (R4). A line pushed
- * while the socket is down still shows, and the socket close drops the event. */
-static void send_line(EntityID entity_id, const char* text) {
+/* Trim and push one line. The history shows it once the server echoes it. */
+static void send_line(const ChatPane* pane, const char* text) {
     char line[CHAT_LINE_BYTES];
     copy_str(line, sizeof(line), text);
     char* start = line;
@@ -93,16 +86,16 @@ static void send_line(EntityID entity_id, const char* text) {
     size_t length = strlen(start);
     while (0 < length && isspace((unsigned char)start[length - 1])) start[--length] = '\0';
     if (0 == length) return;
-    client_event_payload_t p = { .entity_id = entity_id };
+    client_event_payload_t p = { .channel = pane->conversation.channel,
+                                 .entity_id = pane->conversation.peer };
     copy_str(p.text, sizeof(p.text), start);
     client_event_push(CLIENT_EVENT_CHAT, p);
-    notify_store_push(entity_id, "You", start, true);
 }
 
-static void send_input(EntityID entity_id) {
+static void send_input(const ChatPane* pane) {
     char text[CHAT_LINE_BYTES];
     text_input_bridge_take(text, sizeof(text));
-    send_line(entity_id, text);
+    send_line(pane, text);
 }
 
 static bool same_pixels(Rectangle a, Rectangle b) {
@@ -110,62 +103,69 @@ static bool same_pixels(Rectangle a, Rectangle b) {
            (int)a.width == (int)b.width && (int)a.height == (int)b.height;
 }
 
-void chat_pane_update(Rectangle content, EntityID entity_id, bool input_visible, float dt) {
-    ChatLayout l = chat_layout(content);
-
-    if (entity_id != s_entity_id) {
-        /* A draft belongs to the entity it was typed for. */
+void chat_pane_bind(ChatPane* pane, ChatConversation conversation) {
+    assert(pane);
+    if (conversation.channel == pane->conversation.channel &&
+        conversation.peer == pane->conversation.peer) return;
+    if (s_input_owner == pane) {
+        /* A draft belongs to the conversation it was typed for. */
         char draft[CHAT_LINE_BYTES];
         text_input_bridge_take(draft, sizeof(draft));
-        s_entity_id = entity_id;
-        ui_scroll_reset(&s_scroll);
-        s_content_h  = 0.0f;
-        s_seen_count = -1;
     }
-
-    /* The pane shows every line, so none stays unread. */
-    notification_clear(NOTIF_CHAT, entity_id);
-
-    const NotifyEntry* entry = notify_store_get(entity_id);
-    int    count = NULL != entry ? entry->count : 0;
-    double ts    = 0 < count ? entry->messages[count - 1].ts_ms : 0.0;
-    if (count != s_seen_count || ts != s_seen_ts || l.list.height != s_scroll.view.height) {
-        s_stick = true;
-        s_seen_count = count;
-        s_seen_ts = ts;
-    }
-
-    ui_scroll_update(&s_scroll, l.list, s_content_h, dt);
-
-    if (!input_visible) {
-        chat_pane_hide();
-        return;
-    }
-    if (!s_input_shown || !same_pixels(s_input_rect, l.input)) {
-        if (!s_input_shown) s_stick = true;
-        text_input_bridge_show((int)l.input.x, (int)l.input.y, (int)l.input.width,
-                               (int)l.input.height, CHAT_TEXT_MAX, "Say something...");
-        s_input_shown = true;
-        s_input_rect = l.input;
-    }
-    if (text_input_bridge_submitted()) send_input(entity_id);
+    pane->conversation = conversation;
+    ui_scroll_reset(&pane->scroll);
+    pane->content_h  = 0.0f;
+    pane->seen_count = -1;
 }
 
-void chat_pane_draw(Rectangle content, EntityID entity_id, const char* entity_name) {
-    assert(entity_name);
+void chat_pane_update(ChatPane* pane, Rectangle content, bool input_visible, float dt) {
+    assert(pane);
+    ChatLayout l = chat_layout(content);
+
+    /* The pane shows every line, so none stays unread. */
+    chat_log_mark_read(pane->conversation);
+
+    const ChatHistory* h = chat_log_get(pane->conversation);
+    int    count = NULL != h ? h->count : 0;
+    double ts    = 0 < count ? h->lines[count - 1].ts_ms : 0.0;
+    if (count != pane->seen_count || ts != pane->seen_ts || l.list.height != pane->scroll.view.height) {
+        pane->stick = true;
+        pane->seen_count = count;
+        pane->seen_ts = ts;
+    }
+
+    ui_scroll_update(&pane->scroll, l.list, pane->content_h, dt);
+
+    if (!input_visible) {
+        chat_pane_hide(pane);
+        return;
+    }
+    if (s_input_owner != pane || !same_pixels(s_input_rect, l.input)) {
+        if (s_input_owner != pane) {
+            char draft[CHAT_LINE_BYTES];
+            text_input_bridge_take(draft, sizeof(draft));
+            pane->stick = true;
+        }
+        text_input_bridge_show((int)l.input.x, (int)l.input.y, (int)l.input.width,
+                               (int)l.input.height, CYBERIA_CHAT_TEXT_MAX_RUNES, "Say something...");
+        s_input_owner = pane;
+        s_input_rect = l.input;
+    }
+    if (text_input_bridge_submitted()) send_input(pane);
+}
+
+void chat_pane_draw(ChatPane* pane, Rectangle content) {
+    assert(pane);
     ChatLayout l = chat_layout(content);
     int font = chat_font();
     int mx = GetMouseX();
     int my = GetMouseY();
-    char id_label[16];
-    snprintf(id_label, sizeof id_label, "%u", entity_id);
-    const char* their_label = '\0' != entity_name[0] ? entity_name : id_label;
 
-    const NotifyEntry* entry = notify_store_get(entity_id);
-    int count = NULL != entry ? entry->count : 0;
+    const ChatHistory* h = chat_log_get(pane->conversation);
+    int count = NULL != h ? h->count : 0;
 
-    ui_scroll_begin(&s_scroll);
-    float top = l.list.y - ui_scroll_offset(&s_scroll);
+    ui_scroll_begin(&pane->scroll);
+    float top = l.list.y - ui_scroll_offset(&pane->scroll);
     float y = top;
     if (0 == count) {
         DrawText("No messages yet...", (int)l.list.x, (int)y, font, C_HINT);
@@ -174,19 +174,21 @@ void chat_pane_draw(Rectangle content, EntityID entity_id, const char* entity_na
     /* ponytail: wraps the newest CHAT_DRAW_MAX lines every frame; cache the
      * wrapped heights if a long history shows up in a profile. */
     for (int i = CHAT_DRAW_MAX < count ? count - CHAT_DRAW_MAX : 0; count > i; i++) {
-        const NotifyMessage* m = &entry->messages[i];
-        DrawText(m->mine ? "You" : their_label, (int)l.list.x, (int)y, font,
-                 m->mine ? C_MINE : C_THEIRS);
-        y += (float)text_line_height(font);
+        const ChatLine* m = &h->lines[i];
+        if (0 != m->from_id) {
+            DrawText(m->mine ? "You" : m->from_name, (int)l.list.x, (int)y, font,
+                     m->mine ? C_MINE : C_THEIRS);
+            y += (float)text_line_height(font);
+        }
         y += (float)text_wrap(m->text, (int)l.list.x, (int)y, (int)l.list.width, font,
-                              MODAL_TEXT, false, true) + CHAT_GAP;
+                              0 == m->from_id ? C_SYSTEM : MODAL_TEXT, false, true) + CHAT_GAP;
     }
-    s_content_h = y - top;
-    ui_scroll_end(&s_scroll);
-    if (s_stick) {
+    pane->content_h = y - top;
+    ui_scroll_end(&pane->scroll);
+    if (pane->stick) {
         /* The next update clamps the offset to the scroll range. */
-        s_scroll.offset = s_content_h - l.list.height;
-        s_stick = false;
+        pane->scroll.offset = pane->content_h - l.list.height;
+        pane->stick = false;
     }
 
     /* The DOM input covers this frame while it shows. */
@@ -205,29 +207,31 @@ void chat_pane_draw(Rectangle content, EntityID entity_id, const char* entity_na
     }
 }
 
-void chat_pane_press(Rectangle content, EntityID entity_id, int mx, int my) {
+void chat_pane_press(ChatPane* pane, Rectangle content, int mx, int my) {
+    assert(pane);
     ChatLayout l = chat_layout(content);
     if (ui_button_hit(l.send, mx, my)) {
-        send_input(entity_id);
+        send_input(pane);
         return;
     }
     for (int i = 0; CHAT_PRESET_COUNT > i; i++) {
         if (ui_button_hit(l.presets[i], mx, my)) {
-            send_line(entity_id, CHAT_PRESETS[i]);
+            send_line(pane, CHAT_PRESETS[i]);
             return;
         }
     }
     if (CheckCollisionPointRec((Vector2){ (float)mx, (float)my }, l.list)) {
-        ui_scroll_on_press(&s_scroll, mx, my);
+        ui_scroll_on_press(&pane->scroll, mx, my);
     }
 }
 
-bool chat_pane_wheel(Rectangle content, float wheel_delta) {
-    return ui_scroll_on_wheel(&s_scroll, chat_layout(content).list, s_content_h, wheel_delta);
+bool chat_pane_wheel(ChatPane* pane, Rectangle content, float wheel_delta) {
+    assert(pane);
+    return ui_scroll_on_wheel(&pane->scroll, chat_layout(content).list, pane->content_h, wheel_delta);
 }
 
-void chat_pane_hide(void) {
-    if (!s_input_shown) return;
+void chat_pane_hide(ChatPane* pane) {
+    if (s_input_owner != pane) return;
     text_input_bridge_hide();
-    s_input_shown = false;
+    s_input_owner = NULL;
 }

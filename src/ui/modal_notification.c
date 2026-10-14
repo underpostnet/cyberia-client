@@ -689,6 +689,10 @@ static void show_quest_card(QuestChange change, const QuestProgressEntry* q) {
         modal_notification_show("Step Complete", body, (Color){ 90, 170, 220, 255 });
         break;
     }
+    case QUEST_CHANGE_REWARDS_HELD:
+        modal_notification_show("Bag Full", "Free a bag slot to claim the rewards of this quest.",
+                                (Color){ 230, 170, 110, 255 });
+        break;
     case QUEST_CHANGE_NONE:
         break;
     }

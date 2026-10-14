@@ -7,7 +7,7 @@
  *
  * Hosts the persistent HUD controls: the pinned hide/show toggle in the
  * top-left corner, the compact map readout beside it (ui/modal_map), and the
- * right-aligned toggle row [quest][HUD map][fullscreen]. The hide toggle
+ * right-aligned toggle row [audio][chat][quest][HUD map][fullscreen]. The hide toggle
  * slides the whole strip up to clear the screen and stays on top to bring it
  * back. The compact coordinate readout separately opens modal_instance_map.
  *
@@ -33,9 +33,13 @@ float toolbar_height(void);
 /* Vertical offset of the sliding strip (0 → -TOOLBAR_H). Content drawn on
  * the strip (the map readout) rides this. */
 float toolbar_offset_y(void);
+/* Left edge of the toggle row. Content left of it, such as the map readout,
+ * ends before it. */
+float toolbar_row_left(void);
 
 void  toolbar_draw(int screen_width);
-/* Toggle-row taps (quest / HUD map / fullscreen / hide) + the map readout. */
+/* Toggle-row taps (audio / chat / quest / HUD map / fullscreen / hide) + the
+ * map readout. */
 bool  toolbar_handle_click(int mx, int my);
 /* True anywhere on the visible strip and on the always-on hide toggle. */
 bool  toolbar_covers_point(int mx, int my);

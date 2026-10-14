@@ -18,7 +18,7 @@
 #include "audio/audio.h"
 #include "audio/audio_events.h"
 #include "sim/replication.h"
-#include "ui/notify_store.h"
+#include "ui/chat_log.h"
 #include "ui/floating_combat_text.h"
 #include "fx/loot_fx.h"
 #include "ui/item_slot_grid.h"
@@ -124,6 +124,7 @@ static int read_layers(const cJSON* owner, const char* key,
         serial_get_string(item, "itemId", layers[n].item_id, MAX_ITEM_ID_LENGTH);
         layers[n].active   = serial_get_bool_default(item, "active", true);
         layers[n].quantity = serial_get_int_default(item, "quantity", 0);
+        layers[n].slot     = serial_get_int_default(item, "slot", -1);
         /* Only what the player is wearing is critical; a carried spare is not yet drawn. */
         const FetchPriority wanted =
             (FETCH_P0 == priority && !layers[n].active) ? FETCH_P2 : priority;
@@ -199,10 +200,12 @@ static void write_data(int slot, const cJSON* e, EntityKind kind) {
     };
     g_game_state.mask[slot] |= COMP_DATA;
     if (ENTITY_KIND_PLAYER != kind) return;
-    g_game_state.player[slot] = (Player){
+    Player* player = &g_game_state.player[slot];
+    *player = (Player){
         .on_portal   = serial_get_bool_default(e, "onPortal", false),
         .portal_hold = serial_get_float_default(e, "portalHoldProgress", 0.0f),
     };
+    serial_get_string(e, "name", player->name, sizeof player->name);
     g_game_state.mask[slot] |= COMP_PLAYER;
 }
 
@@ -338,6 +341,51 @@ static void unpack_portal(const cJSON* e) {
     gs->mask[slot] |= COMP_PORTAL;
 }
 
+/* A container's stacks, {itemId, qty, slot} each. */
+static void read_stacks(const cJSON* array, Stacks* out) {
+    out->count = 0;
+    const cJSON* item = NULL;
+    cJSON_ArrayForEach(item, array) {
+        if (VAULT_SLOTS_MAX <= out->count) break;
+        ObjectLayerState* stack = &out->items[out->count++];
+        memset(stack, 0, sizeof *stack);
+        serial_get_string(item, "itemId", stack->item_id, sizeof stack->item_id);
+        stack->quantity = serial_get_int_default(item, "qty", 0);
+        stack->slot     = serial_get_int_default(item, "slot", -1);
+    }
+}
+
+/* The party and the invites that wait for the player's answer. */
+static void read_party(const cJSON* e) {
+    Party* party = &g_local_player.party;
+    memset(party, 0, sizeof *party);
+    const cJSON* party_json = serial_get_object(e, "party");
+    if (NULL != party_json) {
+        party->leader_id = serial_get_u32_default(party_json, "leaderId", 0);
+        const cJSON* row = NULL;
+        cJSON_ArrayForEach(row, serial_get_array(party_json, "members")) {
+            if (CYBERIA_PARTY_MAX_MEMBERS <= party->member_count) break;
+            PartyMember* m = &party->members[party->member_count++];
+            m->id       = serial_get_u32_default(row, "id", 0);
+            m->level    = serial_get_int_default(row, "level", 0);
+            m->life     = serial_get_int_default(row, "life", 0);
+            m->max_life = serial_get_int_default(row, "maxLife", 0);
+            serial_get_string(row, "name", m->name, sizeof m->name);
+            serial_get_string(row, "mapCode", m->map_code, sizeof m->map_code);
+        }
+    }
+    g_local_player.invite_count = 0;
+    const cJSON* row = NULL;
+    cJSON_ArrayForEach(row, serial_get_array(e, "partyInvites")) {
+        if (CYBERIA_PARTY_INVITES_MAX <= g_local_player.invite_count) break;
+        PartyInvite* in = &g_local_player.invites[g_local_player.invite_count++];
+        memset(in, 0, sizeof *in);
+        in->from_id    = serial_get_u32_default(row, "fromId", 0);
+        in->expires_at = GetTime() + serial_get_int_default(row, "expiresInMs", 0) / 1000.0;
+        serial_get_string(row, "fromName", in->from_name, sizeof in->from_name);
+    }
+}
+
 static void unpack_self(const cJSON* e, cyberia_frame_t frame, cyberia_input_seq_t consumed) {
     GameState* gs = &g_game_state;
 
@@ -374,24 +422,19 @@ static void unpack_self(const cJSON* e, cyberia_frame_t frame, cyberia_input_seq
     /* Full inventory — every visible layer, active and inactive. Powers the
      * inventory bottom bar. */
     g_local_player.inventory_count = read_layers(e, "inventory", g_local_player.inventory,
-                                                 MAX_OBJECT_LAYERS, FETCH_P1);
+                                                 INVENTORY_LAYERS_MAX, FETCH_P1);
 
-    /* Every vault of the player: the server copy the reconcile builds on. */
+    /* Every container of the player: the server copies the reconcile builds on. */
     g_local_player.vault_count = 0;
     const cJSON* vault_json = NULL;
     cJSON_ArrayForEach(vault_json, serial_get_array(e, "vaults")) {
         if (VAULTS_MAX <= g_local_player.vault_count) break;
         Vault* vault = &g_local_player.vaults[g_local_player.vault_count++];
-        memset(vault, 0, sizeof *vault);
         serial_get_string(vault_json, "actionCode", vault->action_code, sizeof vault->action_code);
-        const cJSON* item = NULL;
-        cJSON_ArrayForEach(item, serial_get_array(vault_json, "items")) {
-            if (VAULT_SLOTS_MAX <= vault->count) break;
-            ObjectLayerState* stack = &vault->items[vault->count++];
-            serial_get_string(item, "itemId", stack->item_id, sizeof stack->item_id);
-            stack->quantity = serial_get_int_default(item, "qty", 0);
-        }
+        read_stacks(serial_get_array(vault_json, "items"), &vault->stacks);
     }
+    read_stacks(serial_get_array(e, "storage"), &g_local_player.storage);
+    read_party(e);
 
     /* The running assembly; the bar ends when the server's timer ends. */
     const cJSON* craft = serial_get_object(e, "craft");
@@ -557,12 +600,13 @@ static void store_quest_array(const cJSON* quests_json, const char* granted) {
         serial_get_string(q, "status", status, sizeof(status));
         serial_get_string(q, "activeStep", active_step, sizeof(active_step));
         serial_get_string(q, "objectivesText", objectives, sizeof(objectives));
+        bool rewards_held = serial_get_bool_default(q, "rewardsHeld", false);
 
         if (granted)
-            quest_progress_store_apply(code, status, active_step, objectives,
+            quest_progress_store_apply(code, status, active_step, objectives, rewards_held,
                                        0 == strcmp(code, granted));
         else
-            quest_progress_store_upsert(code, status, active_step, objectives);
+            quest_progress_store_upsert(code, status, active_step, objectives, rewards_held);
     }
 }
 
@@ -573,7 +617,8 @@ static void json_unpack_init_data(const cJSON* payload) {
     // cellSize / interpolationMs / cameraZoom are NOT here; the cyberia-server
     // never sends presentation. They are hydrated by presentation_runtime
     // once the /api/v1/cyberia-client-hints fetch settles.
-    serial_get_string(payload, "engineId", g_local_player.engine_id, sizeof g_local_player.engine_id);
+    serial_get_string(payload, "playerId", g_local_player.player_id, sizeof g_local_player.player_id);
+    g_game_state.max_level = serial_get_int_default(payload, "maxLevel", 0);
     g_game_state.grid_w = serial_get_int_default(payload, "gridW", 100);
     g_game_state.grid_h = serial_get_int_default(payload, "gridH", 100);
     g_game_state.aoi_radius = serial_get_float_default(payload, "aoiRadius", 15.0f);
@@ -757,14 +802,65 @@ static void json_unpack_metadata(const cJSON* payload) {
     LOG_INFO("[METADATA] Cached %d ObjectLayers, scheduled %d atlas REST fetches\n", ol_count, ol_count);
 }
 
+/* The conversation a chat message files under: its channel, and for a direct
+ * line the other player. */
+static ChatConversation chat_conversation_of(const cJSON* payload, EntityID from_id) {
+    static const char* const words[CHAT_CHANNEL_COUNT] = { "world", "party", "direct" };
+    char word[16] = {0};
+    serial_get_string(payload, "channel", word, sizeof(word));
+    for (int c = 0; CHAT_CHANNEL_COUNT > c; c++) {
+        if (0 != strcmp(word, words[c])) continue;
+        if (CHAT_CHANNEL_DIRECT != c) return chat_channel((chat_channel_t)c);
+        EntityID to_id = serial_get_u32_default(payload, "toId", 0);
+        return chat_direct(from_id == g_local_player.id || 0 == from_id ? to_id : from_id);
+    }
+    return chat_channel(CHAT_CHANNEL_WORLD);
+}
+
+/* What a refusal reason from the social server means to the player. */
+static const char* social_reason_text(const char* reason) {
+    static const struct { const char* reason; const char* text; } TEXTS[] = {
+        { "rate_limited", "Slow down: wait a moment, then send again." },
+        { "unavailable",  "That player is out of reach." },
+        { "no_party",     "You are not in a party." },
+        { "in_party",     "That player is already in a party." },
+        { "not_leader",   "Only the party leader can do that." },
+        { "party_full",   "The party is full." },
+        { "busy",         "That player has too many open invites." },
+        { "expired",      "That invite is no longer open." },
+        { "not_member",   "That player is not in your party." },
+    };
+    for (size_t i = 0; i < sizeof TEXTS / sizeof TEXTS[0]; i++) {
+        if (0 == strcmp(reason, TEXTS[i].reason)) return TEXTS[i].text;
+    }
+    return "That cannot be done now.";
+}
+
 static void json_unpack_chat(const cJSON* payload) {
-    EntityID from_id = serial_get_u32_default(payload, "from", 0);
-    char text[256] = {0};
+    EntityID from_id = serial_get_u32_default(payload, "fromId", 0);
+    char name[PLAYER_NAME_BYTES] = {0};
+    char text[CHAT_LINE_BYTES] = {0};
+    serial_get_string(payload, "fromName", name, sizeof(name));
     serial_get_string(payload, "text", text, sizeof(text));
-    /* TODO: show the sender name. The client holds no player names yet. */
-    char sender[16];
-    snprintf(sender, sizeof sender, "%u", from_id);
-    if (0 != from_id && text[0]) notify_store_push(from_id, sender, text, false);
+    if (0 == from_id || '\0' == text[0]) return;
+    chat_log_push(chat_conversation_of(payload, from_id), from_id, name, text,
+                  from_id == g_local_player.id);
+}
+
+/* A refused chat line: the sender reads why in the conversation it typed in. */
+static void json_unpack_chat_ack(const cJSON* payload) {
+    if (serial_get_bool_default(payload, "ok", false)) return;
+    char reason[32] = {0};
+    serial_get_string(payload, "reason", reason, sizeof(reason));
+    chat_log_push_system(chat_conversation_of(payload, g_local_player.id), social_reason_text(reason));
+}
+
+/* A refused party request. The snapshot already shows that nothing changed. */
+static void json_unpack_party_ack(const cJSON* payload) {
+    if (serial_get_bool_default(payload, "ok", false)) return;
+    char reason[32] = {0};
+    serial_get_string(payload, "reason", reason, sizeof(reason));
+    modal_notification_show("Party", social_reason_text(reason), (Color){ 230, 170, 110, 255 });
 }
 
 /* shop_ack is the server verdict on a shop purchase. An accepted purchase needs
@@ -777,9 +873,9 @@ static void json_unpack_shop_ack(const cJSON* payload) {
     char reason[64] = {0};
     serial_get_string(payload, "reason", reason, sizeof(reason));
     modal_notification_show("Purchase failed",
-                            0 == strcmp(reason, "insufficient_funds")
-                                ? "Not enough currency."
-                                : "The vendor refused the trade.",
+                            0 == strcmp(reason, "insufficient_funds") ? "Not enough currency."
+                            : 0 == strcmp(reason, "inventory_full")   ? "Your bag has no free slot for it."
+                                                                      : "The vendor refused the trade.",
                             (Color){ 210, 120, 110, 255 });
 }
 
@@ -827,6 +923,8 @@ void message_receive(const uint8_t* data, size_t len) {
     else if (0 == strcmp(type, "init_data"))       json_unpack_init_data(payload);
     else if (0 == strcmp(type, "metadata"))        json_unpack_metadata(payload);
     else if (0 == strcmp(type, "chat"))            json_unpack_chat(payload);
+    else if (0 == strcmp(type, "chat_ack"))        json_unpack_chat_ack(payload);
+    else if (0 == strcmp(type, "party_ack"))       json_unpack_party_ack(payload);
     else if (0 == strcmp(type, "dialog_ack"))      json_unpack_dialog_ack(payload);
     else if (0 == strcmp(type, "shop_ack"))        json_unpack_shop_ack(payload);
     else LOG_ERROR("[MESSAGE] unknown type '%s'\n", type);

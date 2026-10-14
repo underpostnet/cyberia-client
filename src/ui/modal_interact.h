@@ -1,14 +1,15 @@
 /**
  * modal_interact — top-half entity interaction modal.
  *
- * A tab strip over a fixed bottom bar of integration buttons:
+ * A tab strip over a fixed bottom bar of integration buttons. The tabs follow
+ * who the modal shows:
  *
- *   Tabs:   [quest]  mission interface — only for quest-provider entities
- *           [shop]   vendor catalog     — only for entities selling items
- *           [stack]  active item slots
- *           [stats]  six-stat stack totals
- *   Bottom: [ Chat ]        chat pane (ui/chat_pane.h)
- *           [ Integration ] stack composite + viewer links, dev UI only
+ *   NPC:     [shop] [assembly] [storage] [quest] — the capabilities it offers
+ *            [stack] active item slots, [stats] six-stat stack totals
+ *   Own:     [profile] [storage] personal storage, [party], [stats]
+ *   Player:  [profile] public profile and party actions, [stats], [stack]
+ *   Bottom:  [ Chat ]        direct chat (ui/chat_pane.h), not on the own profile
+ *            [ Integration ] stack composite + viewer links, dev UI only
  *
  * The paired modal_dialogue (bottom half) carries the talk flow; server
  * validation drives quest grant/advance. Dismiss closes both.
@@ -27,7 +28,8 @@ void modal_interact_init(void);
 
 /* dialogue_item_id is the entity's active skin; has_dialogue is true when that
  * skin has a default dialogue. border tints the header to match the entity's
- * status indicator. */
+ * status indicator. The own player opens its profile; another player its
+ * public profile. */
 void modal_interact_open(EntityID entity_id, const char* display_name,
                          const char* dialogue_item_id, bool has_dialogue,
                          Color border);
@@ -59,17 +61,5 @@ void modal_interact_discard_stack(void);
 
 /* Returns the cached alive layer snapshot (persists across AOI changes). */
 const ObjectLayerState* modal_interact_get_cached_layers(int* out_count);
-
-/* True while the Storage tab is showing and can adopt a drag from the
- * inventory bar. */
-bool modal_interact_storage_accepts_drag(void);
-
-/* Draw the vault's dragged item. The frame orchestrator calls this after the
- * inventory bar so the item in hand rides above every surface. */
-void modal_interact_draw_storage_drag(void);
-
-/* Lift an inventory-bar stack into the vault grid's drag, giving Inventory Bar
- * → Storage Grid the same gesture as a move inside the grid. */
-void modal_interact_storage_drag_in(int inv_idx);
 
 #endif /* MODAL_INTERACT_H */

@@ -10,10 +10,10 @@
 /* One display name for each entity, so the overhead HUD, the interaction
  * bubble, and the JS overlay header always agree.
  *
- *   Players — "Anon-" plus the entity id.
- *   Bots    — active skin item_id, first letter capital, plus "-" and the
- *             entity id. Falls back to the first active layer, then to the
- *             raw id. */
+ *   Players — the name the server gives the player.
+ *   Bots    — active skin item_id, first letter capital.
+ * The dev UI adds "-" and the entity id. A bot falls back to the first active
+ * layer, then to the raw id. */
 
 /* `layers` may be NULL. `out_size` counts the terminator. */
 void nameplate_resolve(EntityID entity_id,

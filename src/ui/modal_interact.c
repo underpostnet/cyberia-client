@@ -1,6 +1,4 @@
 #include "modal_interact.h"
-#include "audio/audio.h"
-#include "audio/audio_events.h"
 #include "text.h"
 
 #include "data/action_cache.h"
@@ -8,14 +6,13 @@
 #include "config.h"
 #include "data/dialogue_data.h"
 #include "fx/fx_grant_delivery.h"
-#include "fx/fx_inventory_bar_qty.h"
-#include "fx/fx_item_transfer.h"
 #include "sim/local_player.h"
 #include "content/presentation_runtime.h"
-#include "sim/vault_ops.h"
 #include "view/viewport.h"
 #include "sim/game_state.h"
 #include "world/world_types.h"
+#include "chat_log.h"
+#include "container_panel.h"
 #include "interaction_bubble.h"
 #include "inventory_bar.h"
 #include "inventory_modal.h"
@@ -26,7 +23,7 @@
 #include "modal_dialogue.h"
 #include "modal_instance_map.h"
 #include "modal_notification.h"
-#include "view/notification.h"
+#include "player_panel.h"
 #include "toolbar.h"
 #include "world/object_layer.h"
 #include "world/object_layers_management.h"
@@ -50,14 +47,20 @@
 
 /* ── Tabs ─────────────────────────────────────────────────────────────── */
 
-/* Chat and Integration are panes: the bottom bar opens them, not the strip. */
+/* Chat and Integration are panes: the bottom bar opens them, not the strip.
+ * Storage is the NPC vault; Own storage is the personal storage. */
 enum { MI_TAB_STACK = 0, MI_TAB_STATS, MI_TAB_QUEST, MI_TAB_SHOP, MI_TAB_CRAFT,
-       MI_TAB_STORAGE, MI_TAB_CHAT, MI_TAB_INTEGRATION, MI_TAB_COUNT };
+       MI_TAB_STORAGE, MI_TAB_PROFILE, MI_TAB_OWN_STORAGE, MI_TAB_PARTY,
+       MI_TAB_CHAT, MI_TAB_INTEGRATION, MI_TAB_COUNT };
 
 static const char* MI_TAB_ICON[MI_TAB_COUNT]  = { "stack", "stats", "quest", "home-red", "engine", "grid",
-                                                  "chat", "reload" };
+                                                  "character", "bag", "users", "chat", "reload" };
 static const char* MI_TAB_LABEL[MI_TAB_COUNT] = { "Stack", "Stats", "Quest", "Shop", "Assembly", "Storage",
-                                                  "Chat", "Integration" };
+                                                  "Profile", "Storage", "Party", "Chat", "Integration" };
+
+/* Who the modal shows: an NPC with its capabilities, the own player, or
+ * another player. A player session never touches an NPC endpoint. */
+typedef enum { MI_MODE_NPC, MI_MODE_SELF, MI_MODE_PLAYER } InteractMode;
 
 /* ── Module state ─────────────────────────────────────────────────────── */
 
@@ -73,6 +76,8 @@ static float s_tab_age = MODAL_POP_DURATION;
 static bool  s_tab_picked = false;
 
 static EntityID s_entity_id     = 0;
+static InteractMode s_mode      = MI_MODE_NPC;
+static ChatPane s_chat;
 static char  s_display_name[64] = {0};
 static char  s_dlg_item[128]    = {0};
 static bool  s_has_dialogue = false;
@@ -176,19 +181,13 @@ static void handle_shop_click(int mx, int my);
 static void handle_craft_click(int mx, int my);
 static void handle_integration_click(int mx, int my);
 static bool storage_tab_visible(void);
-static void draw_storage_tab(Rectangle content);
-static void handle_storage_event(const ItemSlotGridEvent* ev);
+static void open_container_tab(void);
+static void draw_container_tab(Rectangle content);
+static void stack_item_inspect(const ObjectLayerState* ols);
 
-/* The vault grid is seeded from the vault store on open; a drop is applied
- * locally so the item follows the pointer without a round trip. */
-static ItemSlotGrid s_storage_grid;
-static bool         s_storage_bound = false;
-static UIScroll     s_storage_scroll;
-static float        s_storage_content_height = 0.0f;
-
-#define MI_STORAGE_GRID_RIGHT_PAD 30.0f
-#define MI_STORAGE_SCROLL_ICON_SZ 20
-#define MI_STORAGE_SCROLL_STEP 96.0f
+/* Height each container and player tab measured on its last draw. */
+static float s_storage_content_height = 0.0f;
+static float s_player_content_height = 0.0f;
 
 /* ─────────────────────────────────────────────────────────────────────────
  *  EPHEMERAL SESSION DATA — survives navigating away to inspection modals
@@ -340,6 +339,12 @@ static const Color C_TAB_DIM    = { 130, 140, 165, 220 };
 static const Color C_REW_LABEL  = { 255, 215,   0, 220 };
 static const Color C_DESMODAL_TEXT  = { 170, 180, 200, 220 };
 
+/* The view the entity takes: the own player, another player, or an NPC. */
+static InteractMode mode_of(EntityID entity_id) {
+    if (g_local_player.id == entity_id) return MI_MODE_SELF;
+    return game_state_is_player(entity_id) ? MI_MODE_PLAYER : MI_MODE_NPC;
+}
+
 /* ── Capability tabs ─────────────────────────────────────────────────── */
 
 /* Stack and Stats always show; Quest appears whenever the NPC surfaces any
@@ -422,9 +427,22 @@ static bool refresh_bot_snapshot(void) {
 /* Fill `out` with the visible tab IDs in strip order; returns the count.
  * Capability tabs lead the row — a terminal's catalog or recipe book is what
  * the player came for, so the first one also becomes the tab the modal opens
- * on. */
+ * on. A player shows its profile first. */
 static int visible_tabs(int out[MI_TAB_COUNT]) {
     int n = 0;
+    if (MI_MODE_SELF == s_mode) {
+        out[n++] = MI_TAB_PROFILE;
+        out[n++] = MI_TAB_OWN_STORAGE;
+        out[n++] = MI_TAB_PARTY;
+        out[n++] = MI_TAB_STATS;
+        return n;
+    }
+    if (MI_MODE_PLAYER == s_mode) {
+        out[n++] = MI_TAB_PROFILE;
+        out[n++] = MI_TAB_STATS;
+        out[n++] = MI_TAB_STACK;
+        return n;
+    }
     if (shop_tab_visible())    out[n++] = MI_TAB_SHOP;
     if (craft_tab_visible())   out[n++] = MI_TAB_CRAFT;
     if (storage_tab_visible()) out[n++] = MI_TAB_STORAGE;
@@ -445,8 +463,8 @@ static int leading_tab(void) {
 /* Switch tabs, replaying the content pop-in. */
 static void set_tab(int tab) {
     if (tab == s_tab) return;
-    /* Report the vault work before a shop, craft or item event can follow it. */
-    vault_ops_send(s_entity_id);
+    /* Report the container work before a shop, craft or item event can follow it. */
+    container_panel_close();
     s_tab = tab;
     s_tab_age = 0.0f;
 }
@@ -539,7 +557,10 @@ static float active_tab_content_height(void) {
         case MI_TAB_QUEST:   return s_q_content_height;
         case MI_TAB_SHOP:    return s_shop_content_height;
         case MI_TAB_CRAFT:   return s_craft_content_height;
-        case MI_TAB_STORAGE: return s_storage_content_height;
+        case MI_TAB_STORAGE:
+        case MI_TAB_OWN_STORAGE: return s_storage_content_height;
+        case MI_TAB_PROFILE:
+        case MI_TAB_PARTY:   return s_player_content_height;
         case MI_TAB_CHAT:    return CHAT_PANE_HEIGHT;
         case MI_TAB_INTEGRATION: return s_integration_content_height;
         default:             return 0.0f;
@@ -586,13 +607,18 @@ static Rectangle bar_rect(Rectangle card) {
     return (Rectangle){ card.x, card.y + card.height - height, card.width, height };
 }
 
-/* Mobile adds a Dialog entry alongside the Chat and Integration controls. */
 /* Mobile shows the Dialog button while the entity has an active dialogue;
  * desktop shows it only while the paired dialogue is collapsed (its close
  * button handed the space to this modal). The row re-packs otherwise. */
 static bool dialog_btn_visible(void) {
+    if (MI_MODE_NPC != s_mode) return false;
     if (viewport_is_mobile()) return s_has_dialogue;
     return modal_dialogue_is_collapsed();
+}
+
+/* Chat talks to the entity; the own profile has nobody to talk to. */
+static bool chat_btn_visible(void) {
+    return MI_MODE_SELF != s_mode;
 }
 
 /* The Integration tab is a developer surface — it links out to the object-layer
@@ -601,8 +627,8 @@ static bool integration_btn_visible(void) {
     return presentation_runtime_dev_ui();
 }
 
-/* Chat is the only permanent entry; Dialog and Integration come and go, and the
- * row re-packs around whichever are showing. */
+/* Dialog, Chat and Integration come and go, and the row re-packs around
+ * whichever are showing. */
 static void bar_buttons(Rectangle card, Rectangle* dialog, Rectangle* chat,
                         Rectangle* integration) {
     Rectangle bar = bar_rect(card);
@@ -610,13 +636,16 @@ static void bar_buttons(Rectangle card, Rectangle* dialog, Rectangle* chat,
     float button_h = mi_bar_btn_h();
     float by = bar.y + (bar.height - button_h) * 0.5f;
     bool show_dialog      = dialog_btn_visible();
+    bool show_chat        = chat_btn_visible();
     bool show_integration = integration_btn_visible();
 
     *dialog      = (Rectangle){ 0 };
+    *chat        = (Rectangle){ 0 };
     *integration = (Rectangle){ 0 };
 
     if (viewport_is_mobile()) {
-        int   count = 1 + (show_dialog ? 1 : 0) + (show_integration ? 1 : 0);
+        int count = (show_dialog ? 1 : 0) + (show_chat ? 1 : 0) + (show_integration ? 1 : 0);
+        if (0 == count) return;
         float bw = (bar.width - 2.0f * pad - (float)(count - 1) * MI_BAR_BTN_GAP)
                    / (float)count;
         float x = bar.x + pad;
@@ -624,8 +653,10 @@ static void bar_buttons(Rectangle card, Rectangle* dialog, Rectangle* chat,
             *dialog = (Rectangle){ x, by, bw, button_h };
             x += bw + MI_BAR_BTN_GAP;
         }
-        *chat = (Rectangle){ x, by, bw, button_h };
-        x += bw + MI_BAR_BTN_GAP;
+        if (show_chat) {
+            *chat = (Rectangle){ x, by, bw, button_h };
+            x += bw + MI_BAR_BTN_GAP;
+        }
         if (show_integration) *integration = (Rectangle){ x, by, bw, button_h };
         return;
     }
@@ -638,8 +669,10 @@ static void bar_buttons(Rectangle card, Rectangle* dialog, Rectangle* chat,
         *integration = (Rectangle){ x, by, bw, button_h };
         x -= MI_BAR_BTN_GAP + bw;
     }
-    *chat = (Rectangle){ x, by, bw, button_h };
-    x -= MI_BAR_BTN_GAP + bw;
+    if (show_chat) {
+        *chat = (Rectangle){ x, by, bw, button_h };
+        x -= MI_BAR_BTN_GAP + bw;
+    }
     if (show_dialog) *dialog = (Rectangle){ x, by, bw, button_h };
 }
 
@@ -754,6 +787,7 @@ void modal_interact_set_quest_talk(int index) {
  * re-snapshotting from the AOI — the entity may have left the bubble. */
 static void modal_interact_reopen(void) {
     es_pop();
+    s_mode = mode_of(s_entity_id);
     if (!s_open) modal_opened();
     s_open             = true;
     s_age              = 0.0f;
@@ -762,7 +796,7 @@ static void modal_interact_reopen(void) {
 
     /* The paired dialogue key was restored by es_pop. Text resolves async in
      * update; mobile renders it only after the footer opens the reader. */
-    request_active_dialogue();
+    if (MI_MODE_NPC == s_mode) request_active_dialogue();
 
     LOG_INFO("[MODAL_INTERACT] Reopen from ephemeral session: entity=%u layers=%d\n",
              s_entity_id, s_cached_layer_count);
@@ -816,9 +850,9 @@ void modal_interact_init(void) {
     s_craft_content_height = 0.0f;
     s_craft_card_count = 0;
     s_craft_flash_slot = -1;
-    s_storage_bound = false;
-    ui_scroll_reset(&s_storage_scroll);
     s_storage_content_height = 0.0f;
+    s_player_content_height = 0.0f;
+    player_panel_reset();
     s_tab_age = MODAL_POP_DURATION;
     s_tab_picked = false;
     modal_anchor_layout_reset(&s_layout);
@@ -834,7 +868,7 @@ void modal_interact_open(EntityID entity_id, const char* display_name,
      * Reopening the same entity (e.g. returning from item inspection) keeps
      * it, so the modal still renders even if the entity left the AOI. */
     bool same_entity = entity_id == s_entity_id;
-    vault_ops_send(s_entity_id);
+    container_panel_close();
     if (!same_entity) {
         s_cached_layer_count = 0;
         es_clear();
@@ -849,6 +883,8 @@ void modal_interact_open(EntityID entity_id, const char* display_name,
     }
 
     s_entity_id = entity_id;
+    s_mode = mode_of(entity_id);
+    chat_pane_bind(&s_chat, chat_direct(entity_id));
     copy_str(s_display_name, sizeof(s_display_name), display_name ? display_name : "");
     copy_str(s_dlg_item, sizeof(s_dlg_item), dialogue_item_id ? dialogue_item_id : "");
 
@@ -873,9 +909,9 @@ void modal_interact_open(EntityID entity_id, const char* display_name,
     s_craft_content_height = 0.0f;
     s_craft_card_count = 0;
     s_craft_flash_slot = -1;
-    s_storage_bound = false;
-    ui_scroll_reset(&s_storage_scroll);
     s_storage_content_height = 0.0f;
+    s_player_content_height = 0.0f;
+    if (!same_entity) player_panel_reset();
     ui_scroll_reset(&s_integration_scroll);
     s_integration_content_height = 0.0f;
     s_q_expanded = -1;
@@ -907,18 +943,18 @@ void modal_interact_open(EntityID entity_id, const char* display_name,
      * picks a tab themselves. */
     s_tab = leading_tab();
 
-    request_active_dialogue();
+    if (MI_MODE_NPC == s_mode) request_active_dialogue();
 
     LOG_INFO("[MODAL_INTERACT] Open: entity=%u layers=%d quests=%d\n",
              s_entity_id, s_cached_layer_count, s_quest_code_count);
 }
 
 void modal_interact_close(void) {
-    vault_ops_send(s_entity_id);
+    container_panel_close();
     bool was_open = s_open;
     s_open = false;
     s_dialogue_open_requested = false;
-    chat_pane_hide();
+    chat_pane_hide(&s_chat);
     es_clear();
     if (modal_dialogue_is_open()) modal_dialogue_close();
     if (was_open) modal_closed();
@@ -958,12 +994,15 @@ bool modal_interact_handle_wheel(float wheel_delta) {
         return ui_scroll_on_wheel(&s_craft_scroll, content_rect(card_rect()),
                                   s_craft_content_height, wheel_delta);
     }
-    if (s_tab == MI_TAB_STORAGE) {
-        return ui_scroll_on_wheel(&s_storage_scroll, content_rect(card_rect()),
-                                  s_storage_content_height, wheel_delta);
+    if (MI_TAB_STORAGE == s_tab || MI_TAB_OWN_STORAGE == s_tab) {
+        return container_panel_wheel(content_rect(card_rect()), wheel_delta);
+    }
+    if (MI_TAB_PROFILE == s_tab || MI_TAB_PARTY == s_tab) {
+        return player_panel_wheel(MI_TAB_PROFILE == s_tab ? PLAYER_VIEW_PROFILE : PLAYER_VIEW_PARTY,
+                                  content_rect(card_rect()), wheel_delta);
     }
     if (MI_TAB_CHAT == s_tab) {
-        return chat_pane_wheel(content_rect(card_rect()), wheel_delta);
+        return chat_pane_wheel(&s_chat, content_rect(card_rect()), wheel_delta);
     }
     if (MI_TAB_INTEGRATION == s_tab) {
         return ui_scroll_on_wheel(&s_integration_scroll, content_rect(card_rect()),
@@ -1063,19 +1102,13 @@ void modal_interact_update(float dt) {
             handle_craft_click(click_x, click_y);
             if (!s_open) return;
         }
-    } else if (s_tab == MI_TAB_STORAGE) {
-        /* A cell lifted out of the scrolled content owns the gesture; without
-         * this the touch fallback in ui_scroll would scroll the vault out from
-         * under a drag aimed at the inventory bar. */
-        if (s_storage_grid.pressed) ui_scroll_cancel_press(&s_storage_scroll);
-        ui_scroll_update(&s_storage_scroll, content_rect(card_rect()),
-                         s_storage_content_height, dt);
-        item_slot_grid_update(&s_storage_grid, dt);
-        ItemSlotGridEvent ev;
-        if (item_slot_grid_take_event(&s_storage_grid, &ev) && content_ready) {
-            handle_storage_event(&ev);
-            if (!s_open) return;
-        }
+    } else if (MI_TAB_STORAGE == s_tab || MI_TAB_OWN_STORAGE == s_tab) {
+        open_container_tab();
+        container_panel_update(content_rect(card_rect()), content_ready, dt);
+        if (!s_open) return;
+    } else if (MI_TAB_PROFILE == s_tab || MI_TAB_PARTY == s_tab) {
+        player_panel_update(MI_TAB_PROFILE == s_tab ? PLAYER_VIEW_PROFILE : PLAYER_VIEW_PARTY,
+                            content_rect(card_rect()), content_ready, dt);
     } else if (MI_TAB_INTEGRATION == s_tab) {
         ui_scroll_update(&s_integration_scroll, content_rect(card_rect()),
                          s_integration_content_height, dt);
@@ -1089,12 +1122,12 @@ void modal_interact_update(float dt) {
     if (MI_TAB_CHAT == s_tab) {
         bool input_visible = content_ready && MODAL_POP_DURATION <= s_age &&
                              !modal_dialogue_is_fullscreen() && !modal_instance_map_is_open();
-        chat_pane_update(content_rect(card_rect()), s_entity_id, input_visible, dt);
+        chat_pane_update(&s_chat, content_rect(card_rect()), input_visible, dt);
     } else {
-        chat_pane_hide();
+        chat_pane_hide(&s_chat);
     }
 
-    if (!s_dialogue_opened) {
+    if (MI_MODE_NPC == s_mode && !s_dialogue_opened) {
         const DialogueDataSet* d = dialogue_data_get(active_dlg_key());
         if (d && d->state == DLG_DATA_READY && d->line_count > 0) {
             open_dialogue(d->lines, d->line_count);
@@ -1772,14 +1805,16 @@ static int shop_affordable_qty(const ActionShopItem* item) {
     return affordable > MI_SHOP_QTY_MAX ? MI_SHOP_QTY_MAX : affordable;
 }
 
-/* One catalog card. `affordable` mutes the Buy control and reddens the price
- * when the player cannot pay for a single unit — the server enforces the same
- * rule authoritatively. */
+/* One catalog card. `affordable` false reddens the price when the player
+ * cannot pay for a single unit; `room` false says the bag has no slot for the
+ * item. Either mutes the Buy control — the server enforces both rules
+ * authoritatively. */
 static void draw_shop_card(Rectangle card, const ActionShopItem* item, int slot,
-                           bool affordable, int font, int mx, int my) {
+                           bool affordable, bool room, int font, int mx, int my) {
     ObjectLayersManager* olm = obj_layers_mgr_get();
     bool hovered = ui_button_hit(card, mx, my);
-    Color accent = affordable ? (Color){ 120, 200, 140, 235 } : (Color){ 210, 120, 110, 230 };
+    bool buyable = affordable && room;
+    Color accent = buyable ? (Color){ 120, 200, 140, 235 } : (Color){ 210, 120, 110, 230 };
 
     Rectangle inner = draw_card_base(card, hovered);
     DrawRectangle((int)inner.x, (int)inner.y, 3, (int)inner.height, accent);
@@ -1835,14 +1870,14 @@ static void draw_shop_card(Rectangle card, const ActionShopItem* item, int slot,
                       card.width - 2.0f * MI_CARD_PAD, mi_shop_buy_h() };
     s_shop_buy_btn[slot] = buy;
     UIButtonPixelRetroStyle buy_st = {
-        .bg = affordable ? MODAL_ACCEPT : (Color){ 58, 62, 76, 255 },
-        .icon_id = "wallet",
-        .label = "Buy",
+        .bg = buyable ? MODAL_ACCEPT : (Color){ 58, 62, 76, 255 },
+        .icon_id = room ? "wallet" : "lock",
+        .label = room ? "Buy" : "Bag full",
         .font_size = viewport_is_mobile() ? 13 : mi_font_btn(),
-        .text_color = affordable ? MODAL_TEXT : C_TAB_DIM,
-        .enabled = affordable,
+        .text_color = buyable ? MODAL_TEXT : C_TAB_DIM,
+        .enabled = buyable,
     };
-    ui_button_pixel_retro_draw(buy, &buy_st, affordable && ui_button_hit(buy, mx, my));
+    ui_button_pixel_retro_draw(buy, &buy_st, buyable && ui_button_hit(buy, mx, my));
 }
 
 static void draw_shop_tab(Rectangle content, int mx, int my) {
@@ -1873,10 +1908,12 @@ static void draw_shop_tab(Rectangle content, int mx, int my) {
         for (int col = 0; col < 2; col++) {
             int i = first + col;
             if (i >= s_shop_card_count) break;
-            s_shop_affordable[i] = shop_affordable_qty(&am->shop_items[i]) > 0;
+            bool affordable = shop_affordable_qty(&am->shop_items[i]) > 0;
+            bool room = local_player_inventory_has_room(am->shop_items[i].item_id);
+            s_shop_affordable[i] = affordable && room;
             Rectangle card = { content.x + (float)col * (column_width + MI_CARD_GAP), y,
                                column_width, row_height };
-            draw_shop_card(card, &am->shop_items[i], i, s_shop_affordable[i], font, mx, my);
+            draw_shop_card(card, &am->shop_items[i], i, affordable, room, font, mx, my);
         }
 
         y += row_height;
@@ -1961,6 +1998,18 @@ static float craft_card_height(const ActionCraftRecipe* recipe, float card_width
 /* No assembly running, the assembler in the AOI, and every ingredient present
  * in the required amount. The server makes the same checks; a refusal there
  * is a desync. */
+/* True when the bag has a slot for every output the player does not hold yet;
+ * the ingredients keep their slots until the assembly ends. */
+static bool craft_outputs_fit(const ActionCraftRecipe* recipe) {
+    int needed = 0;
+    for (int i = 0; i < recipe->output_count; i++) {
+        const char* id = recipe->outputs[i].item_id;
+        if (!local_player_is_coin(id) && 0 == local_player_item_quantity(id)) needed++;
+    }
+    return 0 == needed ||
+           local_player_inventory_used() + needed <= local_player_open_slots(CYBERIA_INVENTORY_CAPACITY);
+}
+
 static bool craft_recipe_ready(const ActionCraftRecipe* recipe) {
     if (g_local_player.crafting || recipe->output_count <= 0) return false;
     if (0 > game_state_slot(s_entity_id)) return false;
@@ -1997,10 +2046,11 @@ static void draw_craft_stack(Rectangle card, float top, float slot_sz,
 }
 
 /* One recipe card. `ready` illuminates the frame and arms Assemble; a missing
- * ingredient greys the control and reddens the accent. `flash` is the 0..1
- * synthesis pulse played on the card the player just triggered. */
+ * ingredient greys the control and reddens the accent, and `room` false says
+ * the bag has no slot for the outputs. `flash` is the 0..1 synthesis pulse
+ * played on the card the player just triggered. */
 static void draw_craft_card(Rectangle card, const ActionCraftRecipe* recipe, int slot,
-                            bool ready, float flash, int mx, int my) {
+                            bool ready, bool room, float flash, int mx, int my) {
     ObjectLayersManager* olm = obj_layers_mgr_get();
     bool hovered = ui_button_hit(card, mx, my);
     Color accent = ready ? (Color){ 120, 200, 140, 235 } : (Color){ 210, 120, 110, 230 };
@@ -2035,8 +2085,8 @@ static void draw_craft_card(Rectangle card, const ActionCraftRecipe* recipe, int
     s_craft_btn[slot] = btn;
     UIButtonPixelRetroStyle btn_st = {
         .bg = ready ? MODAL_ACCEPT : (Color){ 58, 62, 76, 255 },
-        .icon_id = "engine",
-        .label = "Assemble",
+        .icon_id = room ? "engine" : "lock",
+        .label = room ? "Assemble" : "Bag full",
         .font_size = viewport_is_mobile() ? 13 : mi_font_btn(),
         .text_color = ready ? MODAL_TEXT : C_TAB_DIM,
         .enabled = ready,
@@ -2073,12 +2123,13 @@ static void draw_craft_tab(Rectangle content, int mx, int my) {
         for (int col = 0; col < 2; col++) {
             int i = first + col;
             if (i >= s_craft_card_count) break;
-            s_craft_ready[i] = craft_recipe_ready(&am->craft_recipes[i]);
+            bool room = craft_outputs_fit(&am->craft_recipes[i]);
+            s_craft_ready[i] = craft_recipe_ready(&am->craft_recipes[i]) && room;
             float flash = (i == s_craft_flash_slot)
                         ? 1.0f - s_craft_flash_age / MI_CRAFT_FLASH_DURATION : 0.0f;
             Rectangle card = { content.x + (float)col * (column_width + MI_CARD_GAP), y,
                                column_width, row_height };
-            draw_craft_card(card, &am->craft_recipes[i], i, s_craft_ready[i], flash, mx, my);
+            draw_craft_card(card, &am->craft_recipes[i], i, s_craft_ready[i], room, flash, mx, my);
         }
 
         y += row_height;
@@ -2160,7 +2211,7 @@ static void handle_craft_click(int mx, int my) {
     }
 }
 
-/* ── Storage tab: the personal vault carried by the entity's action ────── */
+/* ── Container tabs: the NPC vault and the personal storage ───────────── */
 
 /* Vault capacity from the action, clamped to what the grid can render. */
 static int storage_capacity(int slots) {
@@ -2174,255 +2225,27 @@ static bool storage_tab_visible(void) {
     return am && storage_capacity(am->storage_slots) >= 1;
 }
 
-static Rectangle storage_scroll_lane(Rectangle content) {
-    float width = content.width > MI_STORAGE_GRID_RIGHT_PAD
-                ? MI_STORAGE_GRID_RIGHT_PAD : 0.0f;
-    return (Rectangle){ content.x + content.width - width, content.y,
-                        width, content.height };
-}
-
-/* Seed the grid from the vault store, which already holds the pending ops.
- * The stacks fill the first cells; cell order is presentation from here on. */
-static void storage_seed(int capacity) {
-    vault_ops_bind(s_action_code);
-    item_slot_grid_init(&s_storage_grid, capacity);
-    const Vault* vault = local_player_vault(s_action_code);
-    for (int i = 0; NULL != vault && i < vault->count && i < capacity; i++) {
-        item_slot_grid_set(&s_storage_grid, i, &vault->items[i]);
+/* A container tab opens its panel once the capacity is known: the vault's
+ * comes with the action metadata, which may still be in flight. */
+static void open_container_tab(void) {
+    if (container_panel_is_open()) return;
+    if (MI_TAB_OWN_STORAGE == s_tab) {
+        container_panel_open_storage(stack_item_inspect);
+        return;
     }
-    s_storage_bound = true;
-}
-
-static void draw_storage_tab(Rectangle content) {
     const ActionMetadataEntry* am = action_metadata();
     int capacity = am ? storage_capacity(am->storage_slots) : 0;
-    if (capacity < 1) {
+    if (0 < capacity) container_panel_open_vault(s_entity_id, s_action_code, capacity, stack_item_inspect);
+}
+
+static void draw_container_tab(Rectangle content) {
+    open_container_tab();
+    if (!container_panel_is_open()) {
         DrawText("No vault here.", (int)content.x, (int)content.y, mi_font_quest(), MODAL_LABEL);
         return;
     }
-    if (!s_storage_bound || capacity != s_storage_grid.capacity) storage_seed(capacity);
-
-    int   font = quest_grid_status_font(quest_grid_font());
-    float head = (float)text_line_height(font) + 4.0f;
-    float top = content.y - ui_scroll_offset(&s_storage_scroll);
-    Rectangle scroll_lane = storage_scroll_lane(content);
-    Rectangle grid = { content.x, content.y,
-                       content.width - scroll_lane.width, content.height };
-
-    ui_scroll_set_scrollbar_bounds(&s_storage_scroll, scroll_lane);
-    ui_scroll_begin(&s_storage_scroll);
-    draw_card_line("Drag between the vault and your inventory bar",
-                   (int)grid.x, (int)top, (int)grid.width, font, MODAL_LABEL, true);
-    /* Cells flow across the full width and wrap, so a large vault is taller
-     * than the panel and the tab scrolls to reach its lower rows. */
-    item_slot_grid_layout(&s_storage_grid,
-                          (Rectangle){ grid.x, top + head, grid.width, 0.0f });
-    /* The viewport ui_scroll scissors to and taps are gated on — not the
-     * tab-pop rect above, which is animated. */
-    item_slot_grid_set_clip(&s_storage_grid, grid);
-    item_slot_grid_draw(&s_storage_grid, obj_layers_mgr_get());
-    s_storage_content_height = head + item_slot_grid_height(&s_storage_grid) + 4.0f;
-    ui_scroll_end(&s_storage_scroll);
-    if (0.0f < scroll_lane.width) {
-        float center_x = scroll_lane.x + scroll_lane.width * 0.5f;
-        ui_icon_draw("arrow-up", center_x, scroll_lane.y + scroll_lane.height * 0.25f,
-                     MI_STORAGE_SCROLL_ICON_SZ, false, 0.0f);
-        ui_icon_draw("arrow-down", center_x, scroll_lane.y + scroll_lane.height * 0.75f,
-                     MI_STORAGE_SCROLL_ICON_SZ, false, 0.0f);
-    }
+    s_storage_content_height = container_panel_draw(content);
 }
-
-/* Move a stack inside the grid. Cell order is presentation, so nothing is sent.
- * A `qty` below the stack splits it, leaving the remainder behind, and landing
- * on the same item merges into it. */
-static void storage_apply_local_move(int from, int to, int qty) {
-    ObjectLayerState moved = s_storage_grid.cells[from];
-    if (qty <= 0 || qty > moved.quantity) qty = moved.quantity;
-    if (qty < moved.quantity) s_storage_grid.cells[from].quantity -= qty;
-    else memset(&s_storage_grid.cells[from], 0, sizeof(s_storage_grid.cells[from]));
-
-    int absorbed = 0 == strcmp(s_storage_grid.cells[to].item_id, moved.item_id)
-                       ? s_storage_grid.cells[to].quantity : 0;
-    moved.quantity = qty + absorbed;
-    s_storage_grid.cells[to] = moved;
-    item_slot_grid_animate_move(&s_storage_grid, from, to);
-}
-
-/* A swap exchanges whole stacks — there is nothing to split into. */
-static void storage_apply_local_swap(int from, int to) {
-    ObjectLayerState moved = s_storage_grid.cells[from];
-    s_storage_grid.cells[from] = s_storage_grid.cells[to];
-    s_storage_grid.cells[to] = moved;
-    item_slot_grid_animate_move(&s_storage_grid, from, to);
-    item_slot_grid_animate_move(&s_storage_grid, to, from);
-}
-
-/* The bar slot where the withdrawn item merges or appends. */
-static Rectangle storage_bar_slot_rect(const char* item_id) {
-    Rectangle slot;
-    if (inventory_bar_predicted_item_slot_rect(item_id, &slot)) return slot;
-    return inventory_bar_toggle_bounds();
-}
-
-/* Dropping a vault cell outside the visible grid withdraws it into inventory. */
-static void storage_drop_out(const ItemSlotGridEvent* ev, int qty) {
-    Rectangle from = item_slot_grid_cell_rect(&s_storage_grid, ev->from_index);
-    ObjectLayerState taken = ev->payload;
-    taken.quantity = qty;
-    if (qty < s_storage_grid.cells[ev->from_index].quantity) {
-        s_storage_grid.cells[ev->from_index].quantity -= qty;
-    } else {
-        memset(&s_storage_grid.cells[ev->from_index], 0,
-               sizeof(s_storage_grid.cells[ev->from_index]));
-    }
-    /* The bar shows no gain FX for a transfer, so this flight is the only
-     * thing that says where the stack went. */
-    fx_item_transfer_spawn_to_inventory(&taken, from,
-                                        storage_bar_slot_rect(taken.item_id));
-    vault_ops_push(taken.item_id, qty, false);
-}
-
-/* Carry out a resolved vault move at `qty` units. */
-static void storage_commit(const ItemSlotGridEvent* ev, int qty) {
-    /* A full op list refuses the drop, so the stack snaps back. */
-    bool crosses = ITEM_SLOT_GRID_EVENT_DROP_OUT == ev->type ||
-                   ITEM_SLOT_GRID_EVENT_DROP_IN == ev->type;
-    if (crosses && vault_ops_full()) return;
-    /* Every vault mutation passes through here — deposit, withdraw, a move inside the grid, a
-     * swap of two cells — so one cue covers them all. A tap only inspects and stays silent. */
-    switch (ev->type) {
-        case ITEM_SLOT_GRID_EVENT_MOVE:
-        case ITEM_SLOT_GRID_EVENT_SWAP:
-        case ITEM_SLOT_GRID_EVENT_DROP_OUT:
-        case ITEM_SLOT_GRID_EVENT_DROP_IN:
-            audio_event(AUDIO_EVENT_ITEM_PICKUP);
-            break;
-        default:
-            break;
-    }
-    switch (ev->type) {
-        case ITEM_SLOT_GRID_EVENT_MOVE:
-            storage_apply_local_move(ev->from_index, ev->to_index, qty);
-            return;
-        case ITEM_SLOT_GRID_EVENT_SWAP:
-            storage_apply_local_swap(ev->from_index, ev->to_index);
-            return;
-        case ITEM_SLOT_GRID_EVENT_DROP_OUT:
-            storage_drop_out(ev, qty);
-            return;
-        case ITEM_SLOT_GRID_EVENT_DROP_IN: {
-            /* An inventory stack dragged onto a cell — deposit it there. The
-             * item settles from where it was released rather than appearing. */
-            ObjectLayerState landed = ev->payload;
-            landed.quantity = qty;
-            if (0 == strcmp(s_storage_grid.cells[ev->to_index].item_id, landed.item_id)) {
-                landed.quantity += s_storage_grid.cells[ev->to_index].quantity;
-            }
-            s_storage_grid.cells[ev->to_index] = landed;
-            float half = s_storage_grid.cell_size * 0.5f;
-            item_slot_grid_animate_from_point(
-                &s_storage_grid, ev->to_index,
-                (Vector2){ ev->point.x - half, ev->point.y - half });
-            fx_inventory_bar_qty_suppress(ev->payload.item_id);
-            vault_ops_push(ev->payload.item_id, qty, true);
-            return;
-        }
-        case ITEM_SLOT_GRID_EVENT_TAP:
-            /* A tap inspects, matching every other slot in the modal. */
-            if (ev->to_index >= 0 && '\0' != s_storage_grid.cells[ev->to_index].item_id[0]) {
-                ObjectLayerState ols = s_storage_grid.cells[ev->to_index];
-                stack_item_inspect(&ols);
-            }
-            return;
-        case ITEM_SLOT_GRID_EVENT_NONE:
-            return;
-    }
-}
-
-/* The drop held while the picker asks how much of the stack to move. */
-static ItemSlotGridEvent s_storage_split;
-
-/* A drop onto a cell holding the same item could mean either "stack these" or
- * "trade places", and the gesture cannot say which — so the card asks. */
-static bool storage_is_stackable_swap(const ItemSlotGridEvent* ev) {
-    return ITEM_SLOT_GRID_EVENT_SWAP == ev->type &&
-           0 == strcmp(s_storage_grid.cells[ev->to_index].item_id, ev->payload.item_id);
-}
-
-static void storage_split_confirmed(const char* item_id, int quantity) {
-    (void)item_id;
-    ItemSlotGridEvent ev = s_storage_split;
-    s_storage_split.type = ITEM_SLOT_GRID_EVENT_NONE;
-    if (ITEM_SLOT_GRID_EVENT_NONE == ev.type) return;
-    /* Agreeing to stack turns the swap into a move onto the occupied cell,
-     * which is what the vault merges. */
-    if (ITEM_SLOT_GRID_EVENT_SWAP == ev.type) ev.type = ITEM_SLOT_GRID_EVENT_MOVE;
-    storage_commit(&ev, quantity);
-}
-
-static void storage_split_declined(void) {
-    ItemSlotGridEvent ev = s_storage_split;
-    s_storage_split.type = ITEM_SLOT_GRID_EVENT_NONE;
-    /* Declining the stack leaves the swap the grid actually emitted; declining
-     * any other split leaves the vault untouched. */
-    if (ITEM_SLOT_GRID_EVENT_SWAP == ev.type) storage_commit(&ev, ev.payload.quantity);
-}
-
-/* Moving more than one of something is a question, not a gesture: the picker
- * sizes it first so a stack can be split across the vault boundary. */
-static bool storage_needs_split(const ItemSlotGridEvent* ev) {
-    if (ev->payload.quantity <= 1) return false;
-    return ITEM_SLOT_GRID_EVENT_MOVE == ev->type ||
-           ITEM_SLOT_GRID_EVENT_DROP_OUT == ev->type ||
-           ITEM_SLOT_GRID_EVENT_DROP_IN == ev->type;
-}
-
-static void storage_ask_split(const ItemSlotGridEvent* ev) {
-    s_storage_split = *ev;
-    const char* prompt = "How many to split off?";
-    const char* label = "Split";
-    const char* icon = "stack";
-    if (ITEM_SLOT_GRID_EVENT_SWAP == ev->type) {
-        prompt = "How many to stack here? Cancel swaps them.";
-        label = "Stack";
-    } else if (ITEM_SLOT_GRID_EVENT_DROP_IN == ev->type) {
-        prompt = "How many to store?";
-        label = "Store";
-        icon = "bag";
-    } else if (ITEM_SLOT_GRID_EVENT_DROP_OUT == ev->type) {
-        prompt = "How many to take?";
-        label = "Take";
-        icon = "hand";
-    }
-    modal_notification_show_split(ev->payload.item_id, prompt,
-                                  (Color){ 120, 200, 140, 255 },
-                                  ev->payload.item_id, ev->payload.quantity,
-                                  label, icon, storage_split_confirmed,
-                                  storage_split_declined);
-}
-
-static void handle_storage_event(const ItemSlotGridEvent* ev) {
-    if (storage_is_stackable_swap(ev) || storage_needs_split(ev)) storage_ask_split(ev);
-    else                                                          storage_commit(ev, ev->payload.quantity);
-}
-
-void modal_interact_storage_drag_in(int inv_idx) {
-    if (!s_open || MI_TAB_STORAGE != s_tab) return;
-    if (inv_idx < 0 || inv_idx >= g_local_player.inventory_count) return;
-    item_slot_grid_begin_external_drag(&s_storage_grid,
-                                       &g_local_player.inventory[inv_idx],
-                                       GetMousePosition());
-}
-
-void modal_interact_draw_storage_drag(void) {
-    if (!s_open || MI_TAB_STORAGE != s_tab) return;
-    item_slot_grid_draw_drag(&s_storage_grid, obj_layers_mgr_get());
-}
-
-bool modal_interact_storage_accepts_drag(void) {
-    return s_open && MI_TAB_STORAGE == s_tab && !item_slot_grid_is_dragging(&s_storage_grid);
-}
-
 
 /* ── Integration tab: the stack composite and a viewer link per item ───── */
 
@@ -2566,8 +2389,12 @@ void modal_interact_draw(void) {
     else if (s_tab == MI_TAB_QUEST)  draw_quest_tab(tab_content, mx, my);
     else if (s_tab == MI_TAB_SHOP)   draw_shop_tab(tab_content, mx, my);
     else if (s_tab == MI_TAB_CRAFT)  draw_craft_tab(tab_content, mx, my);
-    else if (s_tab == MI_TAB_STORAGE) draw_storage_tab(tab_content);
-    else if (MI_TAB_CHAT == s_tab)   chat_pane_draw(tab_content, s_entity_id, s_display_name);
+    else if (MI_TAB_STORAGE == s_tab || MI_TAB_OWN_STORAGE == s_tab) draw_container_tab(tab_content);
+    else if (MI_TAB_PROFILE == s_tab)
+        s_player_content_height = player_panel_draw(PLAYER_VIEW_PROFILE, tab_content, s_entity_id);
+    else if (MI_TAB_PARTY == s_tab)
+        s_player_content_height = player_panel_draw(PLAYER_VIEW_PARTY, tab_content, s_entity_id);
+    else if (MI_TAB_CHAT == s_tab)   chat_pane_draw(&s_chat, tab_content);
     else if (MI_TAB_INTEGRATION == s_tab) draw_integration_tab(tab_content);
 
     /* Fade the new content up by lifting a panel-coloured veil off it —
@@ -2597,9 +2424,9 @@ void modal_interact_draw(void) {
             DrawRectangleRoundedLinesEx(dialog, 0.18f, 6, 2.0f, MODAL_QUEST_FRAME);
     }
 
-    draw_bar_button(chat, "chat", "Chat", MI_TAB_CHAT == s_tab, mx, my);
+    if (chat_btn_visible()) draw_bar_button(chat, "chat", "Chat", MI_TAB_CHAT == s_tab, mx, my);
 
-    int unread = notification_count(NOTIF_CHAT, s_entity_id);
+    int unread = chat_btn_visible() ? chat_log_unread(chat_direct(s_entity_id)) : 0;
     if (unread > 0) {
         float br = 11.0f;
         float bx = chat.x + chat.width - br - 4.0f;
@@ -2658,7 +2485,7 @@ bool modal_interact_handle_click(int mx, int my) {
             s_dialogue_open_requested = true;
         return true;
     }
-    if (ui_button_hit(chat, mx, my)) {
+    if (chat_btn_visible() && ui_button_hit(chat, mx, my)) {
         s_tab_picked = true;
         set_tab(MI_TAB_CHAT);
         return true;
@@ -2673,7 +2500,7 @@ bool modal_interact_handle_click(int mx, int my) {
 
     if (MI_TAB_CHAT == s_tab &&
         CheckCollisionPointRec((Vector2){ (float)mx, (float)my }, content)) {
-        chat_pane_press(content, s_entity_id, mx, my);
+        chat_pane_press(&s_chat, content, mx, my);
         return true;
     }
 
@@ -2708,21 +2535,16 @@ bool modal_interact_handle_click(int mx, int my) {
         return true;
     }
 
-    if (s_tab == MI_TAB_STORAGE &&
+    if ((MI_TAB_STORAGE == s_tab || MI_TAB_OWN_STORAGE == s_tab) &&
         CheckCollisionPointRec((Vector2){ (float)mx, (float)my }, content)) {
-        Rectangle scroll_lane = storage_scroll_lane(content);
-        if (CheckCollisionPointRec((Vector2){ (float)mx, (float)my }, scroll_lane)) {
-            float delta = (float)my < scroll_lane.y + scroll_lane.height * 0.5f
-                        ? -MI_STORAGE_SCROLL_STEP : MI_STORAGE_SCROLL_STEP;
-            ui_scroll_cancel_press(&s_storage_scroll);
-            ui_scroll_nudge(&s_storage_scroll, content, s_storage_content_height, delta);
-            return true;
-        }
-        /* Cells own the press (that is what arms a drag); the margin around
-         * them falls through to the scroll so the tab is still draggable. */
-        if (!item_slot_grid_handle_press(&s_storage_grid, mx, my)) {
-            ui_scroll_on_press(&s_storage_scroll, mx, my);
-        }
+        container_panel_press(content, mx, my);
+        return true;
+    }
+
+    if ((MI_TAB_PROFILE == s_tab || MI_TAB_PARTY == s_tab) &&
+        CheckCollisionPointRec((Vector2){ (float)mx, (float)my }, content)) {
+        player_panel_press(MI_TAB_PROFILE == s_tab ? PLAYER_VIEW_PROFILE : PLAYER_VIEW_PARTY,
+                           content, mx, my);
         return true;
     }
 

@@ -13,6 +13,7 @@
 #include "fx/fx_hit_burst.h"
 #include "fx/fx_level_up.h"
 #include "fx/fx_obstacle_burst.h"
+#include "ui/chat_log.h"
 #include "ui/modal.h"
 #include "ui/ui_state.h"
 #include "log.h"
@@ -53,6 +54,7 @@ static void client_reset_state(void) {
     session_reset();
     prediction_reset();
     client_event_reset();
+    chat_log_reset();
 }
 
 bool connection_open(void) {

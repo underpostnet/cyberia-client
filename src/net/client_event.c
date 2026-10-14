@@ -31,28 +31,28 @@ void client_event_push(client_event_kind_t kind, client_event_payload_t p) {
     };
 }
 
+static const char* const BOX_WORDS[] = { [BOX_BAG] = "bag", [BOX_STORAGE] = "storage", [BOX_VAULT] = "vault" };
+
 static cJSON* pack_event(const client_event_t* e) {
     const client_event_payload_t* p = &e->payload;
     switch (e->kind) {
     case CLIENT_EVENT_PLAYER_ACTION:   return json_pack_player_action(p->target_x, p->target_y);
-    case CLIENT_EVENT_ITEM_ACTIVE:     return json_pack_item_active(p->item_id, p->active);
+    case CLIENT_EVENT_ITEM_ACTIVE:     return json_pack_item_active(p->item_id, p->slot, p->active);
     case CLIENT_EVENT_PLAYER_STASIS:   return json_pack_player_stasis(p->active);
-    case CLIENT_EVENT_CHAT:            return json_pack_chat(p->entity_id, p->text);
+    case CLIENT_EVENT_CHAT:            return json_pack_chat(p->channel, p->entity_id, p->text);
     case CLIENT_EVENT_TALK_DONE:       return json_pack_talk_done(p->entity_id, p->code);
     case CLIENT_EVENT_QUEST_ABANDON:   return json_pack_quest_abandon(p->item_id);
     case CLIENT_EVENT_QUEST_ACCEPT:    return json_pack_quest_accept(p->entity_id, p->item_id);
     case CLIENT_EVENT_SHOP_BUY:        return json_pack_shop_buy(p->entity_id, p->item_id, p->quantity);
     case CLIENT_EVENT_CRAFT_ITEM:      return json_pack_craft_item(p->entity_id, p->recipe_index);
     case CLIENT_EVENT_CRAFT_CANCEL:    return json_pack_craft_cancel();
-    case CLIENT_EVENT_ITEM_OPS: {
-        cJSON* ops = cJSON_CreateArray();
-        assert(ops);
-        for (int i = 0; i < p->op_count; i++) {
-            cJSON_AddItemToArray(ops, json_pack_item_op(p->ops[i].item_id, p->ops[i].qty,
-                                                        p->ops[i].to_vault));
-        }
-        return json_pack_item_ops(p->entity_id, ops);
-    }
+    case CLIENT_EVENT_ITEM_MOVE:       return json_pack_item_move(BOX_WORDS[p->from], p->from_slot, BOX_WORDS[p->to],
+                                                                  p->to_slot, p->quantity, p->entity_id);
+    case CLIENT_EVENT_PARTY_INVITE:    return json_pack_party_target("party_invite", "toId", p->entity_id);
+    case CLIENT_EVENT_PARTY_REPLY:     return json_pack_party_reply(p->entity_id, p->active);
+    case CLIENT_EVENT_PARTY_LEAVE:     return json_pack_party_target("party_leave", NULL, 0);
+    case CLIENT_EVENT_PARTY_KICK:      return json_pack_party_target("party_kick", "toId", p->entity_id);
+    case CLIENT_EVENT_PARTY_DISBAND:   return json_pack_party_target("party_disband", NULL, 0);
     }
     assert(false && "unknown client event kind");
     return NULL;

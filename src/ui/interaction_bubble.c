@@ -7,7 +7,8 @@
  * The icon is the entity's full active ObjectLayer stack rendered at
  * icon size, so players recognise entities at a glance.
  *
- * Tapping a bubble opens modal_interact.
+ * The own player always holds the first bubble. Tapping a bubble opens
+ * modal_interact: the own profile, another player's profile, or an NPC.
  */
 
 #include "interaction_bubble.h"
@@ -22,9 +23,8 @@
 #include "sim/game_state.h"
 #include "world/world_types.h"
 #include "modal_interact.h"
-#include "view/notification.h"
 #include "toolbar.h"
-#include "notify_store.h"
+#include "chat_log.h"
 #include "inventory_bar.h"
 #include "inventory_modal.h"
 #include "modal.h"
@@ -306,13 +306,14 @@ static void scan_entity(EntityID entity_id,
 
     /* Talk is available only when the entity's ACTIVE SKIN has dialogue —
      * the shown dialogue is the skin's. Alive entities use their current
-     * OLs; dead ones reuse the cached alive snapshot. */
+     * OLs; dead ones reuse the cached alive snapshot. A player has no
+     * dialogue. */
     const ObjectLayerState* scan_layers = NULL;
     int scan_count = 0;
-    if (!is_dead) {
+    if (!is_player && !is_dead) {
         scan_layers = OBJ_LAYERS(ap);
         scan_count  = ap->layer_count;
-    } else if (existing && existing->alive_layer_count > 0) {
+    } else if (!is_player && existing && existing->alive_layer_count > 0) {
         scan_layers = existing->alive_layers;
         scan_count  = existing->alive_layer_count;
     }
@@ -363,8 +364,7 @@ static void scan_entity(EntityID entity_id,
     }
 
     /* Display name: resolved centrally by the nameplate module.
-     * Players → "AnonPlayer<first 8 chars of ws id>".
-     * Bots    → skin/body item_id. */
+     * Players → the server-given name. Bots → skin/body item_id. */
     {
         const ObjectLayerState* np_layers = slot->alive_layer_count > 0
             ? slot->alive_layers : OBJ_LAYERS(ap);
@@ -374,6 +374,18 @@ static void scan_entity(EntityID entity_id,
                           np_layers, np_lc,
                           slot->display_name,
                           (int)sizeof(slot->display_name));
+    }
+}
+
+/* The own player holds the first bubble whatever the scan order or the kept
+ * slots of entities that just left. */
+static void pin_self_first(void) {
+    for (int i = 1; i < s_slot_count; i++) {
+        if (g_local_player.id != s_slots[i].entity_id) continue;
+        InteractionBubbleSlot self = s_slots[i];
+        memmove(&s_slots[1], &s_slots[0], sizeof(s_slots[0]) * (size_t)i);
+        s_slots[0] = self;
+        return;
     }
 }
 
@@ -416,10 +428,8 @@ void interaction_bubble_update(void) {
     }
 
     for (int i = 0; i < g_game_state.other_player_count; i++) {
-        scan_entity(
-            g_game_state.other_players[i],
-            NULL, 0
-        );
+        EntityID player = g_game_state.other_players[i];
+        scan_entity(player, NULL, local_player_interaction_flags(player));
     }
 
     for (int i = 0; i < g_game_state.bot_count; i++) {
@@ -449,6 +459,7 @@ void interaction_bubble_update(void) {
         }
     }
     s_slot_count = write;
+    pin_self_first();
 
     /* Keep the scroll geometry (the draw scissor's view) current whenever the
      * column is visible — including the slide-out — so it is never clipped by
@@ -473,7 +484,7 @@ void interaction_bubble_update(void) {
  * so this counter is the sole unread indicator while it is collapsed. */
 static void draw_collapsed_total_badge(void) {
     if (s_col_toggle.expanded) return;
-    int total = notification_total();
+    int total = chat_log_unread_direct() + g_local_player.invite_count;
     if (0 >= total) return;
 
     Rectangle a  = s_col_toggle.anchor;
@@ -617,16 +628,36 @@ void interaction_bubble_draw(void) {
             }
         }
 
+        /* Party marker: a member of the own party, or a pending invite. The
+         * own bubble counts the invites that wait for the player; another
+         * bubble marks the player who sent one. Either bounces until answered. */
+        int invites = is_self ? g_local_player.invite_count : 0;
+        bool invited_by = !is_self && NULL != local_player_invite_from(slot->entity_id);
+        bool member = !is_self && NULL != local_player_party_member(slot->entity_id);
+        if (member || invited_by || 0 < invites) {
+            char phase_key[12];
+            snprintf(phase_key, sizeof phase_key, "p%u", slot->entity_id);
+            float ix = r.x + r.width - 10.0f;
+            float iy = r.y + 10.0f;
+            ui_icon_draw("users", ix, iy, 16, invited_by || 0 < invites, ui_icon_phase(phase_key));
+            if (0 < invites) {
+                char count[8];
+                snprintf(count, sizeof count, "%d", invites);
+                DrawCircle((int)(ix + 8.0f), (int)(iy - 6.0f), 7.0f, (Color){ 210, 60, 60, 245 });
+                DrawText(count, (int)(ix + 8.0f - (float)MeasureText(count, 10) * 0.5f), (int)(iy - 11.0f), 10, WHITE);
+            }
+        }
+
         /* Last chat message — informational bubble below the name, prefixed
          * with a red badge of the target's total notification count. Shown
          * only while there are unread notifications; reading the chat (Chat
          * button) clears the count and hides this. Never intercepts taps. */
-        const NotifyEntry* ne = notify_store_get(slot->entity_id);
-        const NotifyMessage* last = NULL;
+        const ChatHistory* ne = chat_log_get(chat_direct(slot->entity_id));
+        const ChatLine* last = NULL;
         for (int k = NULL != ne ? ne->count - 1 : -1; 0 <= k && NULL == last; k--) {
-            if (!ne->messages[k].mine) last = &ne->messages[k];
+            if (!ne->lines[k].mine && 0 != ne->lines[k].from_id) last = &ne->lines[k];
         }
-        int notif = notification_target_total(slot->entity_id);
+        int notif = chat_log_unread(chat_direct(slot->entity_id));
         if (notif > 0 && NULL != last && '\0' != last->text[0]) {
             int mfs = 11;
             char buf[48];

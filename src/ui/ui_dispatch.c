@@ -8,6 +8,8 @@
 
 #include <raylib.h>
 
+#include "chat_panel.h"
+#include "container_panel.h"
 #include "interaction_bubble.h"
 #include "hud_minimap_overlay.h"
 #include "inventory_bar.h"
@@ -63,15 +65,15 @@ bool ui_dispatch_tap(int x, int y) {
      * keeps the slots read-only. */
     if (modal_dialogue_is_open() || modal_interact_is_open()) {
         if (inventory_bar_handle_toggle_click(x, y)) return true;
-        /* Storage tab open → a press on a bar slot lifts that stack into the
-         * vault grid's drag instead of arming the strip's scroll, which is what
-         * makes Inventory Bar → Storage Grid a single gesture. */
-        /* A worn stack is taken off as it is banked, so long as the loadout survives without it. */
+        /* A container tab open → a press on a bar slot lifts that stack into
+         * the grid's drag instead of arming the strip's scroll, which is what
+         * makes Inventory Bar → container grid a single gesture. A worn stack
+         * is taken off as it is banked, so long as the loadout survives
+         * without it. */
         int drag_slot = inventory_bar_get_tapped_slot(x, y);
-        if (0 <= drag_slot && drag_slot < g_local_player.inventory_count &&
-            storable(drag_slot) &&
-            modal_interact_storage_accepts_drag()) {
-            modal_interact_storage_drag_in(drag_slot);
+        if (!inventory_bar_reordering() && 0 <= drag_slot && storable(drag_slot) &&
+            container_panel_accepts(drag_slot)) {
+            container_panel_drag_in(drag_slot);
             return true;
         }
         /* Arms the drag; the slot activates on release via ui_on_tick. The bar
@@ -103,8 +105,9 @@ bool ui_dispatch_tap(int x, int y) {
 
     if (inventory_modal_handle_click(x, y)) return true;
 
-    /* Quest Journal (right side) before the bubble column (left side). */
+    /* The right-hand column (journal, chat) before the bubble column (left side). */
     if (quest_journal_handle_click(x, y)) return true;
+    if (chat_panel_handle_click(x, y)) return true;
 
     /* Interaction bubbles are blocked whenever a modal is open on top of them
      * (interact / inventory / dialogue / instance map). A click within the
@@ -130,13 +133,16 @@ bool ui_dispatch_covers_point(int x, int y) {
      * accounts for collapse state and the always-present toggle tab). */
     if (interaction_bubble_point_covered(x, y)) return true;
     if (quest_journal_covers_point(x, y)) return true;
+    if (chat_panel_covers_point(x, y)) return true;
     if (inventory_bar_point_covered(x, y)) return true;
     if (toolbar_covers_point(x, y)) return true;
     return false;
 }
 
-/* Escape closes the topmost open modal, innermost first. */
+/* Escape leaves reorder mode, else closes the topmost open modal, innermost
+ * first. */
 static bool ui_dispatch_escape(void) {
+    if (inventory_bar_exit_reorder()) return true;
     if (modal_instance_map_is_open()) {
         modal_instance_map_close();
         return true;
@@ -188,6 +194,9 @@ static bool ui_consume_event(const input_event_t* e) {
     }
     if(!consumed && INPUT_ZOOM == e->type) {
         if (quest_journal_handle_wheel(e->wheel_delta)) { consumed = true; }
+    }
+    if(!consumed && INPUT_ZOOM == e->type) {
+        if (chat_panel_handle_wheel(e->wheel_delta)) { consumed = true; }
     }
     if(!consumed && INPUT_ZOOM == e->type) {
         if (!modal_interact_is_open() &&

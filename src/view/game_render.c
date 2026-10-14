@@ -32,7 +32,8 @@
 #include "ui/modal_dialogue.h"
 #include "data/action_cache.h"
 #include "ui/modal_instance_map.h"
-#include "fx/fx_item_transfer.h"
+#include "ui/chat_panel.h"
+#include "ui/container_panel.h"
 #include "ui/modal_interact.h"
 #include "ui/modal_map.h"
 #include "ui/nameplate.h"
@@ -995,8 +996,9 @@ void game_render_ui(void) {
     // Entity interaction bubbles (left side, collapsible column)
     interaction_bubble_draw();
 
-    // Quest Journal (right side) — grid-level HUD, below every modal.
+    // Quest Journal and chat (right side) — grid-level HUD, below every modal.
     quest_journal_draw();
+    chat_panel_draw();
 
     // Read-only minimap HUD. It never participates in UI input coverage.
     hud_minimap_overlay_draw();
@@ -1030,9 +1032,8 @@ void game_render_ui(void) {
         inventory_bar_draw();
     }
 
-    // A dragged vault slot rides above every surface, the bar included.
-    modal_interact_draw_storage_drag();
-    fx_item_transfer_draw(obj_layers_mgr_get());
+    // A dragged container slot rides above every surface, the bar included.
+    container_panel_draw_drag();
 
     // Instance Map content inside the modal_map container — independent
     // visualization system above the gameplay UI (world stays visible

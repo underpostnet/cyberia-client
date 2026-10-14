@@ -78,6 +78,7 @@ bool modal_wide_layout(void);
 
 void modal_opened(void);   /* 0 → 1 puts the local player in stasis */
 void modal_closed(void);   /* 1 → 0 releases it */
+bool modal_any_open(void); /* a protecting modal is open */
 
 /* Push player_stasis { count > 0 } and set the local flag to match. Call on
  * every init_data, so a reconnect resends the flag. */
