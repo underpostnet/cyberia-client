@@ -12,9 +12,7 @@
 #include "world/world_types.h"
 #include "world/object_layer.h"
 #include "world/object_layers_management.h"
-#include "view/camera.h"
 #include "sim/local_player.h"
-#include "content/presentation_runtime.h"
 #include "audio/audio_context.h"
 #include "sim/self_motion.h"
 #include "audio/audio.h"
@@ -691,14 +689,6 @@ static void json_unpack_init_data(const cJSON* payload) {
              g_game_state.grid_w, g_game_state.grid_h, g_game_state.aoi_radius,
              g_game_state.entity_defaults_count, ui_state_skill_count());
     g_game_state.init_received = true;
-
-    /* Camera follows the presentation runtime's zoom; the underlying value
-     * lives in view/camera.c. Re-initialise with the viewport size so the
-     * offset is correct when the player position lands. */
-    if (camera_zoom() <= 0.0f) {
-        camera_set_zoom(presentation_runtime_camera_zoom());
-    }
-    camera_init(GetScreenWidth(), GetScreenHeight());
 
     /* Signal interested modules (network FSM) that the handshake completed. */
     if (s_init_handler) { s_init_handler(); }

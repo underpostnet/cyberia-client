@@ -110,6 +110,7 @@ void prediction_reconcile(void) {
 
     if (0 == s_pred.state_frame) {               /* 4. no offset yet: apply, do not step */
         apply_motion(0, UINT32_MAX);
+        s_pred.prev = s_pred.curr;               /*    no step yet: nothing to draw between */
     } else {
         apply_motion(0, s_pred.state_frame);     /* 5. in flight, dated before the state */
         for (cyberia_frame_t s = s_pred.state_frame + 1; s <= session_frame(); s++) {

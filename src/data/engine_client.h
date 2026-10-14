@@ -40,7 +40,7 @@ typedef void (*FetchCompletedCb)(const FetchResponse* response);
  *   --stream-profile                     record events in Module.streamTrace */
 void fetch_init(int argc, char** argv);
 void fetch_shutdown(void);
-void fetch_frame_begin(double frame_ms, bool critical);
+void fetch_frame_begin(float frame_dt, bool critical);
 void fetch_frame_end(void);
 bool fetch_has_budget(void);
 double fetch_now(void);

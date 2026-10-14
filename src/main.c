@@ -1,100 +1,29 @@
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-#include <assert.h>
+#include "config.h"
+#include "preload.h"
+#include "telemetry.h"
 
 #include "input/input.h"
 #include "sim/game_state.h"
-#include "data/engine_client.h"
-#include "view/entity_render.h"
-#include "world/world_types.h"
-#include "world/object_layer.h"
-#include "utils.h"
-#include "view/render.h"
-#include "net/game_client.h"
+#include "sim/local_player.h"
 #include "sim/replication.h"
+#include "data/engine_client.h"
+#include "net/game_client.h"
 #include "net/client_event.h"
-#include "config.h"
+#include "view/render.h"
+#include "view/entity_render.h"
+#include "view/local_player_view.h"
+#include "audio/audio_context.h"
+#include "audio/audio.h"
+#include "ui/ui_dispatch.h"
+#include "ui/text.h"
+#include "js/text_input_bridge.h"
 
 #include <raylib.h>
 #include <emscripten/emscripten.h>
 
-#include "js/loading_bridge.h"
-#include "js/text_input_bridge.h"
-
-#include "view/camera.h"
-#include "content/presentation_runtime.h"
-#include "audio/audio_context.h"
-#include "audio/audio.h"
-#include "log.h"
-#include "ui/ui_dispatch.h"
-#include "fx/fx_tap.h"
-#include "ui/interaction_bubble.h"
-#include "ui/text.h"
-#include "ui/modal.h"
-#include "sim/local_player.h"
-#include "view/local_player_view.h"
-
 static const double fixed_step = 1.0/(double)TICK_RATE_HZ;
 static double sim_acc = 0.0;
-
-/* True when the world-px tap position lands within a finger-sized radius of
- * a quest/action provider bot. */
-static bool tap_hits_provider(Vector2 world_pos) {
-    float cell = world_cell_size();
-    for (int i = 0; i < g_game_state.bot_count; i++) {
-        EntityID bot = g_game_state.bots[i];
-        const Interaction* in = local_player_interaction(bot);
-        if ('\0' == game_state_agent(bot)->action_code[0] && (!in || 0 == in->quest_code_count)) continue;
-        Vector2 size = game_state_transform(bot)->size;
-        Vector2 at   = game_state_render(bot)->interp_pos;
-        float half_w = size.x * 0.5f;
-        float half_h = size.y * 0.5f;
-        float cx = (at.x + half_w) * cell;
-        float cy = (at.y + half_h) * cell;
-        float reach = cell * (0.9f + (half_w > half_h ? half_w : half_h));
-        float dx = world_pos.x - cx, dy = world_pos.y - cy;
-        if (dx * dx + dy * dy <= reach * reach) return true;
-    }
-    return false;
-}
-static char s_trace_map[MAX_ID_LENGTH];
-static bool s_trace_player;
-static bool s_trace_frame;
-static bool s_trace_scene;
-static bool s_trace_movement;
-static bool s_destination;
-static Vector2 s_trace_position;
-
-static void observe_scene(bool gameplay) {
-    if ('\0' == g_local_player.map_code[0]) return;
-    const Vector2 pos = game_state_transform(g_local_player.id)->pos;
-    if (0 != strcmp(s_trace_map, g_local_player.map_code)) {
-        s_destination = '\0' != s_trace_map[0];
-        copy_str(s_trace_map, sizeof(s_trace_map), g_local_player.map_code);
-        s_trace_player = s_trace_frame = s_trace_movement = s_trace_scene = false;
-        s_trace_position = pos;
-    }
-    if (!s_trace_player && player_render_ready()) {
-        s_trace_player = true;
-        fetch_event(s_destination ? "destination_player_ready" : "main_player_ready", s_trace_map, 0, 0);
-    }
-    if (!s_trace_scene && s_trace_player && immediate_scene_ready()) {
-        s_trace_scene = true;
-        fetch_event(s_destination ? "destination_activation" : "initial_scene_ready", s_trace_map, 0, 0);
-    }
-    if (gameplay && !s_trace_frame) {
-        s_trace_frame = true;
-        fetch_event(s_destination ? "first_destination_frame" : "first_frame", s_trace_map, 0, 0);
-    }
-    if (gameplay && !s_trace_movement &&
-        (s_trace_position.x != pos.x || s_trace_position.y != pos.y)) {
-        s_trace_movement = true;
-        fetch_event(s_destination ? "first_destination_movement" : "first_movement", s_trace_map, 0, 0);
-    }
-}
-
-static void gameloop(void) {
+static void game_frame(void) {
     float frame_dt = GetFrameTime();
 #ifndef CYBERIA_DEBUG
     if ( frame_dt > 0.25 ) { frame_dt = 0.25; } // runnaway clamp
@@ -104,7 +33,7 @@ static void gameloop(void) {
     // reconcile first, from the tick boundary: the decoder only stores the snapshot
     prediction_reconcile();
 
-    fetch_frame_begin((double)frame_dt * 1000, !player_render_ready() || !immediate_scene_ready() || game_state_own_player()->on_portal);
+    fetch_frame_begin(frame_dt, !player_render_ready() || !immediate_scene_ready() || game_state_own_player()->on_portal);
     text_font_sync();
     game_client_on_tick();
     audio_context_update(frame_dt);
@@ -113,66 +42,8 @@ static void gameloop(void) {
     // input capture in realtime
     input_queue_t frame_input = {0};
     input_queue_on_tick(&frame_input, frame_dt, ui_dispatch_covers_point);
-
     ui_on_tick(&frame_input, frame_dt);
-
-    // TODO: collapse this into a function, this is temporary to remove input.c dependency
-    {
-        input_queue_t bkp_queue = { 0 };
-        input_event_t evt = { 0 };
-        while (input_pop(&frame_input, &evt)) {
-            bool consumed = false;
-            if(!consumed && INPUT_TAP == evt.type) {
-                /* A player in stasis does not act: drop the tap. */
-                if (local_player_in_stasis()) { consumed = true; }
-                if (0 < game_state_vitals(g_local_player.id)->respawn_in) { consumed = true; }
-            }
-            // unconsumed event back to the queue
-            if(!consumed) {
-                input_push(&bkp_queue, evt);
-                continue;
-            }
-        }
-        // return unconsummed events to the original queue
-        input_event_t bkp_evt = { 0 };
-        while (input_pop(&bkp_queue, &bkp_evt)) { input_push(&frame_input, bkp_evt ); }
-    }
-
     input_push_client_events(frame_input);
-
-    // TODO: collapse this into a function, this is temporary to remove input.c dependency
-    {
-        // Tap Effect
-        input_queue_t bkp_queue = { 0 };
-        input_event_t evt = { 0 };
-        while (input_pop(&frame_input, &evt)) {
-            bool consumed = false;
-            /* Steering repeats at the screen edge; it draws no tap effect
-             * and opens no bubble. Both belong to a real pointer. */
-            if(!consumed && INPUT_TAP == evt.type && !evt.synthetic) {
-                FxTapParams fx = fx_tap_default_params();
-                fx.scale = 1.15f;
-                fx.duration = 0.70f;
-                fx.intensity = 1.25f;
-                fx_tap_spawn(evt.world_position, &fx);
-                /* A tap landing on a quest/action provider auto-opens the
-                 * collapsed bubble column so the interaction is reachable. */
-                if (interaction_bubble_is_collapsed() &&
-                    tap_hits_provider(evt.world_position)) {
-                    interaction_bubble_expand();
-                }
-                consumed = false; // TAP EFFECTS DON'T CONSUME THE INPUT, BUT ALSO SHOULDN'T HAPPEN BEFORE PROCESS
-            }
-             // unconsumed event back to the queue
-            if(!consumed) {
-                input_push(&bkp_queue, evt);
-                continue;
-            }
-        }
-         // return unconsummed events to the original queue
-        input_event_t bkp_evt = { 0 };
-        while (input_pop(&bkp_queue, &bkp_evt)) { input_push(&frame_input, bkp_evt ); }
-    }
 
     // fixed step simulation
     bool stepped = false;
@@ -184,61 +55,34 @@ static void gameloop(void) {
         stepped = true;
     }
     /* One events message per pass that ran a step. */
-    if (stepped) client_event_flush();
+    if (stepped) {
+        client_event_flush();
+    }
     /* interp_pos is the presentation position of every entity; for the local
      * player the view owns it. */
     local_player_view_update(prediction_prev(), prediction_self(), (float)(sim_acc / fixed_step));
-    if (0 != g_local_player.id)
+    if (0 != g_local_player.id) {
         game_state_render(g_local_player.id)->interp_pos = local_player_view_position();
+    }
 
     /* Remote-entity render-time interpolation. */
     interpolation_compute_view();
 
     // render interpolated state
     render_on_tick(frame_dt);
-    observe_scene(true);
+    telemetry_observe_scene(true);
     fetch_process_frame();
     fetch_frame_end();
 }
 
-static bool s_load_ready;
-
-static void preloading_loop(void) {
-    const float frame_dt = GetFrameTime();
-    fetch_frame_begin((double)frame_dt * 1000, true);
-    text_font_sync();
-    game_client_on_tick();
-
-    render_on_tick(frame_dt);
-    audio_update(frame_dt);
-    observe_scene(false);
-
-    if (!s_load_ready) {
-        const char* label = NULL;
-        if (!connection_is_open()) label = "Connecting to Cyberia...";
-        else if (!g_game_state.init_received || 0 == g_local_player.id) label = "Entering the world...";
-        else if (!presentation_runtime_is_ready()) label = "Preparing the view...";
-        else if (!player_render_ready()) label = "Loading your character...";
-        else if (!immediate_scene_ready()) label = "Preparing your location...";
-        else if (!text_font_settled()) label = "Preparing the interface...";
-        if (NULL != label) loading_bridge_progress(-1, label);
-        else {
-            s_load_ready = true;
-            fetch_event("tap_to_start_visible", s_trace_map, 0, 0);
-            loading_bridge_ready();
-        }
-    }
-    fetch_process_frame();
-    fetch_frame_end();
-
-    /* Gameplay begins only on the player's explicit Tap-to-Start. */
-    if (s_load_ready && loading_bridge_start_requested()) {
-        fetch_event("gameplay_start", s_trace_map, 0, 0);
-        audio_start();
-        loading_bridge_hide();
-        modal_closed(); /* the loading overlay is the first open modal */
-        emscripten_cancel_main_loop();
-        emscripten_set_main_loop(gameloop, 0, 1);
+/* One main loop for both phases: the splash until the player taps to start,
+ * then gameplay. */
+static bool s_playing = false;
+static void frame(void) {
+    if (s_playing) {
+        game_frame();
+    } else {
+        s_playing = preload_frame();
     }
 }
 
@@ -253,28 +97,14 @@ int main(int argc, char** argv) {
     // command line. Must precede any connection or Data Server call.
     config_init(argc, argv);
     fetch_init(argc, argv);
-    fetch_event("boot_start", "", 0, 0);
+    telemetry_event("boot_start"); // after fetch_init: it reads --stream-profile
     audio_init();
-
-    // Connects to Game Server
-    connection_open();
-
-    render_init(vp_w, vp_h); // NOTE: if render is the window, then combine with it
+    render_init(vp_w, vp_h);
     text_font_init(); // main UI font (loaded async once client-hints name a fontFamily)
 
-    // NOTE: Do not mix the start fetch loop with the running game loop
-    // if need to be non blocking then wait in a loading screen before starting main_loop
-    // all the initializations should be consolidated in related modules
-    presentation_runtime_start_fetch(CYBERIA_CLIENT_HINTS_CODE);
+    preload_start();
 
-    // [preload] it should handle the switch to gameloop on callback
-    emscripten_set_main_loop(preloading_loop, 0, 1);
-
-    // Note: close steps do not make sense in a web environment, but we should keep them for a while
-    connection_close();
-    render_cleanup();
-    audio_shutdown();
-    fetch_shutdown();
-    CloseWindow();
+    // simulate_infinite_loop = 1: this call never returns
+    emscripten_set_main_loop(frame, 0, 1);
     return 0;
 }

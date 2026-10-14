@@ -44,12 +44,6 @@
  * the camera update, effect timers, UI ticks, and the world-render pass.
  * The Camera2D itself lives in view/camera.{c,h}. */
 
-struct {
-    Texture2D splash_texture;
-} render_state = {0};
-
-void render_fallback(int width, int height);
-
 /* Browser window resize → raylib viewport + camera. raylib's IsWindowResized
  * does not fire reliably under Emscripten, so we drive it from the DOM event. */
 static EM_BOOL on_window_resize(int eventType, const EmscriptenUiEvent* uiEvent, void* userData) {
@@ -63,8 +57,6 @@ static EM_BOOL on_window_resize(int eventType, const EmscriptenUiEvent* uiEvent,
 }
 
 void render_init(int width, int height) {
-    render_state.splash_texture = LoadTexture("assets/splash.png");
-
     emscripten_set_resize_callback(EMSCRIPTEN_EVENT_TARGET_WINDOW, NULL, EM_FALSE, on_window_resize);
 
     game_render_init(width, height);
@@ -81,13 +73,9 @@ void render_init(int width, int height) {
     fx_grant_delivery_init();
     fx_assemble_init();
     fx_reward_init();
-    camera_init(width, height);
 }
 
 void render_on_tick(float delta_time) {
-    int current_width  = GetScreenWidth();
-    int current_height = GetScreenHeight();
-
     camera_on_tick(delta_time);
     overhead_occlusion_update(delta_time);
 
@@ -124,35 +112,10 @@ void render_on_tick(float delta_time) {
     modal_instance_map_update(delta_time);
     hud_minimap_overlay_update(delta_time);
 
-    if (g_game_state.init_received) {
-        game_render_frame();
-    } else {
-        render_fallback(current_width, current_height);
-    }
-}
-
-void render_fallback(int width, int height) {
-    BeginDrawing();
-    ClearBackground(DARKGRAY);
-
-    float cx = (float)width  / 2.0f;
-    float cy = (float)height / 2.0f;
-
-    if (render_state.splash_texture.id != 0) {
-        DrawTexture(render_state.splash_texture,
-                    (int)(cx - render_state.splash_texture.width  / 2),
-                    (int)(cy - render_state.splash_texture.height / 2),
-                    WHITE);
-    }
-
-    const char* status_text = "Connecting to server...";
-    int text_width = MeasureText(status_text, 20);
-    DrawText(status_text, (width - text_width) / 2, height - 40, 20, WHITE);
-    EndDrawing();
+    game_render_frame();
 }
 
 void render_cleanup(void) {
-    UnloadTexture(render_state.splash_texture);
     fx_tap_reset();
     fx_footsteps_reset();
     fx_dust_reset();

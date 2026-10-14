@@ -58,7 +58,7 @@ static int s_in_flight;
 static unsigned long s_order;
 static unsigned long s_frame;
 static double s_frame_start;
-static double s_frame_ms;
+static float s_frame_dt;
 static double s_spent;
 static double s_budget;
 static unsigned s_flags;
@@ -391,10 +391,10 @@ void fetch_init(int argc, char** argv) {
 void fetch_shutdown(void) { for (int i = 0; FETCH_QUEUE_CAP > i; i++) discard(&s_requests[i]); }
 double fetch_now(void) { return asset_bridge_now(); }
 bool fetch_disabled(StreamDiagnostic flag) { return 0 != (s_flags & flag); }
-void fetch_frame_begin(double frame_ms, bool critical) {
+void fetch_frame_begin(float frame_dt, bool critical) {
     s_frame++;
     s_frame_start = fetch_now();
-    s_frame_ms = frame_ms;
+    s_frame_dt = frame_dt;
     s_spent = 0;
     s_budget = critical ? 8.0 : 2.0;
 }
@@ -409,7 +409,7 @@ void fetch_account(const char* operation, const char* id, size_t bytes, double s
     fetch_event(operation, id, bytes, elapsed);
 }
 void fetch_frame_end(void) {
-    fetch_event("frame_time", "", 0, s_frame_ms);
+    fetch_event("frame_time", "", 0, (double)s_frame_dt * 1000); /* trace durations are ms */
     fetch_event("asset_processing_time", "", 0, s_spent);
 }
 int fetch_in_flight_count(void) { return s_in_flight; }

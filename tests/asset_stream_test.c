@@ -56,7 +56,7 @@ static void release(const FetchResponse* response) {
 }
 static void frame(void) {
     clock_ms += 16.7;
-    fetch_frame_begin(16.7, false);
+    fetch_frame_begin(0.0167f, false);
     fetch_process_frame();
 }
 static void settle(void) {

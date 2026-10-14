@@ -4,6 +4,7 @@
 #include "view/camera.h"
 #include "audio/audio.h"
 #include "audio/audio_events.h"
+#include "fx/fx_tap.h"
 
 #include <raylib.h>
 
@@ -159,7 +160,7 @@ static bool ui_consume_event(const input_event_t* e) {
     bool consumed = false;
     /* A synthetic tap has no pointer on its target pixel, so HUD chrome
      * must not absorb it. Modals still block it: they put the local player
-     * in stasis, and main drops taps in stasis. */
+     * in stasis, and the world tap branch below drops taps in stasis. */
     if(!consumed && INPUT_TAP == e->type && !e->synthetic) {
         int mx = (int)e->screen_position.x;
         int my = (int)e->screen_position.y;
@@ -195,6 +196,21 @@ static bool ui_consume_event(const input_event_t* e) {
     if(!consumed && INPUT_ZOOM == e->type) {
         if(e->zoom_in) { camera_zoom_by(1.1); } else { camera_zoom_by(0.9); }
         consumed = true;
+    }
+    /* World tap. A player in stasis or waiting to respawn does not act: drop
+     * it. A real pointer tap draws the tap effect and stays in the queue.
+     * Steering repeats at the screen edge are synthetic; they draw nothing. */
+    if(!consumed && INPUT_TAP == e->type) {
+        if (local_player_in_stasis() || 0 < game_state_vitals(g_local_player.id)->respawn_in) {
+            consumed = true;
+        } else if (!e->synthetic) {
+            FxTapParams fx = fx_tap_default_params();
+            fx.scale = 1.15f;
+            fx.duration = 0.70f;
+            fx.intensity = 1.25f;
+            fx_tap_spawn(e->world_position, &fx);
+            interaction_bubble_on_world_tap(e->world_position);
+        }
     }
 
     return consumed;

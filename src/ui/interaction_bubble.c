@@ -167,13 +167,30 @@ static float column_content_height(void) {
            (float)s_slot_count * (float)(IBUBBLE_ICON_SIZE + IBUBBLE_GAP);
 }
 
-bool interaction_bubble_is_collapsed(void) {
-    return s_col_init && !s_col_toggle.expanded;
+/* True when the world-px tap position lands within a finger-sized radius of
+ * a quest/action provider bot. */
+static bool tap_hits_provider(Vector2 world_pos) {
+    float cell = world_cell_size();
+    for (int i = 0; i < g_game_state.bot_count; i++) {
+        EntityID bot = g_game_state.bots[i];
+        const Interaction* in = local_player_interaction(bot);
+        if ('\0' == game_state_agent(bot)->action_code[0] && (!in || 0 == in->quest_code_count)) continue;
+        Vector2 size = game_state_transform(bot)->size;
+        Vector2 at   = game_state_render(bot)->interp_pos;
+        float half_w = size.x * 0.5f;
+        float half_h = size.y * 0.5f;
+        float cx = (at.x + half_w) * cell;
+        float cy = (at.y + half_h) * cell;
+        float reach = cell * (0.9f + (half_w > half_h ? half_w : half_h));
+        float dx = world_pos.x - cx, dy = world_pos.y - cy;
+        if (dx * dx + dy * dy <= reach * reach) return true;
+    }
+    return false;
 }
 
-void interaction_bubble_expand(void) {
-    if (!s_col_init) return;
-    s_col_toggle.expanded = true;
+void interaction_bubble_on_world_tap(Vector2 world_pos) {
+    if (s_col_init && !s_col_toggle.expanded && tap_hits_provider(world_pos))
+        s_col_toggle.expanded = true;
 }
 
 static void column_ensure_toggle(void) {

@@ -1,446 +1,113 @@
 <!doctype html>
-<html lang="en">
-    <head>
-        <meta charset="utf-8" />
-        <link rel="icon" type="image/x-icon" href="favicon.ico" />
-        <meta
-            name="viewport"
-            content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"
-        />
-        <title>CYBERIA MMO</title>
-        <style>     
-           
-            @font-face {
-                font-family: 'retro-font-title';
-                src: URL('fonts/Jersey15-Regular.ttf') format('truetype');
-            }
- 
-            :root {
-                --color-bg: #050505;
-                --color-gold: #ffcc00;
-                --color-gold-glow: rgba(255, 204, 0, 0.6);
-                --color-white: #f5f5f5;
-            }
+<html lang="EN-us">
+  <head>
+    <meta charset="utf-8">
+    <meta http-equiv="Content-Type" content="text/html; charset=utf-8">
 
-            * {
-                margin: 0;
-                padding: 0;
-                box-sizing: border-box;
-            }
+    <title>CYBERIA MMO</title>
 
-            html,
-            body {
-                width: 100%;
-                height: 100%;
-                overflow: hidden;
-                background: #000;
-            }
+    <!-- user-scalable=no: no browser pinch zoom; the game owns pinch -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 
-            body {
-                display: flex;
-                justify-content: center;
-                align-items: center;
-            }
+    <!-- Favicon -->
+    <link rel="shortcut icon" href="favicon.ico">
 
-            #canvas {
-                display: block;
-                position: absolute;
-                top: 0;
-                left: 0;
-                image-rendering: pixelated;
-            }
+    <style>
+        body { margin: 0px; overflow: hidden; background-color: black; }
+        canvas.emscripten { border: 0px none; background-color: black; display: block; image-rendering: pixelated; }
 
-            /* =========================================
-               CYBERIA MATRIX LOADING SCREEN
-               (production loading overlay — driven by the
-               C client through window.CyberiaLoading)
-            ========================================= */
-            #loading {
-                position: absolute;
-                top: 0;
-                left: 0;
-                width: 100%;
-                height: 100%;
-                background-color: var(--color-bg);
-                color: white;
-                font-family: "retro-font-title", monospace;
-                display: flex;
-                flex-direction: column;
-                justify-content: center;
-                align-items: center;
-                overflow: hidden;
-                z-index: 1000;
-                image-rendering: pixelated;
-            }
-
-            /* Retro screen effects (CRT) */
-            #loading .scanlines {
-                position: absolute;
-                top: 0;
-                left: 0;
-                width: 100%;
-                height: 100%;
-                background: linear-gradient(
-                    to bottom,
-                    rgba(255, 255, 255, 0),
-                    rgba(255, 255, 255, 0) 50%,
-                    rgba(0, 0, 0, 0.25) 50%,
-                    rgba(0, 0, 0, 0.25)
-                );
-                background-size: 100% 4px;
-                pointer-events: none;
-                z-index: 50;
-            }
-
-            #loading .vignette {
-                position: absolute;
-                top: 0;
-                left: 0;
-                width: 100%;
-                height: 100%;
-                background: radial-gradient(
-                    circle,
-                    rgba(0, 0, 0, 0) 40%,
-                    rgba(0, 0, 0, 0.8) 100%
-                );
-                pointer-events: none;
-                z-index: 40;
-            }
-
-            /* Cyberia logo in pure CSS — splash.png as a 7x8 pixel matrix:
-                 1111111
-                 1000001
-                 1011101
-                 1010101
-                 1011101
-                 1000001
-                 1110111
-                 0010100
-               One element is the top-left pixel; every other white cell is
-               drawn with a box-shadow offset. */
-            #loading .logo-container {
-                /* One logo pixel = 1em; change font-size to scale the mark */
-                font-size: 22px;
-                width: 7em;
-                height: 8em;
-                margin-bottom: 50px;
-                animation:
-                    pulse-glow 3s infinite ease-in-out,
-                    glitch-anim 10s infinite linear;
-                z-index: 10;
-            }
-
-            #loading .logo-pixels {
-                width: 1em;
-                height: 1em;
-                background-color: var(--color-white);
-                box-shadow:
-                    /* row 0: full top edge */
-                    1em 0 var(--color-white),
-                    2em 0 var(--color-white),
-                    3em 0 var(--color-white),
-                    4em 0 var(--color-white),
-                    5em 0 var(--color-white),
-                    6em 0 var(--color-white),
-                    /* row 1: outer side edges */ 0 1em var(--color-white),
-                    6em 1em var(--color-white),
-                    /* row 2: outer sides + inner square top */ 0 2em
-                        var(--color-white),
-                    2em 2em var(--color-white),
-                    3em 2em var(--color-white),
-                    4em 2em var(--color-white),
-                    6em 2em var(--color-white),
-                    /* row 3: outer sides + inner sides (hollow core pixel) */
-                        0 3em var(--color-white),
-                    2em 3em var(--color-white),
-                    4em 3em var(--color-white),
-                    6em 3em var(--color-white),
-                    /* row 4: outer sides + inner square bottom */ 0 4em
-                        var(--color-white),
-                    2em 4em var(--color-white),
-                    3em 4em var(--color-white),
-                    4em 4em var(--color-white),
-                    6em 4em var(--color-white),
-                    /* row 5: outer side edges */ 0 5em var(--color-white),
-                    6em 5em var(--color-white),
-                    /* row 6: bottom edge with center gap */ 0 6em
-                        var(--color-white),
-                    1em 6em var(--color-white),
-                    2em 6em var(--color-white),
-                    4em 6em var(--color-white),
-                    5em 6em var(--color-white),
-                    6em 6em var(--color-white),
-                    /* row 7: the two feet below the bottom edge */ 2em 7em
-                        var(--color-white),
-                    4em 7em var(--color-white);
-            }
-
-            /* Loading interface */
-            #loading .ui-container {
-                width: 90%;
-                max-width: 600px;
-                z-index: 10;
-                display: flex;
-                flex-direction: column;
-                align-items: center;
-            }
-
-            #loading .title {
-                color: var(--color-gold);
-                font-size: 40px;
-                margin-bottom: 15px;
-                text-shadow: 0 0 10px var(--color-gold-glow);
-                letter-spacing: 2px;
-            }
-
-            #loading .module-text {
-                color: #aaaaaa;
-                font-size: 18px;
-                margin-bottom: 20px;
-                max-width: 100%;
-                white-space: nowrap;
-                overflow: hidden;
-                text-overflow: ellipsis;
-            }
-
-            #loading .progress-wrapper {
-                width: 100%;
-                max-width: 300px; /* the bar never grows past this */
-                position: relative;
-                display: flex;
-                align-items: center;
-            }
-
-            #loading .progress-border {
-                width: 100%;
-                height: 36px;
-                border: 3px solid #444;
-                background-color: #111;
-                padding: 2px;
-                position: relative;
-                box-shadow: 0 0 15px rgba(0, 0, 0, 0.8);
-            }
-
-            #loading .progress-fill {
-                height: 100%;
-                width: 0%;
-                background-color: var(--color-gold);
-                box-shadow: 0 0 10px var(--color-gold-glow);
-                transition: width 0.2s linear;
-                position: relative;
-            }
-
-            #loading .progress-fill::after {
-                content: "";
-                position: absolute;
-                top: 0;
-                left: 0;
-                width: 100%;
-                height: 30%;
-                background-color: rgba(255, 255, 255, 0.4);
-            }
-
-            /* Percentage lives INSIDE the bar so it is always on screen:
-               bold white fill with a solid black outline, fully opaque over
-               both the dark track and the gold fill. */
-            #loading .progress-percent {
-                position: absolute;
-                right: 10px;
-                top: 50%;
-                transform: translateY(-50%);
-                font-size: 25px;
-                font-weight: 700;
-                color: #fff;
-                text-shadow:
-                    2px 0 0 #000,
-                    -2px 0 0 #000,
-                    0 2px 0 #000,
-                    0 -2px 0 #000,
-                    2px 2px 0 #000,
-                    -2px 2px 0 #000,
-                    2px -2px 0 #000,
-                    -2px -2px 0 #000,
-                    1px 0 0 #000,
-                    -1px 0 0 #000,
-                    0 1px 0 #000,
-                    0 -1px 0 #000;
-                z-index: 2;
-                pointer-events: none;
-            }
-
-            /* Space is always reserved (visibility, not display) so the bar
-               never shifts when the ready prompt appears. */
-            #loading .ready-text {
-                visibility: hidden;
-                color: #fff;
-                font-size: 30px;
-                margin-top: 20px;
-                animation: blink 1s infinite;
-                text-shadow: 0 0 8px rgba(255, 255, 255, 0.8);
-            }
-
-            @keyframes pulse-glow {
-                0% {
-                    transform: scale(1);
-                    filter: drop-shadow(0 0 5px rgba(255, 255, 255, 0.15));
-                }
-                50% {
-                    transform: scale(1.03);
-                    filter: drop-shadow(0 0 20px rgba(255, 255, 255, 0.45));
-                }
-                100% {
-                    transform: scale(1);
-                    filter: drop-shadow(0 0 5px rgba(255, 255, 255, 0.15));
-                }
-            }
-
-            @keyframes glitch-anim {
-                0%,
-                96% {
-                    transform: translate(0) scale(1);
-                }
-                97% {
-                    transform: translate(-3px, 2px) scale(1.02);
-                    filter: hue-rotate(90deg);
-                }
-                98% {
-                    transform: translate(3px, -2px) scale(0.98);
-                    filter: hue-rotate(-90deg);
-                }
-                99% {
-                    transform: translate(-3px, -2px) scale(1.02);
-                    filter: drop-shadow(0 0 20px red);
-                }
-                100% {
-                    transform: translate(0) scale(1);
-                }
-            }
-
-            @keyframes blink {
-                0%,
-                100% {
-                    opacity: 1;
-                }
-                50% {
-                    opacity: 0;
-                }
-            }
-        </style>
+        /* Splash effects over the canvas. src/preload.c draws the splash text
+           and removes #fx on Tap-to-Start. */
+        #fx {
+            position: absolute;
+            inset: 0;
+            pointer-events: none;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            image-rendering: pixelated;
+        }
+        #fx .scanlines {
+            position: absolute;
+            inset: 0;
+            background: linear-gradient(to bottom, rgba(255, 255, 255, 0), rgba(255, 255, 255, 0) 50%, rgba(0, 0, 0, 0.25) 50%, rgba(0, 0, 0, 0.25));
+            background-size: 100% 4px;
+        }
+        #fx .vignette {
+            position: absolute;
+            inset: 0;
+            background: radial-gradient(circle, rgba(0, 0, 0, 0) 40%, rgba(0, 0, 0, 0.8) 100%);
+        }
+        /* Cyberia logo as a 7x8 pixel matrix (one pixel = 1em). The bottom
+           margin lifts it above the screen centre, where preload.c draws the
+           text. One element is the top-left pixel; box-shadows draw the rest:
+             1111111
+             1000001
+             1011101
+             1010101
+             1011101
+             1000001
+             1110111
+             0010100 */
+        #fx .logo {
+            font-size: 22px;
+            width: 7em;
+            height: 8em;
+            margin-bottom: 220px;
+            animation: pulse-glow 3s infinite ease-in-out, glitch-anim 10s infinite linear;
+        }
+        #fx .logo::before {
+            content: "";
+            display: block;
+            width: 1em;
+            height: 1em;
+            background-color: #f5f5f5;
+            box-shadow:
+                1em 0 #f5f5f5, 2em 0 #f5f5f5, 3em 0 #f5f5f5, 4em 0 #f5f5f5, 5em 0 #f5f5f5, 6em 0 #f5f5f5,
+                0 1em #f5f5f5, 6em 1em #f5f5f5,
+                0 2em #f5f5f5, 2em 2em #f5f5f5, 3em 2em #f5f5f5, 4em 2em #f5f5f5, 6em 2em #f5f5f5,
+                0 3em #f5f5f5, 2em 3em #f5f5f5, 4em 3em #f5f5f5, 6em 3em #f5f5f5,
+                0 4em #f5f5f5, 2em 4em #f5f5f5, 3em 4em #f5f5f5, 4em 4em #f5f5f5, 6em 4em #f5f5f5,
+                0 5em #f5f5f5, 6em 5em #f5f5f5,
+                0 6em #f5f5f5, 1em 6em #f5f5f5, 2em 6em #f5f5f5, 4em 6em #f5f5f5, 5em 6em #f5f5f5, 6em 6em #f5f5f5,
+                2em 7em #f5f5f5, 4em 7em #f5f5f5;
+        }
+        @keyframes pulse-glow {
+            0%, 100% { transform: scale(1); filter: drop-shadow(0 0 5px rgba(255, 255, 255, 0.15)); }
+            50% { transform: scale(1.03); filter: drop-shadow(0 0 20px rgba(255, 255, 255, 0.45)); }
+        }
+        @keyframes glitch-anim {
+            0%, 96% { transform: translate(0) scale(1); }
+            97% { transform: translate(-3px, 2px) scale(1.02); filter: hue-rotate(90deg); }
+            98% { transform: translate(3px, -2px) scale(0.98); filter: hue-rotate(-90deg); }
+            99% { transform: translate(-3px, -2px) scale(1.02); filter: drop-shadow(0 0 20px red); }
+            100% { transform: translate(0) scale(1); }
+        }
+    </style>
     </head>
     <body>
-        <!-- Production loading screen — visible until the C client reports
-             every real init stage complete AND the player taps to start. -->
-        <div id="loading">
-            <div class="scanlines"></div>
-            <div class="vignette"></div>
-
-            <div class="logo-container" id="loading-logo">
-                <div class="logo-pixels"></div>
-            </div>
-
-            <div class="ui-container">
-                <h1 class="title">CYBERIA</h1>
-                <p class="module-text" id="loading-text">
-                    INITIALIZING RUNTIME...
-                </p>
-                <div class="progress-wrapper">
-                    <div class="progress-border">
-                        <div class="progress-fill" id="loading-bar"></div>
-                        <span class="progress-percent" id="loading-percent"
-                            >0%</span
-                        >
-                    </div>
-                </div>
-                <p class="ready-text" id="loading-ready">TAP TO START</p>
-            </div>
-        </div>
-
-        <canvas
-            id="canvas"
-            oncontextmenu="event.preventDefault()"
-            tabindex="0"
-        ></canvas>
-
-        <script type="text/javascript">
-            /* Loading-screen controller. The C client (js/loading_bridge.c)
-               drives it with REAL initialization stages — there are no
-               timers or simulated progress. */
-            window.CyberiaLoading = (function () {
-                "use strict";
-
-                let ready = false;
-                let startRequested = false;
-                const retryTimer = setTimeout(function () {
-                    if (ready) return;
-                    const retry = document.createElement("button");
-                    retry.id = "loading-retry";
-                    retry.textContent = "Reload";
-                    retry.onclick = function (event) { event.stopPropagation(); location.reload(); };
-                    el("loading-text").after(retry);
-                }, 15000);
-
-                function el(id) {
-                    return document.getElementById(id);
-                }
-
-                // Negative progress means the dependency count is not known.
-                function progress(pct, label) {
-                    const bar = el("loading-bar");
-                    if (!bar) return;
-                    bar.style.width = pct < 0 ? "100%" : pct + "%";
-                    bar.style.opacity = pct < 0 ? "0.35" : "1";
-                    el("loading-percent").innerText = pct < 0 ? "..." : pct + "%";
-                    if (label) {
-                        el("loading-text").innerText = label;
-                    }
-                }
-
-                function setReady() {
-                    if (ready || !el("loading-bar")) return;
-                    ready = true;
-                    clearTimeout(retryTimer);
-                    el("loading-retry")?.remove();
-                    progress(100, null);
-                    const text = el("loading-text");
-                    text.innerText = "Your character is ready.";
-                    text.style.color = "#ffcc00";
-                    el("loading-ready").style.visibility = "visible";
-                    el("loading-logo").style.animation =
-                        "pulse-glow 1s infinite ease-in-out, glitch-anim 5s infinite linear";
-                }
-
-                function hide() {
-                    const overlay = el("loading");
-                    if (!overlay) return;
-                    overlay.style.transition = "opacity 0.6s ease";
-                    overlay.style.opacity = "0";
-                    setTimeout(function () {
-                        overlay.remove();
-                    }, 650);
-                }
-
-                function requestStart() {
-                    if (ready) startRequested = true;
-                }
-
-                document
-                    .getElementById("loading")
-                    .addEventListener("pointerdown", requestStart);
-                document.addEventListener("keydown", requestStart);
-
-                return {
-                    progress: progress,
-                    setReady: setReady,
-                    hide: hide,
-                    startRequested: function () {
-                        return startRequested ? 1 : 0;
-                    },
-                };
-            })();
-
+        <canvas class=emscripten id=canvas oncontextmenu=event.preventDefault() tabindex=-1></canvas>
+        <div id="fx"><div class="logo"></div><div class="vignette"></div><div class="scanlines"></div></div>
+        <p id="output" />
+        <script>
             var Module = {
                 arguments: self.CYBERIA_ARGV || [],
-                canvas: document.getElementById("canvas"),
+                print: (function() {
+                    var element = document.getElementById('output');
+                    if (element) element.value = ''; // clear browser cache
+                    return function(text) {
+                        if (arguments.length > 1) text = Array.prototype.slice.call(arguments).join(' ');
+                        console.log(text);
+                        if (element) {
+                          element.value += text + "\n";
+                          element.scrollTop = element.scrollHeight; // focus on bottom
+                        }
+                    };
+                })(),
+                canvas: (function() {
+                    var canvas = document.getElementById('canvas');
+                    return canvas;
+                })()
             };
         </script>
         {{{ SCRIPT }}}

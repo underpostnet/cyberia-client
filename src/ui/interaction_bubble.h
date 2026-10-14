@@ -22,10 +22,9 @@ void interaction_bubble_update(void);
 void interaction_bubble_draw(void);
 bool interaction_bubble_handle_click(int mx, int my);
 
-/* Collapsed-column state + programmatic expand (e.g. a world tap landing on
- * a quest/action provider auto-opens the column). */
-bool interaction_bubble_is_collapsed(void);
-void interaction_bubble_expand(void);
+/* A world tap landing on a quest/action provider auto-opens the collapsed
+ * column, so the interaction is reachable. */
+void interaction_bubble_on_world_tap(Vector2 world_pos);
 bool interaction_bubble_handle_wheel(float wheel_delta);
 
 /* Apply an equip or unequip that happened while the self-player is dead. The

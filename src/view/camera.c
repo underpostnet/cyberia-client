@@ -52,9 +52,8 @@ void camera_init(int screen_width, int screen_height) {
     g_camera.offset   = (Vector2){ screen_width / 2.0f, screen_height / 2.0f };
     g_camera.target   = (Vector2){ cx, cy };
     g_camera.rotation = 0.0f;
-    if (g_camera.zoom <= 0.0f) {
-        g_camera.zoom = presentation_runtime_camera_zoom();
-    }
+    g_camera.zoom     = presentation_runtime_camera_zoom();
+    s_mobile_zoom_applied = false;
     camera_sync_mobile_zoom();
     LOG_INFO("camera_init target=(%.1f, %.1f) zoom=%.2f", cx, cy, g_camera.zoom);
 }
