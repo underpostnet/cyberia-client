@@ -62,7 +62,7 @@ import io
 import json
 import posixpath
 import subprocess
-from http.server import HTTPServer, SimpleHTTPRequestHandler
+from http.server import ThreadingHTTPServer, SimpleHTTPRequestHandler
 
 RUNTIME_CONFIG_ENV_KEYS = (
     "CYBERIA_WS_ORIGIN",
@@ -193,7 +193,7 @@ if __name__ == "__main__":
     os.chdir(directory)
 
     try:
-        server = HTTPServer(("", port), CyberiaHandler)
+        server = ThreadingHTTPServer(("", port), CyberiaHandler)
     except Exception as exc:
         print(f"[server] bind failed on port {port}: {exc}", flush=True)
         report_container_status(container_id, "error")
@@ -204,6 +204,8 @@ if __name__ == "__main__":
 
     try:
         server.serve_forever()
+    except KeyboardInterrupt:
+        pass
     except Exception as exc:
         print(f"[server] serve_forever error: {exc}", flush=True)
         report_container_status(container_id, "error")
