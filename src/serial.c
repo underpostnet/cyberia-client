@@ -35,11 +35,10 @@ static cJSON* new_message(const char* type, cJSON** payload) {
  * Message packers — client to server
  * ============================================================================ */
 
-cJSON* json_pack_handshake(const char* client_name, const char* version) {
+cJSON* json_pack_auth(const char* ticket) {
     cJSON* p;
-    cJSON* root = new_message("handshake", &p);
-    cJSON_AddStringToObject(p, "name", client_name ? client_name : "cyberia-mmo");
-    cJSON_AddStringToObject(p, "version", version ? version : "1.0.0");
+    cJSON* root = new_message("auth", &p);
+    if (NULL != ticket && '\0' != ticket[0]) cJSON_AddStringToObject(p, "ticket", ticket);
     return root;
 }
 
@@ -147,7 +146,7 @@ cJSON* json_pack_item_move(const char* from, int from_slot, const char* to, int 
     return root;
 }
 
-cJSON* json_pack_party_target(const char* type, const char* key, uint32_t player_id) {
+cJSON* json_pack_player_target(const char* type, const char* key, uint32_t player_id) {
     assert(type);
     cJSON* p;
     cJSON* root = new_message(type, &p);
@@ -159,6 +158,15 @@ cJSON* json_pack_party_reply(uint32_t from_id, bool accept) {
     cJSON* p;
     cJSON* root = new_message("party_reply", &p);
     cJSON_AddNumberToObject(p, "fromId", from_id);
+    cJSON_AddBoolToObject(p, "accept", accept);
+    return root;
+}
+
+cJSON* json_pack_friendship(const char* type, const char* friendship_id, bool accept) {
+    assert(type && friendship_id);
+    cJSON* p;
+    cJSON* root = new_message(type, &p);
+    cJSON_AddStringToObject(p, "friendshipId", friendship_id);
     cJSON_AddBoolToObject(p, "accept", accept);
     return root;
 }

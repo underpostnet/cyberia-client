@@ -181,9 +181,9 @@ static void test_vault_moves_name_their_terminal_and_replay(void) {
 
 static void test_chat_log_files_lines_by_conversation(void) {
     chat_log_reset();
-    chat_log_push(chat_channel(CHAT_CHANNEL_WORLD), 2, "Guest-AB", "hello", false);
-    chat_log_push(chat_channel(CHAT_CHANNEL_WORLD), OWN, "Guest-CD", "hi", true);
-    chat_log_push(chat_direct(2), 2, "Guest-AB", "psst", false);
+    chat_log_push(chat_channel(CHAT_CHANNEL_WORLD), 2, "Guest-AB", "", "hello", false);
+    chat_log_push(chat_channel(CHAT_CHANNEL_WORLD), OWN, "Guest-CD", "", "hi", true);
+    chat_log_push(chat_direct(2), 2, "Guest-AB", "", "psst", false);
     chat_log_push_system(chat_channel(CHAT_CHANNEL_PARTY), "You are not in a party.");
 
     assert(1 == chat_log_unread(chat_channel(CHAT_CHANNEL_WORLD)));
@@ -195,7 +195,7 @@ static void test_chat_log_files_lines_by_conversation(void) {
     chat_log_mark_read(chat_channel(CHAT_CHANNEL_WORLD));
     assert(0 == chat_log_unread(chat_channel(CHAT_CHANNEL_WORLD)));
 
-    for (int i = 0; i < CHAT_LOG_LINES + 5; i++) chat_log_push(chat_direct(2), 2, "Guest-AB", "spam", false);
+    for (int i = 0; i < CHAT_LOG_LINES + 5; i++) chat_log_push(chat_direct(2), 2, "Guest-AB", "", "spam", false);
     assert(CHAT_LOG_LINES == chat_log_get(chat_direct(2))->count);
 
     chat_log_reset();

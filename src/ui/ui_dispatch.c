@@ -9,7 +9,6 @@
 #include <raylib.h>
 
 #include "chat_panel.h"
-#include "container_panel.h"
 #include "interaction_bubble.h"
 #include "hud_minimap_overlay.h"
 #include "inventory_bar.h"
@@ -19,36 +18,15 @@
 #include "modal_interact.h"
 #include "modal_notification.h"
 #include "quest_journal.h"
+#include "session_gate.h"
 #include "toolbar.h"
 #include "sim/game_state.h"
-#include "world/object_layers_management.h"
 
-#include <string.h>
-
-/* item_type_of resolves a carried item's type from the cached ObjectLayer, or "" when this
- * session has not read that layer yet — the same "unknown types pass through" the server applies. */
-static const char* item_type_of(const char* item_id) {
-    ObjectLayer* layer = lookup_cached_layer(item_id);
-    return (layer && layer->data.item.type[0] != '\0') ? layer->data.item.type : "";
-}
-
-/* storable mirrors the server's deposit rule: a stack that is not worn always goes, and a worn one
- * goes when the loadout survives without it. requireSkin keeps a skin on the player, so the last
- * active skin stays and a second one is free to be banked. */
-static bool storable(int slot) {
-    const ObjectLayerState* item = &g_local_player.inventory[slot];
-    if (!item->active) return true;
-    if (!g_game_state.equipment_rules.require_skin) return true;
-    if (0 != strcmp(item_type_of(item->item_id), "skin")) return true;
-    for (int i = 0; i < g_local_player.inventory_count; i++) {
-        const ObjectLayerState* other = &g_local_player.inventory[i];
-        if (i == slot || !other->active) continue;
-        if (0 == strcmp(item_type_of(other->item_id), "skin")) return true;
-    }
-    return false;
-}
 
 bool ui_dispatch_tap(int x, int y) {
+    /* An ended session takes every tap. */
+    if (session_gate_handle_click(x, y)) return true;
+
     /* Notification OK button has highest priority while visible. */
     if (modal_notification_handle_click(x, y)) return true;
 
@@ -61,21 +39,11 @@ bool ui_dispatch_tap(int x, int y) {
     /* Interaction and dialogue modals keep the bottom inventory companion
      * visible. Its toggle remains actionable. While the interact modal is up,
      * bar slots stay live too: tapping one stacks the inventory modal on top
-     * and returns to the interact session on close. A standalone dialogue
-     * keeps the slots read-only. */
+     * and returns to the interact session on close, and dragging one moves it,
+     * into an open container too. A standalone dialogue keeps the slots
+     * read-only. */
     if (modal_dialogue_is_open() || modal_interact_is_open()) {
         if (inventory_bar_handle_toggle_click(x, y)) return true;
-        /* A container tab open → a press on a bar slot lifts that stack into
-         * the grid's drag instead of arming the strip's scroll, which is what
-         * makes Inventory Bar → container grid a single gesture. A worn stack
-         * is taken off as it is banked, so long as the loadout survives
-         * without it. */
-        int drag_slot = inventory_bar_get_tapped_slot(x, y);
-        if (!inventory_bar_reordering() && 0 <= drag_slot && storable(drag_slot) &&
-            container_panel_accepts(drag_slot)) {
-            container_panel_drag_in(drag_slot);
-            return true;
-        }
         /* Arms the drag; the slot activates on release via ui_on_tick. The bar
          * is live for the interact modal and for an inventory-lore dialogue
          * (opened from the inventory modal) so a slot can switch the chain. */
@@ -125,6 +93,7 @@ bool ui_dispatch_tap(int x, int y) {
 }
 
 bool ui_dispatch_covers_point(int x, int y) {
+    if (session_gate_active()) return true;
     if (modal_instance_map_covers_point(x, y)) return true;
     if (modal_dialogue_is_open())   return true;
     if (modal_interact_is_open())   return true;
@@ -139,10 +108,8 @@ bool ui_dispatch_covers_point(int x, int y) {
     return false;
 }
 
-/* Escape leaves reorder mode, else closes the topmost open modal, innermost
- * first. */
+/* Escape closes the topmost open modal, innermost first. */
 static bool ui_dispatch_escape(void) {
-    if (inventory_bar_exit_reorder()) return true;
     if (modal_instance_map_is_open()) {
         modal_instance_map_close();
         return true;
@@ -183,6 +150,9 @@ static bool ui_consume_event(const input_event_t* e) {
         consumed = ui_dispatch_escape();
     }
 
+    if(!consumed && INPUT_ZOOM == e->type) {
+        if (inventory_bar_handle_wheel(e->wheel_delta)) { consumed = true; }
+    }
     if(!consumed && INPUT_ZOOM == e->type) {
         if (inventory_modal_handle_wheel(e->wheel_delta)) { consumed = true; }
     }

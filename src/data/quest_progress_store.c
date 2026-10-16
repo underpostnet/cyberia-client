@@ -9,10 +9,14 @@
 
 static QuestProgressEntry s_entries[QUEST_PROGRESS_STORE_CAP];
 static int        s_count = 0;
+static int        s_revision = 0;
 
 void quest_progress_store_reset(void) {
     s_count = 0;
+    s_revision++;
 }
+
+int quest_progress_store_revision(void) { return s_revision; }
 
 static QuestStatus quest_progress_store_parse_status(const char* status_str) {
     if (status_str) {
@@ -51,6 +55,7 @@ static QuestProgressEntry* upsert(const char* code, const char* status_str,
     copy_str(e->objectives,  QUEST_OBJECTIVES_MAX, objectives);
     e->status = quest_progress_store_parse_status(status_str);
     e->rewards_held = rewards_held;
+    s_revision++;
     return e;
 }
 

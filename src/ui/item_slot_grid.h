@@ -31,10 +31,8 @@
  *     which index would receive the drop and whether that would displace an
  *     occupant, so the grid can shift/highlight before the player commits.
  *   - Releasing over another cell emits a drop; releasing outside the grid
- *     emits an external drop with the release point, which the host maps to
+ *     emits a drop out with the release point, which the host maps to
  *     whatever container is there (the inventory bar).
- *   - An external container can hand a drag in through
- *     item_slot_grid_begin_external_drag, giving bi-directional transfer.
  *
  * Per-frame contract:
  *   item_slot_grid_update(g, dt);            // advance the gesture
@@ -59,15 +57,13 @@ typedef enum {
     ITEM_SLOT_GRID_EVENT_SWAP,
     /* Dropped outside the grid — the host decides what is under `point`. */
     ITEM_SLOT_GRID_EVENT_DROP_OUT,
-    /* An external drag was released over an open cell of this grid. */
-    ITEM_SLOT_GRID_EVENT_DROP_IN,
     /* A press that never became a drag. */
     ITEM_SLOT_GRID_EVENT_TAP,
 } ItemSlotGridEventType;
 
 typedef struct {
     ItemSlotGridEventType type;
-    int     from_index;  /* source cell; -1 for an external drag        */
+    int     from_index;  /* source cell                                  */
     int     to_index;    /* target cell; -1 when released outside       */
     Vector2 point;       /* release position, screen pixels             */
     ObjectLayerState payload; /* the dragged item                       */
@@ -94,8 +90,7 @@ typedef struct {
     /* Drag state. */
     bool    pressed;        /* pointer down inside a cell                */
     bool    dragging;       /* gesture passed the slop                   */
-    bool    external;       /* the drag originated outside this grid     */
-    int     drag_index;     /* source cell, -1 while external            */
+    int     drag_index;     /* source cell, -1 when the press hit no stack */
     Vector2 press_point;
     Vector2 pointer;
     ObjectLayerState drag_item;
@@ -133,11 +128,6 @@ void item_slot_grid_set_clip(ItemSlotGrid* g, Rectangle clip);
 
 /* Route a press. Returns true when it landed inside a visible cell. */
 bool item_slot_grid_handle_press(ItemSlotGrid* g, int mx, int my);
-
-/* Adopt a drag started by another container, so its item can be dropped into
- * a cell. `point` is the current pointer position. */
-void item_slot_grid_begin_external_drag(ItemSlotGrid* g, const ObjectLayerState* ols,
-                                        Vector2 point);
 
 /* Advance the gesture; emits at most one event per frame. */
 void item_slot_grid_update(ItemSlotGrid* g, float dt);

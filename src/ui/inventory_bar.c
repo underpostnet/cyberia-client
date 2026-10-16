@@ -11,15 +11,13 @@
  * not opened yet show the lock icon and the level that opens them. A tap on a
  * locked slot says so.
  *
- * The strip scrolls by a continuous pixel offset: press and slide left/right
- * (finger or mouse) moves it 1:1 and releases into an inertial glide. A press
- * only activates a slot when it never became a drag, so scrolling never opens
- * a modal — activation is deferred to release via inventory_bar_take_tap().
- *
- * Reorder mode lifts a stack onto another strip cell, or onto a cell of the
- * open container, and drops it through ui/stack_move: an empty cell takes it,
- * the same item stacks it, another stack trades places. A stack that lands
- * slides into its cell from where it came.
+ * A press on a stack, or on the coin slot, lifts it once the pointer travels:
+ * the release drops it on a strip cell or on a cell of the open container
+ * through ui/stack_move. A press elsewhere slides the strip 1:1 and releases
+ * into an inertial glide; the wheel scrolls it too. A press that never
+ * travelled is a tap, so a drag never opens a modal — activation is deferred
+ * to release via inventory_bar_take_tap(). A stack that lands slides into its
+ * cell from where it came.
  *
  * The coin slot is always the rightmost slot, pinned outside the scrollable
  * region.  Coins cannot be activated (non-activable), so they never get the
@@ -38,7 +36,6 @@
 #include "inventory_bar.h"
 #include "input/input.h"
 #include "modal_notification.h"
-#include "text.h"
 
 #include "fx/fx_shapes.h"
 #include "world/object_layer.h"
@@ -82,7 +79,6 @@
 static ObjectLayersManager* s_ol_manager = NULL;
 
 static UIToggle s_bar_toggle;
-static UIToggle s_order_toggle;          /* expanded = reorder mode */
 static bool     s_bar_toggle_init = false;
 
 /* A stack that lands in a cell slides in from where it came: the screen point
@@ -90,9 +86,10 @@ static bool     s_bar_toggle_init = false;
 static Vector2 s_settle_from[INVENTORY_LAYERS_MAX];
 static float   s_settle_age[INVENTORY_LAYERS_MAX];
 
-/* The stack held in reorder mode: its slot, or -1. */
-static int     s_lift_si = -1;
-static bool    s_lifting = false;        /* the press passed the slop */
+/* The stack a press landed on: its bag slot, the wallet for the coin slot. */
+static bool    s_lift_armed = false;
+static int     s_lift_slot  = 0;
+static bool    s_lifting    = false;     /* the press passed the slop */
 static Vector2 s_lift_press;
 
 /* Horizontal drag scroll: offset in px, plus gesture + inertia tracking. */
@@ -119,7 +116,6 @@ static const Color C_BAR_BG        = {  10,  10,  20, INV_BAR_ALPHA };
 static const Color C_COIN_BORDER   = { 230, 190,  60, 200 };  /* gold border for coin slot */
 static const Color C_COIN_QTY_TEXT = { 255, 215,   0, 255 };
 static const Color C_PREVIEW_BG    = {  18,  20,  32, 210 };
-static const Color C_REORDER       = { 235, 190,  70, 255 };
 static const Color C_DROP_FREE     = { 120, 200, 140, 255 };
 static const Color C_DROP_REFUSE   = { 210,  90,  80, 255 };
 
@@ -148,12 +144,6 @@ static Rectangle bar_toggle_anchor(int screen_h) {
     return (Rectangle){ x, y, size, size };
 }
 
-/* The reorder button sits right of the bag toggle. */
-static Rectangle order_toggle_anchor(void) {
-    Rectangle bag = s_bar_toggle.anchor;
-    return (Rectangle){ bag.x + bag.width + (float)bar_toggle_pad(), bag.y, bag.width, bag.height };
-}
-
 static void ensure_bar_toggle(void) {
     int screen_h = GetScreenHeight();
     if (!s_bar_toggle_init) {
@@ -162,21 +152,14 @@ static void ensure_bar_toggle(void) {
         s_bar_toggle.icon_collapsed = "bag";
         /* Drag the button in any direction to show or hide the bar. */
         ui_toggle_set_drag(&s_bar_toggle);
-        ui_toggle_init(&s_order_toggle, (Rectangle){ 0 }, false, UI_TOGGLE_CHEVRON_DOWN);
-        s_order_toggle.icon_expanded  = "check";
-        s_order_toggle.icon_collapsed = "grid";
-        s_order_toggle.ring_expanded  = C_REORDER;
         s_bar_toggle_init = true;
     }
     ui_toggle_set_anchor(&s_bar_toggle, bar_toggle_anchor(screen_h));
-    ui_toggle_set_anchor(&s_order_toggle, order_toggle_anchor());
 }
 
 static bool bar_slots_settled(void) {
     return s_bar_toggle.expanded && s_bar_toggle.anim_t >= 0.98f;
 }
-
-static bool order_toggle_shown(void) { return bar_slots_settled(); }
 
 /* coin_item_key returns a representative coin item ID from entity_defaults
  * (the world-drop pickup bot's default skin), or NULL. This is ONLY a
@@ -380,7 +363,7 @@ static void update_drag(float dt) {
     clamp_scroll();
 }
 
-/* ── Reorder mode ─────────────────────────────────────────────────────── */
+/* ── Lifted stacks ────────────────────────────────────────────────────── */
 
 /* Pixels per second the strip scrolls while a lifted stack waits at its edge. */
 #define INV_EDGE_SCROLL_PX 360.0f
@@ -416,16 +399,11 @@ static bool lift_target(Vector2 p, Box* box, int* slot) {
     return container_panel_cell_at((int)p.x, (int)p.y, box, slot);
 }
 
-static void set_reordering(bool on) {
-    s_order_toggle.expanded = on;
-    s_lift_si = -1;
-    s_lifting = false;
-}
-
 /* Carry a lifted stack and drop it on release. Off the strip, or where the
- * move is refused, the stack stays where it was. */
+ * move is refused, the stack stays where it was. A press that never travelled
+ * is a tap. */
 static void update_lift(float dt) {
-    if (0 > s_lift_si) return;
+    if (!s_lift_armed) return;
     Vector2 p = input_pointer_position();
     if (!s_lifting && INV_DRAG_SLOP_PX < hypotf(p.x - s_lift_press.x, p.y - s_lift_press.y)) s_lifting = true;
     if (s_lifting && p.y >= bar_top(GetScreenHeight())) {
@@ -437,21 +415,26 @@ static void update_lift(float dt) {
     if (input_pointer_down()) return;
     Box box = BOX_BAG;
     int to = 0;
-    if (s_lifting && lift_target(p, &box, &to)) stack_move_drop(BOX_BAG, s_lift_si, box, to, lift_ghost(p));
-    s_lift_si = -1;
+    if (!s_lifting) {
+        s_tap_pending = true;
+        s_tap_x = (int)s_lift_press.x;
+        s_tap_y = (int)s_lift_press.y;
+    } else if (lift_target(p, &box, &to)) {
+        stack_move_drop(BOX_BAG, s_lift_slot, box, to, lift_ghost(p));
+    }
+    s_lift_armed = false;
     s_lifting = false;
 }
 
 static void draw_lift(void) {
-    if (0 > s_lift_si || !s_lifting) return;
-    int lifted = local_player_bag_stack(s_lift_si);
-    if (0 > lifted) return;
-    const ObjectLayerState* stack = &g_local_player.inventory[lifted];
+    if (!s_lifting) return;
+    const ObjectLayerState* stack = container_ops_stack(BOX_BAG, s_lift_slot);
+    if (NULL == stack) return;
     Vector2 p = input_pointer_position();
     Box box = BOX_BAG;
     int to = 0;
-    if (lift_target(p, &box, &to) && !(BOX_BAG == box && to == s_lift_si)) {
-        bool lands = MOVE_REFUSED != container_ops_check(BOX_BAG, s_lift_si, box, to, stack->quantity);
+    if (lift_target(p, &box, &to) && !(BOX_BAG == box && to == s_lift_slot)) {
+        bool lands = MOVE_REFUSED != container_ops_check(BOX_BAG, s_lift_slot, box, to, stack->quantity);
         Rectangle cell = BOX_BAG == box ? slot_rect(to, bar_top(GetScreenHeight())) : container_panel_cell_rect(to);
         DrawRectangleLinesEx(cell, 3.0f, lands ? C_DROP_FREE : C_DROP_REFUSE);
     }
@@ -477,9 +460,9 @@ void inventory_bar_init(ObjectLayersManager* ol_manager) {
     s_dragging      = false;
     s_pointer_was_down = false;
     s_tap_pending   = false;
-    s_lift_si       = -1;
-    for (int i = 0; i < INVENTORY_LAYERS_MAX; i++) s_settle_age[i] = ITEM_SLOT_GRID_SETTLE_DUR;
+    s_lift_armed    = false;
     s_lifting       = false;
+    for (int i = 0; i < INVENTORY_LAYERS_MAX; i++) s_settle_age[i] = ITEM_SLOT_GRID_SETTLE_DUR;
     s_bar_toggle_init = false;
     ensure_bar_toggle();
     fx_inventory_bar_qty_init();
@@ -488,8 +471,6 @@ void inventory_bar_init(ObjectLayersManager* ol_manager) {
 void inventory_bar_update(float dt) {
     ensure_bar_toggle();
     ui_toggle_update(&s_bar_toggle, dt);
-    if (!s_bar_toggle.expanded && inventory_bar_reordering()) set_reordering(false);
-    ui_toggle_update(&s_order_toggle, dt);
     ensure_bar_toggle();
     fx_inventory_bar_qty_update(dt);
     for (int i = 0; i < INVENTORY_LAYERS_MAX; i++) {
@@ -515,18 +496,16 @@ Rectangle inventory_bar_toggle_bounds(void) {
 
 bool inventory_bar_handle_toggle_click(int mx, int my) {
     ensure_bar_toggle();
-    if (order_toggle_shown() && ui_toggle_handle_click(&s_order_toggle, mx, my)) {
-        set_reordering(s_order_toggle.expanded);
-        return true;
-    }
     return ui_toggle_handle_click(&s_bar_toggle, mx, my);
 }
 
-bool inventory_bar_reordering(void) { return s_order_toggle.expanded; }
-
-bool inventory_bar_exit_reorder(void) {
-    if (!inventory_bar_reordering()) return false;
-    set_reordering(false);
+bool inventory_bar_handle_wheel(float wheel_delta) {
+    ensure_bar_toggle();
+    Vector2 p = input_pointer_position();
+    if (!bar_slots_settled() || p.y < bar_top(GetScreenHeight())) return false;
+    s_scroll_px -= wheel_delta * (float)slot_pitch();
+    s_scroll_vel = 0.0f;
+    clamp_scroll();
     return true;
 }
 
@@ -537,8 +516,8 @@ void inventory_bar_draw(void) {
     float current_bar_top = bar_top(screen_h);
     /* Skill previews follow the bar top to the screen edge. */
     bool  shown    = 0.0f < s_bar_toggle.anim_t;
-    /* Stasis hides skill previews over modals; reorder mode hides them too. */
-    bool  previews = !local_player_in_stasis() && !inventory_bar_reordering();
+    /* Stasis hides skill previews over modals. */
+    bool  previews = !local_player_in_stasis();
     double now     = GetTime();
 
     if (shown) {
@@ -561,7 +540,7 @@ void inventory_bar_draw(void) {
         if (right <= r.x)          break;
 
         int inv_idx = shown_stack(si);
-        if (0 > inv_idx || (s_lifting && si == s_lift_si)) {
+        if (0 > inv_idx || (s_lifting && si == s_lift_slot)) {
             if (shown && si < open) item_slot_draw_empty(r);
             else if (shown)         item_slot_draw_locked(r, local_player_unlock_level(CYBERIA_INVENTORY_CAPACITY, si));
             continue;
@@ -577,7 +556,6 @@ void inventory_bar_draw(void) {
                               &ol, s_ol_manager, WHITE, 0.0f,
                               fx_inventory_bar_qty_slot_pulsing(ol.item_id, si));
             if (bar_slots_settled()) fx_inventory_bar_qty_draw(r, ol.item_id, si);
-            if (inventory_bar_reordering()) DrawRectangleLinesEx(r, 2.0f, C_REORDER);
         }
         if (previews) draw_skill_previews(r, &ol, current_bar_top, now);
     }
@@ -616,15 +594,6 @@ void inventory_bar_draw(void) {
 
     if (!bar_slots_settled()) fx_inventory_bar_qty_draw_bottom(s_bar_toggle.anchor);
     ui_toggle_draw(&s_bar_toggle);
-    if (order_toggle_shown()) {
-        Rectangle a = s_order_toggle.anchor;
-        if (inventory_bar_reordering()) {
-            int font = bar_qty_font() + 3;
-            text_draw_outlined("Drag stacks to reorder", (int)(a.x + a.width) + bar_toggle_pad(),
-                               (int)(a.y + (a.height - (float)font) * 0.5f), font, C_REORDER, BLACK, 1);
-        }
-        ui_toggle_draw(&s_order_toggle);
-    }
     draw_lift();
 }
 
@@ -639,8 +608,10 @@ bool inventory_bar_handle_click(int mx, int my, int* out_slot) {
     if (!s_bar_toggle.expanded) return s_bar_toggle.anim_t > 0.0f;
 
     int cell = strip_cell_at(mx, my);
-    if (inventory_bar_reordering() && 0 <= cell && 0 <= shown_stack(cell)) {
-        s_lift_si    = cell;
+    bool coin = ui_button_hit(coin_slot_rect(GetScreenWidth(), current_bar_top), mx, my) && 0 <= find_coin_slot();
+    if (coin || (0 <= cell && 0 <= shown_stack(cell))) {
+        s_lift_armed = true;
+        s_lift_slot  = coin ? BAG_WALLET_SLOT : cell;
         s_lifting    = false;
         s_lift_press = (Vector2){ (float)mx, (float)my };
         return true;
@@ -658,7 +629,6 @@ bool inventory_bar_handle_click(int mx, int my, int* out_slot) {
 bool inventory_bar_take_tap(int* out_slot) {
     if (!s_tap_pending) return false;
     s_tap_pending = false;
-    if (inventory_bar_reordering()) return false;
     int slot = inventory_bar_get_tapped_slot(s_tap_x, s_tap_y);
     if (out_slot) *out_slot = slot;
     int cell = strip_cell_at(s_tap_x, s_tap_y);
@@ -675,7 +645,6 @@ bool inventory_bar_take_tap(int* out_slot) {
 bool inventory_bar_point_covered(int mx, int my) {
     ensure_bar_toggle();
     if (ui_button_hit(s_bar_toggle.anchor, mx, my)) return true;
-    if (order_toggle_shown() && ui_button_hit(s_order_toggle.anchor, mx, my)) return true;
     if (s_bar_toggle.anim_t <= 0.0f) return false;
     return (float)my >= bar_top(GetScreenHeight()) && my < GetScreenHeight();
 }

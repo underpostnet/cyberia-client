@@ -14,11 +14,8 @@
  * reaches us from the URL and is interpolated into the websocket URL. */
 void instance_route_sanitize_code(char* code);
 
-/* Writes the websocket endpoint for `instance_code`. `runtime_origin` is the
- * injected window.CYBERIA_WS_ORIGIN; when empty, `fallback_endpoint` is the
- * compile-time full endpoint ("wss://host/ws") whose "/ws" suffix is dropped to
- * recover an origin. */
-void instance_route_ws_url(const char* runtime_origin, const char* fallback_endpoint,
-                           const char* instance_code, char* out, size_t out_size);
+/* Writes the websocket endpoint of `instance_code` on `origin`, the injected
+ * window.CYBERIA_WS_ORIGIN. */
+void instance_route_ws_url(const char* origin, const char* instance_code, char* out, size_t out_size);
 
 #endif // INSTANCE_ROUTE_H

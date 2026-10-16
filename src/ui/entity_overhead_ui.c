@@ -56,6 +56,7 @@ static const Color C_XP_BG       = {  0,   0,   0, 120 };
 /* Text. */
 static const Color C_NAME_TEXT   = {255, 255, 255, 255 };
 static const Color C_NAME_SHADOW = {  0,   0,   0, 200 };
+/* A player in a party the local player is not in. */
 
 /* Respawn countdown — yellow, marking player death. */
 static const Color C_RESPAWN_TEXT = {255, 220,  40, 255 };
@@ -168,11 +169,23 @@ static void draw_transport_bar(float cx, float top_y, float charge) {
                         (float)EOHUD_BAR_H);
 }
 
-static void draw_nameplate(const char *name, float cx, float top_y) {
+/* The name, led by the relation marks: a heart for a friend and the party icon
+ * for a member of the own party. */
+static void draw_nameplate(const char *name, uint8_t relation, float cx, float top_y) {
     if (!name || name[0] == '\0') return;
+    const char* marks[2];
+    int mark_n = 0;
+    if (relation & INTERACTION_FLAG_FRIEND)       marks[mark_n++] = "emoji-heart";
+    if (relation & INTERACTION_FLAG_PARTY_MEMBER) marks[mark_n++] = "users";
+    float marks_w = (float)mark_n * (EOHUD_MARK_SIZE + EOHUD_ITEM_GAP);
     int tw = MeasureText(name, EOHUD_NAME_FONT_SIZE);
-    draw_pill(cx, top_y, (float)tw, (float)EOHUD_BAR_H);
-    draw_centered_label(name, cx, top_y, EOHUD_NAME_FONT_SIZE, C_NAME_TEXT, C_NAME_SHADOW, (float)EOHUD_BAR_H);
+    Rectangle inner = draw_pill(cx, top_y, marks_w + (float)tw, (float)EOHUD_BAR_H);
+    float mark_cy = top_y + EOHUD_BAR_H * 0.5f;
+    float x = inner.x + EOHUD_MARK_SIZE * 0.5f;
+    for (int i = 0; i < mark_n; i++, x += EOHUD_MARK_SIZE + EOHUD_ITEM_GAP)
+        ui_icon_draw(marks[i], x, mark_cy, EOHUD_MARK_SIZE, false, 0.0f);
+    draw_centered_label(name, cx + marks_w * 0.5f, top_y, EOHUD_NAME_FONT_SIZE, C_NAME_TEXT, C_NAME_SHADOW,
+                        (float)EOHUD_BAR_H);
 }
 
 /* One icon-led item of the capability bar: `icon` then outlined `text`
@@ -262,7 +275,7 @@ void entity_overhead_ui_draw(
 
     if (p->show_name) {
         cursor_px -= EOHUD_BAR_H;
-        draw_nameplate(p->name, entity_cx_px, cursor_px);
+        draw_nameplate(p->name, p->relation, entity_cx_px, cursor_px);
         cursor_px -= EOHUD_ROW_GAP;
     }
 

@@ -9,17 +9,22 @@
 /* player_panel — the player tabs of modal_interact.
  *
  *   Profile  who a player is. Another player shows only public data from the
- *            snapshot, and only while it is in view, with the party actions
- *            the server allows. The own profile adds the private block: XP,
- *            the wallet, and the fill of the bag and the personal storage.
+ *            snapshot, and only while it is in view, with the party and
+ *            friend actions the server allows. The own profile adds the
+ *            private block: XP, the wallet, the fill of the bag and the
+ *            personal storage, and whether the state is saved.
  *   Party    the own party: the members, the invites that wait for an
  *            answer, and leave, remove and disband.
+ *   Friends  the friends of the account with their presence, the requests
+ *            that wait for an answer, and chat, accept, decline and remove.
  *
- * Every action is a request; the next snapshot shows its result. */
+ * Every action is a request; the next snapshot or friend list shows its
+ * result. */
 
 typedef enum {
     PLAYER_VIEW_PROFILE,
     PLAYER_VIEW_PARTY,
+    PLAYER_VIEW_FRIENDS,
     PLAYER_VIEW_COUNT,
 } PlayerView;
 

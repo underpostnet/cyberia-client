@@ -24,6 +24,8 @@
 #include "ui/item_slot_grid.h"
 #include "ui/modal_interact.h"
 #include "ui/modal_notification.h"
+#include "ui/session_gate.h"
+#include "game_client.h"
 #include "data/quest_progress_store.h"
 #include "ui/ui_state.h"
 #include "log.h"
@@ -355,7 +357,7 @@ static void read_stacks(const cJSON* array, Stacks* out) {
     }
 }
 
-/* The party and the invites that wait for the player's answer. */
+/* The party, the invites that wait for the player's answer and the invites it sent. */
 static void read_party(const cJSON* e) {
     Party* party = &g_local_player.party;
     memset(party, 0, sizeof *party);
@@ -383,6 +385,13 @@ static void read_party(const cJSON* e) {
         in->from_id    = serial_get_u32_default(row, "fromId", 0);
         in->expires_at = GetTime() + serial_get_int_default(row, "expiresInMs", 0) / 1000.0;
         serial_get_string(row, "fromName", in->from_name, sizeof in->from_name);
+    }
+    g_local_player.sent_invite_count = 0;
+    cJSON_ArrayForEach(row, serial_get_array(e, "partyInvitesSent")) {
+        if (CYBERIA_PARTY_INVITES_MAX <= g_local_player.sent_invite_count) break;
+        SentInvite* out = &g_local_player.sent_invites[g_local_player.sent_invite_count++];
+        out->to_id      = serial_get_u32_default(row, "toId", 0);
+        out->expires_at = GetTime() + serial_get_int_default(row, "expiresInMs", 0) / 1000.0;
     }
 }
 
@@ -439,6 +448,8 @@ static void unpack_self(const cJSON* e, cyberia_frame_t frame, cyberia_input_seq
     /* The running assembly; the bar ends when the server's timer ends. */
     const cJSON* craft = serial_get_object(e, "craft");
     g_local_player.crafting = NULL != craft;
+    g_local_player.held    = serial_get_int_default(e, "held", 0);
+    g_local_player.unsaved = serial_get_bool_default(e, "unsaved", false);
 
     g_local_player.interaction_count = 0;
     const cJSON* row = NULL;
@@ -617,7 +628,10 @@ static void json_unpack_init_data(const cJSON* payload) {
     // cellSize / interpolationMs / cameraZoom are NOT here; the cyberia-server
     // never sends presentation. They are hydrated by presentation_runtime
     // once the /api/v1/cyberia-client-hints fetch settles.
-    serial_get_string(payload, "playerId", g_local_player.player_id, sizeof g_local_player.player_id);
+    char session[16] = {0};
+    serial_get_string(payload, "session", session, sizeof(session));
+    g_local_player.account = 0 == strcmp(session, "account");
+    session_gate_set_account(g_local_player.account);
     g_game_state.max_level = serial_get_int_default(payload, "maxLevel", 0);
     g_game_state.grid_w = serial_get_int_default(payload, "gridW", 100);
     g_game_state.grid_h = serial_get_int_default(payload, "gridH", 100);
@@ -827,8 +841,14 @@ static const char* social_reason_text(const char* reason) {
         { "not_leader",   "Only the party leader can do that." },
         { "party_full",   "The party is full." },
         { "busy",         "That player has too many open invites." },
+        { "invites_full", "Too many of your invites wait for an answer." },
         { "expired",      "That invite is no longer open." },
         { "not_member",   "That player is not in your party." },
+        { "guest",        "Friends need a signed-in account." },
+        { "self",         "You cannot befriend yourself." },
+        { "exists",       "You are already friends, or a request waits." },
+        { "limit",        "The friend list is full." },
+        { "not_found",    "That request is no longer open." },
     };
     for (size_t i = 0; i < sizeof TEXTS / sizeof TEXTS[0]; i++) {
         if (0 == strcmp(reason, TEXTS[i].reason)) return TEXTS[i].text;
@@ -839,11 +859,13 @@ static const char* social_reason_text(const char* reason) {
 static void json_unpack_chat(const cJSON* payload) {
     EntityID from_id = serial_get_u32_default(payload, "fromId", 0);
     char name[PLAYER_NAME_BYTES] = {0};
+    char skin[MAX_ITEM_ID_LENGTH] = {0};
     char text[CHAT_LINE_BYTES] = {0};
     serial_get_string(payload, "fromName", name, sizeof(name));
+    serial_get_string(payload, "fromSkin", skin, sizeof(skin));
     serial_get_string(payload, "text", text, sizeof(text));
     if (0 == from_id || '\0' == text[0]) return;
-    chat_log_push(chat_conversation_of(payload, from_id), from_id, name, text,
+    chat_log_push(chat_conversation_of(payload, from_id), from_id, name, skin, text,
                   from_id == g_local_player.id);
 }
 
@@ -861,6 +883,59 @@ static void json_unpack_party_ack(const cJSON* payload) {
     char reason[32] = {0};
     serial_get_string(payload, "reason", reason, sizeof(reason));
     modal_notification_show("Party", social_reason_text(reason), (Color){ 230, 170, 110, 255 });
+}
+
+/* A refused friend action. */
+static void json_unpack_friend_ack(const cJSON* payload) {
+    if (serial_get_bool_default(payload, "ok", false)) return;
+    char reason[32] = {0};
+    serial_get_string(payload, "reason", reason, sizeof(reason));
+    modal_notification_show("Friends", social_reason_text(reason), (Color){ 230, 170, 110, 255 });
+}
+
+/* The whole friend list of the account, after each change. */
+static void json_unpack_friends(const cJSON* payload) {
+    static const char* const STATUS_WORDS[] = { [FRIEND_ACCEPTED] = "friend", [FRIEND_INCOMING] = "incoming",
+                                                [FRIEND_OUTGOING] = "outgoing" };
+    g_local_player.friend_count = 0;
+    const cJSON* row = NULL;
+    cJSON_ArrayForEach(row, serial_get_array(payload, "friends")) {
+        if (FRIENDS_LIST_MAX <= g_local_player.friend_count) break;
+        char word[16] = {0};
+        serial_get_string(row, "status", word, sizeof(word));
+        int status = -1;
+        for (int s = FRIEND_ACCEPTED; FRIEND_OUTGOING >= s; s++) {
+            if (0 == strcmp(word, STATUS_WORDS[s])) status = s;
+        }
+        if (0 > status) continue;
+        Friend* f = &g_local_player.friends[g_local_player.friend_count];
+        memset(f, 0, sizeof *f);
+        f->status = (FriendStatus)status;
+        serial_get_string(row, "id", f->id, sizeof f->id);
+        serial_get_string(row, "name", f->name, sizeof f->name);
+        serial_get_string(row, "skin", f->skin, sizeof f->skin);
+        serial_get_string(row, "world", f->world, sizeof f->world);
+        serial_get_string(row, "mapCode", f->map_code, sizeof f->map_code);
+        f->online     = serial_get_bool_default(row, "online", false);
+        f->entity_id  = serial_get_u32_default(row, "entityId", 0);
+        f->expires_at = GetTime() + serial_get_int_default(row, "expiresInMs", 0) / 1000.0;
+        g_local_player.friend_count++;
+    }
+}
+
+/* The server ended the session, or refused to start it. */
+static void json_unpack_session_end(const cJSON* payload) {
+    char reason[32] = {0};
+    serial_get_string(payload, "reason", reason, sizeof(reason));
+    LOG_INFO("[SESSION] ended: %s", reason);
+    game_client_on_session_end(reason);
+}
+
+/* The next resume ticket of the account session. */
+static void json_unpack_resume(const cJSON* payload) {
+    char ticket[64] = {0};
+    serial_get_string(payload, "ticket", ticket, sizeof(ticket));
+    if ('\0' != ticket[0]) game_client_hold_resume(ticket);
 }
 
 /* shop_ack is the server verdict on a shop purchase. An accepted purchase needs
@@ -925,6 +1000,10 @@ void message_receive(const uint8_t* data, size_t len) {
     else if (0 == strcmp(type, "chat"))            json_unpack_chat(payload);
     else if (0 == strcmp(type, "chat_ack"))        json_unpack_chat_ack(payload);
     else if (0 == strcmp(type, "party_ack"))       json_unpack_party_ack(payload);
+    else if (0 == strcmp(type, "friend_ack"))      json_unpack_friend_ack(payload);
+    else if (0 == strcmp(type, "friends"))         json_unpack_friends(payload);
+    else if (0 == strcmp(type, "session_end"))     json_unpack_session_end(payload);
+    else if (0 == strcmp(type, "resume"))          json_unpack_resume(payload);
     else if (0 == strcmp(type, "dialog_ack"))      json_unpack_dialog_ack(payload);
     else if (0 == strcmp(type, "shop_ack"))        json_unpack_shop_ack(payload);
     else LOG_ERROR("[MESSAGE] unknown type '%s'\n", type);

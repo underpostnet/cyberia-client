@@ -13,14 +13,11 @@
  * Display and intent only: the bar sends the tap to the server and never
  * changes state locally.
  *
- * A press-and-slide scrolls the strip 1:1 and releases into an inertial
- * glide. A press that never became a drag taps the slot below it, so
- * scrolling never opens a modal.
- *
- * Each strip cell is a bag slot of the server, so a stack stays where it
- * was dropped, and a stack that moves slides into its cell. Reorder mode, from
- * the button beside the bag toggle, makes a drag move a stack to another cell,
- * or to a cell of the open container. Nothing activates while it is on. */
+ * Each strip cell is a bag slot of the server, so a stack stays where it was
+ * dropped. A drag from a stack moves it to another cell, or to a cell of the
+ * open container, and it slides into its cell. A drag elsewhere on the strip,
+ * or the wheel, scrolls it. A press that never travelled taps the slot below
+ * it, so a drag never opens a modal. */
 
 /* The layout metrics live in inventory_bar.c — only the bar itself lays them
  * out. Ask `inventory_bar_visible_height` for the height on screen. */
@@ -53,9 +50,14 @@ Rectangle inventory_bar_toggle_bounds(void);
 bool inventory_bar_handle_toggle_click(int mx, int my);
 
 /* Handle a press on the bar or its persistent toggle. Returns true when the UI
- * consumed it. A press on the strip arms the horizontal drag, so `out_slot` is
- * always -1 — slot activation arrives later through inventory_bar_take_tap. */
+ * consumed it. A press on a stack arms its drag, and anywhere else on the
+ * strip the scroll, so `out_slot` is always -1 — slot activation arrives later
+ * through inventory_bar_take_tap. */
 bool inventory_bar_handle_click(int mx, int my, int* out_slot);
+
+/* Scroll the strip by the wheel while the pointer is over the bar. True when
+ * the bar took the wheel. */
+bool inventory_bar_handle_wheel(float wheel_delta);
 
 /* One-shot: the deferred slot activation from a clean (drag-less) release.
  * `out_slot` receives a full_inventory index, or -1 when the tap hit no slot. */
@@ -80,11 +82,6 @@ Vector2 inventory_bar_cell_center(int slot);
 
 /* Slide the stack of bag slot `slot` in from `origin`, a screen rect. */
 void inventory_bar_animate_from(int slot, Rectangle origin);
-
-bool inventory_bar_reordering(void);
-
-/* Leave reorder mode. True when it was on. */
-bool inventory_bar_exit_reorder(void);
 
 /* Slot rectangle where an item would land after an inventory gain. */
 bool inventory_bar_predicted_item_slot_rect(const char* item_id, Rectangle* out);

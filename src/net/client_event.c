@@ -48,11 +48,16 @@ static cJSON* pack_event(const client_event_t* e) {
     case CLIENT_EVENT_CRAFT_CANCEL:    return json_pack_craft_cancel();
     case CLIENT_EVENT_ITEM_MOVE:       return json_pack_item_move(BOX_WORDS[p->from], p->from_slot, BOX_WORDS[p->to],
                                                                   p->to_slot, p->quantity, p->entity_id);
-    case CLIENT_EVENT_PARTY_INVITE:    return json_pack_party_target("party_invite", "toId", p->entity_id);
+    case CLIENT_EVENT_PARTY_INVITE:    return json_pack_player_target("party_invite", "toId", p->entity_id);
     case CLIENT_EVENT_PARTY_REPLY:     return json_pack_party_reply(p->entity_id, p->active);
-    case CLIENT_EVENT_PARTY_LEAVE:     return json_pack_party_target("party_leave", NULL, 0);
-    case CLIENT_EVENT_PARTY_KICK:      return json_pack_party_target("party_kick", "toId", p->entity_id);
-    case CLIENT_EVENT_PARTY_DISBAND:   return json_pack_party_target("party_disband", NULL, 0);
+    case CLIENT_EVENT_PARTY_LEAVE:     return json_pack_player_target("party_leave", NULL, 0);
+    case CLIENT_EVENT_PARTY_KICK:      return json_pack_player_target("party_kick", "toId", p->entity_id);
+    case CLIENT_EVENT_PARTY_DISBAND:   return json_pack_player_target("party_disband", NULL, 0);
+    case CLIENT_EVENT_FRIENDS_LIST:    return json_pack_player_target("friends_list", NULL, 0);
+    case CLIENT_EVENT_FRIEND_REQUEST:  return json_pack_player_target("friend_request", "toId", p->entity_id);
+    case CLIENT_EVENT_FRIEND_REPLY:    return json_pack_friendship("friend_reply", p->code, p->active);
+    case CLIENT_EVENT_FRIEND_REMOVE:   return json_pack_friendship("friend_remove", p->code, false);
+    case CLIENT_EVENT_SESSION_LEAVE:   return json_pack_player_target("session_leave", NULL, 0);
     }
     assert(false && "unknown client event kind");
     return NULL;

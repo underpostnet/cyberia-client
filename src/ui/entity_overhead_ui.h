@@ -35,6 +35,7 @@
 
 #define EOHUD_PRESENCE_SIZE     28      /* presence icon, topmost */
 #define EOHUD_CAP_ICON_SIZE     20      /* capability-row icons */
+#define EOHUD_MARK_SIZE         14      /* relation marks in the nameplate */
 
 #define EOHUD_NAME_FONT_SIZE    13
 #define EOHUD_HP_LABEL_FONT_SIZE 12
@@ -80,6 +81,10 @@ typedef struct {
     /* Per-player capability bitmask (INTERACTION_FLAG_*), 0 for non-bots.
      * Each set bit adds its icon to the capability bar. */
     uint8_t interaction_flags;
+
+    /* Another player's relation to the local player: INTERACTION_FLAG_FRIEND
+     * and INTERACTION_FLAG_PARTY_MEMBER. Each marks the nameplate. */
+    uint8_t relation;
 
     /* Remaining respawn seconds; 0 hides the row. The caller sets this for
      * the self-player only, so no client shows another player's countdown. */

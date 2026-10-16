@@ -44,4 +44,8 @@ static inline int cyberia_capacity_unlock_level(CyberiaCapacityRule rule, int sl
 #define CYBERIA_PARTY_MAX_MEMBERS 5
 #define CYBERIA_PARTY_INVITES_MAX 5
 #define CYBERIA_CHAT_TEXT_MAX_RUNES 160
+#define CYBERIA_FRIENDS_MAX 200
+#define CYBERIA_FRIEND_REQUESTS_MAX 20
+#define CYBERIA_CHAT_EMOJI_COUNT 8
+static const char* const CYBERIA_CHAT_EMOJI[CYBERIA_CHAT_EMOJI_COUNT] = {"smile", "laugh", "wink", "cool", "sad", "angry", "heart", "thumbsup"};
 #endif

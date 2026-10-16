@@ -9,11 +9,11 @@
 #include <stdio.h>
 #include <string.h>
 
-static void expect_url(const char* runtime_origin, const char* code, const char* want) {
+static void expect_url(const char* origin, const char* code, const char* want) {
     char got[512] = {0};
-    instance_route_ws_url(runtime_origin, "ws://localhost:8081/ws", code, got, sizeof(got));
+    instance_route_ws_url(origin, code, got, sizeof(got));
     if (0 != strcmp(got, want)) {
-        printf("ws url for origin=%s code=%s: got %s, want %s\n", runtime_origin, code, got, want);
+        printf("ws url for origin=%s code=%s: got %s, want %s\n", origin, code, got, want);
         assert(false);
     }
 }
@@ -29,15 +29,10 @@ static void expect_code(const char* raw, const char* want) {
 }
 
 int main(void) {
-    expect_url("ws://localhost:8081", "", "ws://localhost:8081/ws");
-    expect_url("ws://localhost:8081", "TEST", "ws://localhost:8081/TEST/ws");
-    expect_url("ws://localhost:8081", "FOREST", "ws://localhost:8081/FOREST/ws");
+    expect_url("ws://localhost:8083", "", "ws://localhost:8083/ws");
+    expect_url("ws://localhost:8083", "TEST", "ws://localhost:8083/TEST/ws");
+    expect_url("ws://localhost:8083", NULL, "ws://localhost:8083/ws");
     expect_url("wss://server.cyberiaonline.com", "FOREST", "wss://server.cyberiaonline.com/FOREST/ws");
-
-    /* No injected origin: the compile-time endpoint degrades to its origin. */
-    expect_url("", "", "ws://localhost:8081/ws");
-    expect_url("", "TEST", "ws://localhost:8081/TEST/ws");
-    expect_url(NULL, "TEST", "ws://localhost:8081/TEST/ws");
 
     expect_code("TEST", "TEST");
     expect_code("my-world_2", "my-world_2");

@@ -17,6 +17,8 @@
 #define MAX_ID_LENGTH       64
 #define MAX_BEHAVIOR_LENGTH 32
 #define PLAYER_NAME_BYTES   32
+/* A profile image or a friendship: a MongoDB id of 24 hex digits, and the NUL. */
+#define RECORD_ID_BYTES     25
 
 /* The id of an entity on the server, on the wire and here. 0 is no entity. */
 typedef uint32_t EntityID;
@@ -133,9 +135,13 @@ typedef struct {
  * overhead icon. */
 #define INTERACTION_FLAG_LOOT_ELIGIBLE (1u << 2)
 /* Other players only, per viewing player: the local player may invite this
- * player to its party now, or its invite to this player waits for an answer. */
+ * player to its party now. */
 #define INTERACTION_FLAG_PARTY_INVITE  (1u << 3)
-#define INTERACTION_FLAG_PARTY_INVITED (1u << 4)
+/* Other players only: a member of the local player's party, a player in a
+ * party the local player is not in, and an accepted friend. */
+#define INTERACTION_FLAG_PARTY_MEMBER  (1u << 5)
+#define INTERACTION_FLAG_GROUPED       (1u << 6)
+#define INTERACTION_FLAG_FRIEND        (1u << 7)
 #define STATUS_ICON_NONE              0
 #define STATUS_ICON_PASSIVE           1
 #define STATUS_ICON_HOSTILE           2

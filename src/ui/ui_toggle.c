@@ -189,7 +189,7 @@ void ui_toggle_draw(const UIToggle* t) {
      * When icon_expanded / icon_collapsed are set they override the chevron
      * glyph — used by the interaction column and inventory bar to show
      * close-yellow / stack / bag icons instead of arrows. One ring marks the
-     * hover, or the expanded state when ring_expanded is set. */
+     * hover. */
     const char* icon = NULL;
     if (t->expanded && t->icon_expanded) {
         icon = t->icon_expanded;
@@ -205,9 +205,7 @@ void ui_toggle_draw(const UIToggle* t) {
     cx += t->drag_offset.x;
     cy += t->drag_offset.y;
     ui_icon_draw(icon, cx, cy, (int)(sz * 0.75f * t->icon_scale + 0.5f), false, 0.0f);
-    bool marked = t->expanded && 0 < t->ring_expanded.a;
-    if (marked || CheckCollisionPointRec(GetMousePosition(), t->anchor))
-        ui_button_draw_ring(t->anchor, marked ? t->ring_expanded : WHITE);
+    if (CheckCollisionPointRec(GetMousePosition(), t->anchor)) ui_button_draw_ring(t->anchor, WHITE);
 }
 
 bool ui_toggle_handle_click(UIToggle* t, int mx, int my) {

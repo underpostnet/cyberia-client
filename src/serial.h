@@ -11,7 +11,7 @@
  * Every message uses the envelope {"type": <name>, "payload": { ... }},
  * both directions. The socket layer only moves the bytes.
  *
- *   cJSON* j = json_pack_handshake("cyberia-mmo", "1.0.0");
+ *   cJSON* j = json_pack_auth(ticket);
  *   RawPack p = serial_pack(j);          // takes ownership of j
  *   socket_send(&ws, p.data, p.len);
  *   free(p.data);
@@ -32,7 +32,8 @@ cJSON* serial_unpack(const uint8_t* data, size_t len);
 
 /* ── Message packers — client to server ─────────────────────────────── */
 
-cJSON* json_pack_handshake(const char* client_name, const char* version);
+/* The first message of a connection: the launch ticket, or none for a guest. */
+cJSON* json_pack_auth(const char* ticket);
 
 /* The one input message: a batch of client events. Takes ownership of the
  * events array. Each entry is a {type, payload} envelope from a packer below,
@@ -77,10 +78,14 @@ cJSON* json_pack_craft_cancel(void);
 cJSON* json_pack_item_move(const char* from, int from_slot, const char* to, int to_slot, int qty,
                            uint32_t entity_id);
 
-/* A party request of type `type`. `key` names the player field (toId), or is
- * NULL for a request that names none. */
-cJSON* json_pack_party_target(const char* type, const char* key, uint32_t player_id);
+/* A party or friend request of type `type`. `key` names the player field
+ * (toId), or is NULL for a request that names none. */
+cJSON* json_pack_player_target(const char* type, const char* key, uint32_t player_id);
 cJSON* json_pack_party_reply(uint32_t from_id, bool accept);
+
+/* An answer to a friend request (friend_reply) or the end of a friendship
+ * (friend_remove), by friendship id. */
+cJSON* json_pack_friendship(const char* type, const char* friendship_id, bool accept);
 
 /* ── Read helpers ───────────────────────────────────────────────────── */
 

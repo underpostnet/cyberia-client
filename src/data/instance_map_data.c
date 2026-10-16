@@ -1,8 +1,8 @@
 #include "instance_map_data.h"
 
-#include "sim/local_player.h"
 #include "sim/game_state.h"
 #include "engine_client.h"
+#include "quest_progress_store.h"
 #include "log.h"
 #include "utils.h"
 
@@ -13,14 +13,13 @@
 #include <stdlib.h>
 #include <string.h>
 
-#define IMAP_POLL_INTERVAL_S 1.0f
-
 static ImapGraph     s_graph;
 static ImapDataState s_state       = IMAP_DATA_IDLE;
 static bool          s_open        = false;
 static int           s_generation  = 0;
-static float         s_poll_timer  = 0.0f;
-static bool          s_poll_inflight = false;
+/* The quest store revision and the graph the active marks were made for. */
+static int           s_marked_revision   = -1;
+static int           s_marked_generation = -1;
 
 /* Session guard: bumped on every open/close so responses that complete after
  * a close (or across a reopen) are recognised as stale and dropped. */
@@ -100,6 +99,23 @@ static void refresh_node_capability_counts(void) {
     }
 }
 
+/* The providers one POI lists under `key`, with the codes each one links. */
+static void parse_providers(const cJSON* poi_doc, const char* key, const char* links_key, int poi,
+                            ImapProvider* out, int* count) {
+    const cJSON* row = NULL;
+    cJSON_ArrayForEach(row, cJSON_GetObjectItemCaseSensitive(poi_doc, key)) {
+        if (IMAP_MAX_PROVIDERS <= *count) return;
+        ImapProvider* p = &out[(*count)++];
+        *p = (ImapProvider){ .poi = poi, .standalone = cJSON_IsTrue(cJSON_GetObjectItemCaseSensitive(row, "standalone")) };
+        copy_str(p->code, IMAP_CODE_MAX, json_str(row, "code"));
+        const cJSON* link = NULL;
+        cJSON_ArrayForEach(link, cJSON_GetObjectItemCaseSensitive(row, links_key)) {
+            if (IMAP_MAX_LINKS <= p->link_count || !cJSON_IsString(link)) break;
+            copy_str(p->links[p->link_count++], IMAP_CODE_MAX, link->valuestring);
+        }
+    }
+}
+
 static void parse_presence_pois(const cJSON* doc) {
     const cJSON* pois = cJSON_GetObjectItemCaseSensitive(doc, "presencePois");
     if (!cJSON_IsArray(pois)) return;
@@ -121,6 +137,10 @@ static void parse_presence_pois(const cJSON* doc) {
         }
         poi->presence_status = presence;
         poi->capabilities |= parse_capabilities(poi_doc);
+        parse_providers(poi_doc, "quests", "prerequisiteCodes", (int)(poi - s_graph.presence_pois),
+                        s_graph.quests, &s_graph.quest_count);
+        parse_providers(poi_doc, "actions", "questCodes", (int)(poi - s_graph.presence_pois),
+                        s_graph.actions, &s_graph.action_count);
     }
     refresh_node_capability_counts();
 }
@@ -189,7 +209,6 @@ static void on_static_fetched(const FetchResponse* r) {
     if (doc && parse_static_doc(doc)) {
         s_state = IMAP_DATA_READY;
         s_generation++;
-        s_poll_timer = IMAP_POLL_INTERVAL_S; /* first dynamic poll immediately */
     } else {
         s_state = IMAP_DATA_ERROR;
         LOG_WARN("instance map static parse failed");
@@ -198,70 +217,50 @@ static void on_static_fetched(const FetchResponse* r) {
     fetch_data_release(r->data);
 }
 
-/* ── Dynamic payload ────────────────────────────────────────────────────── */
+/* ── Active marks ───────────────────────────────────────────────────────── */
 
-static void clear_dynamic_capabilities(void) {
+static bool quest_running(const char* code) {
+    const QuestProgressEntry* e = quest_progress_store_find(code);
+    return NULL != e && QUEST_ACTIVE == e->status;
+}
+
+/* A quest the player runs, or may accept: not completed, and every
+ * prerequisite completed. */
+static bool quest_actionable(const char* code) {
+    if (quest_running(code)) return true;
+    if (quest_progress_store_is_completed(code)) return false;
+    for (int q = 0; q < s_graph.quest_count; ++q) {
+        const ImapProvider* p = &s_graph.quests[q];
+        if (0 != strcmp(p->code, code)) continue;
+        for (int i = 0; i < p->link_count; ++i)
+            if (!quest_progress_store_is_completed(p->links[i])) return false;
+        return true;
+    }
+    return false;
+}
+
+static void mark_active_pois(void) {
     for (int i = 0; i < s_graph.presence_poi_count; ++i) {
-        s_graph.presence_pois[i].action_active = false;
         s_graph.presence_pois[i].quest_active = false;
+        s_graph.presence_pois[i].action_active = false;
     }
-}
-
-static void apply_dynamic_capabilities(const cJSON* doc, const char* key, bool quest) {
-    const cJSON* arr = cJSON_GetObjectItemCaseSensitive(doc, key);
-    if (!cJSON_IsArray(arr)) return;
-    const cJSON* p = NULL;
-    cJSON_ArrayForEach(p, arr) {
-        int node = instance_map_data_find_node(json_str(p, "mapCode"));
-        int cell_x = json_int(p, "cellX", -1);
-        int cell_y = json_int(p, "cellY", -1);
-        ImapPresencePoi* poi = find_presence_poi(node, cell_x, cell_y);
-        if (NULL == poi) continue;
-        if (quest && (poi->capabilities & IMAP_CAPABILITY_QUEST)) {
-            poi->quest_active = true;
-        } else if (!quest && (poi->capabilities & IMAP_CAPABILITY_ACTION)) {
-            poi->action_active = true;
-        }
+    for (int q = 0; q < s_graph.quest_count; ++q) {
+        if (quest_actionable(s_graph.quests[q].code))
+            s_graph.presence_pois[s_graph.quests[q].poi].quest_active = true;
     }
-}
-
-static void on_dynamic_fetched(const FetchResponse* r) {
-    if (!s_open || atoi(r->asset_id + strlen("imap-dyn-")) != s_session) {
-        s_poll_inflight = false;
-        fetch_data_release(r->data);
-        return;
+    for (int a = 0; a < s_graph.action_count; ++a) {
+        const ImapProvider* p = &s_graph.actions[a];
+        bool active = p->standalone;
+        for (int i = 0; !active && i < p->link_count; ++i) active = quest_actionable(p->links[i]);
+        if (active) s_graph.presence_pois[p->poi].action_active = true;
     }
-    s_poll_inflight = false;
-    if (!r->success) { fetch_data_release(r->data); return; }
-
-    cJSON* root = cJSON_ParseWithLength((const char*)r->data, r->size);
-    const cJSON* doc = envelope_success_doc(root);
-    if (doc && IMAP_DATA_READY == s_state) {
-        clear_dynamic_capabilities();
-        apply_dynamic_capabilities(doc, "questProviders", true);
-        apply_dynamic_capabilities(doc, "actionProviders", false);
-    }
-    cJSON_Delete(root);
-    fetch_data_release(r->data);
-}
-
-static void start_dynamic_poll(void) {
-    char asset_id[48];
-    snprintf(asset_id, sizeof(asset_id), "imap-dyn-%d", s_session);
-    char url[512];
-    snprintf(url, sizeof(url), ENGINE_API_BASE "/cyberia-instance/instance-map/%s/dynamic?playerId=%s",
-             g_game_state.instance_code, g_local_player.player_id);
-    s_poll_inflight = true;
-    fetch_request_start(asset_id, url, on_dynamic_fetched);
 }
 
 /* ── Lifecycle ──────────────────────────────────────────────────────────── */
 
 void instance_map_data_open(void) {
     s_session++;
-    s_open       = true;
-    s_poll_timer = 0.0f;
-    s_poll_inflight = false;
+    s_open = true;
 
     if ('\0' == g_game_state.instance_code[0]) {
         s_state = IMAP_DATA_ERROR;
@@ -280,18 +279,17 @@ void instance_map_data_open(void) {
 
 void instance_map_data_close(void) {
     s_session++;          /* invalidates every in-flight response */
-    s_open        = false;
-    s_state       = IMAP_DATA_IDLE;
-    s_poll_inflight = false;
+    s_open  = false;
+    s_state = IMAP_DATA_IDLE;
 }
 
 void instance_map_data_update(float dt) {
+    (void)dt;
     if (!s_open || IMAP_DATA_READY != s_state) return;
-    s_poll_timer += dt;
-    if (s_poll_timer >= IMAP_POLL_INTERVAL_S && !s_poll_inflight) {
-        s_poll_timer = 0.0f;
-        start_dynamic_poll();
-    }
+    if (s_marked_revision == quest_progress_store_revision() && s_marked_generation == s_generation) return;
+    s_marked_revision = quest_progress_store_revision();
+    s_marked_generation = s_generation;
+    mark_active_pois();
 }
 
 ImapDataState    instance_map_data_state(void) { return s_state; }

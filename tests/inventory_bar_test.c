@@ -114,6 +114,10 @@ bool stack_move_drop(Box from, int from_slot, Box to, int to_slot, Rectangle ori
     return true;
 }
 MoveKind container_ops_check(Box from, int from_slot, Box to, int to_slot, int qty) { return MOVE_PLACE; }
+const ObjectLayerState* container_ops_stack(Box box, int slot) {
+    int at = BAG_WALLET_SLOT == slot ? find_coin_slot() : local_player_bag_stack(slot);
+    return 0 <= at ? &g_local_player.inventory[at] : NULL;
+}
 void fx_shape_cooldown_bar(Rectangle r, float elapsed) {
     cooldown = r;
     cooldown_charge = elapsed;
@@ -175,48 +179,44 @@ static void test_cells_are_bag_slots(void) {
     assert(inventory_bar_predicted_item_slot_rect("gem", &landing) && landing.x == cell(1).x);
 }
 
-/* Reorder mode drops a lifted stack on the cell under the release, of the bar
- * or of the open container, and activates nothing. It ends with Escape and
- * with the bar. */
-static void test_reorder_mode(void) {
-    g_local_player.inventory_count = 2;
+/* A press on a stack taps it, and a drag moves it to the cell under the
+ * release, of the bar or of the open container. A drag from an empty cell, or
+ * the wheel over the bar, scrolls the strip instead. */
+static void test_stacks_drag_and_tap(void) {
+    g_local_player.inventory_count = 3;
     carry(0, "skin", 0);
     carry(1, "pistol", 3);
-    Rectangle order = s_order_toggle.anchor;
-    assert(!inventory_bar_reordering());
-    assert(inventory_bar_handle_toggle_click((int)(order.x + 1.0f), (int)(order.y + 1.0f)));
-    assert(inventory_bar_reordering());
+    carry(2, "coin", BAG_WALLET_SLOT);
 
     int tapped = -1;
     press(cell(3));
-    assert(!inventory_bar_take_tap(&tapped) && -2 == dropped_from);
+    assert(inventory_bar_take_tap(&tapped) && 1 == tapped && -2 == dropped_from);
 
     drag(cell(3), cell(5));
     assert(3 == dropped_from && 5 == dropped_to && BOX_BAG == dropped_box);
+    assert(!inventory_bar_take_tap(&tapped));
     dropped_from = -2;
     drag(cell(0), (Rectangle){ 300.0f, 100.0f, 10.0f, 10.0f });
     assert(-2 == dropped_from);
 
-    /* With a container open, a lifted stack drops on its cells too. */
+    float scrolled = s_scroll_px;
+    drag(cell(2), cell(0));
+    assert(-2 == dropped_from && s_scroll_px > scrolled);
+    s_scroll_px = s_scroll_vel = 0.0f;
+
+    /* With a container open, a stack and the coins drop on its cells. */
     panel_open = true;
     drag(cell(0), (Rectangle){ 250.0f, 40.0f, 10.0f, 10.0f });
     assert(0 == dropped_from && BOX_STORAGE == dropped_box && 2 == dropped_to);
+    drag(coin_slot_rect(800, bar_top(600)), (Rectangle){ 150.0f, 40.0f, 10.0f, 10.0f });
+    assert(BAG_WALLET_SLOT == dropped_from && 1 == dropped_to);
     panel_open = false;
 
-    /* A container drop reaches the bar in reorder mode as well. */
-    int slot = 0;
-    Rectangle free = center_of(cell(4));
-    assert(inventory_bar_cell_at((int)free.x, (int)free.y, &slot) && 4 == slot);
-
-    assert(inventory_bar_exit_reorder() && !inventory_bar_exit_reorder());
-    press(cell(3));
-    assert(inventory_bar_take_tap(&tapped) && 1 == tapped);
-
-    s_order_toggle.expanded = true;
-    s_bar_toggle.expanded = false;
-    inventory_bar_update(0.05f);
-    assert(!inventory_bar_reordering());
-    s_bar_toggle.expanded = true;
+    mouse = (Vector2){ 300.0f, 580.0f };
+    assert(inventory_bar_handle_wheel(-1.0f) && (float)slot_pitch() == s_scroll_px);
+    mouse = (Vector2){ 300.0f, 100.0f };
+    assert(!inventory_bar_handle_wheel(-1.0f));
+    s_scroll_px = 0.0f;
 }
 
 static void draw_at(float animation) {
@@ -290,7 +290,7 @@ int main(void) {
     s_bar_toggle.anim_t = 1.0f;
     s_bar_toggle.expanded = true;
     test_cells_are_bag_slots();
-    test_reorder_mode();
+    test_stacks_drag_and_tap();
 
     puts("inventory_bar_test OK");
     return 0;

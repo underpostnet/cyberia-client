@@ -2,10 +2,11 @@
 #define CYBERIA_UI_TEXT_H
 
 /* Main UI font, configured through client hints (RENDER_DEFAULTS.fontFamily +
- * fontFactorSize). The TTF is fetched async from /assets/fonts/<fontFamily> and,
- * once loaded, becomes the default font for every DrawText / MeasureText call via
- * the shims below; raylib's built-in font is used until then. fontFactorSize
- * scales every text size uniformly.
+ * fontFactorSize). It starts as the font bundled with the client, so the boot
+ * screens and every text before the hints share it. A hint naming another family
+ * fetches /assets/fonts/<fontFamily>, which then becomes the default font for every
+ * DrawText / MeasureText call via the shims below. fontFactorSize scales every
+ * text size uniformly.
  *
  * raylib.h is included first so the DrawText / MeasureText macro overrides are
  * defined only AFTER raylib's own declarations — inclusion order in consumers is
@@ -14,8 +15,9 @@
 #include <raylib.h>
 #include <stdbool.h>
 
-void  text_font_init(void);    /* after InitWindow: seed defaults (built-in font) */
+void  text_font_init(void);    /* after InitWindow: load the bundled font */
 bool  text_font_settled(void);
+Font  text_font(void);         /* the active font, for text drawn at explicit sizes */
 void  text_font_sync(void);    /* per frame: kick the async fetch once hints name a font */
 
 /* DrawText / MeasureText routed through the active font + size factor, mirroring

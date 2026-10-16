@@ -1,4 +1,6 @@
 #include "chat_pane.h"
+#include "emoji.h"
+#include "identity_icon.h"
 #include "modal.h"
 #include "text.h"
 
@@ -39,6 +41,7 @@ typedef struct {
     Rectangle input;
     Rectangle send;
     Rectangle presets[CHAT_PRESET_COUNT];
+    Rectangle emoji[CYBERIA_CHAT_EMOJI_COUNT];
 } ChatLayout;
 
 /* The pane that shows the one DOM input, and where. */
@@ -48,26 +51,32 @@ static Rectangle s_input_rect;
 static inline int   chat_font(void)  { return viewport_is_mobile() ? 12 : 14; }
 static inline float chat_row_h(void) { return viewport_is_mobile() ? 30.0f : 34.0f; }
 
-/* Presets wrap along the bottom edge, the input row sits above them, and the
- * history takes the rest. */
+/* Places one quick-send button of width `w` in the wrapping flow. */
+static Rectangle flow(Rectangle content, float w, float row_h, float* x, float* y) {
+    if (w > content.width) w = content.width;
+    if (0.0f < *x && *x + w > content.width) {
+        *x = 0.0f;
+        *y += row_h + CHAT_GAP;
+    }
+    Rectangle r = { content.x + *x, *y, w, row_h };
+    *x += w + CHAT_GAP;
+    return r;
+}
+
+/* Presets and emoji wrap along the bottom edge, the input row sits above
+ * them, and the history takes the rest. */
 static ChatLayout chat_layout(Rectangle content) {
     ChatLayout l = { 0 };
     int   font  = chat_font();
     float row_h = chat_row_h();
     float x = 0.0f;
     float y = 0.0f;
-    for (int i = 0; CHAT_PRESET_COUNT > i; i++) {
-        float w = (float)MeasureText(CHAT_PRESETS[i], font) + 2.0f * UI_BUTTON_DEFAULT_PAD;
-        if (w > content.width) w = content.width;
-        if (0.0f < x && x + w > content.width) {
-            x = 0.0f;
-            y += row_h + CHAT_GAP;
-        }
-        l.presets[i] = (Rectangle){ content.x + x, y, w, row_h };
-        x += w + CHAT_GAP;
-    }
+    for (int i = 0; CHAT_PRESET_COUNT > i; i++)
+        l.presets[i] = flow(content, (float)MeasureText(CHAT_PRESETS[i], font) + 2.0f * UI_BUTTON_DEFAULT_PAD, row_h, &x, &y);
+    for (int i = 0; CYBERIA_CHAT_EMOJI_COUNT > i; i++) l.emoji[i] = flow(content, row_h, row_h, &x, &y);
     float presets_y = content.y + content.height - (y + row_h);
     for (int i = 0; CHAT_PRESET_COUNT > i; i++) l.presets[i].y += presets_y;
+    for (int i = 0; CYBERIA_CHAT_EMOJI_COUNT > i; i++) l.emoji[i].y += presets_y;
 
     float input_y = presets_y - CHAT_GAP - row_h;
     l.send  = (Rectangle){ content.x + content.width - CHAT_SEND_W, input_y, CHAT_SEND_W, row_h };
@@ -175,13 +184,18 @@ void chat_pane_draw(ChatPane* pane, Rectangle content) {
      * wrapped heights if a long history shows up in a profile. */
     for (int i = CHAT_DRAW_MAX < count ? count - CHAT_DRAW_MAX : 0; count > i; i++) {
         const ChatLine* m = &h->lines[i];
-        if (0 != m->from_id) {
-            DrawText(m->mine ? "You" : m->from_name, (int)l.list.x, (int)y, font,
-                     m->mine ? C_MINE : C_THEIRS);
-            y += (float)text_line_height(font);
+        if (0 == m->from_id) {
+            y += (float)text_wrap(m->text, (int)l.list.x, (int)y, (int)l.list.width, font, C_SYSTEM, false, true) +
+                 CHAT_GAP;
+            continue;
         }
-        y += (float)text_wrap(m->text, (int)l.list.x, (int)y, (int)l.list.width, font,
-                              0 == m->from_id ? C_SYSTEM : MODAL_TEXT, false, true) + CHAT_GAP;
+        float face = (float)text_line_height(font);
+        identity_icon_draw(m->from_skin, (Rectangle){ l.list.x, y, face, face });
+        DrawText(m->mine ? "You" : m->from_name, (int)(l.list.x + face + CHAT_GAP), (int)y, font,
+                 m->mine ? C_MINE : C_THEIRS);
+        y += face;
+        y += (float)emoji_text_wrap(m->text, (int)l.list.x, (int)y, (int)l.list.width, font, MODAL_TEXT, true) +
+             CHAT_GAP;
     }
     pane->content_h = y - top;
     ui_scroll_end(&pane->scroll);
@@ -205,6 +219,12 @@ void chat_pane_draw(ChatPane* pane, Rectangle content) {
         };
         ui_button_pixel_retro_draw(l.presets[i], &preset, ui_button_hit(l.presets[i], mx, my));
     }
+    for (int i = 0; CYBERIA_CHAT_EMOJI_COUNT > i; i++) {
+        char icon[40];
+        snprintf(icon, sizeof(icon), "emoji-%s", CYBERIA_CHAT_EMOJI[i]);
+        UIButtonPixelRetroStyle emoji = { .bg = C_BTN, .icon_id = icon, .enabled = true };
+        ui_button_pixel_retro_draw(l.emoji[i], &emoji, ui_button_hit(l.emoji[i], mx, my));
+    }
 }
 
 void chat_pane_press(ChatPane* pane, Rectangle content, int mx, int my) {
@@ -217,6 +237,14 @@ void chat_pane_press(ChatPane* pane, Rectangle content, int mx, int my) {
     for (int i = 0; CHAT_PRESET_COUNT > i; i++) {
         if (ui_button_hit(l.presets[i], mx, my)) {
             send_line(pane, CHAT_PRESETS[i]);
+            return;
+        }
+    }
+    for (int i = 0; CYBERIA_CHAT_EMOJI_COUNT > i; i++) {
+        if (ui_button_hit(l.emoji[i], mx, my)) {
+            char token[40];
+            snprintf(token, sizeof(token), ":%s:", CYBERIA_CHAT_EMOJI[i]);
+            send_line(pane, token);
             return;
         }
     }

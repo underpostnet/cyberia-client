@@ -8,11 +8,15 @@
 #include "modal_instance_map.h"
 #include "modal_interact.h"
 #include "modal_map.h"
+#include "player_panel.h"
 #include "quest_journal.h"
+#include "session_gate.h"
+#include "text.h"
 #include "ui_button.h"
 #include "ui_icon.h"
 
 #include "js/fullscreen_bridge.h"
+#include "sim/local_player.h"
 
 #include <math.h>
 #include <raylib.h>
@@ -35,8 +39,9 @@ static float slide_eased(void) {
 float toolbar_height(void)   { return TOOLBAR_H * (1.0f - slide_eased()); }
 float toolbar_offset_y(void) { return -TOOLBAR_H * slide_eased(); }
 
-/* Buttons of the toggle row: audio, chat, quest, map, fullscreen. */
-#define TOOLBAR_TOGGLE_COUNT 5
+/* Buttons of the toggle row: session, audio, social, chat, quest, map,
+ * fullscreen. */
+#define TOOLBAR_TOGGLE_COUNT 7
 
 /* Toggle row, right-aligned: index 0 is the rightmost button (fullscreen).
  * All ride the strip's slide. */
@@ -136,6 +141,30 @@ static void toggle_expanded_instance_map(void) {
     modal_instance_map_toggle();
 }
 
+/* Social news waits on the own profile: friend requests first, then party
+ * invites. */
+static void open_social(void) {
+    close_interact_inventory_chain();
+    bool invites_only = 0 == local_player_incoming_requests() && 0 < g_local_player.invite_count;
+    modal_interact_open_own(invites_only ? PLAYER_VIEW_PARTY : PLAYER_VIEW_FRIENDS);
+}
+
+/* While the engine does not take the state of an account player, a notice
+ * under the strip says so: trades wait, and gains made meanwhile are lost if
+ * the world restarts before it takes them. */
+static void draw_unsaved_notice(int screen_width) {
+    if (!g_local_player.unsaved) return;
+    const char* text = "Progress is not being saved. Trades wait; new gains can be lost.";
+    const int font = 14;
+    float w = (float)MeasureText(text, font) + 40.0f;
+    Rectangle r = { ((float)screen_width - w) * 0.5f, toolbar_height() + 6.0f, w, 26.0f };
+    DrawRectangleRec(r, (Color){ 110, 40, 30, 230 });
+    DrawRectangleLinesEx(r, 1.0f, BLACK);
+    ui_icon_draw("cloud", r.x + 14.0f, r.y + r.height * 0.5f, 16, false, 0.0f);
+    text_draw_outlined(text, (int)(r.x + 28.0f), (int)(r.y + (r.height - (float)font) * 0.5f), font, RAYWHITE,
+                       BLACK, 1);
+}
+
 void toolbar_draw(int screen_width) {
     /* Advance the slide (draw runs once per frame). */
     float dt = GetFrameTime();
@@ -159,11 +188,15 @@ void toolbar_draw(int screen_width) {
         draw_btn(btn_rect(2), "quest", quest_journal_is_visible(), mp);
         draw_btn(btn_rect(3), "chat", chat_panel_is_visible(), mp);
         draw_badge(btn_rect(3), chat_panel_unread());
+        draw_btn(btn_rect(4), "users", false, mp);
+        draw_badge(btn_rect(4), local_player_incoming_requests() + g_local_player.invite_count);
         /* The icon shows the state, not the action: muted audio reads as muted. */
-        draw_btn(btn_rect(4), muted ? "audio-mute" : "audio", muted, mp);
+        draw_btn(btn_rect(5), muted ? "audio-mute" : "audio", muted, mp);
+        draw_btn(btn_rect(6), "bars", session_gate_active(), mp);
     }
 
     draw_btn(toggle_rect(), s_hidden ? "cyberia-white-0" : "cyberia-yellow-1", false, mp);
+    draw_unsaved_notice(screen_width);
 }
 
 bool toolbar_handle_click(int mx, int my) {
@@ -177,7 +210,9 @@ bool toolbar_handle_click(int mx, int my) {
         toggle_minimap();
         return true;
     }
-    if (ui_button_hit(btn_rect(4), mx, my)) { audio_toggle_mute(); return true; }
+    if (ui_button_hit(btn_rect(5), mx, my)) { audio_toggle_mute(); return true; }
+    if (ui_button_hit(btn_rect(4), mx, my)) { open_social(); return true; }
+    if (ui_button_hit(btn_rect(6), mx, my)) { session_gate_menu(); return true; }
     if (ui_button_hit(btn_rect(3), mx, my)) {
         toggle_chat_panel();
         return true;

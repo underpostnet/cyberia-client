@@ -117,7 +117,6 @@ bool item_slot_grid_handle_press(ItemSlotGrid* g, int mx, int my) {
 
     g->pressed = true;
     g->dragging = false;
-    g->external = false;
     g->press_point = (Vector2){ (float)mx, (float)my };
     g->pointer = g->press_point;
     /* Only a filled cell can start a drag; an empty one still reports a tap. */
@@ -126,21 +125,9 @@ bool item_slot_grid_handle_press(ItemSlotGrid* g, int mx, int my) {
     return true;
 }
 
-void item_slot_grid_begin_external_drag(ItemSlotGrid* g, const ObjectLayerState* ols,
-                                        Vector2 point) {
-    if (!g || !ols || '\0' == ols->item_id[0]) return;
-    g->pressed = true;
-    g->dragging = true;
-    g->external = true;
-    g->drag_index = -1;
-    g->drag_item = *ols;
-    g->press_point = point;
-    g->pointer = point;
-}
-
 static void emit(ItemSlotGrid* g, ItemSlotGridEventType type, int to_index) {
     g->pending.type = type;
-    g->pending.from_index = g->external ? -1 : g->drag_index;
+    g->pending.from_index = g->drag_index;
     g->pending.to_index = to_index;
     g->pending.point = g->pointer;
     g->pending.payload = g->drag_item;
@@ -149,7 +136,6 @@ static void emit(ItemSlotGrid* g, ItemSlotGridEventType type, int to_index) {
 static void end_gesture(ItemSlotGrid* g) {
     g->pressed = false;
     g->dragging = false;
-    g->external = false;
     g->drag_index = -1;
     g->hover_index = -1;
     memset(&g->drag_item, 0, sizeof(g->drag_item));
@@ -206,12 +192,8 @@ void item_slot_grid_update(ItemSlotGrid* g, float dt) {
         return_dragged_item(g);
     } else if (target < 0) {
         /* Outside the grid — the host resolves what container is there. */
-        if (!g->external) {
-            if (grid_point_in_visible_bounds(g, g->pointer)) return_dragged_item(g);
-            else                                             emit(g, ITEM_SLOT_GRID_EVENT_DROP_OUT, -1);
-        }
-    } else if (g->external) {
-        emit(g, ITEM_SLOT_GRID_EVENT_DROP_IN, target);
+        if (grid_point_in_visible_bounds(g, g->pointer)) return_dragged_item(g);
+        else                                             emit(g, ITEM_SLOT_GRID_EVENT_DROP_OUT, -1);
     } else if (target != g->drag_index) {
         emit(g, '\0' != g->cells[target].item_id[0] ? ITEM_SLOT_GRID_EVENT_SWAP
                                                     : ITEM_SLOT_GRID_EVENT_MOVE,
@@ -252,7 +234,7 @@ void item_slot_grid_draw(const ItemSlotGrid* g, ObjectLayersManager* mgr) {
 
     for (int i = 0; i < g->capacity; i++) {
         Rectangle cell = item_slot_grid_cell_rect(g, i);
-        bool source = g->dragging && !g->external && i == g->drag_index;
+        bool source = g->dragging && i == g->drag_index;
         bool hovered = g->dragging && i == g->hover_index;
         bool settling = '\0' != g->cells[i].item_id[0] &&
                         ITEM_SLOT_GRID_SETTLE_DUR > g->settle_age[i];
@@ -268,19 +250,16 @@ void item_slot_grid_draw(const ItemSlotGrid* g, ObjectLayersManager* mgr) {
         }
 
         /* Preview: green marks a free landing, amber a stack or a swap, red a
-         * refused drop, so the outcome reads before the player commits. An
-         * item from another container never displaces a different one. */
+         * locked cell, so the outcome reads before the player commits. */
         if (hovered) {
             bool occupied = '\0' != g->cells[i].item_id[0] && !source;
-            bool same = 0 == strcmp(g->cells[i].item_id, g->drag_item.item_id);
-            bool refused = g->locked[i] || (occupied && g->external && !same);
-            DrawRectangleLinesEx(cell, 3.0f, refused ? GRID_HOVER_REFUSE : occupied ? GRID_HOVER_JOIN : GRID_HOVER_FREE);
+            DrawRectangleLinesEx(cell, 3.0f, g->locked[i] ? GRID_HOVER_REFUSE : occupied ? GRID_HOVER_JOIN : GRID_HOVER_FREE);
         }
     }
 
     /* Draw moving occupants above settled cells so later indices cannot cover them. */
     for (int i = 0; i < g->capacity; i++) {
-        bool source = g->dragging && !g->external && i == g->drag_index;
+        bool source = g->dragging && i == g->drag_index;
         if (source || '\0' == g->cells[i].item_id[0] ||
             ITEM_SLOT_GRID_SETTLE_DUR <= g->settle_age[i]) continue;
         Rectangle cell = item_slot_grid_cell_rect(g, i);

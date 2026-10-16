@@ -47,13 +47,18 @@ typedef enum {
     CLIENT_EVENT_PARTY_LEAVE,
     CLIENT_EVENT_PARTY_KICK,
     CLIENT_EVENT_PARTY_DISBAND,
+    CLIENT_EVENT_FRIENDS_LIST,
+    CLIENT_EVENT_FRIEND_REQUEST,
+    CLIENT_EVENT_FRIEND_REPLY,
+    CLIENT_EVENT_FRIEND_REMOVE,
+    CLIENT_EVENT_SESSION_LEAVE,
 } client_event_kind_t;
 
 /* Who one chat line reaches; packs to the wire word. */
 typedef enum {
     CHAT_CHANNEL_WORLD,    /* every player on this server */
     CHAT_CHANNEL_PARTY,    /* the members of the party */
-    CHAT_CHANNEL_DIRECT,   /* one player on the map */
+    CHAT_CHANNEL_DIRECT,   /* one player on the map, or a friend on this server */
     CHAT_CHANNEL_COUNT,
 } chat_channel_t;
 
@@ -68,13 +73,13 @@ typedef enum {
  * reads only its own fields. */
 typedef struct {
     float  target_x, target_y;                 /* player_action */
-    EntityID entity_id;                        /* also chat to_id, party player */
+    EntityID entity_id;                        /* also chat to_id, party and friend player */
     char   item_id[CLIENT_EVENT_ID_BYTES];     /* also quest_code */
-    char   code[CLIENT_EVENT_ID_BYTES];        /* dialog_code */
+    char   code[CLIENT_EVENT_ID_BYTES];        /* dialog_code, friendship id */
     chat_channel_t channel;                    /* chat */
     char   text[CHAT_LINE_BYTES];              /* chat */
     int    quantity, recipe_index;             /* quantity: also the units of item_move */
-    bool   active;                             /* also player_stasis, party_reply accept */
+    bool   active;                             /* also player_stasis, party and friend reply accept */
     int    slot;                               /* item_active: the bag slot of the stack */
     Box    from, to;                           /* item_move */
     int    from_slot, to_slot;

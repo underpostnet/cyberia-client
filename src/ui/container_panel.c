@@ -159,9 +159,6 @@ static void handle(const ItemSlotGridEvent* ev) {
             if (!stack_move_drop(s_panel.box, ev->from_index, s_panel.box, ev->to_index, release_rect(ev)))
                 slide_back(ev);
             return;
-        case ITEM_SLOT_GRID_EVENT_DROP_IN:
-            stack_move_drop(BOX_BAG, ev->payload.slot, s_panel.box, ev->to_index, release_rect(ev));
-            return;
         case ITEM_SLOT_GRID_EVENT_DROP_OUT: drop_out(ev); return;
         case ITEM_SLOT_GRID_EVENT_TAP:      tap(ev->to_index); return;
         case ITEM_SLOT_GRID_EVENT_NONE:     return;
@@ -203,8 +200,9 @@ float container_panel_draw(Rectangle content) {
         snprintf(used, sizeof(used), "%d / %d slots used", g_local_player.storage.count,
                  local_player_open_slots(CYBERIA_STORAGE_CAPACITY));
         hint_line(used, grid, top, MODAL_TEXT);
-        hint_line("Drag to and from your bag. Storage empties when you leave.", grid,
-                  top + (float)text_line_height(font), MODAL_LABEL);
+        hint_line(g_local_player.account ? "Drag to and from your bag. Storage stays with your account."
+                                         : "Drag to and from your bag. Storage empties when you leave.",
+                  grid, top + (float)text_line_height(font), MODAL_LABEL);
     } else {
         hint_line("Drag between the vault and your inventory bar", grid, top, MODAL_LABEL);
     }
@@ -246,26 +244,13 @@ bool container_panel_wheel(Rectangle content, float wheel_delta) {
     return s_panel.open && ui_scroll_on_wheel(&s_panel.scroll, content, s_panel.content_h, wheel_delta);
 }
 
-bool container_panel_accepts(int inv_idx) {
-    if (!s_panel.open || item_slot_grid_is_dragging(&s_panel.grid)) return false;
-    if (inv_idx < 0 || inv_idx >= g_local_player.inventory_count) return false;
-    /* The wallet stays with the player. */
-    return BOX_STORAGE != s_panel.box || !local_player_is_coin(g_local_player.inventory[inv_idx].item_id);
-}
-
-void container_panel_drag_in(int inv_idx) {
-    if (!container_panel_accepts(inv_idx)) return;
-    item_slot_grid_begin_external_drag(&s_panel.grid, &g_local_player.inventory[inv_idx], GetMousePosition());
-}
-
 /* A cell dragged from the grid marks the bar cell under it: green where it
  * lands, red where it does not. */
 void container_panel_draw_drag(void) {
     if (!s_panel.open) return;
     int slot = 0;
     const ItemSlotGrid* g = &s_panel.grid;
-    if (item_slot_grid_is_dragging(g) && !g->external &&
-        inventory_bar_cell_at((int)g->pointer.x, (int)g->pointer.y, &slot)) {
+    if (item_slot_grid_is_dragging(g) && inventory_bar_cell_at((int)g->pointer.x, (int)g->pointer.y, &slot)) {
         MoveKind kind = container_ops_check(s_panel.box, g->drag_index, BOX_BAG, slot, g->drag_item.quantity);
         DrawRectangleLinesEx(inventory_bar_cell_rect(slot), 3.0f, MOVE_REFUSED == kind ? C_BLOCK : C_ACCEPT);
     }

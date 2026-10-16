@@ -24,7 +24,6 @@
 #include "world/world_types.h"
 #include "modal_interact.h"
 #include "toolbar.h"
-#include "chat_log.h"
 #include "inventory_bar.h"
 #include "inventory_modal.h"
 #include "modal.h"
@@ -479,34 +478,12 @@ void interaction_bubble_update(void) {
     }
 }
 
-/* Aggregate unread badge on the collapsed toggle — every register, every
- * target. Per-target chat previews render only while the column is open,
- * so this counter is the sole unread indicator while it is collapsed. */
-static void draw_collapsed_total_badge(void) {
-    if (s_col_toggle.expanded) return;
-    int total = chat_log_unread_direct() + g_local_player.invite_count;
-    if (0 >= total) return;
-
-    Rectangle a  = s_col_toggle.anchor;
-    int   fs = 11;
-    float br = 9.0f;
-    float cx = a.x + a.width;
-    float cy = a.y + 4.0f;
-    DrawCircle((int)cx, (int)cy, br, (Color){ 210, 60, 60, 245 });
-    char buf[8];
-    snprintf(buf, sizeof(buf), "%d", total > 99 ? 99 : total);
-    int tw = MeasureText(buf, fs);
-    DrawText(buf, (int)(cx - tw * 0.5f), (int)(cy - fs * 0.5f), fs,
-             (Color){ 255, 255, 255, 245 });
-}
-
 void interaction_bubble_draw(void) {
     column_ensure_toggle();
     /* Keep drawing until the slide offset settles off screen so collapsing
      * plays the same slide the expand does, instead of vanishing on the tap. */
     if (column_hidden() || s_slot_count <= 0) {
         ui_toggle_draw(&s_col_toggle);
-        draw_collapsed_total_badge();
         return;
     }
 
@@ -628,88 +605,19 @@ void interaction_bubble_draw(void) {
             }
         }
 
-        /* Party marker: a member of the own party, or a pending invite. The
-         * own bubble counts the invites that wait for the player; another
-         * bubble marks the player who sent one. Either bounces until answered. */
-        int invites = is_self ? g_local_player.invite_count : 0;
+        /* Party marker: a member of the own party, or the player whose invite
+         * waits; the invite bounces until answered. */
         bool invited_by = !is_self && NULL != local_player_invite_from(slot->entity_id);
         bool member = !is_self && NULL != local_player_party_member(slot->entity_id);
-        if (member || invited_by || 0 < invites) {
+        if (member || invited_by) {
             char phase_key[12];
             snprintf(phase_key, sizeof phase_key, "p%u", slot->entity_id);
-            float ix = r.x + r.width - 10.0f;
-            float iy = r.y + 10.0f;
-            ui_icon_draw("users", ix, iy, 16, invited_by || 0 < invites, ui_icon_phase(phase_key));
-            if (0 < invites) {
-                char count[8];
-                snprintf(count, sizeof count, "%d", invites);
-                DrawCircle((int)(ix + 8.0f), (int)(iy - 6.0f), 7.0f, (Color){ 210, 60, 60, 245 });
-                DrawText(count, (int)(ix + 8.0f - (float)MeasureText(count, 10) * 0.5f), (int)(iy - 11.0f), 10, WHITE);
-            }
+            ui_icon_draw("users", r.x + r.width - 10.0f, r.y + 10.0f, 16, invited_by, ui_icon_phase(phase_key));
         }
 
-        /* Last chat message — informational bubble below the name, prefixed
-         * with a red badge of the target's total notification count. Shown
-         * only while there are unread notifications; reading the chat (Chat
-         * button) clears the count and hides this. Never intercepts taps. */
-        const ChatHistory* ne = chat_log_get(chat_direct(slot->entity_id));
-        const ChatLine* last = NULL;
-        for (int k = NULL != ne ? ne->count - 1 : -1; 0 <= k && NULL == last; k--) {
-            if (!ne->lines[k].mine && 0 != ne->lines[k].from_id) last = &ne->lines[k];
-        }
-        int notif = chat_log_unread(chat_direct(slot->entity_id));
-        if (notif > 0 && NULL != last && '\0' != last->text[0]) {
-            int mfs = 11;
-            char buf[48];
-            copy_str(buf, sizeof(buf), last->text);
-            if (strlen(last->text) > sizeof(buf) - 1) {
-                int dot = text_utf8_floor(buf, (int)sizeof(buf) - 3);
-                buf[dot] = '.';
-                buf[dot + 1] = '.';
-                buf[dot + 2] = '\0';
-            }
-            /* Fade in on arrival for a subtle "new message" pop. */
-            double age  = GetTime() * 1000.0 - last->ts_ms;
-            float  fade = age < 220.0 ? (float)(age / 220.0) : 1.0f;
-
-            int count   = notif;
-            int padx    = 6, pady = 4;
-            int br      = count > 0 ? (int)(mfs * 0.72f) : 0;
-            int badge_w = count > 0 ? br * 2 + 5 : 0;
-            int tw      = MeasureText(buf, mfs);
-
-            float bubx = (float)np_x - padx;
-            float buby = (float)(np_y + np_fs + 5);
-            float bubw = (float)(padx * 2 + badge_w + tw);
-            float bubh = (float)(mfs + pady * 2);
-            Rectangle bub = { bubx, buby, bubw, bubh };
-            /* Grow the slide reach to this chat bubble's overhang. */
-            float reach = (bubx + bubw + 8.0f) - r.x;
-            if (reach > s_col_reach) s_col_reach = reach;
-            DrawRectangleRounded(bub, 0.5f, 6, (Color){ 18, 22, 38, (unsigned char)(225 * fade) });
-            DrawRectangleRoundedLinesEx(bub, 0.5f, 6, 1.0f,
-                                        (Color){ border.r, border.g, border.b,
-                                                 (unsigned char)(150 * fade) });
-
-            if (count > 0) {
-                float bcx = bubx + padx + br;
-                float bcy = buby + bubh * 0.5f;
-                DrawCircle((int)bcx, (int)bcy, (float)br, (Color){ 210, 60, 60, (unsigned char)(245 * fade) });
-                char cbuf[8];
-                snprintf(cbuf, sizeof(cbuf), "%d", count > 99 ? 99 : count);
-                int cfs = mfs - 1;
-                int ctw = MeasureText(cbuf, cfs);
-                DrawText(cbuf, (int)(bcx - ctw * 0.5f), (int)(bcy - cfs * 0.5f), cfs,
-                         (Color){ 255, 255, 255, (unsigned char)(245 * fade) });
-            }
-
-            DrawText(buf, (int)(bubx + padx + badge_w), (int)(buby + pady), mfs,
-                     (Color){ 210, 220, 240, (unsigned char)(245 * fade) });
-        }
     }
     ui_scroll_end(&s_col_scroll);
     ui_toggle_draw(&s_col_toggle);
-    draw_collapsed_total_badge();
 }
 
 static bool open_slot_at(int mx, int my) {

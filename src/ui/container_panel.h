@@ -40,13 +40,6 @@ float container_panel_draw(Rectangle content);
 bool container_panel_press(Rectangle content, int mx, int my);
 bool container_panel_wheel(Rectangle content, float wheel_delta);
 
-/* True when inventory slot inv_idx can be dragged into the open grid. */
-bool container_panel_accepts(int inv_idx);
-
-/* Lift inventory slot inv_idx into the grid's drag, so Inventory Bar → grid
- * is one gesture. */
-void container_panel_drag_in(int inv_idx);
-
 /* The dragged item, drawn after the inventory bar so it rides above it. */
 void container_panel_draw_drag(void);
 

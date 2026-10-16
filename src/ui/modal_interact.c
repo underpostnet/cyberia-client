@@ -2,7 +2,7 @@
 #include "text.h"
 
 #include "data/action_cache.h"
-#include "chat_pane.h"
+#include "chat_panel.h"
 #include "config.h"
 #include "data/dialogue_data.h"
 #include "fx/fx_grant_delivery.h"
@@ -11,7 +11,6 @@
 #include "view/viewport.h"
 #include "sim/game_state.h"
 #include "world/world_types.h"
-#include "chat_log.h"
 #include "container_panel.h"
 #include "interaction_bubble.h"
 #include "inventory_bar.h"
@@ -47,16 +46,26 @@
 
 /* ── Tabs ─────────────────────────────────────────────────────────────── */
 
-/* Chat and Integration are panes: the bottom bar opens them, not the strip.
- * Storage is the NPC vault; Own storage is the personal storage. */
+/* Integration is a pane: the bottom bar opens it, not the strip. Storage is
+ * the NPC vault; Own storage is the personal storage. */
 enum { MI_TAB_STACK = 0, MI_TAB_STATS, MI_TAB_QUEST, MI_TAB_SHOP, MI_TAB_CRAFT,
-       MI_TAB_STORAGE, MI_TAB_PROFILE, MI_TAB_OWN_STORAGE, MI_TAB_PARTY,
-       MI_TAB_CHAT, MI_TAB_INTEGRATION, MI_TAB_COUNT };
+       MI_TAB_STORAGE, MI_TAB_PROFILE, MI_TAB_OWN_STORAGE, MI_TAB_PARTY, MI_TAB_FRIENDS,
+       MI_TAB_INTEGRATION, MI_TAB_COUNT };
 
 static const char* MI_TAB_ICON[MI_TAB_COUNT]  = { "stack", "stats", "quest", "home-red", "engine", "grid",
-                                                  "character", "bag", "users", "chat", "reload" };
+                                                  "character", "bag", "users", "emoji-heart", "reload" };
 static const char* MI_TAB_LABEL[MI_TAB_COUNT] = { "Stack", "Stats", "Quest", "Shop", "Assembly", "Storage",
-                                                  "Profile", "Storage", "Party", "Chat", "Integration" };
+                                                  "Profile", "Storage", "Party", "Friends", "Integration" };
+
+/* The player view a tab shows, or -1 for a tab that is no player view. */
+static int player_view_of(int tab) {
+    switch (tab) {
+        case MI_TAB_PROFILE: return PLAYER_VIEW_PROFILE;
+        case MI_TAB_PARTY:   return PLAYER_VIEW_PARTY;
+        case MI_TAB_FRIENDS: return PLAYER_VIEW_FRIENDS;
+    }
+    return -1;
+}
 
 /* Who the modal shows: an NPC with its capabilities, the own player, or
  * another player. A player session never touches an NPC endpoint. */
@@ -77,7 +86,6 @@ static bool  s_tab_picked = false;
 
 static EntityID s_entity_id     = 0;
 static InteractMode s_mode      = MI_MODE_NPC;
-static ChatPane s_chat;
 static char  s_display_name[64] = {0};
 static char  s_dlg_item[128]    = {0};
 static bool  s_has_dialogue = false;
@@ -434,6 +442,7 @@ static int visible_tabs(int out[MI_TAB_COUNT]) {
         out[n++] = MI_TAB_PROFILE;
         out[n++] = MI_TAB_OWN_STORAGE;
         out[n++] = MI_TAB_PARTY;
+        out[n++] = MI_TAB_FRIENDS;
         out[n++] = MI_TAB_STATS;
         return n;
     }
@@ -560,8 +569,8 @@ static float active_tab_content_height(void) {
         case MI_TAB_STORAGE:
         case MI_TAB_OWN_STORAGE: return s_storage_content_height;
         case MI_TAB_PROFILE:
-        case MI_TAB_PARTY:   return s_player_content_height;
-        case MI_TAB_CHAT:    return CHAT_PANE_HEIGHT;
+        case MI_TAB_PARTY:
+        case MI_TAB_FRIENDS: return s_player_content_height;
         case MI_TAB_INTEGRATION: return s_integration_content_height;
         default:             return 0.0f;
     }
@@ -616,9 +625,9 @@ static bool dialog_btn_visible(void) {
     return modal_dialogue_is_collapsed();
 }
 
-/* Chat talks to the entity; the own profile has nobody to talk to. */
+/* Chat opens the direct conversation with another player in the chat panel. */
 static bool chat_btn_visible(void) {
-    return MI_MODE_SELF != s_mode;
+    return MI_MODE_PLAYER == s_mode;
 }
 
 /* The Integration tab is a developer surface — it links out to the object-layer
@@ -861,9 +870,9 @@ void modal_interact_init(void) {
     es_clear();
 }
 
-void modal_interact_open(EntityID entity_id, const char* display_name,
-                         const char* dialogue_item_id, bool has_dialogue,
-                         Color border) {
+/* Opens a session on an entity seen as `mode`. */
+static void open_session(EntityID entity_id, InteractMode mode, const char* display_name,
+                         const char* dialogue_item_id, bool has_dialogue, Color border) {
     /* A different entity starts a fresh session → drop the prior snapshot.
      * Reopening the same entity (e.g. returning from item inspection) keeps
      * it, so the modal still renders even if the entity left the AOI. */
@@ -883,8 +892,7 @@ void modal_interact_open(EntityID entity_id, const char* display_name,
     }
 
     s_entity_id = entity_id;
-    s_mode = mode_of(entity_id);
-    chat_pane_bind(&s_chat, chat_direct(entity_id));
+    s_mode = mode;
     copy_str(s_display_name, sizeof(s_display_name), display_name ? display_name : "");
     copy_str(s_dlg_item, sizeof(s_dlg_item), dialogue_item_id ? dialogue_item_id : "");
 
@@ -949,12 +957,25 @@ void modal_interact_open(EntityID entity_id, const char* display_name,
              s_entity_id, s_cached_layer_count, s_quest_code_count);
 }
 
+void modal_interact_open(EntityID entity_id, const char* display_name,
+                         const char* dialogue_item_id, bool has_dialogue,
+                         Color border) {
+    open_session(entity_id, mode_of(entity_id), display_name, dialogue_item_id, has_dialogue, border);
+}
+
+void modal_interact_open_own(PlayerView view) {
+    EntityID id = g_local_player.id;
+    open_session(id, MI_MODE_SELF, game_state_has(id, COMP_PLAYER) ? game_state_player(id)->name : "", NULL, false,
+                 MODAL_PANEL_BORDER);
+    s_tab_picked = true;
+    set_tab(PLAYER_VIEW_PARTY == view ? MI_TAB_PARTY : PLAYER_VIEW_FRIENDS == view ? MI_TAB_FRIENDS : MI_TAB_PROFILE);
+}
+
 void modal_interact_close(void) {
     container_panel_close();
     bool was_open = s_open;
     s_open = false;
     s_dialogue_open_requested = false;
-    chat_pane_hide(&s_chat);
     es_clear();
     if (modal_dialogue_is_open()) modal_dialogue_close();
     if (was_open) modal_closed();
@@ -997,12 +1018,8 @@ bool modal_interact_handle_wheel(float wheel_delta) {
     if (MI_TAB_STORAGE == s_tab || MI_TAB_OWN_STORAGE == s_tab) {
         return container_panel_wheel(content_rect(card_rect()), wheel_delta);
     }
-    if (MI_TAB_PROFILE == s_tab || MI_TAB_PARTY == s_tab) {
-        return player_panel_wheel(MI_TAB_PROFILE == s_tab ? PLAYER_VIEW_PROFILE : PLAYER_VIEW_PARTY,
-                                  content_rect(card_rect()), wheel_delta);
-    }
-    if (MI_TAB_CHAT == s_tab) {
-        return chat_pane_wheel(&s_chat, content_rect(card_rect()), wheel_delta);
+    if (0 <= player_view_of(s_tab)) {
+        return player_panel_wheel((PlayerView)player_view_of(s_tab), content_rect(card_rect()), wheel_delta);
     }
     if (MI_TAB_INTEGRATION == s_tab) {
         return ui_scroll_on_wheel(&s_integration_scroll, content_rect(card_rect()),
@@ -1106,25 +1123,14 @@ void modal_interact_update(float dt) {
         open_container_tab();
         container_panel_update(content_rect(card_rect()), content_ready, dt);
         if (!s_open) return;
-    } else if (MI_TAB_PROFILE == s_tab || MI_TAB_PARTY == s_tab) {
-        player_panel_update(MI_TAB_PROFILE == s_tab ? PLAYER_VIEW_PROFILE : PLAYER_VIEW_PARTY,
-                            content_rect(card_rect()), content_ready, dt);
+    } else if (0 <= player_view_of(s_tab)) {
+        player_panel_update((PlayerView)player_view_of(s_tab), content_rect(card_rect()), content_ready, dt);
     } else if (MI_TAB_INTEGRATION == s_tab) {
         ui_scroll_update(&s_integration_scroll, content_rect(card_rect()),
                          s_integration_content_height, dt);
         if (ui_scroll_take_click(&s_integration_scroll, &click_x, &click_y) && content_ready) {
             handle_integration_click(click_x, click_y);
         }
-    }
-
-    /* The DOM input floats above the canvas, so it shows only while nothing
-     * drawn in the canvas covers the settled card. */
-    if (MI_TAB_CHAT == s_tab) {
-        bool input_visible = content_ready && MODAL_POP_DURATION <= s_age &&
-                             !modal_dialogue_is_fullscreen() && !modal_instance_map_is_open();
-        chat_pane_update(&s_chat, content_rect(card_rect()), input_visible, dt);
-    } else {
-        chat_pane_hide(&s_chat);
     }
 
     if (MI_MODE_NPC == s_mode && !s_dialogue_opened) {
@@ -2359,8 +2365,7 @@ void modal_interact_draw(void) {
      * the capability tabs the entity exposes are drawn. Pixel retro style. */
     int tabs[MI_TAB_COUNT];
     int tabs_n = visible_tabs(tabs);
-    bool tab_shown = MI_TAB_CHAT == s_tab ||
-                     (MI_TAB_INTEGRATION == s_tab && integration_btn_visible());
+    bool tab_shown = MI_TAB_INTEGRATION == s_tab && integration_btn_visible();
     for (int k = 0; k < tabs_n; k++) if (tabs[k] == s_tab) tab_shown = true;
     if (!tab_shown) set_tab(MI_TAB_STACK);
     for (int k = 0; k < tabs_n; k++) {
@@ -2390,11 +2395,8 @@ void modal_interact_draw(void) {
     else if (s_tab == MI_TAB_SHOP)   draw_shop_tab(tab_content, mx, my);
     else if (s_tab == MI_TAB_CRAFT)  draw_craft_tab(tab_content, mx, my);
     else if (MI_TAB_STORAGE == s_tab || MI_TAB_OWN_STORAGE == s_tab) draw_container_tab(tab_content);
-    else if (MI_TAB_PROFILE == s_tab)
-        s_player_content_height = player_panel_draw(PLAYER_VIEW_PROFILE, tab_content, s_entity_id);
-    else if (MI_TAB_PARTY == s_tab)
-        s_player_content_height = player_panel_draw(PLAYER_VIEW_PARTY, tab_content, s_entity_id);
-    else if (MI_TAB_CHAT == s_tab)   chat_pane_draw(&s_chat, tab_content);
+    else if (0 <= player_view_of(s_tab))
+        s_player_content_height = player_panel_draw((PlayerView)player_view_of(s_tab), tab_content, s_entity_id);
     else if (MI_TAB_INTEGRATION == s_tab) draw_integration_tab(tab_content);
 
     /* Fade the new content up by lifting a panel-coloured veil off it —
@@ -2424,19 +2426,7 @@ void modal_interact_draw(void) {
             DrawRectangleRoundedLinesEx(dialog, 0.18f, 6, 2.0f, MODAL_QUEST_FRAME);
     }
 
-    if (chat_btn_visible()) draw_bar_button(chat, "chat", "Chat", MI_TAB_CHAT == s_tab, mx, my);
-
-    int unread = chat_btn_visible() ? chat_log_unread(chat_direct(s_entity_id)) : 0;
-    if (unread > 0) {
-        float br = 11.0f;
-        float bx = chat.x + chat.width - br - 4.0f;
-        float by = chat.y + br - 2.0f;
-        DrawCircle((int)bx, (int)by, br, (Color){ 210, 60, 60, 240 });
-        char txt[8];
-        snprintf(txt, sizeof(txt), "%d", unread > 99 ? 99 : unread);
-        int tw = MeasureText(txt, 11);
-        DrawText(txt, (int)(bx - tw * 0.5f), (int)(by - 5.5f), 11, (Color){ 255, 255, 255, 245 });
-    }
+    if (chat_btn_visible()) draw_bar_button(chat, "chat", "Chat", false, mx, my);
 
     if (integration_btn_visible()) {
         draw_bar_button(integration, "reload", "Integration",
@@ -2486,8 +2476,14 @@ bool modal_interact_handle_click(int mx, int my) {
         return true;
     }
     if (chat_btn_visible() && ui_button_hit(chat, mx, my)) {
-        s_tab_picked = true;
-        set_tab(MI_TAB_CHAT);
+        EntityID peer = s_entity_id;
+        char name[sizeof s_display_name];
+        copy_str(name, sizeof name, s_display_name);
+        const char* skin = active_layer_item_id(s_cached_layers, s_cached_layer_count, "skin");
+        char skin_id[MAX_ITEM_ID_LENGTH] = { 0 };
+        copy_str(skin_id, sizeof skin_id, NULL != skin ? skin : "");
+        modal_interact_close();
+        chat_panel_open_direct(peer, name, skin_id);
         return true;
     }
     if (integration_btn_visible() && ui_button_hit(integration, mx, my)) {
@@ -2497,12 +2493,6 @@ bool modal_interact_handle_click(int mx, int my) {
     }
 
     Rectangle content = content_rect(card);
-
-    if (MI_TAB_CHAT == s_tab &&
-        CheckCollisionPointRec((Vector2){ (float)mx, (float)my }, content)) {
-        chat_pane_press(&s_chat, content, mx, my);
-        return true;
-    }
 
     if (MI_TAB_INTEGRATION == s_tab &&
         CheckCollisionPointRec((Vector2){ (float)mx, (float)my }, content)) {
@@ -2541,10 +2531,8 @@ bool modal_interact_handle_click(int mx, int my) {
         return true;
     }
 
-    if ((MI_TAB_PROFILE == s_tab || MI_TAB_PARTY == s_tab) &&
-        CheckCollisionPointRec((Vector2){ (float)mx, (float)my }, content)) {
-        player_panel_press(MI_TAB_PROFILE == s_tab ? PLAYER_VIEW_PROFILE : PLAYER_VIEW_PARTY,
-                           content, mx, my);
+    if (0 <= player_view_of(s_tab) && CheckCollisionPointRec((Vector2){ (float)mx, (float)my }, content)) {
+        player_panel_press((PlayerView)player_view_of(s_tab), content, mx, my);
         return true;
     }
 

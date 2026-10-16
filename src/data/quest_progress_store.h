@@ -52,6 +52,10 @@ typedef struct {
 
 void quest_progress_store_reset(void);
 
+/* Rises with every change of a status or a progress; readers recompute what
+ * they derive from the store when it moves. */
+int  quest_progress_store_revision(void);
+
 /* Insert or update by code, from init_data. `status_str` is "active" |
  * "completed" | "failed"; unknown values default to active. A new entry takes
  * its title and description from quest_cache. Records no change. */

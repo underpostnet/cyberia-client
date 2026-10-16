@@ -54,8 +54,8 @@ void modal_draw_float_shadow(Rectangle rect, float age);
 void modal_draw_card(Rectangle card, bool anchored, float age, float overlay_h,
                      Color border, float header_h);
 
-/* Header title, `pad` from the card's left edge but never left of the
- * toolbar's pinned toggle, clipped before `close_x`. */
+/* Header title, `pad` from the card's left edge, clipped before `close_x`. A
+ * header in the toolbar band never starts left of the pinned toggle. */
 void modal_draw_title(const char* text, Rectangle card, float pad, float header_h,
                       int font, Color color, float close_x);
 

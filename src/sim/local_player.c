@@ -43,6 +43,12 @@ void local_player_reset(void) {
     g_local.fct_count            = 0;
 }
 
+int local_player_incoming_requests(void) {
+    int count = 0;
+    for (int i = 0; g_local_player.friend_count > i; i++) count += FRIEND_INCOMING == g_local_player.friends[i].status;
+    return count;
+}
+
 Vault* local_player_vault(const char* action_code) {
     for (int i = 0; i < g_local_player.vault_count; i++) {
         if (0 == strcmp(g_local_player.vaults[i].action_code, action_code)) return &g_local_player.vaults[i];
@@ -96,6 +102,23 @@ bool local_player_leads_party(void) {
 const PartyInvite* local_player_invite_from(EntityID id) {
     for (int i = 0; i < g_local_player.invite_count; i++) {
         if (id == g_local_player.invites[i].from_id) return &g_local_player.invites[i];
+    }
+    return NULL;
+}
+
+const SentInvite* local_player_invite_to(EntityID id) {
+    for (int i = 0; i < g_local_player.sent_invite_count; i++) {
+        if (id == g_local_player.sent_invites[i].to_id) return &g_local_player.sent_invites[i];
+    }
+    return NULL;
+}
+
+const Friend* local_player_friend_of(EntityID id) {
+    /* An account name is unique, so a row also matches the player it names. */
+    const char* name = game_state_is_player(id) ? game_state_player(id)->name : "";
+    for (int i = 0; 0 != id && i < g_local_player.friend_count; i++) {
+        const Friend* f = &g_local_player.friends[i];
+        if (id == f->entity_id || ('\0' != name[0] && 0 == strcmp(name, f->name))) return f;
     }
     return NULL;
 }
@@ -162,6 +185,26 @@ void local_player_request_party_kick(EntityID member_id) {
 
 void local_player_request_party_disband(void) {
     client_event_push(CLIENT_EVENT_PARTY_DISBAND, (client_event_payload_t){0});
+}
+
+void local_player_request_friends(void) {
+    client_event_push(CLIENT_EVENT_FRIENDS_LIST, (client_event_payload_t){0});
+}
+
+void local_player_request_friend(EntityID player_id) {
+    client_event_push(CLIENT_EVENT_FRIEND_REQUEST, (client_event_payload_t){ .entity_id = player_id });
+}
+
+void local_player_request_friend_reply(const char* friendship_id, bool accept) {
+    client_event_payload_t p = { .active = accept };
+    copy_str(p.code, sizeof(p.code), friendship_id);
+    client_event_push(CLIENT_EVENT_FRIEND_REPLY, p);
+}
+
+void local_player_request_friend_remove(const char* friendship_id) {
+    client_event_payload_t p = {0};
+    copy_str(p.code, sizeof(p.code), friendship_id);
+    client_event_push(CLIENT_EVENT_FRIEND_REMOVE, p);
 }
 
 void    local_player_set_status_icon(uint8_t id) { g_local.status_icon = id; }

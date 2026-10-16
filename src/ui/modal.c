@@ -126,7 +126,7 @@ void modal_draw_card(Rectangle card, bool anchored, float age, float overlay_h,
 void modal_draw_title(const char* text, Rectangle card, float pad, float header_h,
                       int font, Color color, float close_x) {
     float tx = card.x + pad;
-    if (tx < toolbar_toggle_right()) tx = toolbar_toggle_right();
+    if (TOOLBAR_H > card.y && tx < toolbar_toggle_right()) tx = toolbar_toggle_right();
     modal_draw_clipped_text(text, (int)tx, (int)(card.y + (header_h - font) * 0.5f),
                             (int)(close_x - MODAL_HEADER_TITLE_GAP - tx), font, color);
 }

@@ -6,9 +6,10 @@
  *
  *   NPC:     [shop] [assembly] [storage] [quest] — the capabilities it offers
  *            [stack] active item slots, [stats] six-stat stack totals
- *   Own:     [profile] [storage] personal storage, [party], [stats]
+ *   Own:     [profile] [storage] personal storage, [party], [friends], [stats]
  *   Player:  [profile] public profile and party actions, [stats], [stack]
- *   Bottom:  [ Chat ]        direct chat (ui/chat_pane.h), not on the own profile
+ *   Bottom:  [ Chat ]        another player: opens its direct conversation in
+ *                            the chat panel (ui/chat_panel.h)
  *            [ Integration ] stack composite + viewer links, dev UI only
  *
  * The paired modal_dialogue (bottom half) carries the talk flow; server
@@ -18,6 +19,7 @@
 #ifndef MODAL_INTERACT_H
 #define MODAL_INTERACT_H
 
+#include "player_panel.h"
 #include "world/object_layer.h"
 #include "world/world_types.h"
 #include <raylib.h>
@@ -33,6 +35,9 @@ void modal_interact_init(void);
 void modal_interact_open(EntityID entity_id, const char* display_name,
                          const char* dialogue_item_id, bool has_dialogue,
                          Color border);
+
+/* The own profile, on one of its player views. */
+void modal_interact_open_own(PlayerView view);
 
 void modal_interact_close(void);
 bool modal_interact_is_open(void);

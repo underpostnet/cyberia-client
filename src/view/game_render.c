@@ -1,4 +1,5 @@
 #include "game_render.h"
+#include "ui/session_gate.h"
 #include "ui/text.h"
 #include "camera.h"
 #include "sim/local_player.h"
@@ -899,6 +900,10 @@ void game_render_entities(void) {
                                          && 0 >= v->respawn_in,
                     .status_icon       = cue ? 0 : game_state_data(entity_id)->status_icon,
                     .interaction_flags = np_flags,
+                    .relation          = np_is_player && !entry->is_main_player
+                                         ? local_player_interaction_flags(entity_id) &
+                                               (INTERACTION_FLAG_FRIEND | INTERACTION_FLAG_PARTY_MEMBER)
+                                         : 0,
                     .on_portal         = !cue && np_is_player && game_state_player(entity_id)->on_portal,
                     .portal_hold       = np_is_player ? game_state_player(entity_id)->portal_hold : 0.0f,
                     /* Respawn countdown is local-player-only: a remote client
@@ -1055,8 +1060,11 @@ void game_render_ui(void) {
     modal_notification_draw();
 
     // Screen-space loot FX (pickup delivery + the reduction "expend" spray) —
-    // top-most, above the HUD, every modal, and the notification toast.
+    // above the HUD, every modal, and the notification toast.
     draw_loot_screen_fx();
+
+    // The end of the session covers everything.
+    session_gate_draw((Rectangle){ 0, 0, (float)g_renderer.screen_width, (float)g_renderer.screen_height });
 }
 
 Vector2 game_render_world_to_screen(Vector2 world_pos) {

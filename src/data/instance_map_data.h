@@ -8,14 +8,16 @@
 /* instance_map_data — data layer for the expanded Instance Map modal.
  *
  * Independent from the gameplay AOI stream: talks only to the engine-cyberia
- * Instance Map REST endpoints through network/engine_client.
+ * Instance Map REST endpoint through network/engine_client.
  *
  *   open  → GET /api/v1/cyberia-instance/instance-map/:code/static   (once)
- *   open  → GET /api/v1/cyberia-instance/instance-map/:code/dynamic  (~1/s)
- *   close → polling stops immediately; late responses are discarded.
+ *   close → a late response is discarded.
  *
- * Static POIs carry authored presence and
- * capability membership. Live player position and stats remain client-side.
+ * Static POIs carry authored presence, the quests and actions each one
+ * provides, and the prerequisites of each quest. A POI is active from the own
+ * quest state: a quest while it runs, or once its prerequisites are complete;
+ * an action while it carries a shop, a craft or a vault, or fronts such a
+ * quest. Live player position and stats remain client-side.
  */
 
 #define IMAP_MAX_NODES       48
@@ -24,6 +26,8 @@
 #define IMAP_CODE_MAX        64
 #define IMAP_NAME_MAX        64
 #define IMAP_URL_MAX         160
+#define IMAP_MAX_PROVIDERS   512
+#define IMAP_MAX_LINKS       8
 
 enum {
     IMAP_CAPABILITY_ACTION = 1u << 0,
@@ -42,7 +46,7 @@ typedef enum {
 typedef enum {
     IMAP_DATA_IDLE = 0,     /* modal closed, nothing fetched          */
     IMAP_DATA_LOADING,      /* static fetch in flight                 */
-    IMAP_DATA_READY,        /* static graph parsed; polling dynamic   */
+    IMAP_DATA_READY,        /* static graph parsed                    */
     IMAP_DATA_ERROR,        /* static fetch/parse failed              */
 } ImapDataState;
 
@@ -77,6 +81,16 @@ typedef struct {
     bool quest_active;
 } ImapPresencePoi;
 
+/* One quest or action a POI provides. A quest links its prerequisites; an
+ * action links the quests it fronts. */
+typedef struct {
+    int  poi;
+    char code[IMAP_CODE_MAX];
+    char links[IMAP_MAX_LINKS][IMAP_CODE_MAX];
+    int  link_count;
+    bool standalone;    /* action: a shop, a craft or a vault */
+} ImapProvider;
+
 typedef struct {
     char instance_code[IMAP_CODE_MAX];
     char name[IMAP_NAME_MAX];
@@ -90,17 +104,23 @@ typedef struct {
 
     ImapPresencePoi presence_pois[IMAP_MAX_PRESENCE_POIS];
     int             presence_poi_count;
+
+    ImapProvider quests[IMAP_MAX_PROVIDERS];
+    int          quest_count;
+    ImapProvider actions[IMAP_MAX_PROVIDERS];
+    int          action_count;
 } ImapGraph;
 
-/* Begin the static fetch and enable dynamic polling. Requires the metadata
- * message to have delivered g_game_state.instance_code; otherwise the state
- * goes straight to IMAP_DATA_ERROR. */
+/* Begin the static fetch. Requires the metadata message to have delivered
+ * g_game_state.instance_code; otherwise the state goes straight to
+ * IMAP_DATA_ERROR. */
 void instance_map_data_open(void);
 
-/* Stop polling immediately. In-flight responses are discarded on arrival. */
+/* A response that arrives after the close is discarded. */
 void instance_map_data_close(void);
 
-/* Drive the ~1/s dynamic poll while open. Call once per frame. */
+/* Mark the active POIs again when the own quest state changed. Call once per
+ * frame. */
 void instance_map_data_update(float dt);
 
 ImapDataState    instance_map_data_state(void);
@@ -112,7 +132,7 @@ int instance_map_data_find_node(const char* map_code);
 /* Bumped every time a static graph is (re)parsed — layout invalidation key. */
 int instance_map_data_generation(void);
 
-/* Count of dynamically-active quest providers on one node. */
+/* Count of active quest and action providers on one node. */
 int instance_map_data_node_active_quests(int node);
 int instance_map_data_node_active_actions(int node);
 

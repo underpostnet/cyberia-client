@@ -25,7 +25,14 @@ void text_draw_compat(const char* text, int x, int y, int size, Color color) {
 }
 int text_measure_compat(const char* text, int size) { return 10; }
 void text_draw_outlined(const char* text, int x, int y, int size, Color fg, Color outline, int rings) {}
-void ui_icon_draw(const char* icon_id, float cx, float cy, int size, bool bounce, float phase) {}
+/* The icons and circles drawn since the last reset. */
+static const char* s_icons[8];
+static int         s_icon_n;
+static int         s_circles;
+void ui_icon_draw(const char* icon_id, float cx, float cy, int size, bool bounce, float phase) {
+    if (8 > s_icon_n) s_icons[s_icon_n++] = icon_id;
+}
+void DrawCircle(int x, int y, float radius, Color color) { s_circles++; }
 
 static const EntityTransform s_transform = { .pos = { 4.0f, 4.0f }, .size = { 2.0f, 2.0f } };
 
@@ -75,6 +82,21 @@ int main(void) {
     traveler.on_portal = false;
     entity_overhead_ui_draw(&traveler, 4.0f, 4.0f, 1.0f, 32.0f);
     assert(!s_transport_top);
+
+    /* A friend in the own party: a heart, then the party icon, before the name. */
+    EntityOverheadParams other = { .name = "ana", .show_name = true,
+                                   .relation = INTERACTION_FLAG_FRIEND | INTERACTION_FLAG_PARTY_MEMBER };
+    s_icon_n = 0;
+    s_circles = 0;
+    entity_overhead_ui_draw(&other, 4.0f, 4.0f, 1.0f, 32.0f);
+    assert(2 == s_icon_n && 0 == strcmp("emoji-heart", s_icons[0]) && 0 == strcmp("users", s_icons[1]));
+
+    /* A stranger shows no mark, in a party or not. */
+    other.relation = 0;
+    s_icon_n = 0;
+    s_circles = 0;
+    entity_overhead_ui_draw(&other, 4.0f, 4.0f, 1.0f, 32.0f);
+    assert(0 == s_icon_n && 0 == s_circles);
 
     puts("entity_overhead_ui_test OK");
     return 0;

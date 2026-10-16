@@ -16,6 +16,9 @@
 /* Glyph atlas base size — generous so the font stays crisp when scaled up. */
 #define TEXT_FONT_BASE_SIZE 64
 
+/* The font of the client bundle, under assets/fonts/. */
+#define TEXT_BUNDLED_FAMILY "Jersey15-Regular.ttf"
+
 /* Responsive scaling: on a mobile viewport (see view/viewport.h) the global
  * font multiplier is reduced so HUD/UI text is proportionally smaller on
  * phones. Desktop is unaffected. */
@@ -49,10 +52,12 @@ static void on_font_fetched(const FetchResponse *r) {
 }
 
 void text_font_init(void) {
-    s_font = GetFontDefault();
-    s_loaded = false;
+    s_font = LoadFontEx("assets/fonts/" TEXT_BUNDLED_FAMILY, TEXT_FONT_BASE_SIZE, NULL, 0);
+    s_loaded = IsFontValid(s_font);
+    if (s_loaded) SetTextureFilter(s_font.texture, TEXTURE_FILTER_BILINEAR);
+    else LOG_ERROR("[text] bundled font '%s' did not load", TEXT_BUNDLED_FAMILY);
     s_fetching = false;
-    s_family[0] = '\0';
+    copy_str(s_family, sizeof(s_family), s_loaded ? TEXT_BUNDLED_FAMILY : "");
     s_factor = 1.0f;
 }
 
@@ -81,7 +86,7 @@ bool text_font_settled(void) {
     return !s_fetching && (NULL == family || '\0' == family[0] || 0 == strcmp(family, s_family));
 }
 
-static Font text_active_font(void) {
+Font text_font(void) {
     return s_loaded ? s_font : GetFontDefault();
 }
 
@@ -98,14 +103,14 @@ void text_draw_compat(const char *text, int x, int y, int size, Color color) {
     float fs = (float)size * effective_factor();
     if (fs < 1.0f) fs = 1.0f;
     float spacing = (float)((int)fs / 10);
-    DrawTextEx(text_active_font(), text, (Vector2){ (float)x, (float)y }, fs, spacing, color);
+    DrawTextEx(text_font(), text, (Vector2){ (float)x, (float)y }, fs, spacing, color);
 }
 
 int text_measure_compat(const char *text, int size) {
     float fs = (float)size * effective_factor();
     if (fs < 1.0f) fs = 1.0f;
     float spacing = (float)((int)fs / 10);
-    return (int)MeasureTextEx(text_active_font(), text, fs, spacing).x;
+    return (int)MeasureTextEx(text_font(), text, fs, spacing).x;
 }
 
 #define TEXT_LINE_GAP 3

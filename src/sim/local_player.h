@@ -75,9 +75,35 @@ typedef struct {
     double   expires_at;   /* GetTime() clock */
 } PartyInvite;
 
+/* An invite of the player that waits for an answer. */
+typedef struct {
+    EntityID to_id;
+    double   expires_at;   /* GetTime() clock */
+} SentInvite;
+
+typedef enum { FRIEND_ACCEPTED, FRIEND_INCOMING, FRIEND_OUTGOING } FriendStatus;
+
+/* One friendship or friend request of the account. A friend online on this
+ * server carries its entity id; one in another world names that world. */
+typedef struct {
+    char         id[RECORD_ID_BYTES];       /* the friendship */
+    char         name[PLAYER_NAME_BYTES];
+    char         skin[MAX_ID_LENGTH];       /* while online on this server */
+    FriendStatus status;
+    bool         online;
+    char         world[MAX_ID_LENGTH];
+    char         map_code[MAX_ID_LENGTH];
+    EntityID     entity_id;
+    double       expires_at;                /* a request, GetTime() clock */
+} Friend;
+
+#define FRIENDS_LIST_MAX (CYBERIA_FRIENDS_MAX + CYBERIA_FRIEND_REQUESTS_MAX)
+
 typedef struct {
     EntityID         id;
-    char             player_id[MAX_ID_LENGTH]; /* the own id for engine REST calls */
+    bool             account;        /* the state persists with the account */
+    int              held;           /* owned stacks the world cannot load now */
+    bool             unsaved;        /* the engine has not taken the state for a while */
     char             map_code[MAX_ID_LENGTH];
     int              coins;
     double           xp;             /* total XP */
@@ -95,10 +121,17 @@ typedef struct {
     Party            party;
     PartyInvite      invites[CYBERIA_PARTY_INVITES_MAX];
     int              invite_count;
+    SentInvite       sent_invites[CYBERIA_PARTY_INVITES_MAX];
+    int              sent_invite_count;
     bool             crafting;             /* the server runs an assembly */
     Interaction      interactions[INTERACTIONS_MAX];
     int              interaction_count;
+    Friend           friends[FRIENDS_LIST_MAX];
+    int              friend_count;
 } LocalPlayer;
+
+/* Friend requests that wait for the player's answer. */
+int local_player_incoming_requests(void);
 
 /* The vault the player has at `action_code`, or NULL when it is still empty. */
 Vault* local_player_vault(const char* action_code);
@@ -129,6 +162,13 @@ bool local_player_leads_party(void);
 
 /* The pending invite from `id`, or NULL. */
 const PartyInvite* local_player_invite_from(EntityID id);
+
+/* The pending invite of the local player to `id`, or NULL. */
+const SentInvite* local_player_invite_to(EntityID id);
+
+/* The friendship or request of the player on this server `id`, by entity id
+ * or by its unique account name, or NULL. */
+const Friend* local_player_friend_of(EntityID id);
 
 /* What the bot `id` offers the player, or NULL when it offers nothing. */
 const Interaction* local_player_interaction(EntityID id);
@@ -213,6 +253,13 @@ void  local_player_request_party_reply(EntityID from_id, bool accept);
 void  local_player_request_party_leave(void);
 void  local_player_request_party_kick(EntityID member_id);
 void  local_player_request_party_disband(void);
+
+/* Friend requests. The server answers each with a fresh friend list, or a
+ * refusal with friend_ack. */
+void  local_player_request_friends(void);
+void  local_player_request_friend(EntityID player_id);
+void  local_player_request_friend_reply(const char* friendship_id, bool accept);
+void  local_player_request_friend_remove(const char* friendship_id);
 
 /* Status icon ID (mirrors entity status indicator for self). */
 void     local_player_set_status_icon(uint8_t id);
