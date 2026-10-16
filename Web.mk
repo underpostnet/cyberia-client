@@ -26,6 +26,10 @@ LDFLAGS += -sMIN_CHROME_VERSION=116
 LDFLAGS += -sMIN_FIREFOX_VERSION=124
 LDFLAGS += -sMIN_SAFARI_VERSION=170400
 
+ifneq ($(BUILD_MODE),RELEASE)
+LDFLAGS += --profiling-funcs
+endif
+
 #---------------------------------------------------------------------------------------------
 # Web target html container
 WEB_SHELL := $(SRC_DIR)/shell.html
