@@ -4,88 +4,102 @@
 - cluster-only mode — file stats not available
 
 ## Summary
-- 2101 nodes · 7105 edges · 68 communities (65 shown, 3 thin omitted)
-- Extraction: 75% EXTRACTED · 25% INFERRED · 0% AMBIGUOUS · INFERRED: 1772 edges (avg confidence: 0.85)
-- Token cost: 64,362 input · 1,021 output
+- 2105 nodes · 7125 edges · 82 communities (75 shown, 7 thin omitted)
+- Extraction: 75% EXTRACTED · 25% INFERRED · 0% AMBIGUOUS · INFERRED: 1781 edges (avg confidence: 0.85)
+- Token cost: 0 input · 0 output
 
 ## Graph Freshness
-- Built from commit: `2da47dce`
+- Built from commit: `96809723`
 - Run `git rev-parse HEAD` and compare to check if the graph is stale.
 - Run `graphify update .` after code changes (no API cost).
 
 ## Community Hubs (Navigation)
-- Instance Map Graph
-- Inventory Bar Quantity
-- Inventory & Dialogue Modals
-- Entity Render & HUD
-- Client Event Packing
-- Action Craft Cache
-- Notification & Grant FX
-- Player Overhead Display
-- Input & Party Events
-- Chat Log
-- World Entity Rendering
-- UI & FX Modules
-- Interact Modal Cards
-- Fullscreen & HUD Bridges
-- Dialogue Modal
-- Loot Drop FX
-- Interact Mode & Chat Bind
-- Client Event Replication
-- Heal Aura FX
-- Audio & UI Headers
-- Floating Combat Text
-- Item Slot Grid
-- Audio Bus Control
-- Asset Bridge Fetch
-- Subsystem Reset
-- Container Panel Ops
-- Interact Modal Layout
-- Audio Content Fetch
-- Atlas Sprite Sheet Data
-- Entity Animation Render
-- Container Stack Operations
-- Emscripten Bridges & Main
-- Game State Tick
-- Dialogue Data Hash
-- Quest Detail Drawing
-- Reward FX
-- Presentation Runtime Config
-- Subsystem Init
-- Container Panel Tabs
-- Assemble FX
-- Footsteps & Dust FX
-- WebSocket Connection
-- Audio Context Snapshot
-- Dev UI Overlay
-- Camera & Frame Sync
-- Dust Puff FX
-- Atlas Icon Draw
-- Tap FX
-- Stack Move Animation
-- FX Shape Primitives
-- Container Tab Visibility
-- Level Up FX
-- Layer Z Ordering
-- HUD Joystick
-- Death FX
-- Pointer Gesture Input
-- Startup & Init
-- Inventory Capacity Rules
-- Stat & Capacity Contract
-- Asset Bridge JS
-- Fetch Request & Font
-- Subsystem Cleanup
-- Camera Coordinate Transform
-- Resource Destruction
-- Object Layer Alloc
-- Config URL Helpers
+- message.c
+- modal_instance_map.c
+- container_panel.c
+- modal_notification.c
+- inventory_bar.c
+- instance_map_data.c
+- ui_button_draw
+- string
+- chat_log.c
+- quest_journal.c
+- fx_reward.c
+- loot_fx.c
+- ui_button_hit
+- math
+- engine_client.c
+- local_player.c
+- inventory_modal.c
+- socket.c
+- game_render_entities
+- world_cell_size
+- audio.c
+- EntityID
+- toolbar.c
+- audio_content.c
+- game_state.h
+- modal_interact.c
+- player_panel.c
+- game_frame
+- copy_str
+- ui_dispatch_tap
+- input.c
+- game_client.c
+- interaction_bubble_draw
+- viewport_is_mobile
+- prediction_reconcile
+- render_on_tick
+- object_layers_management.c
+- text_line_height
+- container_ops.c
+- fx_shape_spark_shaded
+- modal_anchor_layout_update
+- quest_card_layout
+- modal_instance_map_close
+- draw_entity_layers
+- hash_table.c
+- inventory_modal_handle_click
+- dev_ui_draw
+- interaction_bubble.c
+- fx_tap.c
+- create_object_layer
+- get_or_fetch_atlas_data
+- emit_step
+- local_player_open_slots
+- game_render_init
+- hud_side_stack.c
+- modal_draw_card
+- chat_panel.c
+- audio_context.c
+- quest_progress_store.c
+- game_render_frame
+- lookup_cached_layer
+- modal_dialogue_open
+- hud_joystick.c
+- camera.c
+- stack_move.c
+- asset_bridge.c
+- scan_entity
+- utils
+- prediction_on_snapshot
+- meta_cache.c
+- open_item_viewer
+- cJSON
+- main
+- fx_level_up.c
+- draw_skill_previews
+- ol_as_ico_draw
+- stat_panel.c
+- fullscreen_bridge.c
+- local_player_interaction
+- cyberia_stats_values
 
 ## God Nodes (most connected - your core abstractions)
-1. `viewport_is_mobile()` - 64 edges
+1. `viewport_is_mobile()` - 65 edges
 2. `copy_str()` - 53 edges
-3. `inventory_modal_draw()` - 52 edges
-4. `ui_button_hit()` - 45 edges
+3. `inventory_modal_draw()` - 50 edges
+4. `ui_button_hit()` - 47 edges
 5. `modal_interact_draw()` - 41 edges
 6. `inventory_bar_draw()` - 40 edges
 7. `game_render_entities()` - 37 edges
@@ -94,299 +108,339 @@
 10. `modal_notification_draw()` - 32 edges
 
 ## Surprising Connections (you probably didn't know these)
-- `draw_info_panel()` --calls--> `instance_map_data_node_active_actions()`  [INFERRED]
-  src/ui/modal_instance_map.c → src/data/instance_map_data.c
-- `draw_info_panel()` --calls--> `instance_map_data_node_active_quests()`  [INFERRED]
-  src/ui/modal_instance_map.c → src/data/instance_map_data.c
-- `game_render_frame()` --calls--> `fct_draw_overlay()`  [INFERRED]
-  src/view/game_render.c → src/ui/floating_combat_text.c
-- `game_render_world_objects()` --calls--> `nameplate_resolve_portal()`  [INFERRED]
-  src/view/game_render.c → src/ui/nameplate.c
-- `modal_interact_update()` --calls--> `modal_notification_is_on_cooldown()`  [INFERRED]
-  src/ui/modal_interact.c → src/ui/modal_notification.c
+- `json_unpack_init_data()` --calls--> `quest_progress_store_reset()`  [INFERRED]
+  src/net/message.c → src/data/quest_progress_store.c
+- `json_unpack_snapshot()` --calls--> `fetch_deprioritize()`  [INFERRED]
+  src/net/message.c → src/data/engine_client.c
+- `unpack_self()` --calls--> `local_player_set_action_cooldown()`  [INFERRED]
+  src/net/message.c → src/sim/local_player.c
+- `unpack_self()` --calls--> `local_player_set_action_ready_at()`  [INFERRED]
+  src/net/message.c → src/sim/local_player.c
+- `unpack_self()` --calls--> `local_player_set_consume_ready_at()`  [INFERRED]
+  src/net/message.c → src/sim/local_player.c
 
 ## Import Cycles
 - None detected.
 
-## Communities (68 total, 3 thin omitted)
+## Communities (82 total, 7 thin omitted)
 
-### Community 0 - "Instance Map Graph"
-Cohesion: 0.05
-Nodes (91): presentation_runtime_status_icon(), instance_map_cell_to_card(), instance_map_data_close(), instance_map_data_generation(), instance_map_data_graph(), instance_map_data_open(), instance_map_data_state(), instance_map_presence_color() (+83 more)
-
-### Community 1 - "Inventory Bar Quantity"
-Cohesion: 0.05
-Nodes (92): alloc_entry(), changed_cell(), draw_popup(), find(), fx_inventory_bar_qty_display(), fx_inventory_bar_qty_draw(), fx_inventory_bar_qty_draw_bottom(), fx_inventory_bar_qty_init() (+84 more)
-
-### Community 2 - "Inventory & Dialogue Modals"
-Cohesion: 0.05
-Nodes (77): dialogue_data_available(), dialogue_data_get(), client_on_init_received(), game_state_is_active_item_type(), game_state_is_dead_item(), local_player_status_icon(), interaction_bubble_dead_equip(), activate_enabled() (+69 more)
-
-### Community 3 - "Entity Render & HUD"
-Cohesion: 0.05
-Nodes (68): presentation_runtime_toggle_dev_ui(), input_pointer_position(), container_panel_press(), column_content_height(), column_ensure_toggle(), column_hidden(), column_input_bounds(), column_scroll_view() (+60 more)
-
-### Community 4 - "Client Event Packing"
-Cohesion: 0.08
-Nodes (70): read_config(), settings(), fx_hit_burst_spawn(), client_event_flush(), pack_event(), chat_conversation_of(), claim_slot(), entity_alive() (+62 more)
-
-### Community 5 - "Action Craft Cache"
-Cohesion: 0.05
-Nodes (46): action_cache_fetch(), action_cache_get(), ingest_craft_items(), ingest_doc(), on_action_fetched(), apply_dynamic_capabilities(), clear_dynamic_capabilities(), find_presence_poi() (+38 more)
-
-### Community 6 - "Notification & Grant FX"
-Cohesion: 0.08
-Nodes (62): fx_grant_delivery_begin(), fx_grant_delivery_update(), fx_grant_delivery_waiting(), grant_landed(), release_spent(), fx_inventory_bar_qty_hold_for_delivery(), fx_inventory_bar_qty_notify_arrival(), ease_in_cubic() (+54 more)
-
-### Community 7 - "Player Overhead Display"
-Cohesion: 0.07
-Nodes (48): presentation_runtime_font_family(), game_state_has(), game_state_progress(), local_player_leads_party(), own_level(), draw_capability_bar(), draw_capability_item(), draw_centered_label() (+40 more)
-
-### Community 8 - "Input & Party Events"
+### Community 0 - "message.c"
 Cohesion: 0.06
-Nodes (43): axis_dir(), emit_steer_tap(), emit_tap(), input_pointer_gesture(), input_pop(), input_push(), input_push_client_events(), input_queue_filter() (+35 more)
+Nodes (79): read_config(), settings(), fx_hit_burst_spawn(), client_event_flush(), pack_event(), network_send(), on_socket_open(), on_socket_receive() (+71 more)
 
-### Community 9 - "Chat Log"
+### Community 1 - "modal_instance_map.c"
+Cohesion: 0.05
+Nodes (80): presentation_runtime_status_icon(), instance_map_cell_to_card(), instance_map_data_graph(), instance_map_data_state(), instance_map_presence_color(), ease_smoothstep(), centered_square(), close_bounds() (+72 more)
+
+### Community 2 - "container_panel.c"
+Cohesion: 0.06
+Nodes (55): container_panel_accepts(), container_panel_animate_from(), container_panel_cell_at(), container_panel_cell_rect(), container_panel_drag_in(), container_panel_draw(), container_panel_draw_drag(), container_panel_open_storage() (+47 more)
+
+### Community 3 - "modal_notification.c"
+Cohesion: 0.09
+Nodes (55): fx_grant_delivery_waiting(), ease_in_cubic(), ease_out_cubic(), add_entry_item(), begin_result_delivery(), draw_progress_bar(), hold_result_items(), mn_ok_pulse() (+47 more)
+
+### Community 4 - "inventory_bar.c"
+Cohesion: 0.06
+Nodes (83): fx_grant_delivery_begin(), fx_grant_delivery_update(), grant_landed(), release_spent(), alloc_entry(), changed_cell(), draw_popup(), find() (+75 more)
+
+### Community 5 - "instance_map_data.c"
+Cohesion: 0.14
+Nodes (19): apply_dynamic_capabilities(), clear_dynamic_capabilities(), find_presence_poi(), instance_map_data_find_node(), instance_map_data_generation(), instance_map_data_node_active_actions(), instance_map_data_node_active_quests(), instance_map_data_update() (+11 more)
+
+### Community 6 - "ui_button_draw"
+Cohesion: 0.14
+Nodes (22): draw_capability_bar(), draw_capability_item(), draw_centered_label(), draw_centered_outlined_label(), draw_hp_bar(), draw_nameplate(), draw_pill(), draw_transport_bar() (+14 more)
+
+### Community 7 - "string"
 Cohesion: 0.08
-Nodes (44): append(), chat_channel(), chat_log_get(), chat_log_mark_read(), chat_log_push(), chat_log_push_system(), chat_log_unread(), chat_log_unread_direct() (+36 more)
+Nodes (16): adopt_js_string(), config_init(), on_hints_fetched(), parse_color_object(), parse_response(), world_interpolation_ms(), game_state_layer_pool_reset(), game_state_reset() (+8 more)
 
-### Community 10 - "World Entity Rendering"
+### Community 9 - "chat_log.c"
+Cohesion: 0.15
+Nodes (20): append(), chat_log_get(), chat_log_mark_read(), chat_log_push(), chat_log_push_system(), chat_log_unread(), chat_log_unread_direct(), find() (+12 more)
+
+### Community 10 - "quest_journal.c"
 Cohesion: 0.07
-Nodes (41): presentation_runtime_dev_ui(), presentation_runtime_palette(), world_cell_size(), fx_heal_aura_observe(), fx_hit_burst_draw(), fx_obstacle_burst_draw(), fx_obstacle_burst_snapshot(), fx_shape_spark_shaded() (+33 more)
+Nodes (55): ease_approach(), ease_exp_factor(), column_content_height(), column_ensure_toggle(), column_hidden(), column_input_bounds(), column_scroll_view(), column_scrollbar_bounds() (+47 more)
 
-### Community 11 - "UI & FX Modules"
-Cohesion: 0.07
-Nodes (3): compare_depth(), compare_entities_by_depth(), compare_foregrounds_by_depth()
+### Community 12 - "fx_reward.c"
+Cohesion: 0.06
+Nodes (52): card_center(), current_margin(), fx_assemble_draw(), fx_assemble_init(), fx_assemble_show(), fx_assemble_update(), lcg_f01(), lcg_range() (+44 more)
 
-### Community 12 - "Interact Modal Cards"
-Cohesion: 0.11
-Nodes (36): draw_quest_talk_btn(), card_title_wrap(), craft_card_height(), craft_recipe_ready(), craft_slot_size(), draw_bar_button(), draw_card_base(), draw_card_line() (+28 more)
-
-### Community 13 - "Fullscreen & HUD Bridges"
-Cohesion: 0.10
-Nodes (34): audio_is_muted(), fullscreen_bridge_is_active(), fullscreen_bridge_toggle(), chat_panel_is_visible(), hud_minimap_overlay_is_visible(), chat_height(), chat_reserve(), column_x() (+26 more)
-
-### Community 14 - "Dialogue Modal"
-Cohesion: 0.10
-Nodes (36): modals_block_bubbles(), inventory_modal_is_open(), dlg_fullscreen(), dlg_hidden(), dlg_hidden_on_mobile(), dlg_pad(), dlg_side_pad(), dlg_sprite_size() (+28 more)
-
-### Community 15 - "Loot Drop FX"
+### Community 13 - "loot_fx.c"
 Cohesion: 0.10
 Nodes (31): drop_alloc(), drop_find(), expend_target(), id_phase(), lcg_f01(), lcg_range(), loot_fx_delivery_token_at(), loot_fx_delivery_token_slot_count() (+23 more)
 
-### Community 16 - "Interact Mode & Chat Bind"
-Cohesion: 0.08
-Nodes (35): chat_direct(), chat_pane_bind(), chat_pane_hide(), container_panel_close(), inventory_modal_open(), inventory_modal_open_external(), inventory_modal_set_anchor_entity(), inventory_modal_set_on_close() (+27 more)
+### Community 14 - "ui_button_hit"
+Cohesion: 0.21
+Nodes (18): card_title_wrap(), draw_bar_button(), draw_card_line(), draw_quest_grid_action_button(), draw_quest_grid_button(), draw_shop_card(), mi_font_btn(), mi_shop_price_font() (+10 more)
 
-### Community 17 - "Client Event Replication"
-Cohesion: 0.09
-Nodes (22): world_interpolation_ms(), walk_speed_ref(), client_event_list(), client_event_trim(), local_player_in_stasis(), local_player_move_speed(), local_player_set_stasis(), apply_facts() (+14 more)
-
-### Community 18 - "Heal Aura FX"
-Cohesion: 0.09
-Nodes (17): draw_entry(), ease_out_cubic(), exit_scale(), fx_heal_aura_draw(), lane(), fx_hit_burst_reset(), fx_hit_burst_update(), lane() (+9 more)
-
-### Community 20 - "Floating Combat Text"
+### Community 15 - "math"
 Cohesion: 0.11
-Nodes (12): adopt_js_string(), config_init(), fct_draw_overlay(), fct_event_on_self(), fct_init(), fct_spawn(), lcg_f01(), copy_ucfirst() (+4 more)
+Nodes (10): draw_entry(), exit_scale(), fx_death_draw(), lane(), fx_heal_aura_reset(), fx_hit_burst_draw(), fx_hit_burst_reset(), fx_hit_burst_update() (+2 more)
 
-### Community 21 - "Item Slot Grid"
+### Community 16 - "engine_client.c"
 Cohesion: 0.14
-Nodes (24): container_panel_draw_drag(), emit(), end_gesture(), grid_point_in_visible_bounds(), grid_rows(), item_slot_grid_animate_from_point(), item_slot_grid_animate_move(), item_slot_grid_begin_external_drag() (+16 more)
+Nodes (20): presentation_runtime_start_fetch(), complete(), deliver(), discard(), enqueue(), fetch_deprioritize(), fetch_has_budget(), fetch_now() (+12 more)
 
-### Community 22 - "Audio Bus Control"
-Cohesion: 0.17
-Nodes (27): apply_volume(), audio_get_volume(), audio_params(), audio_play(), audio_request_complete(), audio_set_muted(), audio_set_volume(), audio_shutdown() (+19 more)
+### Community 17 - "local_player.c"
+Cohesion: 0.09
+Nodes (28): client_event_push(), local_player_fct_at(), local_player_fct_clear(), local_player_fct_count(), local_player_fct_push(), local_player_invite_from(), local_player_party_member(), local_player_request_craft() (+20 more)
 
-### Community 23 - "Asset Bridge Fetch"
+### Community 18 - "inventory_modal.c"
+Cohesion: 0.19
+Nodes (24): close_rect(), dir_has_frames(), draw_small_btn(), im_button_h(), im_button_w(), im_close_size(), im_dir_button_gap(), im_dir_button_h() (+16 more)
+
+### Community 19 - "socket.c"
+Cohesion: 0.16
+Nodes (9): connection_close(), socket_close(), socket_is_open(), socket_onclose_internal(), socket_onerror_internal(), socket_onmessage_internal(), socket_onopen_internal(), socket_open() (+1 more)
+
+### Community 20 - "game_render_entities"
+Cohesion: 0.10
+Nodes (21): action_cache_fetch(), fx_death_active(), fx_death_observe(), fx_heal_aura_observe(), fx_level_up_active(), fx_level_up_observe(), fx_obstacle_burst_snapshot(), game_state_obstacle_depleted() (+13 more)
+
+### Community 21 - "world_cell_size"
+Cohesion: 0.22
+Nodes (16): presentation_runtime_dev_ui(), world_cell_size(), fx_heal_aura_draw(), fx_obstacle_burst_draw(), fx_portal_aura_draw(), game_state_appearance(), game_state_data(), fct_draw() (+8 more)
+
+### Community 22 - "audio.c"
+Cohesion: 0.11
+Nodes (36): apply_volume(), audio_get_volume(), audio_is_muted(), audio_params(), audio_play(), audio_request_absent(), audio_request_code(), audio_request_complete() (+28 more)
+
+### Community 23 - "EntityID"
+Cohesion: 0.09
+Nodes (14): fx_footsteps_init(), fx_footsteps_update(), game_state_agent(), game_state_bot_has_feet(), game_state_is_player(), game_state_motion(), game_state_player(), game_state_portal() (+6 more)
+
+### Community 24 - "toolbar.c"
+Cohesion: 0.20
+Nodes (18): chat_panel_is_visible(), modal_map_draw(), btn_rect(), close_interact_inventory_chain(), dismiss_world_covers(), draw_badge(), draw_btn(), interact_inventory_chain_is_open() (+10 more)
+
+### Community 25 - "audio_content.c"
+Cohesion: 0.19
+Nodes (17): audio_preload(), apply_current(), audio_content_fetch(), audio_content_music_finished(), audio_content_restore_music(), audio_content_start(), audio_content_update(), audio_prefetch_map() (+9 more)
+
+### Community 26 - "game_state.h"
+Cohesion: 0.10
+Nodes (3): function(), draw_centered(), draw_splash()
+
+### Community 27 - "modal_interact.c"
+Cohesion: 0.10
+Nodes (52): container_panel_is_open(), modal_anchor_active(), modal_dialogue_is_collapsed(), modal_dialogue_set_quest_style(), modal_dialogue_show_fullscreen(), action_metadata(), active_dlg_key(), active_tab_content_height() (+44 more)
+
+### Community 28 - "player_panel.c"
+Cohesion: 0.22
+Nodes (21): game_state_has(), local_player_leads_party(), avatar(), avatar_size(), bar(), button(), button_h(), draw_other_profile() (+13 more)
+
+### Community 29 - "game_frame"
+Cohesion: 0.12
+Nodes (23): audio_start(), presentation_runtime_font_factor_size(), presentation_runtime_font_family(), presentation_runtime_is_ready(), fetch_frame_begin(), fetch_frame_end(), frame(), game_frame() (+15 more)
+
+### Community 30 - "copy_str"
+Cohesion: 0.09
+Nodes (25): chat_direct(), chat_pane_hide(), container_panel_close(), open_slot_at(), inventory_modal_set_anchor_entity(), inventory_modal_set_on_close(), draw_craft_stack(), es_clear() (+17 more)
+
+### Community 31 - "ui_dispatch_tap"
+Cohesion: 0.21
+Nodes (16): presentation_runtime_toggle_dev_ui(), fx_tap_default_params(), fx_tap_spawn(), modals_block_bubbles(), inventory_modal_is_open(), modal_dialogue_is_item_lore(), modal_dialogue_is_open(), modal_instance_map_is_open() (+8 more)
+
+### Community 32 - "input.c"
 Cohesion: 0.15
-Nodes (21): complete(), deliver(), discard(), enqueue(), fetch_account(), fetch_data_release(), fetch_deprioritize(), fetch_event() (+13 more)
+Nodes (17): axis_dir(), emit_steer_tap(), emit_tap(), input_pointer_gesture(), input_pop(), input_push(), input_push_client_events(), input_queue_filter() (+9 more)
 
-### Community 24 - "Subsystem Reset"
-Cohesion: 0.08
-Nodes (20): audio_context_reset(), config_ws_url(), fx_death_reset(), fx_heal_aura_reset(), fx_level_up_reset(), client_event_reset(), client_reset_state(), connection_close() (+12 more)
+### Community 33 - "game_client.c"
+Cohesion: 0.11
+Nodes (14): audio_context_reset(), fx_death_reset(), fx_level_up_reset(), client_event_reset(), client_reset_state(), connection_get_stats(), on_socket_close(), local_player_reset() (+6 more)
 
-### Community 25 - "Container Panel Ops"
-Cohesion: 0.14
-Nodes (19): container_panel_animate_from(), container_panel_cell_at(), container_panel_cell_rect(), container_panel_open_storage(), container_panel_open_vault(), container_panel_update(), container_panel_wheel(), drop_out() (+11 more)
+### Community 34 - "interaction_bubble_draw"
+Cohesion: 0.11
+Nodes (30): chat_pane_draw(), interaction_bubble_draw(), slot_rect(), draw_dialogue_sprite(), craft_card_height(), craft_recipe_ready(), craft_slot_size(), draw_card_base() (+22 more)
 
-### Community 26 - "Interact Modal Layout"
-Cohesion: 0.15
-Nodes (29): modal_anchor_active(), active_tab_content_height(), anchor_content_card_height(), anchor_safe_area(), anchored_card_rect(), bar_buttons(), bar_rect(), card_rect() (+21 more)
+### Community 35 - "viewport_is_mobile"
+Cohesion: 0.10
+Nodes (31): chat_font(), dlg_fullscreen(), dlg_hidden(), dlg_hidden_on_mobile(), dlg_pad(), dlg_side_pad(), dlg_sprite_size(), draw_quest_talk_btn() (+23 more)
 
-### Community 27 - "Audio Content Fetch"
-Cohesion: 0.15
-Nodes (21): audio_preload(), audio_request_absent(), audio_request_code(), audio_request_priority(), apply_current(), audio_content_fetch(), audio_content_music_finished(), audio_content_restore_music() (+13 more)
+### Community 36 - "prediction_reconcile"
+Cohesion: 0.12
+Nodes (17): walk_speed_ref(), client_event_list(), client_event_trim(), client_on_init_received(), local_player_in_stasis(), local_player_move_speed(), local_player_set_stasis(), apply_facts() (+9 more)
 
-### Community 28 - "Atlas Sprite Sheet Data"
+### Community 37 - "render_on_tick"
+Cohesion: 0.12
+Nodes (20): presentation_runtime_overhead_occlusion_fade_ms(), presentation_runtime_overhead_occlusion_hidden_opacity(), fx_death_update(), fx_heal_aura_update(), fx_level_up_update(), fx_obstacle_burst_update(), fx_portal_aura_update(), fx_tap_update() (+12 more)
+
+### Community 38 - "object_layers_management.c"
 Cohesion: 0.16
 Nodes (16): create_atlas_sprite_sheet_data(), free_atlas_sprite_sheet_data(), ledger_standard_from_string(), free_atlas_value(), json_get_bool_safe(), json_get_int_safe(), json_get_string_safe(), on_atlas_meta_fetched() (+8 more)
 
-### Community 29 - "Entity Animation Render"
-Cohesion: 0.15
-Nodes (11): anim_pool_alloc(), anim_pool_free(), draw_dev_ui_box(), draw_entity_layers(), entity_render_gc(), free_anim_state(), get_animation_state(), get_frame_count_and_direction() (+3 more)
-
-### Community 31 - "Container Stack Operations"
-Cohesion: 0.25
-Nodes (16): apply(), bankable_while_worn(), check(), container_ops_apply(), container_ops_bind_vault(), container_ops_move(), container_ops_stack(), item_type_of() (+8 more)
-
-### Community 32 - "Emscripten Bridges & Main"
-Cohesion: 0.15
-Nodes (3): function(), draw_centered(), draw_splash()
-
-### Community 33 - "Game State Tick"
-Cohesion: 0.16
-Nodes (17): fx_death_update(), fx_dust_update(), fx_heal_aura_update(), fx_level_up_update(), fx_tap_update(), game_state_despawn(), game_state_layer_alloc(), game_state_layer_pool_reset() (+9 more)
-
-### Community 34 - "Dialogue Data Hash"
+### Community 39 - "text_line_height"
 Cohesion: 0.19
-Nodes (14): dialogue_data_request(), dialogue_data_request_code(), on_dialogue_fetched(), parse_response(), find_insert_slot(), find_occupied(), hash_string(), hash_table_contains() (+6 more)
+Nodes (12): draw_quest_step_objectives(), draw_quest_steps(), quest_objective_verb(), effective_factor(), text_active_font(), text_draw_compat(), text_draw_outlined(), text_line_height() (+4 more)
 
-### Community 35 - "Quest Detail Drawing"
-Cohesion: 0.16
-Nodes (17): chat_font(), chat_pane_draw(), hint_font(), draw_quest_detail(), draw_quest_step_objectives(), draw_quest_steps(), mi_close_sz(), mi_font_desc() (+9 more)
-
-### Community 36 - "Reward FX"
-Cohesion: 0.21
-Nodes (15): card_center(), current_margin(), ellipse_point(), fx_reward_init(), fx_reward_show(), fx_reward_trigger(), fx_reward_update(), lcg_f01() (+7 more)
-
-### Community 37 - "Presentation Runtime Config"
-Cohesion: 0.15
-Nodes (13): on_hints_fetched(), parse_color_object(), parse_response(), presentation_runtime_entity_fallback_color(), presentation_runtime_is_ready(), presentation_runtime_overhead_occlusion_fade_ms(), presentation_runtime_overhead_occlusion_hidden_opacity(), presentation_runtime_start_fetch() (+5 more)
-
-### Community 38 - "Subsystem Init"
-Cohesion: 0.11
-Nodes (17): dialogue_data_init(), fx_grant_delivery_init(), loot_fx_reset(), hash_table_init(), dev_ui_init(), hud_minimap_overlay_init(), interaction_bubble_init(), inventory_modal_init() (+9 more)
-
-### Community 39 - "Container Panel Tabs"
+### Community 40 - "container_ops.c"
 Cohesion: 0.26
-Nodes (18): container_panel_draw(), draw_container_tab(), draw_craft_tab(), draw_integration_tab(), draw_quest_tab(), draw_shop_tab(), draw_stack_tab(), draw_stats_tab() (+10 more)
+Nodes (15): apply(), bankable_while_worn(), check(), container_ops_apply(), container_ops_bind_vault(), container_ops_move(), item_type_of(), list_of() (+7 more)
 
-### Community 40 - "Assemble FX"
-Cohesion: 0.25
-Nodes (13): card_center(), current_margin(), fx_assemble_draw(), fx_assemble_init(), fx_assemble_show(), fx_assemble_update(), lcg_f01(), lcg_range() (+5 more)
-
-### Community 41 - "Footsteps & Dust FX"
-Cohesion: 0.18
-Nodes (8): cell_size(), emit_step(), fx_footsteps_init(), fx_footsteps_update(), step_is_visible(), step_params(), track_entity(), tracker_for()
-
-### Community 42 - "WebSocket Connection"
-Cohesion: 0.18
-Nodes (8): socket_close(), socket_is_open(), socket_onclose_internal(), socket_onerror_internal(), socket_onmessage_internal(), socket_onopen_internal(), socket_open(), socket_send()
-
-### Community 43 - "Audio Context Snapshot"
-Cohesion: 0.22
-Nodes (12): audio_context_snapshot(), audio_context_update(), craft_snapshot(), crossed_milestone(), entity_snapshot(), portal_snapshot(), restore_music(), scan_entity() (+4 more)
-
-### Community 44 - "Dev UI Overlay"
+### Community 41 - "fx_shape_spark_shaded"
 Cohesion: 0.17
-Nodes (8): connection_get_stats(), dev_ui_draw(), dev_ui_get_active_item_count(), dev_ui_get_effective_stats_sum(), dev_ui_on_tick(), dev_ui_update_network_stats(), direction_to_string(), mode_to_string()
+Nodes (11): draw_entry(), ease_out_cubic(), exit_scale(), lane(), draw_entity(), lane(), fx_shape_bar(), fx_shape_cooldown_bar() (+3 more)
 
-### Community 45 - "Camera & Frame Sync"
-Cohesion: 0.12
-Nodes (12): presentation_runtime_camera_zoom(), frame(), game_frame(), prediction_self(), session_frame_advance(), camera_init(), camera_resize(), camera_sync_mobile_zoom() (+4 more)
-
-### Community 46 - "Dust Puff FX"
-Cohesion: 0.22
-Nodes (10): alloc_puff(), alpha_curve(), fx_dust_default_params(), fx_dust_draw(), fx_dust_init(), fx_dust_spawn(), lcg_f01(), lcg_range() (+2 more)
-
-### Community 47 - "Atlas Icon Draw"
-Cohesion: 0.21
-Nodes (8): fallback_circle(), get_frames_with_fallback(), ol_as_ico_draw(), atlas_metadata_url(), atlas_texture(), get_atlas_texture(), get_or_fetch_atlas_data(), obj_layers_mgr_schedule_atlas_fetch()
-
-### Community 49 - "Tap FX"
+### Community 42 - "modal_anchor_layout_update"
 Cohesion: 0.26
-Nodes (9): fx_tap_alloc_entry(), fx_tap_default_params(), fx_tap_draw(), fx_tap_draw_cross(), fx_tap_ease_out_quart(), fx_tap_init(), fx_tap_scale_px(), fx_tap_snapf() (+1 more)
+Nodes (12): anchored_card_rect(), update_anchor_layout(), entity_point(), fit_into(), modal_anchor_capture(), modal_anchor_card_size(), modal_anchor_layout_reset(), modal_anchor_layout_update() (+4 more)
 
-### Community 50 - "Stack Move Animation"
-Cohesion: 0.31
-Nodes (6): container_ops_check(), confirmed(), land(), place_rect(), slide_in(), stack_move_drop()
+### Community 44 - "modal_instance_map_close"
+Cohesion: 0.16
+Nodes (18): instance_map_data_close(), instance_map_data_open(), fx_dust_reset(), fx_footsteps_reset(), fx_tap_reset(), input_gestures_set_blocked(), dev_ui_cleanup(), hud_minimap_overlay_cleanup() (+10 more)
 
-### Community 51 - "FX Shape Primitives"
-Cohesion: 0.25
-Nodes (7): draw_particle(), draw_trail(), fx_reward_draw(), fx_shape_bar(), fx_shape_cooldown_bar(), fx_shape_plus(), fx_shape_spark()
+### Community 45 - "draw_entity_layers"
+Cohesion: 0.18
+Nodes (8): anim_pool_alloc(), draw_dev_ui_box(), draw_entity_layers(), get_animation_state(), get_frame_count_and_direction(), layers_render_ready(), pick_available_direction(), atlas_get_direction_frames()
 
-### Community 52 - "Container Tab Visibility"
-Cohesion: 0.24
-Nodes (10): container_panel_is_open(), action_metadata(), craft_tab_visible(), leading_tab(), open_container_tab(), quest_tab_visible(), shop_tab_visible(), storage_capacity() (+2 more)
+### Community 46 - "hash_table.c"
+Cohesion: 0.28
+Nodes (10): find_insert_slot(), find_occupied(), hash_string(), hash_table_contains(), hash_table_put(), hash_table_remove(), hash_table_remove_if(), raw_insert() (+2 more)
 
-### Community 53 - "Level Up FX"
-Cohesion: 0.31
-Nodes (7): draw_entry(), ease_out_cubic(), exit_scale(), fx_level_up_active(), fx_level_up_draw(), fx_level_up_observe(), lane()
+### Community 47 - "inventory_modal_handle_click"
+Cohesion: 0.17
+Nodes (20): dialogue_data_available(), dialogue_data_get(), game_state_is_active_item_type(), game_state_is_dead_item(), local_player_status_icon(), activate_enabled(), card_rect(), current_ols() (+12 more)
 
-### Community 54 - "Layer Z Ordering"
-Cohesion: 0.22
-Nodes (3): ol_stack_ico_draw(), layer_z_priority(), layer_z_sort()
+### Community 48 - "dev_ui_draw"
+Cohesion: 0.17
+Nodes (8): game_state_progress(), own_level(), dev_ui_draw(), dev_ui_get_active_item_count(), dev_ui_get_effective_stats_sum(), direction_to_string(), mode_to_string(), local_player_view_direction()
 
-### Community 55 - "HUD Joystick"
-Cohesion: 0.33
-Nodes (4): hud_joystick_draw(), pixel_ring(), pixel_sector(), row_cells()
+### Community 49 - "interaction_bubble.c"
+Cohesion: 0.13
+Nodes (4): dev_ui_on_tick(), dev_ui_update_network_stats(), item_type_of(), storable()
 
-### Community 56 - "Death FX"
-Cohesion: 0.33
-Nodes (6): draw_entry(), exit_scale(), fx_death_active(), fx_death_draw(), fx_death_observe(), lane()
-
-### Community 57 - "Pointer Gesture Input"
-Cohesion: 0.39
-Nodes (4): pointer_gesture_update(), release(), sector_axis(), start()
-
-### Community 58 - "Startup & Init"
-Cohesion: 0.25
-Nodes (9): audio_init(), audio_start(), fetch_init(), main(), enter_game(), preload_frame(), tapped(), telemetry_event() (+1 more)
-
-### Community 59 - "Inventory Capacity Rules"
-Cohesion: 0.33
-Nodes (8): local_player_inventory_has_room(), local_player_inventory_used(), local_player_is_coin(), local_player_item_quantity(), local_player_open_slots(), container_panel_accepts(), container_panel_drag_in(), craft_outputs_fit()
-
-### Community 60 - "Stat & Capacity Contract"
-Cohesion: 0.32
-Nodes (4): cyberia_capacity_slots(), cyberia_capacity_unlock_level(), cyberia_stats_from_values(), cyberia_stats_values()
-
-### Community 61 - "Asset Bridge JS"
+### Community 50 - "fx_tap.c"
 Cohesion: 0.29
-Nodes (3): asset_bridge_now(), error(), function()
+Nodes (6): fx_tap_alloc_entry(), fx_tap_draw(), fx_tap_draw_cross(), fx_tap_ease_out_quart(), fx_tap_scale_px(), fx_tap_snapf()
 
-### Community 62 - "Fetch Request & Font"
-Cohesion: 0.43
-Nodes (5): presentation_runtime_font_factor_size(), fetch_request_start(), fetch_request_start_at(), fetch_request_start_limited(), text_font_sync()
-
-### Community 63 - "Subsystem Cleanup"
-Cohesion: 0.33
-Nodes (6): fx_dust_reset(), fx_footsteps_reset(), fx_tap_reset(), dev_ui_cleanup(), modal_map_cleanup(), render_cleanup()
-
-### Community 64 - "Camera Coordinate Transform"
-Cohesion: 0.50
-Nodes (3): camera_get(), game_render_screen_to_world(), game_render_world_to_screen()
-
-### Community 65 - "Resource Destruction"
-Cohesion: 0.60
-Nodes (5): dialogue_data_cleanup(), hash_table_destroy(), destroy_entity_render(), game_render_cleanup(), destroy_object_layers_manager()
-
-### Community 66 - "Object Layer Alloc"
+### Community 51 - "create_object_layer"
 Cohesion: 0.50
 Nodes (3): create_object_layer(), free_object_layer(), free_layer_value()
 
-### Community 67 - "Config URL Helpers"
+### Community 52 - "get_or_fetch_atlas_data"
+Cohesion: 0.21
+Nodes (10): dialogue_data_request(), dialogue_data_request_code(), on_dialogue_fetched(), parse_response(), hash_table_get(), atlas_metadata_url(), atlas_texture(), get_atlas_texture() (+2 more)
+
+### Community 53 - "emit_step"
+Cohesion: 0.24
+Nodes (6): cell_size(), emit_step(), step_is_visible(), step_params(), track_entity(), tracker_for()
+
+### Community 54 - "local_player_open_slots"
+Cohesion: 0.29
+Nodes (8): cyberia_capacity_slots(), cyberia_capacity_unlock_level(), local_player_inventory_has_room(), local_player_inventory_used(), local_player_is_coin(), local_player_item_quantity(), local_player_open_slots(), craft_outputs_fit()
+
+### Community 55 - "game_render_init"
+Cohesion: 0.14
+Nodes (15): dialogue_data_cleanup(), dialogue_data_init(), hash_table_destroy(), hash_table_init(), interaction_bubble_init(), inventory_modal_init(), modal_dialogue_init(), modal_notification_init() (+7 more)
+
+### Community 56 - "hud_side_stack.c"
+Cohesion: 0.37
+Nodes (11): hud_minimap_overlay_is_visible(), chat_height(), chat_reserve(), column_x(), hud_side_stack_available(), hud_side_stack_chat_slot(), hud_side_stack_journal_slot(), hud_side_stack_map_slot() (+3 more)
+
+### Community 57 - "modal_draw_card"
+Cohesion: 0.29
+Nodes (7): shadow_text(), modal_draw_card(), modal_draw_clipped_text(), modal_draw_float_shadow(), modal_draw_title(), modal_pop_alpha(), toolbar_toggle_right()
+
+### Community 58 - "chat_panel.c"
+Cohesion: 0.23
+Nodes (16): chat_channel(), chat_panel_covers_point(), chat_panel_desired_height(), chat_panel_draw(), chat_panel_handle_click(), chat_panel_handle_wheel(), chat_panel_toggle(), chat_panel_unread() (+8 more)
+
+### Community 59 - "audio_context.c"
+Cohesion: 0.21
+Nodes (12): audio_context_snapshot(), audio_context_update(), craft_snapshot(), crossed_milestone(), entity_snapshot(), portal_snapshot(), restore_music(), scan_entity() (+4 more)
+
+### Community 60 - "quest_progress_store.c"
+Cohesion: 0.23
+Nodes (12): find_by_code(), quest_progress_store_apply(), quest_progress_store_count(), quest_progress_store_find(), quest_progress_store_get(), quest_progress_store_is_completed(), quest_progress_store_parse_status(), quest_progress_store_reset() (+4 more)
+
+### Community 61 - "game_render_frame"
+Cohesion: 0.13
+Nodes (12): presentation_runtime_camera_zoom(), prediction_self(), fct_draw_overlay(), camera_get(), camera_init(), camera_resize(), camera_sync_mobile_zoom(), game_render_frame() (+4 more)
+
+### Community 62 - "lookup_cached_layer"
+Cohesion: 0.20
+Nodes (5): interaction_bubble_dead_equip(), layer_z_priority(), layer_z_sort(), active_layer_item_id(), lookup_cached_layer()
+
+### Community 63 - "modal_dialogue_open"
+Cohesion: 0.13
+Nodes (13): inventory_modal_handle_content_click(), inventory_modal_open(), inventory_modal_open_external(), inventory_modal_switch_slot(), on_dialogue_close_reopen(), rebuild_dir_str(), reset_view_state(), shown_inv_idx() (+5 more)
+
+### Community 64 - "hud_joystick.c"
+Cohesion: 0.33
+Nodes (4): hud_joystick_draw(), pixel_ring(), pixel_sector(), row_cells()
+
+### Community 66 - "stack_move.c"
+Cohesion: 0.27
+Nodes (7): container_ops_check(), container_ops_stack(), confirmed(), land(), place_rect(), slide_in(), stack_move_drop()
+
+### Community 67 - "asset_bridge.c"
+Cohesion: 0.29
+Nodes (3): asset_bridge_now(), error(), function()
+
+### Community 68 - "scan_entity"
+Cohesion: 0.24
+Nodes (9): presentation_runtime_entity_fallback_color(), presentation_runtime_palette(), presentation_runtime_status_border(), copy_active_layers(), find_slot(), interaction_bubble_get_alive_layers(), scan_entity(), status_border_color() (+1 more)
+
+### Community 69 - "utils"
+Cohesion: 0.22
+Nodes (3): action_cache_get(), on_action_fetched(), on_quest_fetched()
+
+### Community 70 - "prediction_on_snapshot"
+Cohesion: 0.40
+Nodes (3): prediction_on_snapshot(), prediction_prev(), session_next_input_sequence()
+
+### Community 71 - "meta_cache.c"
+Cohesion: 0.38
+Nodes (6): find_or_create(), head_at(), meta_cache_fetch(), meta_cache_find(), meta_cache_on_fetched(), quest_cache_get()
+
+### Community 72 - "open_item_viewer"
 Cohesion: 0.67
 Nodes (3): config_data_server_url(), open_item_viewer(), url_encode()
 
+### Community 73 - "cJSON"
+Cohesion: 0.36
+Nodes (5): ingest_craft_items(), ingest_doc(), ingest_quest_doc(), json_int(), json_str()
+
+### Community 74 - "main"
+Cohesion: 0.22
+Nodes (8): audio_init(), config_ws_url(), fetch_init(), main(), connection_open(), message_set_init_handler(), preload_start(), text_font_init()
+
+### Community 75 - "fx_level_up.c"
+Cohesion: 0.39
+Nodes (5): draw_entry(), ease_out_cubic(), exit_scale(), fx_level_up_draw(), lane()
+
+### Community 76 - "draw_skill_previews"
+Cohesion: 0.33
+Nodes (5): cooldown_charge(), local_player_action_charge(), local_player_consume_charge(), draw_skill_previews(), skill_preview_layout()
+
+### Community 77 - "ol_as_ico_draw"
+Cohesion: 0.29
+Nodes (3): fallback_circle(), get_frames_with_fallback(), ol_as_ico_draw()
+
+### Community 78 - "stat_panel.c"
+Cohesion: 0.48
+Nodes (4): stat_panel_draw(), stat_panel_grid_draw(), stat_panel_sum_draw(), value_color()
+
 ## Knowledge Gaps
-- **3 thin communities (<3 nodes) omitted from report** — run `graphify query` to explore isolated nodes.
+- **7 thin communities (<3 nodes) omitted from report** — run `graphify query` to explore isolated nodes.
 
 ## Suggested Questions
 _Questions this graph is uniquely positioned to answer:_
 
-- **Why does `copy_str()` connect `Interact Mode & Chat Bind` to `Instance Map Graph`, `Inventory Bar Quantity`, `Inventory & Dialogue Modals`, `Entity Render & HUD`, `Client Event Packing`, `Action Craft Cache`, `Notification & Grant FX`, `Player Overhead Display`, `Input & Party Events`, `Chat Log`, `World Entity Rendering`, `Interact Modal Cards`, `Dialogue Modal`, `Floating Combat Text`, `Audio Bus Control`, `Container Panel Ops`, `Audio Content Fetch`, `Container Stack Operations`, `Quest Detail Drawing`, `Audio Context Snapshot`, `Fetch Request & Font`?**
-  _High betweenness centrality (0.039) - this node is a cross-community bridge._
-- **Are the 63 inferred relationships involving `viewport_is_mobile()` (e.g. with `chat_font()` and `chat_row_h()`) actually correct?**
-  _`viewport_is_mobile()` has 63 INFERRED edges - model-reasoned connections that need verification._
-- **Should `Instance Map Graph` be split into smaller, more focused modules?**
-  _Cohesion score 0.0501906941266209 - nodes in this community are weakly interconnected._
-- **Why does `inventory_modal_draw()` connect `Inventory & Dialogue Modals` to `Inventory Bar Quantity`, `Quest Detail Drawing`, `Player Overhead Display`, `Container Panel Tabs`, `Chat Log`, `Interact Modal Cards`, `Dialogue Modal`, `Atlas Icon Draw`, `Interact Mode & Chat Bind`, `Interact Modal Layout`, `Stat & Capacity Contract`?**
-  _High betweenness centrality (0.014) - this node is a cross-community bridge._
+- **Why does `copy_str()` connect `copy_str` to `message.c`, `modal_instance_map.c`, `container_panel.c`, `modal_notification.c`, `inventory_bar.c`, `instance_map_data.c`, `string`, `chat_log.c`, `ui_button_hit`, `local_player.c`, `inventory_modal.c`, `audio.c`, `audio_content.c`, `player_panel.c`, `game_frame`, `interaction_bubble_draw`, `viewport_is_mobile`, `text_line_height`, `container_ops.c`, `inventory_modal_handle_click`, `audio_context.c`, `quest_progress_store.c`, `modal_dialogue_open`, `meta_cache.c`, `cJSON`, `draw_skill_previews`?**
+  _High betweenness centrality (0.029) - this node is a cross-community bridge._
+- **Are the 64 inferred relationships involving `viewport_is_mobile()` (e.g. with `chat_font()` and `chat_row_h()`) actually correct?**
+  _`viewport_is_mobile()` has 64 INFERRED edges - model-reasoned connections that need verification._
+- **Should `message.c` be split into smaller, more focused modules?**
+  _Cohesion score 0.06265143648321218 - nodes in this community are weakly interconnected._
+- **Why does `on_window_resize()` connect `game_render_frame` to `game_render.c`?**
+  _High betweenness centrality (0.021) - this node is a cross-community bridge._
 - **Are the 52 inferred relationships involving `copy_str()` (e.g. with `audio_play()` and `audio_update()`) actually correct?**
   _`copy_str()` has 52 INFERRED edges - model-reasoned connections that need verification._
-- **Should `Inventory Bar Quantity` be split into smaller, more focused modules?**
-  _Cohesion score 0.05214917825537294 - nodes in this community are weakly interconnected._
-- **Should `Inventory & Dialogue Modals` be split into smaller, more focused modules?**
-  _Cohesion score 0.05171717171717172 - nodes in this community are weakly interconnected._
+- **Should `modal_instance_map.c` be split into smaller, more focused modules?**
+  _Cohesion score 0.05486327448944271 - nodes in this community are weakly interconnected._
+- **Why does `ui_button_hit()` connect `ui_button_hit` to `modal_instance_map.c`, `interaction_bubble_draw`, `container_panel.c`, `inventory_bar.c`, `viewport_is_mobile`, `modal_notification.c`, `ui_button_draw`, `chat_log.c`, `quest_journal.c`, `inventory_modal_handle_click`, `inventory_modal.c`, `toolbar.c`, `chat_panel.c`, `modal_interact.c`, `player_panel.c`, `copy_str`, `modal_dialogue_open`?**
+  _High betweenness centrality (0.019) - this node is a cross-community bridge._

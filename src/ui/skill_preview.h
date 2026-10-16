@@ -5,6 +5,7 @@
 #include <stdbool.h>
 
 #include "world/object_layer.h"
+#include "world/object_layers_management.h"
 #include "ui_state.h"
 
 /* Summoned entity previews: the entities the configured skills of an item
@@ -34,5 +35,16 @@ int skill_preview_summons(const ObjectLayerState* slot, SkillPreview out[SKILL_P
  * row crosses it. */
 void skill_preview_layout(Rectangle slot, float floor_y, Rectangle keep_clear, int count,
                           Rectangle icons[SKILL_PREVIEW_MAX], Rectangle* bar);
+
+/* Skill pager: the skills of one item that summon an entity, one per page,
+ * with < > arrows when more than one matches. */
+void  skill_preview_pager_reset(void);
+
+/* Draw the current page of `item_id`'s skills at (x, y), `w` wide. Returns the
+ * y below the page; `y` when no skill matches. */
+float skill_preview_pager_draw(ObjectLayersManager* mgr, const char* item_id, float x, float y, float w, int font);
+
+/* Turn the page on an arrow hit. True when the click hit an enabled arrow. */
+bool  skill_preview_pager_click(int mx, int my);
 
 #endif /* CYBERIA_UI_SKILL_PREVIEW_H */

@@ -86,13 +86,6 @@ static bool      s_lore_btn_visible = false;
 static Rectangle s_activate_btn_rect;
 static bool      s_activate_btn_visible = false;
 
-/* Skill pagination (arrow buttons when >1 skill matches the item) */
-static int       s_skill_page = 0;
-static int       s_skill_total = 0;
-static Rectangle s_skill_prev_rect;
-static Rectangle s_skill_next_rect;
-static bool      s_skill_arrows_visible = false;
-
 /* Main item preview/details column; header and action controls stay fixed. */
 static UIScroll s_content_scroll;
 static float    s_content_height = 0.0f;
@@ -150,7 +143,6 @@ static const Color C_BTN_TEXT      = { 230, 230, 230, 255 };
 static const Color C_QTY           = { 255, 215,   0, 255 };
 static const Color C_DIR_BTN_SEL   = {  50,  80, 160, 240 };   /* selected dir */
 static const Color C_DIR_BTN_DEF   = {  35,  38,  60, 220 };   /* unselected  */
-static const Color C_DIR_BTN_DIS   = {  22,  22,  30, 180 };   /* disabled    */
 static const Color C_MODE_IDLE     = {  40,  90,  40, 230 };
 static const Color C_MODE_WALK     = {  90,  50,  10, 230 };
 static const Color C_LORE_BTN     = {  50,  50, 120, 240 };
@@ -425,9 +417,7 @@ static void reset_view_state(void) {
     strncpy(s_dir,  "down", sizeof(s_dir)  - 1);
     strncpy(s_mode, "idle", sizeof(s_mode) - 1);
     rebuild_dir_str();
-    s_skill_page = 0;
-    s_skill_total = 0;
-    s_skill_arrows_visible = false;
+    skill_preview_pager_reset();
     s_lore_btn_visible = false;
     s_activate_btn_visible = false;
     ui_scroll_reset(&s_content_scroll);
@@ -521,15 +511,7 @@ static void inventory_modal_handle_content_click(int mx, int my) {
         return;
     }
 
-    if (s_skill_arrows_visible && s_skill_total > 1) {
-        if (s_skill_page > 0 && ui_button_hit(s_skill_prev_rect, mx, my)) {
-            s_skill_page--;
-            return;
-        }
-        if (s_skill_page < s_skill_total - 1 && ui_button_hit(s_skill_next_rect, mx, my)) {
-            s_skill_page++;
-        }
-    }
+    skill_preview_pager_click(mx, my);
 }
 
 void inventory_modal_update(float dt) {
@@ -791,132 +773,9 @@ void inventory_modal_draw(void) {
         y_cursor += body_font + 8;
     }
 
-    /* 10b. Skill bar — summoned entities associated via skillConfig ──── */
-    /* Shows one skill at a time with left/right arrows when multiple match.
-     * Layout:
-     *   [separator]
-     *   SkillName (1/2)                              < >
-     *   [sprite] summonedItemId
-     *            word-wrapped description...
-     */
-    s_skill_arrows_visible = false;
-    s_skill_total = 0;
-    if (ols->item_id[0] != '\0') {
-        /* First pass: count matching skills */
-        int match_indices[UI_STATE_MAX_SKILL_ENTRIES];
-        int match_count = 0;
-        int total = ui_state_skill_count();
-        for (int si = 0; si < total; si++) {
-            const UiSkillEntry* se = ui_state_skill_at(si);
-            if (!se || strcmp(se->trigger_item_id, ols->item_id) != 0) continue;
-            if (se->summoned_entity_item_id[0] == '\0') continue;
-            if (match_count < UI_STATE_MAX_SKILL_ENTRIES)
-                match_indices[match_count++] = si;
-        }
-        s_skill_total = match_count;
-
-        if (match_count > 0) {
-            /* Clamp page */
-            if (s_skill_page >= match_count) s_skill_page = match_count - 1;
-            if (s_skill_page < 0) s_skill_page = 0;
-
-            const UiSkillEntry* se = ui_state_skill_at(match_indices[s_skill_page]);
-            const char* summon_id = skill_preview_summon_id(se);
-            const char* summon_label = summon_id ? summon_id : se->summoned_entity_item_id;
-
-            /* Separator line */
-            DrawLine((int)(info_x + pad), (int)y_cursor,
-                     (int)(info_x + info_w - pad), (int)y_cursor,
-                     (Color){ 70, 70, 100, 140 });
-            y_cursor += 6;
-
-            /* ── Header row: skill name (left) + pagination arrows (right) ── */
-            {
-                /* Skill name — use se->name if available, otherwise logicEventId */
-                const char* skill_label = (se->name[0] != '\0') ? se->name : se->logic_event_id;
-                char header_buf[96];
-                if (match_count > 1)
-                    snprintf(header_buf, sizeof(header_buf), "%s (%d/%d)",
-                             skill_label, s_skill_page + 1, match_count);
-                else
-                    snprintf(header_buf, sizeof(header_buf), "%s", skill_label);
-
-                DrawText(header_buf, (int)(info_x + pad), (int)y_cursor,
-                         stat_font, (Color){ 180, 160, 255, 220 });
-
-                /* Right-aligned arrows (only when >1 skill) */
-                if (match_count > 1) {
-                    float arrow_w = inventory_modal_compact() ? 24.0f : 28.0f;
-                    float arrow_h = inventory_modal_compact() ? 20.0f : 22.0f;
-                    float arrow_y = y_cursor;
-                    float next_x = info_x + info_w - pad - arrow_w;
-                    float prev_x = next_x - arrow_w - 4;
-
-                    s_skill_prev_rect = (Rectangle){ prev_x, arrow_y, arrow_w, arrow_h };
-                    s_skill_next_rect = (Rectangle){ next_x, arrow_y, arrow_w, arrow_h };
-                    s_skill_arrows_visible = true;
-
-                    int mx = GetMouseX(), my = GetMouseY();
-
-                    UIButtonStyle arrow = {
-                        .font_size     = stat_font,
-                        .bg            = { 40, 42, 68, 220 },
-                        .bg_hover      = { 60, 60, 100, 240 },
-                        .bg_disabled   = C_DIR_BTN_DIS,
-                        .border        = { 60, 65, 90, 160 },
-                        .text_color    = { 200, 210, 230, 240 },
-                        .text_disabled = { 60, 65, 75, 140 },
-                    };
-                    bool can_prev = s_skill_page > 0;
-                    bool can_next = s_skill_page < match_count - 1;
-                    arrow.text = "<";
-                    ui_button_draw(s_skill_prev_rect, &arrow,
-                        ui_button_resolve_state(can_prev, false, ui_button_hit(s_skill_prev_rect, mx, my)));
-                    arrow.text = ">";
-                    ui_button_draw(s_skill_next_rect, &arrow,
-                        ui_button_resolve_state(can_next, false, ui_button_hit(s_skill_next_rect, mx, my)));
-                }
-
-                y_cursor += stat_font + 6;
-            }
-
-            /* ── Content row: [sprite] + summoned item name + description ── */
-            int ico_sz = inventory_modal_compact() ? 30 : 36;
-            float ico_x = info_x + pad;
-            float ico_y = y_cursor;
-
-            /* Animated sprite of the summoned entity */
-            if (s_ol_manager && summon_id) {
-                ol_as_ico_draw(s_ol_manager, summon_id,
-                               (int)ico_x, (int)ico_y, ico_sz,
-                               "down_idle", 0, WHITE);
-            }
-            DrawRectangleLinesEx(
-                (Rectangle){ ico_x, ico_y, (float)ico_sz, (float)ico_sz },
-                1.0f, (Color){ 80, 80, 130, 160 });
-
-            /* Summoned item name right of sprite */
-            float text_x = ico_x + ico_sz + 8;
-            DrawText(summon_label,
-                     (int)text_x, (int)ico_y,
-                     stat_font, (Color){ 200, 220, 255, 240 });
-
-            /* Skill description below the name, word-wrapped */
-            if (se->description[0] != '\0') {
-                float desc_y = ico_y + stat_font + 3;
-                desc_y += (float)text_wrap(se->description, (int)text_x, (int)desc_y,
-                                           (int)(info_x + info_w - pad - text_x),
-                                           stat_font - 1, (Color){ 160, 165, 180, 200 },
-                                           false, true);
-                /* Advance y_cursor to the bottom of the taller element */
-                float sprite_bottom = ico_y + ico_sz;
-                float text_bottom = desc_y;
-                y_cursor = (sprite_bottom > text_bottom ? sprite_bottom : text_bottom) + 6;
-            } else {
-                y_cursor = ico_y + ico_sz + 6;
-            }
-        }
-    }
+    /* 10b. Skill bar — summoned entities associated via skillConfig. */
+    y_cursor = skill_preview_pager_draw(s_ol_manager, ols->item_id, info_x + pad, y_cursor,
+                                        info_w - 2.0f * pad, stat_font);
 
     float content_bottom = y_cursor > preview_bottom ? y_cursor : preview_bottom;
     s_content_height = content_bottom - content_origin_y + 8.0f;

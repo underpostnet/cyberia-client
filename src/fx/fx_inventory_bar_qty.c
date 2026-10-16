@@ -43,7 +43,7 @@ typedef struct {
     int    seen_qty[FQ_STACKS];
     int    seen_count;
     int    cell;
-    float  display;       /* badge value: the pre-change count while held       */
+    int    display;       /* badge value: the pre-change count while held       */
     /* A detected change held until the pickup particle lands (or fallback). */
     bool   pending;
     int    pending_delta; /* accumulated signed change while held               */
@@ -109,7 +109,7 @@ static void release_pending(FqEntry* e) {
     /* The badge lands with the delivery: the moment the item visibly arrives is
      * the moment its slot must read the new total, so the count snaps here
      * rather than rolling toward it afterwards. */
-    e->display = (float)e->actual;
+    e->display = e->actual;
     e->hidden = false;
     e->held = false;
     e->pending = false;
@@ -200,13 +200,13 @@ void fx_inventory_bar_qty_update(float dt) {
                 /* First copy with its pickup still in flight: hold the slot
                  * hidden until the flight lands, then reveal + "+N" + tween. */
                 e->hidden = true;
-                e->display = 0.0f;
+                e->display = 0;
                 e->pending = true;
                 e->pending_delta = qty;
                 e->pending_since = s_clock;
             } else {
                 /* Initial load / non-pickup grant: seed without a popup. */
-                e->display = (float)qty;
+                e->display = qty;
             }
         } else if (e->actual != qty) {
             e->cell = changed_cell(e, slots, qtys, count);
@@ -214,7 +214,7 @@ void fx_inventory_bar_qty_update(float dt) {
                 /* A transfer between two visible surfaces: land the badge with
                  * no popup, and drop any hold that was waiting on it. */
                 e->actual = qty;
-                e->display = (float)qty;
+                e->display = qty;
                 e->hidden = e->held = e->pending = e->silent = false;
                 e->pending_delta = 0;
             } else {
@@ -247,7 +247,7 @@ void fx_inventory_bar_qty_update(float dt) {
         if (!e->present && e->actual > 0 && !e->hidden && !e->held) {
             if (e->silent) {
                 e->actual = 0;
-                e->display = 0.0f;
+                e->display = 0;
                 e->silent = e->pending = false;
                 e->pending_delta = 0;
             } else {
@@ -284,7 +284,7 @@ int fx_inventory_bar_qty_display(const char* item_id, int slot, int actual) {
     FqEntry* e = find(item_id);
     if (!e || slot != e->cell) return actual;
     /* The changed stack holds its share of the held change. */
-    int held = actual + (int)(e->display + 0.5f) - e->actual;
+    int held = actual + e->display - e->actual;
     return 0 > held ? 0 : held;
 }
 
