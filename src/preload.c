@@ -10,6 +10,7 @@
 #include "sim/replication.h"
 #include "telemetry.h"
 #include "ui/modal.h"
+#include "ui/session_gate.h"
 #include "ui/text.h"
 #include "view/camera.h"
 #include "view/entity_render.h"
@@ -25,22 +26,19 @@ static const Color SPLASH_BG    = {   5,   5,   5, 255 };
 static const Color SPLASH_GOLD  = { 255, 204,   0, 255 };
 static const Color SPLASH_LABEL = { 170, 170, 170, 255 };
 
-static Font   s_font;
 static double s_started_at;
 static bool   s_ready;
 static int    s_touches;
 
 void preload_start(void) {
-    s_font = LoadFontEx("assets/fonts/Jersey15-Regular.ttf", 40, NULL, 0);
     s_started_at = GetTime();
+    presentation_runtime_start_fetch(CYBERIA_CLIENT_HINTS_CODE);
     connection_open();
 }
 
 /* First unmet gate, NULL when the world is ready to show. */
 static const char* pending(void) {
     if (!connection_is_open()) return "Connecting to Cyberia...";
-    /* Assets start after the connection. Repeat calls do nothing. */
-    presentation_runtime_start_fetch(CYBERIA_CLIENT_HINTS_CODE);
     if (!g_game_state.init_received || 0 == g_local_player.id) return "Entering the world...";
     if (!presentation_runtime_is_ready()) return "Preparing the view...";
     /* The two render checks also queue the P0 fetches they wait for. */
@@ -60,18 +58,34 @@ static bool tapped(void) {
 }
 
 static void draw_centered(const char* text, float y, float size, Color color) {
-    const Vector2 extent = MeasureTextEx(s_font, text, size, 2.0f);
-    DrawTextEx(s_font, text, (Vector2){ (GetScreenWidth() - extent.x) * 0.5f, y }, size, 2.0f, color);
+    const Vector2 extent = MeasureTextEx(text_font(), text, size, 2.0f);
+    DrawTextEx(text_font(), text, (Vector2){ (GetScreenWidth() - extent.x) * 0.5f, y }, size, 2.0f, color);
 }
 
-/* shell.html centres the CSS logo above y = h/2; the text goes below it. */
-static void draw_splash(const char* label, const char* prompt) {
+/* shell.html centres the CSS logo above y = h/2; the wordmark goes below it. */
+static float draw_wordmark(void) {
     const float y = GetScreenHeight() * 0.5f;
+    draw_centered("CYBERIA", y + 10.0f, 40.0f, SPLASH_GOLD);
+    return y + 60.0f;
+}
+
+/* The wordmark, then the state under it. A call to action blinks. */
+static void draw_splash(const char* label, const char* prompt) {
     BeginDrawing();
     ClearBackground(SPLASH_BG);
-    draw_centered("CYBERIA", y + 10.0f, 40.0f, SPLASH_GOLD);
-    draw_centered(label, y + 65.0f, 18.0f, NULL == prompt ? SPLASH_LABEL : SPLASH_GOLD);
-    if (NULL != prompt && 0.5 > fmod(GetTime(), 1.0)) draw_centered(prompt, y + 100.0f, 30.0f, WHITE);
+    const float y = draw_wordmark();
+    draw_centered(label, y + 5.0f, 18.0f, NULL == prompt ? SPLASH_LABEL : SPLASH_GOLD);
+    if (NULL != prompt && 0.5 > fmod(GetTime(), 1.0)) draw_centered(prompt, y + 40.0f, 30.0f, WHITE);
+    EndDrawing();
+}
+
+/* A launch the server refused, or a session that ended before gameplay: the
+ * session card under the wordmark. */
+static void draw_gate(void) {
+    BeginDrawing();
+    ClearBackground(SPLASH_BG);
+    const float top = draw_wordmark();
+    session_gate_draw((Rectangle){ 0, top, (float)GetScreenWidth(), (float)GetScreenHeight() - top });
     EndDrawing();
 }
 
@@ -84,7 +98,6 @@ static void enter_game(void) {
     audio_start();
     modal_closed(); /* the splash is the first open modal */
     emscripten_run_script("document.getElementById('fx').remove()");
-    UnloadFont(s_font);
 }
 
 bool preload_frame(void) {
@@ -103,11 +116,20 @@ bool preload_frame(void) {
 
     /* Read input before EndDrawing: its PollInputEvents clears the release. */
     const bool tap = tapped();
-    draw_splash(s_ready ? "Your character is ready." : label,
-                s_ready ? "TAP TO START" : stuck ? "TAP TO RELOAD" : NULL);
+    if (session_gate_active()) {
+        draw_gate();
+    } else {
+        draw_splash(s_ready ? "Your character is ready." : label,
+                    s_ready ? "TAP TO START" : stuck ? "TAP TO RELOAD" : NULL);
+    }
     audio_update(frame_dt);
     fetch_process_frame();
     fetch_frame_end();
+
+    if (session_gate_active()) {
+        if (tap) session_gate_handle_click(GetMouseX(), GetMouseY());
+        return false;
+    }
 
     if (tap && stuck) emscripten_run_script("location.reload()");
     if (!tap || !s_ready) return false;

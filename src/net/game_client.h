@@ -24,7 +24,15 @@ void game_client_on_tick(void);
  * graduates from AWAITING_INIT to RUNNING. */
 void client_on_init_received(void);
 
-/** Pack a message and send it. Takes ownership of msg. Only the handshake
+/* Keeps the resume ticket the server issued for this account session: it
+ * lives in memory only and rejoins the session after a dropped connection. */
+void game_client_hold_resume(const char* ticket);
+
+/* A session_end the server sent: a resume that must wait tries again, a
+ * restart of an account session resumes, anything else goes to the gate. */
+void game_client_on_session_end(const char* reason);
+
+/** Pack a message and send it. Takes ownership of msg. Only the auth message
  * and client_event_flush call it; every input goes through client_event. */
 bool network_send(cJSON* msg);
 

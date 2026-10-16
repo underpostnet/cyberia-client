@@ -5,6 +5,17 @@
     <meta http-equiv="Content-Type" content="text/html; charset=utf-8">
 
     <title>CYBERIA MMO</title>
+    <meta name="referrer" content="no-referrer">
+
+    <!-- The launch ticket arrives once in the fragment. Keep it in memory only
+         and drop it from the address bar and the history. -->
+    <script>
+        (function () {
+            var found = /(?:^|&)ticket=([A-Za-z0-9_-]{43})(?:&|$)/.exec(self.location.hash.slice(1));
+            self.CYBERIA_LAUNCH_TICKET = found ? found[1] : '';
+            if (self.location.hash) history.replaceState(null, '', self.location.pathname + self.location.search);
+        })();
+    </script>
 
     <!-- user-scalable=no: no browser pinch zoom; the game owns pinch -->
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
@@ -26,12 +37,6 @@
             justify-content: center;
             align-items: center;
             image-rendering: pixelated;
-        }
-        #fx .scanlines {
-            position: absolute;
-            inset: 0;
-            background: linear-gradient(to bottom, rgba(255, 255, 255, 0), rgba(255, 255, 255, 0) 50%, rgba(0, 0, 0, 0.25) 50%, rgba(0, 0, 0, 0.25));
-            background-size: 100% 4px;
         }
         #fx .vignette {
             position: absolute;
@@ -87,7 +92,7 @@
     </head>
     <body>
         <canvas class=emscripten id=canvas oncontextmenu=event.preventDefault() tabindex=-1></canvas>
-        <div id="fx"><div class="logo"></div><div class="vignette"></div><div class="scanlines"></div></div>
+        <div id="fx"><div class="logo"></div><div class="vignette"></div></div>
         <p id="output" />
         <script>
             var Module = {

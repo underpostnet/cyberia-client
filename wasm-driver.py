@@ -7,11 +7,11 @@ stale WASM/JS.
 
 Usage
 -----
-  python3 wasm-driver.py [--port=<port>] [--directory=<dir>] [--data-server-url=<url>] [client flags]
+  python3 wasm-driver.py [--port=<port>] [--directory=<dir>] --data-server-url=<url> [client flags]
 
   --port              TCP port (default: 8080)
   --directory         Directory to serve (default: current directory)
-  --data-server-url   Data Server origin (default: https://cyberiaonline.com).
+  --data-server-url   Data Server origin, required.
                       Passed to the WASM client as window.CYBERIA_ARGV, which
                       emscripten turns into the client's own argv.
   client flags        Any other flag is appended to the client argv, e.g.
@@ -29,11 +29,9 @@ Multi-instance routing
   into index.html as window.* globals:
 
     CYBERIA_WS_ORIGIN          websocket origin, e.g. wss://server.cyberiaonline.com
-    CYBERIA_DEFAULT_INSTANCE   instance used when served from the root path
     CYBERIA_BASE_PATH          this container's public path, e.g. /FOREST
 
-  Unset vars are simply not injected and the client falls back to the values
-  compiled into the WASM.
+  CYBERIA_WS_ORIGIN is required. CYBERIA_BASE_PATH is not injected when unset.
 
 Container status reporting
 --------------------------
@@ -66,7 +64,6 @@ from http.server import ThreadingHTTPServer, SimpleHTTPRequestHandler
 
 RUNTIME_CONFIG_ENV_KEYS = (
     "CYBERIA_WS_ORIGIN",
-    "CYBERIA_DEFAULT_INSTANCE",
     # This instance's URL sub-path ("/FOREST", "/TEST", "" for default).
     "CYBERIA_BASE_PATH",
 )
@@ -178,12 +175,12 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Static HTTP server for the Cyberia WASM client.")
     parser.add_argument("--port", type=int, default=8080, help="TCP port (default: 8080)")
     parser.add_argument("--directory", default=".", help="directory to serve (default: working directory)")
-    parser.add_argument(
-        "--data-server-url",
-        default="https://cyberiaonline.com",
-        help="Data Server origin (default: https://cyberiaonline.com)",
-    )
+    parser.add_argument("--data-server-url", required=True, help="Data Server origin")
     args, client_flags = parser.parse_known_args()
+    if not args.data_server_url:
+        parser.error("--data-server-url needs the Data Server origin")
+    if not os.environ.get("CYBERIA_WS_ORIGIN"):
+        parser.error("CYBERIA_WS_ORIGIN is required: the websocket origin of the game server")
 
     port = args.port
     directory = args.directory

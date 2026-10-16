@@ -15,8 +15,10 @@
 #include "fx/fx_obstacle_burst.h"
 #include "ui/chat_log.h"
 #include "ui/modal.h"
+#include "ui/session_gate.h"
 #include "ui/ui_state.h"
 #include "log.h"
+#include "utils.h"
 
 #include <assert.h>
 #include <stdbool.h>
@@ -35,6 +37,19 @@ typedef struct {
 } ClientCtx;
 
 static ClientCtx g_client = {0};
+
+/* How long a dropped account session tries to resume, within the life of its
+ * resume ticket, and the longest wait between two tries. */
+#define RESUME_WINDOW_S  240.0
+#define RESUME_BACKOFF_S 15.0
+
+static struct {
+    char   ticket[64];   /* the resume ticket, memory only */
+    bool   active;       /* reconnecting with the ticket */
+    double until;
+    double next;
+    double backoff;
+} s_resume;
 
 static void on_socket_open(void* ctx);
 static void on_socket_receive(const uint8_t* data, uint32_t length, void* ctx);
@@ -86,6 +101,7 @@ conn_stats connection_get_stats(void) {
 
 void client_on_init_received(void) {
     LOG_INFO("init_data received");
+    s_resume.active = false;
     /* Every join starts in stasis; the modal count tells the server the truth. */
     modal_push_stasis();
 }
@@ -100,8 +116,20 @@ void game_client_on_tick(void) {
                   g_game_state.init_received ? 1 : 0);
     }
 
-    // This is a draft for a reconnection feature... there are better ways to handle this
-    if(!connection_is_open()) {
+    if (s_resume.active && !connection_is_open() && now >= s_resume.next) {
+        if (now > s_resume.until) {
+            s_resume.active = false;
+            session_gate_lost();
+        } else {
+            s_resume.next = now + s_resume.backoff;
+            s_resume.backoff = s_resume.backoff * 2.0 < RESUME_BACKOFF_S ? s_resume.backoff * 2.0 : RESUME_BACKOFF_S;
+            connection_open();
+        }
+    }
+
+    /* A guest reconnects as a new guest. An account session resumes or waits
+     * at its gate, and an ended session waits for the player there. */
+    if (!connection_is_open() && !s_resume.active && !session_gate_active() && !session_gate_account()) {
         static const double retry_interval = 3.0;
         if (now - g_client.last_reconnect_at >= retry_interval) {
             g_client.last_reconnect_at = now;
@@ -123,10 +151,33 @@ bool network_send(cJSON* msg) {
     return ok;
 }
 
+void game_client_hold_resume(const char* ticket) { copy_str(s_resume.ticket, sizeof s_resume.ticket, ticket); }
+
+/* Starts resuming a dropped account session; false without a resume ticket. */
+static bool start_resume(void) {
+    if (!session_gate_account() || '\0' == s_resume.ticket[0]) return false;
+    s_resume.active = true;
+    s_resume.until = GetTime() + RESUME_WINDOW_S;
+    s_resume.next = GetTime() + 1.0;
+    s_resume.backoff = 1.0;
+    return true;
+}
+
+void game_client_on_session_end(const char* reason) {
+    if (s_resume.active && 0 == strcmp(reason, "busy")) return;
+    if (0 == strcmp(reason, "server_restart") && start_resume()) return;
+    s_resume.active = false;
+    s_resume.ticket[0] = '\0';
+    session_gate_end(reason);
+}
+
 /* ── Socket callbacks ────────────────────────────────────────────────── */
 
 static void on_socket_open(void* ctx) {
-    network_send(json_pack_handshake("cyberia-mmo", "1.0.0"));
+    char ticket[64];
+    if (s_resume.active) copy_str(ticket, sizeof ticket, s_resume.ticket);
+    else config_take_launch_ticket(ticket, sizeof(ticket));
+    network_send(json_pack_auth(ticket));
     LOG_INFO("WebSocket open");
 }
 
@@ -149,4 +200,7 @@ static void on_socket_close(int code, const char* reason, void* ctx) {
                  code, reason ? reason : "none");
     }
     client_reset_state();
+    if (session_gate_leaving()) session_gate_lost();
+    else if (!session_gate_active() && !s_resume.active && session_gate_account() && !start_resume())
+        session_gate_lost();
 }

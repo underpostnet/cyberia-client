@@ -48,7 +48,11 @@ void config_init(int argc, char** argv) {
     adopt_js_string((char*)EM_ASM_PTR({ return allocateUTF8(self.CYBERIA_WS_ORIGIN || ""); }), ws_origin,
                     sizeof(ws_origin));
 
-    instance_route_ws_url(ws_origin, WS_URL, s_instance_code, s_ws_url, sizeof(s_ws_url));
+    if ('\0' == ws_origin[0]) {
+        LOG_ERROR("missing window.CYBERIA_WS_ORIGIN");
+        assert(false);
+    }
+    instance_route_ws_url(ws_origin, s_instance_code, s_ws_url, sizeof(s_ws_url));
 
     /* The Data Server URL has one source: the command line. */
     static const char kFlag[]  = "--data-server-url=";
@@ -71,4 +75,35 @@ const char* config_ws_url(void) {
 
 const char* config_data_server_url(void) {
     return s_data_server_url;
+}
+
+const char* config_instance_code(void) {
+    return s_instance_code;
+}
+
+bool config_take_launch_ticket(char* out, size_t out_size) {
+    assert(out && 0 < out_size);
+    adopt_js_string((char*)EM_ASM_PTR({
+                        var ticket = self.CYBERIA_LAUNCH_TICKET || "";
+                        self.CYBERIA_LAUNCH_TICKET = "";
+                        return allocateUTF8(ticket);
+                    }),
+                    out, out_size);
+    return '\0' != out[0];
+}
+
+EM_JS(void, open_portal, (const char* portal, const char* path, const char* world, const char* as), {
+    const url = new URL(UTF8ToString(path), UTF8ToString(portal) + "/");
+    const query = {world: UTF8ToString(world), as: UTF8ToString(as)};
+    for (const key in query) if (query[key]) url.searchParams.set(key, query[key]);
+    self.location.assign(url.href);
+})
+
+void config_open_portal(PortalPage page) {
+    switch (page) {
+        case PORTAL_PLAY_GUEST:   open_portal(s_data_server_url, "launch", s_instance_code, "guest"); break;
+        case PORTAL_PLAY_ACCOUNT: open_portal(s_data_server_url, "launch", s_instance_code, "account"); break;
+        case PORTAL_WORLDS:       open_portal(s_data_server_url, "", "", ""); break;
+        case PORTAL_SIGN_OUT:     open_portal(s_data_server_url, "?signout", "", ""); break;
+    }
 }

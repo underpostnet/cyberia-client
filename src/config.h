@@ -2,12 +2,7 @@
 #define CONFIG_H
 
 #include <stdbool.h>
-
-#if defined(CYBERIA_DEBUG)
-#define WS_URL                "ws://localhost:8081/ws"
-#else
-#define WS_URL                "wss://server.cyberiaonline.com/ws"
-#endif
+#include <stddef.h>
 
 /** Must equal the server DefaultTickRate. Replay needs the same dt. */
 #define TICK_RATE_HZ             30
@@ -29,16 +24,27 @@ static const char* CYBERIA_CLIENT_HINTS_CODE = "cyberia-main";
  * segment of window.location.pathname; an empty segment (root) is the default
  * instance and yields a prefix-free "<origin>/ws" for the default server. A
  * non-root instance keeps its segment in "<origin>/<instance>/ws", matching
- * the server's CYBERIA_BASE_PATH mount. The websocket origin comes from
- * window.CYBERIA_WS_ORIGIN, injected by the static server; WS_URL above is the
- * fallback for local builds.
+ * the server's CYBERIA_BASE_PATH mount. The websocket origin has one source:
+ * window.CYBERIA_WS_ORIGIN, injected by the static server.
  *
  * The Data Server URL has one source: the --data-server-url=<origin> command
- * line argument. It is required. Call config_init() before connection_open()
+ * line argument. Both are required. Call config_init() before connection_open()
  * or any Data Server fetch. */
 
 void        config_init(int argc, char** argv);
 const char* config_ws_url(void);
 const char* config_data_server_url(void);
+/* The instance code of the URL; empty for the default instance. */
+const char* config_instance_code(void);
+
+/* The launch ticket the page read from its fragment, once: a later call
+ * answers false. A ticket lives in memory only. */
+bool        config_take_launch_ticket(char* out, size_t out_size);
+
+/* The portal pages the game leaves for: the launch bridge of this instance for
+ * a guest or an account session, the world selection, and the sign-out. */
+typedef enum { PORTAL_PLAY_GUEST, PORTAL_PLAY_ACCOUNT, PORTAL_WORLDS, PORTAL_SIGN_OUT } PortalPage;
+
+void        config_open_portal(PortalPage page);
 
 #endif // CONFIG_H
