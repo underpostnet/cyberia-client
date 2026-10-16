@@ -1,0 +1,5 @@
+# Allowlist: scan src/ only.
+/*
+!/src/
+
+/src/shell.html
