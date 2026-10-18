@@ -8,12 +8,9 @@
 #include "ui_scroll.h"
 
 /* One conversation inside a host's content rect: the history from chat_log, a
- * DOM text input (js/text_input_bridge.h), a Send button and quick-chat
- * presets. The host calls update, draw and press with the same content rect.
+ * DOM text input (js/text_input_bridge.h), an emoji menu and a Send button.
+ * The host calls update, draw and press with the same content rect.
  * Every pane shares the one DOM input; the pane that shows it owns it. */
-
-/* Content height the pane asks for in an anchored card. */
-#define CHAT_PANE_HEIGHT 280.0f
 
 typedef struct {
     ChatConversation conversation;
@@ -21,7 +18,8 @@ typedef struct {
     float            content_h;
     int              seen_count;
     double           seen_ts;
-    bool             stick;   /* scroll to the newest line on the next draw */
+    bool             stick;       /* scroll to the newest line on the next draw */
+    bool             emoji_open;  /* the emoji menu shows over the history */
 } ChatPane;
 
 /* Point the pane at a conversation. A new one starts at its newest line. */
@@ -34,7 +32,8 @@ void chat_pane_update(ChatPane* pane, Rectangle content, bool input_visible, flo
 
 void chat_pane_draw(ChatPane* pane, Rectangle content);
 
-/* Route a press inside the content rect: Send, a preset, or a history scroll. */
+/* Route a press inside the content rect: the emoji menu, Send, or a history
+ * scroll. A press outside the open emoji menu closes it. */
 void chat_pane_press(ChatPane* pane, Rectangle content, int mx, int my);
 
 bool chat_pane_wheel(ChatPane* pane, Rectangle content, float wheel_delta);

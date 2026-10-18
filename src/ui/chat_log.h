@@ -24,16 +24,14 @@ typedef struct {
 typedef struct {
     EntityID from_id;                      /* 0 for a system line */
     char     from_name[PLAYER_NAME_BYTES];
-    char     from_skin[MAX_ITEM_ID_LENGTH]; /* the active skin of the sender, or empty */
     char     text[CHAT_LINE_BYTES];
-    double   ts_ms;                        /* GetTime() clock */
+    double   at_ms;                        /* Unix ms: server time of a player line, local time of a system line */
     bool     mine;
 } ChatLine;
 
 typedef struct {
     ChatConversation conversation;
     char             peer_name[PLAYER_NAME_BYTES];  /* a direct conversation: who it is with */
-    char             peer_skin[MAX_ITEM_ID_LENGTH];
     ChatLine         lines[CHAT_LOG_LINES];
     int              count;
     int              unread;
@@ -47,15 +45,15 @@ static inline ChatConversation chat_direct(EntityID peer) {
     return (ChatConversation){ .channel = CHAT_CHANNEL_DIRECT, .peer = peer };
 }
 
-/* One player line. A line that is not `mine` counts as unread. */
-void chat_log_push(ChatConversation c, EntityID from_id, const char* from_name,
-                   const char* from_skin, const char* text, bool mine);
+/* One player line at the server time `at_ms`. A line that is not `mine` counts as unread. */
+void chat_log_push(ChatConversation c, EntityID from_id, const char* from_name, const char* text, double at_ms,
+                   bool mine);
 
 /* One local feedback line. It counts as read. */
 void chat_log_push_system(ChatConversation c, const char* text);
 
-/* Opens the direct conversation with a peer, named and drawn by its skin. */
-void chat_log_open_direct(EntityID peer, const char* name, const char* skin);
+/* Opens the direct conversation with a peer, named by its player name. */
+void chat_log_open_direct(EntityID peer, const char* name);
 
 /* NULL when the conversation was never opened and has no line. */
 const ChatHistory* chat_log_get(ChatConversation c);

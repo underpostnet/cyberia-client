@@ -51,6 +51,13 @@ static struct {
     double backoff;
 } s_resume;
 
+/* An in-place travel: the socket of the target world opens once the socket of
+ * the world left has closed, and the gate shows until the target sends init_data. */
+static struct {
+    bool pending;
+    bool open;
+} s_enter;
+
 static void on_socket_open(void* ctx);
 static void on_socket_receive(const uint8_t* data, uint32_t length, void* ctx);
 static void on_socket_error(void* ctx);
@@ -102,6 +109,8 @@ conn_stats connection_get_stats(void) {
 void client_on_init_received(void) {
     LOG_INFO("init_data received");
     s_resume.active = false;
+    s_enter.open = false;
+    session_gate_arrived();
     /* Every join starts in stasis; the modal count tells the server the truth. */
     modal_push_stasis();
 }
@@ -114,6 +123,12 @@ void game_client_on_tick(void) {
                   g_client.heartbeat_frames, now,
                   connection_is_open() ? 1 : 0,
                   g_game_state.init_received ? 1 : 0);
+    }
+
+    if (s_enter.pending && !connection_is_open()) {
+        s_enter.pending = false;
+        s_enter.open = connection_open();
+        if (!s_enter.open) session_gate_lost();
     }
 
     if (s_resume.active && !connection_is_open() && now >= s_resume.next) {
@@ -153,6 +168,8 @@ bool network_send(cJSON* msg) {
 
 void game_client_hold_resume(const char* ticket) { copy_str(s_resume.ticket, sizeof s_resume.ticket, ticket); }
 
+void game_client_enter_world(void) { s_enter.pending = true; }
+
 /* Starts resuming a dropped account session; false without a resume ticket. */
 static bool start_resume(void) {
     if (!session_gate_account() || '\0' == s_resume.ticket[0]) return false;
@@ -163,12 +180,13 @@ static bool start_resume(void) {
     return true;
 }
 
-void game_client_on_session_end(const char* reason) {
+void game_client_on_session_end(const char* reason, const char* travel_ticket) {
     if (s_resume.active && 0 == strcmp(reason, "busy")) return;
     if (0 == strcmp(reason, "server_restart") && start_resume()) return;
     s_resume.active = false;
     s_resume.ticket[0] = '\0';
-    session_gate_end(reason);
+    s_enter.open = false;
+    session_gate_end(reason, travel_ticket);
 }
 
 /* ── Socket callbacks ────────────────────────────────────────────────── */
@@ -200,7 +218,10 @@ static void on_socket_close(int code, const char* reason, void* ctx) {
                  code, reason ? reason : "none");
     }
     client_reset_state();
-    if (session_gate_leaving()) session_gate_lost();
+    if (s_enter.open) {
+        s_enter.open = false;
+        session_gate_lost();
+    } else if (session_gate_leaving()) session_gate_lost();
     else if (!session_gate_active() && !s_resume.active && session_gate_account() && !start_resume())
         session_gate_lost();
 }

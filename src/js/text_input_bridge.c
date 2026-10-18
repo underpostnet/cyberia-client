@@ -39,6 +39,7 @@ EM_JS(void, text_input_bridge_show, (int x, int y, int width, int height, int ma
     input.style.height = height + 'px';
     input.maxLength = max_len;
     input.placeholder = UTF8ToString(placeholder);
+    input.setAttribute('aria-label', input.placeholder);
     input.hidden = false;
 })
 
@@ -60,4 +61,12 @@ EM_JS(size_t, text_input_bridge_take, (char* out, size_t cap), {
     const length = stringToUTF8(input.value, out, cap);
     input.value = "";
     return length;
+})
+
+EM_JS(size_t, text_input_bridge_read, (char* out, size_t cap), {
+    return stringToUTF8(Module.textInput.element.value, out, cap);
+})
+
+EM_JS(void, text_input_bridge_set, (const char* text), {
+    Module.textInput.element.value = UTF8ToString(text);
 })

@@ -25,5 +25,7 @@ bool text_input_bridge_submitted(void);
 /* Copy the input text into `out`, NUL-terminated, and clear the input.
  * Returns the byte length. */
 size_t text_input_bridge_take(char* out, size_t cap);
+size_t text_input_bridge_read(char* out, size_t cap);
+void text_input_bridge_set(const char* text);
 
 #endif /* CYBERIA_JS_TEXT_INPUT_BRIDGE_H */

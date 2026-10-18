@@ -30,7 +30,10 @@ void game_client_hold_resume(const char* ticket);
 
 /* A session_end the server sent: a resume that must wait tries again, a
  * restart of an account session resumes, anything else goes to the gate. */
-void game_client_on_session_end(const char* reason);
+void game_client_on_session_end(const char* reason, const char* travel_ticket);
+
+/* Opens the world config_enter_world named once the current socket has closed. */
+void game_client_enter_world(void);
 
 /** Pack a message and send it. Takes ownership of msg. Only the auth message
  * and client_event_flush call it; every input goes through client_event. */

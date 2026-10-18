@@ -53,11 +53,16 @@ static cJSON* pack_event(const client_event_t* e) {
     case CLIENT_EVENT_PARTY_LEAVE:     return json_pack_player_target("party_leave", NULL, 0);
     case CLIENT_EVENT_PARTY_KICK:      return json_pack_player_target("party_kick", "toId", p->entity_id);
     case CLIENT_EVENT_PARTY_DISBAND:   return json_pack_player_target("party_disband", NULL, 0);
+    case CLIENT_EVENT_STATUS_NOTE: {
+        cJSON* message = json_pack_player_target("status_note", NULL, 0);
+        cJSON_AddStringToObject(cJSON_GetObjectItemCaseSensitive(message, "payload"), "text", p->text);
+        return message;
+    }
     case CLIENT_EVENT_FRIENDS_LIST:    return json_pack_player_target("friends_list", NULL, 0);
     case CLIENT_EVENT_FRIEND_REQUEST:  return json_pack_player_target("friend_request", "toId", p->entity_id);
     case CLIENT_EVENT_FRIEND_REPLY:    return json_pack_friendship("friend_reply", p->code, p->active);
     case CLIENT_EVENT_FRIEND_REMOVE:   return json_pack_friendship("friend_remove", p->code, false);
-    case CLIENT_EVENT_SESSION_LEAVE:   return json_pack_player_target("session_leave", NULL, 0);
+    case CLIENT_EVENT_SESSION_LEAVE:   return json_pack_session_leave(p->code);
     }
     assert(false && "unknown client event kind");
     return NULL;

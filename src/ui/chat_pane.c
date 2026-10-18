@@ -18,15 +18,11 @@
 #include <stdbool.h>
 #include <stdio.h>
 #include <string.h>
+#include <time.h>
 
 #define CHAT_DRAW_MAX     50
 #define CHAT_GAP          6.0f
 #define CHAT_SEND_W       76.0f
-#define CHAT_PRESET_COUNT 6
-
-static const char* CHAT_PRESETS[CHAT_PRESET_COUNT] = {
-    "Hello!", "GG", "Help!", "Trade?", "Follow me", "Thanks!",
-};
 
 static const Color C_MINE     = { 120, 180, 240, 255 };
 static const Color C_THEIRS   = { 200, 200, 220, 230 };
@@ -39,9 +35,10 @@ static const Color C_INPUT_BG = {  18,  18,  36, 225 };
 typedef struct {
     Rectangle list;
     Rectangle input;
+    Rectangle emoji;  /* the square toggle of the emoji menu */
     Rectangle send;
-    Rectangle presets[CHAT_PRESET_COUNT];
-    Rectangle emoji[CYBERIA_CHAT_EMOJI_COUNT];
+    Rectangle menu;   /* the emoji menu over the bottom of the history */
+    int       menu_columns;
 } ChatLayout;
 
 /* The pane that shows the one DOM input, and where. */
@@ -51,45 +48,61 @@ static Rectangle s_input_rect;
 static inline int   chat_font(void)  { return viewport_is_mobile() ? 12 : 14; }
 static inline float chat_row_h(void) { return viewport_is_mobile() ? 30.0f : 34.0f; }
 
-/* Places one quick-send button of width `w` in the wrapping flow. */
-static Rectangle flow(Rectangle content, float w, float row_h, float* x, float* y) {
-    if (w > content.width) w = content.width;
-    if (0.0f < *x && *x + w > content.width) {
-        *x = 0.0f;
-        *y += row_h + CHAT_GAP;
-    }
-    Rectangle r = { content.x + *x, *y, w, row_h };
-    *x += w + CHAT_GAP;
-    return r;
-}
-
-/* Presets and emoji wrap along the bottom edge, the input row sits above
- * them, and the history takes the rest. */
+/* The input row sits on the bottom edge and the history takes the rest. The
+ * emoji menu opens over the history, right-aligned above its toggle. */
 static ChatLayout chat_layout(Rectangle content) {
     ChatLayout l = { 0 };
-    int   font  = chat_font();
     float row_h = chat_row_h();
-    float x = 0.0f;
-    float y = 0.0f;
-    for (int i = 0; CHAT_PRESET_COUNT > i; i++)
-        l.presets[i] = flow(content, (float)MeasureText(CHAT_PRESETS[i], font) + 2.0f * UI_BUTTON_DEFAULT_PAD, row_h, &x, &y);
-    for (int i = 0; CYBERIA_CHAT_EMOJI_COUNT > i; i++) l.emoji[i] = flow(content, row_h, row_h, &x, &y);
-    float presets_y = content.y + content.height - (y + row_h);
-    for (int i = 0; CHAT_PRESET_COUNT > i; i++) l.presets[i].y += presets_y;
-    for (int i = 0; CYBERIA_CHAT_EMOJI_COUNT > i; i++) l.emoji[i].y += presets_y;
-
-    float input_y = presets_y - CHAT_GAP - row_h;
+    float input_y = content.y + content.height - row_h;
     l.send  = (Rectangle){ content.x + content.width - CHAT_SEND_W, input_y, CHAT_SEND_W, row_h };
-    l.input = (Rectangle){ content.x, input_y, content.width - CHAT_SEND_W - CHAT_GAP, row_h };
+    l.emoji = (Rectangle){ l.send.x - CHAT_GAP - row_h, input_y, row_h, row_h };
+    l.input = (Rectangle){ content.x, input_y, l.emoji.x - CHAT_GAP - content.x, row_h };
     l.list  = (Rectangle){ content.x, content.y, content.width, input_y - CHAT_GAP - content.y };
     if (0.0f > l.list.height) l.list.height = 0.0f;
+
+    float cell = row_h + CHAT_GAP;
+    int fit = (int)((content.width - CHAT_GAP) / cell);
+    int rows = (CYBERIA_CHAT_EMOJI_COUNT + fit - 1) / (0 < fit ? fit : 1);
+    l.menu_columns = (CYBERIA_CHAT_EMOJI_COUNT + rows - 1) / (0 < rows ? rows : 1);
+    float menu_w = (float)l.menu_columns * cell + CHAT_GAP;
+    float menu_h = (float)rows * cell + CHAT_GAP;
+    l.menu = (Rectangle){ content.x + content.width - menu_w, input_y - CHAT_GAP - menu_h, menu_w, menu_h };
     return l;
 }
 
-/* Trim and push one line. The history shows it once the server echoes it. */
-static void send_line(const ChatPane* pane, const char* text) {
+static Rectangle emoji_cell(const ChatLayout* l, int index) {
+    float side = chat_row_h();
+    float cell = side + CHAT_GAP;
+    return (Rectangle){ l->menu.x + CHAT_GAP + (float)(index % l->menu_columns) * cell,
+                        l->menu.y + CHAT_GAP + (float)(index / l->menu_columns) * cell, side, side };
+}
+
+/* Appends the token of an emoji to the typed text, inside the rune limit. */
+static void insert_emoji(int index) {
+    char text[CHAT_LINE_BYTES];
+    size_t length = text_input_bridge_read(text, sizeof text);
+    const char* space = 0 < length && ' ' != text[length - 1] ? " " : "";
+    char token[40];
+    snprintf(token, sizeof token, "%s:%s: ", space, CYBERIA_CHAT_EMOJI[index]);
+    if (CYBERIA_CHAT_TEXT_MAX_RUNES < GetCodepointCount(text) + (int)strlen(token)) return;
+    snprintf(text + length, sizeof text - length, "%s", token);
+    text_input_bridge_set(text);
+}
+
+/* "14:32" for a line of today, "Oct 17 14:32" for an older one. */
+static void time_label(double at_ms, char* out, size_t size) {
+    time_t now = time(NULL);
+    time_t at = (time_t)(at_ms / 1000.0);
+    struct tm today = *localtime(&now);
+    struct tm line = *localtime(&at);
+    bool same_day = today.tm_year == line.tm_year && today.tm_yday == line.tm_yday;
+    strftime(out, size, same_day ? "%H:%M" : "%b %d %H:%M", &line);
+}
+
+/* Takes the typed line, trimmed, and pushes it. The history shows it once the server echoes it. */
+static void send_input(const ChatPane* pane) {
     char line[CHAT_LINE_BYTES];
-    copy_str(line, sizeof(line), text);
+    text_input_bridge_take(line, sizeof(line));
     char* start = line;
     while (isspace((unsigned char)*start)) start++;
     size_t length = strlen(start);
@@ -99,12 +112,6 @@ static void send_line(const ChatPane* pane, const char* text) {
                                  .entity_id = pane->conversation.peer };
     copy_str(p.text, sizeof(p.text), start);
     client_event_push(CLIENT_EVENT_CHAT, p);
-}
-
-static void send_input(const ChatPane* pane) {
-    char text[CHAT_LINE_BYTES];
-    text_input_bridge_take(text, sizeof(text));
-    send_line(pane, text);
 }
 
 static bool same_pixels(Rectangle a, Rectangle b) {
@@ -122,6 +129,7 @@ void chat_pane_bind(ChatPane* pane, ChatConversation conversation) {
         text_input_bridge_take(draft, sizeof(draft));
     }
     pane->conversation = conversation;
+    pane->emoji_open = false;
     ui_scroll_reset(&pane->scroll);
     pane->content_h  = 0.0f;
     pane->seen_count = -1;
@@ -136,7 +144,7 @@ void chat_pane_update(ChatPane* pane, Rectangle content, bool input_visible, flo
 
     const ChatHistory* h = chat_log_get(pane->conversation);
     int    count = NULL != h ? h->count : 0;
-    double ts    = 0 < count ? h->lines[count - 1].ts_ms : 0.0;
+    double ts    = 0 < count ? h->lines[count - 1].at_ms : 0.0;
     if (count != pane->seen_count || ts != pane->seen_ts || l.list.height != pane->scroll.view.height) {
         pane->stick = true;
         pane->seen_count = count;
@@ -167,6 +175,7 @@ void chat_pane_draw(ChatPane* pane, Rectangle content) {
     assert(pane);
     ChatLayout l = chat_layout(content);
     int font = chat_font();
+    int stamp_font = font - 2;
     int mx = GetMouseX();
     int my = GetMouseY();
 
@@ -190,9 +199,15 @@ void chat_pane_draw(ChatPane* pane, Rectangle content) {
             continue;
         }
         float face = (float)text_line_height(font);
-        identity_icon_draw(m->from_skin, (Rectangle){ l.list.x, y, face, face });
-        DrawText(m->mine ? "You" : m->from_name, (int)(l.list.x + face + CHAT_GAP), (int)y, font,
-                 m->mine ? C_MINE : C_THEIRS);
+        identity_icon_draw(m->from_name, (Rectangle){ l.list.x, y, face, face });
+        char when[24];
+        time_label(m->at_ms, when, sizeof when);
+        int stamp_w = MeasureText(when, stamp_font);
+        int right = (int)(l.list.x + l.list.width);
+        int name_x = (int)(l.list.x + face + CHAT_GAP);
+        modal_draw_clipped_text(m->mine ? "You" : m->from_name, name_x, (int)y,
+                                right - stamp_w - (int)CHAT_GAP - name_x, font, m->mine ? C_MINE : C_THEIRS);
+        DrawText(when, right - stamp_w, (int)y + font - stamp_font, stamp_font, C_HINT);
         y += face;
         y += (float)emoji_text_wrap(m->text, (int)l.list.x, (int)y, (int)l.list.width, font, MODAL_TEXT, true) +
              CHAT_GAP;
@@ -212,41 +227,41 @@ void chat_pane_draw(ChatPane* pane, Rectangle content) {
         .bg = C_SEND, .label = "Send", .font_size = font, .text_color = MODAL_TEXT, .enabled = true,
     };
     ui_button_pixel_retro_draw(l.send, &send, ui_button_hit(l.send, mx, my));
-    for (int i = 0; CHAT_PRESET_COUNT > i; i++) {
-        UIButtonPixelRetroStyle preset = {
-            .bg = C_BTN, .label = CHAT_PRESETS[i], .font_size = font, .text_color = MODAL_TEXT,
-            .enabled = true,
-        };
-        ui_button_pixel_retro_draw(l.presets[i], &preset, ui_button_hit(l.presets[i], mx, my));
-    }
+    UIButtonPixelRetroStyle toggle = {
+        .bg = C_BTN, .icon_id = "emoji-smile", .selected = pane->emoji_open, .enabled = true,
+    };
+    ui_button_pixel_retro_draw(l.emoji, &toggle, ui_button_hit(l.emoji, mx, my));
+    if (!pane->emoji_open) return;
+
+    DrawRectangleRec(l.menu, MODAL_PANEL_BG);
+    DrawRectangleLinesEx(l.menu, 1.0f, MODAL_PANEL_BORDER);
     for (int i = 0; CYBERIA_CHAT_EMOJI_COUNT > i; i++) {
         char icon[40];
         snprintf(icon, sizeof(icon), "emoji-%s", CYBERIA_CHAT_EMOJI[i]);
+        Rectangle cell = emoji_cell(&l, i);
         UIButtonPixelRetroStyle emoji = { .bg = C_BTN, .icon_id = icon, .enabled = true };
-        ui_button_pixel_retro_draw(l.emoji[i], &emoji, ui_button_hit(l.emoji[i], mx, my));
+        ui_button_pixel_retro_draw(cell, &emoji, ui_button_hit(cell, mx, my));
     }
 }
 
 void chat_pane_press(ChatPane* pane, Rectangle content, int mx, int my) {
     assert(pane);
     ChatLayout l = chat_layout(content);
+    if (ui_button_hit(l.emoji, mx, my)) {
+        pane->emoji_open = !pane->emoji_open;
+        return;
+    }
+    bool menu = pane->emoji_open;
+    pane->emoji_open = false;
+    if (menu && ui_button_hit(l.menu, mx, my)) {
+        ui_scroll_cancel_press(&pane->scroll);
+        for (int i = 0; CYBERIA_CHAT_EMOJI_COUNT > i; i++)
+            if (ui_button_hit(emoji_cell(&l, i), mx, my)) insert_emoji(i);
+        return;
+    }
     if (ui_button_hit(l.send, mx, my)) {
         send_input(pane);
         return;
-    }
-    for (int i = 0; CHAT_PRESET_COUNT > i; i++) {
-        if (ui_button_hit(l.presets[i], mx, my)) {
-            send_line(pane, CHAT_PRESETS[i]);
-            return;
-        }
-    }
-    for (int i = 0; CYBERIA_CHAT_EMOJI_COUNT > i; i++) {
-        if (ui_button_hit(l.emoji[i], mx, my)) {
-            char token[40];
-            snprintf(token, sizeof(token), ":%s:", CYBERIA_CHAT_EMOJI[i]);
-            send_line(pane, token);
-            return;
-        }
     }
     if (CheckCollisionPointRec((Vector2){ (float)mx, (float)my }, l.list)) {
         ui_scroll_on_press(&pane->scroll, mx, my);
@@ -259,6 +274,7 @@ bool chat_pane_wheel(ChatPane* pane, Rectangle content, float wheel_delta) {
 }
 
 void chat_pane_hide(ChatPane* pane) {
+    pane->emoji_open = false;
     if (s_input_owner != pane) return;
     text_input_bridge_hide();
     s_input_owner = NULL;

@@ -1,3 +1,4 @@
+#include "ui/player_panel.h"
 #include "message.h"
 
 #include "config.h"
@@ -20,6 +21,7 @@
 #include "sim/replication.h"
 #include "ui/chat_log.h"
 #include "ui/floating_combat_text.h"
+#include "ui/identity_icon.h"
 #include "fx/loot_fx.h"
 #include "ui/item_slot_grid.h"
 #include "ui/modal_interact.h"
@@ -357,6 +359,32 @@ static void read_stacks(const cJSON* array, Stacks* out) {
     }
 }
 
+static HeldReason held_reason_of(const char* word) {
+    if (0 == strcmp(word, "rebound")) return HELD_REBOUND;
+    if (0 == strcmp(word, "no_room")) return HELD_NO_ROOM;
+    if (0 == strcmp(word, "unsupported")) return HELD_UNSUPPORTED;
+    if (0 == strcmp(word, "incompatible")) return HELD_INCOMPATIBLE;
+    return HELD_UNKNOWN;
+}
+
+/* The owned stacks the world holds: the first HELD_STACKS_SHOWN rows, and the exact count. */
+static void read_held(const cJSON* array) {
+    g_local_player.held_count = cJSON_GetArraySize(array);
+    int n = 0;
+    const cJSON* item = NULL;
+    cJSON_ArrayForEach(item, array) {
+        if (HELD_STACKS_SHOWN <= n) break;
+        HeldStack* stack = &g_local_player.held[n++];
+        memset(stack, 0, sizeof *stack);
+        char reason[16] = {0};
+        serial_get_string(item, "itemId", stack->item_id, sizeof stack->item_id);
+        serial_get_string(item, "cid", stack->cid, sizeof stack->cid);
+        serial_get_string(item, "reason", reason, sizeof reason);
+        stack->quantity = serial_get_int_default(item, "quantity", 0);
+        stack->reason   = held_reason_of(reason);
+    }
+}
+
 /* The party, the invites that wait for the player's answer and the invites it sent. */
 static void read_party(const cJSON* e) {
     Party* party = &g_local_player.party;
@@ -448,7 +476,7 @@ static void unpack_self(const cJSON* e, cyberia_frame_t frame, cyberia_input_seq
     /* The running assembly; the bar ends when the server's timer ends. */
     const cJSON* craft = serial_get_object(e, "craft");
     g_local_player.crafting = NULL != craft;
-    g_local_player.held    = serial_get_int_default(e, "held", 0);
+    read_held(serial_get_array(e, "held"));
     g_local_player.unsaved = serial_get_bool_default(e, "unsaved", false);
 
     g_local_player.interaction_count = 0;
@@ -621,6 +649,29 @@ static void store_quest_array(const cJSON* quests_json, const char* granted) {
     }
 }
 
+/* The skills of each trigger item a skill map names replace the ones the
+ * client holds for it; an empty list leaves the item with none. */
+static void read_skill_map(const cJSON* skill_map) {
+    const cJSON* entry = NULL;
+    cJSON_ArrayForEach(entry, skill_map) {
+        if (!entry->string || !cJSON_IsArray(entry)) continue;
+        ui_state_drop_skills(entry->string);
+        const cJSON* def_obj = NULL;
+        cJSON_ArrayForEach(def_obj, entry) {
+            if (!cJSON_IsObject(def_obj)) continue;
+            UiSkillEntry se = {0};
+            copy_str(se.trigger_item_id, sizeof se.trigger_item_id, entry->string);
+            serial_get_string(def_obj, "logicEventId", se.logic_event_id, sizeof se.logic_event_id);
+            serial_get_string(def_obj, "name", se.name, sizeof se.name);
+            serial_get_string(def_obj, "description", se.description, sizeof se.description);
+            serial_get_string(def_obj, "summonedEntityItemId", se.summoned_entity_item_id,
+                              sizeof se.summoned_entity_item_id);
+            se.held = serial_get_bool_default(def_obj, "held", false);
+            ui_state_push_skill(&se);
+        }
+    }
+}
+
 static void json_unpack_init_data(const cJSON* payload) {
     LOG_INFO("[INIT_DATA] parsing payload\n");
 
@@ -633,6 +684,8 @@ static void json_unpack_init_data(const cJSON* payload) {
     g_local_player.account = 0 == strcmp(session, "account");
     session_gate_set_account(g_local_player.account);
     g_game_state.max_level = serial_get_int_default(payload, "maxLevel", 0);
+    g_game_state.server_build[0] = '\0';
+    serial_get_string(payload, "build", g_game_state.server_build, sizeof(g_game_state.server_build));
     g_game_state.grid_w = serial_get_int_default(payload, "gridW", 100);
     g_game_state.grid_h = serial_get_int_default(payload, "gridH", 100);
     g_game_state.aoi_radius = serial_get_float_default(payload, "aoiRadius", 15.0f);
@@ -704,40 +757,7 @@ static void json_unpack_init_data(const cJSON* payload) {
         }
     }
 
-    if (skill_map_json && cJSON_IsObject(skill_map_json)) {
-        cJSON* entry = NULL;
-        cJSON_ArrayForEach(entry, skill_map_json) {
-            if (!entry->string || !cJSON_IsArray(entry)) continue;
-
-            cJSON* def_obj = NULL;
-            cJSON_ArrayForEach(def_obj, entry) {
-                if (!cJSON_IsObject(def_obj)) continue;
-
-                UiSkillEntry se = {0};
-                strncpy(se.trigger_item_id, entry->string, MAX_ITEM_ID_LENGTH - 1);
-
-                cJSON* id_json = cJSON_GetObjectItem(def_obj, "logicEventId");
-                if (id_json && cJSON_IsString(id_json))
-                    strncpy(se.logic_event_id, cJSON_GetStringValue(id_json), MAX_ITEM_ID_LENGTH - 1);
-
-                cJSON* name_json = cJSON_GetObjectItem(def_obj, "name");
-                if (name_json && cJSON_IsString(name_json))
-                    strncpy(se.name, cJSON_GetStringValue(name_json), MAX_ITEM_ID_LENGTH - 1);
-
-                cJSON* desc_json = cJSON_GetObjectItem(def_obj, "description");
-                if (desc_json && cJSON_IsString(desc_json))
-                    strncpy(se.description, cJSON_GetStringValue(desc_json), sizeof(se.description) - 1);
-
-                cJSON* summon_json = cJSON_GetObjectItem(def_obj, "summonedEntityItemId");
-                if (summon_json && cJSON_IsString(summon_json))
-                    strncpy(se.summoned_entity_item_id, cJSON_GetStringValue(summon_json), MAX_ITEM_ID_LENGTH - 1);
-
-                se.held = serial_get_bool_default(def_obj, "held", false);
-
-                ui_state_push_skill(&se);
-            }
-        }
-    }
+    read_skill_map(skill_map_json);
 
     /* Seed the Quest Journal store from the connect-time snapshot. Cleared
      * first so a reconnect repopulates cleanly. */
@@ -761,7 +781,8 @@ static void json_unpack_metadata(const cJSON* payload) {
 
     // Parse objectLayers: map of itemId → OL definition. These are the item facts the client
     // reasons about — type, stats, render descriptor — for everything the player could ever
-    // equip or pick up, and they arrive in this one message at no extra request cost.
+    // equip or pick up. The join message carries every definition the world holds; a later
+    // one carries only the definitions that changed or arrived since, with no other key.
     //
     // Their atlases are NOT fetched here. The definition set spans the whole instance (and, in
     // the fallback world, every canonical item), while a session draws a small subset of it:
@@ -781,6 +802,8 @@ static void json_unpack_metadata(const cJSON* payload) {
             }
         }
     }
+    /* A delta carries the skills of each definition it carries. */
+    read_skill_map(cJSON_GetObjectItem(payload, "skillMap"));
 
     // Parse instanceCode if provided: keys the Instance Map REST fetches.
     serial_get_string(payload, "instanceCode", g_game_state.instance_code,
@@ -813,7 +836,7 @@ static void json_unpack_metadata(const cJSON* payload) {
                g_game_state.equipment_rules.require_skin);
     }
 
-    LOG_INFO("[METADATA] Cached %d ObjectLayers, scheduled %d atlas REST fetches\n", ol_count, ol_count);
+    LOG_INFO("[METADATA] Cached %d ObjectLayers\n", ol_count);
 }
 
 /* The conversation a chat message files under: its channel, and for a direct
@@ -847,6 +870,9 @@ static const char* social_reason_text(const char* reason) {
         { "guest",        "Friends need a signed-in account." },
         { "self",         "You cannot befriend yourself." },
         { "exists",       "You are already friends, or a request waits." },
+        { "too_long",     "Use 80 Unicode code points or fewer." },
+        { "too_soon",     "Wait 10 seconds between status note changes." },
+        { "invalid",      "Enter a valid status note." },
         { "limit",        "The friend list is full." },
         { "not_found",    "That request is no longer open." },
     };
@@ -859,14 +885,15 @@ static const char* social_reason_text(const char* reason) {
 static void json_unpack_chat(const cJSON* payload) {
     EntityID from_id = serial_get_u32_default(payload, "fromId", 0);
     char name[PLAYER_NAME_BYTES] = {0};
-    char skin[MAX_ITEM_ID_LENGTH] = {0};
+    char avatar[CYBERIA_IDENTITY_PREVIEW_URL_MAX] = {0};
     char text[CHAT_LINE_BYTES] = {0};
     serial_get_string(payload, "fromName", name, sizeof(name));
-    serial_get_string(payload, "fromSkin", skin, sizeof(skin));
+    serial_get_string(payload, "fromAvatar", avatar, sizeof(avatar));
     serial_get_string(payload, "text", text, sizeof(text));
     if (0 == from_id || '\0' == text[0]) return;
-    chat_log_push(chat_conversation_of(payload, from_id), from_id, name, skin, text,
-                  from_id == g_local_player.id);
+    identity_icon_note(name, avatar);
+    chat_log_push(chat_conversation_of(payload, from_id), from_id, name, text,
+                  serial_get_double_default(payload, "atMs", 0.0), from_id == g_local_player.id);
 }
 
 /* A refused chat line: the sender reads why in the conversation it typed in. */
@@ -885,19 +912,29 @@ static void json_unpack_party_ack(const cJSON* payload) {
     modal_notification_show("Party", social_reason_text(reason), (Color){ 230, 170, 110, 255 });
 }
 
-/* A refused friend action. */
+/* A note save or a refused friend action. */
 static void json_unpack_friend_ack(const cJSON* payload) {
+    char action[16] = {0};
+    serial_get_string(payload, "action", action, sizeof action);
+    if (0 == strcmp(action, "note")) player_panel_note_result(serial_get_bool_default(payload, "ok", false));
     if (serial_get_bool_default(payload, "ok", false)) return;
+    if (0 == strcmp(action, "list")) g_local_player.friends_unavailable = true;
     char reason[32] = {0};
     serial_get_string(payload, "reason", reason, sizeof(reason));
-    modal_notification_show("Friends", social_reason_text(reason), (Color){ 230, 170, 110, 255 });
+    const char* message = 0 == strcmp(action, "note") && 0 == strcmp(reason, "unavailable")
+                              ? "Could not save your note. Try again." : social_reason_text(reason);
+    modal_notification_show("Social", message, (Color){ 230, 170, 110, 255 });
 }
 
 /* The whole friend list of the account, after each change. */
 static void json_unpack_friends(const cJSON* payload) {
+    g_local_player.friends_loaded = true;
+    g_local_player.friends_unavailable = false;
     static const char* const STATUS_WORDS[] = { [FRIEND_ACCEPTED] = "friend", [FRIEND_INCOMING] = "incoming",
                                                 [FRIEND_OUTGOING] = "outgoing" };
     g_local_player.friend_count = 0;
+    serial_get_string(payload, "note", g_local_player.status_note, sizeof g_local_player.status_note);
+    g_local_player.note_ready_at = GetTime() + serial_get_int_default(payload, "noteRetryInMs", 0) / 1000.0;
     const cJSON* row = NULL;
     cJSON_ArrayForEach(row, serial_get_array(payload, "friends")) {
         if (FRIENDS_LIST_MAX <= g_local_player.friend_count) break;
@@ -913,12 +950,15 @@ static void json_unpack_friends(const cJSON* payload) {
         f->status = (FriendStatus)status;
         serial_get_string(row, "id", f->id, sizeof f->id);
         serial_get_string(row, "name", f->name, sizeof f->name);
-        serial_get_string(row, "skin", f->skin, sizeof f->skin);
+        char avatar[CYBERIA_IDENTITY_PREVIEW_URL_MAX] = {0};
+        serial_get_string(row, "avatar", avatar, sizeof avatar);
+        identity_icon_note(f->name, avatar);
         serial_get_string(row, "world", f->world, sizeof f->world);
         serial_get_string(row, "mapCode", f->map_code, sizeof f->map_code);
+        if (FRIEND_ACCEPTED == f->status) serial_get_string(row, "note", f->note, sizeof f->note);
         f->online     = serial_get_bool_default(row, "online", false);
         f->entity_id  = serial_get_u32_default(row, "entityId", 0);
-        f->expires_at = GetTime() + serial_get_int_default(row, "expiresInMs", 0) / 1000.0;
+        f->expires_at = GetTime() + serial_get_double_default(row, "expiresInMs", 0.0) / 1000.0;
         g_local_player.friend_count++;
     }
 }
@@ -926,9 +966,12 @@ static void json_unpack_friends(const cJSON* payload) {
 /* The server ended the session, or refused to start it. */
 static void json_unpack_session_end(const cJSON* payload) {
     char reason[32] = {0};
+    char travel_ticket[64] = {0};
     serial_get_string(payload, "reason", reason, sizeof(reason));
+    const cJSON* travel = serial_get_object(payload, "travel");
+    if (travel) serial_get_string(travel, "ticket", travel_ticket, sizeof(travel_ticket));
     LOG_INFO("[SESSION] ended: %s", reason);
-    game_client_on_session_end(reason);
+    game_client_on_session_end(reason, travel_ticket);
 }
 
 /* The next resume ticket of the account session. */
