@@ -3,23 +3,24 @@
 
 #include <stdbool.h>
 
-/* modal_instance_map — expanded Instance Intelligence Map content.
+/* modal_instance_map — the expanded map content, with two views.
  *
  * Renders inside modal_map's container: toggling the Map button morphs the
  * compact corner readout into a full-screen translucent panel (and retracts
- * it on close), so the two modes read as one integrated widget. This module
- * owns only the expanded content — a packed rotatable map-card grid with
- * animated portal edges and static presence POIs on their authored cells.
- * The world keeps rendering behind the translucent container.
+ * it on close), so the two modes read as one integrated widget. The world
+ * keeps rendering behind the translucent container.
+ *
+ * WORLD shows the maps of this world on the cells of its authored layout,
+ * with animated portal edges and static presence POIs on their cells.
+ * UNIVERSE shows the worlds of its universe on their cells, the routes
+ * between them, and the availability of each world. A world the player can
+ * reach now offers TRAVEL, which leaves through the launch bridge.
  *
  * Fully independent from the gameplay renderer and camera: it owns its own
- * camera (drag pan, wheel/pinch zoom, smooth interpolation), its own data
- * layer (data/instance_map_data — engine-cyberia REST, never the AOI stream),
- * and its own selection state.
- *
- * The compact coordinate readout opens this expanded inspection surface. Its
- * header owns the close control. Opening starts the static fetch and dynamic
- * polling; closing stops polling.
+ * camera (drag pan, wheel/pinch zoom, smooth interpolation), its data layers
+ * (data/instance_map_data, data/universe_map_data — engine-cyberia REST,
+ * never the AOI stream) and its own selection state. The universe data loads
+ * only when its view first shows.
  */
 
 void modal_instance_map_init(void);

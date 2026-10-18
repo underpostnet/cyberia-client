@@ -3,6 +3,7 @@
 
 #include <raylib.h>
 #include <stdbool.h>
+#include <stddef.h>
 #include <stdint.h>
 
 /* instance_map_data — data layer for the expanded Instance Map modal.
@@ -12,6 +13,11 @@
  *
  *   open  → GET /api/v1/cyberia-instance/instance-map/:code/static   (once)
  *   close → a late response is discarded.
+ *
+ * Each node sits on the cell of the authored graph layout the engine resolves:
+ * x grows right, y grows down. The layout is view data; portals keep their own
+ * cells on each map. A map with a world origin has a place in its world
+ * instead: maps whose places share a whole edge join there.
  *
  * Static POIs carry authored presence, the quests and actions each one
  * provides, and the prerequisites of each quest. A POI is active from the own
@@ -55,11 +61,17 @@ typedef struct {
     char    name[IMAP_NAME_MAX];
     char    preview_url[IMAP_URL_MAX];      /* API path of the map's Object
                                              * Layer capture ("" = none)  */
+    bool    placed;                 /* the map has a world origin      */
+    Vector2 world;                  /* its centre there, in layout
+                                     * cells at the scale of extent  */
     int     grid_x, grid_y;
+    float   extent_w, extent_h;     /* size of the map in its layout
+                                     * cell, in cells: one scale for
+                                     * every map of the world        */
     int     quest_provider_count;   /* static totals bound to this map */
     int     action_provider_count;
     int     portal_count;           /* edges touching this node        */
-    int     grid_col, grid_row;     /* packed instance-map tile        */
+    int     layout_x, layout_y;     /* cell of the graph layout        */
 } ImapNode;
 
 typedef struct {
@@ -97,7 +109,6 @@ typedef struct {
 
     ImapNode nodes[IMAP_MAX_NODES];
     int      node_count;
-    int      grid_cols, grid_rows;
 
     ImapEdge edges[IMAP_MAX_EDGES];
     int      edge_count;
@@ -144,5 +155,34 @@ Color instance_map_presence_color(ImapPresenceStatus status);
  * mapped into `card`. A node with no grid gives the card centre. */
 Vector2 instance_map_cell_to_card(Rectangle card, const ImapNode* node,
                                   float cell_x, float cell_y);
+
+/* The card of a node: its map at its extent, centred on `center`, where one
+ * layout cell spans `cell_side` pixels. */
+Rectangle instance_map_node_rect(const ImapNode* node, Vector2 center, float cell_side);
+/* The active map in `bounds`: zoom 1 fits it whole; a closer zoom follows the
+ * player and stops at the map edges. */
+Rectangle instance_map_local_rect(const ImapNode* node, Rectangle bounds, Vector2 player, float zoom);
+
+/* The edges of a card a neighbour covers whole. */
+enum { IMAP_EDGE_LEFT = 1u << 0, IMAP_EDGE_TOP = 1u << 1, IMAP_EDGE_RIGHT = 1u << 2, IMAP_EDGE_BOTTOM = 1u << 3 };
+
+/* The edges of `a` that the place of `b` covers whole: both maps placed, the
+ * same length along the edge, and their places side by side. */
+unsigned instance_map_shared_edges(const ImapNode* a, const ImapNode* b);
+/* The edges of a node any other node covers. */
+unsigned instance_map_joined_edges(const ImapGraph* graph, int index);
+
+/* Each centre of the view, about the origin, and the span, in layout cells. A
+ * placed map sits at its place; the other maps pack on their layout cells, a
+ * gap right of the placed ones. */
+Vector2 instance_map_layout(const ImapGraph* graph, float gap, Vector2* centers);
+
+/* The name of a node, with its map code when another node has the same name. */
+void instance_map_node_label(const ImapGraph* graph, int index, char* out, size_t size);
+
+/* Unit direction, in layout cells, from the map of a portal to the map it
+ * leads to, between their places when both have one; zero for a link inside
+ * one map. */
+Vector2 instance_map_exit_direction(const ImapGraph* graph, const ImapEdge* edge);
 
 #endif /* CYBERIA_UI_INSTANCE_MAP_DATA_H */

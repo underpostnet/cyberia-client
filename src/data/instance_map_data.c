@@ -5,8 +5,10 @@
 #include "quest_progress_store.h"
 #include "log.h"
 #include "utils.h"
+#include "ui/graph_layout.h"
 
 #include <cJSON.h>
+#include <float.h>
 #include <math.h>
 #include <raymath.h>
 #include <stdio.h>
@@ -31,21 +33,6 @@ int instance_map_data_find_node(const char* map_code) {
         if (0 == strcmp(s_graph.nodes[i].map_code, map_code)) return i;
     }
     return -1;
-}
-
-/* ── Deterministic packed grid layout ───────────────────────────────────── */
-static void layout_graph(void) {
-    int n = s_graph.node_count;
-    if (0 == n) return;
-
-    int cols = (int)ceilf(sqrtf((float)n));
-    int rows = (n + cols - 1) / cols;
-    s_graph.grid_cols = cols;
-    s_graph.grid_rows = rows;
-    for (int i = 0; i < n; ++i) {
-        s_graph.nodes[i].grid_col = i % cols;
-        s_graph.nodes[i].grid_row = i / cols;
-    }
 }
 
 /* ── Static payload ─────────────────────────────────────────────────────── */
@@ -161,8 +148,15 @@ static bool parse_static_doc(const cJSON* doc) {
         const char* name = json_str(nd, "name");
         copy_str(node->name, IMAP_NAME_MAX, name ? name : node->map_code);
         copy_str(node->preview_url, IMAP_URL_MAX, json_str(nd, "previewUrl"));
+        const cJSON* world = cJSON_GetObjectItemCaseSensitive(nd, "world");
+        node->placed = cJSON_IsObject(world);
+        if (node->placed) node->world = (Vector2){ json_float(world, "x", 0.0f), json_float(world, "y", 0.0f) };
         node->grid_x = json_int(nd, "gridX", 16);
         node->grid_y = json_int(nd, "gridY", 16);
+        node->extent_w = json_float(nd, "w", 1.0f);
+        node->extent_h = json_float(nd, "h", 1.0f);
+        node->layout_x = json_int(nd, "x", 0);
+        node->layout_y = json_int(nd, "y", 0);
     }
     parse_presence_pois(doc);
 
@@ -188,7 +182,6 @@ static bool parse_static_doc(const cJSON* doc) {
         }
     }
 
-    layout_graph();
     return s_graph.node_count > 0;
 }
 
@@ -324,10 +317,111 @@ Color instance_map_presence_color(ImapPresenceStatus status) {
     }
 }
 
+Rectangle instance_map_node_rect(const ImapNode* node, Vector2 center, float cell_side) {
+    float w = node->extent_w * cell_side;
+    float h = node->extent_h * cell_side;
+    return (Rectangle){ center.x - w * 0.5f, center.y - h * 0.5f, w, h };
+}
+
+Rectangle instance_map_local_rect(const ImapNode* node, Rectangle bounds, Vector2 player, float zoom) {
+    float gx = 0 < node->grid_x ? (float)node->grid_x : 1.0f;
+    float gy = 0 < node->grid_y ? (float)node->grid_y : 1.0f;
+    float scale = fminf(bounds.width / gx, bounds.height / gy) * fmaxf(1.0f, zoom);
+    float w = gx * scale, h = gy * scale;
+    float x = bounds.x + bounds.width * 0.5f - player.x * scale;
+    float y = bounds.y + bounds.height * 0.5f - player.y * scale;
+    x = w > bounds.width ? Clamp(x, bounds.x + bounds.width - w, bounds.x)
+                         : bounds.x + (bounds.width - w) * 0.5f;
+    y = h > bounds.height ? Clamp(y, bounds.y + bounds.height - h, bounds.y)
+                          : bounds.y + (bounds.height - h) * 0.5f;
+    return (Rectangle){ x, y, w, h };
+}
+
+Vector2 instance_map_exit_direction(const ImapGraph* graph, const ImapEdge* edge) {
+    const ImapNode* from = &graph->nodes[edge->source_node];
+    const ImapNode* to = &graph->nodes[edge->target_node];
+    if (from->placed && to->placed) return Vector2Normalize(Vector2Subtract(to->world, from->world));
+    return Vector2Normalize((Vector2){ (float)(to->layout_x - from->layout_x), (float)(to->layout_y - from->layout_y) });
+}
+
 Vector2 instance_map_cell_to_card(Rectangle card, const ImapNode* node,
                                   float cell_x, float cell_y) {
     float fx = 0 < node->grid_x ? cell_x / (float)node->grid_x : 0.5f;
     float fy = 0 < node->grid_y ? cell_y / (float)node->grid_y : 0.5f;
     return (Vector2){ card.x + Clamp(fx, 0.0f, 1.0f) * card.width,
                       card.y + Clamp(fy, 0.0f, 1.0f) * card.height };
+}
+
+/* Two lengths of one world, equal up to float error. */
+static bool same_length(float a, float b) { return fabsf(a - b) <= 1e-4f * fmaxf(1.0f, fmaxf(fabsf(a), fabsf(b))); }
+
+unsigned instance_map_shared_edges(const ImapNode* a, const ImapNode* b) {
+    if (!a->placed || !b->placed) return 0;
+    float dx = b->world.x - a->world.x, dy = b->world.y - a->world.y;
+    unsigned edges = 0;
+    if (same_length(dy, 0.0f) && same_length(a->extent_h, b->extent_h)) {
+        float across = (a->extent_w + b->extent_w) * 0.5f;
+        if (same_length(dx, -across)) edges |= IMAP_EDGE_LEFT;
+        if (same_length(dx, across)) edges |= IMAP_EDGE_RIGHT;
+    }
+    if (same_length(dx, 0.0f) && same_length(a->extent_w, b->extent_w)) {
+        float across = (a->extent_h + b->extent_h) * 0.5f;
+        if (same_length(dy, -across)) edges |= IMAP_EDGE_TOP;
+        if (same_length(dy, across)) edges |= IMAP_EDGE_BOTTOM;
+    }
+    return edges;
+}
+
+unsigned instance_map_joined_edges(const ImapGraph* graph, int index) {
+    unsigned edges = 0;
+    for (int i = 0; graph->node_count > i; i++)
+        if (i != index) edges |= instance_map_shared_edges(&graph->nodes[index], &graph->nodes[i]);
+    return edges;
+}
+
+Vector2 instance_map_layout(const ImapGraph* graph, float gap, Vector2* centers) {
+    Vector2 cells[IMAP_MAX_NODES], sizes[IMAP_MAX_NODES], packed[IMAP_MAX_NODES];
+    int indices[IMAP_MAX_NODES], count = 0;
+    float left = FLT_MAX, top = FLT_MAX, right = -FLT_MAX, bottom = -FLT_MAX;
+    for (int i = 0; graph->node_count > i; i++) {
+        const ImapNode* n = &graph->nodes[i];
+        if (n->placed) {
+            centers[i] = n->world;
+            left = fminf(left, n->world.x - n->extent_w * 0.5f);
+            right = fmaxf(right, n->world.x + n->extent_w * 0.5f);
+            top = fminf(top, n->world.y - n->extent_h * 0.5f);
+            bottom = fmaxf(bottom, n->world.y + n->extent_h * 0.5f);
+            continue;
+        }
+        cells[count] = (Vector2){ (float)n->layout_x, (float)n->layout_y };
+        sizes[count] = (Vector2){ n->extent_w, n->extent_h };
+        indices[count++] = i;
+    }
+    Vector2 span = graph_layout_pack(cells, sizes, count, gap, packed);
+    if (FLT_MAX == left) {
+        for (int i = 0; count > i; i++) centers[indices[i]] = packed[i];
+        return span;
+    }
+    /* The other maps sit right of the placed ones, level with their top. */
+    if (0 < count) {
+        for (int i = 0; count > i; i++)
+            centers[indices[i]] = (Vector2){ packed[i].x + right + gap + span.x * 0.5f, packed[i].y + top + span.y * 0.5f };
+        right += gap + span.x;
+        bottom = fmaxf(bottom, top + span.y);
+    }
+    for (int i = 0; graph->node_count > i; i++) {
+        centers[i].x -= (left + right) * 0.5f;
+        centers[i].y -= (top + bottom) * 0.5f;
+    }
+    return (Vector2){ right - left, bottom - top };
+}
+
+void instance_map_node_label(const ImapGraph* graph, int index, char* out, size_t size) {
+    const ImapNode* node = &graph->nodes[index];
+    for (int i = 0; graph->node_count > i; i++) {
+        if (i == index || 0 != strcmp(graph->nodes[i].name, node->name)) continue;
+        snprintf(out, size, "%s (%s)", node->name, node->map_code);
+        return;
+    }
+    copy_str(out, size, node->name);
 }
