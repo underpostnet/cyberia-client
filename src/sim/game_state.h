@@ -67,6 +67,7 @@ struct GameState {
     /* Instance the simulation server loaded (forwarded in the metadata
      * message) — keys the Instance Map REST fetches against engine-cyberia. */
     char instance_code[MAX_ID_LENGTH];
+    char server_build[MAX_ID_LENGTH];    /* the binary of the server this client plays on */
 
     int grid_w;
     int grid_h;

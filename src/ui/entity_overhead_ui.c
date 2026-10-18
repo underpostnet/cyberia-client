@@ -175,8 +175,8 @@ static void draw_nameplate(const char *name, uint8_t relation, float cx, float t
     if (!name || name[0] == '\0') return;
     const char* marks[2];
     int mark_n = 0;
-    if (relation & INTERACTION_FLAG_FRIEND)       marks[mark_n++] = "emoji-heart";
-    if (relation & INTERACTION_FLAG_PARTY_MEMBER) marks[mark_n++] = "users";
+    if (relation & INTERACTION_FLAG_FRIEND)       marks[mark_n++] = "friends";
+    if (relation & INTERACTION_FLAG_PARTY_MEMBER) marks[mark_n++] = "party";
     float marks_w = (float)mark_n * (EOHUD_MARK_SIZE + EOHUD_ITEM_GAP);
     int tw = MeasureText(name, EOHUD_NAME_FONT_SIZE);
     Rectangle inner = draw_pill(cx, top_y, marks_w + (float)tw, (float)EOHUD_BAR_H);

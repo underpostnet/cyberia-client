@@ -1,13 +1,14 @@
 #ifndef CYBERIA_UI_TOOLBAR_H
 #define CYBERIA_UI_TOOLBAR_H
 
+#include <raylib.h>
 #include <stdbool.h>
 
 /* toolbar — top HUD strip spanning the viewport width.
  *
  * Hosts the persistent HUD controls: the pinned hide/show toggle in the
  * top-left corner, the compact map readout beside it (ui/modal_map), and the
- * right-aligned toggle row [audio][chat][quest][HUD map][fullscreen]. The hide toggle
+ * right-aligned toggle row [chat][social][quest][HUD map][settings]. The hide toggle
  * slides the whole strip up to clear the screen and stays on top to bring it
  * back. The compact coordinate readout separately opens modal_instance_map.
  *
@@ -38,9 +39,11 @@ float toolbar_offset_y(void);
 float toolbar_row_left(void);
 
 void  toolbar_draw(int screen_width);
-/* Toggle-row taps (audio / chat / quest / HUD map / fullscreen / hide) + the
- * map readout. */
+/* Toggle-row taps (chat / social / quest / HUD map / settings / hide) + the map readout. */
 bool  toolbar_handle_click(int mx, int my);
+
+/* A count in the top-right corner of a button; nothing for 0. */
+void  toolbar_badge_draw(Rectangle r, int count);
 /* True anywhere on the visible strip and on the always-on hide toggle. */
 bool  toolbar_covers_point(int mx, int my);
 

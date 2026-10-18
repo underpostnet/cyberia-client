@@ -14,6 +14,7 @@
 #define CFG_URL_MAX    512
 
 static char s_instance_code[CFG_CODE_MAX];
+static char s_ws_origin[CFG_ORIGIN_MAX];
 static char s_ws_url[CFG_URL_MAX];
 static char s_data_server_url[CFG_URL_MAX];
 static bool s_initialized = false;
@@ -44,15 +45,14 @@ void config_init(int argc, char** argv) {
 
     instance_route_sanitize_code(s_instance_code);
 
-    char ws_origin[CFG_ORIGIN_MAX] = {0};
-    adopt_js_string((char*)EM_ASM_PTR({ return allocateUTF8(self.CYBERIA_WS_ORIGIN || ""); }), ws_origin,
-                    sizeof(ws_origin));
+    adopt_js_string((char*)EM_ASM_PTR({ return allocateUTF8(self.CYBERIA_WS_ORIGIN || ""); }), s_ws_origin,
+                    sizeof(s_ws_origin));
 
-    if ('\0' == ws_origin[0]) {
+    if ('\0' == s_ws_origin[0]) {
         LOG_ERROR("missing window.CYBERIA_WS_ORIGIN");
         assert(false);
     }
-    instance_route_ws_url(ws_origin, s_instance_code, s_ws_url, sizeof(s_ws_url));
+    instance_route_ws_url(s_ws_origin, s_instance_code, s_ws_url, sizeof(s_ws_url));
 
     /* The Data Server URL has one source: the command line. */
     static const char kFlag[]  = "--data-server-url=";
@@ -81,6 +81,24 @@ const char* config_instance_code(void) {
     return s_instance_code;
 }
 
+/* The address bar names the world entered, and the next connection takes its ticket. */
+EM_JS(void, enter_world_page, (const char* segment, const char* ticket), {
+    const url = new URL(self.location.href);
+    url.pathname = "/" + UTF8ToString(segment);
+    url.hash = "";
+    self.history.replaceState(null, "", url.href);
+    self.CYBERIA_LAUNCH_TICKET = UTF8ToString(ticket);
+})
+
+void config_enter_world(const char* path, const char* ticket) {
+    assert(path && ticket);
+    snprintf(s_instance_code, sizeof(s_instance_code), "%s", '/' == path[0] ? path + 1 : path);
+    instance_route_sanitize_code(s_instance_code);
+    instance_route_ws_url(s_ws_origin, s_instance_code, s_ws_url, sizeof(s_ws_url));
+    enter_world_page(s_instance_code, ticket);
+    LOG_INFO("config entered instance=%s ws=%s", s_instance_code, s_ws_url);
+}
+
 bool config_take_launch_ticket(char* out, size_t out_size) {
     assert(out && 0 < out_size);
     adopt_js_string((char*)EM_ASM_PTR({
@@ -101,9 +119,11 @@ EM_JS(void, open_portal, (const char* portal, const char* path, const char* worl
 
 void config_open_portal(PortalPage page) {
     switch (page) {
-        case PORTAL_PLAY_GUEST:   open_portal(s_data_server_url, "launch", s_instance_code, "guest"); break;
-        case PORTAL_PLAY_ACCOUNT: open_portal(s_data_server_url, "launch", s_instance_code, "account"); break;
-        case PORTAL_WORLDS:       open_portal(s_data_server_url, "", "", ""); break;
-        case PORTAL_SIGN_OUT:     open_portal(s_data_server_url, "?signout", "", ""); break;
+        case PORTAL_WORLDS:   open_portal(s_data_server_url, "", "", ""); break;
+        case PORTAL_SIGN_OUT: open_portal(s_data_server_url, "?signout", "", ""); break;
     }
+}
+
+void config_open_launch(const char* instance_code, bool account) {
+    open_portal(s_data_server_url, "launch", instance_code, account ? "account" : "guest");
 }

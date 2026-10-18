@@ -21,13 +21,18 @@ ObjectLayer* lookup_cached_layer(const char* item_id);
  * else NULL. */
 const char* active_layer_item_id(const ObjectLayerState* layers, int count, const char* type);
 
-/* Atlas data for an item key, fetched on a cache miss. NULL on failure. A
- * miss costs two requests and a PNG decode. */
-AtlasSpriteSheetData* get_or_fetch_atlas_data(const char* item_key, FetchPriority priority);
+/* A key names a render: an Object Layer cid, or a label the world sends the
+ * definition of, which stands for the cid of that definition. Renders are
+ * cached by cid, so two labels of one definition share one render. */
 
-/* Cached atlas texture for an item key. An empty texture (id 0) means the
- * atlas is absent or still loading. */
-Texture2D get_atlas_texture(const char* item_key, FetchPriority priority);
+/* Atlas data for a key, fetched on a cache miss. NULL while the definition of a
+ * label has not arrived, while loading, and on failure. A miss costs two
+ * requests and a PNG decode. */
+AtlasSpriteSheetData* get_or_fetch_atlas_data(const char* key, FetchPriority priority);
+
+/* Cached atlas texture for a key. An empty texture (id 0) means the atlas is
+ * absent or still loading. */
+Texture2D get_atlas_texture(const char* key, FetchPriority priority);
 
 /* Parse and cache one ObjectLayer from the WS metadata message. The JSON has
  * the shape { "cid": ..., "data": { "stats": ..., "item": ..., "render": ..., ... } };
@@ -35,6 +40,6 @@ Texture2D get_atlas_texture(const char* item_key, FetchPriority priority);
  * ownership. */
 void populate_object_layer_from_json(const char* item_id, const cJSON* ol_json);
 
-void obj_layers_mgr_schedule_atlas_fetch(const char* item_key, FetchPriority priority);
+void obj_layers_mgr_schedule_atlas_fetch(const char* key, FetchPriority priority);
 
 #endif // OBJECT_LAYERS_MANAGEMENT_H

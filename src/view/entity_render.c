@@ -9,6 +9,7 @@
 #include "ui/text.h"
 #include "world/object_layers_management.h"
 #include "world/layer_z_order.h"
+#include "content/stat_contract_generated.h"
 #include "hash_table.h"
 #include <raylib.h>
 #include <math.h>
@@ -64,6 +65,7 @@ typedef struct {
     ObjectLayer* layer;
     AtlasSpriteSheetData* atlas;
     int priority;
+    int index;
 } LayerRenderInfo;
 
 // --- Helper Functions ---
@@ -146,7 +148,7 @@ static bool anim_is_stale(const char* key, void* value, void* user_data) {
 static int compare_layer_priority(const void* a, const void* b) {
     LayerRenderInfo* info_a = (LayerRenderInfo*)a;
     LayerRenderInfo* info_b = (LayerRenderInfo*)b;
-    return info_a->priority - info_b->priority;
+    return info_a->priority != info_b->priority ? info_a->priority - info_b->priority : info_a->index - info_b->index;
 }
 
 /**
@@ -400,12 +402,13 @@ void draw_entity_layers(
         }
 
         // Add to render list (atlas may be NULL if only ObjectLayer is available)
+        layers_to_render[render_count].index = i;
         layers_to_render[render_count].state = state;
         layers_to_render[render_count].layer = layer;
         layers_to_render[render_count].atlas = atlas;
         layers_to_render[render_count].priority = layer
             ? layer_z_priority(layer->data.item.type, direction == DIRECTION_UP)
-            : 50; // Default priority if no ObjectLayer metadata yet
+            : CYBERIA_LAYER_PRIORITY_OTHER; // Default priority if no ObjectLayer metadata yet
         render_count++;
     }
 
@@ -507,9 +510,9 @@ void draw_entity_layers(
         // Atlas-based texture loading (single texture per item)
         // ====================================================================
 
-        if (atlas && atlas->item_key[0] != '\0') {
+        if (atlas && atlas->cid[0] != '\0') {
             // Get or poll the atlas texture (async loading)
-            Texture2D atlas_texture = get_atlas_texture(atlas->item_key, asset_priority);
+            Texture2D atlas_texture = get_atlas_texture(atlas->cid, asset_priority);
 
             if (atlas_texture.id > 0) {
                 // Atlas texture is ready — look up the source rectangle

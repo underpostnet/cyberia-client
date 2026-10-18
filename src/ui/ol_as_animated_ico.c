@@ -50,28 +50,28 @@ static const DirectionFrameData* get_frames_with_fallback(
 /* ── Public API ────────────────────────────────────────────────────────── */
 
 void ol_as_ico_draw(ObjectLayersManager* mgr,
-                    const char* item_key,
+                    const char* key,
                     int x, int y, int icon_size,
                     const char* dir_str,
                     int frame_ms,
                     Color tint) {
-    if (!mgr || !item_key || item_key[0] == '\0') {
+    if (!mgr || !key || key[0] == '\0') {
         fallback_circle(x, y, icon_size);
         return;
     }
 
-    AtlasSpriteSheetData* atlas = get_or_fetch_atlas_data(item_key, FETCH_P1);
+    AtlasSpriteSheetData* atlas = get_or_fetch_atlas_data(key, FETCH_P1);
     if (!atlas) {
         /* Atlas not cached yet — pump the fetch state machine so metadata REST
          * request is scheduled (first call) or polled (subsequent calls).
          * Once metadata arrives, get_atlas_texture will automatically kick off
          * the PNG blob fetch on the next frame. */
-        get_atlas_texture(item_key, FETCH_P1);
+        get_atlas_texture(key, FETCH_P1);
         fallback_circle(x, y, icon_size);
         return;
     }
 
-    Texture2D tex = get_atlas_texture(item_key, FETCH_P1);
+    Texture2D tex = get_atlas_texture(key, FETCH_P1);
     if (tex.id == 0) {
         fallback_circle(x, y, icon_size);
         return;

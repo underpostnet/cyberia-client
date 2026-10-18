@@ -39,4 +39,9 @@ static inline int json_int(const cJSON* obj, const char* key, int fallback) {
     return cJSON_IsNumber(v) ? v->valueint : fallback;
 }
 
+static inline float json_float(const cJSON* obj, const char* key, float fallback) {
+    const cJSON* v = cJSON_GetObjectItemCaseSensitive(obj, key);
+    return cJSON_IsNumber(v) ? (float)v->valuedouble : fallback;
+}
+
 #endif /* CYBERIA_UTIL_UTILS_H */

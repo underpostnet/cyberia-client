@@ -46,6 +46,15 @@ static inline int cyberia_capacity_unlock_level(CyberiaCapacityRule rule, int sl
 #define CYBERIA_CHAT_TEXT_MAX_RUNES 160
 #define CYBERIA_FRIENDS_MAX 200
 #define CYBERIA_FRIEND_REQUESTS_MAX 20
+#define CYBERIA_STATUS_NOTE_MAX_RUNES 80
 #define CYBERIA_CHAT_EMOJI_COUNT 8
 static const char* const CYBERIA_CHAT_EMOJI[CYBERIA_CHAT_EMOJI_COUNT] = {"smile", "laugh", "wink", "cool", "sad", "angry", "heart", "thumbsup"};
+/* Draw priorities of the layers of an entity that faces down; lower draws first. */
+#define CYBERIA_LAYER_PRIORITY_SKIN 10
+#define CYBERIA_LAYER_PRIORITY_WEAPON 40
+#define CYBERIA_LAYER_PRIORITY_OTHER 50
+/* The API route of an identity preview, followed by the ordered CIDs of its layers. */
+#define CYBERIA_IDENTITY_PREVIEW_ROUTE "/cyberia-player/appearance/v1/"
+#define CYBERIA_IDENTITY_PREVIEW_URL_MAX 2048
+#define CYBERIA_IDENTITY_PREVIEW_MAX_LAYERS 20
 #endif

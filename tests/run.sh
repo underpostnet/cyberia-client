@@ -9,6 +9,10 @@ trap 'rm -rf "$out"' EXIT
 
 cc_flags=(-std=gnu11 -Wextra -Wno-unused-parameter -Wpointer-arith -Isrc -Ilibs/raylib/src -Ilibs/cJSON)
 
+cc "${cc_flags[@]}" -ffunction-sections -fdata-sections -Wl,--gc-sections \
+    -o "$out/status_note" tests/status_note_test.c libs/raylib/src/rtext.c -lm
+"$out/status_note"
+
 cc "${cc_flags[@]}" -o "$out/asset_stream" tests/asset_stream_test.c -lm
 "$out/asset_stream"
 
@@ -53,7 +57,8 @@ cc "${cc_flags[@]}" -o "$out/input" tests/input_test.c src/input/input.c src/inp
 cc "${cc_flags[@]}" -o "$out/hud_joystick" tests/hud_joystick_test.c src/ui/hud_joystick.c -lm
 "$out/hud_joystick"
 
-cc "${cc_flags[@]}" -o "$out/skill_preview" tests/skill_preview_test.c src/ui/skill_preview.c src/ui/ui_state.c \
+cc "${cc_flags[@]}" -ffunction-sections -fdata-sections -Wl,--gc-sections \
+    -o "$out/skill_preview" tests/skill_preview_test.c src/ui/skill_preview.c src/ui/ui_state.c \
     src/sim/local_player.c src/utils.c libs/cJSON/cJSON.c -lm
 "$out/skill_preview"
 
@@ -88,3 +93,18 @@ cc "${cc_flags[@]}" -ffunction-sections -fdata-sections -Wl,--gc-sections \
     src/net/client_event.c src/sim/game_state.c src/sim/local_player.c src/sim/container_ops.c \
     src/serial.c src/utils.c libs/cJSON/cJSON.c -lm
 "$out/replication"
+
+cc "${cc_flags[@]}" -ffunction-sections -fdata-sections -Wl,--gc-sections \
+    -o "$out/instance_map_geometry" tests/instance_map_geometry_test.c src/data/instance_map_data.c src/ui/graph_layout.c \
+    src/utils.c libs/cJSON/cJSON.c -lm
+"$out/instance_map_geometry"
+
+cc "${cc_flags[@]}" -o "$out/universe_map_data" tests/universe_map_data_test.c src/data/universe_map_data.c \
+    src/utils.c libs/cJSON/cJSON.c -lm
+"$out/universe_map_data"
+
+cc "${cc_flags[@]}" -o "$out/graph_layout" tests/graph_layout_test.c src/ui/graph_layout.c -lm
+"$out/graph_layout"
+
+cc "${cc_flags[@]}" -o "$out/hud_side_stack" tests/hud_side_stack_test.c src/ui/hud_side_stack.c -lm
+"$out/hud_side_stack"

@@ -25,14 +25,30 @@ struct ObjectLayersManager {
     HashTable atlases;
 };
 
-static void atlas_metadata_url(const char* item_key, char* url, size_t size) {
-    snprintf(url, size, ENGINE_API_BASE "/atlas-sprite-sheet/metadata/%s", item_key);
+/* An Object Layer cid: "bafkrei" and 52 base32 characters. Labels never take this form. */
+#define OL_CID_PREFIX "bafkrei"
+#define OL_CID_LENGTH 59
+
+static bool is_object_layer_cid(const char* key) {
+    return 0 == strncmp(key, OL_CID_PREFIX, sizeof(OL_CID_PREFIX) - 1) && OL_CID_LENGTH == strlen(key);
+}
+
+/* The cid of the render a key names: a cid as is, or the cid of the definition
+ * the world binds a label to. NULL while the world has not sent that definition. */
+static const char* render_cid(const char* key) {
+    if (is_object_layer_cid(key)) return key;
+    const ObjectLayer* layer = hash_table_get(&g_olm_singleton->layers, key);
+    return (layer && is_object_layer_cid(layer->cid)) ? layer->cid : NULL;
+}
+
+static void atlas_layout_url(const char* cid, char* url, size_t size) {
+    snprintf(url, size, ENGINE_API_BASE "/atlas-sprite-sheet/layout/%s", cid);
 }
 
 /* The primary render decodes to one pixel per cell, the unit of the layout. */
 static Texture2D atlas_texture(const AtlasSpriteSheetData* atlas, FetchPriority priority, bool visible) {
     char url[512];
-    snprintf(url, sizeof(url), ENGINE_API_BASE "/atlas-sprite-sheet/blob/%s", atlas->item_key);
+    snprintf(url, sizeof(url), ENGINE_API_BASE "/atlas-sprite-sheet/render/%s", atlas->cid);
     return fetch_texture(url, atlas->cell_pixel_dim, priority, visible);
 }
 
@@ -225,23 +241,15 @@ static void on_atlas_meta_fetched(const FetchResponse* r) {
 
     assert(g_olm_singleton);
 
-    /* Parse REST response: { "data": { "metadata": { itemKey, atlasWidth, ... } } } */
+    /* REST response: { "data": { "renderCid", "metadataCid", "layout": { atlasWidth, ... } } } */
     cJSON* root = cJSON_ParseWithLength((const char*)r->data, r->size);
     fetch_data_release(r->data);
     if (!root) return;
 
     cJSON* doc   = cJSON_GetObjectItem(root, "data");
-    cJSON* rmeta = doc ? cJSON_GetObjectItem(doc, "metadata") : NULL;
-    if (!rmeta) { cJSON_Delete(root); return; }
-
-    char item_key[MAX_ITEM_ID_LENGTH];
-    memset(item_key, 0, sizeof(item_key));
-    {
-        char* ik = json_get_string_safe(rmeta, "itemKey", "");
-        strncpy(item_key, ik, MAX_ITEM_ID_LENGTH - 1);
-        free(ik);
-    }
-    if (item_key[0] == '\0' || hash_table_contains(&g_olm_singleton->atlases, item_key)) {
+    cJSON* rmeta = doc ? cJSON_GetObjectItem(doc, "layout") : NULL;
+    const char* cid = r->asset_id;
+    if (!rmeta || !is_object_layer_cid(cid) || hash_table_contains(&g_olm_singleton->atlases, cid)) {
         cJSON_Delete(root);
         return;
     }
@@ -249,7 +257,7 @@ static void on_atlas_meta_fetched(const FetchResponse* r) {
     AtlasSpriteSheetData* atlas = create_atlas_sprite_sheet_data();
     if (!atlas) { cJSON_Delete(root); return; }
 
-    strncpy(atlas->item_key, item_key, MAX_ITEM_ID_LENGTH - 1);
+    strncpy(atlas->cid, cid, MAX_ITEM_ID_LENGTH - 1);
     atlas->atlas_width    = json_get_int_safe(rmeta, "atlasWidth",  0);
     atlas->atlas_height   = json_get_int_safe(rmeta, "atlasHeight", 0);
     atlas->cell_pixel_dim = json_get_int_safe(rmeta, "cellPixelDim", 1);
@@ -262,36 +270,39 @@ static void on_atlas_meta_fetched(const FetchResponse* r) {
     cJSON* frames = cJSON_GetObjectItem(rmeta, "frames");
     if (frames) parse_ws_direction_frames(frames, atlas);
 
-    hash_table_put(&g_olm_singleton->atlases, item_key, atlas);
-    LOG_INFO("[ATLAS REST] Metadata cached via callback for: %s (%dx%d)", item_key, atlas->atlas_width, atlas->atlas_height);
+    hash_table_put(&g_olm_singleton->atlases, atlas->cid, atlas);
+    LOG_INFO("[ATLAS REST] Layout cached for: %s (%dx%d)", atlas->cid, atlas->atlas_width, atlas->atlas_height);
 
     atlas_texture(atlas, r->priority, false);
 
     cJSON_Delete(root);
 }
 
-AtlasSpriteSheetData* get_or_fetch_atlas_data(const char* item_key, FetchPriority priority) {
-    assert(NULL != item_key && NULL != g_olm_singleton);
-    obj_layers_mgr_schedule_atlas_fetch(item_key, priority);
+AtlasSpriteSheetData* get_or_fetch_atlas_data(const char* key, FetchPriority priority) {
+    assert(NULL != key && NULL != g_olm_singleton);
+    const char* cid = render_cid(key);
+    if (NULL == cid) return NULL;
+    obj_layers_mgr_schedule_atlas_fetch(cid, priority);
     char url[512];
-    atlas_metadata_url(item_key, url, sizeof(url));
+    atlas_layout_url(cid, url, sizeof(url));
     fetch_visible(url);
-    return hash_table_get(&g_olm_singleton->atlases, item_key);
+    return hash_table_get(&g_olm_singleton->atlases, cid);
 }
 
-Texture2D get_atlas_texture(const char* item_key, FetchPriority priority) {
-    AtlasSpriteSheetData* atlas = get_or_fetch_atlas_data(item_key, priority);
+Texture2D get_atlas_texture(const char* key, FetchPriority priority) {
+    AtlasSpriteSheetData* atlas = get_or_fetch_atlas_data(key, priority);
     return NULL != atlas ? atlas_texture(atlas, priority, true) : (Texture2D){0};
 }
 
-void obj_layers_mgr_schedule_atlas_fetch(const char* item_key, FetchPriority priority) {
-    assert(NULL != item_key && NULL != g_olm_singleton);
-    if ('\0' == item_key[0]) return;
-    AtlasSpriteSheetData* atlas = hash_table_get(&g_olm_singleton->atlases, item_key);
+void obj_layers_mgr_schedule_atlas_fetch(const char* key, FetchPriority priority) {
+    assert(NULL != key && NULL != g_olm_singleton);
+    const char* cid = render_cid(key);
+    if (NULL == cid) return;
+    AtlasSpriteSheetData* atlas = hash_table_get(&g_olm_singleton->atlases, cid);
     if (NULL != atlas) { atlas_texture(atlas, priority, false); return; }
     char url[512];
-    atlas_metadata_url(item_key, url, sizeof(url));
-    fetch_request_start_at(item_key, url, on_atlas_meta_fetched, priority);
+    atlas_layout_url(cid, url, sizeof(url));
+    fetch_request_start_at(cid, url, on_atlas_meta_fetched, priority);
 }
 
 void populate_object_layer_from_json(const char* item_id, const cJSON* ol_json) {

@@ -1,7 +1,6 @@
 #include "toolbar.h"
 #include "ease.h"
 
-#include "audio/audio.h"
 #include "chat_panel.h"
 #include "hud_minimap_overlay.h"
 #include "inventory_modal.h"
@@ -11,11 +10,11 @@
 #include "player_panel.h"
 #include "quest_journal.h"
 #include "session_gate.h"
+#include "social_panel.h"
 #include "text.h"
 #include "ui_button.h"
 #include "ui_icon.h"
 
-#include "js/fullscreen_bridge.h"
 #include "sim/local_player.h"
 
 #include <math.h>
@@ -39,11 +38,10 @@ static float slide_eased(void) {
 float toolbar_height(void)   { return TOOLBAR_H * (1.0f - slide_eased()); }
 float toolbar_offset_y(void) { return -TOOLBAR_H * slide_eased(); }
 
-/* Buttons of the toggle row: session, audio, social, chat, quest, map,
- * fullscreen. */
-#define TOOLBAR_TOGGLE_COUNT 7
+/* Buttons of the toggle row: chat, social, quest, map, settings. */
+#define TOOLBAR_TOGGLE_COUNT 5
 
-/* Toggle row, right-aligned: index 0 is the rightmost button (fullscreen).
+/* Toggle row, right-aligned: index 0 is the rightmost button (settings).
  * All ride the strip's slide. */
 static Rectangle btn_rect(int index_from_right) {
     float x = (float)GetScreenWidth()
@@ -64,14 +62,14 @@ static Rectangle toggle_rect(void) {
                         sz, sz };
 }
 
-static void draw_btn(Rectangle r, const char* icon, bool selected, Vector2 mouse) {
+static void toolbar_button_draw(Rectangle r, const char* icon, bool selected) {
     /* Clean icon-only button: draw the icon directly with no background,
      * no border, no shadow. One white ring marks the hover or the selection. */
     float sz = r.width < r.height ? r.width : r.height;
     float cx = r.x + r.width * 0.5f;
     float cy = r.y + r.height * 0.5f;
     ui_icon_draw(icon, cx, cy, (int)(sz * 0.65f), false, 0.0f);
-    if (selected || CheckCollisionPointRec(mouse, r)) ui_button_draw_ring(r, WHITE);
+    if (selected || CheckCollisionPointRec(GetMousePosition(), r)) ui_button_draw_ring(r, WHITE);
 }
 
 static bool interact_inventory_chain_is_open(void) {
@@ -97,8 +95,26 @@ static bool dismiss_world_covers(void) {
     return dismissed;
 }
 
+/* The social panel takes the whole column and covers the chat: a tap on the
+ * chat closes it, and the chat shows. */
+static bool dismiss_social_panel(void) {
+    bool dismissed = social_panel_is_visible();
+    social_panel_close();
+    return dismissed;
+}
+
+/* The chat and the social panel cover the minimap and the journal: a tap on
+ * either closes them, and the panel it targets shows. */
+static bool dismiss_column_covers(void) {
+    bool dismissed = dismiss_social_panel();
+    if (!chat_panel_is_visible()) return dismissed;
+    chat_panel_toggle();
+    return true;
+}
+
 static void toggle_minimap(void) {
     bool dismissed = dismiss_world_covers();
+    dismissed = dismiss_column_covers() || dismissed;
     if (dismissed || !hud_minimap_overlay_is_visible()) {
         if (!hud_minimap_overlay_is_visible()) hud_minimap_overlay_show();
         return;
@@ -108,6 +124,7 @@ static void toggle_minimap(void) {
 
 static void toggle_quest_journal(void) {
     bool dismissed = dismiss_world_covers();
+    dismissed = dismiss_column_covers() || dismissed;
     if (dismissed || !quest_journal_is_visible()) {
         if (!quest_journal_is_visible()) quest_journal_toggle();
         return;
@@ -117,12 +134,23 @@ static void toggle_quest_journal(void) {
 
 static void toggle_chat_panel(void) {
     bool dismissed = dismiss_world_covers();
+    dismissed = dismiss_social_panel() || dismissed;
     if (dismissed && chat_panel_is_visible()) return;
     chat_panel_toggle();
 }
 
-/* Unread count in the top-right corner of a toolbar button. */
-static void draw_badge(Rectangle r, int count) {
+static void toggle_social_panel(void) {
+    bool dismissed = dismiss_world_covers();
+    if (dismissed && social_panel_is_visible()) return;
+    social_panel_toggle();
+}
+
+static void toolbar_bar_draw(Rectangle r) {
+    DrawRectangleRec(r, TB_BG);
+    DrawLine((int)r.x, (int)(r.y + r.height), (int)(r.x + r.width), (int)(r.y + r.height), TB_LINE);
+}
+
+void toolbar_badge_draw(Rectangle r, int count) {
     if (0 >= count) return;
     char text[8];
     snprintf(text, sizeof text, "%d", 99 < count ? 99 : count);
@@ -139,14 +167,6 @@ static void toggle_expanded_instance_map(void) {
     }
     hud_minimap_overlay_hide();
     modal_instance_map_toggle();
-}
-
-/* Social news waits on the own profile: friend requests first, then party
- * invites. */
-static void open_social(void) {
-    close_interact_inventory_chain();
-    bool invites_only = 0 == local_player_incoming_requests() && 0 < g_local_player.invite_count;
-    modal_interact_open_own(invites_only ? PLAYER_VIEW_PARTY : PLAYER_VIEW_FRIENDS);
 }
 
 /* While the engine does not take the state of an account player, a notice
@@ -174,28 +194,22 @@ void toolbar_draw(int screen_width) {
     if (s_slide_t > 1.0f) s_slide_t = 1.0f;
 
     float oy = toolbar_offset_y();
-    Vector2 mp = GetMousePosition();
 
     if (s_slide_t < 1.0f) {
-        DrawRectangle(0, (int)oy, screen_width, (int)TOOLBAR_H, TB_BG);
-        DrawLine(0, (int)(oy + TOOLBAR_H), screen_width, (int)(oy + TOOLBAR_H), TB_LINE);
+        toolbar_bar_draw((Rectangle){ 0, oy, (float)screen_width, TOOLBAR_H });
 
-        bool fs_active = fullscreen_bridge_is_active();
-        bool map_open  = hud_minimap_overlay_is_visible();
-        bool muted     = audio_is_muted();
-        draw_btn(btn_rect(0), fs_active ? "shrink" : "fullscreen", fs_active, mp);
-        draw_btn(btn_rect(1), "map", map_open, mp);
-        draw_btn(btn_rect(2), "quest", quest_journal_is_visible(), mp);
-        draw_btn(btn_rect(3), "chat", chat_panel_is_visible(), mp);
-        draw_badge(btn_rect(3), chat_panel_unread());
-        draw_btn(btn_rect(4), "users", false, mp);
-        draw_badge(btn_rect(4), local_player_incoming_requests() + g_local_player.invite_count);
-        /* The icon shows the state, not the action: muted audio reads as muted. */
-        draw_btn(btn_rect(5), muted ? "audio-mute" : "audio", muted, mp);
-        draw_btn(btn_rect(6), "bars", session_gate_active(), mp);
+        bool social = social_panel_is_visible();
+        bool chat = chat_panel_is_visible() && !social;
+        toolbar_button_draw(btn_rect(0), "engine", session_gate_settings_open());
+        toolbar_button_draw(btn_rect(1), "map", hud_minimap_overlay_is_visible() && !social && !chat);
+        toolbar_button_draw(btn_rect(2), "quest", quest_journal_is_visible() && !social && !chat);
+        toolbar_button_draw(btn_rect(3), "friends", social);
+        toolbar_badge_draw(btn_rect(3), local_player_social_news());
+        toolbar_button_draw(btn_rect(4), "chat", chat);
+        toolbar_badge_draw(btn_rect(4), chat_panel_unread());
     }
 
-    draw_btn(toggle_rect(), s_hidden ? "cyberia-white-0" : "cyberia-yellow-1", false, mp);
+    toolbar_button_draw(toggle_rect(), s_hidden ? "cyberia-white-0" : "cyberia-yellow-1", false);
     draw_unsaved_notice(screen_width);
 }
 
@@ -205,16 +219,17 @@ bool toolbar_handle_click(int mx, int my) {
         return true;
     }
     if (s_hidden) return false;
-    if (ui_button_hit(btn_rect(0), mx, my)) { fullscreen_bridge_toggle(); return true; }
+    if (ui_button_hit(btn_rect(0), mx, my)) { session_gate_settings(); return true; }
     if (ui_button_hit(btn_rect(1), mx, my)) {
         toggle_minimap();
         return true;
     }
-    if (ui_button_hit(btn_rect(5), mx, my)) { audio_toggle_mute(); return true; }
-    if (ui_button_hit(btn_rect(4), mx, my)) { open_social(); return true; }
-    if (ui_button_hit(btn_rect(6), mx, my)) { session_gate_menu(); return true; }
-    if (ui_button_hit(btn_rect(3), mx, my)) {
+    if (ui_button_hit(btn_rect(4), mx, my)) {
         toggle_chat_panel();
+        return true;
+    }
+    if (ui_button_hit(btn_rect(3), mx, my)) {
+        toggle_social_panel();
         return true;
     }
     if (ui_button_hit(btn_rect(2), mx, my)) {

@@ -22,6 +22,15 @@ static inline Vector2 ui_rect_center(Rectangle r) {
     return (Vector2){ r.x + r.width * 0.5f, r.y + r.height * 0.5f };
 }
 
+/* The largest rectangle of the proportions width × height inside `frame`, centred:
+ * a picture drawn there keeps its aspect ratio and is never cut. */
+static inline Rectangle ui_rect_contain(Rectangle frame, float width, float height) {
+    float sx = frame.width / width, sy = frame.height / height;
+    float s = sx < sy ? sx : sy;
+    return (Rectangle){ frame.x + (frame.width - width * s) * 0.5f, frame.y + (frame.height - height * s) * 0.5f,
+                        width * s, height * s };
+}
+
 /* Pixel-retro bevel: a black frame, the fill inset by 2 px, then 2 px top and
  * bottom edges inset by `edge_inset` from the sides. Roundness 0 is square.
  * Returns the inner rectangle, for the outline or stripe that goes on top. */

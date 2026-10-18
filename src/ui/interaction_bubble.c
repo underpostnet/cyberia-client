@@ -612,7 +612,7 @@ void interaction_bubble_draw(void) {
         if (member || invited_by) {
             char phase_key[12];
             snprintf(phase_key, sizeof phase_key, "p%u", slot->entity_id);
-            ui_icon_draw("users", r.x + r.width - 10.0f, r.y + 10.0f, 16, invited_by, ui_icon_phase(phase_key));
+            ui_icon_draw("party", r.x + r.width - 10.0f, r.y + 10.0f, 16, invited_by, ui_icon_phase(phase_key));
         }
 
     }

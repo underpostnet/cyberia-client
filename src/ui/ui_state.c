@@ -23,3 +23,10 @@ int ui_state_push_skill(const UiSkillEntry* entry) {
     g_ui.skills[g_ui.skill_count] = *entry;
     return g_ui.skill_count++;
 }
+
+void ui_state_drop_skills(const char* trigger_item_id) {
+    int kept = 0;
+    for (int i = 0; i < g_ui.skill_count; i++)
+        if (0 != strcmp(g_ui.skills[i].trigger_item_id, trigger_item_id)) g_ui.skills[kept++] = g_ui.skills[i];
+    g_ui.skill_count = kept;
+}

@@ -3,6 +3,7 @@
 
 #include "data/action_cache.h"
 #include "chat_panel.h"
+#include "identity_icon.h"
 #include "config.h"
 #include "data/dialogue_data.h"
 #include "fx/fx_grant_delivery.h"
@@ -49,23 +50,12 @@
 /* Integration is a pane: the bottom bar opens it, not the strip. Storage is
  * the NPC vault; Own storage is the personal storage. */
 enum { MI_TAB_STACK = 0, MI_TAB_STATS, MI_TAB_QUEST, MI_TAB_SHOP, MI_TAB_CRAFT,
-       MI_TAB_STORAGE, MI_TAB_PROFILE, MI_TAB_OWN_STORAGE, MI_TAB_PARTY, MI_TAB_FRIENDS,
-       MI_TAB_INTEGRATION, MI_TAB_COUNT };
+       MI_TAB_STORAGE, MI_TAB_PROFILE, MI_TAB_OWN_STORAGE, MI_TAB_INTEGRATION, MI_TAB_COUNT };
 
 static const char* MI_TAB_ICON[MI_TAB_COUNT]  = { "stack", "stats", "quest", "home-red", "engine", "grid",
-                                                  "character", "bag", "users", "emoji-heart", "reload" };
+                                                  "character", "bag", "reload" };
 static const char* MI_TAB_LABEL[MI_TAB_COUNT] = { "Stack", "Stats", "Quest", "Shop", "Assembly", "Storage",
-                                                  "Profile", "Storage", "Party", "Friends", "Integration" };
-
-/* The player view a tab shows, or -1 for a tab that is no player view. */
-static int player_view_of(int tab) {
-    switch (tab) {
-        case MI_TAB_PROFILE: return PLAYER_VIEW_PROFILE;
-        case MI_TAB_PARTY:   return PLAYER_VIEW_PARTY;
-        case MI_TAB_FRIENDS: return PLAYER_VIEW_FRIENDS;
-    }
-    return -1;
-}
+                                                  "Profile", "Storage", "Integration" };
 
 /* Who the modal shows: an NPC with its capabilities, the own player, or
  * another player. A player session never touches an NPC endpoint. */
@@ -441,8 +431,6 @@ static int visible_tabs(int out[MI_TAB_COUNT]) {
     if (MI_MODE_SELF == s_mode) {
         out[n++] = MI_TAB_PROFILE;
         out[n++] = MI_TAB_OWN_STORAGE;
-        out[n++] = MI_TAB_PARTY;
-        out[n++] = MI_TAB_FRIENDS;
         out[n++] = MI_TAB_STATS;
         return n;
     }
@@ -472,6 +460,7 @@ static int leading_tab(void) {
 /* Switch tabs, replaying the content pop-in. */
 static void set_tab(int tab) {
     if (tab == s_tab) return;
+    player_panel_hide_input();
     /* Report the container work before a shop, craft or item event can follow it. */
     container_panel_close();
     s_tab = tab;
@@ -568,9 +557,7 @@ static float active_tab_content_height(void) {
         case MI_TAB_CRAFT:   return s_craft_content_height;
         case MI_TAB_STORAGE:
         case MI_TAB_OWN_STORAGE: return s_storage_content_height;
-        case MI_TAB_PROFILE:
-        case MI_TAB_PARTY:
-        case MI_TAB_FRIENDS: return s_player_content_height;
+        case MI_TAB_PROFILE: return s_player_content_height;
         case MI_TAB_INTEGRATION: return s_integration_content_height;
         default:             return 0.0f;
     }
@@ -963,15 +950,8 @@ void modal_interact_open(EntityID entity_id, const char* display_name,
     open_session(entity_id, mode_of(entity_id), display_name, dialogue_item_id, has_dialogue, border);
 }
 
-void modal_interact_open_own(PlayerView view) {
-    EntityID id = g_local_player.id;
-    open_session(id, MI_MODE_SELF, game_state_has(id, COMP_PLAYER) ? game_state_player(id)->name : "", NULL, false,
-                 MODAL_PANEL_BORDER);
-    s_tab_picked = true;
-    set_tab(PLAYER_VIEW_PARTY == view ? MI_TAB_PARTY : PLAYER_VIEW_FRIENDS == view ? MI_TAB_FRIENDS : MI_TAB_PROFILE);
-}
-
 void modal_interact_close(void) {
+    player_panel_hide_input();
     container_panel_close();
     bool was_open = s_open;
     s_open = false;
@@ -1018,8 +998,8 @@ bool modal_interact_handle_wheel(float wheel_delta) {
     if (MI_TAB_STORAGE == s_tab || MI_TAB_OWN_STORAGE == s_tab) {
         return container_panel_wheel(content_rect(card_rect()), wheel_delta);
     }
-    if (0 <= player_view_of(s_tab)) {
-        return player_panel_wheel((PlayerView)player_view_of(s_tab), content_rect(card_rect()), wheel_delta);
+    if (MI_TAB_PROFILE == s_tab) {
+        return player_panel_wheel(PLAYER_VIEW_PROFILE, content_rect(card_rect()), wheel_delta);
     }
     if (MI_TAB_INTEGRATION == s_tab) {
         return ui_scroll_on_wheel(&s_integration_scroll, content_rect(card_rect()),
@@ -1123,8 +1103,8 @@ void modal_interact_update(float dt) {
         open_container_tab();
         container_panel_update(content_rect(card_rect()), content_ready, dt);
         if (!s_open) return;
-    } else if (0 <= player_view_of(s_tab)) {
-        player_panel_update((PlayerView)player_view_of(s_tab), content_rect(card_rect()), content_ready, dt);
+    } else if (MI_TAB_PROFILE == s_tab) {
+        player_panel_update(PLAYER_VIEW_PROFILE, content_rect(card_rect()), content_ready, dt);
     } else if (MI_TAB_INTEGRATION == s_tab) {
         ui_scroll_update(&s_integration_scroll, content_rect(card_rect()),
                          s_integration_content_height, dt);
@@ -2395,8 +2375,8 @@ void modal_interact_draw(void) {
     else if (s_tab == MI_TAB_SHOP)   draw_shop_tab(tab_content, mx, my);
     else if (s_tab == MI_TAB_CRAFT)  draw_craft_tab(tab_content, mx, my);
     else if (MI_TAB_STORAGE == s_tab || MI_TAB_OWN_STORAGE == s_tab) draw_container_tab(tab_content);
-    else if (0 <= player_view_of(s_tab))
-        s_player_content_height = player_panel_draw((PlayerView)player_view_of(s_tab), tab_content, s_entity_id);
+    else if (MI_TAB_PROFILE == s_tab)
+        s_player_content_height = player_panel_draw(PLAYER_VIEW_PROFILE, tab_content, s_entity_id);
     else if (MI_TAB_INTEGRATION == s_tab) draw_integration_tab(tab_content);
 
     /* Fade the new content up by lifting a panel-coloured veil off it —
@@ -2479,11 +2459,11 @@ bool modal_interact_handle_click(int mx, int my) {
         EntityID peer = s_entity_id;
         char name[sizeof s_display_name];
         copy_str(name, sizeof name, s_display_name);
-        const char* skin = active_layer_item_id(s_cached_layers, s_cached_layer_count, "skin");
-        char skin_id[MAX_ITEM_ID_LENGTH] = { 0 };
-        copy_str(skin_id, sizeof skin_id, NULL != skin ? skin : "");
+        char appearance[CYBERIA_IDENTITY_PREVIEW_URL_MAX];
+        identity_appearance_ref(s_cached_layers, s_cached_layer_count, appearance, sizeof appearance);
+        identity_icon_note(name, appearance);
         modal_interact_close();
-        chat_panel_open_direct(peer, name, skin_id);
+        chat_panel_open_direct(peer, name);
         return true;
     }
     if (integration_btn_visible() && ui_button_hit(integration, mx, my)) {
@@ -2531,8 +2511,8 @@ bool modal_interact_handle_click(int mx, int my) {
         return true;
     }
 
-    if (0 <= player_view_of(s_tab) && CheckCollisionPointRec((Vector2){ (float)mx, (float)my }, content)) {
-        player_panel_press((PlayerView)player_view_of(s_tab), content, mx, my);
+    if (MI_TAB_PROFILE == s_tab && CheckCollisionPointRec((Vector2){ (float)mx, (float)my }, content)) {
+        player_panel_press(PLAYER_VIEW_PROFILE, content, mx, my);
         return true;
     }
 

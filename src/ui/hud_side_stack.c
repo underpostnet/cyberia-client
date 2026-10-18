@@ -4,6 +4,7 @@
 #include "hud_minimap_overlay.h"
 #include "inventory_bar.h"
 #include "quest_journal.h"
+#include "social_panel.h"
 #include "toolbar.h"
 
 #include <raylib.h>
@@ -18,24 +19,16 @@ static float hud_side_stack_available(void) {
     return 0.0f < avail ? avail : 0.0f;
 }
 
-/* Height the chat takes at the bottom of the column, its gap included. */
-static float chat_height(float desired_h) {
-    if (!chat_panel_is_visible()) return 0.0f;
-    float avail = hud_side_stack_available();
-    bool shared = hud_minimap_overlay_is_visible() || quest_journal_is_visible();
-    float cap = shared ? avail * HUD_SIDE_STACK_CHAT_SHARE : avail;
-    return desired_h < cap ? desired_h : cap;
-}
+/* The chat or the social panel shows: it takes the whole column. */
+static bool column_covered(void) { return chat_panel_is_visible() || social_panel_is_visible(); }
 
-static float chat_reserve(void) {
-    float h = chat_height(chat_panel_desired_height());
-    return 0.0f < h ? h + HUD_SIDE_STACK_GAP : 0.0f;
+static Rectangle column_slot(bool shown) {
+    return (Rectangle){ column_x(), toolbar_height(), HUD_SIDE_STACK_W, shown ? hud_side_stack_available() : 0.0f };
 }
 
 static float map_height(void) {
-    if (!hud_minimap_overlay_is_visible()) return 0.0f;
-    float avail = hud_side_stack_available() - chat_reserve();
-    if (0.0f > avail) avail = 0.0f;
+    if (!hud_minimap_overlay_is_visible() || column_covered()) return 0.0f;
+    float avail = hud_side_stack_available();
     float h = HUD_MINIMAP_OVERLAY_SIZE < avail ? HUD_MINIMAP_OVERLAY_SIZE : avail;
     if (quest_journal_is_visible()) {
         float shared = avail - HUD_SIDE_STACK_JOURNAL_RESERVE - HUD_SIDE_STACK_GAP;
@@ -43,7 +36,7 @@ static float map_height(void) {
         float cap = shared > floor ? shared : floor;
         if (h > cap) h = cap;
     }
-    return h;
+    return HUD_SIDE_STACK_MAP_MIN > h ? 0.0f : h;
 }
 
 Rectangle hud_side_stack_map_slot(void) {
@@ -52,18 +45,19 @@ Rectangle hud_side_stack_map_slot(void) {
 
 Rectangle hud_side_stack_journal_slot(float desired_h) {
     float top = toolbar_height();
-    float room = hud_side_stack_available() - chat_reserve();
+    float room = hud_side_stack_available();
     float map_h = map_height();
     if (0.0f < map_h) {
         top += map_h + HUD_SIDE_STACK_GAP;
         room -= map_h + HUD_SIDE_STACK_GAP;
     }
-    if (!quest_journal_is_visible() || 0.0f >= room) return (Rectangle){ column_x(), top, HUD_SIDE_STACK_W, 0.0f };
+    if (!quest_journal_is_visible() || column_covered() || 0.0f >= room)
+        return (Rectangle){ column_x(), top, HUD_SIDE_STACK_W, 0.0f };
     return (Rectangle){ column_x(), top, HUD_SIDE_STACK_W, desired_h < room ? desired_h : room };
 }
 
-Rectangle hud_side_stack_chat_slot(float desired_h) {
-    float h = chat_height(desired_h);
-    float bottom = toolbar_height() + hud_side_stack_available();
-    return (Rectangle){ column_x(), bottom - h, HUD_SIDE_STACK_W, h };
+Rectangle hud_side_stack_chat_slot(void) {
+    return column_slot(chat_panel_is_visible() && !social_panel_is_visible());
 }
+
+Rectangle hud_side_stack_social_slot(void) { return column_slot(social_panel_is_visible()); }

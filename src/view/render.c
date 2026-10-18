@@ -28,6 +28,7 @@
 #include "ui/modal_map.h"
 #include "ui/quest_journal.h"
 #include "ui/chat_panel.h"
+#include "ui/social_panel.h"
 #include "ui/modal_notification.h"
 #include "fx/fx_dust.h"
 #include "fx/fx_footsteps.h"
@@ -100,6 +101,7 @@ void render_on_tick(float delta_time) {
     if (inventory_modal_is_open())  inventory_modal_update(delta_time);
     if (modal_dialogue_is_open())   modal_dialogue_update(delta_time);
     if (modal_interact_is_open())   modal_interact_update(delta_time);
+    social_panel_update(delta_time);
     quest_journal_update(delta_time);
     chat_panel_update(delta_time);
     modal_notification_update(delta_time);

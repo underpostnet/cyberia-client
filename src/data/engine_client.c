@@ -197,6 +197,12 @@ void fetch_request_start_limited(const char* id, const char* url, FetchCompleted
     callback(&response);
 }
 
+void fetch_forget(const char* url) {
+    Request* request = find_request(url);
+    if (NULL != request && 0 == request->count &&
+        (ASSET_READY == request->state || ASSET_FAILED == request->state)) discard(request);
+}
+
 void fetch_request_start(const char* id, const char* url, FetchCompletedCb callback) {
     fetch_request_start_at(id, url, callback, FETCH_P1);
 }

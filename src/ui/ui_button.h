@@ -88,5 +88,8 @@ typedef struct {
 } UIButtonPixelRetroStyle;
 
 void ui_button_pixel_retro_draw(Rectangle bounds, const UIButtonPixelRetroStyle* style, bool hovered);
+/* Whether a centered button shows both its icon and its label; a narrower one
+ * keeps the label. */
+bool ui_button_pixel_retro_fits(Rectangle bounds, const UIButtonPixelRetroStyle* style);
 
 #endif /* UI_BUTTON_H */

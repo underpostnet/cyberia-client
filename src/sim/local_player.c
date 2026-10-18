@@ -45,9 +45,12 @@ void local_player_reset(void) {
 
 int local_player_incoming_requests(void) {
     int count = 0;
-    for (int i = 0; g_local_player.friend_count > i; i++) count += FRIEND_INCOMING == g_local_player.friends[i].status;
+    for (int i = 0; g_local_player.friend_count > i; i++) count += FRIEND_INCOMING == g_local_player.friends[i].status &&
+        GetTime() < g_local_player.friends[i].expires_at;
     return count;
 }
+
+int local_player_social_news(void) { return local_player_incoming_requests() + g_local_player.invite_count; }
 
 Vault* local_player_vault(const char* action_code) {
     for (int i = 0; i < g_local_player.vault_count; i++) {

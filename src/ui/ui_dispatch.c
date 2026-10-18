@@ -19,6 +19,7 @@
 #include "modal_notification.h"
 #include "quest_journal.h"
 #include "session_gate.h"
+#include "social_panel.h"
 #include "toolbar.h"
 #include "sim/game_state.h"
 
@@ -73,7 +74,8 @@ bool ui_dispatch_tap(int x, int y) {
 
     if (inventory_modal_handle_click(x, y)) return true;
 
-    /* The right-hand column (journal, chat) before the bubble column (left side). */
+    /* The right-hand column (social, journal, chat) before the bubble column (left side). */
+    if (social_panel_handle_click(x, y)) return true;
     if (quest_journal_handle_click(x, y)) return true;
     if (chat_panel_handle_click(x, y)) return true;
 
@@ -101,6 +103,7 @@ bool ui_dispatch_covers_point(int x, int y) {
     /* Bubble column only blocks taps while expanded (its own predicate
      * accounts for collapse state and the always-present toggle tab). */
     if (interaction_bubble_point_covered(x, y)) return true;
+    if (social_panel_covers_point(x, y)) return true;
     if (quest_journal_covers_point(x, y)) return true;
     if (chat_panel_covers_point(x, y)) return true;
     if (inventory_bar_point_covered(x, y)) return true;
@@ -124,6 +127,10 @@ static bool ui_dispatch_escape(void) {
     }
     if (modal_dialogue_is_open()) {
         modal_dialogue_close();
+        return true;
+    }
+    if (social_panel_is_visible()) {
+        social_panel_close();
         return true;
     }
     return false;
@@ -161,6 +168,9 @@ static bool ui_consume_event(const input_event_t* e) {
     }
     if(!consumed && INPUT_ZOOM == e->type) {
         if (modal_interact_handle_wheel(e->wheel_delta)) { consumed = true; }
+    }
+    if(!consumed && INPUT_ZOOM == e->type) {
+        if (social_panel_handle_wheel(e->wheel_delta)) { consumed = true; }
     }
     if(!consumed && INPUT_ZOOM == e->type) {
         if (quest_journal_handle_wheel(e->wheel_delta)) { consumed = true; }

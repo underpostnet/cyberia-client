@@ -89,7 +89,7 @@ int main(void) {
     s_icon_n = 0;
     s_circles = 0;
     entity_overhead_ui_draw(&other, 4.0f, 4.0f, 1.0f, 32.0f);
-    assert(2 == s_icon_n && 0 == strcmp("emoji-heart", s_icons[0]) && 0 == strcmp("users", s_icons[1]));
+    assert(2 == s_icon_n && 0 == strcmp("friends", s_icons[0]) && 0 == strcmp("party", s_icons[1]));
 
     /* A stranger shows no mark, in a party or not. */
     other.relation = 0;

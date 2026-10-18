@@ -154,6 +154,14 @@ cJSON* json_pack_player_target(const char* type, const char* key, uint32_t playe
     return root;
 }
 
+cJSON* json_pack_session_leave(const char* travel) {
+    assert(travel);
+    cJSON* p;
+    cJSON* root = new_message("session_leave", &p);
+    if ('\0' != travel[0]) cJSON_AddStringToObject(p, "travel", travel);
+    return root;
+}
+
 cJSON* json_pack_party_reply(uint32_t from_id, bool accept) {
     cJSON* p;
     cJSON* root = new_message("party_reply", &p);

@@ -34,6 +34,7 @@
 #include "data/action_cache.h"
 #include "ui/modal_instance_map.h"
 #include "ui/chat_panel.h"
+#include "ui/social_panel.h"
 #include "ui/container_panel.h"
 #include "ui/modal_interact.h"
 #include "ui/modal_map.h"
@@ -1001,7 +1002,8 @@ void game_render_ui(void) {
     // Entity interaction bubbles (left side, collapsible column)
     interaction_bubble_draw();
 
-    // Quest Journal and chat (right side) — grid-level HUD, below every modal.
+    // Social, Quest Journal and chat (right side) — grid-level HUD, below every modal.
+    social_panel_draw();
     quest_journal_draw();
     chat_panel_draw();
 

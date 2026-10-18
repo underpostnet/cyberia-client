@@ -83,6 +83,10 @@ cJSON* json_pack_item_move(const char* from, int from_slot, const char* to, int 
 cJSON* json_pack_player_target(const char* type, const char* key, uint32_t player_id);
 cJSON* json_pack_party_reply(uint32_t from_id, bool accept);
 
+/* The end of the session. `travel` names the world a travel in this page
+ * enters, or is empty. */
+cJSON* json_pack_session_leave(const char* travel);
+
 /* An answer to a friend request (friend_reply) or the end of a friendship
  * (friend_remove), by friendship id. */
 cJSON* json_pack_friendship(const char* type, const char* friendship_id, bool accept);

@@ -6,17 +6,20 @@
 
 #include "world/world_types.h"
 
-/* player_panel — the player tabs of modal_interact.
+/* player_panel — the player views: Profile in modal_interact, the others in
+ * social_panel.
  *
- *   Profile  who a player is. Another player shows only public data from the
- *            snapshot, and only while it is in view, with the party and
- *            friend actions the server allows. The own profile adds the
- *            private block: XP, the wallet, the fill of the bag and the
- *            personal storage, and whether the state is saved.
- *   Party    the own party: the members, the invites that wait for an
- *            answer, and leave, remove and disband.
- *   Friends  the friends of the account with their presence, the requests
- *            that wait for an answer, and chat, accept, decline and remove.
+ *   Profile   who a player is. Another player shows only public data from the
+ *             snapshot, and only while it is in view, with the party and
+ *             friend actions the server allows. The own profile adds the
+ *             private block: XP, the wallet, the fill of the bag and the
+ *             personal storage, and whether the state is saved.
+ *   Party     the own party: the members, the invites that wait for an
+ *             answer, and leave, remove and disband.
+ *   Friends   the own note and the friends of the account with their
+ *             presence. A tap on a friend shows chat, invite and remove.
+ *   Requests  the friend requests received, with accept and decline, and
+ *             the ones sent, with cancel.
  *
  * Every action is a request; the next snapshot or friend list shows its
  * result. */
@@ -25,11 +28,14 @@ typedef enum {
     PLAYER_VIEW_PROFILE,
     PLAYER_VIEW_PARTY,
     PLAYER_VIEW_FRIENDS,
+    PLAYER_VIEW_REQUESTS,
     PLAYER_VIEW_COUNT,
 } PlayerView;
 
 /* A new session starts every view at its top. */
 void  player_panel_reset(void);
+void  player_panel_hide_input(void);
+void  player_panel_note_result(bool accepted);
 
 /* Scroll, and answer a tap once `ready` (the content has settled). */
 void  player_panel_update(PlayerView view, Rectangle content, bool ready, float dt);

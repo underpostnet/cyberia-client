@@ -41,10 +41,18 @@ const char* config_instance_code(void);
  * answers false. A ticket lives in memory only. */
 bool        config_take_launch_ticket(char* out, size_t out_size);
 
-/* The portal pages the game leaves for: the launch bridge of this instance for
- * a guest or an account session, the world selection, and the sign-out. */
-typedef enum { PORTAL_PLAY_GUEST, PORTAL_PLAY_ACCOUNT, PORTAL_WORLDS, PORTAL_SIGN_OUT } PortalPage;
+/* The portal pages the game leaves for: the world selection and the sign-out. */
+typedef enum { PORTAL_WORLDS, PORTAL_SIGN_OUT } PortalPage;
 
 void        config_open_portal(PortalPage page);
+
+/* Opens the launch bridge of a world for an account or a guest session. An
+ * empty code is the default world. */
+void        config_open_launch(const char* instance_code, bool account);
+
+/* Plays another world in this page: `path` is its path on the client ("" or
+ * "/<code>"). The instance code, the WebSocket URL and the address bar follow
+ * it, and the next connection authenticates with `ticket`. */
+void        config_enter_world(const char* path, const char* ticket);
 
 #endif // CONFIG_H

@@ -4,20 +4,21 @@
  */
 
 #include "layer_z_order.h"
+#include "content/stat_contract_generated.h"
 #include <stdlib.h>
 #include <string.h>
 
 int layer_z_priority(const char* type, bool facing_up) {
-    if (!type || type[0] == '\0') return 50;
-    if (strcmp(type, "skin") == 0)   return facing_up ? 40 : 10;
-    if (strcmp(type, "weapon") == 0) return facing_up ? 10 : 40;
-    return 50;
+    if (!type || type[0] == '\0') return CYBERIA_LAYER_PRIORITY_OTHER;
+    if (strcmp(type, "skin") == 0)   return facing_up ? CYBERIA_LAYER_PRIORITY_WEAPON : CYBERIA_LAYER_PRIORITY_SKIN;
+    if (strcmp(type, "weapon") == 0) return facing_up ? CYBERIA_LAYER_PRIORITY_SKIN : CYBERIA_LAYER_PRIORITY_WEAPON;
+    return CYBERIA_LAYER_PRIORITY_OTHER;
 }
 
 static int cmp_z_entry(const void* a, const void* b) {
     const LayerZEntry* ea = (const LayerZEntry*)a;
     const LayerZEntry* eb = (const LayerZEntry*)b;
-    return ea->priority - eb->priority;
+    return ea->priority != eb->priority ? ea->priority - eb->priority : ea->index - eb->index;
 }
 
 int layer_z_sort(const ObjectLayerState* layers, int count,

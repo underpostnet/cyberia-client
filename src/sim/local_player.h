@@ -45,6 +45,21 @@ typedef struct {
     int              count;
 } Stacks;
 
+/* Why the world holds an owned stack instead of loading it. */
+typedef enum { HELD_UNKNOWN, HELD_REBOUND, HELD_NO_ROOM, HELD_UNSUPPORTED, HELD_INCOMPATIBLE } HeldReason;
+
+/* An owned stack the world cannot load now. It keeps the definition it was
+ * granted with, so it is drawn by its own cid and is never usable here. */
+typedef struct {
+    char       item_id[MAX_ITEM_ID_LENGTH];
+    char       cid[MAX_ITEM_ID_LENGTH];
+    int        quantity;
+    HeldReason reason;
+} HeldStack;
+
+/* The held stacks the self snapshot carries in full; the count stays exact. */
+#define HELD_STACKS_SHOWN 8
+
 /* One NPC vault of the player, keyed by the action code of its terminal. */
 typedef struct {
     char   action_code[MAX_ID_LENGTH];
@@ -88,7 +103,7 @@ typedef enum { FRIEND_ACCEPTED, FRIEND_INCOMING, FRIEND_OUTGOING } FriendStatus;
 typedef struct {
     char         id[RECORD_ID_BYTES];       /* the friendship */
     char         name[PLAYER_NAME_BYTES];
-    char         skin[MAX_ID_LENGTH];       /* while online on this server */
+    char         note[CYBERIA_STATUS_NOTE_MAX_RUNES * 4 + 1];
     FriendStatus status;
     bool         online;
     char         world[MAX_ID_LENGTH];
@@ -97,12 +112,13 @@ typedef struct {
     double       expires_at;                /* a request, GetTime() clock */
 } Friend;
 
-#define FRIENDS_LIST_MAX (CYBERIA_FRIENDS_MAX + CYBERIA_FRIEND_REQUESTS_MAX)
+#define FRIENDS_LIST_MAX (CYBERIA_FRIENDS_MAX + 2 * CYBERIA_FRIEND_REQUESTS_MAX)
 
 typedef struct {
     EntityID         id;
     bool             account;        /* the state persists with the account */
-    int              held;           /* owned stacks the world cannot load now */
+    HeldStack        held[HELD_STACKS_SHOWN];
+    int              held_count;     /* owned stacks the world cannot load now */
     bool             unsaved;        /* the engine has not taken the state for a while */
     char             map_code[MAX_ID_LENGTH];
     int              coins;
@@ -128,10 +144,17 @@ typedef struct {
     int              interaction_count;
     Friend           friends[FRIENDS_LIST_MAX];
     int              friend_count;
+    bool             friends_loaded;
+    bool             friends_unavailable;
+    char             status_note[CYBERIA_STATUS_NOTE_MAX_RUNES * 4 + 1];
+    double           note_ready_at;
 } LocalPlayer;
 
 /* Friend requests that wait for the player's answer. */
 int local_player_incoming_requests(void);
+
+/* Social news: the friend requests and the party invites that wait for the player. */
+int local_player_social_news(void);
 
 /* The vault the player has at `action_code`, or NULL when it is still empty. */
 Vault* local_player_vault(const char* action_code);

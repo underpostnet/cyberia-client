@@ -9,7 +9,8 @@
 /* UI-only data fed by engine metadata.
  *
  *   - skill_map: trigger-item-id → skill-event mapping, pushed by the
- *     server's init_data so the client can render the right skill labels.
+ *     server's init_data and replaced per trigger by each metadata delta, so
+ *     the client can render the right skill labels.
  *
  * A pure presentation lookup table that never participates in gameplay
  * simulation, which is why it lives outside GameState.
@@ -31,5 +32,7 @@ void ui_state_reset(void);
 int    ui_state_skill_count(void);
 const UiSkillEntry* ui_state_skill_at(int idx);
 int    ui_state_push_skill(const UiSkillEntry* entry);
+/* Removes every skill entry of a trigger item. */
+void   ui_state_drop_skills(const char* trigger_item_id);
 
 #endif /* CYBERIA_UI_STATE_H */

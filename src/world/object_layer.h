@@ -71,10 +71,10 @@ typedef struct {
     int count;
 } DirectionFrameData;
 
-/* The render metadata of one item: the layout of its primary render. The
+/* The render metadata of one definition: the layout of its primary render. The
  * per-direction arrays clip the animation frames out of that one texture. */
 typedef struct {
-    char item_key[MAX_ITEM_ID_LENGTH];
+    char cid[MAX_ITEM_ID_LENGTH];       /* the Object Layer cid of the definition */
     int atlas_width;                    /* cells */
     int atlas_height;                   /* cells */
     int cell_pixel_dim;                 /* pixels per cell of the primary render PNG */

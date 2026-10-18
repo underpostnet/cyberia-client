@@ -286,6 +286,11 @@ void quest_journal_draw(void) {
     s_header_h = header_walk(JW_MEASURE, 0, 0, probe.x, probe.y, probe.width);
     s_content_h = sections_walk(JW_MEASURE, 0, 0, probe.x, probe.y + s_header_h, probe.width) - (probe.y + s_header_h);
     Rectangle panel = panel_rect();
+    if (0.0f >= panel.height) {
+        s_panel_h = 0.0f;
+        s_view = (Rectangle){ 0 };
+        return;
+    }
     float x = panel.x, w = panel.width, y = panel.y;
 
     /* The header always draws so its close control stays reachable; the

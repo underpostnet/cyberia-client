@@ -30,6 +30,14 @@ static bool  s_fetching;
 static char  s_family[128];      /* family currently loaded or already attempted */
 static float s_factor = 1.0f;
 
+/* The glyphs a font loads: Latin from U+0020 to U+017F and the general
+ * punctuation block. A codepoint the font lacks loads no glyph and draws '?'. */
+#define TEXT_LATIN_END       0x0180
+#define TEXT_PUNCTUATION     0x2000
+#define TEXT_PUNCTUATION_END 0x2070
+#define TEXT_CODEPOINT_COUNT ((TEXT_LATIN_END - 0x20) + (TEXT_PUNCTUATION_END - TEXT_PUNCTUATION))
+static int s_codepoints[TEXT_CODEPOINT_COUNT];
+
 static void on_font_fetched(const FetchResponse *r) {
     s_fetching = false;
     if (!r->success || NULL == r->data || 0 == r->size) {
@@ -38,7 +46,7 @@ static void on_font_fetched(const FetchResponse *r) {
         return;
     }
     Font f = LoadFontFromMemory(".ttf", (const unsigned char *)r->data, (int)r->size,
-                                TEXT_FONT_BASE_SIZE, NULL, 0);
+                                TEXT_FONT_BASE_SIZE, s_codepoints, TEXT_CODEPOINT_COUNT);
     fetch_data_release(r->data);
     if (!IsFontValid(f)) {
         LOG_ERROR("[text] LoadFontFromMemory failed for '%s'", s_family);
@@ -52,7 +60,10 @@ static void on_font_fetched(const FetchResponse *r) {
 }
 
 void text_font_init(void) {
-    s_font = LoadFontEx("assets/fonts/" TEXT_BUNDLED_FAMILY, TEXT_FONT_BASE_SIZE, NULL, 0);
+    int count = 0;
+    for (int cp = 0x20; TEXT_LATIN_END > cp; ++cp) s_codepoints[count++] = cp;
+    for (int cp = TEXT_PUNCTUATION; TEXT_PUNCTUATION_END > cp; ++cp) s_codepoints[count++] = cp;
+    s_font = LoadFontEx("assets/fonts/" TEXT_BUNDLED_FAMILY, TEXT_FONT_BASE_SIZE, s_codepoints, TEXT_CODEPOINT_COUNT);
     s_loaded = IsFontValid(s_font);
     if (s_loaded) SetTextureFilter(s_font.texture, TEXTURE_FILTER_BILINEAR);
     else LOG_ERROR("[text] bundled font '%s' did not load", TEXT_BUNDLED_FAMILY);

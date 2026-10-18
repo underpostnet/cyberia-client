@@ -97,6 +97,12 @@ void ui_button_draw_ring(Rectangle bounds, Color color) {
 
 /* ── Pixel-retro draw (public, used by modal_interact etc.) ──────────── */
 
+bool ui_button_pixel_retro_fits(Rectangle r, const UIButtonPixelRetroStyle* style) {
+    if (NULL == style->label || '\0' == style->label[0]) return true;
+    float icon_sz = fminf((float)style->font_size + 6.0f, r.height - 8.0f);
+    return (float)MeasureText(style->label, style->font_size) + icon_sz + 6.0f + 12.0f <= r.width;
+}
+
 void ui_button_pixel_retro_draw(Rectangle r, const UIButtonPixelRetroStyle* style, bool hovered) {
     bool active_hover = hovered && style->enabled;
     Color base = style->bg;
@@ -141,6 +147,7 @@ void ui_button_pixel_retro_draw(Rectangle r, const UIButtonPixelRetroStyle* styl
     /* Centered group: icon + single line, sized to fit and centered.
      * When there is no label, size the icon to fill the button (minus padding)
      * so that icon-only buttons (toggle arrows, toolbar) get a large icon. */
+    if (has_icon && has_label) has_icon = ui_button_pixel_retro_fits(r, style);
     float icon_sz;
     if (has_icon && !has_label) {
         float max_sz = r.height < r.width ? r.height : r.width;

@@ -62,6 +62,8 @@ void fetch_request_start(const char* id, const char* url, FetchCompletedCb callb
 void fetch_request_start_at(const char* id, const char* url, FetchCompletedCb callback, FetchPriority priority);
 void fetch_request_start_limited(const char* id, const char* url, FetchCompletedCb callback,
                                  size_t max_bytes, unsigned timeout_ms, FetchPriority priority);
+// Drops a settled response, so the next request of the url reads the engine again.
+void fetch_forget(const char* url);
 // The request table owns textures; callers use them only in the current frame.
 Texture2D fetch_texture(const char* url, int pixel_scale, FetchPriority priority, bool visible);
 

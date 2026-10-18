@@ -64,6 +64,13 @@ int main(void) {
     assert(0 == skill_preview_summons(&coin, summons, &held));
     ObjectLayerState sword = slot("sword", true);
     assert(0 == skill_preview_summons(&sword, summons, &held));
+    /* A skill map a world sends later replaces the skills of its triggers, and only theirs. */
+    ui_state_drop_skills("atlas_pistol_mk2");
+    pistol.active = true;
+    assert(0 == skill_preview_summons(&pistol, summons, &held) && 1 == ui_state_skill_count());
+    push_skill("atlas_pistol_mk2", "projectile", "atlas_pistol_mk2_shell");
+    assert(1 == skill_preview_summons(&pistol, summons, &held));
+    assert(0 == strcmp("atlas_pistol_mk2_shell", summons[0].item_id) && 2 == ui_state_skill_count());
 
     /* A held skill previews an inactive stack: the item it consumes, with the units left. */
     push_skill_held("med-gel", "zero-waste-auto-consume-heal", "med-gel", true);
