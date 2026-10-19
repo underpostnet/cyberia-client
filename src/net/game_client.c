@@ -31,7 +31,6 @@
 typedef struct {
     Socket     sock;
     conn_stats stats;
-    double     status_entered_at;
     double     last_reconnect_at;
     int        heartbeat_frames;
 } ClientCtx;
@@ -125,13 +124,13 @@ void game_client_on_tick(void) {
                   g_game_state.init_received ? 1 : 0);
     }
 
-    if (s_enter.pending && !connection_is_open()) {
+    if (s_enter.pending && !socket_is_active(&g_client.sock)) {
         s_enter.pending = false;
         s_enter.open = connection_open();
         if (!s_enter.open) session_gate_lost();
     }
 
-    if (s_resume.active && !connection_is_open() && now >= s_resume.next) {
+    if (s_resume.active && !socket_is_active(&g_client.sock) && now >= s_resume.next) {
         if (now > s_resume.until) {
             s_resume.active = false;
             session_gate_lost();
@@ -144,15 +143,12 @@ void game_client_on_tick(void) {
 
     /* A guest reconnects as a new guest. An account session resumes or waits
      * at its gate, and an ended session waits for the player there. */
-    if (!connection_is_open() && !s_resume.active && !session_gate_active() && !session_gate_account()) {
+    if (!socket_is_active(&g_client.sock) && !s_resume.active && !session_gate_active() && !session_gate_account()) {
         static const double retry_interval = 3.0;
         if (now - g_client.last_reconnect_at >= retry_interval) {
             g_client.last_reconnect_at = now;
             LOG_INFO("reconnecting...");
-            if (!connection_open()) {
-                /* connection_open already logs the failure; stay
-                    * DISCONNECTED, retry on the next interval. */
-            }
+            connection_open();
         }
     }
 }

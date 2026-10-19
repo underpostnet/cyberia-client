@@ -23,7 +23,6 @@ typedef struct {
 
 typedef struct {
     EMSCRIPTEN_WEBSOCKET_T socket;
-    bool connected;
     SocketHandlers callbacks;
     void* user_ctx;
 } Socket;
@@ -31,6 +30,8 @@ typedef struct {
 bool socket_open(Socket* sock, const char* url, void* user_ctx, SocketHandlers handlers);
 void socket_close(Socket* sock);
 bool socket_is_open(const Socket* sock);
+/* An active handle includes a connection that is still opening or closing. */
+bool socket_is_active(const Socket* sock);
 
 /* Send packed bytes to the server. */
 bool socket_send(const Socket* sock, const void* data, size_t len);

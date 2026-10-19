@@ -1,13 +1,11 @@
 #include "socket.h"
 #include "log.h"
-#include <stdio.h>
 #include <assert.h>
 #include <string.h>
 #include <stdint.h>
 
 #include <emscripten/websocket.h>
 
-// Forward declarations of internal event handlers
 static EM_BOOL socket_onopen_internal(int eventType, const EmscriptenWebSocketOpenEvent* event, void* userData);
 static EM_BOOL socket_onmessage_internal(int eventType, const EmscriptenWebSocketMessageEvent* event, void* userData);
 static EM_BOOL socket_onerror_internal(int eventType, const EmscriptenWebSocketErrorEvent* event, void* userData);
@@ -17,8 +15,8 @@ bool socket_open(Socket* sock, const char* url, void* user_ctx, SocketHandlers c
     assert(sock);
     assert(url);
     assert(user_ctx);
+    if (socket_is_active(sock)) return true;
 
-    // Check if WebSocket is supported in this environment
     if (!emscripten_websocket_is_supported()) {
         LOG_ERROR("WebSocket is not supported in this environment");
         return false;
@@ -31,17 +29,15 @@ bool socket_open(Socket* sock, const char* url, void* user_ctx, SocketHandlers c
     attrs.createOnMainThread = EM_TRUE;
 
     EMSCRIPTEN_WEBSOCKET_T handle = emscripten_websocket_new(&attrs);
-    if (handle <= 0) {
+    if (0 >= handle) {
         LOG_ERROR("Failed to create WebSocket");
         return false;
     }
 
     sock->socket = handle;
-    sock->connected = false;
     sock->user_ctx = user_ctx;
     sock->callbacks = callbacks;
 
-    // Register event callbacks; userData is forwarded verbatim to user callbacks
     emscripten_websocket_set_onopen_callback(handle, sock, socket_onopen_internal);
     emscripten_websocket_set_onmessage_callback(handle, sock, socket_onmessage_internal);
     emscripten_websocket_set_onerror_callback(handle, sock, socket_onerror_internal);
@@ -53,12 +49,12 @@ bool socket_open(Socket* sock, const char* url, void* user_ctx, SocketHandlers c
 bool socket_send(const Socket* sock, const void* data, size_t len) {
     assert(sock);
     assert(data);
-    assert(len > 0);
+    assert(0 < len);
     if (!socket_is_open(sock)) {
         return false;
     }
     EMSCRIPTEN_RESULT result = emscripten_websocket_send_binary(sock->socket, (void*)data, (uint32_t)len);
-    if (result != EMSCRIPTEN_RESULT_SUCCESS) {
+    if (EMSCRIPTEN_RESULT_SUCCESS != result) {
         LOG_ERROR("WebSocket send failed: %d", result);
         return false;
     }
@@ -67,36 +63,39 @@ bool socket_send(const Socket* sock, const void* data, size_t len) {
 
 void socket_close(Socket* sock) {
     assert(sock);
-    if (sock->socket > 0) {
-        emscripten_websocket_close(sock->socket, 1000, "Client initiated closure");
-        emscripten_websocket_delete(sock->socket);
-    }
+    EMSCRIPTEN_WEBSOCKET_T handle = sock->socket;
     sock->socket = 0;
-    sock->connected = false;
+    if (0 < handle) {
+        emscripten_websocket_close(handle, 1000, "Client initiated closure");
+        emscripten_websocket_delete(handle);
+    }
 }
 
 bool socket_is_open(const Socket* sock) {
     assert(sock);
-    return sock && sock->connected;
+    unsigned short state;
+    return socket_is_active(sock) &&
+           EMSCRIPTEN_RESULT_SUCCESS == emscripten_websocket_get_ready_state(sock->socket, &state) && 1 == state;
 }
 
-// ============================================================================
-// Internal Event Handlers (Emscripten WebSocket Callbacks)
-// ============================================================================
+bool socket_is_active(const Socket* sock) {
+    assert(sock);
+    return 0 < sock->socket;
+}
+
 static EM_BOOL socket_onopen_internal(int eventType, const EmscriptenWebSocketOpenEvent* event, void* userData) {
-    printf("[WS] onopen fired — socket=%d\n", event ? event->socket : -1);
     Socket* sock = userData;
-    if (sock && sock->callbacks.on_open) {
-        sock->connected = true;
-        sock->callbacks.on_open(sock->user_ctx);
-        return EM_TRUE;
-    }
-    return EM_FALSE;
+    assert(sock && event);
+    if (event->socket != sock->socket || !socket_is_open(sock)) return EM_FALSE;
+    if (NULL != sock->callbacks.on_open) sock->callbacks.on_open(sock->user_ctx);
+    return EM_TRUE;
 }
 
 static EM_BOOL socket_onmessage_internal(int eventType, const EmscriptenWebSocketMessageEvent* event, void* userData) {
     Socket* sock = userData;
-    if (sock && sock->callbacks.on_receive) {
+    assert(sock && event);
+    if (event->socket != sock->socket) return EM_FALSE;
+    if (NULL != sock->callbacks.on_receive) {
         sock->callbacks.on_receive(event->data, event->numBytes, sock->user_ctx);
         return EM_TRUE;
     }
@@ -104,30 +103,23 @@ static EM_BOOL socket_onmessage_internal(int eventType, const EmscriptenWebSocke
 }
 
 static EM_BOOL socket_onerror_internal(int eventType, const EmscriptenWebSocketErrorEvent* event, void* userData) {
-    LOG_ERROR("WebSocket error occurred");
     Socket* sock = userData;
-    if (sock) {
-        if (sock->callbacks.on_error) {
-            sock->callbacks.on_error(sock->user_ctx);
-        }
-        socket_close(sock);
-    }
+    assert(sock && event);
+    if (event->socket != sock->socket) return EM_FALSE;
+    LOG_ERROR("WebSocket error occurred");
+    if (NULL != sock->callbacks.on_error) sock->callbacks.on_error(sock->user_ctx);
     return EM_TRUE;
 }
 
 static EM_BOOL socket_onclose_internal(int eventType, const EmscriptenWebSocketCloseEvent* event, void* userData) {
     Socket* sock = userData;
-    // Only log unexpected closures
-    if (!(bool)event->wasClean || event->code != 1000) {
+    assert(sock && event);
+    if (event->socket != sock->socket) return EM_FALSE;
+    if (!event->wasClean || 1000 != event->code) {
         LOG_ERROR("WebSocket closed unexpectedly: code=%d, reason='%s'", event->code, event->reason);
     }
-    if (sock) {
-        if (sock->callbacks.on_close) {
-            sock->callbacks.on_close(event->code, event->reason, sock->user_ctx);
-        }
-        sock->socket = 0;
-        sock->connected = false;
-    }
+    socket_close(sock);
+    if (NULL != sock->callbacks.on_close) sock->callbacks.on_close(event->code, event->reason, sock->user_ctx);
 
     return EM_TRUE;
 }
