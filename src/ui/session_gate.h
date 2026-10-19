@@ -28,6 +28,8 @@ void session_gate_arrived(void);
 void session_gate_settings(void);
 /* True while the settings menu shows. */
 bool session_gate_settings_open(void);
+/* Escape closes settings. Other session cards consume Escape. */
+bool session_gate_handle_escape(void);
 
 /* Leaves for another world of the universe: the session ends with its final
  * save, then the target opens with the same principal. With `in_place`, an

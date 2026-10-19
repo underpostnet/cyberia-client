@@ -109,8 +109,15 @@ cc "${cc_flags[@]}" -o "$out/graph_layout" tests/graph_layout_test.c src/ui/grap
 cc "${cc_flags[@]}" -o "$out/hud_side_stack" tests/hud_side_stack_test.c src/ui/hud_side_stack.c -lm
 "$out/hud_side_stack"
 
+cc "${cc_flags[@]}" -o "$out/session_gate" tests/session_gate_test.c src/ui/session_gate.c -lm
+"$out/session_gate"
+
 cc "${cc_flags[@]}" -Itests/stubs -o "$out/socket" tests/socket_test.c src/net/socket.c
 "$out/socket"
+
+cc "${cc_flags[@]}" -ffunction-sections -fdata-sections -Wl,--gc-sections \
+    -o "$out/ui_switch" tests/ui_switch_test.c src/ui/ui_switch.c -lm
+"$out/ui_switch"
 
 cc "${cc_flags[@]}" -Itests/stubs -ffunction-sections -fdata-sections -Wl,--gc-sections \
     -o "$out/game_client" tests/game_client_test.c src/net/game_client.c src/serial.c src/utils.c libs/cJSON/cJSON.c -lm

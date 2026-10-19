@@ -9,10 +9,12 @@
 #include "net/game_client.h"
 #include "text.h"
 #include "ui_button.h"
+#include "ui_switch.h"
 #include "view/viewport.h"
 #include "world/world_types.h"
 
 #include <raylib.h>
+#include <math.h>
 #include <stddef.h>
 #include <stdio.h>
 #include <string.h>
@@ -53,7 +55,7 @@ static const GateText GATE_TEXTS[] = {
     { "invalid", "The game could not start this session.", { SIGN_IN, GUEST } },
     { "signed_in_elsewhere", "Your account is playing in another window.",
       { { WAY_ACCOUNT, "PLAY HERE", "log-in" }, PORTAL } },
-    { "unavailable", "The world cannot open your session now.", { { WAY_RECONNECT, "TRY AGAIN", "reload" }, PORTAL } },
+    { "unavailable", "The world cannot open your session now.", { { WAY_ACCOUNT, "TRY AGAIN", "reload" }, PORTAL } },
     { "invalid_state", "Your progress could not be saved.", { PLAY_ACCOUNT, PORTAL } },
     { "left_saving",
       "Your last changes are still on their way to storage. The world keeps them if storage answers within 10 minutes.",
@@ -64,12 +66,11 @@ static const GateText GATE_LOST_ACCOUNT = { "", "The connection to the world was
 static const GateText GATE_LOST_GUEST   = { "", "The connection to the world was lost.", { PLAY_RECONNECT, PORTAL } };
 static const GateText GATE_RESTART_ACCOUNT = { "", "The world restarted.", { PLAY_ACCOUNT, PORTAL } };
 static const GateText GATE_RESTART_GUEST   = { "", "The world restarted.", { PLAY_RECONNECT, PORTAL } };
-/* The settings card draws the portal in its first row. */
 static const GateText GATE_SETTINGS_ACCOUNT = {
     "", "", { { WAY_GUEST, "PLAY AS GUEST", "anon" }, { WAY_SIGN_OUT, "SIGN OUT", "log-out" } },
 };
 static const GateText GATE_SETTINGS_GUEST = {
-    "", "Guest session: your items and progress end when you leave.",
+    "", "",
     { { WAY_ACCOUNT, "SIGN IN TO KEEP PROGRESS", "log-in" } },
 };
 static const GateText GATE_LEAVING = { "", "Saving your progress...", { { 0 } } };
@@ -97,6 +98,8 @@ static struct {
     Rectangle       buttons[GATE_ACTIONS_MAX];
     Rectangle       portal, sound, fullscreen;
     Rectangle       close;
+    Rectangle       card;
+    UISwitch        sound_switch, fullscreen_switch;
 } s;
 
 static void show(const GateText* text) {
@@ -192,9 +195,17 @@ void session_gate_arrived(void) {
 void session_gate_settings(void) {
     show(s.account ? &GATE_SETTINGS_ACCOUNT : &GATE_SETTINGS_GUEST);
     s.settings = true;
+    ui_switch_init(&s.sound_switch, !audio_is_muted());
+    ui_switch_init(&s.fullscreen_switch, fullscreen_bridge_is_active());
 }
 
 bool session_gate_settings_open(void) { return s.active && s.settings; }
+
+bool session_gate_handle_escape(void) {
+    if (!s.active) return false;
+    if (s.settings) s.active = false;
+    return true;
+}
 
 void session_gate_set_account(bool account) { s.account = account; }
 bool session_gate_account(void) { return s.account; }
@@ -239,25 +250,29 @@ void session_gate_draw(Rectangle area) {
     int body_font = mobile ? 14 : 17;
     float pad = mobile ? 14.0f : 20.0f;
     float w = area.width - 2.0f * pad < 440.0f ? area.width - 2.0f * pad : 440.0f;
-    float button_h = mobile ? 40.0f : 44.0f;
+    float button_h = s.settings || !mobile ? 44.0f : 40.0f;
     int count = action_count();
     int rows = s.settings ? 3 : 0;
+    if (s.settings)
+        pad = fminf(pad, fmaxf(6.0f, (area.height - 16.0f - 44.0f - (float)(rows + count) * button_h)
+                                    / (float)(rows + count + 1)));
     bool message = '\0' != s.text->message[0];
     float body_h = message ? (float)text_wrap(s.text->message, 0, 0, (int)(w - 2.0f * pad), body_font, MODAL_TEXT,
                                               true, false) + pad
                            : 0.0f;
-    float header_h = (float)title_font + pad;
+    float header_h = s.settings ? 44.0f : (float)title_font + pad;
     float h = header_h + pad + (float)(rows + count) * (button_h + pad) + body_h;
     Rectangle card = { area.x + (area.width - w) * 0.5f, area.y + (area.height - h) * 0.5f, w, h };
+    s.card = card;
+    s.close = s.settings
+        ? (Rectangle){ card.x + card.width - pad * 0.5f - 44.0f, card.y, 44.0f, 44.0f }
+        : (Rectangle){ 0 };
 
     modal_draw_card(card, false, s.age, area.y + area.height, MODAL_PANEL_BORDER, header_h);
     modal_draw_title(s.settings ? "SETTINGS" : "SESSION", card, pad, header_h, title_font, MODAL_TEXT,
-                     card.x + card.width);
-    s.close = (Rectangle){ 0 };
+                     s.settings ? s.close.x : card.x + card.width);
     if (s.settings) {
-        float size = header_h - pad;
-        s.close = (Rectangle){ card.x + card.width - pad - size, card.y + pad * 0.5f, size, size };
-        UIButtonStyle close = { .icon_id = "close-yellow", .no_fill = true };
+        UIButtonStyle close = { .icon_id = "close-yellow", .icon_size = title_font, .no_fill = true };
         ui_button_draw(s.close, &close, ui_button_resolve_state(true, false, ui_button_hit(s.close, GetMouseX(), GetMouseY())));
     }
     float y = card.y + header_h + pad;
@@ -266,26 +281,24 @@ void session_gate_draw(Rectangle area) {
         bool muted = audio_is_muted();
         bool full = fullscreen_bridge_is_active();
         const GateAction way = PORTAL;
-        s.portal = (Rectangle){ card.x + pad, y, w - 2.0f * pad, button_h };
-        s.sound = (Rectangle){ card.x + pad, y + button_h + pad, w - 2.0f * pad, button_h };
-        s.fullscreen = (Rectangle){ card.x + pad, y + 2.0f * (button_h + pad), w - 2.0f * pad, button_h };
+        s.sound = (Rectangle){ card.x + pad, y, w - 2.0f * pad, button_h };
+        s.fullscreen = (Rectangle){ card.x + pad, y + button_h + pad, w - 2.0f * pad, button_h };
+        s.portal = (Rectangle){ card.x + pad, y + 2.0f * (button_h + pad), w - 2.0f * pad, button_h };
         UIButtonPixelRetroStyle portal = {
             .bg = C_BUTTON, .icon_id = way.icon, .label = way.label, .font_size = body_font, .text_color = WHITE,
             .enabled = true,
         };
-        UIButtonPixelRetroStyle sound = {
-            .bg = C_BUTTON, .icon_id = muted ? "audio-mute" : "audio",
-            .label = muted ? "SOUND OFF" : "SOUND ON", .font_size = body_font, .text_color = WHITE,
-            .selected = !muted, .enabled = true,
+        UISwitchStyle sound = {
+            .icon_id = muted ? "audio-mute" : "audio", .label = "SOUND", .font_size = body_font,
         };
-        UIButtonPixelRetroStyle screen = {
-            .bg = C_BUTTON, .icon_id = full ? "shrink" : "fullscreen",
-            .label = full ? "FULL SCREEN ON" : "FULL SCREEN OFF", .font_size = body_font, .text_color = WHITE,
-            .selected = full, .enabled = true,
+        UISwitchStyle screen = {
+            .icon_id = full ? "shrink" : "fullscreen", .label = "FULL SCREEN", .font_size = body_font,
         };
+        ui_switch_update(&s.sound_switch, !muted, GetFrameTime());
+        ui_switch_update(&s.fullscreen_switch, full, GetFrameTime());
+        ui_switch_draw(&s.sound_switch, s.sound, &sound, ui_button_hit(s.sound, GetMouseX(), GetMouseY()));
+        ui_switch_draw(&s.fullscreen_switch, s.fullscreen, &screen, ui_button_hit(s.fullscreen, GetMouseX(), GetMouseY()));
         ui_button_pixel_retro_draw(s.portal, &portal, ui_button_hit(s.portal, GetMouseX(), GetMouseY()));
-        ui_button_pixel_retro_draw(s.sound, &sound, ui_button_hit(s.sound, GetMouseX(), GetMouseY()));
-        ui_button_pixel_retro_draw(s.fullscreen, &screen, ui_button_hit(s.fullscreen, GetMouseX(), GetMouseY()));
         y += (float)rows * (button_h + pad);
     }
     if (message)
@@ -305,7 +318,7 @@ void session_gate_draw(Rectangle area) {
 
 bool session_gate_handle_click(int mx, int my) {
     if (!s.active) return false;
-    if (s.settings && ui_button_hit(s.close, mx, my)) {
+    if (s.settings && (!ui_button_hit(s.card, mx, my) || ui_button_hit(s.close, mx, my))) {
         s.active = false;
         return true;
     }

@@ -113,6 +113,7 @@ bool ui_dispatch_covers_point(int x, int y) {
 
 /* Escape closes the topmost open modal, innermost first. */
 static bool ui_dispatch_escape(void) {
+    if (session_gate_handle_escape()) return true;
     if (modal_instance_map_is_open()) {
         modal_instance_map_close();
         return true;
