@@ -23,6 +23,9 @@
 #define MINIMAP_ZOOM_MIN            1
 #define MINIMAP_ZOOM_DEFAULT        1
 #define MINIMAP_ZOOM_MAX            4
+#define MINIMAP_OPACITY_MIN         0
+#define MINIMAP_OPACITY_DEFAULT     2
+#define MINIMAP_OPACITY_MAX        10
 #define MINIMAP_CONTROL_SIDE       28.0f
 #define MINIMAP_CONTROL_GAP         4.0f
 #define MINIMAP_CONTROL_INSET       6.0f
@@ -30,11 +33,10 @@
 #define MINIMAP_LABEL_MAX_W       120.0f
 #define MINIMAP_MARKER_ROOM        22.0f   /* what a label keeps clear of a marker */
 
-/* The world shows through the map body; the header, the controls and the markers stay opaque. */
-static const Color MINIMAP_BG           = { 8, 14, 24, 150 };
-static const Color MINIMAP_HEADER       = { 3, 7, 16, 235 };
-static const Color MINIMAP_TEXTURE      = { 255, 255, 255, 140 };
-static const Color MINIMAP_NEUTRAL      = { 10, 16, 28, 110 };
+/* The map body stays transparent; controls and markers keep their contrast. */
+static const Color MINIMAP_BG           = { 8, 14, 24, 48 };
+static const Color MINIMAP_HEADER       = { 3, 7, 16, 160 };
+static const Color MINIMAP_TEXTURE      = { 255, 255, 255, 64 };
 static const Color MINIMAP_EDGE         = { 150, 200, 235, 150 };
 static const Color MINIMAP_GRID         = { 80, 150, 190, 38 };
 static const Color MINIMAP_OUTLINE      = { 3, 7, 16, 230 };
@@ -48,11 +50,15 @@ static const Color MINIMAP_EXIT         = { 60, 200, 255, 255 };
 static const Color MINIMAP_LINK         = { 170, 110, 255, 255 };
 
 /* The controls along the right edge of the map, top to bottom. */
-typedef enum { MINIMAP_TEXTURE_TOGGLE = 0, MINIMAP_ZOOM_IN, MINIMAP_ZOOM_OUT, MINIMAP_CONTROL_COUNT } MinimapControl;
+typedef enum {
+    MINIMAP_TEXTURE_TOGGLE, MINIMAP_ZOOM_IN, MINIMAP_ZOOM_OUT,
+    MINIMAP_TRANSPARENCY_MORE, MINIMAP_TRANSPARENCY_LESS, MINIMAP_CONTROL_COUNT,
+} MinimapControl;
 
 static bool s_visible = false;
 static bool s_texture_visible = true;
 static int  s_zoom_level = MINIMAP_ZOOM_DEFAULT;
+static int  s_opacity_level = MINIMAP_OPACITY_DEFAULT;
 static char s_exit_hint[IMAP_NAME_MAX * 2 + 16]; /* the exit under the pointer, this frame */
 
 static Rectangle overlay_bounds(void) {
@@ -81,9 +87,15 @@ static Rectangle control_bounds(Rectangle bounds, MinimapControl control) {
 /* The backing under the controls, so they read on any texture. */
 static Rectangle control_rail(Rectangle bounds) {
     Rectangle first = control_bounds(bounds, MINIMAP_TEXTURE_TOGGLE);
-    Rectangle last = control_bounds(bounds, MINIMAP_ZOOM_OUT);
+    Rectangle last = control_bounds(bounds, MINIMAP_CONTROL_COUNT - 1);
     return (Rectangle){ first.x - 3.0f, first.y - 3.0f, last.x + last.width - first.x + 6.0f,
                         last.y + last.height - first.y + 6.0f };
+}
+
+static Color map_alpha(Color color) {
+    int alpha = (int)color.a * s_opacity_level / MINIMAP_OPACITY_DEFAULT;
+    color.a = (unsigned char)(255 < alpha ? 255 : alpha);
+    return color;
 }
 
 static Rectangle centered_square(Vector2 at, float side) {
@@ -96,16 +108,14 @@ static void draw_square_marker(Vector2 at, float side, Color color) {
     DrawRectangleRec(centered_square(at, side), color);
 }
 
-/* The map texture under the markers, which keep their own opacity. Without the
- * texture, or until it loads, a grid on a neutral fill marks the map. */
+/* A missing or hidden texture leaves the grid on the container background. */
 static void draw_map(Rectangle rect, const ImapNode* node) {
     Texture2D texture = s_texture_visible && '\0' != node->preview_url[0]
         ? fetch_texture(node->preview_url, 1, FETCH_P1, true) : (Texture2D){0};
     if (0 < texture.id) {
         DrawTexturePro(texture, (Rectangle){0, 0, (float)texture.width, (float)texture.height},
-                       rect, (Vector2){0}, 0.0f, MINIMAP_TEXTURE);
+                       rect, (Vector2){0}, 0.0f, map_alpha(MINIMAP_TEXTURE));
     } else {
-        DrawRectangleRec(rect, MINIMAP_NEUTRAL);
         for (int i = 1; 4 > i; i++) {
             float x = rect.x + rect.width * (float)i / 4.0f;
             float y = rect.y + rect.height * (float)i / 4.0f;
@@ -291,8 +301,14 @@ static void draw_player(Vector2 center) {
     draw_arrow(Vector2Add(center, Vector2Scale(dir, 12.0f)), dir, 5.0f, MINIMAP_PLAYER);
 }
 
-/* The texture toggle shows the map icon; a slash crosses it while the texture
- * is off. The pointer over it names the state. */
+static void draw_control_tip(Rectangle bounds, Rectangle control, const char* tip) {
+    float width = (float)MeasureText(tip, MINIMAP_LABEL_FONT) + 8.0f;
+    float x = fmaxf(bounds.x + 4.0f, control.x - width - 6.0f);
+    Rectangle box = { x, control.y + 6.0f, width, (float)text_line_height(MINIMAP_LABEL_FONT) + 4.0f };
+    DrawRectangleRec(box, MINIMAP_OUTLINE);
+    DrawText(tip, (int)box.x + 4, (int)box.y + 2, MINIMAP_LABEL_FONT, MINIMAP_TEXT);
+}
+
 static void draw_controls(Rectangle bounds, Vector2 mouse) {
     DrawRectangleRec(control_rail(bounds), MINIMAP_RAIL);
     Rectangle texture = control_bounds(bounds, MINIMAP_TEXTURE_TOGGLE);
@@ -304,26 +320,32 @@ static void draw_controls(Rectangle bounds, Vector2 mouse) {
         DrawLineEx((Vector2){ texture.x + 5.0f, texture.y + texture.height - 5.0f },
                    (Vector2){ texture.x + texture.width - 5.0f, texture.y + 5.0f }, 2.0f, MINIMAP_OFF);
     }
-    if (over_texture) {
-        const char* tip = s_texture_visible ? "MAP TEXTURE ON" : "MAP TEXTURE OFF";
-        int width = MeasureText(tip, MINIMAP_LABEL_FONT);
-        Rectangle box = { texture.x - (float)width - 14.0f, texture.y + 6.0f, (float)width + 8.0f,
-                          (float)text_line_height(MINIMAP_LABEL_FONT) + 4.0f };
-        DrawRectangleRec(box, MINIMAP_OUTLINE);
-        DrawText(tip, (int)box.x + 4, (int)box.y + 2, MINIMAP_LABEL_FONT, MINIMAP_TEXT);
+    const struct {
+        const char* label;
+        const char* tip;
+        bool enabled;
+    } controls[] = {
+        { "+", "ZOOM IN", MINIMAP_ZOOM_MAX > s_zoom_level },
+        { "-", "ZOOM OUT", MINIMAP_ZOOM_MIN < s_zoom_level },
+        { "T+", "MORE TRANSPARENT", MINIMAP_OPACITY_MIN < s_opacity_level },
+        { "T-", "LESS TRANSPARENT", MINIMAP_OPACITY_MAX > s_opacity_level },
+    };
+    for (int i = MINIMAP_ZOOM_IN; MINIMAP_CONTROL_COUNT > i; i++) {
+        Rectangle rect = control_bounds(bounds, i);
+        bool hovered = CheckCollisionPointRec(mouse, rect);
+        UIButtonStyle style = { .text = controls[i - MINIMAP_ZOOM_IN].label,
+                                .font_size = MINIMAP_ZOOM_OUT >= i ? 18 : 14, .no_fill = true };
+        ui_button_draw(rect, &style, ui_button_resolve_state(controls[i - MINIMAP_ZOOM_IN].enabled, false, hovered));
     }
-    Rectangle zoom_in = control_bounds(bounds, MINIMAP_ZOOM_IN);
-    Rectangle zoom_out = control_bounds(bounds, MINIMAP_ZOOM_OUT);
-    UIButtonStyle zoom_in_style = { .text = "+", .font_size = 18, .no_fill = true };
-    UIButtonStyle zoom_out_style = { .text = "-", .font_size = 18, .no_fill = true };
-    ui_button_draw(zoom_in, &zoom_in_style,
-                   ui_button_resolve_state(MINIMAP_ZOOM_MAX > s_zoom_level, false, CheckCollisionPointRec(mouse, zoom_in)));
-    ui_button_draw(zoom_out, &zoom_out_style,
-                   ui_button_resolve_state(MINIMAP_ZOOM_MIN < s_zoom_level, false, CheckCollisionPointRec(mouse, zoom_out)));
+    if (over_texture) draw_control_tip(bounds, texture, s_texture_visible ? "MAP TEXTURE ON" : "MAP TEXTURE OFF");
+    for (int i = MINIMAP_ZOOM_IN; MINIMAP_CONTROL_COUNT > i; i++) {
+        Rectangle rect = control_bounds(bounds, i);
+        if (CheckCollisionPointRec(mouse, rect)) draw_control_tip(bounds, rect, controls[i - MINIMAP_ZOOM_IN].tip);
+    }
 }
 
 static void draw_chrome(Rectangle bounds, const char* map_name) {
-    DrawRectangle((int)bounds.x, (int)bounds.y, (int)bounds.width, (int)MINIMAP_HEADER_H, MINIMAP_HEADER);
+    DrawRectangle((int)bounds.x, (int)bounds.y, (int)bounds.width, (int)MINIMAP_HEADER_H, map_alpha(MINIMAP_HEADER));
     char title[IMAP_NAME_MAX];
     snprintf(title, sizeof title, "%s", map_name);
     int limit = (int)(close_bounds(bounds).x - bounds.x - 14.0f);
@@ -351,6 +373,7 @@ static void draw_chrome(Rectangle bounds, const char* map_name) {
 void hud_minimap_overlay_init(void) {
     s_visible = false;
     s_zoom_level = MINIMAP_ZOOM_DEFAULT;
+    s_opacity_level = MINIMAP_OPACITY_DEFAULT;
 }
 
 void hud_minimap_overlay_cleanup(void) {
@@ -385,7 +408,7 @@ void hud_minimap_overlay_draw(void) {
 
     Rectangle bounds = overlay_bounds();
     if (MINIMAP_HEADER_H > bounds.height) return;
-    DrawRectangleRec(bounds, MINIMAP_BG);
+    DrawRectangleRec(bounds, map_alpha(MINIMAP_BG));
     Rectangle body = { bounds.x, bounds.y + MINIMAP_HEADER_H, bounds.width, bounds.height - MINIMAP_HEADER_H };
 
     const ImapGraph* graph = instance_map_data_graph();
@@ -439,6 +462,14 @@ bool hud_minimap_overlay_handle_click(int mx, int my) {
     }
     if (ui_button_hit(control_bounds(bounds, MINIMAP_ZOOM_OUT), mx, my)) {
         if (MINIMAP_ZOOM_MIN < s_zoom_level) s_zoom_level--;
+        return true;
+    }
+    if (ui_button_hit(control_bounds(bounds, MINIMAP_TRANSPARENCY_MORE), mx, my)) {
+        if (MINIMAP_OPACITY_MIN < s_opacity_level) s_opacity_level--;
+        return true;
+    }
+    if (ui_button_hit(control_bounds(bounds, MINIMAP_TRANSPARENCY_LESS), mx, my)) {
+        if (MINIMAP_OPACITY_MAX > s_opacity_level) s_opacity_level++;
         return true;
     }
     return false;

@@ -14,10 +14,8 @@
  *   open  → GET /api/v1/cyberia-instance/instance-map/:code/static   (once)
  *   close → a late response is discarded.
  *
- * Each node sits on the cell of the authored graph layout the engine resolves:
- * x grows right, y grows down. The layout is view data; portals keep their own
- * cells on each map. A map with a world origin has a place in its world
- * instead: maps whose places share a whole edge join there.
+ * The engine places each map. Maps that share an edge of positive length
+ * form one surface; a corner or an overlap is no shared edge.
  *
  * Static POIs carry authored presence, the quests and actions each one
  * provides, and the prerequisites of each quest. A POI is active from the own
@@ -34,6 +32,8 @@
 #define IMAP_URL_MAX         160
 #define IMAP_MAX_PROVIDERS   512
 #define IMAP_MAX_LINKS       8
+/* Map edges closer than this share of a map cell are one edge. */
+#define IMAP_JOIN_TOLERANCE  0.01f
 
 enum {
     IMAP_CAPABILITY_ACTION = 1u << 0,
@@ -56,6 +56,11 @@ typedef enum {
     IMAP_DATA_ERROR,        /* static fetch/parse failed              */
 } ImapDataState;
 
+/* A rectangle in layout units: x grows right, y grows down. */
+typedef struct {
+    float left, top, right, bottom;
+} ImapBounds;
+
 typedef struct {
     char    map_code[IMAP_CODE_MAX];
     char    name[IMAP_NAME_MAX];
@@ -65,19 +70,22 @@ typedef struct {
     Vector2 world;                  /* its centre there, in layout
                                      * cells at the scale of extent  */
     int     grid_x, grid_y;
-    float   extent_w, extent_h;     /* size of the map in its layout
-                                     * cell, in cells: one scale for
+    float   extent_w, extent_h;     /* size of the map: one scale for
                                      * every map of the world        */
     int     quest_provider_count;   /* static totals bound to this map */
     int     action_provider_count;
     int     portal_count;           /* edges touching this node        */
-    int     layout_x, layout_y;     /* cell of the graph layout        */
+    Vector2 position;               /* centre from the engine          */
+    ImapBounds bounds;              /* the map about the world centre;
+                                     * maps that touch share one edge
+                                     * value                          */
 } ImapNode;
 
 typedef struct {
     int  source_node;
     int  target_node;
     bool intra;                     /* same-map edge (intra-* mode)    */
+    bool joined;                    /* its two maps share an edge      */
     /* Endpoint cells on each node's map; -1 = random destination (the
      * rendered link anchors to the node centre with a vibration). */
     int  source_cell_x, source_cell_y;
@@ -109,6 +117,8 @@ typedef struct {
 
     ImapNode nodes[IMAP_MAX_NODES];
     int      node_count;
+    Vector2  span;                  /* size of the world               */
+    float    cell;                  /* size of one map cell            */
 
     ImapEdge edges[IMAP_MAX_EDGES];
     int      edge_count;
@@ -156,26 +166,13 @@ Color instance_map_presence_color(ImapPresenceStatus status);
 Vector2 instance_map_cell_to_card(Rectangle card, const ImapNode* node,
                                   float cell_x, float cell_y);
 
-/* The card of a node: its map at its extent, centred on `center`, where one
- * layout cell spans `cell_side` pixels. */
-Rectangle instance_map_node_rect(const ImapNode* node, Vector2 center, float cell_side);
 /* The active map in `bounds`: zoom 1 fits it whole; a closer zoom follows the
  * player and stops at the map edges. */
 Rectangle instance_map_local_rect(const ImapNode* node, Rectangle bounds, Vector2 player, float zoom);
 
-/* The edges of a card a neighbour covers whole. */
-enum { IMAP_EDGE_LEFT = 1u << 0, IMAP_EDGE_TOP = 1u << 1, IMAP_EDGE_RIGHT = 1u << 2, IMAP_EDGE_BOTTOM = 1u << 3 };
-
-/* The edges of `a` that the place of `b` covers whole: both maps placed, the
- * same length along the edge, and their places side by side. */
-unsigned instance_map_shared_edges(const ImapNode* a, const ImapNode* b);
-/* The edges of a node any other node covers. */
-unsigned instance_map_joined_edges(const ImapGraph* graph, int index);
-
-/* Each centre of the view, about the origin, and the span, in layout cells. A
- * placed map sits at its place; the other maps pack on their layout cells, a
- * gap right of the placed ones. */
-Vector2 instance_map_layout(const ImapGraph* graph, float gap, Vector2* centers);
+/* Whether two maps share an edge of positive length, within `tolerance`.
+ * A corner or an overlap is no shared edge. */
+bool instance_map_bounds_touch(ImapBounds a, ImapBounds b, float tolerance);
 
 /* The name of a node, with its map code when another node has the same name. */
 void instance_map_node_label(const ImapGraph* graph, int index, char* out, size_t size);

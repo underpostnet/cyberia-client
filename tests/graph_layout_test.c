@@ -11,8 +11,14 @@ int main(void) {
     Vector2 cells[] = { { -12, 4 }, { 8, 4 }, { 8, 30 }, { -12, 30 } };
     Vector2 sizes[] = { { 0.8f, 0.4f }, { 0.4f, 0.8f }, { 0.6f, 0.3f }, { 0.7f, 0.2f } };
     Vector2 centers[4];
+    /* A run of empty lines leaves the room of the smallest node and one more gap. */
     Vector2 span = graph_layout_pack(cells, sizes, 4, 0.025f, centers);
+    assert(near(span.x, 1.425f + 0.4f + 0.025f) && near(span.y, 1.125f + 0.2f + 0.025f));
+    Vector2 dense[] = { { 0, 0 }, { 1, 0 }, { 1, 1 }, { 0, 1 } };
+    Vector2 packed[4];
+    span = graph_layout_pack(dense, sizes, 4, 0.025f, packed);
     assert(near(span.x, 1.425f) && near(span.y, 1.125f));
+    span = graph_layout_pack(cells, sizes, 4, 0.025f, centers);
     assert(centers[0].x < centers[1].x && near(centers[0].y, centers[1].y));
     assert(centers[0].y < centers[3].y && near(centers[0].x, centers[3].x));
     for (int i = 0; 4 > i; i++) {

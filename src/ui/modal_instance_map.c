@@ -41,7 +41,7 @@
 #define IMAP_ZOOM_STEP      1.15f
 #define IMAP_DRAG_SLOP_PX   9.0f
 #define IMAP_CAM_LAMBDA     11.0f   /* exp smoothing rate for pan/zoom      */
-#define IMAP_MAP_GAP        0.025f  /* maps on layout cells nearly touch       */
+#define IMAP_FRAME_CELL_PX  8.0f    /* most px of one map cell when the world view opens */
 #define UMAP_WORLD_GAP      0.2f    /* room for the routes between worlds      */
 
 static const Color IMAP_BG        = { 6, 10, 22, 205 };
@@ -50,6 +50,13 @@ static const Color IMAP_EDGE      = { 60, 200, 255, 255 };
 static const Color IMAP_EDGE_INTRA= { 170, 110, 255, 255 };
 static const Color IMAP_NODE_LINE = { 90, 210, 250, 220 };
 static const Color IMAP_SELECTED  = { 255, 210, 90, 255 };
+static const Color IMAP_HOVER     = { 120, 220, 255, 255 };
+static const Color IMAP_RIM       = { 70, 170, 220, 210 };
+static const Color IMAP_RIM_SHADOW= { 2, 4, 10, 235 };
+static const Color IMAP_PLATE     = { 18, 52, 104, 238 };
+static const Color IMAP_PLATE_EDGE= { 96, 176, 255, 255 };
+static const Color IMAP_PLATE_GLOW= { 160, 215, 255, 150 };
+static const Color IMAP_PLATE_TEXT= { 236, 246, 255, 255 };
 static const Color IMAP_PLAYER    = { 110, 255, 150, 255 };
 static const Color IMAP_TEXT      = { 205, 225, 245, 235 };
 static const Color IMAP_TEXT_DIM  = { 130, 150, 180, 190 };
@@ -86,8 +93,8 @@ typedef struct {
     bool    universe_open; /* the universe data was asked for  */
     bool    framed;        /* the open view fits its graph */
     bool    clear_pending; /* the selection still has to leave its panel */
-    Vector2 centers[IMAP_MAX_NODES];
-    Vector2 span;                        /* of the packed graph, in cells */
+    Vector2 centers[IMAP_MAX_NODES];     /* of the universe cards         */
+    Vector2 span;                        /* of the open view, in layout units */
     int viewport_w, viewport_h;          /* the screen the view was framed for */
     int selected_node;    /* -1 = none, in the open view     */
     char selected_code[IMAP_CODE_MAX];
@@ -163,10 +170,10 @@ static int view_node_count(void) {
                                      : instance_map_data_graph()->node_count;
 }
 
-/* Packs the open view on the layout cells of the editor, its empty rows and columns removed. */
+/* The engine places the maps; the client packs the universe cards. */
 static void pack_view(void) {
     if (VIEW_UNIVERSE != s_m.view) {
-        s_m.span = instance_map_layout(instance_map_data_graph(), IMAP_MAP_GAP, s_m.centers);
+        s_m.span = instance_map_data_graph()->span;
         return;
     }
     const UmapGraph* u = universe_map_data_graph();
@@ -188,39 +195,46 @@ static Rectangle frame_area(void) {
 /* The most pixels one layout cell spans with a span in the frame area. */
 static float fit_side(Vector2 span) {
     Rectangle area = frame_area();
-    return fminf(area.width / fmaxf(span.x, 1.0f), area.height / fmaxf(span.y, 1.0f));
+    return fminf(area.width / fmaxf(span.x, 1e-3f), area.height / fmaxf(span.y, 1e-3f));
 }
 
-static Vector2 node_center(int idx) {
+/* A layout point on the screen. */
+static Vector2 screen_point(Vector2 p) {
     Vector2 c = ui_rect_center(s_m.panel);
     float side = node_screen_side();
-    return (Vector2){ c.x + s_m.pan.x + s_m.centers[idx].x * side, c.y + s_m.pan.y + s_m.centers[idx].y * side };
+    return (Vector2){ c.x + s_m.pan.x + p.x * side, c.y + s_m.pan.y + p.y * side };
 }
 
 static float node_screen_radius(void) {
     return node_screen_side() * 0.5f;
 }
 
-/* A map card has the proportions of its map, a world card those of its
- * preview. A map card sits on whole pixels, so two joined maps meet. */
+/* A map rounds each edge from its one value, so maps that touch meet on one pixel at every zoom. */
 static Rectangle node_rect(int idx) {
-    Vector2 p = node_center(idx);
-    float side = node_screen_side();
     if (VIEW_UNIVERSE == s_m.view) {
         const UmapNode* u = &universe_map_data_graph()->nodes[idx];
+        Vector2 p = screen_point(s_m.centers[idx]);
+        float side = node_screen_side();
         return (Rectangle){ p.x - u->extent_w * side * 0.5f, p.y - u->extent_h * side * 0.5f,
                             u->extent_w * side, u->extent_h * side };
     }
-    Rectangle r = instance_map_node_rect(&instance_map_data_graph()->nodes[idx], p, side);
-    float left = roundf(r.x), top = roundf(r.y);
-    return (Rectangle){ left, top, roundf(r.x + r.width) - left, roundf(r.y + r.height) - top };
+    ImapBounds b = instance_map_data_graph()->nodes[idx].bounds;
+    Vector2 min = screen_point((Vector2){ b.left, b.top });
+    Vector2 max = screen_point((Vector2){ b.right, b.bottom });
+    float left = roundf(min.x), top = roundf(min.y);
+    return (Rectangle){ left, top, roundf(max.x) - left, roundf(max.y) - top };
+}
+
+static Vector2 node_center(int idx) {
+    return ui_rect_center(node_rect(idx));
 }
 
 static int node_at_point(float x, float y) {
     int hit = -1;
     float best = 1e9f;
     for (int i = 0; i < view_node_count(); ++i) {
-        if (!CheckCollisionPointRec((Vector2){ x, y }, node_rect(i))) continue;
+        Rectangle r = node_rect(i);
+        if (r.x > x || r.x + r.width <= x || r.y > y || r.y + r.height <= y) continue;
         Vector2 p = node_center(i);
         float dx = x - p.x, dy = y - p.y;
         float d2 = dx * dx + dy * dy;
@@ -261,11 +275,13 @@ static int view_generation(void) {
     return VIEW_UNIVERSE == s_m.view ? universe_map_data_generation() : instance_map_data_generation();
 }
 
-/* Fits the packed graph under the header, never closer than IMAP_ZOOM_INIT. */
+/* Fits the graph under the header, up to IMAP_FRAME_CELL_PX per map cell or IMAP_ZOOM_INIT per world card. */
 static void frame_view(void) {
     pack_view();
     Rectangle area = frame_area();
-    s_m.zoom = s_m.zoom_target = Clamp(fit_side(s_m.span) / IMAP_NODE_SIDE, IMAP_ZOOM_MIN, IMAP_ZOOM_INIT);
+    float closest = VIEW_UNIVERSE == s_m.view ? IMAP_ZOOM_INIT
+                                              : IMAP_FRAME_CELL_PX / (instance_map_data_graph()->cell * IMAP_NODE_SIDE);
+    s_m.zoom = s_m.zoom_target = Clamp(fit_side(s_m.span) / IMAP_NODE_SIDE, IMAP_ZOOM_MIN, fmaxf(IMAP_ZOOM_MIN, closest));
     s_m.pan = s_m.pan_target = (Vector2){ 0.0f, area.y + area.height * 0.5f - (float)GetScreenHeight() * 0.5f };
     s_m.framed = true;
     s_m.viewport_w = GetScreenWidth();
@@ -444,15 +460,14 @@ static void initials_of(const char* name, char* out, size_t size) {
     out[n] = '\0';
 }
 
-/* A picture: the texture its url loads, contained in `r` at its own aspect ratio,
- * else a dotted tile with the initials of the name, so a card never shows an
- * empty panel while it loads or when none exists. */
-static void draw_picture(Rectangle r, const char* url, const char* name, FetchPriority priority, float fade) {
+/* Matching pictures fill rounded map bounds; other pictures keep their proportions. */
+static void draw_picture(Rectangle r, Vector2 extent, const char* url, const char* name, FetchPriority priority, float fade) {
     Texture2D tex = '\0' != url[0] ? fetch_texture(url, 1, priority, true) : (Texture2D){ 0 };
     DrawRectangleRec(r, fade_c((Color){ 10, 18, 32, 255 }, fade));
     if (0 != tex.id) {
+        bool matches = 1e-4f > fabsf((float)tex.width / (float)tex.height - extent.x / extent.y);
         DrawTexturePro(tex, (Rectangle){ 0, 0, (float)tex.width, (float)tex.height },
-                       ui_rect_contain(r, (float)tex.width, (float)tex.height), (Vector2){ 0, 0 }, 0.0f,
+                       matches ? r : ui_rect_contain(r, (float)tex.width, (float)tex.height), (Vector2){ 0, 0 }, 0.0f,
                        Fade(WHITE, fade));
         return;
     }
@@ -505,19 +520,13 @@ static void draw_pixel_panel(Rectangle bounds, Color fill, Color accent, bool fo
     draw_pixel_border(bounds, accent, focused, fade);
 }
 
-/* An outline on every side but the `joined` ones (IMAP_EDGE_* bits). */
-static void draw_open_outline(Rectangle bounds, unsigned joined, int thickness, Color color) {
-    if (bounds.width <= 0.0f || bounds.height <= 0.0f) return;
-    if (!(joined & IMAP_EDGE_TOP)) DrawRectangle((int)bounds.x, (int)bounds.y, (int)bounds.width, thickness, color);
-    if (!(joined & IMAP_EDGE_LEFT)) DrawRectangle((int)bounds.x, (int)bounds.y, thickness, (int)bounds.height, color);
-    if (!(joined & IMAP_EDGE_BOTTOM))
-        DrawRectangle((int)bounds.x, (int)(bounds.y + bounds.height - thickness), (int)bounds.width, thickness, color);
-    if (!(joined & IMAP_EDGE_RIGHT))
-        DrawRectangle((int)(bounds.x + bounds.width - thickness), (int)bounds.y, thickness, (int)bounds.height, color);
-}
-
+/* An outline inside `bounds`. */
 static void draw_pixel_outline(Rectangle bounds, int thickness, Color color) {
-    draw_open_outline(bounds, 0, thickness, color);
+    if (bounds.width <= 0.0f || bounds.height <= 0.0f) return;
+    DrawRectangle((int)bounds.x, (int)bounds.y, (int)bounds.width, thickness, color);
+    DrawRectangle((int)bounds.x, (int)bounds.y, thickness, (int)bounds.height, color);
+    DrawRectangle((int)bounds.x, (int)(bounds.y + bounds.height - thickness), (int)bounds.width, thickness, color);
+    DrawRectangle((int)(bounds.x + bounds.width - thickness), (int)bounds.y, thickness, (int)bounds.height, color);
 }
 
 static void draw_pixel_active_pulse(Rectangle bounds, Color accent, float fade, double time) {
@@ -611,9 +620,8 @@ static Vector2 pixel_path_point(Vector2 a, Vector2 b, float progress) {
 static void draw_edge(const ImapEdge* e, int idx, float fade, double t) {
     Color base = e->intra ? IMAP_EDGE_INTRA : IMAP_EDGE;
 
-    /* Two joined maps show their link by the edge they share. */
-    const ImapGraph* graph = instance_map_data_graph();
-    if (0 != instance_map_shared_edges(&graph->nodes[e->source_node], &graph->nodes[e->target_node])) return;
+    /* Maps that touch show a link across their edge only while one of them is selected. */
+    if (e->joined && s_m.selected_node != e->source_node && s_m.selected_node != e->target_node) return;
     Vector2 a = edge_endpoint(e->source_node, e->source_cell_x, e->source_cell_y, t, idx * 2);
     Vector2 b = edge_endpoint(e->target_node, e->target_cell_x, e->target_cell_y, t, idx * 2 + 1);
 
@@ -760,61 +768,64 @@ static void draw_zoomed_capability_tab(Vector2 at, const char* status_icon,
     }
 }
 
-/* Card pass runs before edges so links land on the map surface. */
-static void draw_node_card(int idx, float fade) {
-    const ImapNode*  n  = &instance_map_data_graph()->nodes[idx];
-    Rectangle card = node_rect(idx);
+/* Every rim goes under every picture, so only the rim around maps that touch shows. */
+static void draw_surface_rim(float fade) {
+    const ImapGraph* gr = instance_map_data_graph();
+    for (int i = 0; gr->node_count > i; i++) DrawRectangleRec(ui_rect_inset(node_rect(i), -3.0f), fade_c(IMAP_RIM_SHADOW, fade));
+    for (int i = 0; gr->node_count > i; i++) DrawRectangleRec(ui_rect_inset(node_rect(i), -1.0f), fade_c(IMAP_RIM, fade));
+}
 
-    bool selected = idx == s_m.selected_node;
-    bool hovered = CheckCollisionPointRec(GetMousePosition(), card);
-    Color accent = selected ? IMAP_SELECTED : hovered ? (Color){ 120, 220, 255, 255 } : IMAP_NODE_LINE;
-    draw_picture(card, n->preview_url, n->name, FETCH_P1, fade);
-    /* A joined edge keeps no line: the mark stays on the open sides and over the map. */
-    if (selected || hovered) {
-        draw_open_outline(card, instance_map_joined_edges(instance_map_data_graph(), idx), 2, fade_c(accent, fade));
-        DrawRectangleRec(card, fade_c(accent, fade * (selected ? 0.16f : 0.08f)));
+/* Marks draw inside their map, so a mark never opens a gap between maps. */
+static void draw_node_marks(int idx, int hovered_node, float fade, double t) {
+    const ImapNode* n = &instance_map_data_graph()->nodes[idx];
+    Rectangle card = node_rect(idx);
+    if (0 == strcmp(n->map_code, g_local_player.map_code))
+        draw_pixel_outline(card, 2, fade_c(IMAP_PLAYER, fade * (0.4f + 0.25f * sinf((float)t * 3.2f))));
+    if (idx == s_m.selected_node) {
+        DrawRectangleRec(card, fade_c(IMAP_SELECTED, fade * 0.16f));
+        draw_pixel_outline(card, 2, fade_c(IMAP_SELECTED, fade));
+    } else if (idx == hovered_node) {
+        DrawRectangleRec(card, fade_c(IMAP_HOVER, fade * 0.08f));
+        draw_pixel_outline(card, 1, fade_c(IMAP_HOVER, fade));
     }
 }
 
 /* Copies text into out, cut with an ellipsis to max_width pixels. */
 static void fit_label(char* out, size_t size, const char* text, int font_size, int max_width) {
+    assert(4 <= size);
     copy_str(out, size, text);
-    int length = (int)strlen(out);
-    while (length > 3 && MeasureText(out, font_size) > max_width) {
-        length = text_utf8_floor(out, length - 1);
-        out[length] = '\0';
+    if (strlen(text) < size && max_width >= MeasureText(out, font_size)) return;
+    if (max_width < MeasureText("...", font_size)) {
+        out[0] = '\0';
+        return;
     }
-    if (length < (int)strlen(text) && length >= 3) {
-        int dot = text_utf8_floor(out, length - 3);
-        memcpy(out + dot, "...", 4);
+    int length = (int)strlen(out);
+    while (0 < length && (size <= (size_t)length + 3 || max_width < MeasureText(out, font_size))) {
+        length = text_utf8_floor(out, length - 1);
+        if (size > (size_t)length + 3) memcpy(out + length, "...", 4);
     }
 }
 
-/* Labels stay within their map surface. A joinable map takes a tag inside it,
- * which never lines the edge it may share. */
-static void draw_node_name(const char* name, Rectangle card, bool selected, bool tag, float fade) {
-    if (32.0f > card.width || 20.0f > card.height) return;
-    int font_size = 150.0f <= card.width ? 15 : 11;
+/* A name plate centred on its card; a long name shrinks its text before it loses letters. */
+static void draw_node_name(const char* name, Rectangle card, bool selected, float fade) {
+    int font_size = (int)Clamp(fminf(card.width * 0.07f, card.height * 0.14f), 10.0f, 20.0f);
+    while (10 < font_size && (int)(card.width * 0.8f) - (font_size / 2 + 2) * 2 < MeasureText(name, font_size)) font_size--;
+    int pad = font_size / 2 + 2;
     char label[IMAP_NAME_MAX];
-    fit_label(label, sizeof(label), name, font_size, (int)card.width - (tag ? 20 : 8));
+    fit_label(label, sizeof(label), name, font_size, (int)(card.width * 0.8f) - pad * 2);
     int width = MeasureText(label, font_size);
-    float label_height = (float)text_line_height(font_size) + 4.0f;
-    if (tag) {
-        Rectangle pill = { floorf(card.x + (card.width - (float)width) * 0.5f - 6.0f),
-                           floorf(card.y + card.height - label_height - 6.0f), (float)width + 12.0f, label_height };
-        DrawRectangleRec(pill, fade_c((Color){ 4, 8, 16, 220 }, fade));
-        DrawRectangleLinesEx(pill, 1.0f, fade_c(selected ? IMAP_SELECTED : IMAP_NODE_LINE, fade));
-        shadow_label(label, (int)pill.x + 6, (int)(pill.y + 2.0f), font_size,
-                     fade_c(selected ? IMAP_SELECTED : IMAP_TEXT, fade));
-        return;
-    }
-    Rectangle strip = { card.x, card.y + card.height - label_height, card.width, label_height };
-    DrawRectangleRec(strip, fade_c((Color){ 4, 8, 16, 220 }, fade));
-    DrawRectangle((int)strip.x, (int)strip.y, (int)strip.width, 1,
-                  fade_c(selected ? IMAP_SELECTED : IMAP_NODE_LINE, fade));
-    shadow_label(label, (int)(strip.x + (strip.width - (float)width) * 0.5f),
-                 (int)(strip.y + 2.0f), font_size,
-                 fade_c(selected ? IMAP_SELECTED : IMAP_TEXT, fade));
+    float height = (float)(font_size + pad);
+    if (0 == width || card.height - 4.0f < height) return;
+    Vector2 center = ui_rect_center(card);
+    Rectangle plate = { floorf(center.x - (float)(width + pad * 2) * 0.5f), floorf(center.y - height * 0.5f),
+                        (float)(width + pad * 2), height };
+    Color edge = selected ? IMAP_SELECTED : IMAP_PLATE_EDGE;
+    DrawRectangleRec(ui_rect_inset(plate, -1.0f), fade_c(IMAP_RIM_SHADOW, fade));
+    DrawRectangleRec(plate, fade_c(IMAP_PLATE, fade));
+    DrawRectangleLinesEx(plate, 1.0f, fade_c(edge, fade));
+    DrawRectangle((int)plate.x + 1, (int)plate.y + 1, (int)plate.width - 2, 1, fade_c(IMAP_PLATE_GLOW, fade));
+    shadow_label(label, (int)plate.x + pad, (int)(plate.y + (height - (float)font_size) * 0.5f), font_size,
+                 fade_c(selected ? IMAP_SELECTED : IMAP_PLATE_TEXT, fade));
 }
 
 /* Overlay pass: static presence is always shown; capability tabs appear only
@@ -847,13 +858,10 @@ static void draw_node_overlay(int idx, float fade, double t) {
         }
     }
 
-    /* Local player: presence outline on the card + the same POI label as the
-     * rest at the live map cell — presence status, capabilities, and sum
-     * stats fed from the player's real state — wrapped in a green pulse. */
+    /* Local player: the same POI label as the rest at the live map cell —
+     * presence status, capabilities, and sum stats fed from the player's real
+     * state — wrapped in a green pulse. */
     if (is_player) {
-        float grow = 9.0f + 3.0f * sinf((float)t * 3.2f);
-        Rectangle ring = { card.x - grow, card.y - grow, card.width + grow * 2.0f, card.height + grow * 2.0f };
-        draw_open_outline(ring, instance_map_joined_edges(gr, idx), 3, fade_c(IMAP_PLAYER, fade * 0.85f));
         Vector2 mp = instance_map_cell_to_card(card, n,
                                   game_state_own_render()->interp_pos.x,
                                   game_state_own_render()->interp_pos.y);
@@ -874,7 +882,7 @@ static void draw_node_overlay(int idx, float fade, double t) {
     }
     char label[IMAP_NAME_MAX];
     instance_map_node_label(gr, idx, label, sizeof label);
-    draw_node_name(label, card, selected, n->placed, fade);
+    draw_node_name(label, card, selected, fade);
 }
 
 /* A new selection leaves its detail panel once: the camera moves the node the
@@ -1091,10 +1099,10 @@ static void draw_world_card(int idx, float fade) {
     float shade = n->served ? fade : fade * 0.5f;
 
     Color accent = selected ? IMAP_SELECTED : here ? IMAP_PLAYER : IMAP_NODE_LINE;
-    draw_picture(card, n->preview_url, n->name, FETCH_P2, shade);
+    draw_picture(card, (Vector2){ n->extent_w, n->extent_h }, n->preview_url, n->name, FETCH_P2, shade);
     if (selected || hovered || here) DrawRectangleLinesEx(card, 2.0f, fade_c(accent, shade));
     draw_status_pill(card.x + 5.0f, card.y + 5.0f, n->status, fade);
-    draw_node_name(n->name, card, selected, false, fade);
+    draw_node_name(n->name, card, selected, fade);
 }
 
 #define UMAP_PANEL_PAD    12.0f
@@ -1129,7 +1137,8 @@ static void draw_universe_panel(float fade) {
     DrawRectangle((int)r.x, (int)(r.y + 4.0f), 3, (int)(r.height - 8.0f), fade_c(IMAP_SELECTED, fade));
 
     Rectangle picture = { r.x + pad, r.y + pad, panel_w - pad * 2.0f, picture_h };
-    if (0.0f < picture_h) draw_picture(picture, n->thumbnail_url, n->name, FETCH_P1, fade);
+    if (0.0f < picture_h) draw_picture(picture, (Vector2){ picture.width, picture.height },
+                                      n->thumbnail_url, n->name, FETCH_P1, fade);
 
     int x = (int)(r.x + pad + 6.0f);
     int y = (int)(picture.y + picture_h + pad);
@@ -1288,10 +1297,16 @@ void modal_instance_map_draw(int screen_width, int screen_height) {
         draw_universe(content, t);
     } else if (content > 0.0f) {
         if (IMAP_DATA_READY == instance_map_data_state()) {
-            /* Cards → edges → overlays: link lines land on the map surfaces
-             * and the POI icons plug into them from above. Packed cards share
-             * grid edges, so declaration order is the stable painter order. */
-            for (int i = 0; i < gr->node_count; ++i) draw_node_card(i, content);
+            /* Rim → pictures → marks → links → overlays: the links land on
+             * the surface and the POI icons plug into them from above. */
+            Vector2 pointer = GetMousePosition();
+            int hovered = node_at_point(pointer.x, pointer.y);
+            draw_surface_rim(content);
+            for (int i = 0; i < gr->node_count; ++i) {
+                const ImapNode* n = &gr->nodes[i];
+                draw_picture(node_rect(i), (Vector2){ n->extent_w, n->extent_h }, n->preview_url, n->name, FETCH_P1, content);
+            }
+            for (int i = 0; i < gr->node_count; ++i) draw_node_marks(i, hovered, content, t);
             for (int e = 0; e < gr->edge_count; ++e) draw_edge(&gr->edges[e], e, content, t);
             for (int i = 0; i < gr->node_count; ++i) draw_node_overlay(i, content, t);
 

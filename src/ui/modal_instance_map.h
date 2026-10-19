@@ -10,8 +10,9 @@
  * it on close), so the two modes read as one integrated widget. The world
  * keeps rendering behind the translucent container.
  *
- * WORLD shows the maps of this world on the cells of its authored layout,
- * with animated portal edges and static presence POIs on their cells.
+ * WORLD shows the maps of this world as the engine places them: maps that
+ * share an edge form one surface. Animated portal edges and static presence
+ * POIs sit on their cells.
  * UNIVERSE shows the worlds of its universe on their cells, the routes
  * between them, and the availability of each world. A world the player can
  * reach now offers TRAVEL, which leaves through the launch bridge.

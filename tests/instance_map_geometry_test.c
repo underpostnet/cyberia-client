@@ -1,8 +1,8 @@
-/* The geometry of the instance maps: each map card has the proportions of its
- * map at the one scale the engine sends, centred on its cell, at every zoom; a
- * picture keeps its aspect ratio inside its card; the minimap fits the active
- * map only, and its exits point to the maps they lead to. Maps with world
- * origins sit at their places and join only along whole shared edges. */
+/* The geometry of the instance maps: each map keeps the proportions of its
+ * grid at the one scale the engine sends; maps join where they share an edge
+ * of positive length, whatever their sizes; corners, gaps and overlaps never
+ * join; edges within the tolerance take one value; the minimap fits the
+ * active map only, and its exits point to the maps they lead to. */
 
 #include "data/instance_map_data.h"
 #include "data/engine_client.h"
@@ -33,136 +33,174 @@ const QuestProgressEntry* quest_progress_store_find(const char* code) { return N
 bool quest_progress_store_is_completed(const char* code) { return false; }
 int quest_progress_store_revision(void) { return 0; }
 
-static const char* STATIC =
-    "{\"status\":\"success\",\"data\":{\"instanceCode\":\"forest\",\"name\":\"Forest\",\"nodes\":["
-    "{\"mapCode\":\"wide\",\"x\":0,\"y\":0,\"w\":0.88,\"h\":0.44,\"gridX\":64,\"gridY\":32},"
-    "{\"mapCode\":\"tall\",\"x\":1,\"y\":0,\"w\":0.44,\"h\":0.88,\"gridX\":32,\"gridY\":64},"
-    "{\"mapCode\":\"old\",\"x\":2,\"y\":0,\"gridX\":16,\"gridY\":16}],"
+/* The engine payload of the `test` world: two maps side by side, one as wide as both under them. */
+static const char* TEST_WORLD =
+    "{\"status\":\"success\",\"data\":{\"instanceCode\":\"test\",\"name\":\"Test\",\"nodes\":["
+    "{\"mapCode\":\"test-a\",\"x\":0,\"y\":0,\"w\":0.5,\"h\":0.5,\"gridX\":64,\"gridY\":64,\"position\":{\"x\":-0.25,\"y\":-0.1953125}},"
+    "{\"mapCode\":\"test-b\",\"x\":1,\"y\":0,\"w\":0.5,\"h\":0.5,\"gridX\":64,\"gridY\":64,\"position\":{\"x\":0.25,\"y\":-0.1953125}},"
+    "{\"mapCode\":\"map-test-b\",\"x\":0,\"y\":1,\"w\":1,\"h\":0.390625,\"gridX\":128,\"gridY\":50,\"position\":{\"x\":0,\"y\":0.25}}],"
     "\"edges\":["
-    "{\"sourceMapCode\":\"wide\",\"sourceCellX\":60,\"sourceCellY\":10,\"targetMapCode\":\"tall\",\"targetCellX\":1,\"targetCellY\":1},"
-    "{\"sourceMapCode\":\"tall\",\"sourceCellX\":3,\"sourceCellY\":3,\"targetMapCode\":\"tall\"},"
-    "{\"sourceMapCode\":\"old\",\"sourceCellX\":0,\"sourceCellY\":0,\"targetMapCode\":\"wide\",\"targetCellX\":2,\"targetCellY\":2}],"
+    "{\"sourceMapCode\":\"test-a\",\"sourceCellX\":60,\"sourceCellY\":10,\"targetMapCode\":\"test-b\",\"targetCellX\":1,\"targetCellY\":1},"
+    "{\"sourceMapCode\":\"test-b\",\"sourceCellX\":3,\"sourceCellY\":3,\"targetMapCode\":\"test-b\"},"
+    "{\"sourceMapCode\":\"map-test-b\",\"sourceCellX\":0,\"sourceCellY\":0,\"targetMapCode\":\"test-a\",\"targetCellX\":2,\"targetCellY\":2}],"
     "\"presencePois\":[]}}";
 
-static const char* SPATIAL =
-    "{\"status\":\"success\",\"data\":{\"instanceCode\":\"forest\",\"nodes\":["
-    "{\"mapCode\":\"a\",\"name\":\"Gate\",\"w\":0.88,\"h\":0.88,\"gridX\":64,\"gridY\":64,\"world\":{\"x\":0.44,\"y\":0.44}},"
-    "{\"mapCode\":\"b\",\"name\":\"Gate\",\"w\":0.88,\"h\":0.88,\"gridX\":64,\"gridY\":64,\"world\":{\"x\":1.32,\"y\":0.44}},"
-    "{\"mapCode\":\"c\",\"name\":\"Cliff\",\"w\":0.44,\"h\":0.88,\"gridX\":32,\"gridY\":64,\"world\":{\"x\":1.98,\"y\":0.44}},"
-    "{\"mapCode\":\"d\",\"w\":0.88,\"h\":0.88,\"gridX\":64,\"gridY\":64,\"world\":{\"x\":0.44,\"y\":1.32}},"
-    "{\"mapCode\":\"e\",\"w\":0.88,\"h\":0.88,\"gridX\":64,\"gridY\":64,\"world\":{\"x\":1.815,\"y\":1.815}},"
-    "{\"mapCode\":\"f\",\"x\":0,\"y\":0,\"w\":0.88,\"h\":0.88,\"gridX\":64,\"gridY\":64,\"world\":null}],"
+/* The engine payload of the `amethyst-strata-expansion` world: a column of
+ * two maps, an empty column, two maps in a row, and a wide map under the
+ * column that meets the row at one corner. */
+static const char* AMETHYST_WORLD =
+    "{\"status\":\"success\",\"data\":{\"instanceCode\":\"amethyst\",\"nodes\":["
+    "{\"mapCode\":\"foliage\",\"name\":\"Gate\",\"w\":0.5,\"h\":0.5,\"gridX\":64,\"gridY\":64,\"position\":{\"x\":-0.75,\"y\":0.0546875}},"
+    "{\"mapCode\":\"athel\",\"name\":\"Gate\",\"w\":0.5,\"h\":0.5,\"gridX\":64,\"gridY\":64,\"position\":{\"x\":0.25,\"y\":0.0546875}},"
+    "{\"mapCode\":\"sap\",\"name\":\"Sap\",\"w\":0.5,\"h\":0.5,\"gridX\":64,\"gridY\":64,\"position\":{\"x\":-0.75,\"y\":-0.4453125}},"
+    "{\"mapCode\":\"verdant\",\"w\":0.5,\"h\":0.5,\"gridX\":64,\"gridY\":64,\"position\":{\"x\":0.75,\"y\":0.0546875}},"
+    "{\"mapCode\":\"map-test\",\"w\":1,\"h\":0.390625,\"gridX\":128,\"gridY\":50,\"position\":{\"x\":-0.5,\"y\":0.5}}],"
     "\"edges\":["
-    "{\"sourceMapCode\":\"a\",\"sourceCellX\":63,\"sourceCellY\":10,\"targetMapCode\":\"b\",\"targetCellX\":0,\"targetCellY\":10},"
-    "{\"sourceMapCode\":\"b\",\"sourceCellX\":5,\"sourceCellY\":5,\"targetMapCode\":\"elsewhere\"},"
-    "{\"sourceMapCode\":\"c\",\"sourceCellX\":5,\"sourceCellY\":5,\"targetMapCode\":\"f\"}],"
+    "{\"sourceMapCode\":\"foliage\",\"targetMapCode\":\"athel\"},"
+    "{\"sourceMapCode\":\"sap\",\"targetMapCode\":\"foliage\"},"
+    "{\"sourceMapCode\":\"map-test\",\"targetMapCode\":\"athel\"},"
+    "{\"sourceMapCode\":\"athel\",\"targetMapCode\":\"verdant\"},"
+    "{\"sourceMapCode\":\"map-test\",\"targetMapCode\":\"foliage\"}],"
     "\"presencePois\":[]}}";
+
+/* Centres a float step apart: the edges of neighbours differ by far less than a map cell. */
+static const char* JITTER_WORLD =
+    "{\"status\":\"success\",\"data\":{\"instanceCode\":\"jitter\",\"nodes\":["
+    "{\"mapCode\":\"a\",\"w\":0.3333333,\"h\":0.3333333,\"gridX\":48,\"gridY\":48,\"position\":{\"x\":-0.1666667,\"y\":0}},"
+    "{\"mapCode\":\"b\",\"w\":0.3333333,\"h\":0.3333333,\"gridX\":48,\"gridY\":48,\"position\":{\"x\":0.16666671,\"y\":0.0000001}},"
+    "{\"mapCode\":\"c\",\"w\":1,\"h\":0.5,\"gridX\":144,\"gridY\":72,\"position\":{\"x\":0.3333334,\"y\":0.4166667}}],"
+    "\"edges\":[],\"presencePois\":[]}}";
 
 static bool near(float a, float b) { return fabsf(a - b) < 0.01f; }
 
-int main(void) {
-    copy_str(g_game_state.instance_code, sizeof g_game_state.instance_code, "forest");
+static const ImapGraph* load(const char* payload) {
+    instance_map_data_close();
     instance_map_data_open();
-    FetchResponse response = { .asset_id = s_asset_id, .success = true, .data = (void*)STATIC, .size = strlen(STATIC) };
+    FetchResponse response = { .asset_id = s_asset_id, .success = true, .data = (void*)payload, .size = strlen(payload) };
     s_callback(&response);
-    const ImapGraph* graph = instance_map_data_graph();
-    assert(IMAP_DATA_READY == instance_map_data_state() && 3 == graph->node_count);
+    assert(IMAP_DATA_READY == instance_map_data_state());
+    return instance_map_data_graph();
+}
 
-    /* A landscape map and a portrait map keep their proportions at every zoom. */
-    for (float side = 40.0f; side < 1000.0f; side *= 3.0f) {
-        Rectangle wide = instance_map_node_rect(&graph->nodes[0], (Vector2){ 100, 100 }, side);
-        Rectangle tall = instance_map_node_rect(&graph->nodes[1], (Vector2){ 100, 100 }, side);
-        assert(near(wide.width / wide.height, 2.0f) && near(tall.height / tall.width, 2.0f));
-        assert(near(wide.width, tall.height) && near(wide.width, 0.88f * side));
-        assert(near(wide.x + wide.width * 0.5f, 100.0f) && near(tall.y + tall.height * 0.5f, 100.0f));
-    }
-    /* A payload without extents fills the cell, as before. */
-    Rectangle old = instance_map_node_rect(&graph->nodes[2], (Vector2){ 0, 0 }, 50.0f);
-    assert(near(old.width, 50.0f) && near(old.height, 50.0f));
+static ImapBounds box(float left, float top, float right, float bottom) {
+    return (ImapBounds){ left, top, right, bottom };
+}
+
+static bool touch(ImapBounds a, ImapBounds b) {
+    const float tolerance = IMAP_JOIN_TOLERANCE / 64.0f;
+    bool joined = instance_map_bounds_touch(a, b, tolerance);
+    assert(joined == instance_map_bounds_touch(b, a, tolerance));
+    return joined;
+}
+
+static Rectangle card_of(const ImapNode* node, float side) {
+    ImapBounds b = node->bounds;
+    return (Rectangle){ b.left * side, b.top * side, (b.right - b.left) * side, (b.bottom - b.top) * side };
+}
+
+int main(void) {
+    copy_str(g_game_state.instance_code, sizeof g_game_state.instance_code, "test");
+
+    /* Equal maps on a whole edge, different maps on a whole edge, a small map on part of a large edge. */
+    assert(touch(box(0, 0, 1, 1), box(1, 0, 2, 1)));
+    assert(touch(box(0, 0, 2, 1), box(2, 0, 3, 1)));
+    assert(touch(box(0, 0, 2, 2), box(2, 0.5f, 3, 1.5f)));
+    assert(touch(box(0, 0, 2, 2), box(0.5f, 2, 1, 3)));
+    /* A gap, a corner, an overlap and an island never join. */
+    assert(!touch(box(0, 0, 1, 1), box(1.5f, 0, 2.5f, 1)));
+    assert(!touch(box(0, 0, 1, 1), box(1, 1, 2, 2)));
+    assert(!touch(box(0, 0, 2, 1), box(1, 0, 3, 1)));
+    assert(!touch(box(0, 0, 1, 1), box(4, 4, 5, 5)));
+    /* Within the tolerance an edge is one edge; past it, a gap or an overlap. */
+    const float cell = 1.0f / 64.0f;
+    assert(touch(box(0, 0, 1, 1), box(1 + 0.005f * cell, 0, 2, 1)));
+    assert(touch(box(0, 0, 1, 1), box(1 - 0.005f * cell, 0, 2, 1)));
+    assert(!touch(box(0, 0, 1, 1), box(1 + 0.05f * cell, 0, 2, 1)));
+    assert(!touch(box(0, 0, 1, 1), box(1 - 0.05f * cell, 0, 2, 1)));
+    /* A shared stretch shorter than the tolerance is a corner. */
+    assert(!touch(box(0, 0, 1, 1), box(1, 1 - 0.005f * cell, 2, 2)));
+
+    /* The `test` world: one surface of three maps, two sizes. */
+    const ImapGraph* graph = load(TEST_WORLD);
+    assert(3 == graph->node_count && near(graph->span.x, 1.0f) && near(graph->span.y, 114.0f / 128.0f));
+    assert(near(graph->cell, 1.0f / 128.0f));
+    const ImapNode *a = &graph->nodes[0], *b = &graph->nodes[1], *wide = &graph->nodes[2];
+    assert(a->bounds.right == b->bounds.left && a->bounds.bottom == wide->bounds.top);
+    assert(b->bounds.bottom == wide->bounds.top);
+    assert(a->bounds.left == wide->bounds.left && b->bounds.right == wide->bounds.right);
+    assert(graph->edges[0].joined && !graph->edges[1].joined && graph->edges[2].joined);
+    assert(!graph->edges[1].joined && graph->edges[1].intra);
+
+    /* A map keeps the proportions of its grid. */
+    Rectangle card = card_of(wide, 300.0f);
+    assert(near(card.width / card.height, 128.0f / 50.0f));
+    card = card_of(a, 300.0f);
+    assert(near(card.width, card.height));
 
     /* A cell of the map lands where it is on the map, whatever the card shape. */
-    Rectangle tall = instance_map_node_rect(&graph->nodes[1], (Vector2){ 0, 0 }, 100.0f);
-    Vector2 corner = instance_map_cell_to_card(tall, &graph->nodes[1], 32.0f, 64.0f);
-    assert(near(corner.x, tall.x + tall.width) && near(corner.y, tall.y + tall.height));
-
-    Rectangle bounds = { 0, 0, 200, 160 };
-    Vector2 player = { 16, 8 };
-    Rectangle current = instance_map_local_rect(&graph->nodes[0], bounds, player, 1.0f);
-    Vector2 marker = instance_map_cell_to_card(current, &graph->nodes[0], player.x, player.y);
-    assert(near(current.width, 200.0f) && near(current.height, 100.0f));
-    assert(near(marker.x, 50.0f) && near(marker.y, 55.0f));
-    current = instance_map_local_rect(&graph->nodes[0], bounds, (Vector2){ 32, 16 }, 2.0f);
-    marker = instance_map_cell_to_card(current, &graph->nodes[0], 32, 16);
-    assert(near(marker.x, 100.0f) && near(marker.y, 80.0f));
-    current = instance_map_local_rect(&graph->nodes[0], bounds, (Vector2){ 0, 0 }, 3.0f);
-    assert(near(current.x, bounds.x) && near(current.y, bounds.y));
-    current = instance_map_local_rect(&graph->nodes[1], bounds, (Vector2){ 32, 64 }, 3.0f);
-    assert(near(current.x + current.width, bounds.width) && near(current.y + current.height, bounds.height));
-    assert(near(current.height / current.width, 2.0f));
+    card = card_of(wide, 100.0f);
+    Vector2 corner = instance_map_cell_to_card(card, wide, 128.0f, 50.0f);
+    assert(near(corner.x, card.x + card.width) && near(corner.y, card.y + card.height));
 
     /* An exit points from its map to the map it leads to; a link inside one map has no direction. */
-    assert(3 == graph->edge_count && !graph->edges[0].intra && graph->edges[1].intra);
     Vector2 east = instance_map_exit_direction(graph, &graph->edges[0]);
     Vector2 inside = instance_map_exit_direction(graph, &graph->edges[1]);
-    Vector2 west = instance_map_exit_direction(graph, &graph->edges[2]);
     assert(near(east.x, 1.0f) && near(east.y, 0.0f));
     assert(near(inside.x, 0.0f) && near(inside.y, 0.0f));
-    assert(near(west.x, -1.0f) && near(west.y, 0.0f));
+
+    /* The minimap fits the active map, and follows the player at a closer zoom. */
+    Rectangle bounds = { 0, 0, 200, 160 };
+    Rectangle current = instance_map_local_rect(wide, bounds, (Vector2){ 64, 25 }, 1.0f);
+    assert(near(current.width, 200.0f) && near(current.height, 200.0f * 50.0f / 128.0f));
+    current = instance_map_local_rect(wide, bounds, (Vector2){ 64, 25 }, 2.0f);
+    Vector2 marker = instance_map_cell_to_card(current, wide, 64, 25);
+    assert(near(marker.x, 100.0f) && near(marker.y, 80.0f));
+    current = instance_map_local_rect(wide, bounds, (Vector2){ 0, 0 }, 3.0f);
+    assert(near(current.x, bounds.x) && near(current.y, bounds.y));
 
     Rectangle fit = ui_rect_contain((Rectangle){ 0, 0, 100, 50 }, 64, 64);
     assert(near(fit.width, 50.0f) && near(fit.height, 50.0f) && near(fit.x, 25.0f) && near(fit.y, 0.0f));
-    fit = ui_rect_contain((Rectangle){ 10, 10, 40, 80 }, 300, 100);
-    assert(near(fit.width / fit.height, 3.0f) && near(fit.width, 40.0f) && near(fit.y + fit.height * 0.5f, 50.0f));
 
-    /* Maps with world origins: a, b, c in a row, d under a, e apart, f on a layout cell. */
-    instance_map_data_close();
-    instance_map_data_open();
-    response = (FetchResponse){ .asset_id = s_asset_id, .success = true, .data = (void*)SPATIAL, .size = strlen(SPATIAL) };
-    s_callback(&response);
-    graph = instance_map_data_graph();
-    assert(IMAP_DATA_READY == instance_map_data_state() && 6 == graph->node_count && 2 == graph->edge_count);
-    const ImapNode *a = &graph->nodes[0], *b = &graph->nodes[1], *c = &graph->nodes[2];
-    const ImapNode *d = &graph->nodes[3], *e = &graph->nodes[4], *f = &graph->nodes[5];
-    assert(a->placed && near(a->world.x, 0.44f) && near(a->world.y, 0.44f) && !f->placed);
-    assert(IMAP_EDGE_RIGHT == instance_map_shared_edges(a, b) && IMAP_EDGE_LEFT == instance_map_shared_edges(b, a));
-    assert(IMAP_EDGE_BOTTOM == instance_map_shared_edges(a, d) && IMAP_EDGE_RIGHT == instance_map_shared_edges(b, c));
-    assert(0 == instance_map_shared_edges(a, e) && 0 == instance_map_shared_edges(a, f));
-    assert(IMAP_EDGE_LEFT == instance_map_shared_edges(c, b));
-    /* A map half as wide under another shares part of an edge only: no join. */
-    ImapNode upper = { .placed = true, .world = { 0.44f, 0.44f }, .extent_w = 0.88f, .extent_h = 0.88f };
-    ImapNode lower = { .placed = true, .world = { 0.22f, 1.32f }, .extent_w = 0.44f, .extent_h = 0.88f };
-    assert(0 == instance_map_shared_edges(&upper, &lower) && 0 == instance_map_shared_edges(&lower, &upper));
-    assert((IMAP_EDGE_RIGHT | IMAP_EDGE_BOTTOM) == instance_map_joined_edges(graph, 0));
-
-    Vector2 centers[IMAP_MAX_NODES], again[IMAP_MAX_NODES];
-    Vector2 span = instance_map_layout(graph, 0.025f, centers);
-    instance_map_layout(graph, 0.025f, again);
-    for (int i = 0; graph->node_count > i; i++) assert(near(centers[i].x, again[i].x) && near(centers[i].y, again[i].y));
-    /* Joined maps meet with no gap; the map apart keeps its distance; the unplaced map sits beside. */
-    assert(near(centers[1].x - centers[0].x, 0.88f) && near(centers[3].y - centers[0].y, 0.88f));
-    assert(near(centers[2].x - centers[1].x, 0.66f));
-    for (int i = 0; graph->node_count > i; i++)
-        for (int j = i + 1; graph->node_count > j; j++) {
-            const ImapNode *p = &graph->nodes[i], *q = &graph->nodes[j];
-            assert(fabsf(centers[i].x - centers[j].x) >= (p->extent_w + q->extent_w) * 0.5f - 0.001f ||
-                   fabsf(centers[i].y - centers[j].y) >= (p->extent_h + q->extent_h) * 0.5f - 0.001f);
-        }
-    assert(centers[5].x - f->extent_w * 0.5f >= centers[4].x + e->extent_w * 0.5f + 0.025f - 0.001f);
-    assert(near(span.y, (100.0f + 64.0f) * 0.88f / 64.0f));
-    /* The rectangles of joined cards share their edge exactly. */
-    Rectangle ra = instance_map_node_rect(a, Vector2Scale(centers[0], 200.0f), 200.0f);
-    Rectangle rb = instance_map_node_rect(b, Vector2Scale(centers[1], 200.0f), 200.0f);
-    assert(near(ra.x + ra.width, rb.x) && near(ra.y, rb.y) && near(ra.height, rb.height));
-    /* An exit between placed maps points along their places. */
-    Vector2 placed_east = instance_map_exit_direction(graph, &graph->edges[0]);
-    assert(near(placed_east.x, 1.0f) && near(placed_east.y, 0.0f));
-
+    /* The `amethyst-strata-expansion` world: the empty column stays, the corner never joins. */
+    graph = load(AMETHYST_WORLD);
+    const ImapNode *foliage = &graph->nodes[0], *athel = &graph->nodes[1], *sap = &graph->nodes[2];
+    const ImapNode *verdant = &graph->nodes[3], *map_test = &graph->nodes[4];
+    assert(near(graph->span.x, 2.0f) && near(graph->span.y, 178.0f / 128.0f));
+    assert(foliage->bounds.top == athel->bounds.top && athel->bounds.top == verdant->bounds.top);
+    assert(near(athel->bounds.left - foliage->bounds.right, 0.5f));
+    assert(athel->bounds.right == verdant->bounds.left && sap->bounds.bottom == foliage->bounds.top);
+    assert(map_test->bounds.right == athel->bounds.left && map_test->bounds.top == athel->bounds.bottom);
+    assert(!graph->edges[0].joined && graph->edges[1].joined && !graph->edges[2].joined);
+    assert(graph->edges[3].joined && graph->edges[4].joined);
     /* Two maps of one name tell themselves apart by their codes. */
     char label[IMAP_NAME_MAX];
     instance_map_node_label(graph, 0, label, sizeof label);
-    assert(0 == strcmp(label, "Gate (a)"));
+    assert(0 == strcmp(label, "Gate (foliage)"));
     instance_map_node_label(graph, 2, label, sizeof label);
-    assert(0 == strcmp(label, "Cliff"));
+    assert(0 == strcmp(label, "Sap"));
+
+    /* Edges a float step apart take one value; a map under both meets them. */
+    graph = load(JITTER_WORLD);
+    assert(graph->nodes[0].bounds.right == graph->nodes[1].bounds.left);
+    assert(graph->nodes[0].bounds.bottom == graph->nodes[2].bounds.top);
+    assert(graph->nodes[1].bounds.bottom == graph->nodes[2].bounds.top);
+    assert(graph->nodes[0].bounds.top == graph->nodes[1].bounds.top);
+
+    const char* invalid[] = {
+        "{\"nodes\":[{\"mapCode\":\"a\"}]}",
+        "{\"nodes\":[{\"mapCode\":\"a\",\"position\":{\"x\":\"0\",\"y\":0}}]}",
+        "{\"nodes\":[{\"mapCode\":\"a\",\"position\":{\"x\":1e99,\"y\":0}}]}",
+        "{\"nodes\":[{\"mapCode\":\"a\",\"w\":0,\"position\":{\"x\":0,\"y\":0}}]}",
+    };
+    for (int i = 0; 4 > i; i++) {
+        instance_map_data_close();
+        instance_map_data_open();
+        char payload[512];
+        snprintf(payload, sizeof payload, "{\"status\":\"success\",\"data\":%s}", invalid[i]);
+        FetchResponse response = { .asset_id = s_asset_id, .success = true, .data = payload, .size = strlen(payload) };
+        s_callback(&response);
+        assert(IMAP_DATA_ERROR == instance_map_data_state());
+    }
     puts("instance_map_geometry_test OK");
     return 0;
 }

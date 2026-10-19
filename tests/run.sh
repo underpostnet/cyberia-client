@@ -99,6 +99,10 @@ cc "${cc_flags[@]}" -ffunction-sections -fdata-sections -Wl,--gc-sections \
     src/utils.c libs/cJSON/cJSON.c -lm
 "$out/instance_map_geometry"
 
+cc "${cc_flags[@]}" -ffunction-sections -fdata-sections -Wl,--gc-sections \
+    -o "$out/modal_instance_map" tests/modal_instance_map_test.c src/utils.c -lm
+"$out/modal_instance_map"
+
 cc "${cc_flags[@]}" -o "$out/universe_map_data" tests/universe_map_data_test.c src/data/universe_map_data.c \
     src/utils.c libs/cJSON/cJSON.c -lm
 "$out/universe_map_data"
@@ -122,3 +126,7 @@ cc "${cc_flags[@]}" -ffunction-sections -fdata-sections -Wl,--gc-sections \
 cc "${cc_flags[@]}" -Itests/stubs -ffunction-sections -fdata-sections -Wl,--gc-sections \
     -o "$out/game_client" tests/game_client_test.c src/net/game_client.c src/serial.c src/utils.c libs/cJSON/cJSON.c -lm
 "$out/game_client"
+
+cc "${cc_flags[@]}" -ffunction-sections -fdata-sections -Wl,--gc-sections \
+    -o "$out/hud_minimap_overlay" tests/hud_minimap_overlay_test.c -lm
+"$out/hud_minimap_overlay"
