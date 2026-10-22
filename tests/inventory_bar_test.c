@@ -13,6 +13,7 @@
 #include "ui/ui_toggle.h"
 
 #include <assert.h>
+#include <math.h>
 #include <raylib.h>
 #include <stdbool.h>
 #include <stdio.h>
@@ -20,6 +21,7 @@
 
 LocalPlayer g_local_player;
 GameState g_game_state;
+const Color MODAL_PANEL_BG = { 0 }, MODAL_PANEL_BORDER = { 0 }, MODAL_SELECTED = { 0 };
 static bool stasis;
 static int preview_count;
 static int slot_count;
@@ -70,8 +72,12 @@ void fx_inventory_bar_qty_draw_bottom(Rectangle anchor) {}
 void DrawRectangle(int x, int y, int width, int height, Color color) {}
 void DrawRectangleRounded(Rectangle rect, float roundness, int segments, Color color) {}
 void DrawRectangleLinesEx(Rectangle rect, float thick, Color color) {}
+void DrawRectangleRec(Rectangle rect, Color color) {}
+static int trade_badges;
+void ui_icon_draw(const char* icon_id, float cx, float cy, int size, bool bounce, float phase) {
+    trade_badges += 0 == strcmp("trade", icon_id);
+}
 void DrawLine(int x1, int y1, int x2, int y2, Color color) {}
-void DrawCircle(int x, int y, float radius, Color color) {}
 void DrawText(const char* text, int x, int y, int size, Color color) {}
 int MeasureText(const char* text, int size) { return 10; }
 Vector2 GetMousePosition(void) { return mouse; }
@@ -114,6 +120,21 @@ bool stack_move_drop(Box from, int from_slot, Box to, int to_slot, Rectangle ori
     return true;
 }
 MoveKind container_ops_check(Box from, int from_slot, Box to, int to_slot, int qty) { return MOVE_PLACE; }
+static bool covered, offer_open;
+static int offered = -2, ground_slot = -2;
+static Vector2 ground_cell;
+bool ui_dispatch_covers_point(int x, int y) { return covered; }
+bool trade_panel_offer_at(int mx, int my) { return offer_open && my < 100; }
+Rectangle trade_panel_offer_rect(void) { return (Rectangle){ 0 }; }
+void trade_panel_offer_bag_stack(int bag_slot) { offered = bag_slot; }
+Vector2 world_drop_cell(Vector2 screen) { return (Vector2){ screen.x / 100.0f, screen.y / 100.0f }; }
+bool world_drop_allowed(const char* item_id, const char** reason) { return true; }
+void world_drop_draw_target(Vector2 cell, bool allowed) {}
+void world_drop_ask(Box box, int slot, const char* item_id, int quantity, Vector2 cell) {
+    assert(BOX_BAG == box);
+    ground_slot = slot;
+    ground_cell = cell;
+}
 const ObjectLayerState* container_ops_stack(Box box, int slot) {
     int at = BAG_WALLET_SLOT == slot ? find_coin_slot() : local_player_bag_stack(slot);
     return 0 <= at ? &g_local_player.inventory[at] : NULL;
@@ -180,8 +201,8 @@ static void test_cells_are_bag_slots(void) {
 }
 
 /* A press on a stack taps it, and a drag moves it to the cell under the
- * release, of the bar or of the open container. A drag from an empty cell, or
- * the wheel over the bar, scrolls the strip instead. */
+ * release, of the bar or of the open container. Only the track and the wheel
+ * over the bar scroll the strip. */
 static void test_stacks_drag_and_tap(void) {
     g_local_player.inventory_count = 3;
     carry(0, "skin", 0);
@@ -196,13 +217,41 @@ static void test_stacks_drag_and_tap(void) {
     assert(3 == dropped_from && 5 == dropped_to && BOX_BAG == dropped_box);
     assert(!inventory_bar_take_tap(&tapped));
     dropped_from = -2;
-    drag(cell(0), (Rectangle){ 300.0f, 100.0f, 10.0f, 10.0f });
-    assert(-2 == dropped_from);
 
-    float scrolled = s_scroll_px;
+    /* Over the world, a stack drops on the ground at the cell under the pointer; the coins never do. */
+    drag(cell(0), (Rectangle){ 300.0f, 100.0f, 10.0f, 10.0f });
+    assert(-2 == dropped_from && 0 == ground_slot && 3.05f == ground_cell.x && 1.05f == ground_cell.y);
+    ground_slot = -2;
+    drag(coin_slot_rect(800, bar_top(600)), (Rectangle){ 300.0f, 100.0f, 10.0f, 10.0f });
+    assert(-2 == ground_slot);
+    covered = true;
+    drag(cell(0), (Rectangle){ 300.0f, 100.0f, 10.0f, 10.0f });
+    assert(-2 == ground_slot && -2 == dropped_from);
+    covered = false;
+
+    /* Over the own offer of an open trade, a stack joins the offer. */
+    offer_open = true;
+    drag(cell(3), (Rectangle){ 300.0f, 40.0f, 10.0f, 10.0f });
+    assert(3 == offered && -2 == ground_slot && -2 == dropped_from);
+    offer_open = false;
+
+    /* A drag from an empty cell neither moves a stack, nor scrolls, nor taps. */
     drag(cell(2), cell(0));
-    assert(-2 == dropped_from && s_scroll_px > scrolled);
-    s_scroll_px = s_scroll_vel = 0.0f;
+    assert(-2 == dropped_from && 0.0f == s_scroll_px && !inventory_bar_take_tap(&tapped));
+
+    /* A drag of the thumb pans the strip by the share of its travel. */
+    Rectangle track = track_rect(bar_top(600)), thumb = thumb_rect(track);
+    float max = max_scroll_px(800, strip_cells());
+    assert(track.y + track.height <= cell(0).y && 0.0f < max);
+    drag((Rectangle){ thumb.x + 100.0f, thumb.y, 0.0f, thumb.height },
+         (Rectangle){ thumb.x + 200.0f, thumb.y, 0.0f, thumb.height });
+    assert(0.01f > fabsf(100.0f / (track.width - thumb.width) * max - s_scroll_px));
+    assert(-2 == dropped_from && !inventory_bar_take_tap(&tapped));
+
+    /* A press on the track brings the thumb under the pointer. */
+    press((Rectangle){ track.x + track.width - 2.0f, track.y, 0.0f, track.height });
+    assert(max == s_scroll_px && !inventory_bar_take_tap(&tapped));
+    s_scroll_px = 0.0f;
 
     /* With a container open, a stack and the coins drop on its cells. */
     panel_open = true;
@@ -245,11 +294,11 @@ int main(void) {
 
     draw_at(0.5f);
     assert(1 == preview_count && 2 == slot_count);
-    assert(shown.x == preview.x && shown.y + 36.0f == preview.y);
+    assert(shown.x == preview.x && shown.y + (float)bar_height() * 0.5f == preview.y);
 
     draw_at(0.0f);
     assert(1 == preview_count && 0 == slot_count);
-    assert(shown.x == preview.x && shown.y + 72.0f == preview.y);
+    assert(shown.x == preview.x && shown.y + (float)bar_height() == preview.y);
     assert(cooldown.y + cooldown.height < 600.0f);
 
     stasis = true;
@@ -291,6 +340,22 @@ int main(void) {
     s_bar_toggle.expanded = true;
     test_cells_are_bag_slots();
     test_stacks_drag_and_tap();
+
+    /* While a trade is open, the offered stack and the offered coins show the trade icon. */
+    g_local_player.trade.state = TRADE_OPEN;
+    g_local_player.trade.mine.count = 1;
+    g_local_player.trade.mine.items[0].slot = 3;
+    trade_badges = 0;
+    draw_at(1.0f);
+    assert(1 == trade_badges);
+    g_local_player.trade.mine.coins = 5;
+    trade_badges = 0;
+    draw_at(1.0f);
+    assert(2 == trade_badges);
+    g_local_player.trade.state = TRADE_NONE;
+    trade_badges = 0;
+    draw_at(1.0f);
+    assert(0 == trade_badges);
 
     puts("inventory_bar_test OK");
     return 0;

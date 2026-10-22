@@ -44,7 +44,7 @@ static cJSON* pack_event(const client_event_t* e) {
     case CLIENT_EVENT_QUEST_ABANDON:   return json_pack_quest_abandon(p->item_id);
     case CLIENT_EVENT_QUEST_ACCEPT:    return json_pack_quest_accept(p->entity_id, p->item_id);
     case CLIENT_EVENT_SHOP_BUY:        return json_pack_shop_buy(p->entity_id, p->item_id, p->quantity);
-    case CLIENT_EVENT_CRAFT_ITEM:      return json_pack_craft_item(p->entity_id, p->recipe_index);
+    case CLIENT_EVENT_CRAFT_ITEM:      return json_pack_craft_item(p->entity_id, p->recipe_index, p->quote);
     case CLIENT_EVENT_CRAFT_CANCEL:    return json_pack_craft_cancel();
     case CLIENT_EVENT_ITEM_MOVE:       return json_pack_item_move(BOX_WORDS[p->from], p->from_slot, BOX_WORDS[p->to],
                                                                   p->to_slot, p->quantity, p->entity_id);
@@ -63,6 +63,26 @@ static cJSON* pack_event(const client_event_t* e) {
     case CLIENT_EVENT_FRIEND_REPLY:    return json_pack_friendship("friend_reply", p->code, p->active);
     case CLIENT_EVENT_FRIEND_REMOVE:   return json_pack_friendship("friend_remove", p->code, false);
     case CLIENT_EVENT_SESSION_LEAVE:   return json_pack_session_leave(p->code);
+    case CLIENT_EVENT_ITEM_DROP:
+        return json_pack_item_drop(BOX_WORDS[p->from], p->from_slot, p->quantity, p->target_x, p->target_y);
+    case CLIENT_EVENT_ITEM_QUOTE:
+        return json_pack_item_quote(p->entity_id, p->burn, BOX_WORDS[p->from], p->from_slot);
+    case CLIENT_EVENT_ITEM_SELL:      return json_pack_quote_confirm("item_sell", p->code, p->quantity);
+    case CLIENT_EVENT_ITEM_BURN:      return json_pack_quote_confirm("item_burn", p->code, p->quantity);
+    case CLIENT_EVENT_TRADE_REQUEST:   return json_pack_player_target("trade_request", "toId", p->entity_id);
+    case CLIENT_EVENT_TRADE_REPLY:     return json_pack_trade_reply(p->entity_id, p->active);
+    case CLIENT_EVENT_TRADE_OFFER:
+        return json_pack_trade_offer(p->offer_slots, p->offer_qtys, p->offer_count, p->coins);
+    case CLIENT_EVENT_TRADE_CONFIRM:   return json_pack_trade_confirm(p->revision);
+    case CLIENT_EVENT_TRADE_CANCEL:    return json_pack_player_target("trade_cancel", NULL, 0);
+    case CLIENT_EVENT_MARKET_OPEN:     return json_pack_market_open(p->entity_id, p->item_id, p->mode, p->code);
+    case CLIENT_EVENT_MARKET_LIST:
+        return json_pack_market_list(p->entity_id, BOX_WORDS[p->from], p->from_slot, p->quantity,
+                                     p->auction ? "auction" : "fixed", p->price, p->hours);
+    case CLIENT_EVENT_MARKET_CANCEL:   return json_pack_market_listing("market_cancel", p->entity_id, p->code, 0);
+    case CLIENT_EVENT_MARKET_BUY:      return json_pack_market_listing("market_buy", p->entity_id, p->code, 0);
+    case CLIENT_EVENT_MARKET_BID:      return json_pack_market_listing("market_bid", p->entity_id, p->code, p->price);
+    case CLIENT_EVENT_MARKET_COLLECT:  return json_pack_player_target("market_collect", "entityId", p->entity_id);
     }
     assert(false && "unknown client event kind");
     return NULL;
@@ -92,6 +112,12 @@ void client_event_trim(cyberia_input_seq_t consumed) {
     memmove(s_q.items, s_q.items + n, (size_t)(s_q.count - n) * sizeof s_q.items[0]);
     s_q.count -= n;
     s_q.sent  -= n < s_q.sent ? n : s_q.sent;
+}
+
+void client_event_resend(cyberia_input_seq_t from) {
+    int n = 0;
+    while (n < s_q.sent && from > s_q.items[n].sequence) n++;
+    s_q.sent = n;
 }
 
 const client_event_t* client_event_list(int* count) {

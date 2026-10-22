@@ -5,6 +5,7 @@
 #include "player_panel.h"
 #include "sim/local_player.h"
 #include "ui_button.h"
+#include "ui_tabs.h"
 
 #include <raylib.h>
 
@@ -63,10 +64,11 @@ void social_panel_draw(void) {
     Rectangle panel = panel_rect();
     if (HUD_PANEL_HEADER_H > panel.height) return;
     hud_panel_draw_frame(panel);
-    HudPanelTab tabs[SP_TAB_COUNT];
+    UITab tabs[SP_TAB_COUNT];
     for (SocialTab tab = 0; SP_TAB_COUNT > tab; tab++)
-        tabs[tab] = (HudPanelTab){ SP_LABEL[tab], SP_ICON[tab], true, tab_news(tab) };
-    hud_panel_draw_tabs(panel, tabs, SP_TAB_COUNT, s_tab);
+        tabs[tab] = (UITab){ SP_LABEL[tab], SP_ICON[tab], true, tab_news(tab) };
+    UITabs group = hud_panel_tabs(panel, SP_TAB_COUNT);
+    ui_tabs_draw(&group, tabs, s_tab);
     hud_panel_draw_close(panel);
     player_panel_draw(SP_VIEW[s_tab], hud_panel_content_rect(panel), g_local_player.id);
 }
@@ -82,10 +84,11 @@ bool social_panel_handle_click(int mx, int my) {
         social_panel_close();
         return true;
     }
-    for (SocialTab tab = 0; SP_TAB_COUNT > tab; tab++) {
-        if (!ui_button_hit(hud_panel_tab_rect(panel, tab, SP_TAB_COUNT), mx, my)) continue;
-        if (tab != s_tab) player_panel_hide_input();
-        s_tab = tab;
+    UITabs group = hud_panel_tabs(panel, SP_TAB_COUNT);
+    int tab = ui_tabs_hit(&group, mx, my);
+    if (0 <= tab) {
+        if ((SocialTab)tab != s_tab) player_panel_hide_input();
+        s_tab = (SocialTab)tab;
         return true;
     }
     player_panel_press(SP_VIEW[s_tab], hud_panel_content_rect(panel), mx, my);

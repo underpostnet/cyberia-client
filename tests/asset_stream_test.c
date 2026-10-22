@@ -179,6 +179,36 @@ int main(void) {
     fetch_shutdown();
     assert(0 == fetch_pending_count() && 0 == fetch_in_flight_count());
 
+    /* Travel through many worlds: each draws its own textures every frame.
+     * What the current world draws stays resident; what earlier worlds drew is
+     * evicted once the resident bytes pass the budget, so memory stays bounded,
+     * and a world revisited while its textures are resident fetches nothing. */
+    image_width = image_height = 1024;
+    size_t peak = 0;
+    char url[48];
+    for (int world = 0; 40 > world; world++) {
+        for (int pass = 0; 3 > pass; pass++) {
+            for (int texture = 0; 4 > texture; texture++) {
+                snprintf(url, sizeof(url), "/render/world-%d-%d", world, texture);
+                fetch_texture(url, 1, FETCH_P1, true);
+            }
+            settle();
+        }
+        size_t resident = 0;
+        for (int i = 0; FETCH_QUEUE_CAP > i; i++) resident += resident_bytes(&s_requests[i]);
+        if (peak < resident) peak = resident;
+        for (int texture = 0; 4 > texture; texture++) {
+            snprintf(url, sizeof(url), "/render/world-%d-%d", world, texture);
+            assert(ASSET_READY == fetch_state(url));
+        }
+    }
+    assert(FETCH_CACHE_BYTES + 4u * 1024u * 1024u * 4u >= peak);
+    assert(ASSET_UNREQUESTED == fetch_state("/render/world-0-0"));
+    before = network_count;
+    fetch_texture("/render/world-39-0", 1, FETCH_P1, true);
+    assert(before == network_count && ASSET_READY == fetch_state("/render/world-39-0"));
+    fetch_shutdown();
+
     char* argv[] = {"client", "--stream-disable=audio-network,bogus,atlas", "--stream-profile"};
     fetch_init(3, argv);
     assert(fetch_disabled(STREAM_AUDIO_NETWORK_DISABLED) && fetch_disabled(STREAM_ATLAS_DISABLED));

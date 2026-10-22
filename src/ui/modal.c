@@ -49,6 +49,8 @@ const Color MODAL_ACCEPT       = {  38, 138,  76, 255 };
 const Color MODAL_QUEST_FRAME  = { 230, 200,  60, 230 };
 const Color MODAL_QUEST        = { 250, 205,  70, 255 };
 const Color MODAL_ACTION       = {  90, 230, 235, 255 };
+const Color MODAL_BUTTON       = {  24,  30,  48, 255 };
+const Color MODAL_SELECTED     = {  70, 110, 175, 230 };
 
 float modal_pop_scale(float age) {
     if (age >= MODAL_POP_DURATION) return 1.0f;

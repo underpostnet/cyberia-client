@@ -15,6 +15,7 @@
 #include "fx/fx_obstacle_burst.h"
 #include "ui/chat_log.h"
 #include "ui/modal.h"
+#include "ui/save_status.h"
 #include "ui/session_gate.h"
 #include "ui/ui_state.h"
 #include "log.h"
@@ -76,6 +77,7 @@ static void client_reset_state(void) {
     prediction_reset();
     client_event_reset();
     chat_log_reset();
+    save_status_reset();
 }
 
 bool connection_open(void) {
@@ -105,8 +107,9 @@ conn_stats connection_get_stats(void) {
     return g_client.stats;
 }
 
-void client_on_init_received(void) {
+void client_on_init_received(bool adopted) {
     LOG_INFO("init_data received");
+    if (g_local_player.account) save_status_joined(s_resume.active, adopted);
     s_resume.active = false;
     s_enter.open = false;
     session_gate_arrived();

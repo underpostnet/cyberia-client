@@ -21,10 +21,12 @@
 const Color MODAL_PANEL_BORDER = { 80, 80, 130, 220 };
 const Color MODAL_TEXT = { 220, 220, 230, 240 };
 const Color MODAL_ACCEPT = { 38, 138, 76, 255 };
+const Color MODAL_BUTTON = { 24, 30, 48, 255 };
 
 static Rectangle s_card, s_close, s_sound, s_fullscreen, s_portal, s_signout, s_retry;
 static bool s_mobile, s_muted, s_full, s_sound_on, s_full_on;
-static int s_leaves, s_redirects, s_launches, s_connections;
+static int s_leaves, s_redirects, s_launches, s_connections, s_entered;
+static char s_entered_ticket[64];
 static PortalPage s_page;
 
 bool viewport_is_mobile(void) { return s_mobile; }
@@ -41,7 +43,10 @@ void config_open_launch(const char* code, bool account) {
     assert(0 == strcmp("world", code) && account);
     s_launches++;
 }
-void config_enter_world(const char* path, const char* ticket) {}
+void config_enter_world(const char* path, const char* ticket) {
+    s_entered++;
+    snprintf(s_entered_ticket, sizeof s_entered_ticket, "%s", ticket);
+}
 void game_client_enter_world(void) {}
 bool connection_open(void) { s_connections++; return true; }
 void copy_str(char* dst, size_t cap, const char* src) { snprintf(dst, cap, "%s", src); }
@@ -60,10 +65,7 @@ int text_wrap(const char* text, int x, int y, int maxw, int size, Color color, b
 bool ui_button_hit(Rectangle r, int x, int y) {
     return r.x <= x && r.x + r.width > x && r.y <= y && r.y + r.height > y;
 }
-UIButtonState ui_button_resolve_state(bool enabled, bool selected, bool hovered) { return UI_BUTTON_NORMAL; }
-void ui_button_draw(Rectangle bounds, const UIButtonStyle* style, UIButtonState state) {
-    if (0 == strcmp("close-yellow", style->icon_id)) s_close = bounds;
-}
+void ui_button_draw_close(Rectangle bounds) { s_close = bounds; }
 void ui_button_pixel_retro_draw(Rectangle bounds, const UIButtonPixelRetroStyle* style, bool hovered) {
     if (0 == strcmp("CYBERIA PORTAL", style->label)) s_portal = bounds;
     if (0 == strcmp("SIGN OUT", style->label)) s_signout = bounds;
@@ -150,6 +152,26 @@ int main(void) {
     session_gate_draw((Rectangle){ 0, 0, 1280, 800 });
     tap(s_retry);
     assert(1 == s_launches && 0 == s_connections);
+
+    /* The target world holds the session back while the world left saves. */
+    session_gate_end("saving", "");
+    session_gate_draw((Rectangle){ 0, 0, 1280, 800 });
+    tap(s_retry);
+    assert(2 == s_launches);
+    session_gate_end("ended", "");
+    assert(session_gate_active() && !session_gate_leaving());
+
+    /* A travel whose last changes still save goes on with its ticket. */
+    session_gate_travel("world-b", "/b", "World B", true);
+    assert(2 == s_leaves && session_gate_leaving());
+    session_gate_end("left_saving", "ticket-b");
+    assert(1 == s_entered && 0 == strcmp("ticket-b", s_entered_ticket) && !session_gate_leaving());
+    session_gate_arrived();
+    assert(!session_gate_active());
+    /* Without a ticket the card says the changes keep saving. */
+    session_gate_travel("world-b", "/b", "World B", true);
+    session_gate_end("left_saving", "");
+    assert(1 == s_entered && session_gate_active() && !session_gate_leaving());
 
     puts("session_gate_test OK");
     return 0;

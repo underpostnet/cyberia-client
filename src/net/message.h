@@ -11,8 +11,9 @@ void message_receive(const uint8_t* data, size_t len);
 
 /* Register a handler called when an init_data payload finishes. Keeps the
  * data flow outward: message.c signals interested modules instead of calling
- * into the network layer. */
-typedef void (*MessageInitHandler)(void);
+ * into the network layer. `adopted` marks an account session that plays the
+ * changes its closed session had not saved yet. */
+typedef void (*MessageInitHandler)(bool adopted);
 void message_set_init_handler(MessageInitHandler handler);
 
 #endif // CYBERIA_NETWORK_MESSAGE_H

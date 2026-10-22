@@ -28,7 +28,7 @@
 #include "fx/fx_portal_aura.h"
 #include "fx/fx_obstacle_burst.h"
 #include "ui/inventory_bar.h"
-#include "fx/loot_fx.h"
+#include "fx/fx_loot.h"
 #include "ui/inventory_modal.h"
 #include "ui/modal_dialogue.h"
 #include "data/action_cache.h"
@@ -157,25 +157,25 @@ static void draw_drop_count(float top_x, float top_y, float dims_w, float cell_s
  * loot), then the Object Layer tokens vacuuming toward their collectors.
  * Tokens reuse the shared entity-layer path (async atlas pipeline). No
  * background plate — the token and bordered-square sparks carry the read. */
-static void game_render_loot_fx(void) {
+static void game_render_fx_loot(void) {
     if (!g_entity_render) return;
     const float cell_size = world_cell_size();
 
     /* Bordered-square particles (ambient float + collection burst). */
-    int pslots = loot_fx_particle_slot_count();
+    int pslots = fx_loot_particle_slot_count();
     for (int i = 0; i < pslots; i++) {
-        LootFxParticle pt;
-        if (!loot_fx_particle_at(i, &pt)) continue;
-        Color body = (LOOT_FX_TINT_GRAY == pt.tint) ? FX_SPARK_GRAY : FX_SPARK_GOLD;
+        FxLootParticle pt;
+        if (!fx_loot_particle_at(i, &pt)) continue;
+        Color body = (FX_LOOT_TINT_GRAY == pt.tint) ? FX_SPARK_GRAY : FX_SPARK_GOLD;
         fx_shape_spark(pt.x * cell_size, pt.y * cell_size,
                        pt.size * cell_size, body, 1.0f);
     }
 
     /* Vacuum flight tokens. */
-    int slots = loot_fx_slot_count();
+    int slots = fx_loot_slot_count();
     for (int i = 0; i < slots; i++) {
-        LootFxRender fx;
-        if (!loot_fx_render_at(i, &fx)) continue;
+        FxLootRender fx;
+        if (!fx_loot_render_at(i, &fx)) continue;
 
         float half = fx.size * 0.5f;
 
@@ -236,7 +236,7 @@ void game_render_world(void) {
 
     // 8. Effects — FCT pop-ups, loot flights, level-up, heal and transport auras, hit bursts, death cues
     fct_draw();
-    game_render_loot_fx();
+    game_render_fx_loot();
     fx_level_up_draw();
     fx_heal_aura_draw();
     fx_portal_aura_draw();
@@ -753,7 +753,7 @@ void game_render_entities(void) {
                  * another player's loot. */
                 bool loot_eligible = 0 != (local_player_interaction_flags(entity_id)
                                            & INTERACTION_FLAG_LOOT_ELIGIBLE);
-                if (!loot_fx_drop_render_pos(entity_id,
+                if (!fx_loot_drop_render_pos(entity_id,
                                              interp_pos.x,
                                              interp_pos.y,
                                              size.x,
@@ -907,6 +907,8 @@ void game_render_entities(void) {
                                          : 0,
                     .on_portal         = !cue && np_is_player && game_state_player(entity_id)->on_portal,
                     .portal_hold       = np_is_player ? game_state_player(entity_id)->portal_hold : 0.0f,
+                    .portal_fee        = entry->is_main_player ? g_local_player.portal_fee : 0,
+                    .portal_short      = entry->is_main_player && local_player_coins() < g_local_player.portal_fee,
                     /* Respawn countdown is local-player-only: a remote client
                      * must never see another player's countdown. */
                     .respawn_seconds   = (!cue && entry->is_main_player) ? v->respawn_in : 0,
@@ -979,17 +981,17 @@ void game_render_aoi_circle(void) {
  * flight — which originates from inside the notification card — is never dimmed
  * or clipped by the toast's overlay while it travels to the inventory bar. */
 static void draw_loot_screen_fx(void) {
-    int loot_scr = loot_fx_screen_particle_slot_count();
+    int loot_scr = fx_loot_screen_particle_slot_count();
     for (int i = 0; i < loot_scr; i++) {
-        LootFxScreenParticle sp;
-        if (!loot_fx_screen_particle_at(i, &sp)) continue;
+        FxLootScreenParticle sp;
+        if (!fx_loot_screen_particle_at(i, &sp)) continue;
         fx_shape_spark(sp.x, sp.y, sp.size, FX_SPARK_GOLD, sp.alpha);
     }
 
-    int loot_tok = loot_fx_delivery_token_slot_count();
+    int loot_tok = fx_loot_delivery_token_slot_count();
     for (int i = 0; i < loot_tok; i++) {
-        LootFxDeliveryToken tk;
-        if (!loot_fx_delivery_token_at(i, &tk)) continue;
+        FxLootDeliveryToken tk;
+        if (!fx_loot_delivery_token_at(i, &tk)) continue;
         Color tint = { 255, 255, 255, (unsigned char)(255.0f * tk.alpha + 0.5f) };
         ol_as_ico_draw(obj_layers_mgr_get(), tk.item_id,
                        (int)(tk.x - tk.size * 0.5f), (int)(tk.y - tk.size * 0.5f),

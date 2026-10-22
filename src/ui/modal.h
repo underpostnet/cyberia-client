@@ -27,6 +27,8 @@ extern const Color MODAL_ACCEPT;       /* the green of an accept button       */
 extern const Color MODAL_QUEST_FRAME;  /* gold frame marking a quest context  */
 extern const Color MODAL_QUEST;        /* quest capability marker             */
 extern const Color MODAL_ACTION;       /* action capability marker            */
+extern const Color MODAL_BUTTON;       /* fill of a button or a tab at rest   */
+extern const Color MODAL_SELECTED;     /* fill of the active tab or a thumb   */
 
 /* Eased pop-in scale (0.80 → 1.0) over MODAL_POP_DURATION; 1.0 afterwards. */
 float modal_pop_scale(float age);

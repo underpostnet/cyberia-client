@@ -44,9 +44,15 @@ static inline int cyberia_capacity_unlock_level(CyberiaCapacityRule rule, int sl
 #define CYBERIA_PARTY_MAX_MEMBERS 5
 #define CYBERIA_PARTY_INVITES_MAX 5
 #define CYBERIA_CHAT_TEXT_MAX_RUNES 160
+#define CYBERIA_TRADE_OFFER_MAX_STACKS 8
+/* The most cells between the centre of a player and the cell it drops a stack on. */
+#define CYBERIA_ITEM_DROP_REACH 4.0f
 #define CYBERIA_FRIENDS_MAX 200
 #define CYBERIA_FRIEND_REQUESTS_MAX 20
 #define CYBERIA_STATUS_NOTE_MAX_RUNES 80
+/* The rows of one market view, and the most durations a market offers. */
+#define CYBERIA_MARKET_PAGE 20
+#define CYBERIA_MARKET_HOURS_MAX 7
 #define CYBERIA_CHAT_EMOJI_COUNT 8
 static const char* const CYBERIA_CHAT_EMOJI[CYBERIA_CHAT_EMOJI_COUNT] = {"smile", "laugh", "wink", "cool", "sad", "angry", "heart", "thumbsup"};
 /* Draw priorities of the layers of an entity that faces down; lower draws first. */

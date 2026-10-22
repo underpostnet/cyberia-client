@@ -95,6 +95,12 @@ void ui_button_draw_ring(Rectangle bounds, Color color) {
     DrawRectangle(x + w - 2, y + h - 2, 1, 1, color);
 }
 
+void ui_button_draw_close(Rectangle bounds) {
+    UIButtonStyle style = { .icon_id = "close-yellow", .no_fill = true };
+    ui_button_draw(bounds, &style, UI_BUTTON_NORMAL);
+    if (CheckCollisionPointRec(GetMousePosition(), bounds)) ui_button_draw_ring(bounds, WHITE);
+}
+
 /* ── Pixel-retro draw (public, used by modal_interact etc.) ──────────── */
 
 bool ui_button_pixel_retro_fits(Rectangle r, const UIButtonPixelRetroStyle* style) {

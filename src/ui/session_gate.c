@@ -21,7 +21,6 @@
 
 #define GATE_ACTIONS_MAX 3
 
-static const Color C_BUTTON = { 24, 30, 48, 255 };
 
 typedef enum { WAY_GUEST, WAY_ACCOUNT, WAY_PORTAL, WAY_SIGN_OUT, WAY_RECONNECT, WAY_CONTINUE, WAY_TRAVEL } GateWay;
 
@@ -56,9 +55,11 @@ static const GateText GATE_TEXTS[] = {
     { "signed_in_elsewhere", "Your account is playing in another window.",
       { { WAY_ACCOUNT, "PLAY HERE", "log-in" }, PORTAL } },
     { "unavailable", "The world cannot open your session now.", { { WAY_ACCOUNT, "TRY AGAIN", "reload" }, PORTAL } },
+    { "saving", "Your progress is still saving in the world you left. Try again in a moment.",
+      { { WAY_ACCOUNT, "TRY AGAIN", "reload" }, PORTAL } },
+    { "ended", "The game team ended this session. Play again to continue.", { PLAY_ACCOUNT, PORTAL } },
     { "invalid_state", "Your progress could not be saved.", { PLAY_ACCOUNT, PORTAL } },
-    { "left_saving",
-      "Your last changes are still on their way to storage. The world keeps them if storage answers within 10 minutes.",
+    { "left_saving", "Your last changes are still saving. The world keeps them and retries for up to 10 minutes.",
       { { WAY_CONTINUE, "CONTINUE", "forward" } } },
 };
 
@@ -161,7 +162,9 @@ void session_gate_end(const char* reason, const char* travel_ticket) {
         travel_by_bridge();
         return;
     }
-    if (s.leaving && 0 == strcmp(reason, "left")) {
+    /* A travel goes on with its ticket even while the last changes save: the
+     * target holds the session back until they did. */
+    if (s.leaving && (0 == strcmp(reason, "left") || '\0' != travel_ticket[0])) {
         copy_str(s_travel.ticket, sizeof s_travel.ticket, travel_ticket);
         finish_leave();
         return;
@@ -271,10 +274,7 @@ void session_gate_draw(Rectangle area) {
     modal_draw_card(card, false, s.age, area.y + area.height, MODAL_PANEL_BORDER, header_h);
     modal_draw_title(s.settings ? "SETTINGS" : "SESSION", card, pad, header_h, title_font, MODAL_TEXT,
                      s.settings ? s.close.x : card.x + card.width);
-    if (s.settings) {
-        UIButtonStyle close = { .icon_id = "close-yellow", .icon_size = title_font, .no_fill = true };
-        ui_button_draw(s.close, &close, ui_button_resolve_state(true, false, ui_button_hit(s.close, GetMouseX(), GetMouseY())));
-    }
+    if (s.settings) ui_button_draw_close(s.close);
     float y = card.y + header_h + pad;
     s.portal = s.sound = s.fullscreen = (Rectangle){ 0 };
     if (s.settings) {
@@ -285,7 +285,7 @@ void session_gate_draw(Rectangle area) {
         s.fullscreen = (Rectangle){ card.x + pad, y + button_h + pad, w - 2.0f * pad, button_h };
         s.portal = (Rectangle){ card.x + pad, y + 2.0f * (button_h + pad), w - 2.0f * pad, button_h };
         UIButtonPixelRetroStyle portal = {
-            .bg = C_BUTTON, .icon_id = way.icon, .label = way.label, .font_size = body_font, .text_color = WHITE,
+            .bg = MODAL_BUTTON, .icon_id = way.icon, .label = way.label, .font_size = body_font, .text_color = WHITE,
             .enabled = true,
         };
         UISwitchStyle sound = {
@@ -308,7 +308,7 @@ void session_gate_draw(Rectangle area) {
         const GateAction* action = &s.text->actions[i];
         s.buttons[i] = (Rectangle){ card.x + pad, y, w - 2.0f * pad, button_h };
         UIButtonPixelRetroStyle style = {
-            .bg = 0 == i && !s.settings ? MODAL_ACCEPT : C_BUTTON, .icon_id = action->icon,
+            .bg = 0 == i && !s.settings ? MODAL_ACCEPT : MODAL_BUTTON, .icon_id = action->icon,
             .label = action->label, .font_size = body_font, .text_color = WHITE, .enabled = true,
         };
         ui_button_pixel_retro_draw(s.buttons[i], &style, ui_button_hit(s.buttons[i], GetMouseX(), GetMouseY()));

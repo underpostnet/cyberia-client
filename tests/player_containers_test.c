@@ -118,6 +118,11 @@ static void test_moves_split_stack_and_swap_in_the_bag(void) {
     assert(MOVE_REFUSED == container_ops_check(BOX_BAG, 1, BOX_BAG, 8, 1));
     assert(MOVE_SWAP == container_ops_check(BOX_BAG, 1, BOX_BAG, 0, 5));
     assert(MOVE_STACK != container_ops_check(BOX_BAG, 1, BOX_BAG, 0, 5));
+
+    /* An open trade holds every stack where it is. */
+    g_local_player.trade.state = TRADE_OPEN;
+    assert(MOVE_REFUSED == container_ops_check(BOX_BAG, 1, BOX_BAG, 0, 5));
+    g_local_player.trade.state = TRADE_NONE;
 }
 
 /* Units cross between the bag and the storage onto an empty slot or onto the

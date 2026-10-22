@@ -21,8 +21,9 @@ conn_stats   connection_get_stats(void);
 void game_client_on_tick(void);
 
 /* Signal that the authoritative init_data payload has arrived; the FSM
- * graduates from AWAITING_INIT to RUNNING. */
-void client_on_init_received(void);
+ * graduates from AWAITING_INIT to RUNNING. `adopted` marks an account session
+ * that plays the changes its closed session had not saved yet. */
+void client_on_init_received(bool adopted);
 
 /* Keeps the resume ticket the server issued for this account session: it
  * lives in memory only and rejoins the session after a dropped connection. */

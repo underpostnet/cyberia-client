@@ -28,7 +28,6 @@ static const Color C_MINE     = { 120, 180, 240, 255 };
 static const Color C_THEIRS   = { 200, 200, 220, 230 };
 static const Color C_SYSTEM   = { 230, 170, 110, 235 };
 static const Color C_HINT     = { 130, 140, 165, 200 };
-static const Color C_BTN      = {  24,  30,  48, 255 };
 static const Color C_SEND     = {  35,  80, 160, 255 };
 static const Color C_INPUT_BG = {  18,  18,  36, 225 };
 
@@ -228,7 +227,7 @@ void chat_pane_draw(ChatPane* pane, Rectangle content) {
     };
     ui_button_pixel_retro_draw(l.send, &send, ui_button_hit(l.send, mx, my));
     UIButtonPixelRetroStyle toggle = {
-        .bg = C_BTN, .icon_id = "emoji-smile", .selected = pane->emoji_open, .enabled = true,
+        .bg = MODAL_BUTTON, .icon_id = "emoji-smile", .selected = pane->emoji_open, .enabled = true,
     };
     ui_button_pixel_retro_draw(l.emoji, &toggle, ui_button_hit(l.emoji, mx, my));
     if (!pane->emoji_open) return;
@@ -239,7 +238,7 @@ void chat_pane_draw(ChatPane* pane, Rectangle content) {
         char icon[40];
         snprintf(icon, sizeof(icon), "emoji-%s", CYBERIA_CHAT_EMOJI[i]);
         Rectangle cell = emoji_cell(&l, i);
-        UIButtonPixelRetroStyle emoji = { .bg = C_BTN, .icon_id = icon, .enabled = true };
+        UIButtonPixelRetroStyle emoji = { .bg = MODAL_BUTTON, .icon_id = icon, .enabled = true };
         ui_button_pixel_retro_draw(cell, &emoji, ui_button_hit(cell, mx, my));
     }
 }

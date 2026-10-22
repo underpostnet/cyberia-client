@@ -5,6 +5,9 @@
 #include <stdint.h>
 #include <string.h>
 
+#include <raylib.h>
+
+#include "net/client_event.h"           /* Box */
 #include "ui/floating_combat_text.h"   /* FCTType */
 #include "world/object_layer.h"
 #include "content/stat_contract_generated.h"
@@ -114,12 +117,48 @@ typedef struct {
 
 #define FRIENDS_LIST_MAX (CYBERIA_FRIENDS_MAX + 2 * CYBERIA_FRIEND_REQUESTS_MAX)
 
+/* How far the engine holds the state of an account player, as the server
+ * reports it: every change saved, one on its way, commits failing and
+ * retrying, or the state refused until an operator repairs the records. */
+typedef enum { DURABILITY_SAVED, DURABILITY_SAVING, DURABILITY_DEGRADED, DURABILITY_RECOVERY } Durability;
+
+/* The stage of the trade of the player: it asked, it was asked, both edit
+ * offers, or the server commits them. */
+typedef enum { TRADE_NONE, TRADE_REQUESTED, TRADE_INCOMING, TRADE_OPEN, TRADE_COMMITTING } TradeState;
+
+/* One offered stack. `slot` is the bag slot of an own line; -1 for the partner's. */
+typedef struct {
+    char item_id[MAX_ITEM_ID_LENGTH];
+    char cid[MAX_CID_LENGTH];
+    int  quantity;
+    int  slot;
+} TradeLine;
+
+typedef struct {
+    TradeLine items[CYBERIA_TRADE_OFFER_MAX_STACKS];
+    int       count;
+    int       coins;
+    bool      confirmed;
+} TradeOffer;
+
+/* The trade of the player, as the server holds it. */
+typedef struct {
+    TradeState state;
+    EntityID   partner_id;
+    char       partner_name[PLAYER_NAME_BYTES];
+    uint32_t   revision;      /* a confirmation names it */
+    TradeOffer mine, theirs;
+    double     expires_at;    /* GetTime() clock */
+} Trade;
+
 typedef struct {
     EntityID         id;
     bool             account;        /* the state persists with the account */
     HeldStack        held[HELD_STACKS_SHOWN];
     int              held_count;     /* owned stacks the world cannot load now */
-    bool             unsaved;        /* the engine has not taken the state for a while */
+    Durability       durability;
+    int              unsaved_ms;     /* age of the oldest change the engine has not applied */
+    int              portal_fee;     /* the fee the current portal hold charges, 0 off a portal */
     char             map_code[MAX_ID_LENGTH];
     int              coins;
     double           xp;             /* total XP */
@@ -140,6 +179,7 @@ typedef struct {
     SentInvite       sent_invites[CYBERIA_PARTY_INVITES_MAX];
     int              sent_invite_count;
     bool             crafting;             /* the server runs an assembly */
+    Trade            trade;
     Interaction      interactions[INTERACTIONS_MAX];
     int              interaction_count;
     Friend           friends[FRIENDS_LIST_MAX];
@@ -183,6 +223,10 @@ const PartyMember* local_player_party_member(EntityID id);
 /* True when the local player leads its party. */
 bool local_player_leads_party(void);
 
+/* True while the goods of the player cannot be saved: the server refuses its
+ * trades until a commit lands again. */
+bool local_player_unsaved(void);
+
 /* The pending invite from `id`, or NULL. */
 const PartyInvite* local_player_invite_from(EntityID id);
 
@@ -204,6 +248,11 @@ static inline uint8_t local_player_interaction_flags(EntityID id) {
 extern LocalPlayer g_local_player;
 
 static inline int local_player_coins(void) { return g_local_player.coins; }
+
+/* True while a trade holds the goods of the player: open or committing. */
+static inline bool local_player_trading(void) {
+    return TRADE_OPEN == g_local_player.trade.state || TRADE_COMMITTING == g_local_player.trade.state;
+}
 
 /* Progress through the current level, 0..1. A full bar at the maximum level,
  * where both thresholds meet. */
@@ -262,9 +311,46 @@ void  local_player_request_quest_accept(EntityID entity_id, const char* quest_co
 void  local_player_request_shop_buy(EntityID entity_id, const char* item_id,
                                     int quantity);
 
-/* Assemble an assembler entity's recipe. The caller checks the ingredients
- * first; the snapshot self block then carries the running assembly. */
-void  local_player_request_craft(EntityID entity_id, int recipe_index);
+/* Assemble an assembler entity's recipe for the fee the player saw. The caller
+ * checks the ingredients first; the snapshot self block then carries the
+ * running assembly, and craft_ack a refusal. */
+void  local_player_request_craft(EntityID entity_id, int recipe_index, int fee);
+
+/* Drop `qty` units of the stack in `slot` of `box` (bag or storage) on the
+ * world cell `at`; a negative cell drops at the feet. item_drop_ack answers. */
+void  local_player_request_item_drop(Box box, int slot, int qty, Vector2 at);
+
+/* Ask the terminal `entity_id` the price of a sale (`burn` false) or a burn
+ * of the bag stack in `slot`. item_quote_ack answers with a quote. */
+void  local_player_request_quote(EntityID entity_id, bool burn, int slot);
+
+/* Confirm a quote for `quantity` units; item_sell_ack or item_burn_ack answers. */
+void  local_player_confirm_quote(bool burn, const char* quote_id, int quantity);
+
+/* Ask the market of terminal `terminal` for the page at cursor `after` ("" the
+ * first) of the listings of `mode` ("" every mode); a market message answers. */
+void  local_player_market_open(EntityID terminal, const char* mode, const char* after);
+
+/* List `quantity` units of the bag stack in `slot` at terminal `terminal` for
+ * `hours`: an auction opening at `price`, else a fixed price. */
+void  local_player_market_list(EntityID terminal, int slot, int quantity, bool auction, int price, int hours);
+
+/* Cancel, buy or bid (`price`) on a listing of the last market view. A
+ * market_ack answers each, and a fresh view follows it. */
+void  local_player_market_cancel(EntityID terminal, const char* listing_id);
+void  local_player_market_buy(EntityID terminal, const char* listing_id);
+void  local_player_market_bid(EntityID terminal, const char* listing_id, int price);
+
+/* Take the pending claims of the last market view. */
+void  local_player_market_collect(EntityID terminal);
+
+/* Trade requests. trade_ack answers a refusal; the snapshot carries the trade. */
+void  local_player_request_trade(EntityID player_id);
+void  local_player_request_trade_reply(EntityID from_id, bool accept);
+void  local_player_request_trade_offer(const TradeOffer* offer);
+void  local_player_request_trade_confirm(void);
+void  local_player_request_trade_cancel(void);
+
 
 /* Abort the running assembly — the server refunds its ingredients. */
 void  local_player_request_craft_cancel(void);

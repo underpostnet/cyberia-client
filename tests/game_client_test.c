@@ -25,6 +25,7 @@
 #include <string.h>
 
 GameState g_game_state;
+LocalPlayer g_local_player;
 static double s_now;
 static bool s_active, s_open, s_account, s_gate;
 static int s_created, s_launch_reads, s_sends, s_lost, s_resets;
@@ -90,6 +91,8 @@ void prediction_reset(void) {}
 void client_event_reset(void) {}
 void chat_log_reset(void) {}
 void modal_push_stasis(void) {}
+void save_status_joined(bool resumed, bool adopted) {}
+void save_status_reset(void) {}
 
 static void tick(double now) { s_now = now; game_client_on_tick(); }
 static void open_event(void) { s_open = true; s_callbacks.on_open(s_ctx); }
@@ -104,7 +107,7 @@ int main(void) {
     open_event();
     assert(1 == s_sends && 1 == s_launch_reads && 0 == strcmp("launch-ticket", s_auth_ticket));
     s_account = true;
-    client_on_init_received();
+    client_on_init_received(false);
     game_client_hold_resume("resume-ticket");
     close_event();
     assert(1 == s_resets && 0 == s_lost);
@@ -115,7 +118,7 @@ int main(void) {
     assert(2 == s_created && 1 == s_launch_reads);
     open_event();
     assert(2 == s_sends && 1 == s_launch_reads && 0 == strcmp("resume-ticket", s_auth_ticket));
-    client_on_init_received();
+    client_on_init_received(false);
     close_event();
     tick(61.0);
     open_event();

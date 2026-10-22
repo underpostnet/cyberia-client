@@ -9,6 +9,7 @@
 #include "utils.h"
 
 #include <cJSON.h>
+#include <string.h>
 
 static ActionMetadataEntry s_entries[ACTION_CACHE_CAP];
 static void ingest_doc(void* entry, const cJSON* doc);
@@ -46,6 +47,17 @@ static int ingest_craft_items(const cJSON* arr, ActionCraftItem* out) {
         copy_str(out[count].item_id, sizeof(out[count].item_id), item);
         out[count].qty = json_int(row, "qty", 1);
         count++;
+    }
+    return count;
+}
+
+/* Read a list of item ids into `out`; returns the count. */
+static int ingest_item_ids(const cJSON* arr, char out[ACTION_CACHE_TRADE_MAX][MAX_ITEM_ID_LENGTH]) {
+    int count = 0;
+    const cJSON* id = NULL;
+    cJSON_ArrayForEach(id, arr) {
+        if (ACTION_CACHE_TRADE_MAX <= count) break;
+        if (cJSON_IsString(id) && '\0' != id->valuestring[0]) copy_str(out[count++], MAX_ITEM_ID_LENGTH, id->valuestring);
     }
     return count;
 }
@@ -89,6 +101,8 @@ static void ingest_doc(void* entry, const cJSON* doc) {
             slot->ingredient_count = ingest_craft_items(cJSON_GetObjectItemCaseSensitive(r, "ingredients"),
                                                         slot->ingredients);
             slot->craft_time_ms = json_int(r, "craftTimeMs", 0);
+            slot->has_fee = cJSON_IsNumber(cJSON_GetObjectItemCaseSensitive(r, "fee"));
+            slot->fee = json_int(r, "fee", 0);
             /* A recipe with nothing to produce is not offerable. */
             if (slot->output_count > 0) e->craft_count++;
         }
@@ -97,4 +111,13 @@ static void ingest_doc(void* entry, const cJSON* doc) {
     /* storageSlots is the vault capacity; a positive value is what makes the
      * entity a storage terminal. */
     e->storage_slots = json_int(doc, "storageSlots", 0);
+
+    /* A non-empty list makes the entity a merchant or a burner. The item policy
+     * of the economy decides whether each item takes part. */
+    e->buyback_count = ingest_item_ids(cJSON_GetObjectItemCaseSensitive(doc, "buybackItems"), e->buyback_items);
+    e->burn_count = ingest_item_ids(cJSON_GetObjectItemCaseSensitive(doc, "burnItems"), e->burn_items);
+
+    /* A market code makes the entity a market terminal. */
+    copy_str(e->market_code, sizeof e->market_code,
+             json_str(cJSON_GetObjectItemCaseSensitive(doc, "market"), "marketCode"));
 }

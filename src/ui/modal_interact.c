@@ -24,6 +24,10 @@
 #include "modal_instance_map.h"
 #include "modal_notification.h"
 #include "player_panel.h"
+#include "market_panel.h"
+#include "merchant_panel.h"
+#include "world/economy.h"
+#include "trade_panel.h"
 #include "toolbar.h"
 #include "world/object_layer.h"
 #include "world/object_layers_management.h"
@@ -36,6 +40,7 @@
 #include "ui_scroll.h"
 #include "ui_icon.h"
 #include "ui_rect.h"
+#include "ui_tabs.h"
 #include "log.h"
 #include "utils.h"
 
@@ -50,12 +55,15 @@
 /* Integration is a pane: the bottom bar opens it, not the strip. Storage is
  * the NPC vault; Own storage is the personal storage. */
 enum { MI_TAB_STACK = 0, MI_TAB_STATS, MI_TAB_QUEST, MI_TAB_SHOP, MI_TAB_CRAFT,
-       MI_TAB_STORAGE, MI_TAB_PROFILE, MI_TAB_OWN_STORAGE, MI_TAB_INTEGRATION, MI_TAB_COUNT };
+       MI_TAB_STORAGE, MI_TAB_PROFILE, MI_TAB_OWN_STORAGE, MI_TAB_BUYBACK, MI_TAB_BURN, MI_TAB_MARKET,
+       MI_TAB_TRADE, MI_TAB_INTEGRATION, MI_TAB_COUNT };
 
 static const char* MI_TAB_ICON[MI_TAB_COUNT]  = { "stack", "stats", "quest", "home-red", "engine", "grid",
-                                                  "character", "bag", "reload" };
+                                                  "character", "bag", "buyback", "burn", "market", "trade",
+                                                  "reload" };
 static const char* MI_TAB_LABEL[MI_TAB_COUNT] = { "Stack", "Stats", "Quest", "Shop", "Assembly", "Storage",
-                                                  "Profile", "Storage", "Integration" };
+                                                  "Profile", "Storage", "Buyback", "Salvage", "Market", "Trade",
+                                                  "Integration" };
 
 /* Who the modal shows: an NPC with its capabilities, the own player, or
  * another player. A player session never touches an NPC endpoint. */
@@ -186,6 +194,8 @@ static void stack_item_inspect(const ObjectLayerState* ols);
 /* Height each container and player tab measured on its last draw. */
 static float s_storage_content_height = 0.0f;
 static float s_player_content_height = 0.0f;
+/* Height the merchant or the trade tab measured on its last draw. */
+static float s_panel_content_height = 0.0f;
 
 /* ─────────────────────────────────────────────────────────────────────────
  *  EPHEMERAL SESSION DATA — survives navigating away to inspection modals
@@ -266,8 +276,6 @@ static void es_clear(void) {
 #define MI_HEADER_H       46
 #define MI_CLOSE_SZ       40
 #define MI_TAB_H          40
-#define MI_TAB_W          104
-#define MI_TAB_GAP        4
 #define MI_BAR_H          56
 #define MI_BAR_BTN_H      40
 #define MI_BAR_BTN_MAXW   150
@@ -315,14 +323,6 @@ static inline float mi_pad(void)          { return viewport_is_mobile() ? 8.0f :
 static inline float mi_header_h(void)     { return viewport_is_mobile() ? 36.0f : (float)MI_HEADER_H; }
 static inline float mi_close_sz(void)     { return viewport_is_mobile() ? 32.0f : (float)MI_CLOSE_SZ; }
 static inline float mi_tab_h(void)        { return viewport_is_mobile() ? 32.0f : (float)MI_TAB_H; }
-/* `count` is how many tabs the entity's capabilities actually expose, so the
- * mobile strip packs to the visible row instead of the enum size. */
-static inline float mi_tab_w(Rectangle card, int count) {
-    if (!viewport_is_mobile()) return (float)MI_TAB_W;
-    if (count < 1) count = 1;
-    float available = (card.width - 2.0f * mi_pad() - (float)(count - 1) * MI_TAB_GAP) / (float)count;
-    return available < 90.0f ? available : 90.0f;
-}
 static inline float mi_bar_h(void)        { return viewport_is_mobile() ? 48.0f : (float)MI_BAR_H; }
 static inline float mi_bar_btn_h(void)    { return viewport_is_mobile() ? 34.0f : (float)MI_BAR_BTN_H; }
 static inline float mi_bar_btn_maxw(void) { return viewport_is_mobile() ? 128.0f : (float)MI_BAR_BTN_MAXW; }
@@ -330,10 +330,8 @@ static inline int   mi_font_name(void)    { return viewport_is_mobile() ? 18 : M
 static inline int   mi_font_label(void)   { return viewport_is_mobile() ? 12 : MI_FONT_LABEL; }
 static inline int   mi_font_btn(void)     { return viewport_is_mobile() ? 14 : MI_FONT_BTN; }
 
-static const Color C_BTN        = {  24,  30,  48, 255 };
 static const Color C_CONTENT    = {  60,  80, 130,  36 };
-static const Color C_TAB_ACTIVE = {  70, 110, 175, 200 };
-static const Color C_TAB_DIM    = { 130, 140, 165, 220 };
+static const Color C_TEXT_DIM   = { 130, 140, 165, 220 };
 static const Color C_REW_LABEL  = { 255, 215,   0, 220 };
 static const Color C_DESMODAL_TEXT  = { 170, 180, 200, 220 };
 
@@ -370,6 +368,9 @@ static bool craft_tab_visible(void) {
     const ActionMetadataEntry* am = action_metadata();
     return am && am->craft_count > 0;
 }
+
+/* The merchant panel mode of the active tab. */
+static MerchantMode merchant_mode(void) { return MI_TAB_BURN == s_tab ? MERCHANT_BURN : MERCHANT_BUYBACK; }
 
 /* Re-read the per-player bot capability snapshot (pending quest-talks, quest
  * codes, interaction flags) from live AOI so the quest-talk buttons and quest
@@ -435,18 +436,48 @@ static int visible_tabs(int out[MI_TAB_COUNT]) {
         return n;
     }
     if (MI_MODE_PLAYER == s_mode) {
+        /* A trade with this player leads; otherwise the profile does. */
+        if (trade_panel_with(s_entity_id)) out[n++] = MI_TAB_TRADE;
         out[n++] = MI_TAB_PROFILE;
+        if (!trade_panel_with(s_entity_id)) out[n++] = MI_TAB_TRADE;
         out[n++] = MI_TAB_STATS;
         out[n++] = MI_TAB_STACK;
         return n;
     }
     if (shop_tab_visible())    out[n++] = MI_TAB_SHOP;
     if (craft_tab_visible())   out[n++] = MI_TAB_CRAFT;
+    if (0 < merchant_panel_count(action_metadata(), MERCHANT_BUYBACK)) out[n++] = MI_TAB_BUYBACK;
+    if (0 < merchant_panel_count(action_metadata(), MERCHANT_BURN))    out[n++] = MI_TAB_BURN;
+    if (market_panel_visible(action_metadata()))                        out[n++] = MI_TAB_MARKET;
     if (storage_tab_visible()) out[n++] = MI_TAB_STORAGE;
     if (quest_tab_visible())  out[n++] = MI_TAB_QUEST;
     out[n++] = MI_TAB_STACK;
     out[n++] = MI_TAB_STATS;
     return n;
+}
+
+/* The tab strip under the header: the visible tabs in rows. `ids` receives
+ * the tab at each index of the strip. */
+static UITabs tab_strip(Rectangle card, int ids[MI_TAB_COUNT], UITab tabs[MI_TAB_COUNT]) {
+    int count = visible_tabs(ids);
+    for (int k = 0; count > k; k++) tabs[k] = (UITab){ MI_TAB_LABEL[ids[k]], MI_TAB_ICON[ids[k]], true, 0 };
+    float pad = mi_pad();
+    return ui_tabs_wrap(tabs, count, card.x + pad, card.y + mi_header_h(), card.width - 2.0f * pad, mi_tab_h());
+}
+
+/* Bottom edge of the tab strip of `card`. */
+static float tab_strip_bottom(Rectangle card) {
+    int ids[MI_TAB_COUNT];
+    UITab tabs[MI_TAB_COUNT];
+    UITabs strip = tab_strip(card, ids, tabs);
+    return strip.y + ui_tabs_height(&strip);
+}
+
+/* The strip index of `tab`, or -1 when the strip does not show it. */
+static int strip_index(const int ids[MI_TAB_COUNT], int count, int tab) {
+    for (int k = 0; count > k; k++)
+        if (ids[k] == tab) return k;
+    return -1;
 }
 
 /* Leading tab for the entity's current capabilities — Shop, else Assembly,
@@ -461,6 +492,7 @@ static int leading_tab(void) {
 static void set_tab(int tab) {
     if (tab == s_tab) return;
     player_panel_hide_input();
+    trade_panel_reset();
     /* Report the container work before a shop, craft or item event can follow it. */
     container_panel_close();
     s_tab = tab;
@@ -511,8 +543,8 @@ static Rectangle anchor_safe_area(void) {
 /* Card height that fits the active tab's content exactly — the chrome around
  * the content area (see content_rect) plus the height that tab measured on its
  * last draw. */
-static float anchor_content_card_height(float content_h) {
-    return mi_header_h() + mi_tab_h() + 2.0f * mi_pad() + content_h + mi_bar_h();
+static float anchor_content_card_height(Rectangle card, float content_h) {
+    return tab_strip_bottom(card) - card.y + 2.0f * mi_pad() + content_h + mi_bar_h();
 }
 
 static Rectangle anchored_card_rect(void) {
@@ -558,6 +590,10 @@ static float active_tab_content_height(void) {
         case MI_TAB_STORAGE:
         case MI_TAB_OWN_STORAGE: return s_storage_content_height;
         case MI_TAB_PROFILE: return s_player_content_height;
+        case MI_TAB_BUYBACK:
+        case MI_TAB_BURN:
+        case MI_TAB_MARKET:
+        case MI_TAB_TRADE:   return s_panel_content_height;
         case MI_TAB_INTEGRATION: return s_integration_content_height;
         default:             return 0.0f;
     }
@@ -570,7 +606,7 @@ static float active_tab_content_height(void) {
  * differently — only resize once the incoming tab has settled. */
 static void update_anchor_layout(float dt) {
     float content = s_tab_age >= MODAL_POP_DURATION ? active_tab_content_height() : 0.0f;
-    if (content > 0.0f) content = anchor_content_card_height(content);
+    if (content > 0.0f) content = anchor_content_card_height(anchored_card_rect(), content);
 
     modal_anchor_layout_update(&s_layout, s_entity_id, anchor_safe_area(),
                                content, MI_ANCHOR_DEFAULT_H, MI_ANCHOR_MIN_H,
@@ -583,17 +619,10 @@ static Rectangle close_rect(Rectangle card) {
                         size, size };
 }
 
-static Rectangle tab_rect(Rectangle card, int i, int count) {
-    float y = card.y + mi_header_h();
-    float width = mi_tab_w(card, count);
-    return (Rectangle){ card.x + mi_pad() + (float)i * (width + MI_TAB_GAP), y,
-                        width, mi_tab_h() };
-}
-
 /* Content area between the tab strip and the bottom bar. */
 static Rectangle content_rect(Rectangle card) {
     float pad = mi_pad();
-    float top = card.y + mi_header_h() + mi_tab_h() + pad;
+    float top = tab_strip_bottom(card) + pad;
     float bot = card.y + card.height - mi_bar_h() - pad;
     return (Rectangle){ card.x + pad, top, card.width - 2.0f * pad, bot - top };
 }
@@ -745,7 +774,7 @@ const char* modal_interact_quest_talk_label(int index) {
     const char* code = s_talk_quest_codes[index];
     const QuestProgressEntry* q = quest_progress_store_find(code);
     if (q) {
-        if ('\0' != q->objectives[0])  return q->objectives;
+        if ('\0' != q->objectives_text[0])  return q->objectives_text;
         if ('\0' != q->active_step[0]) return q->active_step;
         if ('\0' != q->title[0])       return q->title;
     }
@@ -848,7 +877,11 @@ void modal_interact_init(void) {
     s_craft_flash_slot = -1;
     s_storage_content_height = 0.0f;
     s_player_content_height = 0.0f;
+    s_panel_content_height = 0.0f;
     player_panel_reset();
+    merchant_panel_reset();
+    market_panel_reset();
+    trade_panel_reset();
     s_tab_age = MODAL_POP_DURATION;
     s_tab_picked = false;
     modal_anchor_layout_reset(&s_layout);
@@ -906,7 +939,13 @@ static void open_session(EntityID entity_id, InteractMode mode, const char* disp
     s_craft_flash_slot = -1;
     s_storage_content_height = 0.0f;
     s_player_content_height = 0.0f;
-    if (!same_entity) player_panel_reset();
+    s_panel_content_height = 0.0f;
+    if (!same_entity) {
+        player_panel_reset();
+        merchant_panel_reset();
+        market_panel_reset();
+    }
+    trade_panel_reset();
     ui_scroll_reset(&s_integration_scroll);
     s_integration_content_height = 0.0f;
     s_q_expanded = -1;
@@ -953,6 +992,7 @@ void modal_interact_open(EntityID entity_id, const char* display_name,
 void modal_interact_close(void) {
     player_panel_hide_input();
     container_panel_close();
+    trade_panel_reset();
     bool was_open = s_open;
     s_open = false;
     s_dialogue_open_requested = false;
@@ -1001,6 +1041,11 @@ bool modal_interact_handle_wheel(float wheel_delta) {
     if (MI_TAB_PROFILE == s_tab) {
         return player_panel_wheel(PLAYER_VIEW_PROFILE, content_rect(card_rect()), wheel_delta);
     }
+    if (MI_TAB_BUYBACK == s_tab || MI_TAB_BURN == s_tab) {
+        return merchant_panel_wheel(merchant_mode(), content_rect(card_rect()), wheel_delta);
+    }
+    if (MI_TAB_MARKET == s_tab) return market_panel_wheel(content_rect(card_rect()), wheel_delta);
+    if (MI_TAB_TRADE == s_tab) return trade_panel_wheel(content_rect(card_rect()), wheel_delta);
     if (MI_TAB_INTEGRATION == s_tab) {
         return ui_scroll_on_wheel(&s_integration_scroll, content_rect(card_rect()),
                                   s_integration_content_height, wheel_delta);
@@ -1105,6 +1150,12 @@ void modal_interact_update(float dt) {
         if (!s_open) return;
     } else if (MI_TAB_PROFILE == s_tab) {
         player_panel_update(PLAYER_VIEW_PROFILE, content_rect(card_rect()), content_ready, dt);
+    } else if (MI_TAB_BUYBACK == s_tab || MI_TAB_BURN == s_tab) {
+        merchant_panel_update(merchant_mode(), content_rect(card_rect()), content_ready, dt);
+    } else if (MI_TAB_MARKET == s_tab) {
+        market_panel_update(content_rect(card_rect()), s_entity_id, content_ready, dt);
+    } else if (MI_TAB_TRADE == s_tab) {
+        trade_panel_tab_update(content_rect(card_rect()), content_ready, dt);
     } else if (MI_TAB_INTEGRATION == s_tab) {
         ui_scroll_update(&s_integration_scroll, content_rect(card_rect()),
                          s_integration_content_height, dt);
@@ -1205,13 +1256,6 @@ static void draw_stats_tab(Rectangle content) {
 
 /* ── Quest tab: show the entity's active-quest description + rewards ──── */
 
-static const char* quest_objective_verb(const char* type) {
-    if (type && 0 == strcmp(type, "collect")) return "Collect";
-    if (type && 0 == strcmp(type, "kill"))    return "Defeat";
-    if (type && 0 == strcmp(type, "talk"))    return "Talk to";
-    return "Complete";
-}
-
 static float draw_quest_step_objectives(const QuestStepMeta* step,
                                         const char* progress, int x, float y,
                                         int width, int font, Color color) {
@@ -1227,7 +1271,7 @@ static float draw_quest_step_objectives(const QuestStepMeta* step,
         const QuestObjectiveMeta* objective = &step->objectives[i];
         char line[MAX_ITEM_ID_LENGTH + 40];
         snprintf(line, sizeof(line), "Objective: %s %s x%d",
-                 quest_objective_verb(objective->type), objective->item_id,
+                 quest_objective_verb(quest_objective_type(objective->type)), objective->item_id,
                  objective->quantity);
         int height = text_wrap(line, x, (int)(y + used), width, font, color, false, true);
         used += (float)height;
@@ -1259,7 +1303,7 @@ static void draw_quest_steps(const QuestMetadataEntry* metadata,
         *y += text_wrap(line, (int)(x + 14.0f), (int)*y, width - 14,
                         step_font, step_color, false, true);
 
-        const char* live_progress = is_current && progress ? progress->objectives : NULL;
+        const char* live_progress = is_current && progress ? progress->objectives_text : NULL;
         Color objective_color = is_current ? C_DESMODAL_TEXT : step_color;
         *y += draw_quest_step_objectives(&metadata->steps[i], live_progress,
                                          (int)(x + 22.0f), *y, width - 22,
@@ -1447,7 +1491,7 @@ static void draw_quest_grid_action_button(Rectangle button, const char* label,
 static void draw_bar_button(Rectangle r, const char* icon, const char* label,
                             bool selected, int mx, int my) {
     UIButtonPixelRetroStyle st = {
-        .bg = C_BTN,
+        .bg = MODAL_BUTTON,
         .icon_id = icon,
         .label = label,
         .font_size = viewport_is_mobile() ? 12 : mi_font_btn(),
@@ -1540,9 +1584,7 @@ static void draw_quest_detail(int slot, const char* code, float x, float w,
     float close_sz = 26.0f;
     float row_top  = *y;
     s_q_close = (Rectangle){ x + w - close_sz - 2.0f, row_top, close_sz, close_sz };
-    UIButtonStyle cb = { .icon_id = "close-yellow", .no_fill = true };
-    ui_button_draw(s_q_close, &cb,
-                   ui_button_resolve_state(true, false, ui_button_hit(s_q_close, mx, my)));
+    ui_button_draw_close(s_q_close);
 
     ui_icon_draw_ex("quest", x + 11.0f, row_top + 13.0f, 20.0f, 0.0f, WHITE);
     int sww = MeasureText(in.word, rfont);
@@ -1611,7 +1653,7 @@ static void draw_quest_detail(int slot, const char* code, float x, float w,
             *y += rfont + 3;
             *y += text_wrap(q->active_step, (int)ix, (int)*y, iw,
                             mi_font_desc(), MODAL_POSITIVE, false, true);
-            *y += draw_quest_step_objectives(NULL, q->objectives, (int)ix,
+            *y += draw_quest_step_objectives(NULL, q->objectives_text, (int)ix,
                                              *y, iw, rfont, C_DESMODAL_TEXT);
         } else {
             DrawText("Loading mission details...", (int)ix, (int)*y, mi_font_desc(), MODAL_LABEL);
@@ -1799,7 +1841,8 @@ static void draw_shop_card(Rectangle card, const ActionShopItem* item, int slot,
                            bool affordable, bool room, int font, int mx, int my) {
     ObjectLayersManager* olm = obj_layers_mgr_get();
     bool hovered = ui_button_hit(card, mx, my);
-    bool buyable = affordable && room;
+    bool trading = local_player_trading();
+    bool buyable = affordable && room && !trading;
     Color accent = buyable ? (Color){ 120, 200, 140, 235 } : (Color){ 210, 120, 110, 230 };
 
     Rectangle inner = draw_card_base(card, hovered);
@@ -1857,10 +1900,10 @@ static void draw_shop_card(Rectangle card, const ActionShopItem* item, int slot,
     s_shop_buy_btn[slot] = buy;
     UIButtonPixelRetroStyle buy_st = {
         .bg = buyable ? MODAL_ACCEPT : (Color){ 58, 62, 76, 255 },
-        .icon_id = room ? "wallet" : "lock",
-        .label = room ? "Buy" : "Bag full",
+        .icon_id = trading ? "trade" : room ? "wallet" : "lock",
+        .label = trading ? "Trade open" : room ? "Buy" : "Bag full",
         .font_size = viewport_is_mobile() ? 13 : mi_font_btn(),
-        .text_color = buyable ? MODAL_TEXT : C_TAB_DIM,
+        .text_color = buyable ? MODAL_TEXT : C_TEXT_DIM,
         .enabled = buyable,
     };
     ui_button_pixel_retro_draw(buy, &buy_st, buyable && ui_button_hit(buy, mx, my));
@@ -1896,7 +1939,7 @@ static void draw_shop_tab(Rectangle content, int mx, int my) {
             if (i >= s_shop_card_count) break;
             bool affordable = shop_affordable_qty(&am->shop_items[i]) > 0;
             bool room = local_player_inventory_has_room(am->shop_items[i].item_id);
-            s_shop_affordable[i] = affordable && room;
+            s_shop_affordable[i] = affordable && room && !local_player_trading();
             Rectangle card = { content.x + (float)col * (column_width + MI_CARD_GAP), y,
                                column_width, row_height };
             draw_shop_card(card, &am->shop_items[i], i, affordable, room, font, mx, my);
@@ -1975,10 +2018,15 @@ static float craft_slot_size(const ActionCraftRecipe* recipe, float card_width) 
     return fit < max ? fit : max;
 }
 
+/* The fee row of a card: its height, 0 for a recipe that charges nothing. */
+static float craft_fee_h(const ActionCraftRecipe* recipe) {
+    return 0 < economy_craft_fee(recipe) ? (float)mi_font_label() + 8.0f + MI_CARD_ICON_GAP : 0.0f;
+}
+
 static float craft_card_height(const ActionCraftRecipe* recipe, float card_width) {
     float slot = craft_slot_size(recipe, card_width);
     return MI_CARD_PAD + slot + MI_CARD_ICON_GAP + MI_CRAFT_ARROW + MI_CARD_ICON_GAP + slot +
-           MI_CARD_ACTION_GAP + mi_shop_buy_h() + MI_CARD_PAD;
+           craft_fee_h(recipe) + MI_CARD_ACTION_GAP + mi_shop_buy_h() + MI_CARD_PAD;
 }
 
 /* No assembly running, the assembler in the AOI, and every ingredient present
@@ -1997,13 +2045,16 @@ static bool craft_outputs_fit(const ActionCraftRecipe* recipe) {
 }
 
 static bool craft_recipe_ready(const ActionCraftRecipe* recipe) {
-    if (g_local_player.crafting || recipe->output_count <= 0) return false;
+    if (g_local_player.crafting || recipe->output_count <= 0 || local_player_trading()) return false;
     if (0 > game_state_slot(s_entity_id)) return false;
+    int coins = economy_craft_fee(recipe);
     for (int i = 0; i < recipe->ingredient_count; i++) {
         const ActionCraftItem* in = &recipe->ingredients[i];
-        if (in->qty > 0 && local_player_item_quantity(in->item_id) < in->qty) return false;
+        if (in->qty <= 0) continue;
+        if (local_player_is_coin(in->item_id)) coins += in->qty;
+        else if (local_player_item_quantity(in->item_id) < in->qty) return false;
     }
-    return true;
+    return local_player_coins() >= coins;
 }
 
 /* One centred stack of slots, each badged with its quantity. Inputs the player
@@ -2066,6 +2117,21 @@ static void draw_craft_card(Rectangle card, const ActionCraftRecipe* recipe, int
     draw_craft_stack(card, y, slot_sz, recipe->outputs, recipe->output_count, false,
                      s_craft_out_slot[slot], olm);
 
+    /* The fee the assembly charges, by the economy rule the server applies. */
+    int fee = economy_craft_fee(recipe);
+    if (0 < fee) {
+        int font = mi_font_label();
+        float icon = (float)font + 6.0f;
+        char line[32];
+        snprintf(line, sizeof(line), "Fee %d", fee);
+        float w = icon + 4.0f + (float)MeasureText(line, font);
+        float fx = card.x + (card.width - w) * 0.5f;
+        float fy = y + slot_sz + MI_CARD_ICON_GAP;
+        ol_as_ico_draw(olm, economy_coin_item(), (int)fx, (int)fy, (int)icon, OL_ICO_DEFAULT_DIR, 0, WHITE);
+        DrawText(line, (int)(fx + icon + 4.0f), (int)(fy + (icon - (float)font) * 0.5f), font,
+                 local_player_coins() >= fee ? C_REW_LABEL : (Color){ 210, 120, 110, 235 });
+    }
+
     Rectangle btn = { card.x + MI_CARD_PAD, card.y + card.height - MI_CARD_PAD - mi_shop_buy_h(),
                       card.width - 2.0f * MI_CARD_PAD, mi_shop_buy_h() };
     s_craft_btn[slot] = btn;
@@ -2074,7 +2140,7 @@ static void draw_craft_card(Rectangle card, const ActionCraftRecipe* recipe, int
         .icon_id = room ? "engine" : "lock",
         .label = room ? "Assemble" : "Bag full",
         .font_size = viewport_is_mobile() ? 13 : mi_font_btn(),
-        .text_color = ready ? MODAL_TEXT : C_TAB_DIM,
+        .text_color = ready ? MODAL_TEXT : C_TEXT_DIM,
         .enabled = ready,
     };
     ui_button_pixel_retro_draw(btn, &btn_st, ready && ui_button_hit(btn, mx, my));
@@ -2161,7 +2227,7 @@ static void request_craft(int slot, const ActionCraftRecipe* recipe) {
 
     s_craft_flash_slot = slot;
     s_craft_flash_age = 0.0f;
-    local_player_request_craft(s_entity_id, slot);
+    local_player_request_craft(s_entity_id, slot, economy_craft_fee(recipe));
 }
 
 /* Open the read-only item inspection the stack tab uses, so a player can read
@@ -2235,7 +2301,8 @@ static void draw_container_tab(Rectangle content) {
 
 /* ── Integration tab: the stack composite and a viewer link per item ───── */
 
-#define MI_INTEGRATION_ROW_SZ 32.0f
+#define MI_INTEGRATION_ROW_SZ  32.0f
+#define MI_INTEGRATION_ROW_GAP 4.0f
 
 static float integration_preview_size(Rectangle content) {
     float size = content.width * 0.35f;
@@ -2246,7 +2313,7 @@ static float integration_preview_size(Rectangle content) {
 static Rectangle integration_row_rect(Rectangle content, int index) {
     float x = content.x + integration_preview_size(content) + mi_pad();
     float y = content.y - ui_scroll_offset(&s_integration_scroll) +
-              (float)index * (MI_INTEGRATION_ROW_SZ + MI_TAB_GAP);
+              (float)index * (MI_INTEGRATION_ROW_SZ + MI_INTEGRATION_ROW_GAP);
     return (Rectangle){ x, y, content.x + content.width - x, MI_INTEGRATION_ROW_SZ };
 }
 
@@ -2273,7 +2340,7 @@ static void draw_integration_tab(Rectangle content) {
                                 (int)(row.y + (row.height - (float)font) * 0.5f),
                                 (int)(row.x + row.width) - text_x, font, MODAL_TEXT);
     }
-    float rows = (float)s_cached_layer_count * (MI_INTEGRATION_ROW_SZ + MI_TAB_GAP);
+    float rows = (float)s_cached_layer_count * (MI_INTEGRATION_ROW_SZ + MI_INTEGRATION_ROW_GAP);
     s_integration_content_height = rows > preview ? rows : preview;
     ui_scroll_end(&s_integration_scroll);
 }
@@ -2327,42 +2394,24 @@ void modal_interact_draw(void) {
     /* Title sits inside the card's own header strip. */
     modal_draw_title(s_display_name, card, mi_pad(), mi_header_h(),
                      mi_font_name(), MODAL_TEXT, xr.x);
-    UIButtonStyle close_btn = { .icon_id = "close-yellow", .no_fill = true };
-    ui_button_draw(xr, &close_btn, ui_button_resolve_state(true, false, ui_button_hit(xr, mx, my)));
+    ui_button_draw_close(xr);
 
     /* Content panel — faint, mostly transparent so the world shows through;
      * just enough to delimit the active tab's content area. */
     Rectangle content = content_rect(card);
     float pad = mi_pad();
-    Rectangle panel = { card.x + pad - 4.0f, card.y + mi_header_h() + mi_tab_h(),
-                        card.width - 2.0f * (pad - 4.0f),
-                        (card.y + card.height - mi_bar_h()) -
-                        (card.y + mi_header_h() + mi_tab_h()) };
+    int ids[MI_TAB_COUNT];
+    UITab tabs[MI_TAB_COUNT];
+    UITabs strip = tab_strip(card, ids, tabs);
+    float strip_bottom = strip.y + ui_tabs_height(&strip);
+    Rectangle panel = { card.x + pad - 4.0f, strip_bottom, card.width - 2.0f * (pad - 4.0f),
+                        card.y + card.height - mi_bar_h() - strip_bottom };
     DrawRectangleRec(panel, C_CONTENT);
 
-    /* Tab strip — inactive tabs are transparent with a dimmed icon+label;
-     * the active tab gets a clearly visible fill so it reads as selected. Only
-     * the capability tabs the entity exposes are drawn. Pixel retro style. */
-    int tabs[MI_TAB_COUNT];
-    int tabs_n = visible_tabs(tabs);
-    bool tab_shown = MI_TAB_INTEGRATION == s_tab && integration_btn_visible();
-    for (int k = 0; k < tabs_n; k++) if (tabs[k] == s_tab) tab_shown = true;
-    if (!tab_shown) set_tab(MI_TAB_STACK);
-    for (int k = 0; k < tabs_n; k++) {
-        int t = tabs[k];
-        Rectangle r = tab_rect(card, k, tabs_n);
-        bool active = t == s_tab;
-        UIButtonPixelRetroStyle st = {
-            .bg = active ? C_TAB_ACTIVE : (Color){ 24, 30, 48, 255 },
-            .icon_id = MI_TAB_ICON[t],
-            .label = MI_TAB_LABEL[t],
-            .font_size = mi_font_label(),
-            .text_color = active ? MODAL_TEXT : C_TAB_DIM,
-            .selected = active,
-            .enabled = true,
-        };
-        ui_button_pixel_retro_draw(r, &st, ui_button_hit(r, mx, my));
-    }
+    /* Only the capability tabs the entity exposes show. */
+    if (0 > strip_index(ids, strip.count, s_tab) && !(MI_TAB_INTEGRATION == s_tab && integration_btn_visible()))
+        set_tab(MI_TAB_STACK);
+    ui_tabs_draw(&strip, tabs, strip_index(ids, strip.count, s_tab));
 
     /* Tab-switch transition: the incoming tab's content pops in from the
      * panel centre and fades up, so switching reads as a swap rather than an
@@ -2377,6 +2426,12 @@ void modal_interact_draw(void) {
     else if (MI_TAB_STORAGE == s_tab || MI_TAB_OWN_STORAGE == s_tab) draw_container_tab(tab_content);
     else if (MI_TAB_PROFILE == s_tab)
         s_player_content_height = player_panel_draw(PLAYER_VIEW_PROFILE, tab_content, s_entity_id);
+    else if (MI_TAB_BUYBACK == s_tab || MI_TAB_BURN == s_tab)
+        s_panel_content_height = merchant_panel_draw(merchant_mode(), tab_content, s_entity_id, action_metadata());
+    else if (MI_TAB_MARKET == s_tab)
+        s_panel_content_height = market_panel_draw(tab_content);
+    else if (MI_TAB_TRADE == s_tab)
+        s_panel_content_height = trade_panel_draw(tab_content, s_entity_id);
     else if (MI_TAB_INTEGRATION == s_tab) draw_integration_tab(tab_content);
 
     /* Fade the new content up by lifting a panel-coloured veil off it —
@@ -2429,20 +2484,20 @@ bool modal_interact_handle_click(int mx, int my) {
 
     /* Tab strip — clicking the already-active quest tab while a quest is
      * expanded returns to the grid view. */
-    int tabs[MI_TAB_COUNT];
-    int tabs_n = visible_tabs(tabs);
-    for (int k = 0; k < tabs_n; k++) {
-        if (ui_button_hit(tab_rect(card, k, tabs_n), mx, my)) {
-            int new_tab = tabs[k];
-            if (new_tab == MI_TAB_QUEST && new_tab == s_tab && s_q_expanded >= 0) {
-                collapse_quest_detail();
-            }
-            /* An explicit pick pins the tab: update stops re-resolving it from
-             * the entity's leading capability. */
-            s_tab_picked = true;
-            set_tab(new_tab);
-            return true;
+    int ids[MI_TAB_COUNT];
+    UITab tabs[MI_TAB_COUNT];
+    UITabs strip = tab_strip(card, ids, tabs);
+    int hit = ui_tabs_hit(&strip, mx, my);
+    if (0 <= hit) {
+        int new_tab = ids[hit];
+        if (new_tab == MI_TAB_QUEST && new_tab == s_tab && s_q_expanded >= 0) {
+            collapse_quest_detail();
         }
+        /* An explicit pick pins the tab: update stops re-resolving it from
+         * the entity's leading capability. */
+        s_tab_picked = true;
+        set_tab(new_tab);
+        return true;
     }
 
     /* Bottom bar integration buttons */
@@ -2513,6 +2568,22 @@ bool modal_interact_handle_click(int mx, int my) {
 
     if (MI_TAB_PROFILE == s_tab && CheckCollisionPointRec((Vector2){ (float)mx, (float)my }, content)) {
         player_panel_press(PLAYER_VIEW_PROFILE, content, mx, my);
+        return true;
+    }
+
+    if ((MI_TAB_BUYBACK == s_tab || MI_TAB_BURN == s_tab) &&
+        CheckCollisionPointRec((Vector2){ (float)mx, (float)my }, content)) {
+        merchant_panel_press(merchant_mode(), content, mx, my);
+        return true;
+    }
+
+    if (MI_TAB_MARKET == s_tab && CheckCollisionPointRec((Vector2){ (float)mx, (float)my }, content)) {
+        market_panel_press(content, mx, my);
+        return true;
+    }
+
+    if (MI_TAB_TRADE == s_tab && CheckCollisionPointRec((Vector2){ (float)mx, (float)my }, content)) {
+        trade_panel_press(content, mx, my);
         return true;
     }
 

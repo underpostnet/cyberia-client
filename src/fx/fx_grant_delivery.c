@@ -3,7 +3,7 @@
 #include "fx_inventory_bar_qty.h"
 #include "sim/local_player.h"
 #include "sim/game_state.h"
-#include "loot_fx.h"
+#include "fx_loot.h"
 #include "world/object_layer.h"
 
 #include <string.h>
@@ -92,7 +92,7 @@ void fx_grant_delivery_update(float dt) {
             FgGain* g = &g_fg.gains[i];
             if (g->launched) continue;
             if (g_fg.spend_age >= FG_SPEND_LEAD + (float)i * FG_STAGGER) {
-                loot_fx_reward_delivery(g->item_id, g->origin.x, g->origin.y);
+                fx_loot_reward_delivery(g->item_id, g->origin.x, g->origin.y);
                 g->launched = true;
             } else {
                 pending++;

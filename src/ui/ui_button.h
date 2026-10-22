@@ -74,6 +74,9 @@ bool ui_button_hit(Rectangle bounds, int mx, int my);
  * selected mark of an icon-only button. */
 void ui_button_draw_ring(Rectangle bounds, Color color);
 
+/* The close button of every panel: the close icon, ringed on hover. */
+void ui_button_draw_close(Rectangle bounds);
+
 /* ── Pixel-retro button style ────────────────────────────────────────── */
 
 typedef struct {

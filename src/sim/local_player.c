@@ -1,5 +1,6 @@
 #include "local_player.h"
 
+#include <raylib.h>
 #include <string.h>
 
 #include "game_state.h"
@@ -50,7 +51,10 @@ int local_player_incoming_requests(void) {
     return count;
 }
 
-int local_player_social_news(void) { return local_player_incoming_requests() + g_local_player.invite_count; }
+int local_player_social_news(void) {
+    return local_player_incoming_requests() + g_local_player.invite_count +
+           (TRADE_INCOMING == g_local_player.trade.state);
+}
 
 Vault* local_player_vault(const char* action_code) {
     for (int i = 0; i < g_local_player.vault_count; i++) {
@@ -100,6 +104,10 @@ const PartyMember* local_player_party_member(EntityID id) {
 
 bool local_player_leads_party(void) {
     return 0 < g_local_player.party.member_count && g_local_player.id == g_local_player.party.leader_id;
+}
+
+bool local_player_unsaved(void) {
+    return DURABILITY_DEGRADED == g_local_player.durability || DURABILITY_RECOVERY == g_local_player.durability;
 }
 
 const PartyInvite* local_player_invite_from(EntityID id) {
@@ -161,9 +169,85 @@ void local_player_request_shop_buy(EntityID entity_id, const char* item_id,
     client_event_push(CLIENT_EVENT_SHOP_BUY, p);
 }
 
-void local_player_request_craft(EntityID entity_id, int recipe_index) {
-    client_event_payload_t p = { .entity_id = entity_id, .recipe_index = recipe_index };
+void local_player_request_craft(EntityID entity_id, int recipe_index, int fee) {
+    client_event_payload_t p = { .entity_id = entity_id, .recipe_index = recipe_index, .quote = fee };
     client_event_push(CLIENT_EVENT_CRAFT_ITEM, p);
+}
+
+void local_player_request_item_drop(Box box, int slot, int qty, Vector2 at) {
+    client_event_push(CLIENT_EVENT_ITEM_DROP, (client_event_payload_t){
+        .from = box, .from_slot = slot, .quantity = qty, .target_x = at.x, .target_y = at.y });
+}
+
+void local_player_request_quote(EntityID entity_id, bool burn, int slot) {
+    client_event_push(CLIENT_EVENT_ITEM_QUOTE, (client_event_payload_t){
+        .entity_id = entity_id, .burn = burn, .from = BOX_BAG, .from_slot = slot });
+}
+
+void local_player_market_open(EntityID terminal, const char* mode, const char* after) {
+    client_event_payload_t p = { .entity_id = terminal };
+    copy_str(p.mode, sizeof p.mode, mode);
+    copy_str(p.code, sizeof p.code, after);
+    client_event_push(CLIENT_EVENT_MARKET_OPEN, p);
+}
+
+void local_player_market_list(EntityID terminal, int slot, int quantity, bool auction, int price, int hours) {
+    client_event_push(CLIENT_EVENT_MARKET_LIST, (client_event_payload_t){
+        .entity_id = terminal, .from = BOX_BAG, .from_slot = slot, .quantity = quantity, .auction = auction,
+        .price = price, .hours = hours });
+}
+
+static void market_listing(client_event_kind_t kind, EntityID terminal, const char* listing_id, int price) {
+    client_event_payload_t p = { .entity_id = terminal, .price = price };
+    copy_str(p.code, sizeof p.code, listing_id);
+    client_event_push(kind, p);
+}
+
+void local_player_market_cancel(EntityID terminal, const char* listing_id) {
+    market_listing(CLIENT_EVENT_MARKET_CANCEL, terminal, listing_id, 0);
+}
+
+void local_player_market_buy(EntityID terminal, const char* listing_id) {
+    market_listing(CLIENT_EVENT_MARKET_BUY, terminal, listing_id, 0);
+}
+
+void local_player_market_bid(EntityID terminal, const char* listing_id, int price) {
+    market_listing(CLIENT_EVENT_MARKET_BID, terminal, listing_id, price);
+}
+
+void local_player_market_collect(EntityID terminal) {
+    client_event_push(CLIENT_EVENT_MARKET_COLLECT, (client_event_payload_t){ .entity_id = terminal });
+}
+
+void local_player_confirm_quote(bool burn, const char* quote_id, int quantity) {
+    client_event_payload_t p = { .quantity = quantity };
+    copy_str(p.code, sizeof p.code, quote_id);
+    client_event_push(burn ? CLIENT_EVENT_ITEM_BURN : CLIENT_EVENT_ITEM_SELL, p);
+}
+
+void local_player_request_trade(EntityID player_id) {
+    client_event_push(CLIENT_EVENT_TRADE_REQUEST, (client_event_payload_t){ .entity_id = player_id });
+}
+
+void local_player_request_trade_reply(EntityID from_id, bool accept) {
+    client_event_push(CLIENT_EVENT_TRADE_REPLY, (client_event_payload_t){ .entity_id = from_id, .active = accept });
+}
+
+void local_player_request_trade_offer(const TradeOffer* offer) {
+    client_event_payload_t p = { .offer_count = offer->count, .coins = offer->coins };
+    for (int i = 0; i < offer->count; i++) {
+        p.offer_slots[i] = offer->items[i].slot;
+        p.offer_qtys[i] = offer->items[i].quantity;
+    }
+    client_event_push(CLIENT_EVENT_TRADE_OFFER, p);
+}
+
+void local_player_request_trade_confirm(void) {
+    client_event_push(CLIENT_EVENT_TRADE_CONFIRM, (client_event_payload_t){ .revision = g_local_player.trade.revision });
+}
+
+void local_player_request_trade_cancel(void) {
+    client_event_push(CLIENT_EVENT_TRADE_CANCEL, (client_event_payload_t){0});
 }
 
 void local_player_request_craft_cancel(void) {

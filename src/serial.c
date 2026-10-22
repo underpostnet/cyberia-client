@@ -118,11 +118,12 @@ cJSON* json_pack_shop_buy(uint32_t entity_id, const char* item_id, int quantity)
     return root;
 }
 
-cJSON* json_pack_craft_item(uint32_t entity_id, int recipe_index) {
+cJSON* json_pack_craft_item(uint32_t entity_id, int recipe_index, double quote) {
     cJSON* p;
     cJSON* root = new_message("craft_item", &p);
     cJSON_AddNumberToObject(p, "entityId", entity_id);
     cJSON_AddNumberToObject(p, "recipeIndex", recipe_index);
+    cJSON_AddNumberToObject(p, "quote", quote);
     return root;
 }
 
@@ -175,6 +176,103 @@ cJSON* json_pack_friendship(const char* type, const char* friendship_id, bool ac
     cJSON* p;
     cJSON* root = new_message(type, &p);
     cJSON_AddStringToObject(p, "friendshipId", friendship_id);
+    cJSON_AddBoolToObject(p, "accept", accept);
+    return root;
+}
+
+cJSON* json_pack_item_drop(const char* box, int slot, int quantity, float x, float y) {
+    assert(box);
+    cJSON* p;
+    cJSON* root = new_message("item_drop", &p);
+    cJSON_AddStringToObject(p, "box", box);
+    cJSON_AddNumberToObject(p, "slot", slot);
+    cJSON_AddNumberToObject(p, "quantity", quantity);
+    cJSON_AddNumberToObject(p, "x", x);
+    cJSON_AddNumberToObject(p, "y", y);
+    return root;
+}
+
+cJSON* json_pack_item_quote(uint32_t entity_id, bool burn, const char* box, int slot) {
+    assert(box);
+    cJSON* p;
+    cJSON* root = new_message("item_quote", &p);
+    cJSON_AddNumberToObject(p, "entityId", entity_id);
+    cJSON_AddStringToObject(p, "kind", burn ? "burn" : "sell");
+    cJSON_AddStringToObject(p, "box", box);
+    cJSON_AddNumberToObject(p, "slot", slot);
+    return root;
+}
+
+cJSON* json_pack_market_open(uint32_t entity_id, const char* item_id, const char* mode, const char* after) {
+    assert(item_id && mode && after);
+    cJSON* p;
+    cJSON* root = new_message("market_open", &p);
+    cJSON_AddNumberToObject(p, "entityId", entity_id);
+    cJSON_AddStringToObject(p, "itemId", item_id);
+    cJSON_AddStringToObject(p, "mode", mode);
+    cJSON_AddStringToObject(p, "after", after);
+    return root;
+}
+
+cJSON* json_pack_market_list(uint32_t entity_id, const char* box, int slot, int quantity, const char* mode, int price,
+                             int hours) {
+    assert(box && mode);
+    cJSON* p;
+    cJSON* root = new_message("market_list", &p);
+    cJSON_AddNumberToObject(p, "entityId", entity_id);
+    cJSON_AddStringToObject(p, "box", box);
+    cJSON_AddNumberToObject(p, "slot", slot);
+    cJSON_AddNumberToObject(p, "quantity", quantity);
+    cJSON_AddStringToObject(p, "mode", mode);
+    cJSON_AddNumberToObject(p, "price", price);
+    cJSON_AddNumberToObject(p, "hours", hours);
+    return root;
+}
+
+cJSON* json_pack_market_listing(const char* type, uint32_t entity_id, const char* listing_id, int price) {
+    assert(type && listing_id);
+    cJSON* p;
+    cJSON* root = new_message(type, &p);
+    cJSON_AddNumberToObject(p, "entityId", entity_id);
+    cJSON_AddStringToObject(p, "listingId", listing_id);
+    if (0 < price) cJSON_AddNumberToObject(p, "price", price);
+    return root;
+}
+
+cJSON* json_pack_quote_confirm(const char* type, const char* quote_id, int quantity) {
+    assert(type && quote_id);
+    cJSON* p;
+    cJSON* root = new_message(type, &p);
+    cJSON_AddStringToObject(p, "quoteId", quote_id);
+    cJSON_AddNumberToObject(p, "quantity", quantity);
+    return root;
+}
+
+cJSON* json_pack_trade_offer(const int* slots, const int* qtys, int count, int coins) {
+    cJSON* p;
+    cJSON* root = new_message("trade_offer", &p);
+    cJSON* items = cJSON_AddArrayToObject(p, "items");
+    for (int i = 0; i < count; i++) {
+        cJSON* line = cJSON_CreateObject();
+        cJSON_AddNumberToObject(line, "slot", slots[i]);
+        cJSON_AddNumberToObject(line, "quantity", qtys[i]);
+        cJSON_AddItemToArray(items, line);
+    }
+    cJSON_AddNumberToObject(p, "coins", coins);
+    return root;
+}
+
+cJSON* json_pack_trade_confirm(uint32_t revision) {
+    cJSON* p;
+    cJSON* root = new_message("trade_confirm", &p);
+    cJSON_AddNumberToObject(p, "revision", revision);
+    return root;
+}
+
+cJSON* json_pack_trade_reply(uint32_t from_id, bool accept) {
+    cJSON* p;
+    cJSON* root = new_message("trade_reply", &p);
+    cJSON_AddNumberToObject(p, "fromId", from_id);
     cJSON_AddBoolToObject(p, "accept", accept);
     return root;
 }

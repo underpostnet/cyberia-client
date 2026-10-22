@@ -2,9 +2,10 @@
  * action_cache — client cache of CyberiaAction metadata fetched by code.
  *
  * The Go server sends only the bot's action CODE over AOI. The presentation
- * metadata — overhead label, the vendor catalog and the assembler recipe
- * book — is fetched lazily from GET /api/v1/cyberia-action/code/:code and cached
- * here. Immutable, so each code is fetched at most once per session.
+ * metadata — overhead label, the vendor catalog, the assembler recipe book, the
+ * items the bot buys back and burns, and its market — is fetched lazily from
+ * GET /api/v1/cyberia-action/code/:code and cached here. Immutable, so each
+ * code is fetched at most once per session.
  *
  * Catalog and recipes are presentation input only: the simulation owns the same
  * rows (delivered over gRPC) and is the sole authority on every transaction.
@@ -16,10 +17,13 @@
 #include "meta_cache.h"
 #include "world/object_layer.h"
 
+#include <stdbool.h>
+
 #define ACTION_CACHE_LABEL_MAX  64
 #define ACTION_CACHE_SHOP_MAX   16
 #define ACTION_CACHE_CRAFT_MAX  16
 #define ACTION_CACHE_CRAFT_ITEMS_MAX 6
+#define ACTION_CACHE_TRADE_MAX  16
 #define ACTION_CACHE_CAP  32
 
 typedef struct {
@@ -41,7 +45,10 @@ typedef struct {
     ActionCraftItem ingredients[ACTION_CACHE_CRAFT_ITEMS_MAX];
     int             ingredient_count;
     int             craft_time_ms;
+    bool            has_fee;   /* the recipe names its fee; else the economy decides */
+    int             fee;
 } ActionCraftRecipe;
+
 
 typedef struct {
     MetaCacheHead head;
@@ -51,6 +58,14 @@ typedef struct {
     ActionCraftRecipe craft_recipes[ACTION_CACHE_CRAFT_MAX];
     int  craft_count;
     int  storage_slots;
+    /* The items this merchant buys back and this terminal burns. */
+    char buyback_items[ACTION_CACHE_TRADE_MAX][MAX_ITEM_ID_LENGTH];
+    int  buyback_count;
+    char burn_items[ACTION_CACHE_TRADE_MAX][MAX_ITEM_ID_LENGTH];
+    int  burn_count;
+    /* The market profile this terminal opens; empty: none. The server sends its
+     * terms and what a seller lists here with each market view. */
+    char market_code[ACTION_CACHE_LABEL_MAX];
 } ActionMetadataEntry;
 
 /* Schedule an async REST fetch if not cached/loading. */

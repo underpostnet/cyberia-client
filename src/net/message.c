@@ -13,6 +13,7 @@
 #include "world/world_types.h"
 #include "world/object_layer.h"
 #include "world/object_layers_management.h"
+#include "world/economy.h"
 #include "sim/local_player.h"
 #include "audio/audio_context.h"
 #include "sim/self_motion.h"
@@ -22,12 +23,17 @@
 #include "ui/chat_log.h"
 #include "ui/floating_combat_text.h"
 #include "ui/identity_icon.h"
-#include "fx/loot_fx.h"
+#include "fx/fx_loot.h"
 #include "ui/item_slot_grid.h"
+#include "ui/market_panel.h"
+#include "ui/merchant_panel.h"
 #include "ui/modal_interact.h"
 #include "ui/modal_notification.h"
+#include "ui/save_status.h"
 #include "ui/session_gate.h"
+#include "client_event.h"
 #include "game_client.h"
+#include "data/instance_map_data.h"
 #include "data/quest_progress_store.h"
 #include "ui/ui_state.h"
 #include "log.h"
@@ -423,6 +429,40 @@ static void read_party(const cJSON* e) {
     }
 }
 
+static void read_trade_offer(const cJSON* json, TradeOffer* out) {
+    out->coins = serial_get_int_default(json, "coins", 0);
+    out->confirmed = serial_get_bool_default(json, "confirmed", false);
+    const cJSON* row = NULL;
+    cJSON_ArrayForEach(row, serial_get_array(json, "items")) {
+        if (CYBERIA_TRADE_OFFER_MAX_STACKS <= out->count) break;
+        TradeLine* line = &out->items[out->count++];
+        serial_get_string(row, "itemId", line->item_id, sizeof line->item_id);
+        serial_get_string(row, "cid", line->cid, sizeof line->cid);
+        line->quantity = serial_get_int_default(row, "quantity", 0);
+        line->slot = serial_get_int_default(row, "slot", -1);
+    }
+}
+
+/* The trade of the player, or none. */
+static void read_trade(const cJSON* json) {
+    static const char* const STATE_WORDS[] = { [TRADE_REQUESTED] = "requested", [TRADE_INCOMING] = "incoming",
+                                               [TRADE_OPEN] = "open", [TRADE_COMMITTING] = "committing" };
+    Trade* trade = &g_local_player.trade;
+    memset(trade, 0, sizeof *trade);
+    if (NULL == json) return;
+    char word[16] = {0};
+    serial_get_string(json, "state", word, sizeof word);
+    for (int state = TRADE_REQUESTED; TRADE_COMMITTING >= state; state++) {
+        if (0 == strcmp(word, STATE_WORDS[state])) trade->state = (TradeState)state;
+    }
+    trade->partner_id = serial_get_u32_default(json, "partnerId", 0);
+    serial_get_string(json, "partnerName", trade->partner_name, sizeof trade->partner_name);
+    trade->revision = serial_get_u32_default(json, "revision", 0);
+    trade->expires_at = GetTime() + serial_get_int_default(json, "expiresInMs", 0) / 1000.0;
+    read_trade_offer(serial_get_object(json, "mine"), &trade->mine);
+    read_trade_offer(serial_get_object(json, "theirs"), &trade->theirs);
+}
+
 static void unpack_self(const cJSON* e, cyberia_frame_t frame, cyberia_input_seq_t consumed) {
     GameState* gs = &g_game_state;
 
@@ -476,8 +516,17 @@ static void unpack_self(const cJSON* e, cyberia_frame_t frame, cyberia_input_seq
     /* The running assembly; the bar ends when the server's timer ends. */
     const cJSON* craft = serial_get_object(e, "craft");
     g_local_player.crafting = NULL != craft;
+    read_trade(serial_get_object(e, "trade"));
     read_held(serial_get_array(e, "held"));
-    g_local_player.unsaved = serial_get_bool_default(e, "unsaved", false);
+    char durability[16] = { 0 };
+    serial_get_string(e, "durability", durability, sizeof durability);
+    g_local_player.durability = 0 == strcmp(durability, "recovery") ? DURABILITY_RECOVERY
+                              : 0 == strcmp(durability, "degraded") ? DURABILITY_DEGRADED
+                              : 0 == strcmp(durability, "saving")   ? DURABILITY_SAVING
+                                                                    : DURABILITY_SAVED;
+    g_local_player.unsaved_ms = serial_get_int_default(e, "unsavedMs", 0);
+    save_status_observe(g_local_player.durability, g_local_player.unsaved_ms);
+    g_local_player.portal_fee = serial_get_int_default(e, "portalFee", 0);
 
     g_local_player.interaction_count = 0;
     const cJSON* row = NULL;
@@ -593,7 +642,7 @@ static void json_unpack_drop_collect(const cJSON* payload) {
     EntityID collector_id = serial_get_u32_default(payload, "collectorId", 0);
     char item_id[MAX_ITEM_ID_LENGTH] = {0};
     serial_get_string(payload, "itemId", item_id, sizeof(item_id));
-    loot_fx_push(drop_id, collector_id, item_id,
+    fx_loot_push(drop_id, collector_id, item_id,
                  serial_get_float_default(payload, "worldX", 0.0f),
                  serial_get_float_default(payload, "worldY", 0.0f),
                  serial_get_bool_default(payload, "granted", true));
@@ -611,7 +660,7 @@ static void json_unpack_drop_spawn(const cJSON* payload) {
     EntityID drop_id = serial_get_u32_default(payload, "dropId", 0);
     char item_id[MAX_ITEM_ID_LENGTH] = {0};
     serial_get_string(payload, "itemId", item_id, sizeof(item_id));
-    loot_fx_note_spawn(drop_id,
+    fx_loot_note_spawn(drop_id,
                        serial_get_float_default(payload, "originX", 0.0f),
                        serial_get_float_default(payload, "originY", 0.0f),
                        serial_get_float_default(payload, "landingX", 0.0f),
@@ -625,8 +674,9 @@ static void json_unpack_drop_spawn(const cJSON* payload) {
  * ============================================================================ */
 
 /* Write each entry of a server quest array into quest_progress_store. The
- * server sends code, status and progress only. `granted` is NULL for the
- * init_data seed, which records no change; dialog_ack passes the granted code. */
+ * server sends code, status, the step and its objective counts only.
+ * `granted` is NULL for the init_data seed, which records no change;
+ * dialog_ack passes the granted code. */
 static void store_quest_array(const cJSON* quests_json, const char* granted) {
     if (!quests_json || !cJSON_IsArray(quests_json)) return;
     const cJSON* q = NULL;
@@ -634,18 +684,25 @@ static void store_quest_array(const cJSON* quests_json, const char* granted) {
         char code[64]        = {0};
         char status[32]      = {0};
         char active_step[160]= {0};
-        char objectives[160] = {0};
+        char step_id[64]     = {0};
         serial_get_string(q, "code", code, sizeof(code));
         serial_get_string(q, "status", status, sizeof(status));
         serial_get_string(q, "activeStep", active_step, sizeof(active_step));
-        serial_get_string(q, "objectivesText", objectives, sizeof(objectives));
-        bool rewards_held = serial_get_bool_default(q, "rewardsHeld", false);
+        serial_get_string(q, "stepId", step_id, sizeof(step_id));
+        QuestSnapshot snapshot = { .code = code, .status = status, .active_step = active_step, .step_id = step_id,
+                                   .rewards_held = serial_get_bool_default(q, "rewardsHeld", false) };
+        const cJSON* o = NULL;
+        cJSON_ArrayForEach(o, cJSON_GetObjectItem(q, "objectives")) {
+            QuestObjectiveType type = quest_objective_type(json_str(o, "type"));
+            if (QUEST_STEP_OBJECTIVES_MAX <= snapshot.objective_count || QUEST_OBJECTIVE_TYPE_COUNT == type) continue;
+            QuestObjectiveProgress* objective = &snapshot.objectives[snapshot.objective_count++];
+            *objective = (QuestObjectiveProgress){ .type = type, .current = json_int(o, "current", 0),
+                                                   .required = json_int(o, "required", 1) };
+            copy_str(objective->item_id, sizeof objective->item_id, json_str(o, "itemId"));
+        }
 
-        if (granted)
-            quest_progress_store_apply(code, status, active_step, objectives, rewards_held,
-                                       0 == strcmp(code, granted));
-        else
-            quest_progress_store_upsert(code, status, active_step, objectives, rewards_held);
+        if (granted) quest_progress_store_apply(&snapshot, 0 == strcmp(code, granted));
+        else quest_progress_store_upsert(&snapshot);
     }
 }
 
@@ -770,7 +827,7 @@ static void json_unpack_init_data(const cJSON* payload) {
     g_game_state.init_received = true;
 
     /* Signal interested modules (network FSM) that the handshake completed. */
-    if (s_init_handler) { s_init_handler(); }
+    if (s_init_handler) { s_init_handler(serial_get_bool_default(payload, "adopted", false)); }
 }
 
 static void json_unpack_metadata(const cJSON* payload) {
@@ -805,9 +862,15 @@ static void json_unpack_metadata(const cJSON* payload) {
     /* A delta carries the skills of each definition it carries. */
     read_skill_map(cJSON_GetObjectItem(payload, "skillMap"));
 
+    /* The economy the world runs: the join message and each change carry it whole. */
+    economy_read(cJSON_GetObjectItem(payload, "economy"));
+
     // Parse instanceCode if provided: keys the Instance Map REST fetches.
     serial_get_string(payload, "instanceCode", g_game_state.instance_code,
                       sizeof(g_game_state.instance_code));
+
+    /* The join and each world rebuild name the world revision: the map views read the content again. */
+    if (cJSON_HasObjectItem(payload, "worldRevision")) instance_map_data_refresh();
 
     // Parse equipmentRules if provided
     cJSON* eq_rules = cJSON_GetObjectItem(payload, "equipmentRules");
@@ -974,6 +1037,12 @@ static void json_unpack_session_end(const cJSON* payload) {
     game_client_on_session_end(reason, travel_ticket);
 }
 
+/* The server queued no event after a batch it never got: the events from
+ * `from` go again with the next flush. */
+static void json_unpack_input_resend(const cJSON* payload) {
+    client_event_resend((cyberia_input_seq_t)serial_get_u32_default(payload, "from", 0));
+}
+
 /* The next resume ticket of the account session. */
 static void json_unpack_resume(const cJSON* payload) {
     char ticket[64] = {0};
@@ -995,6 +1064,166 @@ static void json_unpack_shop_ack(const cJSON* payload) {
                             : 0 == strcmp(reason, "inventory_full")   ? "Your bag has no free slot for it."
                                                                       : "The vendor refused the trade.",
                             (Color){ 210, 120, 110, 255 });
+}
+
+/* What a refusal of an economic operation means to the player. */
+static const char* economy_reason_text(const char* reason) {
+    static const struct { const char* reason; const char* text; } TEXTS[] = {
+        { "not_allowed",        "That is not possible here." },
+        { "not_offered",        "This terminal does not offer that." },
+        { "policy_refused",     "The economy of this world does not allow that for this item." },
+        { "market_closed",      "This market does not open here, or takes no new listing." },
+        { "terms_refused",      "That price or duration is outside the terms of this market." },
+        { "market_changed",     "The terms of this market changed. Check them and try again." },
+        { "incompatible",       "This item runs another version here. It is safe in your inventory." },
+        { "no_stack",           "That stack changed. Try again." },
+        { "equipped",           "Equip another skin first: this one cannot come off." },
+        { "insufficient_funds", "Not enough coins." },
+        { "wallet_full",        "Your wallet cannot hold more coins." },
+        { "inventory_full",     "Your bag has no free slot for it." },
+        { "quote_changed",      "The price changed. Check it and try again." },
+        { "quote_gone",         "That price is no longer offered. Ask again." },
+        { "out_of_range",       "Too far away." },
+        { "trading",            "Finish or cancel your trade first." },
+        { "saving",             "Your last change is still saving. Try again." },
+        { "listing_gone",       "That listing is gone: sold, taken back or ended." },
+        { "listing_changed",    "That listing changed. Check it and try again." },
+        { "bid_low",            "Another bid came first. Check the new lowest bid." },
+        { "market_full",        "You have too many listings open." },
+        { "claim_gone",         "Those claims were already collected." },
+        { "unavailable",        "The market is not available now. Try again soon." },
+        { "dead",               "Not while you wait to respawn." },
+        { "busy",               "That player is busy." },
+        { "guest_account",      "Guests and account players cannot trade, and guests use no market." },
+        { "offer_changed",      "The offers changed. Check them and confirm again." },
+        { "declined",           "The trade was declined." },
+        { "expired",            "The trade request expired." },
+        { "cancelled",          "The trade was cancelled." },
+        { "left",               "The other player left." },
+        { "unsaved",            "The trade could not be saved. Every item is back with its owner." },
+        { "done",               "Trade complete. Each side received the other offer." },
+    };
+    for (size_t i = 0; sizeof(TEXTS) / sizeof(TEXTS[0]) > i; i++) {
+        if (0 == strcmp(TEXTS[i].reason, reason)) return TEXTS[i].text;
+    }
+    return "The server refused it.";
+}
+
+static const Color C_REFUSED = { 210, 120, 110, 255 };
+
+/* A drop waits for its save, turns public, or is refused. */
+static void json_unpack_item_drop_ack(const cJSON* payload) {
+    char reason[32] = {0}, status[16] = {0}, item_id[MAX_ITEM_ID_LENGTH] = {0};
+    serial_get_string(payload, "reason", reason, sizeof reason);
+    serial_get_string(payload, "status", status, sizeof status);
+    serial_get_string(payload, "itemId", item_id, sizeof item_id);
+    int quantity = serial_get_int_default(payload, "quantity", 0);
+    if (!serial_get_bool_default(payload, "ok", false)) {
+        modal_notification_show("Drop failed", economy_reason_text(reason), C_REFUSED);
+        return;
+    }
+    char line[96 + MAX_ITEM_ID_LENGTH];
+    snprintf(line, sizeof line, 0 == strcmp(status, "pending") ? "Dropping %d x %s: saving first." :
+                                                                  "Dropped %d x %s. Anyone can take it.",
+             quantity, item_id);
+    chat_log_push_system(chat_channel(CHAT_CHANNEL_WORLD), line);
+}
+
+/* A market operation done, or why the market refused it. */
+static void json_unpack_market_ack(const cJSON* payload) {
+    char action[24] = {0}, reason[32] = {0};
+    serial_get_string(payload, "action", action, sizeof action);
+    serial_get_string(payload, "reason", reason, sizeof reason);
+    if (!serial_get_bool_default(payload, "ok", false)) {
+        if (0 == strcmp(action, "market_open")) market_panel_refused(economy_reason_text(reason));
+        else modal_notification_show("Market", economy_reason_text(reason), C_REFUSED);
+        return;
+    }
+    static const struct { const char* action; const char* line; } DONE[] = {
+        { "market_list",    "Listed on the market." },
+        { "market_cancel",  "Listing taken back." },
+        { "market_buy",     "Bought on the market." },
+        { "market_bid",     "Bid placed." },
+        { "market_collect", "Market claims collected." },
+    };
+    for (size_t i = 0; sizeof DONE / sizeof DONE[0] > i; i++) {
+        if (0 == strcmp(DONE[i].action, action)) chat_log_push_system(chat_channel(CHAT_CHANNEL_WORLD), DONE[i].line);
+    }
+}
+
+/* A quote of a sale or a burn opens its quantity prompt, or tells why not. */
+static void json_unpack_item_quote_ack(const cJSON* payload) {
+    char reason[32] = {0}, kind[8] = {0};
+    serial_get_string(payload, "reason", reason, sizeof reason);
+    serial_get_string(payload, "kind", kind, sizeof kind);
+    MerchantQuote quote = { .burn = 0 == strcmp(kind, "burn") };
+    if (!serial_get_bool_default(payload, "ok", false)) {
+        modal_notification_show(quote.burn ? "Burn failed" : "Sale failed", economy_reason_text(reason), C_REFUSED);
+        return;
+    }
+    serial_get_string(payload, "quoteId", quote.quote_id, sizeof quote.quote_id);
+    serial_get_string(payload, "itemId", quote.item_id, sizeof quote.item_id);
+    quote.unit = serial_get_int_default(payload, "unit", 0);
+    quote.max_quantity = serial_get_int_default(payload, "maxQuantity", 0);
+    merchant_panel_quoted(&quote);
+}
+
+/* A sale or a burn at a terminal: the coins it paid or charged, or why not. */
+static void json_unpack_stack_operation_ack(const cJSON* payload, bool burn) {
+    char reason[32] = {0}, item_id[MAX_ITEM_ID_LENGTH] = {0};
+    serial_get_string(payload, "reason", reason, sizeof reason);
+    serial_get_string(payload, "itemId", item_id, sizeof item_id);
+    if (!serial_get_bool_default(payload, "ok", false)) {
+        char changed[96];
+        const char* text = economy_reason_text(reason);
+        if (0 == strcmp(reason, "quote_changed")) {
+            snprintf(changed, sizeof changed, "The price is now %d coins each. Check it and try again.",
+                     serial_get_int_default(payload, "unit", 0));
+            text = changed;
+        }
+        modal_notification_show(burn ? "Burn failed" : "Sale failed", text, C_REFUSED);
+        return;
+    }
+    char line[96 + MAX_ITEM_ID_LENGTH];
+    int quantity = serial_get_int_default(payload, "quantity", 0);
+    int coins = serial_get_int_default(payload, "coins", 0);
+    if (burn) snprintf(line, sizeof line, "Burned %d x %s for %d coins.", quantity, item_id, coins);
+    else      snprintf(line, sizeof line, "Sold %d x %s for %d coins.", quantity, item_id, coins);
+    chat_log_push_system(chat_channel(CHAT_CHANNEL_WORLD), line);
+}
+
+static void json_unpack_craft_ack(const cJSON* payload) {
+    if (serial_get_bool_default(payload, "ok", false)) return;
+    char reason[32] = {0};
+    serial_get_string(payload, "reason", reason, sizeof reason);
+    modal_notification_close_assemble();
+    modal_notification_show("Assembly failed", economy_reason_text(reason), C_REFUSED);
+}
+
+/* A trade request, offer or confirmation the server refused, or the end of a trade. */
+static void json_unpack_trade_ack(const cJSON* payload) {
+    char action[16] = {0}, reason[32] = {0};
+    serial_get_string(payload, "action", action, sizeof action);
+    serial_get_string(payload, "reason", reason, sizeof reason);
+    bool ok = serial_get_bool_default(payload, "ok", false);
+    if (0 == strcmp(action, "close")) {
+        if (0 == strcmp(reason, "unsaved")) modal_notification_show("Trade failed", economy_reason_text(reason), C_REFUSED);
+        else chat_log_push_system(chat_channel(CHAT_CHANNEL_WORLD), economy_reason_text(reason));
+        return;
+    }
+    if (ok) return;
+    modal_notification_show("Trade", economy_reason_text(reason), C_REFUSED);
+}
+
+/* A portal the player cannot pay keeps it; tell it once in a while. */
+static void json_unpack_portal_ack(const cJSON* payload) {
+    static double s_told_at = -100.0;
+    if (serial_get_bool_default(payload, "ok", false) || GetTime() - s_told_at < 15.0) return;
+    s_told_at = GetTime();
+    char line[96];
+    snprintf(line, sizeof line, "This portal costs %d coins. You hold %d.", serial_get_int_default(payload, "fee", 0),
+             local_player_coins());
+    modal_notification_show("Portal", line, C_REFUSED);
 }
 
 /* dialog_ack carries the quests a talk, kill, collect or accept changed. The
@@ -1047,8 +1276,18 @@ void message_receive(const uint8_t* data, size_t len) {
     else if (0 == strcmp(type, "friends"))         json_unpack_friends(payload);
     else if (0 == strcmp(type, "session_end"))     json_unpack_session_end(payload);
     else if (0 == strcmp(type, "resume"))          json_unpack_resume(payload);
+    else if (0 == strcmp(type, "input_resend"))    json_unpack_input_resend(payload);
     else if (0 == strcmp(type, "dialog_ack"))      json_unpack_dialog_ack(payload);
     else if (0 == strcmp(type, "shop_ack"))        json_unpack_shop_ack(payload);
+    else if (0 == strcmp(type, "item_drop_ack"))   json_unpack_item_drop_ack(payload);
+    else if (0 == strcmp(type, "item_quote_ack"))  json_unpack_item_quote_ack(payload);
+    else if (0 == strcmp(type, "market"))          market_panel_view(payload);
+    else if (0 == strcmp(type, "market_ack"))      json_unpack_market_ack(payload);
+    else if (0 == strcmp(type, "item_sell_ack"))   json_unpack_stack_operation_ack(payload, false);
+    else if (0 == strcmp(type, "item_burn_ack"))   json_unpack_stack_operation_ack(payload, true);
+    else if (0 == strcmp(type, "craft_ack"))       json_unpack_craft_ack(payload);
+    else if (0 == strcmp(type, "trade_ack"))       json_unpack_trade_ack(payload);
+    else if (0 == strcmp(type, "portal_ack"))      json_unpack_portal_ack(payload);
     else LOG_ERROR("[MESSAGE] unknown type '%s'\n", type);
 
     cJSON_Delete(root);

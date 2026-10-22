@@ -91,9 +91,12 @@ typedef struct {
     int respawn_seconds;
 
     /* A player standing on a portal shows the transport bar, filled by its
-     * teleport charge, 0..1. */
+     * teleport charge, 0..1. The local player also sees the fee of the
+     * transit; portal_short marks a wallet that cannot pay it. */
     bool on_portal;
     float portal_hold;
+    int portal_fee;
+    bool portal_short;
 } EntityOverheadParams;
 
 /* Draw the stack above one entity. Call inside BeginMode2D / EndMode2D. The

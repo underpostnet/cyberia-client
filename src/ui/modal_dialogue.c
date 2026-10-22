@@ -448,8 +448,7 @@ void modal_dialogue_draw(void) {
     float fs_close_sz = 34.0f;
     s_fs_close_rect = (Rectangle){ card.x + card.width - fs_close_sz - 8.0f,
                                    card.y + 8.0f, fs_close_sz, fs_close_sz };
-    UIButtonStyle cb = { .icon_id = "close-yellow", .no_fill = true };
-    ui_button_draw(s_fs_close_rect, &cb, UI_BUTTON_NORMAL);
+    ui_button_draw_close(s_fs_close_rect);
 
     /* Speaker name + progress — right of sprite column */
     const DialogueLine* line = &s_lines[s_current];

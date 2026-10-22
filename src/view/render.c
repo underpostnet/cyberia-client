@@ -17,7 +17,7 @@
 #include "ui/interaction_bubble.h"
 #include "fx/fx_assemble.h"
 #include "fx/fx_grant_delivery.h"
-#include "fx/loot_fx.h"
+#include "fx/fx_loot.h"
 #include "fx/fx_reward.h"
 #include "ui/hud_minimap_overlay.h"
 #include "ui/inventory_bar.h"
@@ -29,6 +29,7 @@
 #include "ui/quest_journal.h"
 #include "ui/chat_panel.h"
 #include "ui/social_panel.h"
+#include "ui/trade_panel.h"
 #include "ui/modal_notification.h"
 #include "fx/fx_dust.h"
 #include "fx/fx_footsteps.h"
@@ -70,7 +71,7 @@ void render_init(int width, int height) {
     fx_tap_init();
     fx_dust_init();
     fx_footsteps_init();
-    loot_fx_reset();
+    fx_loot_reset();
     fx_grant_delivery_init();
     fx_assemble_init();
     fx_reward_init();
@@ -81,7 +82,7 @@ void render_on_tick(float delta_time) {
     overhead_occlusion_update(delta_time);
 
     fct_update(delta_time);
-    loot_fx_update(delta_time);
+    fx_loot_update(delta_time);
     fx_tap_update(delta_time);
     fx_level_up_update(delta_time);
     fx_heal_aura_update(delta_time);
@@ -102,6 +103,7 @@ void render_on_tick(float delta_time) {
     if (modal_dialogue_is_open())   modal_dialogue_update(delta_time);
     if (modal_interact_is_open())   modal_interact_update(delta_time);
     social_panel_update(delta_time);
+    trade_panel_update();
     quest_journal_update(delta_time);
     chat_panel_update(delta_time);
     modal_notification_update(delta_time);

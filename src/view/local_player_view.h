@@ -20,6 +20,9 @@ Vector2 local_player_view_position(void);
 /* The facing of curr; the last facing while idle. */
 Direction local_player_view_direction(void);
 
+/* That facing as a unit vector on screen, y down. */
+Vector2 local_player_view_facing(void);
+
 /* MODE_WALKING while curr has a path, else MODE_IDLE. */
 ObjectLayerMode local_player_view_mode(void);
 

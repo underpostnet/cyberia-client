@@ -53,6 +53,21 @@ typedef enum {
     CLIENT_EVENT_FRIEND_REPLY,
     CLIENT_EVENT_FRIEND_REMOVE,
     CLIENT_EVENT_SESSION_LEAVE,
+    CLIENT_EVENT_ITEM_DROP,
+    CLIENT_EVENT_ITEM_QUOTE,
+    CLIENT_EVENT_ITEM_SELL,
+    CLIENT_EVENT_ITEM_BURN,
+    CLIENT_EVENT_TRADE_REQUEST,
+    CLIENT_EVENT_TRADE_REPLY,
+    CLIENT_EVENT_TRADE_OFFER,
+    CLIENT_EVENT_TRADE_CONFIRM,
+    CLIENT_EVENT_TRADE_CANCEL,
+    CLIENT_EVENT_MARKET_OPEN,
+    CLIENT_EVENT_MARKET_LIST,
+    CLIENT_EVENT_MARKET_CANCEL,
+    CLIENT_EVENT_MARKET_BUY,
+    CLIENT_EVENT_MARKET_BID,
+    CLIENT_EVENT_MARKET_COLLECT,
 } client_event_kind_t;
 
 /* Who one chat line reaches; packs to the wire word. */
@@ -73,17 +88,26 @@ typedef enum {
 /* One flat payload, the same shape as the server inputPayload. Each kind
  * reads only its own fields. */
 typedef struct {
-    float  target_x, target_y;                 /* player_action */
-    EntityID entity_id;                        /* also chat to_id, party and friend player */
-    char   item_id[CLIENT_EVENT_ID_BYTES];     /* also quest_code */
-    char   code[CLIENT_EVENT_ID_BYTES];        /* dialog_code, friendship id */
+    float  target_x, target_y;                 /* player_action; item_drop: the cell, negative at the feet */
+    EntityID entity_id;                        /* also chat to_id, party, friend and trade player, terminal */
+    char   item_id[CLIENT_EVENT_ID_BYTES];     /* also quest_code; market_open: the item filter */
+    char   code[CLIENT_EVENT_ID_BYTES];        /* dialog_code, friendship id, quote id, listing id, market cursor */
     chat_channel_t channel;                    /* chat */
     char   text[CHAT_LINE_BYTES];              /* chat */
-    int    quantity, recipe_index;             /* quantity: also the units of item_move */
-    bool   active;                             /* also player_stasis, party and friend reply accept */
+    int    quantity, recipe_index;             /* quantity: also the units of item_move, drop, sell, burn */
+    bool   active;                             /* also player_stasis, party, friend and trade reply accept */
+    bool   burn;                               /* item_quote: a burn, else a sale */
+    bool   auction;                            /* market_list: an auction, else a fixed price */
+    char   mode[8];                            /* market_open: the listings of one mode, "" for every mode */
+    int    price, hours;                       /* market_list; market_bid: price */
     int    slot;                               /* item_active: the bag slot of the stack */
-    Box    from, to;                           /* item_move */
+    Box    from, to;                           /* item_move; from: the stack of a drop or a quote */
     int    from_slot, to_slot;
+    double quote;                              /* craft_item: the coins the player saw */
+    int    offer_slots[CYBERIA_TRADE_OFFER_MAX_STACKS];   /* trade_offer: bag slots */
+    int    offer_qtys[CYBERIA_TRADE_OFFER_MAX_STACKS];    /* and their units */
+    int    offer_count, coins;
+    uint32_t revision;                         /* trade_confirm */
 } client_event_payload_t;
 
 typedef struct {
@@ -103,6 +127,10 @@ void client_event_flush(void);
 
 /* Drop the events at the front with sequence <= consumed. */
 void client_event_trim(cyberia_input_seq_t consumed);
+
+/* Send the events from sequence `from` again with the next flush: the server
+ * queued none after a batch it never got (input_resend). */
+void client_event_resend(cyberia_input_seq_t from);
 
 /* The unconsumed events, oldest first. Read-only. */
 const client_event_t* client_event_list(int* count);

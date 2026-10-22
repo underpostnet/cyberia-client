@@ -121,7 +121,7 @@ static bool bankable_while_worn(const ObjectLayerState* worn) {
 
 static MoveKind check(Box from, int from_slot, Box to, int to_slot, int qty, EntityID terminal) {
     StackList reach;
-    if (from == to && from_slot == to_slot) return MOVE_REFUSED;
+    if ((from == to && from_slot == to_slot) || local_player_trading()) return MOVE_REFUSED;
     if (0 < game_state_vitals(g_local_player.id)->respawn_in || !list_of(to, terminal, &reach)) return MOVE_REFUSED;
     const ObjectLayerState* src = place(from, from_slot, terminal);
     if (NULL == src || 1 > src->quantity || 1 > qty || !takes(to, to_slot, src->item_id, terminal)) return MOVE_REFUSED;

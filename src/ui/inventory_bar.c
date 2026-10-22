@@ -13,11 +13,15 @@
  *
  * A press on a stack, or on the coin slot, lifts it once the pointer travels:
  * the release drops it on a strip cell or on a cell of the open container
- * through ui/stack_move. A press elsewhere slides the strip 1:1 and releases
- * into an inertial glide; the wheel scrolls it too. A press that never
- * travelled is a tap, so a drag never opens a modal — activation is deferred
- * to release via inventory_bar_take_tap(). A stack that lands slides into its
- * cell from where it came.
+ * through ui/stack_move, on the own offer of an open trade (ui/trade_panel),
+ * or on the ground under the pointer when no UI covers it (ui/world_drop).
+ * A press that never travelled is a tap, so a drag never opens a modal —
+ * activation is deferred to release via inventory_bar_take_tap(). A stack that
+ * lands slides into its cell from where it came.
+ *
+ * When the cells overrun the strip, a scroll track runs over it. Only the
+ * track and the wheel scroll the strip: a drag of the thumb pans it, and a
+ * press on the track brings the thumb under the pointer.
  *
  * The coin slot is always the rightmost slot, pinned outside the scrollable
  * region.  Coins cannot be activated (non-activable), so they never get the
@@ -47,14 +51,19 @@
 #include "sim/container_ops.h"
 #include "stack_move.h"
 #include "container_panel.h"
+#include "trade_panel.h"
+#include "ui_dispatch.h"
+#include "world_drop.h"
 #include "item_slot_grid.h"
 #include "ease.h"
 #include "item_slot.h"
+#include "modal.h"
 #include "world/object_layers_management.h"
 #include "ol_as_animated_ico.h"
 #include "ol_stack_ico.h"
 #include "skill_preview.h"
 #include "ui_button.h"
+#include "ui_icon.h"
 #include "ui_rect.h"
 #include "ui_toggle.h"
 #include "utils.h"
@@ -67,10 +76,11 @@
 
 /* ── Layout constants (screen pixels) ────────────────────────────────── */
 
-#define INV_BAR_HEIGHT      72
 #define INV_SLOT_SIZE       60      /* square */
 #define INV_SLOT_GAP        6
 #define INV_SLOT_PADDING    4       /* around the sprite, inside the slot */
+#define INV_BAR_MARGIN      6       /* above and below each row of the bar */
+#define INV_TRACK_H         14      /* the scroll track over the strip */
 #define INV_BAR_ALPHA       210     /* backing rectangle, 0-255 */
 #define INV_QTY_FONT_SIZE   10
 
@@ -92,23 +102,20 @@ static int     s_lift_slot  = 0;
 static bool    s_lifting    = false;     /* the press passed the slop */
 static Vector2 s_lift_press;
 
-/* Horizontal drag scroll: offset in px, plus gesture + inertia tracking. */
-static float s_scroll_px  = 0.0f;
-static float s_scroll_vel = 0.0f;
-static bool  s_press_armed = false;      /* press landed on the bar          */
-static bool  s_dragging    = false;      /* passed the slop — suppress a tap */
-static bool  s_pointer_was_down = false;
-static float s_press_x = 0.0f;
-static float s_press_y = 0.0f;
-static float s_last_x  = 0.0f;
+/* Scroll offset of the strip in px. */
+static float s_scroll_px = 0.0f;
+/* A press on the track drags the thumb, held `s_track_grab` px from its left edge. */
+static bool  s_track_held = false;
+static float s_track_grab = 0.0f;
+/* A press on a cell without a stack: a tap once it lifts without travel. */
+static bool    s_press_armed = false;
+static Vector2 s_press;
 static bool  s_tap_pending = false;      /* clean release awaiting activation */
 static int   s_tap_x = 0;
 static int   s_tap_y = 0;
 
-/* Pointer travel that turns a press into a scroll instead of a tap. */
+/* Pointer travel that cancels a tap. */
 #define INV_DRAG_SLOP_PX 6.0f
-/* Glide below this speed (px/s) is not worth animating. */
-#define INV_MIN_GLIDE_PX 8.0f
 
 /* ── Internal colours ──────────────────────────────────────────────────── */
 
@@ -121,13 +128,49 @@ static const Color C_DROP_REFUSE   = { 210,  90,  80, 255 };
 
 /* ── Internal helpers ─────────────────────────────────────────────────── */
 
-static int bar_height(void)       { return viewport_is_mobile() ? 60 : INV_BAR_HEIGHT; }
 static int bar_slot_size(void)    { return viewport_is_mobile() ? 50 : INV_SLOT_SIZE; }
 static int bar_slot_gap(void)     { return viewport_is_mobile() ? 4 : INV_SLOT_GAP; }
 static int bar_slot_padding(void) { return viewport_is_mobile() ? 3 : INV_SLOT_PADDING; }
 static int bar_qty_font(void)     { return viewport_is_mobile() ? 9 : INV_QTY_FONT_SIZE; }
 static int bar_toggle_size(void)  { return viewport_is_mobile() ? 28 : 32; }
 static int bar_toggle_pad(void)   { return viewport_is_mobile() ? 5 : 6; }
+static int bar_margin(void)       { return viewport_is_mobile() ? 5 : INV_BAR_MARGIN; }
+static int bar_track_h(void)      { return viewport_is_mobile() ? 12 : INV_TRACK_H; }
+
+static int slot_pitch(void) { return bar_slot_size() + bar_slot_gap(); }
+
+/* The coin slot is pinned to the right edge, outside the scroll strip. */
+static float coin_slot_x(int screen_w) {
+    return (float)(screen_w - bar_slot_size() - bar_slot_gap());
+}
+
+/* Scrollable strip bounds — everything left of the pinned coin slot. */
+static float strip_left(void)             { return (float)bar_slot_gap(); }
+static float strip_right(int screen_w)    { return coin_slot_x(screen_w) - (float)bar_slot_gap(); }
+
+/* Cells of the strip: every slot the capacity can open, and a stack past them. */
+static int strip_cells(void) {
+    int cells = CYBERIA_INVENTORY_SLOTS_MAX;
+    for (int i = 0; i < g_local_player.inventory_count; i++) {
+        if (g_local_player.inventory[i].slot >= cells) cells = g_local_player.inventory[i].slot + 1;
+    }
+    return cells;
+}
+
+/* Furthest the strip may slide before its last cell reaches the right edge. */
+static float max_scroll_px(int screen_w, int scroll_count) {
+    float content = scroll_count > 0 ? (float)(scroll_count * slot_pitch() - bar_slot_gap()) : 0.0f;
+    float max = content - (strip_right(screen_w) - strip_left());
+    return max > 0.0f ? max : 0.0f;
+}
+
+/* The bar holds the track row only while the cells overrun the strip. */
+static bool strip_scrolls(void) { return 0.0f < max_scroll_px(GetScreenWidth(), strip_cells()); }
+
+static int bar_height(void) {
+    int slots = bar_slot_size() + 2 * bar_margin();
+    return strip_scrolls() ? slots + bar_track_h() + bar_margin() : slots;
+}
 
 static float bar_top(int screen_h) {
     return (float)screen_h - bar_height() * s_bar_toggle.anim_t;
@@ -187,59 +230,66 @@ static int shown_stack(int si) {
     return 0 <= i && fx_inventory_bar_qty_slot_visible(g_local_player.inventory[i].item_id) ? i : -1;
 }
 
-static int slot_pitch(void) { return bar_slot_size() + bar_slot_gap(); }
-
-/* The coin slot is pinned to the right edge, outside the scroll strip. */
-static float coin_slot_x(int screen_w) {
-    return (float)(screen_w - bar_slot_size() - bar_slot_gap());
-}
-
-/* Scrollable strip bounds — everything left of the pinned coin slot. */
-static float strip_left(void)             { return (float)bar_slot_gap(); }
-static float strip_right(int screen_w)    { return coin_slot_x(screen_w) - (float)bar_slot_gap(); }
-
-/* visible_slot_count returns how many scrollable slots fit in the strip. */
-static int visible_slot_count(int screen_w) {
-    int usable = (int)(strip_right(screen_w) - strip_left());
-    int n = usable / slot_pitch();
-    return (n < 1) ? 1 : n;
-}
-
-/* Cells of the strip: every slot the capacity can open, and a stack past them. */
-static int strip_cells(void) {
-    int cells = CYBERIA_INVENTORY_SLOTS_MAX;
-    for (int i = 0; i < g_local_player.inventory_count; i++) {
-        if (g_local_player.inventory[i].slot >= cells) cells = g_local_player.inventory[i].slot + 1;
-    }
-    return cells;
-}
-
-/* Furthest the strip may slide before its last cell reaches the right edge. */
-static float max_scroll_px(int screen_w, int scroll_count) {
-    float content = scroll_count > 0 ? (float)(scroll_count * slot_pitch() - bar_slot_gap()) : 0.0f;
-    float max = content - (strip_right(screen_w) - strip_left());
-    return max > 0.0f ? max : 0.0f;
-}
+/* The slots sit in the bottom row of the bar. */
+static float slot_top(float bar_top) { return bar_top + (float)(bar_height() - bar_margin() - bar_slot_size()); }
 
 /* slot_rect returns the screen rect of strip cell si. */
 static Rectangle slot_rect(int si, float bar_top) {
-    float slot_top = bar_top + (bar_height() - bar_slot_size()) * 0.5f;
     float x = strip_left() + (float)si * (float)slot_pitch() - s_scroll_px;
-    return (Rectangle){ x, slot_top, (float)bar_slot_size(), (float)bar_slot_size() };
+    return (Rectangle){ x, slot_top(bar_top), (float)bar_slot_size(), (float)bar_slot_size() };
 }
 
 /* coin_slot_rect returns the rect for the pinned coin slot (right of scrollable area). */
 static Rectangle coin_slot_rect(int screen_w, float bar_top) {
-    float slot_top = bar_top + (bar_height() - bar_slot_size()) * 0.5f;
-    return (Rectangle){ coin_slot_x(screen_w), slot_top,
-                        (float)bar_slot_size(), (float)bar_slot_size() };
+    return (Rectangle){ coin_slot_x(screen_w), slot_top(bar_top), (float)bar_slot_size(), (float)bar_slot_size() };
 }
 
-/* Hold the offset inside range, killing any glide that runs into an edge. */
 static void clamp_scroll(void) {
+    s_scroll_px = fminf(fmaxf(s_scroll_px, 0.0f), max_scroll_px(GetScreenWidth(), strip_cells()));
+}
+
+/* The scroll track spans the strip in the top row of the bar. */
+static Rectangle track_rect(float bar_top) {
+    return (Rectangle){ strip_left(), bar_top + (float)bar_margin(), strip_right(GetScreenWidth()) - strip_left(),
+                        (float)bar_track_h() };
+}
+
+/* The track and its margins: the press target of the track. */
+static Rectangle track_band(float bar_top) {
+    return (Rectangle){ strip_left(), bar_top, strip_right(GetScreenWidth()) - strip_left(),
+                        slot_top(bar_top) - bar_top };
+}
+
+/* The thumb: as wide as the share of the cells in view, placed at the scroll offset. */
+static Rectangle thumb_rect(Rectangle track) {
     float max = max_scroll_px(GetScreenWidth(), strip_cells());
-    if (s_scroll_px < 0.0f) { s_scroll_px = 0.0f; s_scroll_vel = 0.0f; }
-    if (s_scroll_px > max)  { s_scroll_px = max;  s_scroll_vel = 0.0f; }
+    float view = strip_right(GetScreenWidth()) - strip_left();
+    float width = fmaxf(2.0f * track.height, track.width * view / (view + max));
+    float at = 0.0f < max ? s_scroll_px / max : 0.0f;
+    return (Rectangle){ track.x + (track.width - width) * at, track.y, width, track.height };
+}
+
+/* Scroll so the thumb's grab point follows the pointer x. */
+static void drag_thumb(float x) {
+    Rectangle track = track_rect(bar_top(GetScreenHeight()));
+    float travel = track.width - thumb_rect(track).width;
+    if (0.0f < travel)
+        s_scroll_px = (x - s_track_grab - track.x) / travel * max_scroll_px(GetScreenWidth(), strip_cells());
+    clamp_scroll();
+}
+
+static void draw_track(float bar_top) {
+    Rectangle track = track_rect(bar_top);
+    DrawRectangleRec(track, MODAL_PANEL_BG);
+    DrawRectangleLinesEx(track, 1.0f, MODAL_PANEL_BORDER);
+    bool hot = s_track_held || CheckCollisionPointRec(GetMousePosition(), track_band(bar_top));
+    Color fill = hot ? ColorBrightness(MODAL_SELECTED, 0.14f) : MODAL_SELECTED;
+    Color light = ColorBrightness(fill, 0.45f);
+    Rectangle thumb = thumb_rect(track);
+    Rectangle inner = draw_pixel_bevel(thumb, 0.0f, 2.0f, fill, light, ColorBrightness(fill, -0.45f));
+    /* Grip: three ridges at the thumb centre. */
+    for (int i = -1; 1 >= i; i++)
+        DrawRectangle((int)(inner.x + inner.width * 0.5f) + 3 * i, (int)inner.y + 2, 1, (int)inner.height - 4, light);
 }
 
 /* draw_coin_slot renders the pinned right coin slot. `coin_idx` is the
@@ -318,49 +368,23 @@ static void draw_skill_previews(Rectangle slot, const ObjectLayerState* ols, flo
     fx_shape_cooldown_bar(bar, held ? local_player_consume_charge(now) : local_player_action_charge(now));
 }
 
-/* Track the press-drag gesture and the inertial glide that follows it. */
-static void update_drag(float dt) {
-    if (!bar_slots_settled()) {
-        s_press_armed = false;
-        s_dragging    = false;
-        s_scroll_vel  = 0.0f;
-        return;
-    }
-
+/* The thumb follows a held track; a press off the stacks taps on a clean release. */
+static void update_press(void) {
+    if (!bar_slots_settled()) s_track_held = s_press_armed = false;
     bool down = input_pointer_down();
     Vector2 p = input_pointer_position();
-
-    if (down && s_press_armed) {
-        if (!s_dragging && fabsf(p.x - s_press_x) > INV_DRAG_SLOP_PX) s_dragging = true;
-        if (s_dragging) {
-            float dx = p.x - s_last_x;
-            s_scroll_px -= dx;                       /* content follows the pointer 1:1 */
-            if (dt > 0.0f) s_scroll_vel = -dx / dt;
-        }
-        s_last_x = p.x;
+    if (s_track_held) {
+        s_track_held = down;
+        if (down) drag_thumb(p.x);
     }
-
-    if (!down && s_pointer_was_down) {
-        /* A press that never became a drag activates the slot under it. */
-        if (s_press_armed && !s_dragging) {
-            s_tap_pending = true;
-            s_tap_x = (int)s_press_x;
-            s_tap_y = (int)s_press_y;
-        }
+    if (!s_press_armed) return;
+    if (INV_DRAG_SLOP_PX < hypotf(p.x - s_press.x, p.y - s_press.y)) s_press_armed = false;
+    else if (!down) {
+        s_tap_pending = true;
+        s_tap_x = (int)s_press.x;
+        s_tap_y = (int)s_press.y;
         s_press_armed = false;
-        s_dragging    = false;
     }
-    s_pointer_was_down = down;
-
-    if (!s_dragging) {
-        if (fabsf(s_scroll_vel) > INV_MIN_GLIDE_PX) {
-            s_scroll_px  += s_scroll_vel * dt;
-            s_scroll_vel *= powf(0.02f, dt);
-        } else {
-            s_scroll_vel = 0.0f;
-        }
-    }
-    clamp_scroll();
 }
 
 /* ── Lifted stacks ────────────────────────────────────────────────────── */
@@ -387,16 +411,22 @@ static Rectangle lift_ghost(Vector2 p) {
     return (Rectangle){ p.x - size * 0.5f, p.y - size * 0.5f, size, size };
 }
 
-/* Where a lifted stack would land: a strip cell, or a cell of the open
- * container. */
-static bool lift_target(Vector2 p, Box* box, int* slot) {
+/* Where a lifted stack would land. */
+typedef enum { LIFT_NONE, LIFT_CELL, LIFT_OFFER, LIFT_WORLD } LiftTarget;
+
+/* Where a lifted stack would land: a strip cell, a cell of the open container,
+ * the own offer of an open trade, or the ground under the pointer. */
+static LiftTarget lift_target(Vector2 p, Box* box, int* slot) {
     int cell = strip_cell_at((int)p.x, (int)p.y);
     if (0 <= cell) {
         *box = BOX_BAG;
         *slot = cell;
-        return true;
+        return LIFT_CELL;
     }
-    return container_panel_cell_at((int)p.x, (int)p.y, box, slot);
+    if (container_panel_cell_at((int)p.x, (int)p.y, box, slot)) return LIFT_CELL;
+    if (BAG_WALLET_SLOT == s_lift_slot) return LIFT_NONE;
+    if (trade_panel_offer_at((int)p.x, (int)p.y)) return LIFT_OFFER;
+    return ui_dispatch_covers_point((int)p.x, (int)p.y) ? LIFT_NONE : LIFT_WORLD;
 }
 
 /* Carry a lifted stack and drop it on release. Off the strip, or where the
@@ -419,8 +449,16 @@ static void update_lift(float dt) {
         s_tap_pending = true;
         s_tap_x = (int)s_lift_press.x;
         s_tap_y = (int)s_lift_press.y;
-    } else if (lift_target(p, &box, &to)) {
-        stack_move_drop(BOX_BAG, s_lift_slot, box, to, lift_ghost(p));
+    } else {
+        const ObjectLayerState* stack = container_ops_stack(BOX_BAG, s_lift_slot);
+        switch (lift_target(p, &box, &to)) {
+            case LIFT_CELL:  stack_move_drop(BOX_BAG, s_lift_slot, box, to, lift_ghost(p)); break;
+            case LIFT_OFFER: trade_panel_offer_bag_stack(s_lift_slot); break;
+            case LIFT_WORLD:
+                if (NULL != stack) world_drop_ask(BOX_BAG, s_lift_slot, stack->item_id, stack->quantity, world_drop_cell(p));
+                break;
+            case LIFT_NONE: break;
+        }
     }
     s_lift_armed = false;
     s_lifting = false;
@@ -433,10 +471,19 @@ static void draw_lift(void) {
     Vector2 p = input_pointer_position();
     Box box = BOX_BAG;
     int to = 0;
-    if (lift_target(p, &box, &to) && !(BOX_BAG == box && to == s_lift_slot)) {
-        bool lands = MOVE_REFUSED != container_ops_check(BOX_BAG, s_lift_slot, box, to, stack->quantity);
-        Rectangle cell = BOX_BAG == box ? slot_rect(to, bar_top(GetScreenHeight())) : container_panel_cell_rect(to);
-        DrawRectangleLinesEx(cell, 3.0f, lands ? C_DROP_FREE : C_DROP_REFUSE);
+    const char* reason = NULL;
+    switch (lift_target(p, &box, &to)) {
+        case LIFT_CELL:
+            if (BOX_BAG == box && to == s_lift_slot) break;
+            {
+                bool lands = MOVE_REFUSED != container_ops_check(BOX_BAG, s_lift_slot, box, to, stack->quantity);
+                Rectangle cell = BOX_BAG == box ? slot_rect(to, bar_top(GetScreenHeight())) : container_panel_cell_rect(to);
+                DrawRectangleLinesEx(cell, 3.0f, lands ? C_DROP_FREE : C_DROP_REFUSE);
+            }
+            break;
+        case LIFT_OFFER: DrawRectangleLinesEx(trade_panel_offer_rect(), 3.0f, C_DROP_FREE); break;
+        case LIFT_WORLD: world_drop_draw_target(world_drop_cell(p), world_drop_allowed(stack->item_id, &reason)); break;
+        case LIFT_NONE: break;
     }
     item_slot_draw_ex(lift_ghost(p), stack, s_ol_manager, C_DROP_FREE, 0.25f, true);
 }
@@ -455,10 +502,8 @@ static Rectangle settled_rect(int si, Rectangle cell) {
 void inventory_bar_init(ObjectLayersManager* ol_manager) {
     s_ol_manager    = ol_manager;
     s_scroll_px     = 0.0f;
-    s_scroll_vel    = 0.0f;
+    s_track_held    = false;
     s_press_armed   = false;
-    s_dragging      = false;
-    s_pointer_was_down = false;
     s_tap_pending   = false;
     s_lift_armed    = false;
     s_lifting       = false;
@@ -477,7 +522,7 @@ void inventory_bar_update(float dt) {
         if (ITEM_SLOT_GRID_SETTLE_DUR > s_settle_age[i]) s_settle_age[i] += dt;
     }
     update_lift(dt);
-    update_drag(dt);
+    update_press();
 }
 
 float inventory_bar_visible_height(void) {
@@ -504,9 +549,16 @@ bool inventory_bar_handle_wheel(float wheel_delta) {
     Vector2 p = input_pointer_position();
     if (!bar_slots_settled() || p.y < bar_top(GetScreenHeight())) return false;
     s_scroll_px -= wheel_delta * (float)slot_pitch();
-    s_scroll_vel = 0.0f;
     clamp_scroll();
     return true;
+}
+
+/* A stack or the coins in the own offer of an open trade show the trade icon. */
+static void draw_offered(Rectangle cell) {
+    float size = cell.width * 0.34f;
+    Rectangle badge = { cell.x + cell.width - size - 2.0f, cell.y + 2.0f, size, size };
+    DrawRectangleRec(badge, (Color){ 8, 12, 22, 220 });
+    ui_icon_draw("trade", badge.x + size * 0.5f, badge.y + size * 0.5f, (int)size - 2, false, 0.0f);
 }
 
 void inventory_bar_draw(void) {
@@ -527,6 +579,8 @@ void inventory_bar_draw(void) {
     }
 
     int coin_idx = find_coin_slot();
+    const TradeOffer* offer = &g_local_player.trade.mine;
+    bool trading = local_player_trading();
     int cells = strip_cells();
     int open = local_player_open_slots(CYBERIA_INVENTORY_CAPACITY);
     float left  = strip_left();
@@ -556,6 +610,9 @@ void inventory_bar_draw(void) {
                               &ol, s_ol_manager, WHITE, 0.0f,
                               fx_inventory_bar_qty_slot_pulsing(ol.item_id, si));
             if (bar_slots_settled()) fx_inventory_bar_qty_draw(r, ol.item_id, si);
+            for (int i = 0; trading && i < offer->count; i++) {
+                if (offer->items[i].slot == si) draw_offered(r);
+            }
         }
         if (previews) draw_skill_previews(r, &ol, current_bar_top, now);
     }
@@ -573,23 +630,9 @@ void inventory_bar_draw(void) {
         const char* coin_key = (coin_idx >= 0) ? g_local_player.inventory[coin_idx].item_id : coin_item_key();
         draw_coin_slot(ui_rect_scale(cr, fx_inventory_bar_qty_slot_scale(coin_key, BAG_WALLET_SLOT)), coin_idx,
                        s_ol_manager);
+        if (trading && 0 < offer->coins) draw_offered(cr);
         if (bar_slots_settled()) fx_inventory_bar_qty_draw(cr, coin_key, BAG_WALLET_SLOT);
-
-        int vis = visible_slot_count(screen_w);
-        if (cells > vis) {
-            int first     = (int)((s_scroll_px + (float)slot_pitch() * 0.5f) / (float)slot_pitch());
-            int dot_count = cells > 40 ? 40 : cells;
-            int dot_r     = 3;
-            int dot_gap   = 4;
-            int total_w   = dot_count * (dot_r * 2 + dot_gap) - dot_gap;
-            int dot_x     = (screen_w / 2 - total_w / 2);
-            int dot_y     = (int)current_bar_top + 4;
-            for (int i = 0; i < dot_count; i++) {
-                bool on = (i >= first && i < first + vis);
-                Color dc = on ? (Color){180, 200, 255, 220} : (Color){60, 60, 90, 140};
-                DrawCircle(dot_x + i * (dot_r * 2 + dot_gap) + dot_r, dot_y, (float)dot_r, dc);
-            }
-        }
+        if (strip_scrolls()) draw_track(current_bar_top);
     }
 
     if (!bar_slots_settled()) fx_inventory_bar_qty_draw_bottom(s_bar_toggle.anchor);
@@ -607,6 +650,15 @@ bool inventory_bar_handle_click(int mx, int my, int* out_slot) {
     if ((float)my < current_bar_top || my >= GetScreenHeight()) return false;
     if (!s_bar_toggle.expanded) return s_bar_toggle.anim_t > 0.0f;
 
+    if (strip_scrolls() && ui_button_hit(track_band(current_bar_top), mx, my)) {
+        Rectangle thumb = thumb_rect(track_rect(current_bar_top));
+        bool on_thumb = thumb.x <= (float)mx && (float)mx < thumb.x + thumb.width;
+        s_track_held = true;
+        s_track_grab = on_thumb ? (float)mx - thumb.x : thumb.width * 0.5f;
+        drag_thumb((float)mx);
+        return true;
+    }
+
     int cell = strip_cell_at(mx, my);
     bool coin = ui_button_hit(coin_slot_rect(GetScreenWidth(), current_bar_top), mx, my) && 0 <= find_coin_slot();
     if (coin || (0 <= cell && 0 <= shown_stack(cell))) {
@@ -618,11 +670,7 @@ bool inventory_bar_handle_click(int mx, int my, int* out_slot) {
     }
 
     s_press_armed = true;
-    s_dragging    = false;
-    s_press_x     = (float)mx;
-    s_press_y     = (float)my;
-    s_last_x      = (float)mx;
-    s_scroll_vel  = 0.0f;   /* catch a gliding strip */
+    s_press       = (Vector2){ (float)mx, (float)my };
     return true;
 }
 

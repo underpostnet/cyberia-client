@@ -65,9 +65,9 @@ cJSON* json_pack_shop_buy(uint32_t entity_id, const char* item_id,
                           int quantity);
 
 /* Assemble the assembler recipe at `recipe_index`. The server owns the recipe
- * book and the ingredient check; the client only names the terminal and which
- * of its recipes the player triggered. */
-cJSON* json_pack_craft_item(uint32_t entity_id, int recipe_index);
+ * book and the ingredient check; the client names the terminal, the recipe the
+ * player triggered and the fee it saw (`quote`). */
+cJSON* json_pack_craft_item(uint32_t entity_id, int recipe_index, double quote);
 
 /* Abort the running assembly. The server refunds its ingredients. */
 cJSON* json_pack_craft_cancel(void);
@@ -90,6 +90,39 @@ cJSON* json_pack_session_leave(const char* travel);
 /* An answer to a friend request (friend_reply) or the end of a friendship
  * (friend_remove), by friendship id. */
 cJSON* json_pack_friendship(const char* type, const char* friendship_id, bool accept);
+
+/* Drop `qty` units of the stack in `slot` of box `box` on the cell (x, y);
+ * a negative cell drops at the feet. */
+cJSON* json_pack_item_drop(const char* box, int slot, int quantity, float x, float y);
+
+/* Ask the price of a sale (`burn` false) or a burn of the stack in `slot` of
+ * box `box` at terminal `entity_id`. */
+cJSON* json_pack_item_quote(uint32_t entity_id, bool burn, const char* box, int slot);
+
+/* Confirm a quote (item_sell or item_burn) for `quantity` units. */
+cJSON* json_pack_quote_confirm(const char* type, const char* quote_id, int quantity);
+
+/* Ask the market of terminal `entity_id` for the page at cursor `after`
+ * ("" the first), of item `item_id` ("" every item) and `mode` ("" every mode). */
+cJSON* json_pack_market_open(uint32_t entity_id, const char* item_id, const char* mode, const char* after);
+
+/* List `quantity` units of the stack in `slot` of box `box` at terminal
+ * `entity_id`: `mode` fixed or auction, `price` the price or the opening bid. */
+cJSON* json_pack_market_list(uint32_t entity_id, const char* box, int slot, int quantity, const char* mode, int price,
+                             int hours);
+
+/* Cancel, buy or bid on (`type`) listing `listing_id` at terminal `entity_id`;
+ * `price` is the bid, 0 for any other type. */
+cJSON* json_pack_market_listing(const char* type, uint32_t entity_id, const char* listing_id, int price);
+
+/* The whole offer of the player in its trade: bag slots with units, and coins. */
+cJSON* json_pack_trade_offer(const int* slots, const int* qtys, int count, int coins);
+
+/* A confirmation of the trade offers of `revision`. */
+cJSON* json_pack_trade_confirm(uint32_t revision);
+
+/* An answer to a trade request of player `from_id`. */
+cJSON* json_pack_trade_reply(uint32_t from_id, bool accept);
 
 /* ── Read helpers ───────────────────────────────────────────────────── */
 

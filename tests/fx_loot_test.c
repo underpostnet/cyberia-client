@@ -1,4 +1,4 @@
-#include "fx/loot_fx.h"
+#include "fx/fx_loot.h"
 #include "audio/audio_events.h"
 #include "sim/local_player.h"
 #include "sim/game_state.h"
@@ -31,7 +31,7 @@ int GetScreenHeight(void) { return 600; }
 /* The idle float keeps x on the cell and lifts y by at most the hover and the bounce. */
 static void assert_idle_on(EntityID drop_id, float topx, float topy) {
     float x = 0.0f, y = 0.0f;
-    assert(loot_fx_drop_render_pos(drop_id, topx, topy, 1.6f, 1.6f, true, &x, &y));
+    assert(fx_loot_drop_render_pos(drop_id, topx, topy, 1.6f, 1.6f, true, &x, &y));
     assert(x == topx);
     assert(fabsf(y - topy) <= 0.31f);
 }
@@ -40,34 +40,34 @@ static void assert_idle_on(EntityID drop_id, float topx, float topy) {
 static void collect(EntityID drop_id, bool granted) {
     pickup_cues = 0;
     slot_deliveries = 0;
-    loot_fx_push(drop_id, g_local_player.id, "gel", 5.8f, 5.8f, granted);
+    fx_loot_push(drop_id, g_local_player.id, "gel", 5.8f, 5.8f, granted);
     float x, y;
-    assert(!loot_fx_drop_render_pos(drop_id, 5.0f, 5.0f, 1.6f, 1.6f, true, &x, &y));
-    assert(granted == loot_fx_inbound_to_inventory("gel"));
-    loot_fx_update(0.6f);
-    assert(!loot_fx_inbound_to_inventory("gel") || granted);
+    assert(!fx_loot_drop_render_pos(drop_id, 5.0f, 5.0f, 1.6f, 1.6f, true, &x, &y));
+    assert(granted == fx_loot_inbound_to_inventory("gel"));
+    fx_loot_update(0.6f);
+    assert(!fx_loot_inbound_to_inventory("gel") || granted);
 }
 
 int main(void) {
     g_local_player.id = 7;
     g_game_state.mask[0] = COMP_TRANSFORM;
-    loot_fx_reset();
+    fx_loot_reset();
 
     /* A world token arrives by replication only: it idles on its own cell. */
     assert_idle_on(1, 5.0f, 5.0f);
-    loot_fx_update(0.25f);
+    fx_loot_update(0.25f);
     assert_idle_on(1, 5.0f, 5.0f);
 
     /* A zero-length launch idles at once on its landing cell, with no arc. */
-    loot_fx_note_spawn(2, 5.8f, 5.8f, 5.8f, 5.8f, "gel", 0);
+    fx_loot_note_spawn(2, 5.8f, 5.8f, 5.8f, 5.8f, "gel", 0);
     assert_idle_on(2, 5.0f, 5.0f);
 
     /* A death drop still flies from the corpse, then idles on its cell. */
-    loot_fx_note_spawn(3, 1.8f, 1.8f, 5.8f, 5.8f, "gel", 420);
+    fx_loot_note_spawn(3, 1.8f, 1.8f, 5.8f, 5.8f, "gel", 420);
     float x, y;
-    assert(loot_fx_drop_render_pos(3, 5.0f, 5.0f, 1.6f, 1.6f, true, &x, &y));
+    assert(fx_loot_drop_render_pos(3, 5.0f, 5.0f, 1.6f, 1.6f, true, &x, &y));
     assert(fabsf(x - 1.0f) < 0.01f);
-    loot_fx_update(0.5f);
+    fx_loot_update(0.5f);
     assert_idle_on(3, 5.0f, 5.0f);
 
     /* A heal flies to the collector and delivers nothing to the inventory. */
@@ -79,10 +79,10 @@ int main(void) {
     assert(1 == pickup_cues && 1 == slot_deliveries);
 
     /* A stale collection of a token never seen, or of no item, is safe. */
-    loot_fx_push(99, 8, "gel", 1.0f, 1.0f, true);
-    loot_fx_push(99, 8, "", 1.0f, 1.0f, true);
-    loot_fx_update(1.0f);
-    loot_fx_reset();
-    printf("loot_fx_test OK\n");
+    fx_loot_push(99, 8, "gel", 1.0f, 1.0f, true);
+    fx_loot_push(99, 8, "", 1.0f, 1.0f, true);
+    fx_loot_update(1.0f);
+    fx_loot_reset();
+    printf("fx_loot_test OK\n");
     return 0;
 }

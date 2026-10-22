@@ -15,9 +15,10 @@
  *
  * Each strip cell is a bag slot of the server, so a stack stays where it was
  * dropped. A drag from a stack moves it to another cell, or to a cell of the
- * open container, and it slides into its cell. A drag elsewhere on the strip,
- * or the wheel, scrolls it. A press that never travelled taps the slot below
- * it, so a drag never opens a modal. */
+ * open container, and it slides into its cell. When the cells overrun the
+ * strip, a scroll track runs over it: only the track and the wheel scroll it.
+ * A press that never travelled taps the slot below it, so a drag never opens
+ * a modal. */
 
 /* The layout metrics live in inventory_bar.c — only the bar itself lays them
  * out. Ask `inventory_bar_visible_height` for the height on screen. */
@@ -50,9 +51,9 @@ Rectangle inventory_bar_toggle_bounds(void);
 bool inventory_bar_handle_toggle_click(int mx, int my);
 
 /* Handle a press on the bar or its persistent toggle. Returns true when the UI
- * consumed it. A press on a stack arms its drag, and anywhere else on the
- * strip the scroll, so `out_slot` is always -1 — slot activation arrives later
- * through inventory_bar_take_tap. */
+ * consumed it. A press on the track scrolls the strip, a press on a stack arms
+ * its drag, and any other press arms a tap, so `out_slot` is always -1 — slot
+ * activation arrives later through inventory_bar_take_tap. */
 bool inventory_bar_handle_click(int mx, int my, int* out_slot);
 
 /* Scroll the strip by the wheel while the pointer is over the bar. True when
@@ -86,7 +87,7 @@ void inventory_bar_animate_from(int slot, Rectangle origin);
 /* Slot rectangle where an item would land after an inventory gain. */
 bool inventory_bar_predicted_item_slot_rect(const char* item_id, Rectangle* out);
 
-/* Screen-space centre of the slot holding `item_id` — loot_fx aims its
+/* Screen-space centre of the slot holding `item_id` — fx_loot aims its
  * delivery stream at it. False when the item has no slot. */
 bool inventory_bar_item_slot_center(const char* item_id, Vector2* out);
 

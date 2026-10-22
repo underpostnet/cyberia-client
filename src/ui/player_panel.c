@@ -64,7 +64,6 @@ static bool s_note_pending;
 static Rectangle s_note_input;
 static char s_note_error[64];
 
-static const Color C_BTN      = {  24,  30,  48, 255 };
 static const Color C_ACCEPT   = {  38, 138,  76, 255 };
 static const Color C_DANGER   = { 130,  44,  44, 255 };
 static const Color C_DISABLED = {  44,  46,  58, 255 };
@@ -210,7 +209,7 @@ static float status_note(Rectangle c, float y) {
     DrawText("Your note", (int)c.x, (int)(y + (button_h() - (float)font) * 0.5f), font, MODAL_LABEL);
     if (!s_note_editing)
         button(PLAYER_VIEW_FRIENDS, (Rectangle){ c.x + c.width - edit_w, y, edit_w, button_h() }, "chat", "Edit",
-               C_BTN, ready, PP_NOTE_EDIT, 0);
+               MODAL_BUTTON, ready, PP_NOTE_EDIT, 0);
     y += button_h() + gap() * 0.5f;
     bool empty = '\0' == g_local_player.status_note[0];
     y += (float)text_wrap(empty ? "No note yet." : g_local_player.status_note, (int)c.x, (int)y, (int)c.width, font,
@@ -222,9 +221,9 @@ static float status_note(Rectangle c, float y) {
         button(PLAYER_VIEW_FRIENDS, (Rectangle){ c.x, y, width, button_h() }, "check", "Save", C_ACCEPT,
                ready, PP_NOTE_SAVE, 0);
         button(PLAYER_VIEW_FRIENDS, (Rectangle){ c.x + width + gap(), y, width, button_h() }, "close", "Clear",
-               C_BTN, ready, PP_NOTE_CLEAR, 0);
+               MODAL_BUTTON, ready, PP_NOTE_CLEAR, 0);
         button(PLAYER_VIEW_FRIENDS, (Rectangle){ c.x + 2.0f * (width + gap()), y, width, button_h() }, "close",
-               "Cancel", C_BTN, true, PP_NOTE_CANCEL, 0);
+               "Cancel", MODAL_BUTTON, true, PP_NOTE_CANCEL, 0);
         y += button_h() + gap();
     }
     if (!s_note_editing && ready && '\0' == s_note_error[0]) return y - top;
@@ -377,10 +376,12 @@ static float draw_own_profile(Rectangle c, float y, EntityID id) {
             y += text_wrap(value, (int)c.x, (int)y, (int)c.width, font_body() - 1, C_NOTE, false, true);
         }
     }
-    if (g_local_player.unsaved) {
-        y += text_wrap("Your progress is not being saved right now. Trades wait until it is, and gains made meanwhile are lost if the world restarts first.",
-                       (int)c.x, (int)y, (int)c.width, font_body() - 1, C_NOTE, false, true);
-    }
+    const char* saving = DURABILITY_RECOVERY == g_local_player.durability
+                             ? "Your latest changes are not saved yet. The world keeps them and retries; trades wait. A world restart before they save would undo only those changes."
+                         : DURABILITY_DEGRADED == g_local_player.durability
+                             ? "Saving is delayed. The world keeps your latest changes and retries; trades wait until they save."
+                             : NULL;
+    if (saving) y += text_wrap(saving, (int)c.x, (int)y, (int)c.width, font_body() - 1, C_NOTE, false, true);
     y += text_wrap(g_local_player.account ? "Your bag, storage, vaults, coins, XP and quests are saved to your account."
                                           : "Guest session: your bag, storage and party end when you leave.",
                    (int)c.x, (int)y, (int)c.width, font_body() - 1, MODAL_LABEL, false, true);
@@ -434,7 +435,7 @@ static float draw_other_profile(Rectangle c, float y, EntityID id) {
     Rectangle right = { c.x + bw + gap(), y, bw, button_h() };
     Rectangle full = { c.x, y, c.width, button_h() };
     if (NULL != invite) {
-        button(PLAYER_VIEW_PROFILE, left, "close", "Decline", C_BTN, true, PP_DECLINE, id);
+        button(PLAYER_VIEW_PROFILE, left, "close", "Decline", MODAL_BUTTON, true, PP_DECLINE, id);
         button(PLAYER_VIEW_PROFILE, right, "check", "Accept", C_ACCEPT, true, PP_ACCEPT, id);
     } else if (NULL != member) {
         if (local_player_leads_party())
@@ -442,11 +443,11 @@ static float draw_other_profile(Rectangle c, float y, EntityID id) {
         else
             y -= button_h() + gap();
     } else if (NULL != sent) {
-        button(PLAYER_VIEW_PROFILE, full, "clock", "Invite sent", C_BTN, false, PP_INVITE, id);
+        button(PLAYER_VIEW_PROFILE, full, "clock", "Invite sent", MODAL_BUTTON, false, PP_INVITE, id);
     } else if (0 != (flags & INTERACTION_FLAG_PARTY_INVITE)) {
         button(PLAYER_VIEW_PROFILE, full, "party", "Invite to party", C_ACCEPT, true, PP_INVITE, id);
     } else {
-        button(PLAYER_VIEW_PROFILE, full, "lock", invite_refusal(), C_BTN, false, PP_INVITE, id);
+        button(PLAYER_VIEW_PROFILE, full, "lock", invite_refusal(), MODAL_BUTTON, false, PP_INVITE, id);
     }
     y += button_h() + gap();
 
@@ -454,13 +455,13 @@ static float draw_other_profile(Rectangle c, float y, EntityID id) {
     if (g_local_player.account && 0 == (flags & INTERACTION_FLAG_FRIEND)) {
         bool pending = NULL != friendship;
         if (pending && FRIEND_INCOMING == friendship->status) {
-            friend_button(PLAYER_VIEW_PROFILE, (Rectangle){ c.x, y, bw, button_h() }, "close", "Decline", C_BTN,
+            friend_button(PLAYER_VIEW_PROFILE, (Rectangle){ c.x, y, bw, button_h() }, "close", "Decline", MODAL_BUTTON,
                           PP_FRIEND_DECLINE, friendship);
             friend_button(PLAYER_VIEW_PROFILE, (Rectangle){ c.x + bw + gap(), y, bw, button_h() }, "check",
                           "Accept friend", C_ACCEPT, PP_FRIEND_ACCEPT, friendship);
         } else {
             button(PLAYER_VIEW_PROFILE, (Rectangle){ c.x, y, c.width, button_h() }, pending ? "clock" : "friends",
-                   pending ? "Friend request sent" : "Add friend", C_BTN, !pending, PP_FRIEND_ADD, id);
+                   pending ? "Friend request sent" : "Add friend", MODAL_BUTTON, !pending, PP_FRIEND_ADD, id);
         }
         y += button_h() + gap();
     }
@@ -502,7 +503,7 @@ static float draw_party(Rectangle c, float y) {
             button(PLAYER_VIEW_PARTY, (Rectangle){ c.x + gap() * 0.5f, by, bw - gap() * 0.5f, button_h() }, "check",
                    "Accept", C_ACCEPT, true, PP_ACCEPT, in->from_id);
             button(PLAYER_VIEW_PARTY, (Rectangle){ c.x + bw + gap(), by, bw - gap() * 1.5f, button_h() }, "close",
-                   "Decline", C_BTN, true, PP_DECLINE, in->from_id);
+                   "Decline", MODAL_BUTTON, true, PP_DECLINE, in->from_id);
             y += row.height + gap() * 0.5f;
         }
         y += gap();
@@ -546,7 +547,7 @@ static float draw_party(Rectangle c, float y) {
     y += gap();
 
     float bw = leads ? (c.width - gap()) * 0.5f : c.width;
-    button(PLAYER_VIEW_PARTY, (Rectangle){ c.x, y, bw, button_h() }, "log-out", "Leave party", C_BTN, true,
+    button(PLAYER_VIEW_PARTY, (Rectangle){ c.x, y, bw, button_h() }, "log-out", "Leave party", MODAL_BUTTON, true,
            PP_LEAVE, 0);
     if (leads) {
         button(PLAYER_VIEW_PARTY, (Rectangle){ c.x + bw + gap(), y, bw, button_h() }, "close",
@@ -647,8 +648,8 @@ static float draw_requests(Rectangle c, float y, const int count[3]) {
             if (pass != f->status || !request_open(f)) continue;
             request_days(f, line, sizeof line);
             const RowAction answer[] = { { "check", "Accept", C_ACCEPT, true, PP_FRIEND_ACCEPT },
-                                         { "close", "Decline", C_BTN, true, PP_FRIEND_DECLINE } };
-            const RowAction cancel = { "close", "Cancel request", C_BTN, true, PP_FRIEND_DECLINE };
+                                         { "close", "Decline", MODAL_BUTTON, true, PP_FRIEND_DECLINE } };
+            const RowAction cancel = { "close", "Cancel request", MODAL_BUTTON, true, PP_FRIEND_DECLINE };
             int actions = incoming ? 2 : 1;
             Rectangle row = social_row(c, y, f, incoming ? "Wants to be your friend" : "Waiting for an answer",
                                        incoming ? C_NOTE : MODAL_LABEL, line, actions, false);
@@ -683,8 +684,8 @@ static float draw_friend_list(Rectangle c, float y, int accepted) {
             RowAction actions[3];
             int count = 0;
             if (selected) {
-                if (here) actions[count++] = (RowAction){ "chat", "Chat", C_BTN, true, PP_FRIEND_CHAT };
-                if (sent) actions[count++] = (RowAction){ "clock", "Invited", C_BTN, false, PP_INVITE };
+                if (here) actions[count++] = (RowAction){ "chat", "Chat", MODAL_BUTTON, true, PP_FRIEND_CHAT };
+                if (sent) actions[count++] = (RowAction){ "clock", "Invited", MODAL_BUTTON, false, PP_INVITE };
                 else if (invite) actions[count++] = (RowAction){ "party", "Invite", C_ACCEPT, true, PP_INVITE };
                 bool confirm = armed(s_remove_armed_at) && 0 == strcmp(s_remove_armed, f->id);
                 actions[count++] = (RowAction){ "close", confirm ? "Confirm" : "Remove", C_DANGER, true,

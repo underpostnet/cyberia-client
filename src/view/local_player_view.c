@@ -1,6 +1,7 @@
 #include "local_player_view.h"
 
 #include <assert.h>
+#include <math.h>
 #include <raylib.h>
 #include <raymath.h>
 
@@ -27,6 +28,11 @@ void local_player_view_update(const self_motion_t* prev, const self_motion_t* cu
 Vector2 local_player_view_position(void) { return s_view.pos; }
 
 Direction local_player_view_direction(void) { return s_view.direction; }
+
+Vector2 local_player_view_facing(void) {
+    float angle = (float)s_view.direction * PI * 0.25f;
+    return (Vector2){ sinf(angle), -cosf(angle) };
+}
 
 ObjectLayerMode local_player_view_mode(void) { return s_view.mode; }
 

@@ -3,7 +3,7 @@
 #include "sim/local_player.h"
 #include "sim/game_state.h"
 #include "ui/inventory_bar.h"
-#include "loot_fx.h"
+#include "fx_loot.h"
 #include "world/object_layer.h"
 #include "ui/text.h"
 #include "utils.h"
@@ -104,7 +104,7 @@ static void release_pending(FqEntry* e) {
         if (e->pending_delta > 0 || e->hidden) e->pulse_age = 0.0f;
         /* A reduction sprays outward from the cell that changed, captured
          * while it held the stack. */
-        if (e->pending_delta < 0 && e->has_slot) loot_fx_slot_expend_at(e->item_id, e->slot_x, e->slot_y);
+        if (e->pending_delta < 0 && e->has_slot) fx_loot_slot_expend_at(e->item_id, e->slot_x, e->slot_y);
     }
     /* The badge lands with the delivery: the moment the item visibly arrives is
      * the moment its slot must read the new total, so the count snaps here
@@ -196,7 +196,7 @@ void fx_inventory_bar_qty_update(float dt) {
             e = alloc_entry(id);
             e->actual = qty;
             e->cell = slots[0];
-            if (loot_fx_inbound_to_inventory(id)) {
+            if (fx_loot_inbound_to_inventory(id)) {
                 /* First copy with its pickup still in flight: hold the slot
                  * hidden until the flight lands, then reveal + "+N" + tween. */
                 e->hidden = true;

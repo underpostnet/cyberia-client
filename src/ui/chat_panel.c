@@ -13,6 +13,7 @@
 #include "text.h"
 #include "ui_button.h"
 #include "ui_scroll.h"
+#include "ui_tabs.h"
 #include "utils.h"
 #include "view/viewport.h"
 
@@ -27,7 +28,6 @@
 
 typedef enum { CP_TAB_WORLD, CP_TAB_PARTY, CP_TAB_DIRECT, CP_TAB_COUNT } ChatTab;
 
-static const Color C_TAB    = {  24,  30,  48, 255 };
 static const Color C_BADGE  = { 210,  60,  60, 245 };
 static const Color C_ROW    = {  14,  20,  36, 220 };
 static const Color C_NOTE   = { 150, 160, 185, 255 };
@@ -93,8 +93,6 @@ void chat_panel_open_direct(EntityID peer, const char* name) {
 }
 
 static Rectangle panel_rect(void) { return hud_side_stack_chat_slot(); }
-
-static Rectangle tab_rect(Rectangle panel, ChatTab tab) { return hud_panel_tab_rect(panel, tab, CP_TAB_COUNT); }
 
 /* The back row above an open direct conversation, and the pane under it. */
 static Rectangle back_rect(Rectangle content) { return (Rectangle){ content.x, content.y, content.width, CP_BACK_H }; }
@@ -201,7 +199,7 @@ static void draw_conversation_header(Rectangle content) {
     const ChatHistory* h = chat_log_get(chat_direct(s_peer));
     const Friend* friend = local_player_friend_of(s_peer);
     UIButtonPixelRetroStyle style = {
-        .bg = C_TAB, .icon_id = "arrow-left", .font_size = 14, .text_color = MODAL_TEXT, .enabled = true,
+        .bg = MODAL_BUTTON, .icon_id = "arrow-left", .font_size = 14, .text_color = MODAL_TEXT, .enabled = true,
     };
     Rectangle arrow = { back.x, back.y, back.height, back.height };
     ui_button_pixel_retro_draw(arrow, &style, ui_button_hit(back, GetMouseX(), GetMouseY()));
@@ -218,12 +216,13 @@ void chat_panel_draw(void) {
     Rectangle panel = panel_rect();
     if (HUD_PANEL_HEADER_H > panel.height) return;
     hud_panel_draw_frame(panel);
-    HudPanelTab tabs[CP_TAB_COUNT] = {
+    UITab tabs[CP_TAB_COUNT] = {
         [CP_TAB_WORLD]  = { "World", "chat", true, tab_unread(CP_TAB_WORLD) },
         [CP_TAB_PARTY]  = { "Party", "party", in_party(), tab_unread(CP_TAB_PARTY) },
         [CP_TAB_DIRECT] = { "Direct", "character", true, tab_unread(CP_TAB_DIRECT) },
     };
-    hud_panel_draw_tabs(panel, tabs, CP_TAB_COUNT, s_tab);
+    UITabs group = hud_panel_tabs(panel, CP_TAB_COUNT);
+    ui_tabs_draw(&group, tabs, s_tab);
     hud_panel_draw_close(panel);
     Rectangle content = hud_panel_content_rect(panel);
     if (CP_TAB_DIRECT != s_tab) {
@@ -248,8 +247,9 @@ bool chat_panel_handle_click(int mx, int my) {
         chat_panel_toggle();
         return true;
     }
-    for (int tab = 0; CP_TAB_COUNT > tab; tab++) {
-        if (!ui_button_hit(tab_rect(panel, (ChatTab)tab), mx, my)) continue;
+    UITabs group = hud_panel_tabs(panel, CP_TAB_COUNT);
+    int tab = ui_tabs_hit(&group, mx, my);
+    if (0 <= tab) {
         if (CP_TAB_PARTY != tab || in_party()) {
             if (CP_TAB_DIRECT == tab && CP_TAB_DIRECT == s_tab) show_direct_list();
             s_tab = (ChatTab)tab;

@@ -9,6 +9,7 @@
 #include "modal_map.h"
 #include "player_panel.h"
 #include "quest_journal.h"
+#include "save_status.h"
 #include "session_gate.h"
 #include "social_panel.h"
 #include "text.h"
@@ -160,31 +161,6 @@ void toolbar_badge_draw(Rectangle r, int count) {
     DrawText(text, (int)(cx - (float)MeasureText(text, 10) * 0.5f), (int)(cy - 5.0f), 10, WHITE);
 }
 
-static void toggle_expanded_instance_map(void) {
-    if (modal_instance_map_is_open()) {
-        modal_instance_map_close();
-        return;
-    }
-    hud_minimap_overlay_hide();
-    modal_instance_map_toggle();
-}
-
-/* While the engine does not take the state of an account player, a notice
- * under the strip says so: trades wait, and gains made meanwhile are lost if
- * the world restarts before it takes them. */
-static void draw_unsaved_notice(int screen_width) {
-    if (!g_local_player.unsaved) return;
-    const char* text = "Progress is not being saved. Trades wait; new gains can be lost.";
-    const int font = 14;
-    float w = (float)MeasureText(text, font) + 40.0f;
-    Rectangle r = { ((float)screen_width - w) * 0.5f, toolbar_height() + 6.0f, w, 26.0f };
-    DrawRectangleRec(r, (Color){ 110, 40, 30, 230 });
-    DrawRectangleLinesEx(r, 1.0f, BLACK);
-    ui_icon_draw("cloud", r.x + 14.0f, r.y + r.height * 0.5f, 16, false, 0.0f);
-    text_draw_outlined(text, (int)(r.x + 28.0f), (int)(r.y + (r.height - (float)font) * 0.5f), font, RAYWHITE,
-                       BLACK, 1);
-}
-
 void toolbar_draw(int screen_width) {
     /* Advance the slide (draw runs once per frame). */
     float dt = GetFrameTime();
@@ -210,7 +186,7 @@ void toolbar_draw(int screen_width) {
     }
 
     toolbar_button_draw(toggle_rect(), s_hidden ? "cyberia-white-0" : "cyberia-yellow-1", false);
-    draw_unsaved_notice(screen_width);
+    save_status_draw(screen_width, toolbar_height() + 6.0f);
 }
 
 bool toolbar_handle_click(int mx, int my) {
@@ -238,7 +214,7 @@ bool toolbar_handle_click(int mx, int my) {
     }
     /* The coordinate readout opens the expanded inspection map. */
     if (ui_button_hit(modal_map_bounds(), mx, my)) {
-        toggle_expanded_instance_map();
+        modal_instance_map_toggle();
         return true;
     }
     return false;

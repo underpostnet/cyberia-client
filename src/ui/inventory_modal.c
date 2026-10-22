@@ -11,6 +11,8 @@
  *     validates, swaps if needed, and pushes the updated state back in
  *     the next AOI frame.
  *   - The modal follows its stack by item id and closes once it is gone.
+ *   - Drop puts the stack on the ground (world_drop). While a trade is open,
+ *     Offer adds it to the own offer (trade_panel) instead.
  *   - The sprite preview uses ol_as_animated_ico so it plays the live
  *     animation for the selected direction/mode pair.
  *   - Direction (up/down/left/right) and mode (idle/walking) buttons let
@@ -39,11 +41,14 @@
 #include "utils.h"
 #include "stat_panel.h"
 #include "toolbar.h"
+#include "trade_panel.h"
 #include "ui_button.h"
 #include "ui_rect.h"
 #include "ui_scroll.h"
 #include "ui_state.h"
+#include "world/economy.h"
 #include "world/world_types.h"
+#include "world_drop.h"
 
 #include <assert.h>
 #include <math.h>
@@ -85,6 +90,11 @@ static Rectangle s_lore_btn_rect;
 static bool      s_lore_btn_visible = false;
 static Rectangle s_activate_btn_rect;
 static bool      s_activate_btn_visible = false;
+
+/* The button beside Equip: Offer while a trade is open, else Drop. */
+typedef enum { SIDE_NONE, SIDE_DROP, SIDE_OFFER } SideAction;
+static Rectangle  s_side_btn_rect;
+static SideAction s_side = SIDE_NONE;
 
 /* Main item preview/details column; header and action controls stay fixed. */
 static UIScroll s_content_scroll;
@@ -146,6 +156,7 @@ static const Color C_DIR_BTN_DEF   = {  35,  38,  60, 220 };   /* unselected  */
 static const Color C_MODE_IDLE     = {  40,  90,  40, 230 };
 static const Color C_MODE_WALK     = {  90,  50,  10, 230 };
 static const Color C_LORE_BTN     = {  50,  50, 120, 240 };
+static const Color C_SIDE_BTN      = {  45,  70, 100, 240 };
 
 /* ── Helpers ──────────────────────────────────────────────────────────── */
 
@@ -304,8 +315,9 @@ static Rectangle anchored_card_rect(void) {
  * items equip only during the Fragmented State (dead). A type outside
  * activeItemTypes never activates. An active skin cannot come off while
  * requireSkin is set; fragments are exempt, because the server swaps in the
- * hidden default dead skin. */
+ * hidden default dead skin. An open trade holds every stack as it is. */
 static bool activate_enabled(const ObjectLayerState* ols) {
+    if (local_player_trading()) return false;
     const ObjectLayer* data = lookup_cached_layer(ols->item_id);
     if (data && !data->data.item.activable) return false;
     bool is_fragment = game_state_is_dead_item(ols->item_id);
@@ -358,6 +370,14 @@ static void update_anchor_layout(float dt, bool lore_available) {
                                modal_anchor_safe_area(IM_CARD_PAD, IM_ANCHOR_MIN_H),
                                content, IM_ANCHOR_DEFAULT_H, IM_ANCHOR_MIN_H,
                                s_age >= MODAL_POP_DURATION, dt);
+}
+
+static SideAction side_action(const ObjectLayerState* own) {
+    if (local_player_is_coin(own->item_id) || game_state_is_dead_item(own->item_id)) return SIDE_NONE;
+    const ItemPolicy* policy = economy_policy(own->item_id);
+    if (TRADE_OPEN == g_local_player.trade.state) return policy->trade ? SIDE_OFFER : SIDE_NONE;
+    if (local_player_trading() || !policy->world_drop) return SIDE_NONE;
+    return SIDE_DROP;
 }
 
 static void send_activation(const ObjectLayerState* stack, bool active) {
@@ -420,6 +440,7 @@ static void reset_view_state(void) {
     skill_preview_pager_reset();
     s_lore_btn_visible = false;
     s_activate_btn_visible = false;
+    s_side = SIDE_NONE;
     ui_scroll_reset(&s_content_scroll);
     s_content_height = 0.0f;
     s_anchor_entity = 0;
@@ -599,12 +620,7 @@ void inventory_modal_draw(void) {
 
     /* 3. Close button — right-aligned inside the header strip. */
     Rectangle close_r = close_rect(card);
-    {
-        int mx = GetMouseX(), my = GetMouseY();
-        UIButtonStyle close_btn = { .icon_id = "close-yellow", .no_fill = true };
-        ui_button_draw(close_r, &close_btn,
-                       ui_button_resolve_state(true, false, ui_button_hit(close_r, mx, my)));
-    }
+    ui_button_draw_close(close_r);
 
     ui_scroll_begin(&s_content_scroll);
 
@@ -801,8 +817,9 @@ void inventory_modal_draw(void) {
         ui_button_pixel_retro_draw(s_lore_btn_rect, &lore_btn, ui_button_hit(s_lore_btn_rect, mx, my));
     }
 
-    /* 12. Equip / Unequip button — only for the player's own items. */
+    /* 12. Equip / Unequip and the side button — only for the player's own items. */
     s_activate_btn_visible = false;
+    s_side = SIDE_NONE;
     if (!s_is_external) {
         bool currently_active = ols->active;
         const char* btn_label  = currently_active ? "Unequip" : "Equip";
@@ -814,7 +831,15 @@ void inventory_modal_draw(void) {
                         : currently_active ? C_BTN_DEACT : C_BTN_ACTIVATE;
         Color txt_color = !btn_enabled ? C_TEXT_DISABLED : C_BTN_TEXT;
 
-        Rectangle btn_r = inventory_activate_button_rect(card, layout, button_w, button_h);
+        s_side = side_action(ols);
+        float gap = IM_LANDSCAPE_COLUMN_GAP;
+        float row_w = SIDE_NONE == s_side ? button_w
+                    : fminf(2.0f * button_w + gap, card.width - 2.0f * im_pad(card.width));
+        Rectangle btn_r = inventory_activate_button_rect(card, layout, row_w, button_h);
+        if (SIDE_NONE != s_side) {
+            btn_r.width = (btn_r.width - gap) * 0.5f;
+            s_side_btn_rect = (Rectangle){ btn_r.x + btn_r.width + gap, btn_r.y, btn_r.width, btn_r.height };
+        }
         s_activate_btn_rect = btn_r;
         s_activate_btn_visible = true;
         int mx = GetMouseX(), my = GetMouseY();
@@ -822,6 +847,20 @@ void inventory_modal_draw(void) {
                                             .font_size = body_font + 2, .bg = btn_color,
                                             .text_color = txt_color, .enabled = btn_enabled };
         ui_button_pixel_retro_draw(btn_r, &act_btn, ui_button_hit(btn_r, mx, my));
+
+        if (SIDE_NONE != s_side) {
+            bool offer = SIDE_OFFER == s_side;
+            const char* reason = NULL;
+            /* A tap on a dimmed Drop tells why it cannot drop now. */
+            bool ready = offer || world_drop_allowed(ols->item_id, &reason);
+            UIButtonPixelRetroStyle side_btn = { .label = offer ? "Offer" : "Drop",
+                                                 .icon_id = offer ? "trade" : "drop",
+                                                 .font_size = body_font + 2,
+                                                 .bg = ready ? C_SIDE_BTN : C_BTN_DISABLED,
+                                                 .text_color = ready ? C_BTN_TEXT : C_TEXT_DISABLED,
+                                                 .enabled = ready };
+            ui_button_pixel_retro_draw(s_side_btn_rect, &side_btn, ui_button_hit(s_side_btn_rect, mx, my));
+        }
     }
 }
 
@@ -884,6 +923,16 @@ bool inventory_modal_handle_click(int mx, int my) {
                 return true;
             }
         }
+    }
+
+    /* Drop and Offer close the card: the quantity prompt and the result show over the world or the trade. */
+    if (NULL != own && SIDE_NONE != s_side && ui_button_hit(s_side_btn_rect, mx, my)) {
+        ObjectLayerState stack = *own;
+        SideAction side = s_side;
+        inventory_modal_close();
+        if (SIDE_OFFER == side) trade_panel_offer_bag_stack(stack.slot);
+        else world_drop_ask(BOX_BAG, stack.slot, stack.item_id, stack.quantity, (Vector2){ -1.0f, -1.0f });
+        return true;
     }
 
     const ObjectLayerState* ols = current_ols();

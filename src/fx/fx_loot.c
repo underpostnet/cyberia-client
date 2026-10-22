@@ -1,4 +1,4 @@
-#include "loot_fx.h"
+#include "fx_loot.h"
 
 #include "view/game_render.h"
 #include "sim/local_player.h"
@@ -16,7 +16,7 @@
 
 /* ── Tuning ─────────────────────────────────────────────────────────────── */
 
-#define LOOT_FX_MAX          64      /* concurrent vacuum flights               */
+#define FX_LOOT_MAX          64      /* concurrent vacuum flights               */
 #define LOOT_DROP_MAX        128     /* concurrent in-world drop animations     */
 #define LOOT_PARTICLE_MAX    512     /* pooled world-space burst particles      */
 #define LOOT_SCR_PARTICLE_MAX 256    /* pooled screen-space delivery particles  */
@@ -174,14 +174,14 @@ typedef struct {
     bool  active;
 } DeliveryToken;
 
-static VacFlight      s_flights[LOOT_FX_MAX];
+static VacFlight      s_flights[FX_LOOT_MAX];
 static DropAnim       s_drops[LOOT_DROP_MAX];
 static Particle       s_particles[LOOT_PARTICLE_MAX];
 static ScrParticle    s_scr[LOOT_SCR_PARTICLE_MAX];
 static PendingArrival s_pending[LOOT_PENDING_MAX];
 static DeliveryToken  s_tokens[TOKEN_MAX];
 
-/* Presentation clock, advanced only by loot_fx_update — keeps launch/idle
+/* Presentation clock, advanced only by fx_loot_update — keeps launch/idle
  * timing independent of the raylib frame clock and of message arrival time. */
 static double s_clock = 0.0;
 
@@ -203,7 +203,7 @@ static void spawn_ambient(float wx, float wy, uint8_t tint);
 
 /* ── Lifecycle ──────────────────────────────────────────────────────────── */
 
-void loot_fx_reset(void) {
+void fx_loot_reset(void) {
     memset(s_flights, 0, sizeof(s_flights));
     memset(s_drops, 0, sizeof(s_drops));
     memset(s_particles, 0, sizeof(s_particles));
@@ -237,7 +237,7 @@ static DropAnim* drop_alloc(EntityID drop_id) {
     return slot;
 }
 
-void loot_fx_note_spawn(EntityID drop_id, float origin_x, float origin_y,
+void fx_loot_note_spawn(EntityID drop_id, float origin_x, float origin_y,
                         float landing_x, float landing_y, const char* item_id,
                         uint16_t launch_ms) {
     if (0 == drop_id) return;
@@ -257,7 +257,7 @@ void loot_fx_note_spawn(EntityID drop_id, float origin_x, float origin_y,
     (void)item_id; /* item texture comes from the AOI drop bot itself */
 }
 
-bool loot_fx_drop_render_pos(EntityID drop_id,
+bool fx_loot_drop_render_pos(EntityID drop_id,
                              float land_topx, float land_topy,
                              float dims_w, float dims_h,
                              bool loot_eligible,
@@ -314,7 +314,7 @@ bool loot_fx_drop_render_pos(EntityID drop_id,
         /* Ambient sparks emit from below the token base and rise up over it. */
         if (s_clock >= a->next_emit) {
             spawn_ambient(cx, cy + dims_h * EMIT_DOWN_FRAC,
-                          a->eligible ? LOOT_FX_TINT_GOLD : LOOT_FX_TINT_GRAY);
+                          a->eligible ? FX_LOOT_TINT_GOLD : FX_LOOT_TINT_GRAY);
             a->next_emit = s_clock + lcg_range(AMBIENT_INTERVAL_MIN, AMBIENT_INTERVAL_MAX);
         }
     }
@@ -389,7 +389,7 @@ static void spawn_slot_arrival(float sx, float sy) {
             .vy     = sinf(ang) * spd - ARRIVAL_UP_BIAS,
             .ttl    = ARRIVAL_TTL * lcg_range(0.8f, 1.2f),
             .size   = lcg_range(ARRIVAL_SIZE_MIN, ARRIVAL_SIZE_MAX),
-            .tint   = LOOT_FX_TINT_GOLD,
+            .tint   = FX_LOOT_TINT_GOLD,
             .active = true,
         };
     }
@@ -428,7 +428,7 @@ static void spawn_slot_delivery(float from_x, float from_y, float to_x, float to
             .ty     = to_y + lcg_range(-DELIVER_TARGET_JIT, DELIVER_TARGET_JIT),
             .ttl    = DELIVER_TTL * lcg_range(0.85f, 1.15f),
             .size   = lcg_range(DELIVER_SIZE_MIN, DELIVER_SIZE_MAX),
-            .tint   = LOOT_FX_TINT_GOLD,
+            .tint   = FX_LOOT_TINT_GOLD,
             .active = true,
         };
     }
@@ -463,7 +463,7 @@ static void trigger_slot_delivery(const VacFlight* f) {
     spawn_slot_delivery(from.x, from.y, slot.x, slot.y, f->item_id);
 }
 
-void loot_fx_reward_delivery(const char* item_id, float from_x, float from_y) {
+void fx_loot_reward_delivery(const char* item_id, float from_x, float from_y) {
     if (!item_id || item_id[0] == '\0') return;
     /* A granted item has no world parabola to land: this call is the moment it becomes the
      * player's, so it is the moment it sounds. */
@@ -489,7 +489,7 @@ static void expend_target(float from_x, float from_y, float* tx, float* ty) {
     *ty = y;
 }
 
-void loot_fx_slot_expend_at(const char* item_id, float from_x, float from_y) {
+void fx_loot_slot_expend_at(const char* item_id, float from_x, float from_y) {
     if (!item_id || item_id[0] == '\0') return;
 
     /* A stack leaving the bar is the same kind of moment as one arriving — a shop price paid, a
@@ -517,7 +517,7 @@ void loot_fx_slot_expend_at(const char* item_id, float from_x, float from_y) {
             .ty     = ty,
             .ttl    = EXPEND_TTL * lcg_range(0.9f, 1.1f),
             .size   = lcg_range(EXPEND_SIZE_MIN, EXPEND_SIZE_MAX),
-            .tint   = LOOT_FX_TINT_GOLD,
+            .tint   = FX_LOOT_TINT_GOLD,
             .active = true,
         };
     }
@@ -525,7 +525,7 @@ void loot_fx_slot_expend_at(const char* item_id, float from_x, float from_y) {
 
 /* ── Vacuum flight (stage 3) ───────────────────────────────────────────── */
 
-void loot_fx_push(EntityID drop_id, EntityID collector_id,
+void fx_loot_push(EntityID drop_id, EntityID collector_id,
                   const char* item_id, float world_x, float world_y,
                   bool granted) {
     if (!item_id || item_id[0] == '\0') return;
@@ -547,13 +547,13 @@ void loot_fx_push(EntityID drop_id, EntityID collector_id,
 
     /* Treasure burst rising from below the token's ground location. */
     spawn_burst(world_x, world_y + BURST_EMIT_DOWN,
-                eligible ? LOOT_FX_TINT_GOLD : LOOT_FX_TINT_GRAY);
+                eligible ? FX_LOOT_TINT_GOLD : FX_LOOT_TINT_GRAY);
 
     /* Arm the detached vacuum flight. */
     VacFlight* slot = NULL;
     float oldest = -1.0f;
     int   oldest_i = 0;
-    for (int i = 0; i < LOOT_FX_MAX; i++) {
+    for (int i = 0; i < FX_LOOT_MAX; i++) {
         if (!s_flights[i].active) { slot = &s_flights[i]; break; }
         if (s_flights[i].age > oldest) { oldest = s_flights[i].age; oldest_i = i; }
     }
@@ -572,9 +572,9 @@ void loot_fx_push(EntityID drop_id, EntityID collector_id,
     slot->active  = true;
 }
 
-bool loot_fx_inbound_to_inventory(const char* item_id) {
+bool fx_loot_inbound_to_inventory(const char* item_id) {
     if (!item_id || item_id[0] == '\0') return false;
-    for (int i = 0; i < LOOT_FX_MAX; i++) {
+    for (int i = 0; i < FX_LOOT_MAX; i++) {
         const VacFlight* f = &s_flights[i];
         if (f->active && f->granted && 0 == strcmp(f->item_id, item_id) &&
             g_local_player.id == f->collector_id) {
@@ -605,11 +605,11 @@ static bool resolve_collector_center(EntityID collector_id, float* cx, float* cy
 
 /* ── Per-frame integration ─────────────────────────────────────────────── */
 
-void loot_fx_update(float dt) {
+void fx_loot_update(float dt) {
     s_clock += dt;
 
     /* Vacuum flights. */
-    for (int i = 0; i < LOOT_FX_MAX; i++) {
+    for (int i = 0; i < FX_LOOT_MAX; i++) {
         VacFlight* f = &s_flights[i];
         if (!f->active) continue;
 
@@ -707,10 +707,10 @@ void loot_fx_update(float dt) {
 
 /* ── Renderer bridges ──────────────────────────────────────────────────── */
 
-int loot_fx_slot_count(void) { return LOOT_FX_MAX; }
+int fx_loot_slot_count(void) { return FX_LOOT_MAX; }
 
-bool loot_fx_render_at(int i, LootFxRender* out) {
-    if (i < 0 || i >= LOOT_FX_MAX || !out) return false;
+bool fx_loot_render_at(int i, FxLootRender* out) {
+    if (i < 0 || i >= FX_LOOT_MAX || !out) return false;
     const VacFlight* f = &s_flights[i];
     if (!f->active) return false;
 
@@ -723,9 +723,9 @@ bool loot_fx_render_at(int i, LootFxRender* out) {
     return true;
 }
 
-int loot_fx_particle_slot_count(void) { return LOOT_PARTICLE_MAX; }
+int fx_loot_particle_slot_count(void) { return LOOT_PARTICLE_MAX; }
 
-bool loot_fx_particle_at(int i, LootFxParticle* out) {
+bool fx_loot_particle_at(int i, FxLootParticle* out) {
     if (i < 0 || i >= LOOT_PARTICLE_MAX || !out) return false;
     const Particle* p = &s_particles[i];
     if (!p->active) return false;
@@ -739,9 +739,9 @@ bool loot_fx_particle_at(int i, LootFxParticle* out) {
     return true;
 }
 
-int loot_fx_delivery_token_slot_count(void) { return TOKEN_MAX; }
+int fx_loot_delivery_token_slot_count(void) { return TOKEN_MAX; }
 
-bool loot_fx_delivery_token_at(int i, LootFxDeliveryToken* out) {
+bool fx_loot_delivery_token_at(int i, FxLootDeliveryToken* out) {
     if (i < 0 || i >= TOKEN_MAX || !out) return false;
     const DeliveryToken* t = &s_tokens[i];
     if (!t->active) return false;
@@ -762,9 +762,9 @@ bool loot_fx_delivery_token_at(int i, LootFxDeliveryToken* out) {
     return true;
 }
 
-int loot_fx_screen_particle_slot_count(void) { return LOOT_SCR_PARTICLE_MAX; }
+int fx_loot_screen_particle_slot_count(void) { return LOOT_SCR_PARTICLE_MAX; }
 
-bool loot_fx_screen_particle_at(int i, LootFxScreenParticle* out) {
+bool fx_loot_screen_particle_at(int i, FxLootScreenParticle* out) {
     if (i < 0 || i >= LOOT_SCR_PARTICLE_MAX || !out) return false;
     const ScrParticle* p = &s_scr[i];
     if (!p->active) return false;

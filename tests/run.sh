@@ -69,6 +69,10 @@ cc "${cc_flags[@]}" -o "$out/player_containers" tests/player_containers_test.c s
     src/sim/container_ops.c src/ui/chat_log.c src/utils.c libs/cJSON/cJSON.c -lm
 "$out/player_containers"
 
+cc "${cc_flags[@]}" -o "$out/economy" tests/economy_test.c src/world/economy.c src/world/market_terms.c src/serial.c src/utils.c \
+    libs/cJSON/cJSON.c -lm
+"$out/economy"
+
 cc "${cc_flags[@]}" -ffunction-sections -fdata-sections -Wl,--gc-sections \
     -o "$out/world_depth" tests/world_depth_test.c -lm
 "$out/world_depth"
@@ -82,8 +86,8 @@ cc "${cc_flags[@]}" -o "$out/entity_overhead_ui" tests/entity_overhead_ui_test.c
 "$out/entity_overhead_ui"
 
 cc "${cc_flags[@]}" -ffunction-sections -fdata-sections -Wl,--gc-sections \
-    -o "$out/loot_fx" tests/loot_fx_test.c src/fx/loot_fx.c src/utils.c -lm
-"$out/loot_fx"
+    -o "$out/fx_loot" tests/fx_loot_test.c src/fx/fx_loot.c src/utils.c -lm
+"$out/fx_loot"
 
 cc "${cc_flags[@]}" -o "$out/self_motion" tests/self_motion_test.c src/sim/self_motion.c -lm
 "$out/self_motion"
@@ -100,18 +104,37 @@ cc "${cc_flags[@]}" -ffunction-sections -fdata-sections -Wl,--gc-sections \
 "$out/instance_map_geometry"
 
 cc "${cc_flags[@]}" -ffunction-sections -fdata-sections -Wl,--gc-sections \
-    -o "$out/modal_instance_map" tests/modal_instance_map_test.c src/utils.c -lm
+    -o "$out/modal_instance_map" tests/modal_instance_map_test.c src/utils.c libs/cJSON/cJSON.c -lm
 "$out/modal_instance_map"
 
-cc "${cc_flags[@]}" -o "$out/universe_map_data" tests/universe_map_data_test.c src/data/universe_map_data.c \
+cc "${cc_flags[@]}" -ffunction-sections -fdata-sections -Wl,--gc-sections \
+    -o "$out/universe_map_data" tests/universe_map_data_test.c src/data/universe_map_data.c src/data/instance_map_data.c \
     src/utils.c libs/cJSON/cJSON.c -lm
 "$out/universe_map_data"
+
+cc "${cc_flags[@]}" -ffunction-sections -fdata-sections -Wl,--gc-sections \
+    -o "$out/map_route" tests/map_route_test.c src/data/map_route.c src/data/instance_map_data.c \
+    src/data/quest_progress_store.c src/utils.c libs/cJSON/cJSON.c -lm
+"$out/map_route"
+
+cc "${cc_flags[@]}" -ffunction-sections -fdata-sections -Wl,--gc-sections \
+    -o "$out/quest_target" tests/quest_target_test.c src/data/quest_target.c src/data/map_route.c \
+    src/data/instance_map_data.c src/data/quest_progress_store.c src/utils.c libs/cJSON/cJSON.c -lm
+"$out/quest_target"
+
+cc "${cc_flags[@]}" -ffunction-sections -fdata-sections -Wl,--gc-sections \
+    -o "$out/quest_journal" tests/quest_journal_test.c src/data/quest_target.c src/data/map_route.c \
+    src/data/instance_map_data.c src/data/quest_progress_store.c src/utils.c libs/cJSON/cJSON.c -lm
+"$out/quest_journal"
 
 cc "${cc_flags[@]}" -o "$out/graph_layout" tests/graph_layout_test.c src/ui/graph_layout.c -lm
 "$out/graph_layout"
 
 cc "${cc_flags[@]}" -o "$out/hud_side_stack" tests/hud_side_stack_test.c src/ui/hud_side_stack.c -lm
 "$out/hud_side_stack"
+
+cc "${cc_flags[@]}" -o "$out/save_status" tests/save_status_test.c src/ui/save_status.c -lm
+"$out/save_status"
 
 cc "${cc_flags[@]}" -o "$out/session_gate" tests/session_gate_test.c src/ui/session_gate.c -lm
 "$out/session_gate"
@@ -122,6 +145,19 @@ cc "${cc_flags[@]}" -Itests/stubs -o "$out/socket" tests/socket_test.c src/net/s
 cc "${cc_flags[@]}" -ffunction-sections -fdata-sections -Wl,--gc-sections \
     -o "$out/ui_switch" tests/ui_switch_test.c src/ui/ui_switch.c -lm
 "$out/ui_switch"
+
+cc "${cc_flags[@]}" -ffunction-sections -fdata-sections -Wl,--gc-sections \
+    -o "$out/ui_tabs" tests/ui_tabs_test.c src/ui/ui_tabs.c -lm
+"$out/ui_tabs"
+
+cc "${cc_flags[@]}" -ffunction-sections -fdata-sections -Wl,--gc-sections \
+    -o "$out/map_marker" tests/map_marker_test.c src/ui/map_marker.c -lm
+"$out/map_marker"
+
+cc "${cc_flags[@]}" -ffunction-sections -fdata-sections -Wl,--gc-sections \
+    -o "$out/map_detail" tests/map_detail_test.c src/data/instance_map_data.c src/data/quest_progress_store.c \
+    src/data/quest_target.c src/data/map_route.c src/utils.c libs/cJSON/cJSON.c -lm
+"$out/map_detail"
 
 cc "${cc_flags[@]}" -Itests/stubs -ffunction-sections -fdata-sections -Wl,--gc-sections \
     -o "$out/game_client" tests/game_client_test.c src/net/game_client.c src/serial.c src/utils.c libs/cJSON/cJSON.c -lm

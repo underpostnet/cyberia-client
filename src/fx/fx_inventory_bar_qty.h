@@ -28,7 +28,7 @@ void fx_inventory_bar_qty_init(void);
 void fx_inventory_bar_qty_update(float dt);
 
 /* Release a held +/- popup the moment the loot pickup particle reaches this
- * item's slot (called by loot_fx when its slot-delivery lands). Changes with no
+ * item's slot (called by fx_loot when its slot-delivery lands). Changes with no
  * pickup animation release on a short fallback timer instead. */
 void fx_inventory_bar_qty_notify_arrival(const char* item_id);
 

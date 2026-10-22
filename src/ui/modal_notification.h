@@ -62,6 +62,21 @@ void modal_notification_show_split(const char* title, const char* message, Color
                                    ModalNotificationConfirmFn on_confirm,
                                    ModalNotificationCancelFn on_cancel);
 
+/* show_split for an amount to choose, such as a price: the stepper starts at
+ * `initial` instead of `max_quantity`. */
+void modal_notification_show_amount(const char* title, const char* message, Color accent,
+                                    const char* item_id, int initial, int max_quantity,
+                                    const char* confirm_label, const char* confirm_icon,
+                                    ModalNotificationConfirmFn on_confirm);
+
+/* show_split with a running total: the chosen count times `price_quantity` of
+ * `price_item_id`, which the action pays or charges. It leaves at once too. */
+void modal_notification_show_split_priced(const char* title, const char* message, Color accent,
+                                          const char* item_id, int max_quantity,
+                                          const char* price_item_id, int price_quantity,
+                                          const char* confirm_label, const char* confirm_icon,
+                                          ModalNotificationConfirmFn on_confirm);
+
 /* One line of a result set: what is produced and how much of it. */
 typedef struct {
     const char* item_id;
@@ -93,6 +108,16 @@ void modal_notification_show_assemble(const ModalNotificationAssemble* assemble)
 /* Set the time left on the running assembly from the snapshot, so the bar
  * ends when the server's timer ends. Ignored when no assembly is charging. */
 void modal_notification_set_assemble_remaining(float seconds);
+
+/* Close a charging assembly card the server refused; nothing is granted. */
+void modal_notification_close_assemble(void);
+
+/* A question with two answers: the confirm button runs `on_accept`, Cancel
+ * runs `on_cancel`. The card closes by itself at `deadline` (GetTime() clock)
+ * with no answer: the question no longer stands. */
+void modal_notification_show_prompt(const char* title, const char* message, Color accent,
+                                    const char* confirm_label, const char* confirm_icon, double deadline,
+                                    ModalNotificationCancelFn on_accept, ModalNotificationCancelFn on_cancel);
 
 void modal_notification_update(float dt);
 void modal_notification_draw(void);

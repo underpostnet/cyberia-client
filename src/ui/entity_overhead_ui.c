@@ -154,7 +154,7 @@ static void draw_xp_bar(float cx, float top_y, float ratio, double xp, double xp
     }
 }
 
-static void draw_transport_bar(float cx, float top_y, float charge) {
+static void draw_transport_bar(float cx, float top_y, float charge, int fee, bool short_of_fee) {
     Rectangle bar = { cx - EOHUD_HP_BAR_W * 0.5f, top_y,
                       (float)EOHUD_HP_BAR_W, (float)EOHUD_BAR_H };
     DrawRectangleRounded(bar, EOHUD_PILL_ROUND, 8, C_HP_BG);
@@ -165,8 +165,10 @@ static void draw_transport_bar(float cx, float top_y, float charge) {
         DrawRectangleRounded(fill, EOHUD_PILL_ROUND, 8, C_TRANSPORT_FILL);
     }
     DrawRectangleRoundedLinesEx(bar, EOHUD_PILL_ROUND, 8, 1.0f, C_TRANSPORT_BORDER);
-    draw_centered_label("Transporting...", cx, top_y, EOHUD_HP_LABEL_FONT_SIZE, C_LABEL, C_NAME_SHADOW,
-                        (float)EOHUD_BAR_H);
+    char label[48] = "Transporting...";
+    if (0 < fee) snprintf(label, sizeof label, short_of_fee ? "Needs %d coins" : "Transport - %d coins", fee);
+    draw_centered_label(label, cx, top_y, EOHUD_HP_LABEL_FONT_SIZE, short_of_fee ? C_HP_LOW : C_LABEL,
+                        C_NAME_SHADOW, (float)EOHUD_BAR_H);
 }
 
 /* The name, led by the relation marks: a heart for a friend and the party icon
@@ -303,7 +305,7 @@ void entity_overhead_ui_draw(
 
     if (p->on_portal) {
         cursor_px -= EOHUD_BAR_H;
-        draw_transport_bar(entity_cx_px, cursor_px, p->portal_hold);
+        draw_transport_bar(entity_cx_px, cursor_px, p->portal_hold, p->portal_fee, p->portal_short);
         cursor_px -= EOHUD_ROW_GAP;
     }
 

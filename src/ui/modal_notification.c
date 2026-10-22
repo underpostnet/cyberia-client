@@ -31,7 +31,7 @@
 #include "fx/fx_grant_delivery.h"
 #include "fx/fx_inventory_bar_qty.h"
 #include "item_slot.h"
-#include "fx/loot_fx.h"
+#include "fx/fx_loot.h"
 #include "sim/local_player.h"
 #include "modal.h"
 #include "modal_interact.h"
@@ -134,6 +134,7 @@ typedef struct {
     int   qty_max;
     char  price_item[64];
     int   price_qty;
+    bool  purchase;   /* a priced picker that waits for the grant */
     char  confirm_label[16];
     char  confirm_icon[24];
     ModalNotificationConfirmFn on_confirm;
@@ -142,6 +143,9 @@ typedef struct {
     NotifItem inputs[MN_ITEMS_MAX];
     int       input_count;
     ModalNotificationCancelFn on_cancel;
+    /* Prompt — inactive when on_accept is NULL. */
+    ModalNotificationCancelFn on_accept;
+    double    deadline;
 } NotifEntry;
 
 static NotifEntry s_queue[MN_QUEUE_CAP];
@@ -164,6 +168,7 @@ static int   s_qty_max = 0;
 static int   s_qty_step = 1;   /* step size the − / + buttons apply */
 static char  s_price_item[64] = {0};
 static int   s_price_qty = 0;
+static bool  s_purchase = false;
 static char  s_confirm_label[16] = {0};
 static char  s_confirm_icon[24]  = {0};
 static ModalNotificationConfirmFn s_on_confirm = NULL;
@@ -175,6 +180,9 @@ static float s_craft_age   = 0.0f;
 static NotifItem s_inputs[MN_ITEMS_MAX];
 static int   s_input_count = 0;
 static ModalNotificationCancelFn s_on_cancel = NULL;
+static ModalNotificationCancelFn s_on_accept = NULL;
+static double s_deadline = 0.0;
+static double s_prompt_shown = 0.0;  /* when the prompt opened: its answer window starts */
 
 /* True from a confirm-press until fx_grant_delivery has sequenced the server's
  * grant into the inventory (or given up on a rejected transaction). */
@@ -192,7 +200,7 @@ static bool  s_closing    = false;
 static float s_close_age  = 0.0f;
 
 /* True until the delivery flights (notification slot -> inventory slot,
- * loot_fx.c) land — the card holds at rest so the player watches the items
+ * fx_loot.c) land — the card holds at rest so the player watches the items
  * arrive before it closes. */
 static bool  s_awaiting_delivery = false;
 
@@ -204,13 +212,14 @@ static float s_ok_pulse_age = 0.0f;
 /* ── Mode predicates ──────────────────────────────────────────────────── */
 
 static bool notif_has_picker(void)    { return s_qty_max > 0; }
-/* A priced picker is a purchase: it shows a running total and waits for the
- * server's grant. An unpriced one is a split of stock already owned. */
+/* A priced picker shows a running total. A purchase also waits for the
+ * server's grant; a split moves stock the player already owns. */
 static bool notif_has_price(void)     { return notif_has_picker() && '\0' != s_price_item[0]; }
 static bool notif_has_step_size(void) {
     return notif_has_picker() && s_qty_max - s_qty_min + 1 >= MN_STEP_SIZE_MIN_CHOICES;
 }
 static bool notif_is_assembling(void) { return s_craft_total > 0.0f; }
+static bool notif_is_prompt(void)     { return NULL != s_on_accept; }
 
 /* ── Queue ────────────────────────────────────────────────────────────── */
 
@@ -235,6 +244,7 @@ static void show_next(void) {
     s_on_confirm = e->on_confirm;
     copy_str(s_price_item, sizeof(s_price_item), e->price_item);
     s_price_qty = e->price_qty;
+    s_purchase  = e->purchase;
     copy_str(s_confirm_label, sizeof(s_confirm_label), e->confirm_label);
     copy_str(s_confirm_icon, sizeof(s_confirm_icon), e->confirm_icon);
     memcpy(s_inputs, e->inputs, sizeof(s_inputs));
@@ -242,6 +252,9 @@ static void show_next(void) {
     s_craft_total  = e->craft_seconds;
     s_craft_age    = 0.0f;
     s_on_cancel    = e->on_cancel;
+    s_on_accept    = e->on_accept;
+    s_deadline     = e->deadline;
+    s_prompt_shown = GetTime();
     s_awaiting_grant = false;
     s_accent = e->accent;
     s_age    = 0.0f;
@@ -303,12 +316,14 @@ void modal_notification_init(void) {
     s_qty_step = 1;
     s_price_item[0] = '\0';
     s_price_qty = 0;
+    s_purchase = false;
     s_confirm_label[0] = '\0';
     s_confirm_icon[0] = '\0';
     s_on_confirm = NULL;
     s_craft_total = 0.0f;
     s_input_count = 0;
     s_on_cancel = NULL;
+    s_on_accept = NULL;
 }
 
 void modal_notification_show(const char* title, const char* message, Color accent) {
@@ -336,17 +351,18 @@ void modal_notification_show_picker(const char* title, const char* message, Colo
     e->qty_max = max_quantity;
     strncpy(e->price_item, price_item_id ? price_item_id : "", sizeof(e->price_item) - 1);
     e->price_qty = price_quantity;
+    e->purchase = true;
     strncpy(e->confirm_label, "Buy", sizeof(e->confirm_label) - 1);
     strncpy(e->confirm_icon, "wallet", sizeof(e->confirm_icon) - 1);
     e->on_confirm = on_confirm;
     present();
 }
 
-void modal_notification_show_split(const char* title, const char* message, Color accent,
-                                   const char* item_id, int max_quantity,
-                                   const char* confirm_label, const char* confirm_icon,
-                                   ModalNotificationConfirmFn on_confirm,
-                                   ModalNotificationCancelFn on_cancel) {
+static NotifEntry* push_split(const char* title, const char* message, Color accent,
+                              const char* item_id, int max_quantity,
+                              const char* confirm_label, const char* confirm_icon,
+                              ModalNotificationConfirmFn on_confirm,
+                              ModalNotificationCancelFn on_cancel) {
     if (max_quantity < 1) max_quantity = 1;
 
     NotifEntry* e = push_entry(title, message, accent);
@@ -359,6 +375,49 @@ void modal_notification_show_split(const char* title, const char* message, Color
             sizeof(e->confirm_icon) - 1);
     e->on_confirm = on_confirm;
     e->on_cancel = on_cancel;
+    return e;
+}
+
+void modal_notification_show_split(const char* title, const char* message, Color accent,
+                                   const char* item_id, int max_quantity,
+                                   const char* confirm_label, const char* confirm_icon,
+                                   ModalNotificationConfirmFn on_confirm,
+                                   ModalNotificationCancelFn on_cancel) {
+    push_split(title, message, accent, item_id, max_quantity, confirm_label, confirm_icon, on_confirm, on_cancel);
+    present();
+}
+
+void modal_notification_show_amount(const char* title, const char* message, Color accent,
+                                    const char* item_id, int initial, int max_quantity,
+                                    const char* confirm_label, const char* confirm_icon,
+                                    ModalNotificationConfirmFn on_confirm) {
+    NotifEntry* e = push_split(title, message, accent, item_id, max_quantity, confirm_label, confirm_icon,
+                               on_confirm, NULL);
+    e->items[0].qty = initial < 1 ? 1 : (initial > e->qty_max ? e->qty_max : initial);
+    present();
+}
+
+void modal_notification_show_split_priced(const char* title, const char* message, Color accent,
+                                          const char* item_id, int max_quantity,
+                                          const char* price_item_id, int price_quantity,
+                                          const char* confirm_label, const char* confirm_icon,
+                                          ModalNotificationConfirmFn on_confirm) {
+    NotifEntry* e = push_split(title, message, accent, item_id, max_quantity, confirm_label, confirm_icon,
+                               on_confirm, NULL);
+    copy_str(e->price_item, sizeof(e->price_item), price_item_id);
+    e->price_qty = price_quantity;
+    present();
+}
+
+void modal_notification_show_prompt(const char* title, const char* message, Color accent,
+                                    const char* confirm_label, const char* confirm_icon, double deadline,
+                                    ModalNotificationCancelFn on_accept, ModalNotificationCancelFn on_cancel) {
+    NotifEntry* e = push_entry(title, message, accent);
+    copy_str(e->confirm_label, sizeof(e->confirm_label), confirm_label);
+    copy_str(e->confirm_icon, sizeof(e->confirm_icon), confirm_icon);
+    e->on_accept = on_accept;
+    e->on_cancel = on_cancel;
+    e->deadline = deadline;
     present();
 }
 
@@ -542,7 +601,7 @@ static void notif_buttons(Rectangle card, Rectangle* cancel, Rectangle* confirm)
         *cancel = (Rectangle){ card.x + (card.width - MN_OK_W) / 2.0f, y, MN_OK_W, MN_OK_H };
         return;
     }
-    if (notif_has_picker()) {
+    if (notif_has_picker() || notif_is_prompt()) {
         *cancel  = (Rectangle){ card.x + card.width * 0.5f - MN_BTN_GAP * 0.5f - MN_OK_W,
                                 y, MN_OK_W, MN_OK_H };
         *confirm = (Rectangle){ card.x + card.width * 0.5f + MN_BTN_GAP * 0.5f, y, MN_OK_W, MN_OK_H };
@@ -625,7 +684,7 @@ static void release_result_items(void) {
 
 static bool results_inbound(void) {
     for (int i = 0; i < s_item_count; i++) {
-        if (loot_fx_inbound_to_inventory(s_items[i].item_id)) return true;
+        if (fx_loot_inbound_to_inventory(s_items[i].item_id)) return true;
     }
     return false;
 }
@@ -652,6 +711,14 @@ static void start_closing(void) {
  * question for anything that follows the charge itself. */
 static bool notif_is_charging(void) {
     return s_open && notif_is_assembling() && !s_awaiting_grant && !s_awaiting_delivery && !s_closing;
+}
+
+void modal_notification_close_assemble(void) {
+    if (!s_open || !notif_is_assembling() || s_closing) return;
+    s_craft_total = 0.0f;
+    s_on_cancel = NULL;
+    release_result_items();
+    start_closing();
 }
 
 void modal_notification_set_assemble_remaining(float seconds) {
@@ -748,7 +815,7 @@ void modal_notification_update(float dt) {
     /* Confirmed transaction: hold the card at rest while fx_grant_delivery
      * waits for the server's grant and sequences the spend → arrival FX. It
      * clears either by launching the flights or by giving up on a rejected
-     * transaction; loot_fx tells the two apart. */
+     * transaction; fx_loot tells the two apart. */
     if (s_awaiting_grant) {
         if (fx_grant_delivery_waiting()) return;
         s_awaiting_grant = false;
@@ -775,12 +842,20 @@ void modal_notification_update(float dt) {
              * reverse of the arrival parabola, while the outputs fly in. */
             for (int i = 0; i < s_input_count; i++) {
                 Rectangle slot = notif_input_slot(card, i);
-                loot_fx_slot_expend_at(s_inputs[i].item_id,
+                fx_loot_slot_expend_at(s_inputs[i].item_id,
                                        slot.x + slot.width * 0.5f,
                                        slot.y + slot.height * 0.5f);
             }
             begin_result_delivery(card, NULL, 0);
         }
+        return;
+    }
+
+    /* A question whose deadline passed no longer stands. */
+    if (notif_is_prompt() && GetTime() >= s_deadline) {
+        s_on_accept = NULL;
+        s_on_cancel = NULL;
+        start_closing();
         return;
     }
 
@@ -890,7 +965,7 @@ void modal_notification_draw(void) {
 
     /* Result slots — centred, popping in oversized (soft overshoot) with their
      * colour transitioning from the accent back to normal as they settle. Once
-     * the delivery flights launch the icons leave the slots empty: the loot_fx
+     * the delivery flights launch the icons leave the slots empty: the fx_loot
      * tokens are what's seen flying to the inventory, so the items must vanish
      * here to sell that motion, and they stay empty through the close-slide. */
     for (int i = 0; i < s_item_count; i++) {
@@ -983,9 +1058,8 @@ void modal_notification_draw(void) {
             ui_button_pixel_retro_draw(step_size, &step_btn, ui_button_hit(step_size, mx, my));
         }
 
-        /* Running total — the price item's own sprite beside what this purchase
-         * costs at the selected count, so "10 coin each" always has its sum. A
-         * split has nothing to price, so it steps the count and nothing more. */
+        /* Running total — the price item's own sprite beside what the selected
+         * count costs or pays, so "10 coins each" always has its sum. */
         if (notif_has_price()) {
             Rectangle row = notif_total_row(card);
             char total[24];
@@ -1036,7 +1110,7 @@ void modal_notification_draw(void) {
     } else if (!s_closing && !s_awaiting_grant && !s_awaiting_delivery) {
         if (confirm_r.width > 0.0f) {
             UIButtonPixelRetroStyle ok_btn = {
-                .bg = notif_has_picker() ? (Color){ 38, 138, 76, 235 } : (Color){ 50, 55, 80, 235 },
+                .bg = notif_has_picker() || notif_is_prompt() ? (Color){ 38, 138, 76, 235 } : (Color){ 50, 55, 80, 235 },
                 .icon_id = ok_icon,
                 .label = ok_label,
                 .font_size = 15,
@@ -1046,13 +1120,12 @@ void modal_notification_draw(void) {
             };
             ui_button_pixel_retro_draw(confirm_r, &ok_btn, ui_button_hit(confirm_r, mx, my));
         }
-        /* A purchase is refusable and an assembly is abortable: both pair with
-         * a Cancel that stops the operation. */
+        /* A picker and an assembly pair with Cancel; a prompt pairs with Decline. */
         if (cancel_r.width > 0.0f) {
             UIButtonPixelRetroStyle cancel_btn = {
                 .bg = (Color){ 90, 50, 58, 235 },
                 .icon_id = "close",
-                .label = "Cancel",
+                .label = notif_is_prompt() ? "Decline" : "Cancel",
                 .font_size = 15,
                 .text_color = C_TITLE,
                 .selected = false,
@@ -1060,6 +1133,13 @@ void modal_notification_draw(void) {
             };
             ui_button_pixel_retro_draw(cancel_r, &cancel_btn, ui_button_hit(cancel_r, mx, my));
         }
+    }
+
+    /* The answer window of a prompt drains along the bottom edge of the card. */
+    if (notif_is_prompt() && s_deadline > s_prompt_shown) {
+        float left = fmaxf(0.0f, (float)((s_deadline - GetTime()) / (s_deadline - s_prompt_shown)));
+        DrawRectangle((int)card.x + 2, (int)(card.y + card.height) - 5, (int)((card.width - 4.0f) * left), 3,
+                      Fade(s_accent, a));
     }
 
     /* Synthesis field last, so the convergence reads over the panel instead of
@@ -1104,6 +1184,7 @@ bool modal_notification_handle_click(int mx, int my) {
     if (cancel_r.width > 0.0f && ui_button_hit(cancel_r, mx, my)) {
         if (s_on_cancel) { s_on_cancel(); s_on_cancel = NULL; }
         s_on_confirm = NULL;
+        s_on_accept = NULL;
         release_result_items();
         start_closing();
         return true;
@@ -1129,6 +1210,14 @@ bool modal_notification_handle_click(int mx, int my) {
          * regardless of how long the card itself stays on screen after. */
         s_ok_pulsing = true;
         s_ok_pulse_age = 0.0f;
+        if (notif_is_prompt()) {
+            ModalNotificationCancelFn accept = s_on_accept;
+            s_on_accept = NULL;
+            s_on_cancel = NULL;
+            start_closing();
+            accept();
+            return true;
+        }
         /* A picker hands its confirmed count to the opener, then leaves the
          * spend → arrival FX to fx_grant_delivery and holds until it settles. */
         if (s_on_confirm) {
@@ -1137,7 +1226,7 @@ bool modal_notification_handle_click(int mx, int my) {
             char item[64];
             copy_str(item, sizeof(item), s_items[0].item_id);
             int qty = s_items[0].qty;
-            if (notif_has_price()) {
+            if (s_purchase) {
                 const char* spent = s_price_item;
                 begin_result_delivery(card, &spent, 1);
                 confirm(item, qty);
@@ -1158,7 +1247,7 @@ bool modal_notification_handle_click(int mx, int my) {
              * notification closes. */
             for (int i = 0; i < s_item_count; i++) {
                 Rectangle slot = notif_item_slot(card, i);
-                loot_fx_reward_delivery(s_items[i].item_id,
+                fx_loot_reward_delivery(s_items[i].item_id,
                                         slot.x + slot.width * 0.5f,
                                         slot.y + slot.height * 0.5f);
             }

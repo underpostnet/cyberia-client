@@ -1,6 +1,7 @@
 #include "ui_switch.h"
 
 #include "ease.h"
+#include "modal.h"
 #include "text.h"
 #include "ui_button.h"
 #include "ui_icon.h"
@@ -22,8 +23,7 @@ void ui_switch_update(UISwitch* control, bool on, float dt) {
 
 void ui_switch_draw(const UISwitch* control, Rectangle bounds, const UISwitchStyle* style, bool hovered) {
     Color text = { 220, 230, 240, 255 };
-    draw_pixel_bevel(bounds, 0.0f, 2.0f, (Color){ 24, 30, 48, 255 },
-                     (Color){ 45, 55, 76, 255 }, (Color){ 10, 14, 24, 255 });
+    draw_pixel_bevel(bounds, 0.0f, 2.0f, MODAL_BUTTON, (Color){ 45, 55, 76, 255 }, (Color){ 10, 14, 24, 255 });
     if (hovered) ui_button_draw_ring(bounds, text);
 
     float cy = bounds.y + bounds.height * 0.5f;

@@ -20,7 +20,18 @@
 #include <stdio.h>
 
 double GetTime(void) { return 0.0; }
-bool network_send(cJSON* msg) { cJSON_Delete(msg); return true; }
+
+/* The sequences of the last batch sent. */
+static int s_sent_first, s_sent_count;
+bool network_send(cJSON* msg) {
+    const cJSON* events = cJSON_GetObjectItemCaseSensitive(cJSON_GetObjectItemCaseSensitive(msg, "payload"), "events");
+    s_sent_count = cJSON_GetArraySize(events);
+    const cJSON* first = cJSON_GetArrayItem(events, 0);
+    const cJSON* payload = cJSON_GetObjectItemCaseSensitive(first, "payload");
+    s_sent_first = s_sent_count ? (int)cJSON_GetObjectItemCaseSensitive(payload, "seq")->valuedouble : 0;
+    cJSON_Delete(msg);
+    return true;
+}
 ObjectLayer* lookup_cached_layer(const char* item_id) { return NULL; }
 
 #define SPEED 5.0f
@@ -84,6 +95,23 @@ int main(void) {
     int count = 0;
     client_event_list(&count);
     assert(0 == count);
+
+    /* input_resend: the server queued nothing after a batch it never got, so
+     * the events from the gap go again, once, with the next flush. */
+    for (int i = 0; 3 > i; i++)
+        client_event_push(CLIENT_EVENT_PLAYER_ACTION, (client_event_payload_t){ .target_x = 3, .target_y = 2 });
+    client_event_flush();
+    assert(2 == s_sent_first && 3 == s_sent_count);
+    s_sent_count = 0;
+    client_event_flush();
+    assert(0 == s_sent_count);
+    client_event_resend(3);
+    client_event_flush();
+    assert(3 == s_sent_first && 2 == s_sent_count);
+    client_event_resend(9);
+    s_sent_count = 0;
+    client_event_flush();
+    assert(0 == s_sent_count);
 
     printf("replication_test OK\n");
     return 0;

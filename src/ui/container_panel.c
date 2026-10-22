@@ -14,6 +14,7 @@
 #include "utils.h"
 #include "view/viewport.h"
 #include "world/object_layers_management.h"
+#include "world_drop.h"
 
 #include <raylib.h>
 #include <stdio.h>
@@ -36,6 +37,7 @@ static struct {
     ItemSlotGrid            grid;
     UIScroll                scroll;
     float                   content_h;
+    Rectangle               drop_zone;  /* the visible drop zone of the personal storage */
 } s_panel;
 
 static int hint_font(void) { return viewport_is_mobile() ? 12 : 14; }
@@ -123,10 +125,16 @@ static Rectangle release_rect(const ItemSlotGridEvent* ev) {
 /* A stack that does not land slides back into its cell from the release. */
 static void slide_back(const ItemSlotGridEvent* ev) { container_panel_animate_from(ev->from_index, release_rect(ev)); }
 
-/* A stack released over the bar lands on the cell under it; anywhere else it
- * goes back. Over a full bag a refusal says why. */
+/* A stack released over the bar lands on the cell under it, one released on
+ * the drop zone of the personal storage drops on the ground, and anywhere else
+ * it goes back. Over a full bag a refusal says why. */
 static void drop_out(const ItemSlotGridEvent* ev) {
     int slot = 0;
+    if (BOX_STORAGE == s_panel.box && CheckCollisionPointRec(ev->point, s_panel.drop_zone)) {
+        slide_back(ev);
+        world_drop_ask(BOX_STORAGE, ev->from_index, ev->payload.item_id, ev->payload.quantity, (Vector2){ -1.0f, -1.0f });
+        return;
+    }
     if (inventory_bar_cell_at((int)ev->point.x, (int)ev->point.y, &slot) &&
         stack_move_drop(s_panel.box, ev->from_index, BOX_BAG, slot, release_rect(ev))) return;
     slide_back(ev);
@@ -203,6 +211,21 @@ float container_panel_draw(Rectangle content) {
         hint_line(g_local_player.account ? "Drag to and from your bag. Storage stays with your account."
                                          : "Drag to and from your bag. Storage empties when you leave.",
                   grid, top + (float)text_line_height(font), MODAL_LABEL);
+        float zone_h = (float)font + 16.0f;
+        Rectangle zone = { grid.x, top + head, grid.width, zone_h };
+        s_panel.drop_zone = GetCollisionRec(zone, grid);
+        bool over = item_slot_grid_is_dragging(&s_panel.grid) &&
+                    CheckCollisionPointRec(s_panel.grid.pointer, s_panel.drop_zone);
+        DrawRectangleRec(zone, over ? Fade(C_ACCEPT, 0.35f) : (Color){ 30, 34, 52, 200 });
+        DrawRectangleLinesEx(zone, over ? 2.0f : 1.0f, over ? C_ACCEPT : MODAL_LABEL);
+        const char* label = "Drag here to drop on the ground";
+        float icon = (float)font + 4.0f;
+        float w = icon + 6.0f + (float)MeasureText(label, font);
+        float lx = zone.x + (zone.width - w) * 0.5f;
+        ui_icon_draw("drop", lx + icon * 0.5f, zone.y + zone_h * 0.5f, (int)icon, false, 0.0f);
+        text_draw_outlined(label, (int)(lx + icon + 6.0f), (int)(zone.y + (zone_h - (float)font) * 0.5f),
+                           font, MODAL_TEXT, BLACK, 1);
+        head += zone_h + 6.0f;
     } else {
         hint_line("Drag between the vault and your inventory bar", grid, top, MODAL_LABEL);
     }
