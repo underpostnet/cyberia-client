@@ -1,0 +1,51 @@
+name: CI | Test cyberia-client
+
+on:
+  push:
+    branches: ['**']
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  native:
+    name: Native tests
+    # A branch of this repository runs on push; a pull request runs here only from a fork.
+    if: github.event_name == 'push' || github.event.pull_request.head.repo.full_name != github.repository
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Clone repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Run the native tests
+        run: bash tests/run.sh
+
+  wasm:
+    name: WASM build (${{ matrix.mode }})
+    if: github.event_name == 'push' || github.event.pull_request.head.repo.full_name != github.repository
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    # The toolchain of the runtime images (Dockerfile, Dockerfile.dev).
+    container: emscripten/emsdk:5.0.6
+    strategy:
+      fail-fast: false
+      matrix:
+        mode: [RELEASE, DEBUG]
+    steps:
+      - name: Clone repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Build the client
+        env:
+          BUILD_MODE: ${{ matrix.mode }}
+        run: make -f Web.mk clean all BUILD_MODE="$BUILD_MODE" OUTPUT_DIR=bin/
