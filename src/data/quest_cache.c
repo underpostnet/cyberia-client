@@ -42,15 +42,10 @@ const QuestMetadataEntry* quest_cache_get(const char* code) {
 
 int quest_active_step_index(const QuestMetadataEntry* metadata,
                             const QuestProgressEntry* progress) {
-    if (NULL == metadata || NULL == progress || '\0' == progress->active_step[0]) return 0;
-    for (int i = 0; i < metadata->step_count; i++) {
-        const QuestStepMeta* step = &metadata->steps[i];
-        if (0 == strcmp(step->id, progress->active_step) ||
-            0 == strcmp(step->description, progress->active_step)) {
-            return i;
-        }
-    }
-    return 0;
+    if ('\0' == progress->step_id[0]) return metadata->step_count;
+    for (int i = 0; i < metadata->step_count; i++)
+        if (0 == strcmp(metadata->steps[i].id, progress->step_id)) return i;
+    return -1;
 }
 
 /* Parse the quest doc (`data` object of the engine envelope) into entry, then

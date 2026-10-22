@@ -5,7 +5,9 @@
 #include "quest_progress_store.h"
 #include "log.h"
 #include "utils.h"
+#include "world/world_types.h"
 
+#include <assert.h>
 #include <cJSON.h>
 #include <float.h>
 #include <math.h>
@@ -16,7 +18,7 @@
 
 static ImapGraph     s_graph;
 static ImapDataState s_state       = IMAP_DATA_IDLE;
-static bool          s_open        = false;
+static int           s_users       = 0;     /* the views that hold the graph open */
 static int           s_generation  = 0;
 /* The quest store revision and the graph the active marks were made for. */
 static int           s_marked_revision   = -1;
@@ -44,6 +46,32 @@ static ImapPresenceStatus presence_status_from_string(const char* value) {
     if (0 == strcmp(value, "portal"))        return IMAP_PRESENCE_PORTAL;
     if (0 == strcmp(value, "portal-random")) return IMAP_PRESENCE_PORTAL_RANDOM;
     return IMAP_PRESENCE_NONE;
+}
+
+ImapPresenceStatus instance_map_presence_of_status(uint8_t status_icon) {
+    switch (status_icon) {
+        case STATUS_ICON_PASSIVE:       return IMAP_PRESENCE_PASSIVE;
+        case STATUS_ICON_HOSTILE:       return IMAP_PRESENCE_HOSTILE;
+        case STATUS_ICON_RESOURCE:      return IMAP_PRESENCE_RESOURCE;
+        case STATUS_ICON_PORTAL:        return IMAP_PRESENCE_PORTAL;
+        case STATUS_ICON_PORTAL_RANDOM: return IMAP_PRESENCE_PORTAL_RANDOM;
+        default:                        return IMAP_PRESENCE_NONE;
+    }
+}
+
+ImapEntrySpawn instance_map_parse_entry_spawn(const cJSON* doc) {
+    const cJSON* spawn = cJSON_GetObjectItemCaseSensitive(doc, "entrySpawn");
+    const char* mode = json_str(spawn, "mode");
+    ImapEntrySpawn out = { .mode = NULL == mode                         ? IMAP_SPAWN_NONE
+                                 : 0 == strcmp(mode, "fixed")           ? IMAP_SPAWN_FIXED
+                                 : 0 == strcmp(mode, "random")          ? IMAP_SPAWN_RANDOM
+                                                                        : IMAP_SPAWN_UNRESOLVED,
+                           .cell_x = json_int(spawn, "cellX", -1), .cell_y = json_int(spawn, "cellY", -1) };
+    copy_str(out.map_code, sizeof out.map_code, json_str(spawn, "mapCode"));
+    copy_str(out.map_name, sizeof out.map_name, json_str(spawn, "mapName"));
+    if (IMAP_SPAWN_FIXED == out.mode && (0 > out.cell_x || 0 > out.cell_y || '\0' == out.map_code[0]))
+        out.mode = IMAP_SPAWN_UNRESOLVED;
+    return out;
 }
 
 static ImapPresencePoi* find_presence_poi(int node, int cell_x, int cell_y) {
@@ -85,19 +113,71 @@ static void refresh_node_capability_counts(void) {
     }
 }
 
-/* The providers one POI lists under `key`, with the codes each one links. */
-static void parse_providers(const cJSON* poi_doc, const char* key, const char* links_key, int poi,
-                            ImapProvider* out, int* count) {
+static const char* const SERVICE_NAMES[IMAP_SERVICE_COUNT] = {
+    [IMAP_SERVICE_SHOP] = "shop",       [IMAP_SERVICE_CRAFT] = "craft",     [IMAP_SERVICE_STORAGE] = "storage",
+    [IMAP_SERVICE_MARKET] = "market",   [IMAP_SERVICE_BUYBACK] = "buyback", [IMAP_SERVICE_BURN] = "burn",
+    [IMAP_SERVICE_TALK] = "talk",
+};
+
+static uint8_t parse_services(const cJSON* row) {
+    uint8_t services = 0;
+    const cJSON* value = NULL;
+    cJSON_ArrayForEach(value, cJSON_GetObjectItemCaseSensitive(row, "services")) {
+        for (int s = 0; cJSON_IsString(value) && IMAP_SERVICE_COUNT > s; ++s)
+            if (0 == strcmp(value->valuestring, SERVICE_NAMES[s])) services |= (uint8_t)(1u << s);
+    }
+    return services;
+}
+
+/* The providers one POI lists under `key`, with the label and the codes each one links. */
+static void parse_providers(const cJSON* poi_doc, const char* key, const char* label_key, const char* links_key,
+                            int poi, ImapProvider* out, int* count) {
     const cJSON* row = NULL;
     cJSON_ArrayForEach(row, cJSON_GetObjectItemCaseSensitive(poi_doc, key)) {
         if (IMAP_MAX_PROVIDERS <= *count) return;
         ImapProvider* p = &out[(*count)++];
-        *p = (ImapProvider){ .poi = poi, .standalone = cJSON_IsTrue(cJSON_GetObjectItemCaseSensitive(row, "standalone")) };
+        *p = (ImapProvider){ .poi = poi, .services = parse_services(row),
+                             .standalone = cJSON_IsTrue(cJSON_GetObjectItemCaseSensitive(row, "standalone")) };
         copy_str(p->code, IMAP_CODE_MAX, json_str(row, "code"));
+        copy_str(p->label, IMAP_NAME_MAX, json_str(row, label_key));
         const cJSON* link = NULL;
         cJSON_ArrayForEach(link, cJSON_GetObjectItemCaseSensitive(row, links_key)) {
             if (IMAP_MAX_LINKS <= p->link_count || !cJSON_IsString(link)) break;
             copy_str(p->links[p->link_count++], IMAP_CODE_MAX, link->valuestring);
+        }
+    }
+}
+
+static const char* const YIELD_VIAS[IMAP_YIELD_VIA_COUNT] = {
+    [IMAP_YIELD_DROP] = "drop", [IMAP_YIELD_SHOP] = "shop", [IMAP_YIELD_CRAFT] = "craft",
+};
+
+/* One row of `key` placed on a POI, under the item of `id_key`. */
+static void parse_placed(const cJSON* poi_doc, const char* key, const char* id_key, int poi) {
+    const cJSON* row = NULL;
+    cJSON_ArrayForEach(row, cJSON_GetObjectItemCaseSensitive(poi_doc, key)) {
+        if (IMAP_MAX_PLACED <= s_graph.placed_count) return;
+        if (0 > s_graph.presence_pois[poi].first_placed) s_graph.presence_pois[poi].first_placed = s_graph.placed_count;
+        ImapPlaced* placed = &s_graph.placed[s_graph.placed_count++];
+        *placed = (ImapPlaced){ .poi = poi, .bot = 0 == strcmp("bots", key),
+                                .mortal = cJSON_IsTrue(cJSON_GetObjectItemCaseSensitive(row, "mortal")),
+                                .stats = json_int(row, "stats", 0) };
+        copy_str(placed->item_id, sizeof placed->item_id, json_str(row, id_key));
+    }
+}
+
+/* The bots and resources one POI places and the items it gives. */
+static void parse_targets(const cJSON* poi_doc, int poi) {
+    parse_placed(poi_doc, "bots", "skin", poi);
+    parse_placed(poi_doc, "resources", "itemId", poi);
+    const cJSON* row = NULL;
+    cJSON_ArrayForEach(row, cJSON_GetObjectItemCaseSensitive(poi_doc, "yields")) {
+        const char* via = json_str(row, "via");
+        for (int v = 0; NULL != via && IMAP_YIELD_VIA_COUNT > v && IMAP_MAX_YIELDS > s_graph.yield_count; v++) {
+            if (0 != strcmp(via, YIELD_VIAS[v])) continue;
+            ImapYield* yield = &s_graph.yields[s_graph.yield_count++];
+            *yield = (ImapYield){ .poi = poi, .via = (ImapYieldVia)v };
+            copy_str(yield->item_id, sizeof yield->item_id, json_str(row, "itemId"));
         }
     }
 }
@@ -119,14 +199,21 @@ static void parse_presence_pois(const cJSON* doc) {
         if (NULL == poi) {
             if (s_graph.presence_poi_count >= IMAP_MAX_PRESENCE_POIS) break;
             poi = &s_graph.presence_pois[s_graph.presence_poi_count++];
-            *poi = (ImapPresencePoi){ .node = node, .cell_x = cell_x, .cell_y = cell_y };
+            *poi = (ImapPresencePoi){ .node = node, .cell_x = cell_x, .cell_y = cell_y, .first_placed = -1 };
         }
         poi->presence_status = presence;
         poi->capabilities |= parse_capabilities(poi_doc);
-        parse_providers(poi_doc, "quests", "prerequisiteCodes", (int)(poi - s_graph.presence_pois),
+        parse_providers(poi_doc, "quests", "title", "prerequisiteCodes", (int)(poi - s_graph.presence_pois),
                         s_graph.quests, &s_graph.quest_count);
-        parse_providers(poi_doc, "actions", "questCodes", (int)(poi - s_graph.presence_pois),
+        parse_providers(poi_doc, "actions", "label", "questCodes", (int)(poi - s_graph.presence_pois),
                         s_graph.actions, &s_graph.action_count);
+        parse_targets(poi_doc, (int)(poi - s_graph.presence_pois));
+    }
+    for (int q = 0; s_graph.quest_count > q; ++q) s_graph.presence_pois[s_graph.quests[q].poi].quest_count++;
+    for (int a = 0; s_graph.action_count > a; ++a) {
+        ImapPresencePoi* poi = &s_graph.presence_pois[s_graph.actions[a].poi];
+        poi->action_count++;
+        poi->services |= s_graph.actions[a].services;
     }
     refresh_node_capability_counts();
 }
@@ -175,6 +262,7 @@ static bool parse_static_doc(const cJSON* doc) {
     memset(&s_graph, 0, sizeof(s_graph));
     copy_str(s_graph.instance_code, IMAP_CODE_MAX, json_str(doc, "instanceCode"));
     copy_str(s_graph.name, IMAP_NAME_MAX, json_str(doc, "name"));
+    s_graph.entry_spawn = instance_map_parse_entry_spawn(doc);
 
     const cJSON* nodes = cJSON_GetObjectItemCaseSensitive(doc, "nodes");
     if (!cJSON_IsArray(nodes)) return false;
@@ -192,6 +280,9 @@ static bool parse_static_doc(const cJSON* doc) {
         if (node->placed) node->world = (Vector2){ json_float(world, "x", 0.0f), json_float(world, "y", 0.0f) };
         node->grid_x = json_int(nd, "gridX", 16);
         node->grid_y = json_int(nd, "gridY", 16);
+        const cJSON* placed = cJSON_GetObjectItemCaseSensitive(nd, "placed");
+        node->population = (ImapPopulation){ json_int(placed, "hostile", 0), json_int(placed, "passive", 0),
+                                             json_int(placed, "resource", 0) };
         node->extent_w = json_float(nd, "w", 1.0f);
         node->extent_h = json_float(nd, "h", 1.0f);
         if (!isfinite(node->extent_w) || !isfinite(node->extent_h) || 0.0f >= node->extent_w || 0.0f >= node->extent_h) return false;
@@ -234,7 +325,7 @@ static bool parse_static_doc(const cJSON* doc) {
 
 static void on_static_fetched(const FetchResponse* r) {
     /* asset_id carries the session stamp — drop stale/closed sessions. */
-    if (!s_open || atoi(r->asset_id + strlen("imap-static-")) != s_session) {
+    if (0 == s_users || atoi(r->asset_id + strlen("imap-static-")) != s_session) {
         fetch_data_release(r->data);
         return;
     }
@@ -259,34 +350,48 @@ static void on_static_fetched(const FetchResponse* r) {
 
 /* ── Active marks ───────────────────────────────────────────────────────── */
 
-static bool quest_running(const char* code) {
+ImapQuestState instance_map_quest_state(const char* code) {
     const QuestProgressEntry* e = quest_progress_store_find(code);
-    return NULL != e && QUEST_ACTIVE == e->status;
-}
-
-/* A quest the player runs, or may accept: not completed, and every
- * prerequisite completed. */
-static bool quest_actionable(const char* code) {
-    if (quest_running(code)) return true;
-    if (quest_progress_store_is_completed(code)) return false;
+    if (NULL != e && QUEST_ACTIVE == e->status) return IMAP_QUEST_ACTIVE;
+    if (quest_progress_store_is_completed(code)) return IMAP_QUEST_COMPLETED;
     for (int q = 0; q < s_graph.quest_count; ++q) {
         const ImapProvider* p = &s_graph.quests[q];
         if (0 != strcmp(p->code, code)) continue;
         for (int i = 0; i < p->link_count; ++i)
-            if (!quest_progress_store_is_completed(p->links[i])) return false;
-        return true;
+            if (!quest_progress_store_is_completed(p->links[i])) return IMAP_QUEST_LOCKED;
+        return IMAP_QUEST_AVAILABLE;
     }
-    return false;
+    return IMAP_QUEST_LOCKED;
+}
+
+/* A quest the player runs, or may accept. */
+static bool quest_actionable(const char* code) {
+    ImapQuestState state = instance_map_quest_state(code);
+    return IMAP_QUEST_ACTIVE == state || IMAP_QUEST_AVAILABLE == state;
+}
+
+/* What a POI shows first: a quest to go on with, then one to take, then one locked, then one done. */
+static int quest_state_rank(ImapQuestState state) {
+    switch (state) {
+        case IMAP_QUEST_ACTIVE:    return 3;
+        case IMAP_QUEST_AVAILABLE: return 2;
+        case IMAP_QUEST_LOCKED:    return 1;
+        case IMAP_QUEST_COMPLETED:
+        default:                   return 0;
+    }
 }
 
 static void mark_active_pois(void) {
     for (int i = 0; i < s_graph.presence_poi_count; ++i) {
         s_graph.presence_pois[i].quest_active = false;
         s_graph.presence_pois[i].action_active = false;
+        s_graph.presence_pois[i].quest_state = IMAP_QUEST_COMPLETED;
     }
     for (int q = 0; q < s_graph.quest_count; ++q) {
-        if (quest_actionable(s_graph.quests[q].code))
-            s_graph.presence_pois[s_graph.quests[q].poi].quest_active = true;
+        ImapPresencePoi* poi = &s_graph.presence_pois[s_graph.quests[q].poi];
+        ImapQuestState state = instance_map_quest_state(s_graph.quests[q].code);
+        if (IMAP_QUEST_ACTIVE == state || IMAP_QUEST_AVAILABLE == state) poi->quest_active = true;
+        if (quest_state_rank(state) > quest_state_rank(poi->quest_state)) poi->quest_state = state;
     }
     for (int a = 0; a < s_graph.action_count; ++a) {
         const ImapProvider* p = &s_graph.actions[a];
@@ -298,10 +403,13 @@ static void mark_active_pois(void) {
 
 /* ── Lifecycle ──────────────────────────────────────────────────────────── */
 
-void instance_map_data_open(void) {
-    s_session++;
-    s_open = true;
+static void static_url(char* out, size_t size) {
+    snprintf(out, size, ENGINE_API_BASE "/cyberia-instance/instance-map/%s/static", g_game_state.instance_code);
+}
 
+/* A new session: a response of an older one is dropped. */
+static void fetch_static(void) {
+    s_session++;
     if ('\0' == g_game_state.instance_code[0]) {
         s_state = IMAP_DATA_ERROR;
         LOG_WARN("instance map open without instance code (metadata not received)");
@@ -312,20 +420,34 @@ void instance_map_data_open(void) {
     char asset_id[48];
     snprintf(asset_id, sizeof(asset_id), "imap-static-%d", s_session);
     char url[256];
-    snprintf(url, sizeof(url), ENGINE_API_BASE "/cyberia-instance/instance-map/%s/static",
-             g_game_state.instance_code);
+    static_url(url, sizeof url);
     fetch_request_start(asset_id, url, on_static_fetched);
 }
 
+void instance_map_data_open(void) {
+    if (1 == ++s_users) fetch_static();
+}
+
+void instance_map_data_refresh(void) {
+    char url[256];
+    static_url(url, sizeof url);
+    fetch_forget(url);
+    if (0 < s_users) fetch_static();
+}
+
+void instance_map_data_retry(void) {
+    if (IMAP_DATA_ERROR == s_state) instance_map_data_refresh();
+}
+
 void instance_map_data_close(void) {
+    assert(0 < s_users);
+    if (0 < --s_users) return;
     s_session++;          /* invalidates every in-flight response */
-    s_open  = false;
     s_state = IMAP_DATA_IDLE;
 }
 
 void instance_map_data_update(float dt) {
-    (void)dt;
-    if (!s_open || IMAP_DATA_READY != s_state) return;
+    if (0 == s_users || IMAP_DATA_READY != s_state) return;
     if (s_marked_revision == quest_progress_store_revision() && s_marked_generation == s_generation) return;
     s_marked_revision = quest_progress_store_revision();
     s_marked_generation = s_generation;
@@ -348,6 +470,38 @@ int instance_map_data_node_active_actions(int node) {
     for (int i = 0; i < s_graph.presence_poi_count; ++i)
         if (s_graph.presence_pois[i].node == node && s_graph.presence_pois[i].action_active) n++;
     return n;
+}
+
+void instance_map_edge_destination(const ImapGraph* graph, const ImapEdge* edge, char* out, size_t size) {
+    bool random = 0 > edge->target_cell_x || 0 > edge->target_cell_y;
+    if (edge->intra) {
+        if (random) snprintf(out, size, "Random cell of this map");
+        else snprintf(out, size, "This map (%d, %d)", edge->target_cell_x, edge->target_cell_y);
+        return;
+    }
+    char name[IMAP_NAME_MAX + IMAP_CODE_MAX];
+    instance_map_node_label(graph, edge->target_node, name, sizeof name);
+    if (random) snprintf(out, size, "%s - random cell", name);
+    else snprintf(out, size, "%s (%d, %d)", name, edge->target_cell_x, edge->target_cell_y);
+}
+
+ImapNodeLinks instance_map_node_links(const ImapGraph* graph, int node) {
+    ImapNodeLinks links = { 0 };
+    bool neighbor[IMAP_MAX_NODES] = { false };
+    for (int i = 0; graph->edge_count > i; ++i) {
+        const ImapEdge* e = &graph->edges[i];
+        if (node == e->source_node) links.portals++;
+        if (node != e->source_node && node != e->target_node) continue;
+        int other = node == e->source_node ? e->target_node : e->source_node;
+        if (other == node) continue;
+        if (!neighbor[other]) links.neighbors++;
+        neighbor[other] = true;
+        if (node != e->source_node) continue;
+        bool listed = false;
+        for (int d = 0; links.destination_count > d; ++d) listed = listed || other == links.destinations[d];
+        if (!listed) links.destinations[links.destination_count++] = other;
+    }
+    return links;
 }
 
 /* One presence palette for both maps. The instance map values are the source;

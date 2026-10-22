@@ -1,6 +1,7 @@
 /* The data layer of the Universe view: it parses the universe of this world,
- * marks this world, offers TRAVEL only along a route to a world that takes
- * sessions, reads the engine again while open, and drops a late response. */
+ * marks this world, names the entry spawn of each world, offers TRAVEL only
+ * along a route to a world that takes sessions, reads the engine again while
+ * open, and drops a late response. */
 
 #include "data/universe_map_data.h"
 #include "data/engine_client.h"
@@ -31,11 +32,12 @@ void fetch_data_release(void* data) {}
 
 static const char* UNIVERSE =
     "{\"status\":\"success\",\"data\":{\"code\":\"cyberia\",\"name\":\"Cyberia\",\"instances\":["
-    "{\"instanceCode\":\"root\",\"name\":\"Violet Strata\",\"previewUrl\":\"/world-preview.png\",\"thumbnailUrl\":\"/world-thumbnail.png\",\"x\":0,\"y\":0,\"served\":true,\"status\":\"available\",\"url\":\"https://server.example.com\"},"
+    "{\"instanceCode\":\"root\",\"name\":\"Violet Strata\",\"previewUrl\":\"/world-preview.png\",\"thumbnailUrl\":\"/world-thumbnail.png\",\"x\":0,\"y\":0,\"served\":true,\"status\":\"available\",\"url\":\"https://server.example.com\","
+    "\"entrySpawn\":{\"mode\":\"fixed\",\"mapCode\":\"gate\",\"mapName\":\"Gate\",\"cellX\":4,\"cellY\":5}},"
     "{\"instanceCode\":\"test\",\"name\":\"Test\",\"x\":2,\"y\":-1,\"w\":1,\"h\":0.5,\"served\":true,\"status\":\"available\",\"url\":\"https://server.example.com/test\","
-    "\"path\":\"/test\",\"build\":\"0123456789abcdef\"},"
+    "\"path\":\"/test\",\"build\":\"0123456789abcdef\",\"entrySpawn\":{\"mode\":\"random\"}},"
     "{\"instanceCode\":\"closing\",\"x\":0,\"y\":3,\"served\":true,\"status\":\"draining\",\"url\":\"https://server.example.com/closing\","
-    "\"path\":\"/closing\",\"build\":\"fedcba9876543210\"},"
+    "\"path\":\"/closing\",\"build\":\"fedcba9876543210\",\"entrySpawn\":{\"mode\":\"unresolved\",\"mapCode\":\"lost\"}},"
     "{\"instanceCode\":\"dark\",\"x\":-2,\"y\":1,\"served\":true,\"status\":\"offline\",\"url\":\"\"},"
     "{\"instanceCode\":\"unreleased\",\"x\":5,\"y\":5,\"served\":false,\"status\":\"available\",\"url\":\"https://server.example.com/u\"},"
     "{\"instanceCode\":\"island\",\"x\":9,\"y\":9,\"served\":true,\"status\":\"available\",\"url\":\"https://server.example.com/i\"}],"
@@ -76,6 +78,14 @@ int main(void) {
     assert(0 == strcmp("/world-preview.png", g->nodes[node_of("root")].preview_url));
     assert(0 == strcmp("/world-thumbnail.png", g->nodes[node_of("root")].thumbnail_url));
     assert('\0' == g->nodes[node_of("test")].thumbnail_url[0]);
+    /* Each world names where a new player starts; a random one names no cell, and a world without it says nothing. */
+    const ImapEntrySpawn* entry = &g->nodes[node_of("root")].entry;
+    assert(IMAP_SPAWN_FIXED == entry->mode && 0 == strcmp("gate", entry->map_code) && 0 == strcmp("Gate", entry->map_name));
+    assert(4 == entry->cell_x && 5 == entry->cell_y);
+    entry = &g->nodes[node_of("test")].entry;
+    assert(IMAP_SPAWN_RANDOM == entry->mode && 0 > entry->cell_x && '\0' == entry->map_code[0]);
+    assert(IMAP_SPAWN_UNRESOLVED == g->nodes[node_of("closing")].entry.mode);
+    assert(IMAP_SPAWN_NONE == g->nodes[node_of("dark")].entry.mode);
     /* A card takes the proportions of its preview; a payload without them is square. */
     assert(1.0f == g->nodes[node_of("test")].extent_w && 0.5f == g->nodes[node_of("test")].extent_h);
     assert(1.0f == g->nodes[node_of("root")].extent_w && 1.0f == g->nodes[node_of("root")].extent_h);

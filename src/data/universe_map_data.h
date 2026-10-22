@@ -43,6 +43,7 @@ typedef struct {
                                      * proportions of its preview      */
     bool       served;              /* the served content holds it      */
     UmapStatus status;
+    ImapEntrySpawn entry;           /* where a new player of it starts  */
 } UmapNode;
 
 typedef struct {
@@ -73,6 +74,8 @@ typedef enum {
 
 void universe_map_data_open(void);
 void universe_map_data_close(void);
+/* After a failed fetch: fetch again now, ahead of the refresh period. */
+void universe_map_data_retry(void);
 
 /* Refreshes the availability while open. Call once per frame. */
 void universe_map_data_update(float dt);
@@ -83,9 +86,6 @@ const UmapGraph* universe_map_data_graph(void);
 /* Bumped every time a response is parsed. */
 int universe_map_data_generation(void);
 bool universe_map_data_stale(void);
-
-/* Whether this world links to a node: a link from it, or a bidirectional link. */
-bool universe_map_data_linked(int node);
 
 /* Whether a player of this world can travel to a node now, and why not. */
 UmapTravel universe_map_data_travel(int node);

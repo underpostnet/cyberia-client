@@ -10,8 +10,10 @@
 #include "sim/game_state.h"
 #include "ui/ui_rect.h"
 #include "utils.h"
+#include "world/world_types.h"
 
 #include <assert.h>
+#include <cJSON.h>
 #include <math.h>
 #include <raylib.h>
 #define RAYMATH_IMPLEMENTATION
@@ -29,9 +31,38 @@ void fetch_request_start(const char* id, const char* url, FetchCompletedCb callb
     s_callback = callback;
 }
 void fetch_data_release(void* data) {}
-const QuestProgressEntry* quest_progress_store_find(const char* code) { return NULL; }
-bool quest_progress_store_is_completed(const char* code) { return false; }
-int quest_progress_store_revision(void) { return 0; }
+void fetch_forget(const char* url) {}
+/* The player's quests: one active, one completed; the revision moves when they change. */
+static QuestProgressEntry s_active = { .status = QUEST_ACTIVE };
+static char s_completed[64];
+static int  s_revision;
+const QuestProgressEntry* quest_progress_store_find(const char* code) {
+    return 0 == strcmp(code, s_active.code) ? &s_active : NULL;
+}
+bool quest_progress_store_is_completed(const char* code) { return 0 == strcmp(code, s_completed); }
+int quest_progress_store_revision(void) { return s_revision; }
+
+/* Two maps with every kind of portal, a place with two quests and a vendor, the
+ * bots and resources map A places, and an entry spawn on A. */
+static const char* SERVICES_WORLD =
+    "{\"status\":\"success\",\"data\":{\"instanceCode\":\"test\","
+    "\"entrySpawn\":{\"mode\":\"fixed\",\"mapCode\":\"a\",\"mapName\":\"A\",\"cellX\":4,\"cellY\":5},\"nodes\":["
+    "{\"mapCode\":\"a\",\"name\":\"A\",\"w\":0.5,\"h\":0.5,\"gridX\":16,\"gridY\":16,\"position\":{\"x\":-1,\"y\":0},"
+    "\"placed\":{\"hostile\":1,\"passive\":2,\"resource\":3}},"
+    "{\"mapCode\":\"b\",\"name\":\"B\",\"w\":0.5,\"h\":0.5,\"gridX\":16,\"gridY\":16,\"position\":{\"x\":1,\"y\":0}}],"
+    "\"edges\":["
+    "{\"sourceMapCode\":\"a\",\"sourceCellX\":1,\"sourceCellY\":2,\"targetMapCode\":\"b\",\"targetCellX\":3,\"targetCellY\":4},"
+    "{\"sourceMapCode\":\"a\",\"sourceCellX\":5,\"sourceCellY\":6,\"targetMapCode\":\"b\",\"targetCellX\":-1,\"targetCellY\":-1},"
+    "{\"sourceMapCode\":\"b\",\"sourceCellX\":7,\"sourceCellY\":8,\"targetMapCode\":\"b\",\"targetCellX\":5,\"targetCellY\":6},"
+    "{\"sourceMapCode\":\"b\",\"sourceCellX\":9,\"sourceCellY\":9,\"targetMapCode\":\"b\"}],"
+    "\"presencePois\":["
+    "{\"mapCode\":\"a\",\"cellX\":1,\"cellY\":1,\"presenceStatus\":\"passive\",\"capabilities\":[\"action\",\"quest\"],"
+    "\"quests\":[{\"code\":\"q1\",\"title\":\"First\",\"prerequisiteCodes\":[]},"
+    "{\"code\":\"q2\",\"title\":\"Second\",\"prerequisiteCodes\":[\"q1\"]}],"
+    "\"actions\":[{\"code\":\"vendor\",\"label\":\"Vendor\",\"standalone\":true,\"questCodes\":[\"q2\"],"
+    "\"services\":[\"shop\",\"market\",\"talk\",\"unknown\"]}]},"
+    "{\"mapCode\":\"b\",\"cellX\":2,\"cellY\":2,\"presenceStatus\":\"passive\",\"capabilities\":[\"action\"],"
+    "\"actions\":[{\"code\":\"idle\",\"services\":[]}]}]}}";
 
 /* The engine payload of the `test` world: two maps side by side, one as wide as both under them. */
 static const char* TEST_WORLD =
@@ -74,8 +105,7 @@ static const char* JITTER_WORLD =
 static bool near(float a, float b) { return fabsf(a - b) < 0.01f; }
 
 static const ImapGraph* load(const char* payload) {
-    instance_map_data_close();
-    instance_map_data_open();
+    instance_map_data_refresh();
     FetchResponse response = { .asset_id = s_asset_id, .success = true, .data = (void*)payload, .size = strlen(payload) };
     s_callback(&response);
     assert(IMAP_DATA_READY == instance_map_data_state());
@@ -100,6 +130,7 @@ static Rectangle card_of(const ImapNode* node, float side) {
 
 int main(void) {
     copy_str(g_game_state.instance_code, sizeof g_game_state.instance_code, "test");
+    instance_map_data_open();
 
     /* Equal maps on a whole edge, different maps on a whole edge, a small map on part of a large edge. */
     assert(touch(box(0, 0, 1, 1), box(1, 0, 2, 1)));
@@ -148,6 +179,77 @@ int main(void) {
     assert(near(east.x, 1.0f) && near(east.y, 0.0f));
     assert(near(inside.x, 0.0f) && near(inside.y, 0.0f));
 
+    /* An action carries its label and the services it configures; a quest its title. A place sums them up. */
+    graph = load(SERVICES_WORLD);
+    assert(2 == graph->action_count && 2 == graph->quest_count && 2 == graph->presence_poi_count);
+    assert(0 == strcmp("Vendor", graph->actions[0].label) && 0 == strcmp("Second", graph->quests[1].label));
+    uint8_t vendor = (1u << IMAP_SERVICE_SHOP) | (1u << IMAP_SERVICE_MARKET) | (1u << IMAP_SERVICE_TALK);
+    assert(vendor == graph->actions[0].services && 0 == graph->actions[1].services);
+    const ImapPresencePoi* place = &graph->presence_pois[0];
+    assert(2 == place->quest_count && 1 == place->action_count && vendor == place->services);
+    assert(0 == graph->presence_pois[1].quest_count && 1 == graph->presence_pois[1].action_count);
+
+    /* Each map counts the bots and resources it places; the world names its entry spawn. */
+    const ImapPopulation* population = &graph->nodes[0].population;
+    assert(1 == population->hostile && 2 == population->passive && 3 == population->resource);
+    assert(0 == graph->nodes[1].population.passive);
+    const ImapEntrySpawn* spawn = &graph->entry_spawn;
+    assert(IMAP_SPAWN_FIXED == spawn->mode && 0 == strcmp("a", spawn->map_code) && 0 == strcmp("A", spawn->map_name));
+    assert(4 == spawn->cell_x && 5 == spawn->cell_y);
+    /* A fixed spawn without a map or a cell, or an unknown mode, is unresolved; no entry spawn is none. */
+    const char* unresolved[] = { "{\"entrySpawn\":{\"mode\":\"fixed\",\"mapCode\":\"a\"}}",
+                                 "{\"entrySpawn\":{\"mode\":\"fixed\",\"cellX\":1,\"cellY\":1}}",
+                                 "{\"entrySpawn\":{\"mode\":\"elsewhere\"}}" };
+    for (int i = 0; 3 > i; i++) {
+        cJSON* doc = cJSON_Parse(unresolved[i]);
+        assert(IMAP_SPAWN_UNRESOLVED == instance_map_parse_entry_spawn(doc).mode);
+        cJSON_Delete(doc);
+    }
+    cJSON* empty = cJSON_Parse("{\"entrySpawn\":null}");
+    assert(IMAP_SPAWN_NONE == instance_map_parse_entry_spawn(empty).mode);
+    cJSON_Delete(empty);
+
+    /* A map draws the presence class of a status. Capabilities, players, the dead and unknown ids have none. */
+    assert(IMAP_PRESENCE_PASSIVE == instance_map_presence_of_status(STATUS_ICON_PASSIVE));
+    assert(IMAP_PRESENCE_HOSTILE == instance_map_presence_of_status(STATUS_ICON_HOSTILE));
+    assert(IMAP_PRESENCE_RESOURCE == instance_map_presence_of_status(STATUS_ICON_RESOURCE));
+    assert(IMAP_PRESENCE_PORTAL == instance_map_presence_of_status(STATUS_ICON_PORTAL));
+    assert(IMAP_PRESENCE_PORTAL_RANDOM == instance_map_presence_of_status(STATUS_ICON_PORTAL_RANDOM));
+    const uint8_t none[] = { STATUS_ICON_NONE, STATUS_ICON_FROZEN, STATUS_ICON_PLAYER, STATUS_ICON_DEAD,
+                             STATUS_ICON_RESOURCE_EXTRACTED, STATUS_ICON_ACTION_PROVIDER, STATUS_ICON_QUEST_PROVIDER,
+                             12, 255 };
+    for (int i = 0; (int)sizeof none > i; i++) assert(IMAP_PRESENCE_NONE == instance_map_presence_of_status(none[i]));
+
+    /* The quest states follow the server: active and completed from the store, else the prerequisites decide. */
+    instance_map_data_update(0.0f);
+    assert(IMAP_QUEST_AVAILABLE == instance_map_quest_state("q1") && IMAP_QUEST_LOCKED == instance_map_quest_state("q2"));
+    assert(IMAP_QUEST_AVAILABLE == place->quest_state && IMAP_QUEST_LOCKED == instance_map_quest_state("other"));
+    copy_str(s_completed, sizeof s_completed, "q1");
+    assert(IMAP_QUEST_COMPLETED == instance_map_quest_state("q1") && IMAP_QUEST_AVAILABLE == instance_map_quest_state("q2"));
+    copy_str(s_active.code, sizeof s_active.code, "q2");
+    s_revision++;
+    instance_map_data_update(0.0f);
+    assert(IMAP_QUEST_ACTIVE == instance_map_quest_state("q2") && IMAP_QUEST_ACTIVE == place->quest_state);
+    s_active.code[0] = s_completed[0] = '\0';
+    s_revision++;
+
+    /* A destination names the map and the cell, a random cell, or the same map. */
+    char to[IMAP_NAME_MAX * 3];
+    const char* expected[] = { "B (3, 4)", "B - random cell", "This map (5, 6)", "Random cell of this map" };
+    for (int e = 0; 4 > e; e++) {
+        instance_map_edge_destination(graph, &graph->edges[e], to, sizeof to);
+        assert(0 == strcmp(expected[e], to));
+    }
+    graph = load(TEST_WORLD);
+
+    /* A map counts the portals on it, the maps linked to it either way, and where its portals lead. */
+    ImapNodeLinks links = instance_map_node_links(graph, 0);
+    assert(1 == links.portals && 2 == links.neighbors && 1 == links.destination_count && 1 == links.destinations[0]);
+    links = instance_map_node_links(graph, 1);
+    assert(1 == links.portals && 1 == links.neighbors && 0 == links.destination_count);
+    links = instance_map_node_links(graph, 2);
+    assert(1 == links.portals && 1 == links.neighbors && 1 == links.destination_count && 0 == links.destinations[0]);
+
     /* The minimap fits the active map, and follows the player at a closer zoom. */
     Rectangle bounds = { 0, 0, 200, 160 };
     Rectangle current = instance_map_local_rect(wide, bounds, (Vector2){ 64, 25 }, 1.0f);
@@ -193,8 +295,7 @@ int main(void) {
         "{\"nodes\":[{\"mapCode\":\"a\",\"w\":0,\"position\":{\"x\":0,\"y\":0}}]}",
     };
     for (int i = 0; 4 > i; i++) {
-        instance_map_data_close();
-        instance_map_data_open();
+        instance_map_data_refresh();
         char payload[512];
         snprintf(payload, sizeof payload, "{\"status\":\"success\",\"data\":%s}", invalid[i]);
         FetchResponse response = { .asset_id = s_asset_id, .success = true, .data = payload, .size = strlen(payload) };

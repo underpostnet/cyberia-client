@@ -6,13 +6,15 @@
 /* modal_instance_map — the expanded map content, with two views.
  *
  * Renders inside modal_map's container: toggling the Map button morphs the
- * compact corner readout into a full-screen translucent panel (and retracts
- * it on close), so the two modes read as one integrated widget. The world
- * keeps rendering behind the translucent container.
+ * compact corner readout into a full-screen opaque canvas (and retracts it on
+ * close), so the two modes read as one integrated widget. The chrome is the
+ * modal chrome: a header strip with the view tabs and the close button, and
+ * modal cards for the details of a selection.
  *
  * WORLD shows the maps of this world as the engine places them: maps that
  * share an edge form one surface. Animated portal edges and static presence
- * POIs sit on their cells.
+ * POIs sit on their cells; the cells where the player advances a quest
+ * objective carry gold brackets (data/quest_target).
  * UNIVERSE shows the worlds of its universe on their cells, the routes
  * between them, and the availability of each world. A world the player can
  * reach now offers TRAVEL, which leaves through the launch bridge.
@@ -28,8 +30,13 @@ void modal_instance_map_init(void);
 void modal_instance_map_cleanup(void);
 
 bool modal_instance_map_is_open(void);
+/* Opening takes the place of the minimap. */
 void modal_instance_map_toggle(void);
 void modal_instance_map_close(void);
+
+/* Opens the WORLD view on the followed quest objective: its card, and its
+ * destination in focus close up once the world map has loaded. */
+void modal_instance_map_locate(void);
 
 /* Per-frame: data polling, gesture tracking, camera interpolation. */
 void modal_instance_map_update(float dt);

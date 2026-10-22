@@ -65,6 +65,7 @@ static bool parse_doc(const cJSON* doc, UmapGraph* graph) {
         n->extent_h = json_float(member, "h", 1.0f);
         n->served   = cJSON_IsTrue(cJSON_GetObjectItemCaseSensitive(member, "served"));
         n->status   = status_from_string(json_str(member, "status"));
+        n->entry    = instance_map_parse_entry_spawn(member);
         if (0 == strcmp(n->instance_code, g_game_state.instance_code)) graph->current = graph->node_count;
         graph->node_count++;
     }
@@ -139,6 +140,12 @@ void universe_map_data_open(void) {
     request();
 }
 
+void universe_map_data_retry(void) {
+    if (!s_open || s_in_flight || IMAP_DATA_ERROR != s_state || '\0' == g_game_state.instance_code[0]) return;
+    s_state = IMAP_DATA_LOADING;
+    request();
+}
+
 void universe_map_data_close(void) {
     s_session++;
     s_open = false;
@@ -159,7 +166,8 @@ const UmapGraph* universe_map_data_graph(void) { return &s_graph; }
 int              universe_map_data_generation(void) { return s_generation; }
 bool             universe_map_data_stale(void) { return s_stale; }
 
-bool universe_map_data_linked(int node) {
+/* Whether this world links to a node: a link from it, or a bidirectional link. */
+static bool linked(int node) {
     int here = s_graph.current;
     for (int i = 0; 0 <= here && i < s_graph.link_count; ++i) {
         const UmapLink* l = &s_graph.links[i];
@@ -174,7 +182,7 @@ UmapTravel universe_map_data_travel(int node) {
     const UmapNode* n = &s_graph.nodes[node];
     if (node == s_graph.current) return UMAP_TRAVEL_HERE;
     if (s_stale) return UMAP_TRAVEL_STALE;
-    if (!universe_map_data_linked(node)) return UMAP_TRAVEL_NO_ROUTE;
+    if (!linked(node)) return UMAP_TRAVEL_NO_ROUTE;
     if (!n->served) return UMAP_TRAVEL_NOT_SERVED;
     if (UMAP_OFFLINE == n->status) return UMAP_TRAVEL_OFFLINE;
     if (UMAP_DRAINING == n->status) return UMAP_TRAVEL_DRAINING;

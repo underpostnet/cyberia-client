@@ -55,9 +55,8 @@ typedef struct {
  * title until it lands. */
 const QuestMetadataEntry* quest_cache_get(const char* code);
 
-/* Index of the step the progress entry is on. The server puts the step
- * description into `active_step`, so match the description as well as the id.
- * Returns 0 when there is no match. */
+/* Index of the step the progress entry is on: the step its `step_id` names,
+ * step_count once every step is done, -1 when the metadata has no such step. */
 int quest_active_step_index(const QuestMetadataEntry* metadata,
                             const QuestProgressEntry* progress);
 

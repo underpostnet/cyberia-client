@@ -2,8 +2,10 @@
 #include "modal.h"
 
 #include "hud_side_stack.h"
+#include "map_marker.h"
 #include "data/instance_map_data.h"
 #include "data/engine_client.h"
+#include "data/quest_target.h"
 #include "text.h"
 #include "ui_button.h"
 #include "ui_rect.h"
@@ -44,9 +46,7 @@ static const Color MINIMAP_RAIL         = { 3, 7, 16, 190 };
 static const Color MINIMAP_TEXT         = { 215, 230, 245, 235 };
 static const Color MINIMAP_TEXT_DIM     = { 140, 165, 190, 205 };
 static const Color MINIMAP_OFF          = { 255, 110, 90, 235 };
-static const Color MINIMAP_PLAYER       = { 105, 255, 145, 255 };
 static const Color MINIMAP_OTHER_PLAYER = { 100, 205, 255, 245 };
-static const Color MINIMAP_EXIT         = { 60, 200, 255, 255 };
 static const Color MINIMAP_LINK         = { 170, 110, 255, 255 };
 
 /* The controls along the right edge of the map, top to bottom. */
@@ -59,7 +59,7 @@ static bool s_visible = false;
 static bool s_texture_visible = true;
 static int  s_zoom_level = MINIMAP_ZOOM_DEFAULT;
 static int  s_opacity_level = MINIMAP_OPACITY_DEFAULT;
-static char s_exit_hint[IMAP_NAME_MAX * 2 + 16]; /* the exit under the pointer, this frame */
+static char s_exit_hint[IMAP_NAME_MAX * 3 + 16]; /* the exit under the pointer, this frame */
 
 static Rectangle overlay_bounds(void) {
     return hud_side_stack_map_slot();
@@ -126,8 +126,7 @@ static void draw_map(Rectangle rect, const ImapNode* node) {
     DrawRectangleLinesEx(rect, 1.0f, MINIMAP_EDGE);
 }
 
-/* Authored presence draws hollow under the filled live markers. Portals draw
- * as exits. */
+/* Authored presence draws faded under the live marks. Portals draw as exits. */
 static void draw_static_pois(const ImapGraph* graph, int current_index, Rectangle rect) {
     double time = GetTime();
     for (int i = 0; i < graph->presence_poi_count; ++i) {
@@ -137,31 +136,18 @@ static void draw_static_pois(const ImapGraph* graph, int current_index, Rectangl
         const ImapNode* node = &graph->nodes[poi->node];
         Vector2 at = instance_map_cell_to_card(rect, node, (float)poi->cell_x + 0.5f,
                                    (float)poi->cell_y + 0.5f);
-        Color color = instance_map_presence_color(poi->presence_status);
-        float side = 7.0f;
-        DrawRectangleLinesEx(centered_square(at, side + 2.0f), 3.0f, MINIMAP_OUTLINE);
-        DrawRectangleLinesEx(centered_square(at, side), 1.0f, color);
+        float side = MAP_MARKER_PRESENCE_MIN;
+        map_marker_draw_presence(at, side, poi->presence_status, 1, 0.45f);
         if (poi->action_active || poi->quest_active) {
             Color active = poi->quest_active ? MODAL_QUEST : MODAL_ACTION;
             float pulse_side = 13.0f + 3.0f * sinf((float)time * 4.0f + (float)i);
             DrawRectangleLinesEx(centered_square(at, pulse_side), 1.0f, active);
         } else if (poi->capabilities & IMAP_CAPABILITY_QUEST) {
-            DrawRectangleLinesEx(centered_square(at, side + 4.0f), 1.0f, MODAL_QUEST);
+            DrawRectangleLinesEx(centered_square(at, side + 6.0f), 1.0f, MODAL_QUEST);
         } else if (poi->capabilities & IMAP_CAPABILITY_ACTION) {
-            DrawRectangleLinesEx(centered_square(at, side + 4.0f), 1.0f, MODAL_ACTION);
+            DrawRectangleLinesEx(centered_square(at, side + 6.0f), 1.0f, MODAL_ACTION);
         }
     }
-}
-
-/* A triangle at `at`, `size` long, pointing along unit `dir`. */
-static void draw_arrow(Vector2 at, Vector2 dir, float size, Color color) {
-    Vector2 side = { -dir.y, dir.x };
-    Vector2 tip = Vector2Add(at, Vector2Scale(dir, size));
-    Vector2 a = Vector2Add(at, Vector2Scale(side, size * 0.6f));
-    Vector2 b = Vector2Subtract(at, Vector2Scale(side, size * 0.6f));
-    /* raylib fills one winding; both orders cover either direction. */
-    DrawTriangle(tip, a, b, color);
-    DrawTriangle(tip, b, a, color);
 }
 
 /* `text` cut with an ellipsis to `max_w` pixels. */
@@ -176,74 +162,55 @@ static void fit_text(char* out, size_t size, const char* text, int font, float m
     if (3 <= length) memcpy(out + text_utf8_floor(out, length - 3), "...", 4);
 }
 
-static bool clear_of(Rectangle box, const Rectangle* taken, int count) {
-    for (int i = 0; count > i; i++)
-        if (CheckCollisionRecs(box, taken[i])) return false;
-    return true;
-}
-
 /* Each portal of the current map: a gate where it stands, a link inside the
  * map with a ring, an exit to another map with an arrow toward it and a tag
  * naming it. A tag takes the first side of its gate (below, above, right,
- * left) clear of the controls, the markers and the tags before it. The exit
- * under the pointer goes to s_exit_hint in full. */
+ * left) clear of the controls, the player, the entry spawn, the markers and
+ * the tags before it. The exit under the pointer goes to s_exit_hint in full. */
 static void draw_exits(const ImapGraph* graph, int current_index, Rectangle rect, Rectangle view, Vector2 player,
-                       Rectangle controls) {
+                       Rectangle controls, Rectangle spawn) {
     const ImapNode* node = &graph->nodes[current_index];
+    Color exit_color = instance_map_presence_color(IMAP_PRESENCE_PORTAL);
     Vector2 gates[IMAP_MAX_EDGES];
     int edges[IMAP_MAX_EDGES], gate_count = 0;
-    Rectangle taken[IMAP_MAX_EDGES * 2 + 2];
+    Rectangle taken[IMAP_MAX_EDGES * 2 + 3];
     int taken_count = 0;
     taken[taken_count++] = controls;
     taken[taken_count++] = centered_square(player, MINIMAP_MARKER_ROOM);
+    taken[taken_count++] = spawn;
     for (int i = 0; graph->edge_count > i; ++i) {
         const ImapEdge* edge = &graph->edges[i];
         if (edge->source_node != current_index || 0 > edge->source_cell_x || 0 > edge->source_cell_y) continue;
         Vector2 at = instance_map_cell_to_card(rect, node, (float)edge->source_cell_x + 0.5f,
                                                (float)edge->source_cell_y + 0.5f);
-        Color color = edge->intra ? MINIMAP_LINK : MINIMAP_EXIT;
+        Color color = edge->intra ? MINIMAP_LINK : exit_color;
         if (edge->intra) {
-            DrawCircleLinesV(at, 11.0f, MINIMAP_OUTLINE);
-            DrawCircleLinesV(at, 10.0f, color);
+            DrawCircleLinesV(at, 13.0f, MINIMAP_OUTLINE);
+            DrawCircleLinesV(at, 12.0f, color);
         } else {
             Vector2 dir = instance_map_exit_direction(graph, edge);
-            draw_arrow(Vector2Add(at, Vector2Scale(dir, 8.0f)), dir, 10.0f, MINIMAP_OUTLINE);
-            draw_arrow(Vector2Add(at, Vector2Scale(dir, 9.0f)), dir, 7.0f, color);
+            map_marker_draw_arrow(Vector2Add(at, Vector2Scale(dir, 10.0f)), dir, 7.0f, color, 1.0f);
         }
-        DrawPoly(at, 4, 10.0f, 0.0f, MINIMAP_OUTLINE);
-        DrawPoly(at, 4, 8.0f, 0.0f, color);
-        DrawPoly(at, 4, 3.0f, 0.0f, WHITE);
+        map_marker_draw_gate(at, 7.0f, color, 1.0f);
         gates[gate_count] = at;
         edges[gate_count++] = i;
         taken[taken_count++] = centered_square(at, MINIMAP_MARKER_ROOM);
     }
 
     s_exit_hint[0] = '\0';
-    float height = (float)text_line_height(MINIMAP_LABEL_FONT) + 4.0f;
     for (int g = 0; gate_count > g; ++g) {
         const ImapEdge* edge = &graph->edges[edges[g]];
         Vector2 at = gates[g];
         if (edge->intra || !CheckCollisionPointRec(at, view)) continue;
-        char name[IMAP_NAME_MAX * 2];
-        instance_map_node_label(graph, edge->target_node, name, sizeof name);
-        char label[IMAP_NAME_MAX * 2];
+        char name[IMAP_NAME_MAX * 3];
+        instance_map_edge_destination(graph, edge, name, sizeof name);
+        char label[IMAP_NAME_MAX * 3];
         fit_text(label, sizeof label, name, MINIMAP_LABEL_FONT, fminf(MINIMAP_LABEL_MAX_W, view.width - 16.0f));
-        float width = (float)MeasureText(label, MINIMAP_LABEL_FONT) + 8.0f;
-        Vector2 offsets[4] = {
-            { -width * 0.5f, 14.0f }, { -width * 0.5f, -14.0f - height },
-            { 14.0f, -height * 0.5f }, { -14.0f - width, -height * 0.5f },
-        };
-        bool placed = false;
-        for (int side = 0; 4 > side && !placed; ++side) {
-            Rectangle box = { floorf(at.x + offsets[side].x), floorf(at.y + offsets[side].y), width, height };
-            box.x = Clamp(box.x, view.x + 2.0f, view.x + view.width - width - 2.0f);
-            box.y = Clamp(box.y, view.y + 2.0f, view.y + view.height - height - 2.0f);
-            if (!clear_of(box, taken, taken_count)) continue;
+        Rectangle box;
+        if (map_marker_place_label(at, map_marker_label_size(label, MINIMAP_LABEL_FONT, false, -1), 14.0f, view, taken,
+                                   taken_count, &box)) {
             taken[taken_count++] = box;
-            DrawRectangleRec(box, MINIMAP_OUTLINE);
-            DrawRectangleLinesEx(box, 1.0f, Fade(MINIMAP_EXIT, 0.55f));
-            DrawText(label, (int)box.x + 4, (int)box.y + 2, MINIMAP_LABEL_FONT, MINIMAP_EXIT);
-            placed = true;
+            map_marker_draw_label(box, label, MINIMAP_LABEL_FONT, exit_color, false, false, -1, 1.0f);
         }
         if (CheckCollisionPointRec(GetMousePosition(), centered_square(at, MINIMAP_MARKER_ROOM)))
             snprintf(s_exit_hint, sizeof s_exit_hint, "EXIT TO %s", name);
@@ -267,6 +234,7 @@ static Vector2 drawn_map_position(const ImapNode* node, Rectangle rect, EntityID
     return instance_map_cell_to_card(rect, node, pos.x + size.x * 0.5f, pos.y + size.y * 0.5f);
 }
 
+/* Live bots and resources in the class of their status; a dead one is a dot. */
 static void draw_live_presence(const ImapGraph* graph, int current_index,
                                Rectangle rect) {
     const ImapNode* node = &graph->nodes[current_index];
@@ -277,28 +245,43 @@ static void draw_live_presence(const ImapGraph* graph, int current_index,
     }
     for (int i = 0; i < g_game_state.bot_count; ++i) {
         EntityID bot = g_game_state.bots[i];
-        Vector2 at = drawn_map_position(node, rect, bot);
-        draw_square_marker(at, 5.0f, instance_map_presence_color(
-            STATUS_ICON_HOSTILE == game_state_data(bot)->status_icon ? IMAP_PRESENCE_HOSTILE
-                                                         : IMAP_PRESENCE_PASSIVE));
+        map_marker_draw_presence(drawn_map_position(node, rect, bot), MAP_MARKER_PRESENCE_MIN,
+                                 instance_map_presence_of_status(game_state_data(bot)->status_icon), 1, 1.0f);
     }
     for (int i = 0; i < g_game_state.resource_count; ++i) {
-        Vector2 at = drawn_map_position(node, rect, g_game_state.resources[i]);
-        draw_square_marker(at, 5.0f,
-                           instance_map_presence_color(IMAP_PRESENCE_RESOURCE));
+        EntityID resource = g_game_state.resources[i];
+        map_marker_draw_presence(drawn_map_position(node, rect, resource), MAP_MARKER_PRESENCE_MIN,
+                                 instance_map_presence_of_status(game_state_data(resource)->status_icon), 1, 1.0f);
     }
 }
 
-/* The own player, its facing as a tick ahead of the marker. */
-static void draw_player(Vector2 center) {
-    float pulse_side = 15.0f + 3.0f * sinf((float)GetTime() * 4.5f);
-    DrawRectangleLinesEx(centered_square(center, pulse_side + 2.0f), 1.0f, MINIMAP_OUTLINE);
-    DrawRectangleLinesEx(centered_square(center, pulse_side), 1.0f, MINIMAP_PLAYER);
-    draw_square_marker(center, 7.0f, MINIMAP_PLAYER);
-    float angle = (float)local_player_view_direction() * PI * 0.25f;
-    Vector2 dir = { sinf(angle), -cosf(angle) };
-    draw_arrow(Vector2Add(center, Vector2Scale(dir, 11.0f)), dir, 7.0f, MINIMAP_OUTLINE);
-    draw_arrow(Vector2Add(center, Vector2Scale(dir, 12.0f)), dir, 5.0f, MINIMAP_PLAYER);
+/* Gold brackets on the cells of the current map where the player advances a
+ * quest objective; the followed destination in focus adds its halo. */
+static void draw_quest_targets(const ImapGraph* graph, int current_index, Rectangle rect) {
+    const QuestTarget* followed = quest_target_tracked();
+    int focus = quest_target_tracked_destination();
+    for (int i = 0; quest_target_count() > i; i++) {
+        const QuestTarget* target = quest_target_get(i);
+        for (int d = 0; target->destination_count > d; d++) {
+            const ImapPresencePoi* poi = &graph->presence_pois[target->destinations[d].poi];
+            if (current_index != poi->node) continue;
+            Vector2 at = instance_map_cell_to_card(rect, &graph->nodes[poi->node], (float)poi->cell_x + 0.5f,
+                                                   (float)poi->cell_y + 0.5f);
+            bool on = target == followed;
+            map_marker_draw_target(centered_square(at, MAP_MARKER_PRESENCE_MIN + 4.0f), on && d == focus,
+                                   on ? 1.0f : 0.55f, GetTime());
+        }
+    }
+}
+
+/* The entry spawn when it lies on the current map; its room, else no area. */
+static Rectangle draw_entry_spawn(const ImapGraph* graph, int current_index, Rectangle rect) {
+    const ImapEntrySpawn* spawn = &graph->entry_spawn;
+    const ImapNode* node = &graph->nodes[current_index];
+    if (IMAP_SPAWN_FIXED != spawn->mode || 0 != strcmp(spawn->map_code, node->map_code)) return (Rectangle){ 0 };
+    Vector2 at = instance_map_cell_to_card(rect, node, (float)spawn->cell_x + 0.5f, (float)spawn->cell_y + 0.5f);
+    map_marker_draw_spawn(at, MAP_MARKER_SPAWN_MIN, 1.0f);
+    return centered_square(at, MAP_MARKER_SPAWN_MIN + 8.0f);
 }
 
 static void draw_control_tip(Rectangle bounds, Rectangle control, const char* tip) {
@@ -355,8 +338,7 @@ static void draw_chrome(Rectangle bounds, const char* map_name) {
         title[length] = '\0';
     }
     DrawText(title, (int)bounds.x + 7, (int)bounds.y + 12, 12, MINIMAP_TEXT);
-    UIButtonStyle close_style = { .icon_id = "close-yellow", .no_fill = true };
-    ui_button_draw(close_bounds(bounds), &close_style, UI_BUTTON_NORMAL);
+    ui_button_draw_close(close_bounds(bounds));
 
     char coords[40];
     snprintf(coords, sizeof(coords), "%.0f, %.0f",
@@ -401,6 +383,7 @@ bool hud_minimap_overlay_is_visible(void) {
 void hud_minimap_overlay_update(float dt) {
     if (!s_visible) return;
     instance_map_data_update(dt);
+    quest_target_update();
 }
 
 void hud_minimap_overlay_draw(void) {
@@ -426,9 +409,11 @@ void hud_minimap_overlay_draw(void) {
         BeginScissorMode((int)clip.x, (int)clip.y, (int)clip.width, (int)clip.height);
         draw_map(rect, node);
         draw_static_pois(graph, current_index, rect);
+        Rectangle spawn = draw_entry_spawn(graph, current_index, rect);
         draw_live_presence(graph, current_index, rect);
-        draw_exits(graph, current_index, rect, clip, own, control_rail(bounds));
-        draw_player(own);
+        draw_quest_targets(graph, current_index, rect);
+        draw_exits(graph, current_index, rect, clip, own, control_rail(bounds), spawn);
+        map_marker_draw_player(own, MAP_MARKER_PLAYER_MIN_R, local_player_view_facing(), 1.0f, GetTime());
         draw_exit_hint(clip);
         EndScissorMode();
     } else {

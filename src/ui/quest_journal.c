@@ -3,8 +3,11 @@
 
 #include "hud_side_stack.h"
 #include "modal.h"
+#include "modal_instance_map.h"
+#include "data/instance_map_data.h"
 #include "data/quest_cache.h"
 #include "data/quest_progress_store.h"
+#include "data/quest_target.h"
 #include "ui_button.h"
 #include "ui_icon.h"
 #include "ui_scroll.h"
@@ -25,6 +28,10 @@
 #define QJ_FONT_SECTION   14
 #define QJ_FONT_NAME      13
 #define QJ_FONT_SMALL     11
+
+#define QJ_LOCATE_W       92   /* the LOCATE button of an objective       */
+#define QJ_LOCATE_H       30
+#define QJ_LOCATE_BAND    44   /* its tap band: an objective is at least this tall */
 
 #define QJ_CARD_MX        6    /* card horizontal margin inside the panel */
 #define QJ_CARD_PAD       7    /* card inner padding                      */
@@ -65,6 +72,14 @@ static UIScroll s_scroll;             /* clips + scrolls the section content    
 static UIToggle s_section[QUEST_STATUS_COUNT];
 static int      s_page[QUEST_STATUS_COUNT]   = { 0, 0, 0 };
 
+/* Shows or hides the journal. While it shows it holds the world map: where its objectives lead. */
+static void set_visible(bool visible) {
+    if (visible == s_visible) return;
+    s_visible = visible;
+    if (visible) instance_map_data_open();
+    else instance_map_data_close();
+}
+
 static int page_count(int count) {
     if (count <= 0) return 1;
     return (count + QUEST_JOURNAL_PAGE_SIZE - 1) / QUEST_JOURNAL_PAGE_SIZE;
@@ -86,11 +101,76 @@ static void ensure_init(void) {
     s_init = true;
 }
 
-/* Render (or measure) one quest as a single flat card — no nested expand:
- * a status dot, the prominent quest name, then either the active step +
- * objectives (active) or a one-word status (Completed / Abandoned). Everything
- * wraps to the card width. Returns the card's pixel height. */
-static int quest_card_layout(bool draw, const QuestProgressEntry* e, QuestStatus sec, int x, int y, int w) {
+/* Where an objective leads in this world, in one line. */
+static void destination_text(const QuestTarget* target, char* out, size_t size) {
+    switch (target->state) {
+        case QUEST_TARGET_PENDING:   snprintf(out, size, "Loading the world map..."); return;
+        case QUEST_TARGET_ABSENT:    snprintf(out, size, "Not in this world"); return;
+        case QUEST_TARGET_NO_SOURCE: snprintf(out, size, "No known source in this world"); return;
+        case QUEST_TARGET_FOUND:
+        case QUEST_TARGET_UNREACHABLE: break;
+    }
+    const ImapGraph* gr = instance_map_data_graph();
+    const ImapPresencePoi* poi = &gr->presence_pois[target->destinations[0].poi];
+    char map[IMAP_NAME_MAX * 2];
+    instance_map_node_label(gr, poi->node, map, sizeof map);
+    const char* route = QUEST_TARGET_UNREACHABLE == target->state ? " - no route from here" : "";
+    if (1 == target->destination_count)
+        snprintf(out, size, "%s (%d, %d)%s", map, poi->cell_x, poi->cell_y, route);
+    else
+        snprintf(out, size, "%d places - nearest %s (%d, %d)%s", target->destination_count, map, poi->cell_x,
+                 poi->cell_y, route);
+}
+
+/* The objectives of the step a quest is on: the count the server keeps, then
+ * where each one leads. An objective that leads somewhere has a LOCATE button,
+ * which follows it and shows its nearest destination on the map. The followed
+ * one reads FOLLOWING and shows the destination in focus again. The whole
+ * height of the objective, at least QJ_LOCATE_BAND, takes the tap. */
+static int objectives_layout(int mode, int mx, int my, const QuestProgressEntry* e, int x, int y, int w) {
+    int cy = y;
+    const QuestTarget* followed = quest_target_tracked();
+    for (int i = 0; e->objective_count > i; i++) {
+        const QuestObjectiveProgress* o = &e->objectives[i];
+        bool done = o->current >= o->required;
+        const QuestTarget* target = done ? NULL : quest_target_find(e->code, e->step_id, o->type, o->item_id);
+        bool locate = NULL != target && 0 < target->destination_count;
+        int text_w = locate ? w - QJ_LOCATE_W - 6 : w, top = cy;
+        char line[MAX_ITEM_ID_LENGTH + 48];
+        snprintf(line, sizeof line, "%s %s %d/%d%s", quest_objective_verb(o->type), o->item_id, o->current,
+                 o->required, done ? " - done" : "");
+        cy += text_wrap(line, x, cy, text_w, QJ_FONT_SMALL, done ? C_STEP_DONE : MODAL_TEXT, false, JW_DRAW == mode);
+        if (NULL != target) {
+            char where[IMAP_NAME_MAX * 2 + 48];
+            destination_text(target, where, sizeof where);
+            cy += text_wrap(where, x + 8, cy, text_w - 8, QJ_FONT_SMALL, C_DIM, false, JW_DRAW == mode);
+        }
+        if (!locate) continue;
+        if (QJ_LOCATE_BAND > cy - top) cy = top + QJ_LOCATE_BAND;
+        bool on = target == followed;
+        Rectangle band = { (float)(x + w - QJ_LOCATE_W), (float)top, QJ_LOCATE_W, (float)(cy - top) };
+        Rectangle button = { band.x, band.y + (band.height - QJ_LOCATE_H) * 0.5f, QJ_LOCATE_W, QJ_LOCATE_H };
+        if (JW_DRAW == mode) {
+            UIButtonPixelRetroStyle style = { .bg = on ? MODAL_SELECTED : MODAL_BUTTON, .icon_id = "target",
+                                              .label = on ? "FOLLOWING" : "LOCATE", .font_size = 10,
+                                              .text_color = on ? WHITE : MODAL_QUEST, .selected = on, .enabled = true };
+            ui_button_pixel_retro_draw(button, &style, ui_button_hit(band, GetMouseX(), GetMouseY()));
+        } else if (JW_CLICK == mode && ui_button_hit(band, mx, my)) {
+            quest_target_track(target, on ? quest_target_tracked_destination() : 0);
+            modal_instance_map_locate();
+        }
+    }
+    return cy - y;
+}
+
+/* Render, measure or hit-test one quest as a single flat card — no nested
+ * expand: a status dot, the prominent quest name, then for an active quest its
+ * code and world, its steps and the objectives of the current one; else a
+ * one-word status (Completed / Abandoned). Everything wraps to the card width.
+ * Returns the card's pixel height. */
+static int quest_card_layout(int mode, int mx, int my, const QuestProgressEntry* e, QuestStatus sec, int x, int y,
+                             int w) {
+    bool draw = JW_DRAW == mode;
     const char* name = e->title[0] != '\0' ? e->title : e->code;
     int tx = x + QJ_CARD_PAD + 12;                 /* text column, right of the dot */
     int tw = w - (QJ_CARD_PAD + 12) - QJ_CARD_PAD;
@@ -103,9 +183,13 @@ static int quest_card_layout(bool draw, const QuestProgressEntry* e, QuestStatus
     cy += 2;
 
     if (QUEST_ACTIVE == sec) {
+        char sub[META_CACHE_CODE_MAX + IMAP_NAME_MAX + 4];
+        bool world = IMAP_DATA_READY == instance_map_data_state();
+        snprintf(sub, sizeof sub, "%s%s%s", e->code, world ? " - " : "", world ? instance_map_data_graph()->name : "");
+        cy += text_wrap(sub, tx, cy, tw, QJ_FONT_SMALL, C_DIM, false, draw);
         /* Full step list when metadata is cached: completed steps in muted
-         * green, the current step as the green focus (with its objectives
-         * line), future steps visually disabled. */
+         * green, the current step as the green focus (with its objectives),
+         * future steps visually disabled. */
         const QuestMetadataEntry* qm = quest_cache_get(e->code);
         if (qm && META_CACHE_READY == qm->head.state && qm->step_count > 0) {
             int active_idx = quest_active_step_index(qm, e);
@@ -115,13 +199,11 @@ static int quest_card_layout(bool draw, const QuestProgressEntry* e, QuestStatus
                 char line[QUEST_STEP_MAX + 4];
                 snprintf(line, sizeof(line), "%s %s", current ? ">" : "-", qm->steps[s].description);
                 cy += text_wrap(line, tx, cy, tw, QJ_FONT_SMALL, c, false, draw);
-                if (current) {
-                    cy += text_wrap(e->objectives, tx + 8, cy, tw - 8, QJ_FONT_SMALL, C_DIM, false, draw);
-                }
+                if (current) cy += objectives_layout(mode, mx, my, e, tx + 8, cy, tw - 8);
             }
         } else {
             cy += text_wrap(e->active_step, tx, cy, tw, QJ_FONT_SMALL, C_STEP, false, draw);
-            cy += text_wrap(e->objectives, tx, cy, tw, QJ_FONT_SMALL, C_DIM, false, draw);
+            cy += objectives_layout(mode, mx, my, e, tx, cy, tw);
         }
         if (e->rewards_held) {
             cy += text_wrap("Rewards wait: free a bag slot.", tx, cy, tw, QJ_FONT_SMALL, C_HELD, false, draw);
@@ -151,10 +233,9 @@ static float header_walk(int mode, int mx, int my, float x, float y, float w) {
         DrawText("QUEST JOURNAL", (int)(x + QJ_HEADER_PAD),
                  (int)(y + (header_h - QJ_FONT_TITLE) * 0.5f),
                  QJ_FONT_TITLE, C_HEADER_TEXT);
-        UIButtonStyle cb = { .icon_id = "close-yellow", .no_fill = true };
-        ui_button_draw(close_r, &cb, UI_BUTTON_NORMAL);
+        ui_button_draw_close(close_r);
     } else if (JW_CLICK == mode && ui_button_hit(close_r, mx, my)) {
-        s_visible = false;
+        set_visible(false);
     }
     return header_h;
 }
@@ -191,13 +272,15 @@ static float sections_walk(int mode, int mx, int my, float x, float y0, float w)
             const QuestProgressEntry* e = quest_progress_store_get((QuestStatus)sec, i);
             if (!e) continue;
 
-            int ch = quest_card_layout(false, e, (QuestStatus)sec,
-                                       (int)(x + QJ_CARD_MX), (int)y, (int)(w - 2 * QJ_CARD_MX));
+            int cx = (int)(x + QJ_CARD_MX), cw = (int)(w - 2 * QJ_CARD_MX);
+            int ch = quest_card_layout(JW_MEASURE, 0, 0, e, (QuestStatus)sec, cx, (int)y, cw);
+            Rectangle card = { x + QJ_CARD_MX, y, w - 2 * QJ_CARD_MX, (float)ch };
             if (JW_DRAW == mode) {
-                Rectangle card = { x + QJ_CARD_MX, y, w - 2 * QJ_CARD_MX, (float)ch };
                 DrawRectangleRounded(card, 0.16f, 4, C_CARD);
-                quest_card_layout(true, e, (QuestStatus)sec,
-                                  (int)(x + QJ_CARD_MX), (int)y, (int)(w - 2 * QJ_CARD_MX));
+                quest_card_layout(JW_DRAW, 0, 0, e, (QuestStatus)sec, cx, (int)y, cw);
+            } else if (JW_CLICK == mode && ui_button_hit(card, mx, my)) {
+                quest_card_layout(JW_CLICK, mx, my, e, (QuestStatus)sec, cx, (int)y, cw);
+                return y;
             }
             y += ch + QJ_CARD_GAP;
         }
@@ -239,7 +322,7 @@ static float sections_walk(int mode, int mx, int my, float x, float y0, float w)
 
 void quest_journal_init(void) {
     s_init    = false;
-    s_visible = false;
+    set_visible(false);
     s_age     = 0.0f;
     for (int i = 0; i < QUEST_STATUS_COUNT; ++i) {
         s_page[i] = 0;
@@ -248,7 +331,7 @@ void quest_journal_init(void) {
 
 /* Sections, pages and the scroll offset persist across toggles. */
 void quest_journal_toggle(void) {
-    s_visible = !s_visible;
+    set_visible(!s_visible);
     if (s_visible) {
         ensure_init();
         s_age = 0.0f;                          /* replay the panel pop on each open */
@@ -262,6 +345,7 @@ bool quest_journal_is_visible(void) {
 void quest_journal_update(float dt) {
     ensure_init();
     s_age += dt;
+    if (s_visible) quest_target_update();
     for (int i = 0; i < QUEST_STATUS_COUNT; ++i) {
         ui_toggle_update(&s_section[i], dt);
     }
