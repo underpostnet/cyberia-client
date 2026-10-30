@@ -1,1 +1,1 @@
-{"schema":1,"application":"cyberia-client","version":"v3.5.0","build":{"id":"73e2976916394529","mode":"production"},"runtime":{"basePath":"/","apiBasePath":"api/v1"}}
+{"schema":1,"application":"cyberia-client","version":"v4.0.0","build":{"id":"2abeafa7609fa434","mode":"production"},"runtime":{"basePath":"/","apiBasePath":"api/v1"}}
