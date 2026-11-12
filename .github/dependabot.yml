@@ -1,0 +1,19 @@
+version: 2
+
+updates:
+  - package-ecosystem: 'github-actions'
+    directory: '/'
+    schedule:
+      interval: 'weekly'
+      day: 'monday'
+    open-pull-requests-limit: 5
+    labels:
+      - 'dependencies'
+      - 'ci'
+    # The engine generates these workflows: `cyberia release build` overwrites them.
+    exclude-paths:
+      - '.github/workflows/cyberia-client.cd.yml'
+      - '.github/workflows/docker-image.cyberia-client.ci.yml'
+      - '.github/workflows/docker-image.cyberia-client.dev.ci.yml'
+    commit-message:
+      prefix: 'ci(actions)'
