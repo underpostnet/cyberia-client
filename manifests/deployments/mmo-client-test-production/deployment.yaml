@@ -3,7 +3,7 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: dd-cyberia-mmo-client-test-production-blue
-  namespace: default
+  namespace: underpost-workloads
   labels:
     app: dd-cyberia-mmo-client-test-production-blue
     deploy-id: dd-cyberia-mmo-client-test-production
@@ -18,6 +18,15 @@ spec:
         app: dd-cyberia-mmo-client-test-production-blue
         deploy-id: dd-cyberia-mmo-client-test-production
     spec:
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+              - matchExpressions:
+                  - key: kubernetes.io/hostname
+                    operator: In
+                    values:
+                      - hp-envy-iso-ram-rocky9
       containers:
         - name: dd-cyberia-mmo-client-test-production-blue
           image: underpost/cyberia-client:v4.0.0
@@ -38,7 +47,7 @@ spec:
             - /bin/sh
             - -c
             - >
-              set -a && . /home/dd/engine/engine-private/conf/dd-cyberia/instances/mmo-client-test/env/production.env && set +a && exec python3 /home/dd/engine/cyberia-client/wasm-driver.py --port=8081 --directory=/home/dd/engine/cyberia-client/bin --data-server-url=$CYBERIA_DATA_SERVER_URL
+              exec python3 /home/dd/engine/cyberia-client/wasm-driver.py --port=8081 --directory=/home/dd/engine/cyberia-client/bin --data-server-url=$CYBERIA_DATA_SERVER_URL
           readinessProbe:
             {
               "tcpSocket": {
@@ -82,23 +91,13 @@ spec:
             }
 
 
-    
-          volumeMounts:
-            - name: instance-cyberia-client-dd-cyberia-mmo-client-test-pro-37858d60
-              mountPath: /home/dd/engine/engine-private/conf/dd-cyberia/instances/mmo-client-test/env
-    
-      volumes:
-        - name: instance-cyberia-client-dd-cyberia-mmo-client-test-pro-37858d60
-          persistentVolumeClaim:
-            claimName: instance-cyberia-client-dd-cyberia-mmo-client-test-production-blue
-    
-      
+
 ---
 apiVersion: v1
 kind: Service
 metadata:
   name: dd-cyberia-mmo-client-test-production-blue-service
-  namespace: default
+  namespace: underpost-workloads
 spec:
   selector:
     app: dd-cyberia-mmo-client-test-production-blue

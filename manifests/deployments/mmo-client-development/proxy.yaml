@@ -4,10 +4,12 @@ apiVersion: projectcontour.io/v1
 kind: HTTPProxy
 metadata:
   name: client.cyberiaonline.com
-  namespace: default
+  namespace: underpost-workloads
 spec:
   virtualhost:
     fqdn: client.cyberiaonline.com
+    tls:
+      secretName: client.cyberiaonline.com
   routes:
     - conditions:
         - prefix: /
