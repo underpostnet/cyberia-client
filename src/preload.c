@@ -4,6 +4,7 @@
 #include "config.h"
 #include "content/presentation_runtime.h"
 #include "data/engine_client.h"
+#include "input/input.h"
 #include "net/game_client.h"
 #include "sim/game_state.h"
 #include "sim/local_player.h"
@@ -28,12 +29,14 @@ static const Color SPLASH_LABEL = { 170, 170, 170, 255 };
 
 static double s_started_at;
 static bool   s_ready;
-static int    s_touches;
+static bool   s_pointer_down;
 
 void preload_start(void) {
     s_started_at = GetTime();
     presentation_runtime_start_fetch(CYBERIA_CLIENT_HINTS_CODE);
     connection_open();
+    /* The splash is a full-screen surface: it owns every press. */
+    input_gestures_set_blocked(true);
 }
 
 /* First unmet gate, NULL when the world is ready to show. */
@@ -48,13 +51,30 @@ static const char* pending(void) {
     return NULL;
 }
 
-/* A touch or mouse release, or a key press, this frame. On release, so the
- * pointer is up when gameplay starts and gives no world tap. */
-static bool tapped(void) {
-    const int touches = GetTouchPointCount();
-    const bool touch_end = 0 == touches && 0 < s_touches;
-    s_touches = touches;
-    return touch_end || IsMouseButtonReleased(MOUSE_BUTTON_LEFT) || 0 != GetKeyPressed();
+/* The splash covers the screen and has no control to claim a press. */
+static bool splash_covers(int x, int y) {
+    (void)x;
+    (void)y;
+    return true;
+}
+
+static bool splash_claim(int pointer, Vector2 position) {
+    (void)pointer;
+    (void)position;
+    return false;
+}
+
+/* A release of the UI pointer, or a key press, this frame; `at` is where the
+ * pointer lifted. On release, so the pointer is up when gameplay starts. */
+static bool tapped(double dt, Vector2* at) {
+    const bool key = 0 != GetKeyPressed();
+    input_queue_t presses = { 0 };
+    input_queue_on_tick(&presses, dt, splash_covers, splash_claim);
+    const bool down     = input_pointer_down();
+    const bool released = s_pointer_down && !down && !input_pointer_cancelled();
+    s_pointer_down = down;
+    *at = input_pointer_position();
+    return released || key;
 }
 
 static void draw_centered(const char* text, float y, float size, Color color) {
@@ -97,6 +117,7 @@ static void enter_game(void) {
     telemetry_event("gameplay_start");
     audio_start();
     modal_closed(); /* the splash is the first open modal */
+    input_gestures_set_blocked(false);
     emscripten_run_script("document.getElementById('fx').remove()");
 }
 
@@ -114,8 +135,9 @@ bool preload_frame(void) {
     const bool stuck = !s_ready && PRELOAD_RELOAD_AFTER_S < GetTime() - s_started_at;
     telemetry_observe_scene(false);
 
-    /* Read input before EndDrawing: its PollInputEvents clears the release. */
-    const bool tap = tapped();
+    /* Read input before EndDrawing: its PollInputEvents clears the key press. */
+    Vector2 at;
+    const bool tap = tapped(frame_dt, &at);
     if (session_gate_active()) {
         draw_gate();
     } else {
@@ -127,7 +149,7 @@ bool preload_frame(void) {
     fetch_frame_end();
 
     if (session_gate_active()) {
-        if (tap) session_gate_handle_click(GetMouseX(), GetMouseY());
+        if (tap) session_gate_handle_click((int)at.x, (int)at.y);
         return false;
     }
 

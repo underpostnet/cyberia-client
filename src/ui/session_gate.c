@@ -3,6 +3,7 @@
 #include "config.h"
 #include "modal.h"
 #include "audio/audio.h"
+#include "combat_cluster.h"
 #include "js/fullscreen_bridge.h"
 #include "utils.h"
 #include "net/client_event.h"
@@ -97,10 +98,10 @@ static struct {
     const GateText* text;
     float           age;
     Rectangle       buttons[GATE_ACTIONS_MAX];
-    Rectangle       portal, sound, fullscreen;
+    Rectangle       portal, sound, fullscreen, aim;
     Rectangle       close;
     Rectangle       card;
-    UISwitch        sound_switch, fullscreen_switch;
+    UISwitch        sound_switch, fullscreen_switch, aim_switch;
 } s;
 
 static void show(const GateText* text) {
@@ -200,6 +201,7 @@ void session_gate_settings(void) {
     s.settings = true;
     ui_switch_init(&s.sound_switch, !audio_is_muted());
     ui_switch_init(&s.fullscreen_switch, fullscreen_bridge_is_active());
+    ui_switch_init(&s.aim_switch, combat_cluster_auto_target());
 }
 
 bool session_gate_settings_open(void) { return s.active && s.settings; }
@@ -255,7 +257,10 @@ void session_gate_draw(Rectangle area) {
     float w = area.width - 2.0f * pad < 440.0f ? area.width - 2.0f * pad : 440.0f;
     float button_h = s.settings || !mobile ? 44.0f : 40.0f;
     int count = action_count();
-    int rows = s.settings ? 3 : 0;
+    int rows = s.settings ? 4 : 0;
+    /* A short screen pairs the sound and the full screen switches on one row. */
+    bool paired = s.settings && area.height < 66.0f + (float)(rows + count) * (button_h + 6.0f);
+    if (paired) rows--;
     if (s.settings)
         pad = fminf(pad, fmaxf(6.0f, (area.height - 16.0f - 44.0f - (float)(rows + count) * button_h)
                                     / (float)(rows + count + 1)));
@@ -276,14 +281,20 @@ void session_gate_draw(Rectangle area) {
                      s.settings ? s.close.x : card.x + card.width);
     if (s.settings) ui_button_draw_close(s.close);
     float y = card.y + header_h + pad;
-    s.portal = s.sound = s.fullscreen = (Rectangle){ 0 };
+    s.portal = s.sound = s.fullscreen = s.aim = (Rectangle){ 0 };
     if (s.settings) {
         bool muted = audio_is_muted();
         bool full = fullscreen_bridge_is_active();
+        bool aim = combat_cluster_auto_target();
         const GateAction way = PORTAL;
-        s.sound = (Rectangle){ card.x + pad, y, w - 2.0f * pad, button_h };
-        s.fullscreen = (Rectangle){ card.x + pad, y + button_h + pad, w - 2.0f * pad, button_h };
-        s.portal = (Rectangle){ card.x + pad, y + 2.0f * (button_h + pad), w - 2.0f * pad, button_h };
+        float row = button_h + pad;
+        float full_w = w - 2.0f * pad;
+        float half_w = (full_w - pad) * 0.5f;
+        s.sound = (Rectangle){ card.x + pad, y, paired ? half_w : full_w, button_h };
+        s.fullscreen = paired ? (Rectangle){ card.x + 2.0f * pad + half_w, y, half_w, button_h }
+                              : (Rectangle){ card.x + pad, y + row, full_w, button_h };
+        s.aim = (Rectangle){ card.x + pad, s.fullscreen.y + row, full_w, button_h };
+        s.portal = (Rectangle){ card.x + pad, s.aim.y + row, full_w, button_h };
         UIButtonPixelRetroStyle portal = {
             .bg = MODAL_BUTTON, .icon_id = way.icon, .label = way.label, .font_size = body_font, .text_color = WHITE,
             .enabled = true,
@@ -294,10 +305,15 @@ void session_gate_draw(Rectangle area) {
         UISwitchStyle screen = {
             .icon_id = full ? "shrink" : "fullscreen", .label = "FULL SCREEN", .font_size = body_font,
         };
+        UISwitchStyle aiming = {
+            .icon_id = aim ? "target" : "hand", .label = "AUTO TARGET", .font_size = body_font,
+        };
         ui_switch_update(&s.sound_switch, !muted, GetFrameTime());
         ui_switch_update(&s.fullscreen_switch, full, GetFrameTime());
+        ui_switch_update(&s.aim_switch, aim, GetFrameTime());
         ui_switch_draw(&s.sound_switch, s.sound, &sound, ui_button_hit(s.sound, GetMouseX(), GetMouseY()));
         ui_switch_draw(&s.fullscreen_switch, s.fullscreen, &screen, ui_button_hit(s.fullscreen, GetMouseX(), GetMouseY()));
+        ui_switch_draw(&s.aim_switch, s.aim, &aiming, ui_button_hit(s.aim, GetMouseX(), GetMouseY()));
         ui_button_pixel_retro_draw(s.portal, &portal, ui_button_hit(s.portal, GetMouseX(), GetMouseY()));
         y += (float)rows * (button_h + pad);
     }
@@ -332,6 +348,10 @@ bool session_gate_handle_click(int mx, int my) {
     }
     if (s.settings && ui_button_hit(s.fullscreen, mx, my)) {
         fullscreen_bridge_toggle();
+        return true;
+    }
+    if (s.settings && ui_button_hit(s.aim, mx, my)) {
+        combat_cluster_set_auto_target(!combat_cluster_auto_target());
         return true;
     }
     for (int i = 0; action_count() > i; i++) {

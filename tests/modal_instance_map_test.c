@@ -155,8 +155,11 @@ Vector2 graph_layout_pack(const Vector2* cells, const Vector2* sizes, int count,
     return (Vector2){ 0 };
 }
 void input_gestures_set_blocked(bool blocked) {}
-static int s_minimap_hides;
-void hud_minimap_overlay_hide(void) { s_minimap_hides++; }
+static int s_minimap_hides, s_minimap_shows;
+static bool s_minimap_visible;
+void hud_minimap_overlay_hide(void) { s_minimap_hides++; s_minimap_visible = false; }
+void hud_minimap_overlay_show(void) { s_minimap_shows++; s_minimap_visible = true; }
+bool hud_minimap_overlay_is_visible(void) { return s_minimap_visible; }
 void audio_event(const char* logic_event_id) {}
 const QuestMetadataEntry* quest_cache_get(const char* code) { return NULL; }
 void modal_opened(void) {}
@@ -553,6 +556,18 @@ int main(void) {
     refresh_route();
     assert(-1 == s_m.selected_node && LINK_PLAIN == link_emphasis(0, NULL));
     modal_instance_map_close();
+
+    /* The map opened over the minimap gives it back on close; one opened without it shows none. */
+    s_minimap_visible = true;
+    int shows = s_minimap_shows;
+    modal_instance_map_toggle();
+    assert(!s_minimap_visible);
+    modal_instance_map_close();
+    assert(s_minimap_visible && shows + 1 == s_minimap_shows);
+    s_minimap_visible = false;
+    modal_instance_map_toggle();
+    modal_instance_map_close();
+    assert(!s_minimap_visible && shows + 1 == s_minimap_shows);
     s_state = IMAP_DATA_READY;
     s_generation++;
     quest_target_update();

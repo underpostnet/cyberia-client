@@ -23,8 +23,8 @@ const Color MODAL_TEXT = { 220, 220, 230, 240 };
 const Color MODAL_ACCEPT = { 38, 138, 76, 255 };
 const Color MODAL_BUTTON = { 24, 30, 48, 255 };
 
-static Rectangle s_card, s_close, s_sound, s_fullscreen, s_portal, s_signout, s_retry;
-static bool s_mobile, s_muted, s_full, s_sound_on, s_full_on;
+static Rectangle s_card, s_close, s_sound, s_fullscreen, s_aim, s_portal, s_signout, s_retry;
+static bool s_mobile, s_muted, s_full, s_sound_on, s_full_on, s_auto_target = true, s_aim_on;
 static int s_leaves, s_redirects, s_launches, s_connections, s_entered;
 static char s_entered_ticket[64];
 static PortalPage s_page;
@@ -37,6 +37,8 @@ bool audio_is_muted(void) { return s_muted; }
 void audio_toggle_mute(void) { s_muted = !s_muted; }
 bool fullscreen_bridge_is_active(void) { return s_full; }
 void fullscreen_bridge_toggle(void) { s_full = !s_full; }
+bool combat_cluster_auto_target(void) { return s_auto_target; }
+void combat_cluster_set_auto_target(bool on) { s_auto_target = on; }
 const char* config_instance_code(void) { return "world"; }
 void config_open_portal(PortalPage page) { s_redirects++; s_page = page; }
 void config_open_launch(const char* code, bool account) {
@@ -76,6 +78,7 @@ void ui_switch_update(UISwitch* control, bool on, float dt) { control->on = on; 
 void ui_switch_draw(const UISwitch* control, Rectangle bounds, const UISwitchStyle* style, bool hovered) {
     if (0 == strcmp("SOUND", style->label)) { s_sound = bounds; s_sound_on = control->on; }
     if (0 == strcmp("FULL SCREEN", style->label)) { s_fullscreen = bounds; s_full_on = control->on; }
+    if (0 == strcmp("AUTO TARGET", style->label)) { s_aim = bounds; s_aim_on = control->on; }
 }
 
 static void tap(Rectangle rect) {
@@ -90,10 +93,11 @@ static void layout(int width, int height, bool account) {
     assert(0.0f <= s_card.x && 0.0f <= s_card.y);
     assert((float)width >= s_card.x + s_card.width);
     assert((float)height >= s_card.y + s_card.height);
-    assert(44.0f <= s_sound.height && 44.0f <= s_fullscreen.height);
+    assert(44.0f <= s_sound.height && 44.0f <= s_fullscreen.height && 44.0f <= s_aim.height);
     assert(44.0f <= s_close.width && 44.0f <= s_close.height);
-    assert(s_fullscreen.y >= s_sound.y + s_sound.height);
-    assert(s_portal.y >= s_fullscreen.y + s_fullscreen.height);
+    assert(s_fullscreen.y >= s_sound.y + s_sound.height || s_fullscreen.x >= s_sound.x + s_sound.width);
+    assert(s_aim.y >= s_fullscreen.y + s_fullscreen.height);
+    assert(s_portal.y >= s_aim.y + s_aim.height);
 }
 
 int main(void) {
@@ -131,6 +135,15 @@ int main(void) {
     assert(!s_full_on);
     tap(s_sound);
     assert(!s_muted);
+
+    /* Auto target is on by default; off, a tap of a combat control casts along the facing. */
+    assert(s_aim_on);
+    tap(s_aim);
+    assert(!s_auto_target && session_gate_settings_open());
+    session_gate_draw((Rectangle){ 0, 0, 1280, 800 });
+    assert(!s_aim_on);
+    tap(s_aim);
+    assert(s_auto_target);
 
     tap(s_signout);
     assert(1 == s_leaves && 0 == s_redirects);

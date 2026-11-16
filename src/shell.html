@@ -25,7 +25,9 @@
 
     <style>
         body { margin: 0px; overflow: hidden; background-color: black; }
-        canvas.emscripten { border: 0px none; background-color: black; display: block; image-rendering: pixelated; }
+        /* touch-action none: the browser keeps every finger on the canvas as a
+           pointer, never as a scroll or zoom that cancels it. */
+        canvas.emscripten { border: 0px none; background-color: black; display: block; image-rendering: pixelated; touch-action: none; }
 
         /* Splash effects over the canvas. src/preload.c draws the splash text
            and removes #fx on Tap-to-Start. */

@@ -92,6 +92,7 @@ static const UITab IMAP_VIEW_TABS[VIEW_COUNT] = {
 
 typedef struct {
     bool  open;
+    bool  minimap_return; /* the minimap showed when the map opened: it shows again on close */
 
     Rectangle panel;      /* last drawn panel rect          */
 
@@ -195,6 +196,7 @@ static void reset_camera(void) {
 
 void modal_instance_map_toggle(void) {
     if (s_m.open) { modal_instance_map_close(); return; }
+    s_m.minimap_return = hud_minimap_overlay_is_visible();
     hud_minimap_overlay_hide();
     s_m.open = true;
     s_m.view = VIEW_WORLD;
@@ -222,6 +224,7 @@ void modal_instance_map_close(void) {
     modal_map_set_expanded(false);  /* container retracts to the readout */
     input_gestures_set_blocked(false);
     modal_closed();
+    if (s_m.minimap_return) hud_minimap_overlay_show();
 }
 
 /* ── Projection ─────────────────────────────────────────────────────────── */
@@ -561,9 +564,7 @@ static void resolve_click(Vector2 at) {
     else select_node(node_at_point(at.x, at.y)); /* tapping empty space deselects */
 }
 
-static void track_pinch(void) {
-    Vector2 a = GetTouchPosition(0);
-    Vector2 b = GetTouchPosition(1);
+static void track_pinch(Vector2 a, Vector2 b) {
     float   d = sqrtf((a.x - b.x) * (a.x - b.x) + (a.y - b.y) * (a.y - b.y));
     Vector2 mid = { (a.x + b.x) * 0.5f, (a.y + b.y) * 0.5f };
     if (!s_m.pinching) {
@@ -584,14 +585,15 @@ static void track_pinch(void) {
 }
 
 static void track_pointer(void) {
-    if (GetTouchPointCount() >= 2) { track_pinch(); return; }
+    Vector2 pair[2];
+    if (2 == input_ui_pointers(pair)) { track_pinch(pair[0], pair[1]); return; }
     s_m.pinching = false;
 
     Vector2 p    = input_pointer_position();
     bool    down = input_pointer_down();
 
     if (down && !s_m.pointer_was_down) {
-        s_m.touch     = 0 < GetTouchPointCount();
+        s_m.touch     = input_pointer_touch();
         s_m.pressed   = CheckCollisionPointRec(p, s_m.panel);
         s_m.dragging  = false;
         s_m.press_pos = p;
@@ -607,7 +609,7 @@ static void track_pointer(void) {
             s_m.pan.y        += p.y - s_m.last_pointer.y;
         }
     } else if (!down && s_m.pointer_was_down && s_m.pressed) {
-        if (!s_m.dragging) resolve_click(s_m.press_pos);
+        if (!s_m.dragging && !input_pointer_cancelled()) resolve_click(s_m.press_pos);
         s_m.pressed  = false;
         s_m.dragging = false;
     }
