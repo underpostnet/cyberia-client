@@ -38,7 +38,6 @@ int GetScreenHeight(void) { return 600; }
 double GetTime(void) { return 10.0; }
 bool viewport_is_mobile(void) { return false; }
 bool local_player_in_stasis(void) { return stasis; }
-float local_player_action_charge(double now) { return 0.5f; }
 float local_player_consume_charge(double now) { return 0.25f; }
 ObjectLayer* lookup_cached_layer(const char* id) { return NULL; }
 bool local_player_is_coin(const char* id) { return 0 == strcmp("coin", id); }
@@ -83,9 +82,10 @@ int MeasureText(const char* text, int size) { return 10; }
 Vector2 GetMousePosition(void) { return mouse; }
 int GetMouseX(void) { return (int)mouse.x; }
 int GetMouseY(void) { return (int)mouse.y; }
-int GetTouchPointCount(void) { return 0; }
-Vector2 GetTouchPosition(int index) { return mouse; }
-bool IsMouseButtonDown(int button) { return mouse_down; }
+Vector2 input_pointer_position(void) { return mouse; }
+bool input_pointer_down(void) { return mouse_down; }
+static bool cancelled;
+bool input_pointer_cancelled(void) { return cancelled; }
 bool ui_button_hit(Rectangle b, int mx, int my) {
     return mx >= b.x && mx < b.x + b.width && my >= b.y && my < b.y + b.height;
 }
@@ -166,6 +166,21 @@ static void drag(Rectangle from, Rectangle to) {
     inventory_bar_update(0.05f);
 }
 
+/* Press at the centre of `from`, drag to the centre of `to`, and lose the pointer there. */
+static void drag_lost(Rectangle from, Rectangle to) {
+    mouse = (Vector2){ from.x + from.width * 0.5f, from.y + from.height * 0.5f };
+    assert(inventory_bar_handle_click((int)mouse.x, (int)mouse.y, NULL));
+    mouse_down = true;
+    inventory_bar_update(0.05f);
+    mouse = (Vector2){ to.x + to.width * 0.5f, to.y + to.height * 0.5f };
+    inventory_bar_update(0.05f);
+    mouse_down = false;
+    cancelled = true;
+    inventory_bar_update(0.05f);
+    cancelled = false;
+    inventory_bar_update(0.05f);
+}
+
 static void carry(int at, const char* item_id, int slot) {
     memset(&g_local_player.inventory[at], 0, sizeof g_local_player.inventory[at]);
     strcpy(g_local_player.inventory[at].item_id, item_id);
@@ -235,6 +250,16 @@ static void test_stacks_drag_and_tap(void) {
     assert(3 == offered && -2 == ground_slot && -2 == dropped_from);
     offer_open = false;
 
+    /* A lost pointer drops nothing and taps nothing: the stack stays in its slot. */
+    offered = -2;
+    drag_lost(cell(3), cell(5));
+    drag_lost(cell(3), cell(3));
+    drag_lost(cell(0), (Rectangle){ 300.0f, 100.0f, 10.0f, 10.0f });
+    offer_open = true;
+    drag_lost(cell(3), (Rectangle){ 300.0f, 40.0f, 10.0f, 10.0f });
+    offer_open = false;
+    assert(-2 == dropped_from && -2 == ground_slot && -2 == offered && !inventory_bar_take_tap(&tapped));
+
     /* A drag from an empty cell neither moves a stack, nor scrolls, nor taps. */
     drag(cell(2), cell(0));
     assert(-2 == dropped_from && 0.0f == s_scroll_px && !inventory_bar_take_tap(&tapped));
@@ -276,7 +301,7 @@ static void draw_at(float animation) {
 }
 
 int main(void) {
-    UiSkillEntry skill = { 0 };
+    UiSkillEntry skill = { .activation = SKILL_ACTIVATION_AUTOMATIC };
     strcpy(skill.trigger_item_id, "pistol");
     strcpy(skill.summoned_entity_item_id, "bullet");
     assert(0 <= ui_state_push_skill(&skill));
@@ -288,7 +313,7 @@ int main(void) {
 
     draw_at(1.0f);
     assert(1 == preview_count && 2 == slot_count && 0 == strcmp("bullet", preview_item));
-    assert(0.5f == cooldown_charge && 0 == badge_quantity);
+    assert(0.25f == cooldown_charge && 0 == badge_quantity);
     Rectangle shown = preview;
     assert(cooldown.y + cooldown.height < 600.0f - (float)bar_height());
 
@@ -305,12 +330,15 @@ int main(void) {
     draw_at(0.0f);
     assert(0 == preview_count);
     stasis = false;
-    g_local_player.inventory[1].active = false;
+    /* A manual skill previews nothing: the combat cluster shows it. */
+    ui_state_reset();
+    skill.activation = SKILL_ACTIVATION_MANUAL;
+    assert(0 <= ui_state_push_skill(&skill));
     draw_at(0.0f);
     assert(0 == preview_count);
 
-    /* A held skill previews its inactive stack above the slot: the item, the units left and the consume cooldown. */
-    UiSkillEntry dose = { .held = true };
+    /* An automatic skill previews its inactive stack above the slot: the item, the units left and the consume cooldown. */
+    UiSkillEntry dose = { .activation = SKILL_ACTIVATION_AUTOMATIC };
     strcpy(dose.trigger_item_id, "gel");
     strcpy(dose.summoned_entity_item_id, "gel");
     assert(0 <= ui_state_push_skill(&dose));

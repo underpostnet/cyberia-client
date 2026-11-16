@@ -61,3 +61,8 @@ Rectangle hud_side_stack_chat_slot(void) {
 }
 
 Rectangle hud_side_stack_social_slot(void) { return column_slot(social_panel_is_visible()); }
+
+float hud_side_stack_left(void) {
+    bool shown = hud_minimap_overlay_is_visible() || quest_journal_is_visible() || column_covered();
+    return shown ? column_x() : (float)GetScreenWidth();
+}

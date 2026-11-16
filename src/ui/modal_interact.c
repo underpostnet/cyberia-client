@@ -77,10 +77,9 @@ static int   s_tab  = MI_TAB_STACK;
 /* Tab-switch transition clock — a fresh tab's content pops in over
  * MODAL_POP_DURATION and swallows content taps until it settles. */
 static float s_tab_age = MODAL_POP_DURATION;
-/* True once the player picks a tab. Until then the active tab tracks the
- * entity's leading capability, which can only resolve after the action
- * metadata fetch lands. */
-static bool  s_tab_picked = false;
+/* True once the default tab is final: the player picked a tab, or the action
+ * catalog of the entity landed. Until then the active tab follows default_tab. */
+static bool  s_tab_settled = false;
 
 static EntityID s_entity_id     = 0;
 static InteractMode s_mode      = MI_MODE_NPC;
@@ -424,9 +423,8 @@ static bool refresh_bot_snapshot(void) {
 }
 
 /* Fill `out` with the visible tab IDs in strip order; returns the count.
- * Capability tabs lead the row — a terminal's catalog or recipe book is what
- * the player came for, so the first one also becomes the tab the modal opens
- * on. A player shows its profile first. */
+ * The action tabs of an NPC lead the row; a player shows a live trade, else
+ * its profile, first. */
 static int visible_tabs(int out[MI_TAB_COUNT]) {
     int n = 0;
     if (MI_MODE_SELF == s_mode) {
@@ -480,13 +478,20 @@ static int strip_index(const int ids[MI_TAB_COUNT], int count, int tab) {
     return -1;
 }
 
-/* Leading tab for the entity's current capabilities — Shop, else Assembly,
- * else Quest, else the always-present Stack. */
-static int leading_tab(void) {
+/* The tab the modal opens on: Quest while the NPC holds an actionable quest
+ * for this player (the server quest bit: one to accept or a step to advance
+ * here); else the first tab of the strip: an action tab of an NPC, the live
+ * trade or the profile of a player, else Quest, else Stack. */
+static int default_tab(void) {
     int tabs[MI_TAB_COUNT];
-    visible_tabs(tabs);
-    return tabs[0];
+    int count = visible_tabs(tabs);
+    const Interaction* in = MI_MODE_NPC == s_mode ? local_player_interaction(s_entity_id) : NULL;
+    bool quest = NULL != in && 0 != (in->flags & INTERACTION_FLAG_QUEST);
+    return quest && 0 <= strip_index(tabs, count, MI_TAB_QUEST) ? MI_TAB_QUEST : tabs[0];
 }
+
+/* The action catalog of the entity is still on its way. */
+static bool action_pending(void) { return '\0' != s_action_code[0] && NULL == action_metadata(); }
 
 /* Switch tabs, replaying the content pop-in. */
 static void set_tab(int tab) {
@@ -883,7 +888,7 @@ void modal_interact_init(void) {
     market_panel_reset();
     trade_panel_reset();
     s_tab_age = MODAL_POP_DURATION;
-    s_tab_picked = false;
+    s_tab_settled = false;
     modal_anchor_layout_reset(&s_layout);
     s_q_expanded = -1;
     s_q_expand_age = MODAL_POP_DURATION;
@@ -925,7 +930,7 @@ static void open_session(EntityID entity_id, InteractMode mode, const char* disp
     s_open               = true;
     s_tab                = MI_TAB_STACK;
     s_tab_age            = MODAL_POP_DURATION;
-    s_tab_picked         = false;
+    s_tab_settled        = false;
     /* A fresh session re-resolves both the height and the frozen corner. */
     modal_anchor_layout_reset(&s_layout);
     ui_scroll_reset(&s_q_scroll);
@@ -972,10 +977,10 @@ static void open_session(EntityID entity_id, InteractMode mode, const char* disp
     s_talk_sel = -1;
     refresh_bot_snapshot();
 
-    /* Open on the leading capability tab. The shop catalog arrives with an
-     * async REST fetch, so update keeps re-resolving this until the player
-     * picks a tab themselves. */
-    s_tab = leading_tab();
+    /* The action catalog arrives with an async REST fetch, so update follows
+     * the default tab until it lands or the player picks a tab. */
+    s_tab = default_tab();
+    s_tab_settled = !action_pending();
 
     if (MI_MODE_NPC == s_mode) request_active_dialogue();
 
@@ -1103,10 +1108,10 @@ void modal_interact_update(float dt) {
             s_q_expand_age = MODAL_POP_DURATION;
     }
 
-    /* Follow the entity's leading capability until the player picks a tab —
-     * the Shop tab only becomes visible once its REST fetch lands, after this
-     * modal already opened. */
-    if (!s_tab_picked) set_tab(leading_tab());
+    if (!s_tab_settled) {
+        set_tab(default_tab());
+        s_tab_settled = !action_pending();
+    }
     if (s_tab_age < MODAL_POP_DURATION) {
         s_tab_age += dt;
         if (s_tab_age > MODAL_POP_DURATION) s_tab_age = MODAL_POP_DURATION;
@@ -2493,9 +2498,7 @@ bool modal_interact_handle_click(int mx, int my) {
         if (new_tab == MI_TAB_QUEST && new_tab == s_tab && s_q_expanded >= 0) {
             collapse_quest_detail();
         }
-        /* An explicit pick pins the tab: update stops re-resolving it from
-         * the entity's leading capability. */
-        s_tab_picked = true;
+        s_tab_settled = true;
         set_tab(new_tab);
         return true;
     }
@@ -2522,7 +2525,7 @@ bool modal_interact_handle_click(int mx, int my) {
         return true;
     }
     if (integration_btn_visible() && ui_button_hit(integration, mx, my)) {
-        s_tab_picked = true;
+        s_tab_settled = true;
         set_tab(MI_TAB_INTEGRATION);
         return true;
     }

@@ -38,6 +38,9 @@ cc "${cc_flags[@]}" -o "$out/fx_portal_aura" tests/fx_portal_aura_test.c src/fx/
 cc "${cc_flags[@]}" -o "$out/fx_hit_burst" tests/fx_hit_burst_test.c src/fx/fx_hit_burst.c -lm
 "$out/fx_hit_burst"
 
+cc "${cc_flags[@]}" -o "$out/fx_combat_aim" tests/fx_combat_aim_test.c src/fx/fx_combat_aim.c src/fx/fx_shapes.c -lm
+"$out/fx_combat_aim"
+
 cc "${cc_flags[@]}" -o "$out/fx_obstacle_burst" tests/fx_obstacle_burst_test.c src/fx/fx_obstacle_burst.c -lm
 "$out/fx_obstacle_burst"
 
@@ -54,8 +57,14 @@ cc "${cc_flags[@]}" -o "$out/pointer_gesture" tests/pointer_gesture_test.c src/i
 cc "${cc_flags[@]}" -o "$out/input" tests/input_test.c src/input/input.c src/input/pointer_gesture.c -lm
 "$out/input"
 
-cc "${cc_flags[@]}" -o "$out/hud_joystick" tests/hud_joystick_test.c src/ui/hud_joystick.c -lm
+cc "${cc_flags[@]}" -ffunction-sections -fdata-sections -Wl,--gc-sections \
+    -o "$out/hud_joystick" tests/hud_joystick_test.c src/ui/hud_joystick.c src/fx/fx_shapes.c -lm
 "$out/hud_joystick"
+
+cc "${cc_flags[@]}" -ffunction-sections -fdata-sections -Wl,--gc-sections \
+    -o "$out/combat_cluster" tests/combat_cluster_test.c src/ui/combat_cluster.c src/ui/ui_state.c \
+    src/ui/skill_preview.c src/sim/auto_target.c src/utils.c -lm
+"$out/combat_cluster"
 
 cc "${cc_flags[@]}" -ffunction-sections -fdata-sections -Wl,--gc-sections \
     -o "$out/skill_preview" tests/skill_preview_test.c src/ui/skill_preview.c src/ui/ui_state.c \
@@ -106,6 +115,10 @@ cc "${cc_flags[@]}" -ffunction-sections -fdata-sections -Wl,--gc-sections \
 cc "${cc_flags[@]}" -ffunction-sections -fdata-sections -Wl,--gc-sections \
     -o "$out/modal_instance_map" tests/modal_instance_map_test.c src/utils.c libs/cJSON/cJSON.c -lm
 "$out/modal_instance_map"
+
+cc "${cc_flags[@]}" -ffunction-sections -fdata-sections -Wl,--gc-sections \
+    -o "$out/modal_interact" tests/modal_interact_test.c src/utils.c -lm
+"$out/modal_interact"
 
 cc "${cc_flags[@]}" -ffunction-sections -fdata-sections -Wl,--gc-sections \
     -o "$out/universe_map_data" tests/universe_map_data_test.c src/data/universe_map_data.c src/data/instance_map_data.c \

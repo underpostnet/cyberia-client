@@ -21,6 +21,7 @@
 #include "audio/audio_events.h"
 #include "sim/replication.h"
 #include "ui/chat_log.h"
+#include "ui/combat_cluster.h"
 #include "ui/floating_combat_text.h"
 #include "ui/identity_icon.h"
 #include "fx/fx_loot.h"
@@ -546,7 +547,7 @@ static void unpack_self(const cJSON* e, cyberia_frame_t frame, cyberia_input_seq
     float move_speed = serial_get_float_default(e, "moveSpeed", 0.0f);
     if (move_speed > 0.0f) local_player_set_move_speed(move_speed);
 
-    /* Authoritative action cooldown — the skill-trigger period. Movement is not
+    /* Authoritative action cooldown — the period of the skill activations. Movement is not
      * gated by it; keyboard steering paces its refresh by it. */
     int cooldown_ms = serial_get_int_default(e, "actionCooldownMs", 0);
     if (cooldown_ms > 0) local_player_set_action_cooldown((float)cooldown_ms / 1000.0f);
@@ -718,12 +719,22 @@ static void read_skill_map(const cJSON* skill_map) {
             if (!cJSON_IsObject(def_obj)) continue;
             UiSkillEntry se = {0};
             copy_str(se.trigger_item_id, sizeof se.trigger_item_id, entry->string);
+            serial_get_string(def_obj, "skillId", se.skill_id, sizeof se.skill_id);
             serial_get_string(def_obj, "logicEventId", se.logic_event_id, sizeof se.logic_event_id);
             serial_get_string(def_obj, "name", se.name, sizeof se.name);
             serial_get_string(def_obj, "description", se.description, sizeof se.description);
             serial_get_string(def_obj, "summonedEntityItemId", se.summoned_entity_item_id,
                               sizeof se.summoned_entity_item_id);
-            se.held = serial_get_bool_default(def_obj, "held", false);
+            char word[16] = {0};
+            serial_get_string(def_obj, "activation", word, sizeof word);
+            se.activation = 0 == strcmp(word, "manual")      ? SKILL_ACTIVATION_MANUAL
+                          : 0 == strcmp(word, "automatic")   ? SKILL_ACTIVATION_AUTOMATIC
+                                                             : SKILL_ACTIVATION_EVENT;
+            serial_get_string(def_obj, "targeting", word, sizeof word);
+            se.targeting = 0 == strcmp(word, "direction") ? SKILL_TARGET_DIRECTION
+                         : 0 == strcmp(word, "self")      ? SKILL_TARGET_SELF
+                                                          : SKILL_TARGET_NONE;
+            se.reach = serial_get_float_default(def_obj, "reach", 0.0f);
             ui_state_push_skill(&se);
         }
     }
@@ -750,6 +761,7 @@ static void json_unpack_init_data(const cJSON* payload) {
 
     /* Skill map lives in ui_state — pure presentation lookup. */
     ui_state_reset();
+    combat_cluster_reset();
     cJSON* skill_map_json = cJSON_GetObjectItem(payload, "skillMap");
 
     // Parse entity type defaults
@@ -965,6 +977,20 @@ static void json_unpack_chat_ack(const cJSON* payload) {
     char reason[32] = {0};
     serial_get_string(payload, "reason", reason, sizeof(reason));
     chat_log_push_system(chat_conversation_of(payload, g_local_player.id), social_reason_text(reason));
+}
+
+/* The answer to one skill activation: the combat cluster shows it. */
+static void json_unpack_skill_ack(const cJSON* payload) {
+    SkillAck ack = {
+        .seq         = (uint32_t)serial_get_int_default(payload, "seq", 0),
+        .accepted    = serial_get_bool_default(payload, "accepted", false),
+        .target_id   = (EntityID)serial_get_int_default(payload, "targetId", 0),
+        .aim         = { serial_get_float_default(payload, "x", 0.0f), serial_get_float_default(payload, "y", 0.0f) },
+        .ready_in_ms = serial_get_int_default(payload, "readyInMs", 0),
+    };
+    serial_get_string(payload, "skillId", ack.skill_id, sizeof ack.skill_id);
+    serial_get_string(payload, "reason", ack.reason, sizeof ack.reason);
+    combat_cluster_on_ack(&ack);
 }
 
 /* A refused party request. The snapshot already shows that nothing changed. */
@@ -1271,6 +1297,7 @@ void message_receive(const uint8_t* data, size_t len) {
     else if (0 == strcmp(type, "metadata"))        json_unpack_metadata(payload);
     else if (0 == strcmp(type, "chat"))            json_unpack_chat(payload);
     else if (0 == strcmp(type, "chat_ack"))        json_unpack_chat_ack(payload);
+    else if (0 == strcmp(type, "skill_ack"))       json_unpack_skill_ack(payload);
     else if (0 == strcmp(type, "party_ack"))       json_unpack_party_ack(payload);
     else if (0 == strcmp(type, "friend_ack"))      json_unpack_friend_ack(payload);
     else if (0 == strcmp(type, "friends"))         json_unpack_friends(payload);

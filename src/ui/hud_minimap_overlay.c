@@ -3,6 +3,7 @@
 
 #include "hud_side_stack.h"
 #include "map_marker.h"
+#include "modal_instance_map.h"
 #include "data/instance_map_data.h"
 #include "data/engine_client.h"
 #include "data/quest_target.h"
@@ -51,7 +52,7 @@ static const Color MINIMAP_LINK         = { 170, 110, 255, 255 };
 
 /* The controls along the right edge of the map, top to bottom. */
 typedef enum {
-    MINIMAP_TEXTURE_TOGGLE, MINIMAP_ZOOM_IN, MINIMAP_ZOOM_OUT,
+    MINIMAP_OPEN_MAP, MINIMAP_TEXTURE_TOGGLE, MINIMAP_ZOOM_IN, MINIMAP_ZOOM_OUT,
     MINIMAP_TRANSPARENCY_MORE, MINIMAP_TRANSPARENCY_LESS, MINIMAP_CONTROL_COUNT,
 } MinimapControl;
 
@@ -86,7 +87,7 @@ static Rectangle control_bounds(Rectangle bounds, MinimapControl control) {
 
 /* The backing under the controls, so they read on any texture. */
 static Rectangle control_rail(Rectangle bounds) {
-    Rectangle first = control_bounds(bounds, MINIMAP_TEXTURE_TOGGLE);
+    Rectangle first = control_bounds(bounds, 0);
     Rectangle last = control_bounds(bounds, MINIMAP_CONTROL_COUNT - 1);
     return (Rectangle){ first.x - 3.0f, first.y - 3.0f, last.x + last.width - first.x + 6.0f,
                         last.y + last.height - first.y + 6.0f };
@@ -294,6 +295,10 @@ static void draw_control_tip(Rectangle bounds, Rectangle control, const char* ti
 
 static void draw_controls(Rectangle bounds, Vector2 mouse) {
     DrawRectangleRec(control_rail(bounds), MINIMAP_RAIL);
+    Rectangle open = control_bounds(bounds, MINIMAP_OPEN_MAP);
+    bool over_open = CheckCollisionPointRec(mouse, open);
+    UIButtonStyle expand = { .icon_id = "fullscreen", .icon_size = (int)(open.width * 0.6f), .border = MINIMAP_EDGE };
+    ui_button_draw(open, &expand, ui_button_resolve_state(true, false, over_open));
     Rectangle texture = control_bounds(bounds, MINIMAP_TEXTURE_TOGGLE);
     bool over_texture = CheckCollisionPointRec(mouse, texture);
     UIButtonStyle toggle = { .icon_id = "map", .icon_size = (int)(texture.width * 0.6f), .border = MINIMAP_EDGE };
@@ -320,6 +325,7 @@ static void draw_controls(Rectangle bounds, Vector2 mouse) {
                                 .font_size = MINIMAP_ZOOM_OUT >= i ? 18 : 14, .no_fill = true };
         ui_button_draw(rect, &style, ui_button_resolve_state(controls[i - MINIMAP_ZOOM_IN].enabled, false, hovered));
     }
+    if (over_open) draw_control_tip(bounds, open, "OPEN MAP");
     if (over_texture) draw_control_tip(bounds, texture, s_texture_visible ? "MAP TEXTURE ON" : "MAP TEXTURE OFF");
     for (int i = MINIMAP_ZOOM_IN; MINIMAP_CONTROL_COUNT > i; i++) {
         Rectangle rect = control_bounds(bounds, i);
@@ -435,6 +441,10 @@ bool hud_minimap_overlay_handle_click(int mx, int my) {
     if (MINIMAP_HEADER_H > bounds.height) return false;
     if (ui_button_hit(close_bounds(bounds), mx, my)) {
         hud_minimap_overlay_hide();
+        return true;
+    }
+    if (ui_button_hit(control_bounds(bounds, MINIMAP_OPEN_MAP), mx, my)) {
+        modal_instance_map_toggle();
         return true;
     }
     if (ui_button_hit(control_bounds(bounds, MINIMAP_TEXTURE_TOGGLE), mx, my)) {

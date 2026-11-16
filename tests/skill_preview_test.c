@@ -26,8 +26,8 @@ GameState g_game_state;
 int game_state_slot(EntityID id) { return -1; }
 ObjectLayer* lookup_cached_layer(const char* item_id) { return NULL; }
 
-static void push_skill_held(const char* trigger, const char* logic, const char* summon, bool held) {
-    UiSkillEntry skill = { .held = held };
+static void push_skill_as(const char* trigger, const char* logic, const char* summon, SkillActivation activation) {
+    UiSkillEntry skill = { .activation = activation };
     copy_str(skill.trigger_item_id, sizeof skill.trigger_item_id, trigger);
     copy_str(skill.logic_event_id, sizeof skill.logic_event_id, logic);
     copy_str(skill.summoned_entity_item_id, sizeof skill.summoned_entity_item_id, summon);
@@ -35,7 +35,7 @@ static void push_skill_held(const char* trigger, const char* logic, const char* 
 }
 
 static void push_skill(const char* trigger, const char* logic, const char* summon) {
-    push_skill_held(trigger, logic, summon, false);
+    push_skill_as(trigger, logic, summon, SKILL_ACTIVATION_AUTOMATIC);
 }
 
 static ObjectLayerState slot(const char* item_id, bool active) {
@@ -48,43 +48,34 @@ static bool near(float a, float b) { return a - b < 0.01f && b - a < 0.01f; }
 
 int main(void) {
     SkillPreview summons[SKILL_PREVIEW_MAX];
-    bool held;
 
-    /* The reference skill: the pistol slot previews its bullet, not itself. */
-    push_skill("atlas_pistol_mk2", "projectile", "atlas_pistol_mk2_bullet");
-    push_skill("coin", "coin_drop_or_transaction", "coin");
+    /* A manual skill and an event skill preview nothing: the combat cluster shows the first. */
+    push_skill_as("atlas_pistol_mk2", "projectile", "atlas_pistol_mk2_bullet", SKILL_ACTIVATION_MANUAL);
+    push_skill_as("coin", "coin_drop_or_transaction", "coin", SKILL_ACTIVATION_EVENT);
     ObjectLayerState pistol = slot("atlas_pistol_mk2", true);
-    assert(1 == skill_preview_summons(&pistol, summons, &held) && !held);
-    assert(0 == strcmp("atlas_pistol_mk2_bullet", summons[0].item_id) && 0 == summons[0].quantity);
+    assert(0 == skill_preview_summons(&pistol, summons));
+    ObjectLayerState coin = slot("coin", true);
+    assert(0 == skill_preview_summons(&coin, summons));
 
-    /* Only an active trigger fires a tap skill; other items preview nothing. */
-    pistol.active = false;
-    assert(0 == skill_preview_summons(&pistol, summons, &held));
-    ObjectLayerState coin = slot("coin", false);
-    assert(0 == skill_preview_summons(&coin, summons, &held));
-    ObjectLayerState sword = slot("sword", true);
-    assert(0 == skill_preview_summons(&sword, summons, &held));
-    /* A skill map a world sends later replaces the skills of its triggers, and only theirs. */
-    ui_state_drop_skills("atlas_pistol_mk2");
-    pistol.active = true;
-    assert(0 == skill_preview_summons(&pistol, summons, &held) && 1 == ui_state_skill_count());
-    push_skill("atlas_pistol_mk2", "projectile", "atlas_pistol_mk2_shell");
-    assert(1 == skill_preview_summons(&pistol, summons, &held));
-    assert(0 == strcmp("atlas_pistol_mk2_shell", summons[0].item_id) && 2 == ui_state_skill_count());
-
-    /* A held skill previews an inactive stack: the item it consumes, with the units left. */
-    push_skill_held("med-gel", "zero-waste-auto-consume-heal", "med-gel", true);
+    /* An automatic skill previews its stack, active or not: the item it consumes, with the units left. */
+    push_skill("med-gel", "zero-waste-auto-consume-heal", "med-gel");
     g_local_player.inventory[0] = slot("med-gel", false);
     g_local_player.inventory[0].quantity = 3;
     g_local_player.inventory_count = 1;
-    assert(1 == skill_preview_summons(&g_local_player.inventory[0], summons, &held) && held);
+    assert(1 == skill_preview_summons(&g_local_player.inventory[0], summons));
     assert(0 == strcmp("med-gel", summons[0].item_id) && 3 == summons[0].quantity);
+    g_local_player.inventory[0].active = true;
+    assert(1 == skill_preview_summons(&g_local_player.inventory[0], summons));
     /* Each stack of the consumable counts its own units, not the item total. */
     g_local_player.inventory[1] = slot("med-gel", false);
     g_local_player.inventory[1].quantity = 2;
     g_local_player.inventory_count = 2;
-    assert(1 == skill_preview_summons(&g_local_player.inventory[1], summons, &held) && 2 == summons[0].quantity);
+    assert(1 == skill_preview_summons(&g_local_player.inventory[1], summons) && 2 == summons[0].quantity);
     g_local_player.inventory_count = 0;
+
+    /* A skill map a world sends later replaces the skills of its triggers, and only theirs. */
+    ui_state_drop_skills("med-gel");
+    assert(0 == skill_preview_summons(&g_local_player.inventory[1], summons) && 2 == ui_state_skill_count());
 
     /* One preview per distinct entity, in skill map order, up to the row size. */
     ui_state_reset();
@@ -95,19 +86,19 @@ int main(void) {
     push_skill("staff", "projectile", "$unknown");
     ObjectLayerState staff = slot("staff", true);
     s_skin = "skin-a";
-    assert(2 == skill_preview_summons(&staff, summons, &held));
+    assert(2 == skill_preview_summons(&staff, summons));
     assert(0 == strcmp("orb", summons[0].item_id) && 0 == strcmp("skin-a", summons[1].item_id));
     s_skin = NULL;
-    assert(1 == skill_preview_summons(&staff, summons, &held));
+    assert(1 == skill_preview_summons(&staff, summons));
     push_skill("staff", "projectile", "spark");
     push_skill("staff", "projectile", "ember");
     push_skill("staff", "projectile", "flare");
-    assert(SKILL_PREVIEW_MAX == skill_preview_summons(&staff, summons, &held));
+    assert(SKILL_PREVIEW_MAX == skill_preview_summons(&staff, summons));
     assert(0 == strcmp("ember", summons[2].item_id));
 
     /* A reconnect clears the skill map, and with it every preview. */
     ui_state_reset();
-    assert(0 == skill_preview_summons(&staff, summons, &held));
+    assert(0 == skill_preview_summons(&staff, summons));
 
     /* The row sits above the bar top, centered on its slot, never on the slot. */
     Rectangle icons[SKILL_PREVIEW_MAX];

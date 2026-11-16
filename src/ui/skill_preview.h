@@ -8,8 +8,9 @@
 #include "world/object_layers_management.h"
 #include "ui_state.h"
 
-/* Summoned entity previews: the entities the configured skills of an item
- * summon, from the init_data skill map, and their place above a slot. */
+/* Summoned entity previews: the entities the automatic skills of an item
+ * summon, from the init_data skill map, and their place above a slot. The
+ * combat cluster shows the manual skills. */
 
 /* Distinct summons drawn above one inventory slot. */
 #define SKILL_PREVIEW_MAX 3
@@ -25,10 +26,9 @@ typedef struct {
     int         quantity;
 } SkillPreview;
 
-/* Fill `out` with the distinct entities the skills of `slot` summon, in skill
- * map order. An inactive slot shows only its held skills. `held` reports a
- * held skill in the row: the consume cooldown then times it. */
-int skill_preview_summons(const ObjectLayerState* slot, SkillPreview out[SKILL_PREVIEW_MAX], bool* held);
+/* Fill `out` with the distinct entities the automatic skills of `slot` summon,
+ * in skill map order, active or not. The consume cooldown times them. */
+int skill_preview_summons(const ObjectLayerState* slot, SkillPreview out[SKILL_PREVIEW_MAX]);
 
 /* One row of `count` previews centered over `slot`, with the cooldown bar
  * under the row. Both stay above `floor_y`, and above `keep_clear` where the

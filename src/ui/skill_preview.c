@@ -31,14 +31,13 @@ const char* skill_preview_summon_id(const UiSkillEntry* skill) {
     return id;
 }
 
-int skill_preview_summons(const ObjectLayerState* slot, SkillPreview out[SKILL_PREVIEW_MAX], bool* held) {
-    assert(slot && out && held);
-    *held = false;
+int skill_preview_summons(const ObjectLayerState* slot, SkillPreview out[SKILL_PREVIEW_MAX]) {
+    assert(slot && out);
     int n = 0;
     for (int i = 0; ui_state_skill_count() > i && SKILL_PREVIEW_MAX > n; i++) {
         const UiSkillEntry* skill = ui_state_skill_at(i);
         if (0 != strcmp(skill->trigger_item_id, slot->item_id)) continue;
-        if (!slot->active && !skill->held) continue;
+        if (SKILL_ACTIVATION_AUTOMATIC != skill->activation) continue;
         const char* id = skill_preview_summon_id(skill);
         if (NULL == id) continue;
         bool seen = false;
@@ -48,7 +47,6 @@ int skill_preview_summons(const ObjectLayerState* slot, SkillPreview out[SKILL_P
          * consumable spends them one stack at a time. */
         int quantity = 0 == strcmp(id, slot->item_id) ? slot->quantity : local_player_item_quantity(id);
         out[n++] = (SkillPreview){ .item_id = id, .quantity = quantity };
-        *held = *held || skill->held;
     }
     return n;
 }

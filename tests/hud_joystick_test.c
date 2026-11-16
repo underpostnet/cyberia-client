@@ -5,7 +5,6 @@
 #include <raylib.h>
 #define RAYMATH_IMPLEMENTATION
 #include <raymath.h>
-#include <stddef.h>
 #include <stdio.h>
 
 #define BASE_X 100
@@ -37,18 +36,12 @@ static void draw(pointer_gesture_t g) {
 
 int main(void) {
     pointer_gesture_t g = {
-        .origin = { BASE_X, BASE_Y },
-        .thumb  = { BASE_X, BASE_Y },
+        .steering = true,
+        .origin   = { BASE_X, BASE_Y },
+        .thumb    = { BASE_X, BASE_Y },
     };
-    const enum pointer_state hidden[] = { POINTER_IDLE, POINTER_UI_PENDING, POINTER_PENDING, POINTER_SUPPRESSED };
-    for (size_t i = 0; i < sizeof(hidden) / sizeof(hidden[0]); i++) {
-        g.state = hidden[i];
-        draw(g);
-        assert(0 == s_rects);
-    }
 
     /* The base fills its radius around the origin; a centered thumb stays inside. */
-    g.state = POINTER_JOYSTICK;
     draw(g);
     assert(0 < s_rects);
     assert(BASE_X - R == s_min_x && BASE_X + R == s_max_x);

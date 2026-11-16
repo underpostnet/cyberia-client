@@ -38,12 +38,10 @@ void ui_toggle_init(UIToggle* t, Rectangle anchor, bool initial_expanded,
     t->icon_expanded  = NULL;
     t->icon_collapsed = NULL;
     t->drag_enabled  = false;
-    t->input_enabled = true;
     t->press_armed = false;
     t->dragging    = false;
     t->committed   = false;
     t->changed     = false;
-    t->pointer_was_down = false;
     t->press_pos   = (Vector2){ 0.0f, 0.0f };
     t->drag_offset = (Vector2){ 0.0f, 0.0f };
     t->icon_scale  = 1.0f;
@@ -55,10 +53,6 @@ void ui_toggle_set_anchor(UIToggle* t, Rectangle anchor) {
 
 void ui_toggle_set_drag(UIToggle* t) {
     t->drag_enabled = true;
-}
-
-void ui_toggle_set_input_enabled(UIToggle* t, bool enabled) {
-    t->input_enabled = enabled;
 }
 
 bool ui_toggle_take_changed(UIToggle* t) {
@@ -90,24 +84,11 @@ static void arm_gesture(UIToggle* t, Vector2 press) {
     t->press_pos   = press;
 }
 
-/* Resolve the armed gesture. A touch press reaches ui_toggle_handle_click up to
- * one confirmation window late (pointer_gesture.c holds it to disambiguate a
- * pinch), so the pointer may already have travelled — or lifted — by the first
- * pass here; both are read from the recorded press position, never assumed
- * fresh. */
+/* Resolve the gesture ui_toggle_handle_click armed on the press frame. Travel
+ * is read from the recorded press position. */
 static void update_gesture(UIToggle* t, float dt) {
     Vector2 p    = input_pointer_position();
     bool    down = input_pointer_down();
-
-    /* Touch arms on the press itself rather than waiting out that window,
-     * which is what keeps the icon under the finger from the first frame.
-     * Mouse presses arrive through the dispatcher with no such delay, so they
-     * stay on it and keep its z-order gating. */
-    if (t->input_enabled && !t->press_armed && down && !t->pointer_was_down &&
-        GetTouchPointCount() > 0 && CheckCollisionPointRec(p, t->anchor)) {
-        arm_gesture(t, p);
-    }
-    t->pointer_was_down = down;
 
     if (t->press_armed) {
         float dx   = p.x - t->press_pos.x;
@@ -126,7 +107,7 @@ static void update_gesture(UIToggle* t, float dt) {
             t->drag_offset = follow_offset(t, dx, dy);
         }
         if (!down) {
-            if (!t->committed) toggle_flip(t);
+            if (!t->committed && !input_pointer_cancelled()) toggle_flip(t);
             t->press_armed = false;
             t->dragging    = false;
             t->committed   = false;

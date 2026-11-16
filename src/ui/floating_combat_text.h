@@ -18,11 +18,13 @@
 /* Client-only: the wire carries the kind as a JSON string, so these numbers
  * never cross the network. message.c maps the server `kind` word
  * (game/snapshot.go: FCTDamage "damage", FCTRegen "regen", FCTXp "xp") onto
- * this enum. To add a kind, add it in both places and in the tuning table. */
+ * this enum. The combat cluster raises the misfire of an own skill_ack. Each
+ * kind has a row in the tuning table. */
 typedef enum {
-    FCT_TYPE_DAMAGE = 0,   /* life loss — red   "-N"    */
-    FCT_TYPE_REGEN  = 1,   /* life gain — green "+N"    */
-    FCT_TYPE_XP     = 2,   /* XP award  — gold  "+N XP" */
+    FCT_TYPE_DAMAGE  = 0,   /* life loss — red   "-N"    */
+    FCT_TYPE_REGEN   = 1,   /* life gain — green "+N"    */
+    FCT_TYPE_XP      = 2,   /* XP award  — gold  "+N XP" */
+    FCT_TYPE_MISFIRE = 3,   /* failed skill roll — violet "MISFIRE" */
     FCT_TYPE_COUNT
 } FCTType;
 

@@ -8,9 +8,9 @@
 
 /* UI-only data fed by engine metadata.
  *
- *   - skill_map: trigger-item-id → skill-event mapping, pushed by the
- *     server's init_data and replaced per trigger by each metadata delta, so
- *     the client can render the right skill labels.
+ *   - skill_map: trigger-item-id → skills, pushed by the server's init_data
+ *     and replaced per trigger by each metadata delta. The combat cluster
+ *     shows the manual skills; the skill preview shows the automatic ones.
  *
  * A pure presentation lookup table that never participates in gameplay
  * simulation, which is why it lives outside GameState.
@@ -18,13 +18,31 @@
 
 #define UI_STATE_MAX_SKILL_ENTRIES 64
 
+/* What starts a skill: an activation of the player, a condition on held
+ * units, or a gameplay event of the world. */
+typedef enum {
+    SKILL_ACTIVATION_EVENT,
+    SKILL_ACTIVATION_MANUAL,
+    SKILL_ACTIVATION_AUTOMATIC,
+} SkillActivation;
+
+/* What a skill aims at: a direction from the caster, or not. */
+typedef enum {
+    SKILL_TARGET_NONE,
+    SKILL_TARGET_DIRECTION,
+    SKILL_TARGET_SELF,
+} SkillTarget;
+
 typedef struct {
     char trigger_item_id[MAX_ITEM_ID_LENGTH];
+    char skill_id[MAX_ITEM_ID_LENGTH];
     char logic_event_id[MAX_ITEM_ID_LENGTH];
     char name[MAX_ITEM_ID_LENGTH];
     char description[256];
     char summoned_entity_item_id[MAX_ITEM_ID_LENGTH];
-    bool held;  /* runs by itself on held units; a tap never fires it */
+    SkillActivation activation;
+    SkillTarget     targeting;
+    float           reach;  /* cells a directional skill flies with no stat; 0 for any other */
 } UiSkillEntry;
 
 void ui_state_reset(void);

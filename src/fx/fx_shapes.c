@@ -1,5 +1,6 @@
 #include "fx/fx_shapes.h"
 
+#include <math.h>
 #include <raylib.h>
 
 const Color FX_SPARK_GOLD = { 255, 226, 20, 255 };
@@ -83,4 +84,42 @@ void fx_shape_plus(float cx, float cy, float size_px, Color body) {
     DrawRectangle(x + mid - b, y - b, arm + b * 2, s + b * 2, BLACK);
     DrawRectangle(x, y + mid, s, arm, body);
     DrawRectangle(x + mid, y, arm, s, body);
+}
+
+/* Art pixels on one side of a disc row: those with their center inside `r`. */
+static int row_cells(float r, float y, float px) {
+    if (r <= fabsf(y)) return 0;
+    return (int)(sqrtf(r * r - y * y) / px + 0.5f);
+}
+
+void fx_shape_pixel_ring(Vector2 c, float r_out, float r_in, float px, Color color) {
+    int rows = (int)ceilf(r_out / px);
+    for (int row = -rows; row < rows; row++) {
+        float y   = ((float)row + 0.5f) * px;
+        int   out = row_cells(r_out, y, px);
+        int   in  = row_cells(r_in, y, px);
+        if (out <= in) continue;
+        int top = (int)c.y + row * (int)px;
+        int w   = (out - in) * (int)px;
+        DrawRectangle((int)c.x - out * (int)px, top, w, (int)px, color);
+        DrawRectangle((int)c.x + in * (int)px, top, w, (int)px, color);
+    }
+}
+
+void fx_shape_pixel_arc(Vector2 c, float r_out, float r_in, float px, float from, float span, Color color) {
+    const float turn = 2.0f * PI;
+    if (span <= 0.0f) return;
+    int cells = (int)ceilf(r_out / px);
+    for (int row = -cells; row < cells; row++) {
+        for (int col = -cells; col < cells; col++) {
+            float x = ((float)col + 0.5f) * px;
+            float y = ((float)row + 0.5f) * px;
+            float d = sqrtf(x * x + y * y);
+            if (r_out <= d || d < r_in) continue;
+            float along = fmodf(atan2f(y, x) - from, turn);
+            if (along < 0.0f) along += turn;
+            if (span <= along) continue;
+            DrawRectangle((int)c.x + col * (int)px, (int)c.y + row * (int)px, (int)px, (int)px, color);
+        }
+    }
 }

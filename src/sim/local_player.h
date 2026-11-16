@@ -381,21 +381,20 @@ void   local_player_set_move_speed(float speed);
 float  local_player_move_speed(void);
 
 /* Authoritative action cooldown in seconds, pushed by the server in every AOI
- * self-player block. It does not gate movement — that re-plans every tick —
- * but every tap fires skills, so it is the period after which repeating an
- * unchanged input is worth anything. Keyboard steering paces its refresh by
- * it. Returns the bootstrap default before the first snapshot. */
+ * self-player block. It times the skill activations, not the movement — that
+ * re-plans every tick. Keyboard steering paces its refresh by it. Returns the
+ * bootstrap default before the first snapshot. */
 void   local_player_set_action_cooldown(float seconds);
 float  local_player_action_cooldown(void);
 
 /* Authoritative end of the running action cooldown, on the GetTime() clock.
- * Every skill preview reads this one value. */
+ * The snapshot and each skill_ack set it; every combat control reads it. */
 void   local_player_set_action_ready_at(double time_s);
-/* Elapsed part of the action cooldown at `now`, 0..1. 1 means the next tap
- * fires skills; a skill can still fail its summon chance. */
+/* Elapsed part of the action cooldown at `now`, 0..1. 1 means the next skill
+ * activation is attempted; it can still misfire. */
 float  local_player_action_charge(double now);
 
-/* Authoritative end of the consume cooldown a held skill starts, on the
+/* Authoritative end of the consume cooldown an automatic skill starts, on the
  * GetTime() clock. The action cooldown rule times it. */
 void   local_player_set_consume_ready_at(double time_s);
 /* Elapsed part of the consume cooldown at `now`, 0..1. */

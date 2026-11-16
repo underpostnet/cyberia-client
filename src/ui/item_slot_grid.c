@@ -179,6 +179,12 @@ void item_slot_grid_update(ItemSlotGrid* g, float dt) {
 
     if (input_pointer_down()) return;
 
+    /* A cancelled press taps nothing and drops nothing: the stack goes back. */
+    if (input_pointer_cancelled()) {
+        return_dragged_item(g);
+        end_gesture(g);
+        return;
+    }
     if (!g->dragging) {
         /* A press that never travelled is a tap on whatever it landed on. */
         int index = item_slot_grid_cell_at(g, (int)g->pointer.x, (int)g->pointer.y);

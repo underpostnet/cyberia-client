@@ -42,6 +42,9 @@ cJSON* json_pack_events(cJSON* events);
 
 /* Client event packers. Only client_event_flush calls them. */
 cJSON* json_pack_player_action(float target_x, float target_y);
+/* Attempt the manual skill `skill_id` with one aim: "facing", "auto_target" with the target it
+ * prefers (0 for none), or "direction" along (aim_x, aim_y). */
+cJSON* json_pack_skill_activate(const char* skill_id, const char* aim, float aim_x, float aim_y, uint32_t target_id);
 
 /* Equip or unequip the stack of item_id in bag slot `slot`. */
 cJSON* json_pack_item_active(const char* item_id, int slot, bool active);

@@ -32,6 +32,9 @@ void client_event_push(client_event_kind_t kind, client_event_payload_t p) {
 }
 
 static const char* const BOX_WORDS[] = { [BOX_BAG] = "bag", [BOX_STORAGE] = "storage", [BOX_VAULT] = "vault" };
+static const char* const AIM_WORDS[] = {
+    [SKILL_AIM_FACING] = "facing", [SKILL_AIM_AUTO] = "auto_target", [SKILL_AIM_DIRECTION] = "direction",
+};
 
 static cJSON* pack_event(const client_event_t* e) {
     const client_event_payload_t* p = &e->payload;
@@ -83,6 +86,8 @@ static cJSON* pack_event(const client_event_t* e) {
     case CLIENT_EVENT_MARKET_BUY:      return json_pack_market_listing("market_buy", p->entity_id, p->code, 0);
     case CLIENT_EVENT_MARKET_BID:      return json_pack_market_listing("market_bid", p->entity_id, p->code, p->price);
     case CLIENT_EVENT_MARKET_COLLECT:  return json_pack_player_target("market_collect", "entityId", p->entity_id);
+    case CLIENT_EVENT_SKILL_ACTIVATE:
+        return json_pack_skill_activate(p->code, AIM_WORDS[p->aim], p->target_x, p->target_y, p->entity_id);
     }
     assert(false && "unknown client event kind");
     return NULL;

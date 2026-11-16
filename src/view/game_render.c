@@ -34,6 +34,8 @@
 #include "data/action_cache.h"
 #include "ui/modal_instance_map.h"
 #include "ui/chat_panel.h"
+#include "ui/combat_cluster.h"
+#include "fx/fx_combat_aim.h"
 #include "ui/social_panel.h"
 #include "ui/container_panel.h"
 #include "ui/modal_interact.h"
@@ -94,6 +96,12 @@ void game_render_set_screen_size(int width, int height) {
     g_renderer.screen_height = height;
 }
 
+/* The own player: a dark outline one art pixel wide, and a ground anchor ring
+ * in art pixels of SELF_ANCHOR_PX world units, SELF_ANCHOR_RADIUS of its width. */
+static const Color SELF_OUTLINE = { 0, 0, 0, 170 };
+#define SELF_ANCHOR_PX     2.0f
+#define SELF_ANCHOR_RADIUS 0.42f
+
 void game_render_frame(void) {
     // Atlas textures are loaded on-demand via get_atlas_texture() during rendering.
     // No pre-caching queue processing is needed.
@@ -118,8 +126,10 @@ void game_render_frame(void) {
     // FCT screen-space overlay: damage red flash / regen green pulse
     fct_draw_overlay();
 
-    // Floating joystick (screen space), under every HUD surface and modal.
-    hud_joystick_draw(input_pointer_gesture());
+    // Touch controls (screen space), under every HUD surface and modal.
+    const pointer_gesture_t* joystick = input_joystick();
+    if (NULL != joystick) hud_joystick_draw(joystick);
+    combat_cluster_draw();
 
     // Render UI (screen space)
     game_render_ui();
@@ -198,8 +208,7 @@ static void game_render_fx_loot(void) {
             false,
             cell_size,
             (Color){ 255, 225, 130, 255 },
-            WHITE
-        );
+            WHITE, BLANK);
     }
 }
 
@@ -327,8 +336,7 @@ void game_render_floors(void) {
                 presentation_runtime_dev_ui(),
                 cell_size,
                 floor_color,
-                WHITE
-            );
+                WHITE, BLANK);
         } else {
             Color fallback = presentation_runtime_palette("FLOOR_BACKGROUND");
             Rectangle rect = {
@@ -380,8 +388,7 @@ void game_render_world_objects(void) {
                 presentation_runtime_dev_ui(),
                 cell_size,
                 portal_color,
-                WHITE
-            );
+                WHITE, BLANK);
         } else {
             Rectangle rect = {
                 tf->pos.x * cell_size,
@@ -465,8 +472,7 @@ void game_render_foregrounds(void) {
                 presentation_runtime_dev_ui(),
                 cell_size,
                 fg_color,
-                tint
-            );
+                tint, BLANK);
         } else {
             Rectangle rect = {
                 tf->pos.x * cell_size,
@@ -718,8 +724,7 @@ void game_render_entities(void) {
                     dev_ui,
                     cell_size,
                     obstacle_color,
-                    WHITE
-                );
+                    WHITE, BLANK);
             }
             entity_overhead_ui_draw_obstacle(v, tf, cell_size);
 
@@ -774,6 +779,11 @@ void game_render_entities(void) {
             if (!is_non_combat_bot) {
                 draw_entity_shadow(draw_x, draw_y, render_width, render_height, cell_size);
             }
+            /* The own player stands on its ground anchor, between the shadow and the sprite. */
+            if (entry->is_main_player) {
+                Vector2 feet = { (draw_x + render_width * 0.5f) * cell_size, (draw_y + render_height) * cell_size };
+                fx_player_anchor(feet, render_width * cell_size * SELF_ANCHOR_RADIUS, SELF_ANCHOR_PX, (float)GetTime());
+            }
 
             /* Local-player-exclusive render-scale bump, so the character
              * reads slightly larger than everyone else. */
@@ -819,8 +829,7 @@ void game_render_entities(void) {
                     dev_ui,
                     cell_size,
                     entity_fallback_color,
-                    WHITE
-                );
+                    WHITE, entry->is_main_player ? SELF_OUTLINE : BLANK);
             }
 
             /* On-grid quantity counter above a stacked drop (coins, bundles). */

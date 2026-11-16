@@ -37,4 +37,8 @@ Rectangle hud_side_stack_chat_slot(void);
  * hidden. */
 Rectangle hud_side_stack_social_slot(void);
 
+/* The left edge of the column while a panel shows in it, else the right edge
+ * of the screen. */
+float hud_side_stack_left(void);
+
 #endif /* CYBERIA_UI_HUD_SIDE_STACK_H */

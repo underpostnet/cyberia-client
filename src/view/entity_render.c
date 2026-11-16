@@ -340,7 +340,8 @@ void draw_entity_layers(
     bool dev_ui,
     float cell_size,
     Color fallback_color,
-    Color tint
+    Color tint,
+    Color outline
 ) {
     assert(render);
 
@@ -551,6 +552,18 @@ void draw_entity_layers(
     // ========================================================================
     // Final Rendering
     // ========================================================================
+
+    /* The outline: each layer drawn in the outline colour, one art pixel out on
+     * each side, under every layer. */
+    for (int i = 0; 0 < outline.a && i < render_count; i++) {
+        if (0 == layer_textures[i].id) continue;
+        float px = dest_rec.width / fabsf(layer_source_rects[i].width);
+        const Vector2 out[4] = { { px, 0.0f }, { -px, 0.0f }, { 0.0f, px }, { 0.0f, -px } };
+        for (int k = 0; 4 > k; k++) {
+            Rectangle at = { dest_rec.x + out[k].x, dest_rec.y + out[k].y, dest_rec.width, dest_rec.height };
+            DrawTexturePro(layer_textures[i], layer_source_rects[i], at, (Vector2){ 0.0f, 0.0f }, 0.0f, outline);
+        }
+    }
 
     bool drawn = false;
     for (int i = 0; i < render_count; i++) {

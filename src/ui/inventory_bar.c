@@ -31,10 +31,9 @@
  * (down_idle by default) so the bar shows "live" sprites consistently with the
  * in-world entity render.
  *
- * Above a slot whose skills summon entities, a row shows each summoned entity
- * with the units the player holds of it, and one cooldown bar: the consume
- * cooldown for a held skill, else the shared action cooldown. An inactive slot
- * shows only its held skills.
+ * Above a slot whose automatic skills summon entities, a row shows each
+ * summoned entity with the units the player holds of it, and the consume
+ * cooldown bar. The combat cluster shows the manual skills.
  */
 
 #include "inventory_bar.h"
@@ -342,13 +341,12 @@ static void draw_coin_slot(Rectangle r, int coin_idx, ObjectLayersManager* mgr) 
     DrawText("-", (int)r.x + 3, (int)r.y + 2, lfs, (Color){255, 165, 0, 200});
 }
 
-/* The entities the skills of `ols` summon, in a row above its slot, each with
- * the units the player holds of it, and the cooldown of the row under them.
- * The row takes no input. */
+/* The entities the automatic skills of `ols` summon, in a row above its slot,
+ * each with the units the player holds of it, and the consume cooldown under
+ * them. The row takes no input. */
 static void draw_skill_previews(Rectangle slot, const ObjectLayerState* ols, float floor_y, double now) {
     SkillPreview previews[SKILL_PREVIEW_MAX];
-    bool held;
-    int n = skill_preview_summons(ols, previews, &held);
+    int n = skill_preview_summons(ols, previews);
     if (0 == n) return;
 
     Rectangle icons[SKILL_PREVIEW_MAX];
@@ -365,7 +363,7 @@ static void draw_skill_previews(Rectangle slot, const ObjectLayerState* ols, flo
                           OL_ICO_DEFAULT_DIR, 0, WHITE);
         item_slot_draw_quantity(icons[i], previews[i].quantity);
     }
-    fx_shape_cooldown_bar(bar, held ? local_player_consume_charge(now) : local_player_action_charge(now));
+    fx_shape_cooldown_bar(bar, local_player_consume_charge(now));
 }
 
 /* The thumb follows a held track; a press off the stacks taps on a clean release. */
@@ -378,7 +376,7 @@ static void update_press(void) {
         if (down) drag_thumb(p.x);
     }
     if (!s_press_armed) return;
-    if (INV_DRAG_SLOP_PX < hypotf(p.x - s_press.x, p.y - s_press.y)) s_press_armed = false;
+    if (INV_DRAG_SLOP_PX < hypotf(p.x - s_press.x, p.y - s_press.y) || input_pointer_cancelled()) s_press_armed = false;
     else if (!down) {
         s_tap_pending = true;
         s_tap_x = (int)s_press.x;
@@ -429,11 +427,16 @@ static LiftTarget lift_target(Vector2 p, Box* box, int* slot) {
     return ui_dispatch_covers_point((int)p.x, (int)p.y) ? LIFT_NONE : LIFT_WORLD;
 }
 
-/* Carry a lifted stack and drop it on release. Off the strip, or where the
- * move is refused, the stack stays where it was. A press that never travelled
- * is a tap. */
+/* Carry a lifted stack and drop it on release. Off the strip, where the move
+ * is refused, or when the pointer is cancelled, the stack stays where it was.
+ * A press that never travelled is a tap. */
 static void update_lift(float dt) {
     if (!s_lift_armed) return;
+    if (input_pointer_cancelled()) {
+        s_lift_armed = false;
+        s_lifting = false;
+        return;
+    }
     Vector2 p = input_pointer_position();
     if (!s_lifting && INV_DRAG_SLOP_PX < hypotf(p.x - s_lift_press.x, p.y - s_lift_press.y)) s_lifting = true;
     if (s_lifting && p.y >= bar_top(GetScreenHeight())) {

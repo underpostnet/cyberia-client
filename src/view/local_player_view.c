@@ -5,6 +5,7 @@
 #include <raylib.h>
 #include <raymath.h>
 
+#include "content/stat_contract_generated.h"
 #include "world/object_layer.h"
 #include "sim/self_motion.h"
 
@@ -30,8 +31,7 @@ Vector2 local_player_view_position(void) { return s_view.pos; }
 Direction local_player_view_direction(void) { return s_view.direction; }
 
 Vector2 local_player_view_facing(void) {
-    float angle = (float)s_view.direction * PI * 0.25f;
-    return (Vector2){ sinf(angle), -cosf(angle) };
+    return (Vector2){ CYBERIA_DIRECTION_VECTORS[s_view.direction][0], CYBERIA_DIRECTION_VECTORS[s_view.direction][1] };
 }
 
 ObjectLayerMode local_player_view_mode(void) { return s_view.mode; }

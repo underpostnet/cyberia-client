@@ -33,4 +33,14 @@ void fx_shape_spark_shaded(float cx, float cy, float size_px, Color body);
  * around both arms. Pixel-snapped. */
 void fx_shape_plus(float cx, float cy, float size_px, Color body);
 
+/* Pixel-art rings: square art pixels `px` wide on a grid local to the centre
+ * `c`. The joystick and the combat controls draw with them. */
+
+/* Art pixels between two radii; an inner radius of 0 gives a disc. */
+void fx_shape_pixel_ring(Vector2 c, float r_out, float r_in, float px, Color color);
+
+/* The art pixels of a ring inside an arc. The arc starts at angle `from` and
+ * spans `span` radians clockwise on screen; angle 0 points right. */
+void fx_shape_pixel_arc(Vector2 c, float r_out, float r_in, float px, float from, float span, Color color);
+
 #endif /* CYBERIA_FX_FX_SHAPES_H */

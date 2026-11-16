@@ -147,6 +147,20 @@ cJSON* json_pack_item_move(const char* from, int from_slot, const char* to, int 
     return root;
 }
 
+cJSON* json_pack_skill_activate(const char* skill_id, const char* aim, float aim_x, float aim_y, uint32_t target_id) {
+    assert(skill_id && aim);
+    cJSON* p;
+    cJSON* root = new_message("skill_activate", &p);
+    cJSON_AddStringToObject(p, "skillId", skill_id);
+    cJSON_AddStringToObject(p, "aim", aim);
+    if (0 == strcmp(aim, "direction")) {
+        cJSON_AddNumberToObject(p, "x", aim_x);
+        cJSON_AddNumberToObject(p, "y", aim_y);
+    }
+    if (0 != target_id) cJSON_AddNumberToObject(p, "targetId", target_id);
+    return root;
+}
+
 cJSON* json_pack_player_target(const char* type, const char* key, uint32_t player_id) {
     assert(type);
     cJSON* p;

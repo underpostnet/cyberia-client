@@ -7,8 +7,10 @@
 #include "fx/fx_tap.h"
 
 #include <raylib.h>
+#include <raymath.h>
 
 #include "chat_panel.h"
+#include "combat_cluster.h"
 #include "interaction_bubble.h"
 #include "hud_minimap_overlay.h"
 #include "inventory_bar.h"
@@ -108,6 +110,7 @@ bool ui_dispatch_covers_point(int x, int y) {
     if (chat_panel_covers_point(x, y)) return true;
     if (inventory_bar_point_covered(x, y)) return true;
     if (toolbar_covers_point(x, y)) return true;
+    if (combat_cluster_covers_point(x, y)) return true;
     return false;
 }
 
@@ -200,6 +203,7 @@ static bool ui_consume_event(const input_event_t* e) {
             fx.intensity = 1.25f;
             fx_tap_spawn(e->world_position, &fx);
             interaction_bubble_on_world_tap(e->world_position);
+            combat_cluster_on_world_tap(Vector2Scale(e->world_position, 1.0f / world_cell_size()));
         }
     }
 

@@ -11,9 +11,10 @@ static Vector2 s_pointer;
 static bool s_down;
 
 Vector2 GetMousePosition(void) { return s_pointer; }
-int GetTouchPointCount(void) { return 0; }
-Vector2 GetTouchPosition(int index) { return s_pointer; }
-bool IsMouseButtonDown(int button) { return s_down; }
+Vector2 input_pointer_position(void) { return s_pointer; }
+bool input_pointer_down(void) { return s_down; }
+static bool s_cancelled;
+bool input_pointer_cancelled(void) { return s_cancelled; }
 bool CheckCollisionPointRec(Vector2 p, Rectangle r) {
     return p.x >= r.x && p.x < r.x + r.width && p.y >= r.y && p.y < r.y + r.height;
 }
@@ -69,6 +70,13 @@ int main(void) {
     assert(0 == strcmp("ore", g.cells[3].item_id) && 6 == g.unlock_level[3]);
     ItemSlotGridEvent move = gesture(&g, 3, 2);
     assert(ITEM_SLOT_GRID_EVENT_MOVE == move.type && 3 == move.from_index && 2 == move.to_index);
+
+    /* A lost pointer taps nothing and moves nothing. */
+    s_cancelled = true;
+    assert(ITEM_SLOT_GRID_EVENT_NONE == gesture(&g, 0, 0).type);
+    assert(ITEM_SLOT_GRID_EVENT_NONE == gesture(&g, 0, 1).type);
+    s_cancelled = false;
+    assert(0 == strcmp("ore", g.cells[0].item_id) && !item_slot_grid_is_dragging(&g));
 
     puts("item_slot_grid_test OK");
     return 0;

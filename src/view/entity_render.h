@@ -36,7 +36,9 @@ void entity_render_gc(EntityRender* render);
  * "other", "bot", "floor") and `fallback_color` only tint the dev_ui boxes.
  * With `dev_ui` true the function draws the debug box and skips the layers;
  * with it false it draws the layers only. `tint` multiplies every layer
- * texture; WHITE draws them as authored. */
+ * texture; WHITE draws them as authored. An `outline` with alpha draws one art
+ * pixel of the layers in that colour around them, under every layer; BLANK
+ * draws none. */
 void draw_entity_layers(
     EntityRender* render,
     EntityID entity_id,
@@ -52,7 +54,8 @@ void draw_entity_layers(
     bool dev_ui,
     float cell_size,
     Color fallback_color,
-    Color tint
+    Color tint,
+    Color outline
 );
 
 /* Draws a flat, squashed dark ellipse under an entity's feet — a ground

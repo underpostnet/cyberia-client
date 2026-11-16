@@ -15,6 +15,8 @@ Rectangle hud_side_stack_map_slot(void) { return s_bounds; }
 void instance_map_data_open(void) {}
 void instance_map_data_close(void) {}
 void input_gestures_set_blocked(bool blocked) {}
+static int s_map_opens;
+void modal_instance_map_toggle(void) { s_map_opens++; }
 bool ui_button_hit(Rectangle rect, int x, int y) {
     return rect.x <= x && rect.x + rect.width > x && rect.y <= y && rect.y + rect.height > y;
 }
@@ -83,6 +85,10 @@ int main(void) {
     s_texture_ready = false;
     draw_map(s_bounds, &node);
     assert(2 == s_texture_draws && 0 == s_fills);
+
+    /* The first control opens the Instance Map. */
+    tap(MINIMAP_OPEN_MAP);
+    assert(1 == s_map_opens && MINIMAP_OPEN_MAP == 0);
 
     puts("hud_minimap_overlay_test OK");
     return 0;

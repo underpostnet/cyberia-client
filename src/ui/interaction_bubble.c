@@ -401,7 +401,6 @@ void interaction_bubble_init(void) {
 void interaction_bubble_update(void) {
     column_ensure_toggle();
     /* Re-anchor not needed — the toggle is fixed in screen space. */
-    ui_toggle_set_input_enabled(&s_col_toggle, !modals_block_bubbles());
     ui_toggle_update(&s_col_toggle, GetFrameTime());
     /* Reset the scroll only when opening — and only from the toggle's own
      * transition, which a swipe resolves in ui_toggle_update rather than on the

@@ -14,6 +14,7 @@
 #include "view/local_player_view.h"
 #include "audio/audio_context.h"
 #include "audio/audio.h"
+#include "ui/combat_cluster.h"
 #include "ui/ui_dispatch.h"
 #include "ui/text.h"
 #include "js/text_input_bridge.h"
@@ -41,7 +42,8 @@ static void game_frame(void) {
 
     // input capture in realtime
     input_queue_t frame_input = {0};
-    input_queue_on_tick(&frame_input, frame_dt, ui_dispatch_covers_point);
+    input_queue_on_tick(&frame_input, frame_dt, ui_dispatch_covers_point, combat_cluster_claim);
+    combat_cluster_on_tick(frame_dt);
     ui_on_tick(&frame_input, frame_dt);
     input_push_client_events(frame_input);
 

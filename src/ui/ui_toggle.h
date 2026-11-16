@@ -36,12 +36,10 @@ typedef struct {
     const char*     icon_expanded;   /* overrides chevron when expanded (NULL = use chevron) */
     const char*     icon_collapsed;  /* overrides chevron when collapsed (NULL = use chevron) */
     bool            drag_enabled;    /* swipe control armed by ui_toggle_set_drag  */
-    bool            input_enabled;   /* consumer gate for the touch press fallback */
     bool            press_armed;     /* press landed on the toggle, gesture pending */
     bool            dragging;        /* gesture passed the slop — icon follows      */
     bool            committed;       /* the drag already flipped this gesture       */
     bool            changed;         /* state flipped since the last take_changed   */
-    bool            pointer_was_down;
     Vector2         press_pos;       /* gesture origin — icon follow and flip test  */
     Vector2         drag_offset;     /* px the glyph trails the pointer, springs to 0 */
     float           icon_scale;      /* 1.0, eased up while dragging                */
@@ -59,12 +57,6 @@ void ui_toggle_draw(const UIToggle* t);
  * State resolves in ui_toggle_update — on the commit distance while dragging,
  * else on release. Toggles that skip this call keep flipping on press. */
 void ui_toggle_set_drag(UIToggle* t);
-
-/* Gate the drag-enabled toggle's own press detection, which exists because a
- * touch press reaches the dispatcher late. Consumers whose button can end up
- * under a modal clear it for as long as that modal is up, so the covered
- * button cannot be pressed through. Enabled after init. */
-void ui_toggle_set_input_enabled(UIToggle* t, bool enabled);
 
 /* One-shot: true when `expanded` flipped since the last query. Consumers that
  * react to the transition (resetting a scroll on expand, say) read it after

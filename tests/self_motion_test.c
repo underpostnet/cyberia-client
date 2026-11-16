@@ -2,6 +2,7 @@
  * the same on every leg, and a tap to the walked cell keeps the path. */
 
 #include "sim/self_motion.h"
+#include "content/stat_contract_generated.h"
 #include "world/object_layer.h"
 
 #include <assert.h>
@@ -43,11 +44,31 @@ int main(void) {
     self_motion_tap(&cells, (Vector2){ 7.0f, 4.0f });
     assert(1 == cells.path_count && 7 == cells.path[0].x && 4 == cells.path[0].y);
 
-    /* The walk ends on the last node, idle. */
-    self_motion_t end = { .pos = { 0.95f, 0 }, .path = { { 1, 0 } }, .path_count = 1 };
+    /* The walk ends on the last node, idle, with the facing it had. */
+    self_motion_t end = { .pos = { 0.95f, 0 }, .path = { { 1, 0 } }, .path_count = 1, .direction = DIRECTION_RIGHT };
     self_motion_step(&end, 3.0, 0.1);
     expect_pos(&end, 1.0f, 0.0f, "end");
-    assert(0 == end.path_count && DIRECTION_NONE == end.direction);
+    assert(0 == end.path_count && DIRECTION_RIGHT == end.direction);
+
+    /* A tap on the own cell stops the walk where the player stands, behind or ahead of the
+     * cell centre, and never turns it. A stop for stasis keeps the facing too. */
+    const float stops[] = { 3.3f, 3.7f };
+    for (int i = 0; 2 > i; i++) {
+        self_motion_t walk = { .pos = { stops[i], 2.0f }, .path = { { 8, 2 } }, .path_count = 1, .direction = DIRECTION_RIGHT };
+        self_motion_tap(&walk, walk.pos);
+        self_motion_step(&walk, 3.0, 0.1);
+        expect_pos(&walk, stops[i], 2.0f, "stop in place");
+        assert(0 == walk.path_count && DIRECTION_RIGHT == walk.direction);
+    }
+    self_motion_stop(&end);
+    assert(DIRECTION_RIGHT == end.direction);
+
+    /* Each table vector maps back to its facing, scaled or not; a zero vector has none. */
+    for (int dir = 0; CYBERIA_DIRECTION_COUNT > dir; dir++) {
+        double x = CYBERIA_DIRECTION_VECTORS[dir][0], y = CYBERIA_DIRECTION_VECTORS[dir][1];
+        assert((Direction)dir == direction_of(x, y) && (Direction)dir == direction_of(4.0 * x, 4.0 * y));
+    }
+    assert(DIRECTION_NONE == direction_of(0.0, 0.0) && DIRECTION_LEFT == direction_of(-2.0, 0.4));
 
     printf("self_motion_test OK\n");
     return 0;

@@ -68,6 +68,7 @@ typedef enum {
     CLIENT_EVENT_MARKET_BUY,
     CLIENT_EVENT_MARKET_BID,
     CLIENT_EVENT_MARKET_COLLECT,
+    CLIENT_EVENT_SKILL_ACTIVATE,
 } client_event_kind_t;
 
 /* Who one chat line reaches; packs to the wire word. */
@@ -77,6 +78,13 @@ typedef enum {
     CHAT_CHANNEL_DIRECT,   /* one player on the map, or a friend on this server */
     CHAT_CHANNEL_COUNT,
 } chat_channel_t;
+
+/* How a skill activation aims a directional skill; packs to the wire word. */
+typedef enum {
+    SKILL_AIM_FACING,     /* along the facing of the player */
+    SKILL_AIM_AUTO,       /* at the target the server picks, else along the facing */
+    SKILL_AIM_DIRECTION,  /* along target_x, target_y: never zero */
+} skill_aim_t;
 
 /* The container a slot of an item move belongs to; packs to the wire word. */
 typedef enum {
@@ -88,10 +96,14 @@ typedef enum {
 /* One flat payload, the same shape as the server inputPayload. Each kind
  * reads only its own fields. */
 typedef struct {
-    float  target_x, target_y;                 /* player_action; item_drop: the cell, negative at the feet */
-    EntityID entity_id;                        /* also chat to_id, party, friend and trade player, terminal */
+    float  target_x, target_y;                 /* player_action; item_drop: the cell, negative at the feet;
+                                                  skill_activate: the direction of SKILL_AIM_DIRECTION */
+    EntityID entity_id;                        /* also chat to_id, party, friend and trade player, terminal;
+                                                  skill_activate: the target SKILL_AIM_AUTO prefers */
+    skill_aim_t aim;                           /* skill_activate */
     char   item_id[CLIENT_EVENT_ID_BYTES];     /* also quest_code; market_open: the item filter */
-    char   code[CLIENT_EVENT_ID_BYTES];        /* dialog_code, friendship id, quote id, listing id, market cursor */
+    char   code[CLIENT_EVENT_ID_BYTES];        /* dialog_code, friendship id, quote id, listing id, market cursor,
+                                                  skill id */
     chat_channel_t channel;                    /* chat */
     char   text[CHAT_LINE_BYTES];              /* chat */
     int    quantity, recipe_index;             /* quantity: also the units of item_move, drop, sell, burn */
